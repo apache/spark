@@ -135,9 +135,11 @@ case class AdaptiveSparkPlanExec(
 
   private def collectSQLMetrics(plan: SparkPlan): Seq[SQLMetric] = {
     val metrics = new mutable.ArrayBuffer[SQLMetric]()
-    plan.collect {
+    plan.foreach {
+      case p: ShuffleQueryStageExec => collectSQLMetrics(p.plan).foreach(metrics += _)
+      case p: BroadcastQueryStageExec => collectSQLMetrics(p.plan).foreach(metrics += _)
       case p: SparkPlan =>
-        p.metrics.map { case metric =>
+        p.metrics.foreach { case metric =>
           metrics += metric._2
         }
     }
@@ -148,12 +150,8 @@ case class AdaptiveSparkPlanExec(
     if (!isFinalPlan) {
       // Subqueries do not have their own execution IDs and therefore rely on the main query to
       // update UI.
-      val executionId = if (isSubquery) {
-        None
-      } else {
-        Option(context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY))
-          .map(_.toLong)
-      }
+      val executionId = Option(context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY))
+        .map(_.toLong)
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
@@ -497,15 +495,16 @@ case class AdaptiveSparkPlanExec(
    */
   private def onUpdatePlan(executionId: Long): Unit = {
     if (isSubquery) {
-      onUpdateAccumulator(collectSQLMetrics(currentPhysicalPlan))
+      onUpdateAccumulator(collectSQLMetrics(currentPhysicalPlan), executionId)
+    } else {
+      context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
+        executionId,
+        SQLExecution.getQueryExecution(executionId).toString,
+        SparkPlanInfo.fromSparkPlan(this)))
     }
-    context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
-      executionId,
-      SQLExecution.getQueryExecution(executionId).toString,
-      SparkPlanInfo.fromSparkPlan(this)))
   }
 
-  private def onUpdateAccumulator(sqlMetrics: Seq[SQLMetric]): Unit = {
+  private def onUpdateAccumulator(sqlMetrics: Seq[SQLMetric], executionId: Long): Unit = {
     val accumIdsToMetricType = sqlMetrics.map { case sqlMetric =>
       (sqlMetric.id, sqlMetric.metricType)
     }
