@@ -30,7 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -59,7 +59,7 @@ import org.apache.spark.util.ThreadUtils
  * the rest of the plan.
  */
 case class AdaptiveSparkPlanExec(
-    var inputPlan: SparkPlan,
+    val inputPlan: SparkPlan,
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean)
@@ -133,7 +133,7 @@ case class AdaptiveSparkPlanExec(
       inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
   }
 
-  @volatile var currentPhysicalPlan = initialPlan
+  @volatile private var currentPhysicalPlan = initialPlan
 
   private var isFinalPlan = false
 
@@ -555,6 +555,7 @@ case class AdaptiveSparkPlanExec(
         setTempTagRecursive(physicalNode.get, logicalNode)
         // Replace the corresponding logical node with LogicalQueryStage
         val newLogicalNode = LogicalQueryStage(logicalNode, physicalNode.get)
+        context.dppStageCache.getOrElseUpdate(logicalNode.canonicalized, physicalNode.get)
         val newLogicalPlan = logicalPlan.transformDown {
           case p if p.eq(logicalNode) => newLogicalNode
         }
@@ -570,6 +571,27 @@ case class AdaptiveSparkPlanExec(
     logicalPlan
   }
 
+  private def insertDPPFilter(plan: SparkPlan): SparkPlan = {
+    plan transformAllExpressions {
+      case DynamicPruningExpression(InSubqueryExec(
+      value, broadcastValue: SubqueryBroadcastExec, exprId, _)) =>
+
+        val stage = context.dppStageCache.get(broadcastValue.logicalPlan.get.canonicalized)
+
+        if (conf.exchangeReuseEnabled && stage.nonEmpty) {
+          val name = s"dynamicpruning#${exprId.id}"
+          val bqs = stage.get.asInstanceOf[BroadcastQueryStageExec]
+          val newStage = reuseQueryStage(bqs, bqs.broadcast)
+          val broadcastValues =
+            SubqueryBroadcastExec(name, broadcastValue.index, broadcastValue.buildKeys, newStage)
+
+          DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
+        } else {
+          DynamicPruningExpression(Literal.TrueLiteral)
+        }
+    }
+  }
+
   /**
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
@@ -581,7 +603,8 @@ case class AdaptiveSparkPlanExec(
       sparkPlan,
       preprocessingRules ++ queryStagePreparationRules,
       Some((planChangeLogger, "AQE Replanning")))
-    (newPlan, optimized)
+    val finalPlan = insertDPPFilter(newPlan)
+    (finalPlan, optimized)
   }
 
   /**
@@ -711,6 +734,9 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, QueryStageExec] =
     new TrieMap[SparkPlan, QueryStageExec]()
+
+  val dppStageCache: TrieMap[LogicalPlan, SparkPlan] =
+    new TrieMap[LogicalPlan, SparkPlan]()
 }
 
 /**

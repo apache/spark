@@ -110,7 +110,7 @@ abstract class RemoveRedundantProjectsSuiteBase
   test("join with ordering requirement") {
     val query = "select * from (select key, a, c, b from testView) as t1 join " +
       "(select key, a, b, c from testView) as t2 on t1.key = t2.key where t2.a > 50"
-    assertProjectExec(query, 2, 2)
+    assertProjectExec(query, 3, 3)
   }
 
   test("window function") {

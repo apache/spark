@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.joins.{HashedRelation, HashJoin, LongHashedRelation}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ThreadUtils
@@ -42,7 +43,8 @@ case class SubqueryBroadcastExec(
     name: String,
     index: Int,
     buildKeys: Seq[Expression],
-    child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
+    child: SparkPlan,
+    logicalPlan: Option[LogicalPlan] = None) extends BaseSubqueryExec with UnaryExecNode {
 
   // `SubqueryBroadcastExec` is only used with `InSubqueryExec`. No one would reference this output,
   // so the exprId doesn't matter here. But it's important to correctly report the output length, so

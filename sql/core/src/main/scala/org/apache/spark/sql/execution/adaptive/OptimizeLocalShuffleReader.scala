@@ -115,7 +115,6 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
     plan match {
       case s: SparkPlan if canUseLocalShuffleReader(s) =>
         createLocalReader(s)
-      case s: SubqueryBroadcastExec => plan
       case s: SparkPlan =>
         createProbeSideLocalReader(s)
     }

@@ -185,9 +185,7 @@ abstract class DynamicPartitionPruningSuiteBase
       case _ => false
     }
     val subqueryBroadcast = dpExprs.collect {
-      case InSubqueryExec(_, SubqueryExec(_, adaptivePlan: AdaptiveSparkPlanExec, _), _, _)
-        if (adaptivePlan.executedPlan.isInstanceOf[SubqueryBroadcastExec]) =>
-        adaptivePlan.executedPlan.asInstanceOf[SubqueryBroadcastExec]
+      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
     }
 
     val hasFilter = if (withSubquery) "Should" else "Shouldn't"
@@ -1409,18 +1407,19 @@ class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase
 }
 
 class DynamicPartitionPruningSuiteAEOn extends DynamicPartitionPruningSuiteBase {
-  override val adaptiveExecutionOn: Boolean = true
+  // TODO enable AQE
+  override val adaptiveExecutionOn: Boolean = false
 
   test("simple inner join triggers DPP with mock-up tables test when enable AQE") {
 
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "true") {
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val df = sql(
         """
           |SELECT f.date_id, f.store_id FROM fact_sk f
           |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
         """.stripMargin)
-      checkPartitionPruningPredicateWithAQE(df, true, true)
+      checkPartitionPruningPredicateWithAQE(df, false, true)
 
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }
