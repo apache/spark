@@ -142,11 +142,13 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
   /*
    * This method aim to optimize the skewed join with the following steps:
-   * 1. Check whether the shuffle partition is skewed based on the median size and the skewed partition threshold in origin smj.
+   * 1. Check whether the shuffle partition is skewed based on the median size
+   *    and the skewed partition threshold in origin smj.
    * 2. Assuming partition0 is skewed in left side, and it has 5 mappers (Map0, Map1...Map4).
    *    And we will split the 5 Mappers into 3 mapper ranges [(Map0, Map1), (Map2, Map3), (Map4)]
    *    based on the map size and the max split number.
-   * 3. Create the 3 smjs with separately reading the above mapper ranges and then join with the Partition0 in right side.
+   * 3. Create the 3 smjs with separately reading the above mapper ranges and then join with
+   *    the Partition0 in right side.
    * 4. Finally union the above 3 split smjs and the origin smj.
    */
   def handleSkewJoin(plan: SparkPlan): SparkPlan = {
@@ -165,7 +167,8 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
         logDebug(
           s"""
              |Try to optimize skewed join.
-             |Left side partition size: ${getSizeInfo(leftMedSize, leftStats.bytesByPartitionId.max)}
+             |Left side partition size:
+             |${getSizeInfo(leftMedSize, leftStats.bytesByPartitionId.max)}
              |Right side partition size:
              |${getSizeInfo(rightMedSize, rightStats.bytesByPartitionId.max)}
         """.stripMargin)
