@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.exchange._
-import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveAccumUpdates, SparkListenerSQLAdaptiveExecutionUpdate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -132,6 +133,17 @@ case class AdaptiveSparkPlanExec(
     executedPlan.resetMetrics()
   }
 
+  private def collectSQLMetrics(plan: SparkPlan): Array[SQLMetric] = {
+    val metrics = new mutable.ArrayBuffer[SQLMetric]()
+    plan.collect {
+      case p: SparkPlan =>
+        p.metrics.map { case metric =>
+            metrics += metric._2
+        }
+    }
+    metrics.toArray
+  }
+
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
     if (!isFinalPlan) {
       // Subqueries do not have their own execution IDs and therefore rely on the main query to
@@ -151,6 +163,9 @@ case class AdaptiveSparkPlanExec(
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
           stagesToReplace = result.newStages ++ stagesToReplace
+          if (isSubquery) {
+            collectSQLMetrics(currentPhysicalPlan).foreach(onUpdateAccumulator)
+          }
           executionId.foreach(onUpdatePlan)
 
           // Start materialization of all new stages.
@@ -218,6 +233,9 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
+      if (isSubquery) {
+        collectSQLMetrics(currentPhysicalPlan).foreach(onUpdateAccumulator)
+      }
       executionId.foreach(onUpdatePlan)
       logDebug(s"Final plan: $currentPhysicalPlan")
     }
@@ -488,6 +506,12 @@ case class AdaptiveSparkPlanExec(
       executionId,
       SQLExecution.getQueryExecution(executionId).toString,
       SparkPlanInfo.fromSparkPlan(this)))
+  }
+
+  private def onUpdateAccumulator(metric: SQLMetric): Unit = {
+    val executionId = context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveAccumUpdates(
+      executionId.toLong, metric.id, metric.metricType))
   }
 
   /**

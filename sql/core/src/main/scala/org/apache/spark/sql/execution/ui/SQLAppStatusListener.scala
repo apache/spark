@@ -344,6 +344,18 @@ class SQLAppStatusListener(
     update(exec)
   }
 
+  private def onAdaptiveAccumUpdates(event: SparkListenerSQLAdaptiveAccumUpdates): Unit = {
+    val SparkListenerSQLAdaptiveAccumUpdates(executionId, accumulatorId, metricType) = event
+
+    val stages = liveExecutions.get(executionId).stages
+    stages.foreach { stageId =>
+      val liveStageMetric = stageMetrics.get(stageId)
+      if (liveStageMetric.accumIdsToMetricType.contains(accumulatorId)) {
+        liveStageMetric.accumIdsToMetricType += (accumulatorId -> metricType)
+      }
+    }
+  }
+
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
     val SparkListenerSQLExecutionEnd(executionId, time) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
@@ -383,6 +395,7 @@ class SQLAppStatusListener(
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case e: SparkListenerSQLExecutionStart => onExecutionStart(e)
     case e: SparkListenerSQLAdaptiveExecutionUpdate => onAdaptiveExecutionUpdate(e)
+    case e: SparkListenerSQLAdaptiveAccumUpdates => onAdaptiveAccumUpdates(e)
     case e: SparkListenerSQLExecutionEnd => onExecutionEnd(e)
     case e: SparkListenerDriverAccumUpdates => onDriverAccumUpdates(e)
     case _ => // Ignore
@@ -469,7 +482,7 @@ private class LiveStageMetrics(
     val stageId: Int,
     val attemptId: Int,
     val numTasks: Int,
-    val accumIdsToMetricType: Map[Long, String]) {
+    var accumIdsToMetricType: Map[Long, String]) {
 
   /**
    * Mapping of task IDs to their respective index. Note this may contain more elements than the
