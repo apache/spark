@@ -20,14 +20,15 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{ListQuery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, BindReferences, ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
-import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange}
+import org.apache.spark.sql.execution.joins.{HashedRelationBroadcastMode, HashJoin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -132,12 +133,15 @@ case class InsertAdaptiveSparkPlan(
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(buildPlan)
         verifyAdaptivePlan(executedPlan, buildPlan)
-
+        val adaptivePlan = executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        val packedKeys = BindReferences.bindReferences(
+          HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
+        val mode = HashedRelationBroadcastMode(packedKeys)
+        // plan a broadcast exchange of the build side of the join
+        val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
         val name = s"dynamicpruning#${exprId.id}"
-        // place the broadcast adaptor for reusing the broadcast results on the probe side
-        val broadcastValues =
-        SubqueryBroadcastExec(name, broadcastKeyIndex, buildKeys, executedPlan, Some(buildPlan))
-
+        val broadcastValues = SubqueryAdaptiveBroadcastExec(
+          name, broadcastKeyIndex, buildKeys, adaptivePlan, exchange)
         subqueryMap.put(exprId.id, broadcastValues)
       case _ =>
     }))

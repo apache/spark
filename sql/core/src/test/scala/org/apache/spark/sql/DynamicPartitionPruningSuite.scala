@@ -1419,6 +1419,7 @@ class DynamicPartitionPruningSuiteAEOn extends DynamicPartitionPruningSuiteBase 
           |SELECT f.date_id, f.store_id FROM fact_sk f
           |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
         """.stripMargin)
+      // df.show()
       checkPartitionPruningPredicateWithAQE(df, false, true)
 
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
