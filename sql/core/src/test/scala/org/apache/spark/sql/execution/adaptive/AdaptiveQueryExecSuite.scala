@@ -579,8 +579,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-30524: AQE should disable OptimizeSkewedJoin rule" +
-    " when introduce additional shuffle") {
+  test("SPARK-30524: Do not optimize skew join if introduce additional shuffle") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
