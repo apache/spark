@@ -42,7 +42,7 @@ case class SortMergeJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    partialSMJ: Option[Boolean] = None) extends BinaryExecNode with CodegenSupport {
+    isPartial: Boolean = false) extends BinaryExecNode with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -98,7 +98,7 @@ case class SortMergeJoinExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (partialSMJ.nonEmpty && partialSMJ.get) {
+    if (isPartial) {
       UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
     } else {
       HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
