@@ -63,8 +63,7 @@ case class AdaptiveSparkPlanExec(
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean)
-  extends LeafExecNode
-  with AdaptiveSparkPlanHelper {
+  extends LeafExecNode {
 
   @transient private val lock = new Object()
 
@@ -136,7 +135,7 @@ case class AdaptiveSparkPlanExec(
 
   private def collectSQLMetrics(plan: SparkPlan): Seq[SQLMetric] = {
     val metrics = new mutable.ArrayBuffer[SQLMetric]()
-    collect(plan) {
+    plan.collect {
       case p: SparkPlan =>
         p.metrics.map { case metric =>
           metrics += metric._2
@@ -164,9 +163,6 @@ case class AdaptiveSparkPlanExec(
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
           stagesToReplace = result.newStages ++ stagesToReplace
-          if (isSubquery) {
-            onUpdateAccumulator(collectSQLMetrics(this))
-          }
           executionId.foreach(onUpdatePlan)
 
           // Start materialization of all new stages.
@@ -503,6 +499,9 @@ case class AdaptiveSparkPlanExec(
    * Notify the listeners of the physical plan change.
    */
   private def onUpdatePlan(executionId: Long): Unit = {
+    if (isSubquery) {
+      onUpdateAccumulator(collectSQLMetrics(currentPhysicalPlan))
+    }
     context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
       executionId,
       SQLExecution.getQueryExecution(executionId).toString,

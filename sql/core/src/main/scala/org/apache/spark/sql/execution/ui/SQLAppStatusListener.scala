@@ -348,11 +348,10 @@ class SQLAppStatusListener(
     val SparkListenerSQLAdaptiveAccumUpdates(executionId, accumIdsToMetricType) = event
 
     val stages = liveExecutions.get(executionId).stages
-    accumIdsToMetricType.map { case (accumulatorId, metricType) =>
-      stages.foreach { stageId =>
-        val liveStageMetric = stageMetrics.get(stageId)
-        liveStageMetric.accumIdsToMetricType += (accumulatorId -> metricType)
-      }
+    stages.foreach { stageId =>
+      val liveStageMetric = stageMetrics.get(stageId)
+      stageMetrics.put(stageId, liveStageMetric.copy(
+        accumIdsToMetricType = liveStageMetric.accumIdsToMetricType ++ accumIdsToMetricType))
     }
   }
 
@@ -478,11 +477,11 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
 }
 
-private class LiveStageMetrics(
+private case class LiveStageMetrics(
     val stageId: Int,
     val attemptId: Int,
     val numTasks: Int,
-    var accumIdsToMetricType: Map[Long, String]) {
+    val accumIdsToMetricType: Map[Long, String]) {
 
   /**
    * Mapping of task IDs to their respective index. Note this may contain more elements than the
