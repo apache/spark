@@ -345,12 +345,12 @@ class SQLAppStatusListener(
   }
 
   private def onAdaptiveAccumUpdates(event: SparkListenerSQLAdaptiveAccumUpdates): Unit = {
-    val SparkListenerSQLAdaptiveAccumUpdates(executionId, accumulatorId, metricType) = event
+    val SparkListenerSQLAdaptiveAccumUpdates(executionId, accumIdsToMetricType) = event
 
     val stages = liveExecutions.get(executionId).stages
-    stages.foreach { stageId =>
-      val liveStageMetric = stageMetrics.get(stageId)
-      if (liveStageMetric.accumIdsToMetricType.contains(accumulatorId)) {
+    accumIdsToMetricType.map { case (accumulatorId, metricType) =>
+      stages.foreach { stageId =>
+        val liveStageMetric = stageMetrics.get(stageId)
         liveStageMetric.accumIdsToMetricType += (accumulatorId -> metricType)
       }
     }

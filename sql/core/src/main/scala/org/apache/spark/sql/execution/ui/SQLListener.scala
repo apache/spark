@@ -36,8 +36,7 @@ case class SparkListenerSQLAdaptiveExecutionUpdate(
 
 case class SparkListenerSQLAdaptiveAccumUpdates(
     executionId: Long,
-    accumulatorId: Long,
-    metricType: String)
+    accumIdsToMetricType: Seq[(Long, String)])
   extends SparkListenerEvent
 
 @DeveloperApi

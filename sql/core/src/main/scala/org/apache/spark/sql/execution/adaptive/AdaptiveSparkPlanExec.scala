@@ -63,7 +63,8 @@ case class AdaptiveSparkPlanExec(
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean)
-  extends LeafExecNode {
+  extends LeafExecNode
+  with AdaptiveSparkPlanHelper {
 
   @transient private val lock = new Object()
 
@@ -133,15 +134,15 @@ case class AdaptiveSparkPlanExec(
     executedPlan.resetMetrics()
   }
 
-  private def collectSQLMetrics(plan: SparkPlan): Array[SQLMetric] = {
+  private def collectSQLMetrics(plan: SparkPlan): Seq[SQLMetric] = {
     val metrics = new mutable.ArrayBuffer[SQLMetric]()
-    plan.collect {
+    collect(plan) {
       case p: SparkPlan =>
         p.metrics.map { case metric =>
-            metrics += metric._2
+          metrics += metric._2
         }
     }
-    metrics.toArray
+    metrics
   }
 
   private def getFinalPhysicalPlan(): SparkPlan = lock.synchronized {
@@ -164,7 +165,7 @@ case class AdaptiveSparkPlanExec(
         if (result.newStages.nonEmpty) {
           stagesToReplace = result.newStages ++ stagesToReplace
           if (isSubquery) {
-            collectSQLMetrics(currentPhysicalPlan).foreach(onUpdateAccumulator)
+            onUpdateAccumulator(collectSQLMetrics(this))
           }
           executionId.foreach(onUpdatePlan)
 
@@ -234,7 +235,7 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
       if (isSubquery) {
-        collectSQLMetrics(currentPhysicalPlan).foreach(onUpdateAccumulator)
+        onUpdateAccumulator(collectSQLMetrics(this))
       }
       executionId.foreach(onUpdatePlan)
       logDebug(s"Final plan: $currentPhysicalPlan")
@@ -508,10 +509,13 @@ case class AdaptiveSparkPlanExec(
       SparkPlanInfo.fromSparkPlan(this)))
   }
 
-  private def onUpdateAccumulator(metric: SQLMetric): Unit = {
+  private def onUpdateAccumulator(sqlMetrics: Seq[SQLMetric]): Unit = {
+    val accumIdsToMetricType = sqlMetrics.map { case sqlMetric =>
+      (sqlMetric.id, sqlMetric.metricType)
+    }
     val executionId = context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveAccumUpdates(
-      executionId.toLong, metric.id, metric.metricType))
+      executionId.toLong, accumIdsToMetricType))
   }
 
   /**
