@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveAccumUpdates, SparkListenerSQLAdaptiveExecutionUpdate}
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveAccumUpdates, SparkListenerSQLAdaptiveExecutionUpdate, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -505,12 +505,12 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def onUpdateAccumulator(sqlMetrics: Seq[SQLMetric], executionId: Long): Unit = {
-    val accumIdsToMetricType = sqlMetrics.map { case sqlMetric =>
-      (sqlMetric.id, sqlMetric.metricType)
+    val sqlPlanMetrics = sqlMetrics.map { case sqlMetric =>
+      SQLPlanMetric(sqlMetric.name.get, sqlMetric.id, sqlMetric.metricType)
     }
     val executionId = context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveAccumUpdates(
-      executionId.toLong, accumIdsToMetricType))
+      executionId.toLong, sqlPlanMetrics))
   }
 
   /**

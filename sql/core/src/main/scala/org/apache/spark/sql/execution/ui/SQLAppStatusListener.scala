@@ -350,9 +350,11 @@ class SQLAppStatusListener(
   }
 
   private def onAdaptiveAccumUpdates(event: SparkListenerSQLAdaptiveAccumUpdates): Unit = {
-    val SparkListenerSQLAdaptiveAccumUpdates(executionId, accumIdsToMetricType) = event
+    val SparkListenerSQLAdaptiveAccumUpdates(executionId, sqlPlanMetrics) = event
 
     val exec = getOrCreateExecution(executionId)
+    exec.metrics = exec.metrics ++ sqlPlanMetrics
+    val accumIdsToMetricType = sqlPlanMetrics.map { m => (m.accumulatorId, m.metricType) }.toMap
     exec.accumIdsToMetricType = exec.accumIdsToMetricType ++ accumIdsToMetricType
     update(exec)
   }
@@ -475,8 +477,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       completionTime,
       jobs,
       stages,
-      metricsValues,
-      accumIdsToMetricType)
+      metricsValues)
   }
 
 }
