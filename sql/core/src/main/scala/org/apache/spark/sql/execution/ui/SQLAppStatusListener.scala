@@ -108,8 +108,11 @@ class SQLAppStatusListener(
     val accumIdsAndType = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
     if (accumIdsAndType.nonEmpty) {
       event.stageInfos.foreach { stage =>
+        exec.accumIdsToMetricType = exec.accumIdsToMetricType ++ accumIdsAndType
+        val func = (executionId: Long) => {
+          getOrCreateExecution(executionId).accumIdsToMetricType}
         stageMetrics.put(stage.stageId, new LiveStageMetrics(stage.stageId, 0,
-          stage.numTasks, accumIdsAndType))
+          stage.numTasks, executionId, func))
       }
     }
 
@@ -126,9 +129,11 @@ class SQLAppStatusListener(
     // Reset the metrics tracking object for the new attempt.
     Option(stageMetrics.get(event.stageInfo.stageId)).foreach { stage =>
       if (stage.attemptId != event.stageInfo.attemptNumber) {
+        val func = (executionId: Long) => {
+          getOrCreateExecution(executionId).accumIdsToMetricType}
         stageMetrics.put(event.stageInfo.stageId,
           new LiveStageMetrics(event.stageInfo.stageId, event.stageInfo.attemptNumber,
-            stage.numTasks, stage.accumIdsToMetricType))
+            stage.numTasks, stage.executionId, func))
       }
     }
   }
@@ -347,12 +352,9 @@ class SQLAppStatusListener(
   private def onAdaptiveAccumUpdates(event: SparkListenerSQLAdaptiveAccumUpdates): Unit = {
     val SparkListenerSQLAdaptiveAccumUpdates(executionId, accumIdsToMetricType) = event
 
-    val stages = liveExecutions.get(executionId).stages
-    stages.foreach { stageId =>
-      val liveStageMetric = stageMetrics.get(stageId)
-      stageMetrics.put(stageId, liveStageMetric.copy(
-        accumIdsToMetricType = liveStageMetric.accumIdsToMetricType ++ accumIdsToMetricType))
-    }
+    val exec = getOrCreateExecution(executionId)
+    exec.accumIdsToMetricType = exec.accumIdsToMetricType ++ accumIdsToMetricType
+    update(exec)
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
@@ -454,6 +456,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
   var driverAccumUpdates = Map[Long, Long]()
+  var accumIdsToMetricType = Map[Long, String]()
 
   @volatile var metricsValues: Map[Long, String] = null
 
@@ -477,11 +480,12 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
 }
 
-private case class LiveStageMetrics(
+private class LiveStageMetrics(
     val stageId: Int,
     val attemptId: Int,
     val numTasks: Int,
-    val accumIdsToMetricType: Map[Long, String]) {
+    val executionId: Long,
+    func: (Long) => Map[Long, String]) {
 
   /**
    * Mapping of task IDs to their respective index. Note this may contain more elements than the
@@ -528,7 +532,7 @@ private case class LiveStageMetrics(
     }
 
     accumUpdates
-      .filter { acc => acc.update.isDefined && accumIdsToMetricType.contains(acc.id) }
+      .filter { acc => acc.update.isDefined && func(executionId).contains(acc.id) }
       .foreach { acc =>
         // In a live application, accumulators have Long values, but when reading from event
         // logs, they have String values. For now, assume all accumulators are Long and convert
@@ -542,7 +546,7 @@ private case class LiveStageMetrics(
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
         metricValues(taskIdx) = value
 
-        if (SQLMetrics.metricNeedsMax(accumIdsToMetricType(acc.id))) {
+        if (SQLMetrics.metricNeedsMax(func(executionId)(acc.id))) {
           val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
             taskId))
 
