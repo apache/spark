@@ -136,8 +136,10 @@ case class AdaptiveSparkPlanExec(
   private def collectSQLMetrics(plan: SparkPlan): Seq[SQLMetric] = {
     val metrics = new mutable.ArrayBuffer[SQLMetric]()
     plan.foreach {
-      case p: ShuffleQueryStageExec => collectSQLMetrics(p.plan).foreach(metrics += _)
-      case p: BroadcastQueryStageExec => collectSQLMetrics(p.plan).foreach(metrics += _)
+      case p: ShuffleQueryStageExec if (p.resultOption.isEmpty) =>
+        collectSQLMetrics(p.plan).foreach(metrics += _)
+      case p: BroadcastQueryStageExec if (p.resultOption.isEmpty) =>
+        collectSQLMetrics(p.plan).foreach(metrics += _)
       case p: SparkPlan =>
         p.metrics.foreach { case metric =>
           metrics += metric._2
