@@ -59,7 +59,7 @@ import org.apache.spark.util.ThreadUtils
  * the rest of the plan.
  */
 case class AdaptiveSparkPlanExec(
-    val inputPlan: SparkPlan,
+    inputPlan: SparkPlan,
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean)
