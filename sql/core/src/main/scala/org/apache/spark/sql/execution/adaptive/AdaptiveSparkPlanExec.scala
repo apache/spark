@@ -230,9 +230,6 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       isFinalPlan = true
-      if (isSubquery) {
-        onUpdateAccumulator(collectSQLMetrics(this))
-      }
       executionId.foreach(onUpdatePlan)
       logDebug(s"Final plan: $currentPhysicalPlan")
     }
