@@ -475,7 +475,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       completionTime,
       jobs,
       stages,
-      metricsValues)
+      metricsValues,
+      accumIdsToMetricType)
   }
 
 }

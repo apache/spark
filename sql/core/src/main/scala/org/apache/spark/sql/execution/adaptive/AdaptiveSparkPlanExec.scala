@@ -150,8 +150,8 @@ case class AdaptiveSparkPlanExec(
     if (!isFinalPlan) {
       // Subqueries do not have their own execution IDs and therefore rely on the main query to
       // update UI.
-      val executionId = Option(context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY))
-        .map(_.toLong)
+      val executionId = Option(context.session.sparkContext.getLocalProperty(
+        SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
