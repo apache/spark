@@ -344,8 +344,8 @@ class SQLAppStatusListener(
     update(exec)
   }
 
-  private def onAdaptiveAccumUpdates(event: SparkListenerSQLAdaptiveAccumUpdates): Unit = {
-    val SparkListenerSQLAdaptiveAccumUpdates(executionId, sqlPlanMetrics) = event
+  private def onAdaptiveSQLMetricUpdate(event: SparkListenerSQLAdaptiveSQLMetricUpdates): Unit = {
+    val SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, sqlPlanMetrics) = event
 
     val exec = getOrCreateExecution(executionId)
     exec.metrics = exec.metrics ++ sqlPlanMetrics
@@ -391,7 +391,7 @@ class SQLAppStatusListener(
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case e: SparkListenerSQLExecutionStart => onExecutionStart(e)
     case e: SparkListenerSQLAdaptiveExecutionUpdate => onAdaptiveExecutionUpdate(e)
-    case e: SparkListenerSQLAdaptiveAccumUpdates => onAdaptiveAccumUpdates(e)
+    case e: SparkListenerSQLAdaptiveSQLMetricUpdates => onAdaptiveSQLMetricUpdate(e)
     case e: SparkListenerSQLExecutionEnd => onExecutionEnd(e)
     case e: SparkListenerDriverAccumUpdates => onDriverAccumUpdates(e)
     case _ => // Ignore

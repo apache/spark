@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveAccumUpdates, SparkListenerSQLAdaptiveExecutionUpdate, SQLPlanMetric}
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -497,7 +497,12 @@ case class AdaptiveSparkPlanExec(
    */
   private def onUpdatePlan(executionId: Long): Unit = {
     if (isSubquery) {
-      onUpdateAccumulator(collectSQLMetrics(currentPhysicalPlan), executionId)
+      // When executing subqueries, we can't update the query plan in the UI as the
+      // UI doesn't support partial update yet. However, the subquery may have been
+      // optimized into a different plan and we must let the UI know the SQL metrics
+      // of the new plan nodes, so that it can track the valid accumulator updates later
+      // and display SQL metrics correctly.
+      onUpdateSQLMetrics(collectSQLMetrics(currentPhysicalPlan), executionId)
     } else {
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(
         executionId,
@@ -506,12 +511,11 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
-  private def onUpdateAccumulator(sqlMetrics: Seq[SQLMetric], executionId: Long): Unit = {
+  private def onUpdateSQLMetrics(sqlMetrics: Seq[SQLMetric], executionId: Long): Unit = {
     val sqlPlanMetrics = sqlMetrics.map { case sqlMetric =>
       SQLPlanMetric(sqlMetric.name.get, sqlMetric.id, sqlMetric.metricType)
     }
-    val executionId = context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveAccumUpdates(
+    context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
       executionId.toLong, sqlPlanMetrics))
   }
 

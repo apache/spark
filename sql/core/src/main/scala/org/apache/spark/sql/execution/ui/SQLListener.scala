@@ -34,7 +34,8 @@ case class SparkListenerSQLAdaptiveExecutionUpdate(
   sparkPlanInfo: SparkPlanInfo)
   extends SparkListenerEvent
 
-case class SparkListenerSQLAdaptiveAccumUpdates(
+@DeveloperApi
+case class SparkListenerSQLAdaptiveSQLMetricUpdates(
     executionId: Long,
     sqlPlanMetrics: Seq[SQLPlanMetric])
   extends SparkListenerEvent
