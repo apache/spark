@@ -41,7 +41,8 @@ case class SortMergeJoinExec(
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryExecNode with CodegenSupport {
+    right: SparkPlan,
+    partialSMJ: Option[Boolean] = None) extends BinaryExecNode with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -96,15 +97,8 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  private def containSkewedReader(plan: SparkPlan): Boolean = plan match {
-    case s: SkewedPartitionReaderExec => true
-    case p: PartialShuffleReaderExec => true
-    case s: SortExec => containSkewedReader(s.child)
-    case _ => false
-  }
-
   override def requiredChildDistribution: Seq[Distribution] = {
-    if (containSkewedReader(left)) {
+    if (partialSMJ.nonEmpty && partialSMJ.get) {
       UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
     } else {
       HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
