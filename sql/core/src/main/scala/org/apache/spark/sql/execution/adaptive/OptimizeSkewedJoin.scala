@@ -199,13 +199,10 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
       }
       logDebug(s"number of skewed partitions is ${skewedPartitions.size}")
       if (skewedPartitions.nonEmpty) {
-        val optimizedSmj = smj.transformUp {
-          case shuffleStage: ShuffleQueryStageExec if shuffleStage.id == left.id ||
-            shuffleStage.id == right.id =>
-            PartialShuffleReaderExec(shuffleStage, skewedPartitions.toSet)
-          case sort: SortMergeJoinExec =>
-            sort.copy(isPartial = true)
-        }
+        val optimizedSmj = smj.copy(
+          left = s1.copy(child = PartialShuffleReaderExec(left, skewedPartitions.toSet)),
+          right = s2.copy(child = PartialShuffleReaderExec(right, skewedPartitions.toSet)),
+          isPartial = true)
         subJoins += optimizedSmj
         UnionExec(subJoins)
       } else {
