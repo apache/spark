@@ -579,6 +579,33 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-30524: AQE should disable OptimizeSkewedJoin rule" +
+    " when introduce additional shuffle") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_SKEWED_PARTITION_SIZE_THRESHOLD.key -> "100",
+      SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key -> "700") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 2 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+        val (innerPlan, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT key1 FROM skewData1 join skewData2 ON key1 = key2 group by key1")
+        val innerSmj = findTopLevelSortMergeJoin(innerPlan)
+        assert(innerSmj.size == 1)
+        // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
+        val innerSmjAfter = findTopLevelSortMergeJoin(innerAdaptivePlan)
+        assert(innerSmjAfter.size == 1)
+      }
+    }
+  }
+
   test("SPARK-29544: adaptive skew join with different join types") {
     Seq("false", "true").foreach { reducePostShufflePartitionsEnabled =>
       withSQLConf(
