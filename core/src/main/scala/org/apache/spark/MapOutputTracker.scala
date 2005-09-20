@@ -994,22 +994,22 @@ private[spark] object MapOutputTracker extends Logging {
   }
 
   /**
-    * Given an array of map statuses, the mapId and a range of map output
-    * partitions, returns a sequence that, lists the shuffle block IDs and corresponding shuffle
-    * block sizes stored at that block manager.
-    *
-    * If the status of the map is null (indicating a missing location due to a failed mapper),
-    * throws a FetchFailedException.
-    *
-    * @param shuffleId Identifier for the shuffle
-    * @param startPartition Start of map output partition ID range (included in range)
-    * @param endPartition End of map output partition ID range (excluded from range)
-    * @param statuses List of map statuses, indexed by map ID.
-    * @param mapId Identifier for the map
-    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
-    *         and the second item is a sequence of (shuffle block ID, shuffle block size, map index)
-    *         tuples describing the shuffle blocks that are stored at that block manager.
-    */
+   * Given an array of map statuses, the mapId and a range of map output
+   * partitions, returns a sequence that, lists the shuffle block IDs and corresponding shuffle
+   * block sizes stored at that block manager.
+   *
+   * If the status of the map is null (indicating a missing location due to a failed mapper),
+   * throws a FetchFailedException.
+   *
+   * @param shuffleId Identifier for the shuffle
+   * @param startPartition Start of map output partition ID range (included in range)
+   * @param endPartition End of map output partition ID range (excluded from range)
+   * @param statuses List of map statuses, indexed by map ID.
+   * @param mapId Identifier for the map id
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block ID, shuffle block size, map index)
+   *         tuples describing the shuffle blocks that are stored at that block manager.
+   */
   def convertMapStatuses(
       shuffleId: Int,
       startPartition: Int,
