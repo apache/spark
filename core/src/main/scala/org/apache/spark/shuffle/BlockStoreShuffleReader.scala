@@ -37,27 +37,25 @@ private[spark] class BlockStoreShuffleReader[K, C](
     serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
     mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker,
-    startMapId: Option[Int] = None,
-    endMapId: Option[Int] = None)
+    mapId: Option[Int] = None)
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val blocksByAddress = (startMapId, endMapId) match {
-      case (Some(startId), Some(endId)) => mapOutputTracker.getMapSizesByExecutorId(
+    val blocksByAddress = (mapId) match {
+      case (Some(mapId)) => mapOutputTracker.getMapSizesByExecutorId(
         handle.shuffleId,
         startPartition,
         endPartition,
-        startId,
-        endId)
-      case (None, None) => mapOutputTracker.getMapSizesByExecutorId(
+        mapId)
+      case (None) => mapOutputTracker.getMapSizesByExecutorId(
         handle.shuffleId,
         startPartition,
         endPartition)
-      case (_, _) => throw new IllegalArgumentException(
-        "startMapId and endMapId should be both set or unset")
+      case (_) => throw new IllegalArgumentException(
+        "mapId should be both set or unset")
     }
 
     val wrappedStreams = new ShuffleBlockFetcherIterator(

@@ -74,7 +74,7 @@ case class AdaptiveSparkPlanExec(
   @transient private val optimizer = new RuleExecutor[LogicalPlan] {
     // TODO add more optimization rules
     override protected def batches: Seq[Batch] = Seq(
-      Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf))
+      // Batch("Demote BroadcastHashJoin", Once, DemoteBroadcastHashJoin(conf))
     )
   }
 
@@ -84,6 +84,7 @@ case class AdaptiveSparkPlanExec(
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
+    OptimizeLocalShuffleReader(conf),
     ensureRequirements
   )
 
@@ -91,7 +92,6 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, subqueryCache),
-    OptimizedLocalShuffleReader(conf),
     ReduceNumShufflePartitions(conf),
     ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
       session.sessionState.columnarRules),
