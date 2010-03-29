@@ -1,0 +1,14 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <artifactId>asm-parent</artifactId>
+    <groupId>asm</groupId>
+    <version>3.2</version>
+  </parent>
+
+  <name>ASM Core</name>
+  <artifactId>asm</artifactId>
+  <packaging>jar</packaging>
+  
+</project>

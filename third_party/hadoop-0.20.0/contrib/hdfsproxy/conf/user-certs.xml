@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- 
+
+This file defines the mappings from username to comma seperated list
+of certificate serial numbers that the user is allowed to use. One mapping
+per user. Wildcard characters, such as "*" and "?", are not recognized. 
+Any leading or trailing whitespaces are stripped/ignored. Note that user
+"Admin" is the special hdfsproxy admin user. To make a user an admin, add 
+the user's certificate serial number to user "Admin". Normal users cannot 
+have "Admin" as username. Usernames can only comprise of 0-9a-zA-Z and
+underscore.
+
+-->
+
+<configuration>
+
+<property>
+  <name>Admin</name>
+  <value></value>
+  <description> Special hdfsproxy admin user
+  </description>
+</property>
+
+</configuration>

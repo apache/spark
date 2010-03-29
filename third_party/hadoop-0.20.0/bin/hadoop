@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# The Hadoop command script
+#
+# Environment Variables
+#
+#   JAVA_HOME        The java implementation to use.  Overrides JAVA_HOME.
+#
+#   HADOOP_CLASSPATH Extra Java CLASSPATH entries.
+#
+#   HADOOP_HEAPSIZE  The maximum amount of heap to use, in MB. 
+#                    Default is 1000.
+#
+#   HADOOP_OPTS      Extra Java runtime options.
+#   
+#   HADOOP_NAMENODE_OPTS       These options are added to HADOOP_OPTS 
+#   HADOOP_CLIENT_OPTS         when the respective command is run.
+#   HADOOP_{COMMAND}_OPTS etc  HADOOP_JT_OPTS applies to JobTracker 
+#                              for e.g.  HADOOP_CLIENT_OPTS applies to 
+#                              more than one command (fs, dfs, fsck, 
+#                              dfsadmin etc)  
+#
+#   HADOOP_CONF_DIR  Alternate conf dir. Default is ${HADOOP_HOME}/conf.
+#
+#   HADOOP_ROOT_LOGGER The root appender. Default is INFO,console
+#
+
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
+
+. "$bin"/hadoop-config.sh
+
+cygwin=false
+case "`uname`" in
+CYGWIN*) cygwin=true;;
+esac
+
+# if no args specified, show usage
+if [ $# = 0 ]; then
+  echo "Usage: hadoop [--config confdir] COMMAND"
+  echo "where COMMAND is one of:"
+  echo "  namenode -format     format the DFS filesystem"
+  echo "  secondarynamenode    run the DFS secondary namenode"
+  echo "  namenode             run the DFS namenode"
+  echo "  datanode             run a DFS datanode"
+  echo "  dfsadmin             run a DFS admin client"
+  echo "  mradmin              run a Map-Reduce admin client"
+  echo "  fsck                 run a DFS filesystem checking utility"
+  echo "  fs                   run a generic filesystem user client"
+  echo "  balancer             run a cluster balancing utility"
+  echo "  jobtracker           run the MapReduce job Tracker node" 
+  echo "  pipes                run a Pipes job"
+  echo "  tasktracker          run a MapReduce task Tracker node" 
+  echo "  job                  manipulate MapReduce jobs"
+  echo "  queue                get information regarding JobQueues" 
+  echo "  version              print the version"
+  echo "  jar <jar>            run a jar file"
+  echo "  distcp <srcurl> <desturl> copy file or directories recursively"
+  echo "  archive -archiveName NAME <src>* <dest> create a hadoop archive"
+  echo "  daemonlog            get/set the log level for each daemon"
+  echo " or"
+  echo "  CLASSNAME            run the class named CLASSNAME"
+  echo "Most commands print help when invoked w/o parameters."
+  exit 1
+fi
+
+# get arguments
+COMMAND=$1
+shift
+
+if [ -f "${HADOOP_CONF_DIR}/hadoop-env.sh" ]; then
+  . "${HADOOP_CONF_DIR}/hadoop-env.sh"
+fi
+
+# some Java parameters
+if [ "$JAVA_HOME" != "" ]; then
+  #echo "run java in $JAVA_HOME"
+  JAVA_HOME=$JAVA_HOME
+fi
+  
+if [ "$JAVA_HOME" = "" ]; then
+  echo "Error: JAVA_HOME is not set."
+  exit 1
+fi
+
+JAVA=$JAVA_HOME/bin/java
+JAVA_HEAP_MAX=-Xmx1000m 
+
+# check envvars which might override default args
+if [ "$HADOOP_HEAPSIZE" != "" ]; then
+  #echo "run with heapsize $HADOOP_HEAPSIZE"
+  JAVA_HEAP_MAX="-Xmx""$HADOOP_HEAPSIZE""m"
+  #echo $JAVA_HEAP_MAX
+fi
+
+# CLASSPATH initially contains $HADOOP_CONF_DIR
+CLASSPATH="${HADOOP_CONF_DIR}"
+CLASSPATH=${CLASSPATH}:$JAVA_HOME/lib/tools.jar
+
+# for developers, add Hadoop classes to CLASSPATH
+if [ -d "$HADOOP_HOME/build/classes" ]; then
+  CLASSPATH=${CLASSPATH}:$HADOOP_HOME/build/classes
+fi
+if [ -d "$HADOOP_HOME/build/webapps" ]; then
+  CLASSPATH=${CLASSPATH}:$HADOOP_HOME/build
+fi
+if [ -d "$HADOOP_HOME/build/test/classes" ]; then
+  CLASSPATH=${CLASSPATH}:$HADOOP_HOME/build/test/classes
+fi
+if [ -d "$HADOOP_HOME/build/tools" ]; then
+  CLASSPATH=${CLASSPATH}:$HADOOP_HOME/build/tools
+fi
+
+# so that filenames w/ spaces are handled correctly in loops below
+IFS=
+
+# for releases, add core hadoop jar & webapps to CLASSPATH
+if [ -d "$HADOOP_HOME/webapps" ]; then
+  CLASSPATH=${CLASSPATH}:$HADOOP_HOME
+fi
+for f in $HADOOP_HOME/hadoop-*-core.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+
+# add libs to CLASSPATH
+for f in $HADOOP_HOME/lib/*.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+
+if [ -d "$HADOOP_HOME/build/ivy/lib/Hadoop/common" ]; then
+for f in $HADOOP_HOME/build/ivy/lib/Hadoop/common/*.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+fi
+
+for f in $HADOOP_HOME/lib/jsp-2.1/*.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+
+for f in $HADOOP_HOME/hadoop-*-tools.jar; do
+  TOOL_PATH=${TOOL_PATH}:$f;
+done
+for f in $HADOOP_HOME/build/hadoop-*-tools.jar; do
+  TOOL_PATH=${TOOL_PATH}:$f;
+done
+
+# add user-specified CLASSPATH last
+if [ "$HADOOP_CLASSPATH" != "" ]; then
+  CLASSPATH=${CLASSPATH}:${HADOOP_CLASSPATH}
+fi
+
+# default log directory & file
+if [ "$HADOOP_LOG_DIR" = "" ]; then
+  HADOOP_LOG_DIR="$HADOOP_HOME/logs"
+fi
+if [ "$HADOOP_LOGFILE" = "" ]; then
+  HADOOP_LOGFILE='hadoop.log'
+fi
+
+# default policy file for service-level authorization
+if [ "$HADOOP_POLICYFILE" = "" ]; then
+  HADOOP_POLICYFILE="hadoop-policy.xml"
+fi
+
+# restore ordinary behaviour
+unset IFS
+
+# figure out which class to run
+if [ "$COMMAND" = "namenode" ] ; then
+  CLASS='org.apache.hadoop.hdfs.server.namenode.NameNode'
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_NAMENODE_OPTS"
+elif [ "$COMMAND" = "secondarynamenode" ] ; then
+  CLASS='org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode'
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_SECONDARYNAMENODE_OPTS"
+elif [ "$COMMAND" = "datanode" ] ; then
+  CLASS='org.apache.hadoop.hdfs.server.datanode.DataNode'
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_DATANODE_OPTS"
+elif [ "$COMMAND" = "fs" ] ; then
+  CLASS=org.apache.hadoop.fs.FsShell
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "dfs" ] ; then
+  CLASS=org.apache.hadoop.fs.FsShell
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "dfsadmin" ] ; then
+  CLASS=org.apache.hadoop.hdfs.tools.DFSAdmin
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "mradmin" ] ; then
+  CLASS=org.apache.hadoop.mapred.tools.MRAdmin
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "fsck" ] ; then
+  CLASS=org.apache.hadoop.hdfs.tools.DFSck
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "balancer" ] ; then
+  CLASS=org.apache.hadoop.hdfs.server.balancer.Balancer
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_BALANCER_OPTS"
+elif [ "$COMMAND" = "jobtracker" ] ; then
+  CLASS=org.apache.hadoop.mapred.JobTracker
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_JOBTRACKER_OPTS"
+elif [ "$COMMAND" = "tasktracker" ] ; then
+  CLASS=org.apache.hadoop.mapred.TaskTracker
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_TASKTRACKER_OPTS"
+elif [ "$COMMAND" = "job" ] ; then
+  CLASS=org.apache.hadoop.mapred.JobClient
+elif [ "$COMMAND" = "queue" ] ; then
+  CLASS=org.apache.hadoop.mapred.JobQueueClient
+elif [ "$COMMAND" = "pipes" ] ; then
+  CLASS=org.apache.hadoop.mapred.pipes.Submitter
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "version" ] ; then
+  CLASS=org.apache.hadoop.util.VersionInfo
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "jar" ] ; then
+  CLASS=org.apache.hadoop.util.RunJar
+elif [ "$COMMAND" = "distcp" ] ; then
+  CLASS=org.apache.hadoop.tools.DistCp
+  CLASSPATH=${CLASSPATH}:${TOOL_PATH}
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "daemonlog" ] ; then
+  CLASS=org.apache.hadoop.log.LogLevel
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "archive" ] ; then
+  CLASS=org.apache.hadoop.tools.HadoopArchives
+  CLASSPATH=${CLASSPATH}:${TOOL_PATH}
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "sampler" ] ; then
+  CLASS=org.apache.hadoop.mapred.lib.InputSampler
+  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+else
+  CLASS=$COMMAND
+fi
+
+# cygwin path translation
+if $cygwin; then
+  CLASSPATH=`cygpath -p -w "$CLASSPATH"`
+  HADOOP_HOME=`cygpath -w "$HADOOP_HOME"`
+  HADOOP_LOG_DIR=`cygpath -w "$HADOOP_LOG_DIR"`
+  TOOL_PATH=`cygpath -p -w "$TOOL_PATH"`
+fi
+# setup 'java.library.path' for native-hadoop code if necessary
+JAVA_LIBRARY_PATH=''
+if [ -d "${HADOOP_HOME}/build/native" -o -d "${HADOOP_HOME}/lib/native" ]; then
+  JAVA_PLATFORM=`CLASSPATH=${CLASSPATH} ${JAVA} -Xmx32m org.apache.hadoop.util.PlatformName | sed -e "s/ /_/g"`
+  
+  if [ -d "$HADOOP_HOME/build/native" ]; then
+    JAVA_LIBRARY_PATH=${HADOOP_HOME}/build/native/${JAVA_PLATFORM}/lib
+  fi
+  
+  if [ -d "${HADOOP_HOME}/lib/native" ]; then
+    if [ "x$JAVA_LIBRARY_PATH" != "x" ]; then
+      JAVA_LIBRARY_PATH=${JAVA_LIBRARY_PATH}:${HADOOP_HOME}/lib/native/${JAVA_PLATFORM}
+    else
+      JAVA_LIBRARY_PATH=${HADOOP_HOME}/lib/native/${JAVA_PLATFORM}
+    fi
+  fi
+fi
+
+# cygwin path translation
+if $cygwin; then
+  JAVA_LIBRARY_PATH=`cygpath -p "$JAVA_LIBRARY_PATH"`
+fi
+
+HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.log.dir=$HADOOP_LOG_DIR"
+HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.log.file=$HADOOP_LOGFILE"
+HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.home.dir=$HADOOP_HOME"
+HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.id.str=$HADOOP_IDENT_STRING"
+HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.root.logger=${HADOOP_ROOT_LOGGER:-INFO,console}"
+if [ "x$JAVA_LIBRARY_PATH" != "x" ]; then
+  HADOOP_OPTS="$HADOOP_OPTS -Djava.library.path=$JAVA_LIBRARY_PATH"
+fi  
+HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.policy.file=$HADOOP_POLICYFILE"
+
+# run it
+exec "$JAVA" $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@"

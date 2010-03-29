@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!--
+**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+**  
+ -->
+<!-- This is a diagnostic test configuration file. Diagnostic test driver 
+     reads this file to get the list of tests and their configuration information
+     
+   Title            : Provides brief description of the test
+   ClassName        : Provides the fully qualified java class name that implements the test condition
+   Description      : Provides detailed information about the test describing how it checks for a specific
+                        performance problem.
+   SuccessThreshold : (value between [0..1])        
+                    : Evaluation of a diagnostic test returns its level of impact on the job
+                      performance. If impact value [between 0..1] is equal or greater than the 
+                      success threshold, means rule has detected the problem (TEST POSITIVE) else 
+                      rule has passed the test (TEST NEGATIVE). The impact level is calculated and 
+                      returned by each test's evaluate method. For tests that are boolean in nature 
+                      the impact level is either 0 or 1 and success threshold should be 1.
+   Importance       : Indicates relative importance of this diagnostic test among the set of
+                      diagnostic rules defined in this file. Three declarative values that
+                      can be assigned are High, Medium or Low
+   Prescription     : This is an optional element to store the advice to be included in the report upon test failure
+                      This is overwritten in the report by any advice/prescription text returned by getPrescription method of 
+                      DiagnosticTest.  
+   InputElement     : Input element is made available to the diagnostic test for it to interpret and accept 
+                      any parameters specific to the test. These test specific parameters are used to configure 
+                      the tests without changing the java code.
+-->
+<PostExPerformanceDiagnosisTests>
+
+<DiagnosticTest>
+  <Title><![CDATA[Balanaced Reduce Partitioning]]></Title>
+  <ClassName><![CDATA[org.apache.hadoop.vaidya.postexdiagnosis.tests.BalancedReducePartitioning]]></ClassName>
+  <Description><![CDATA[This rule tests as to how well the input to reduce tasks is balanced]]></Description>
+  <Importance><![CDATA[High]]></Importance> 
+  <SuccessThreshold><![CDATA[0.20]]></SuccessThreshold>
+  <Prescription><![CDATA[advice]]></Prescription>
+  <InputElement>
+    <PercentReduceRecords><![CDATA[0.85]]></PercentReduceRecords>
+  </InputElement>
+</DiagnosticTest>
+
+<DiagnosticTest>
+  <Title><![CDATA[Impact of Map tasks Re-Execution]]></Title>
+  <ClassName><![CDATA[org.apache.hadoop.vaidya.postexdiagnosis.tests.MapsReExecutionImpact]]></ClassName>
+  <Description><![CDATA[This test rule checks percentage of map task re-execution impacting the job performance]]></Description>
+  <Importance><![CDATA[High]]></Importance> 
+  <SuccessThreshold><![CDATA[0.40]]></SuccessThreshold>
+  <Prescription><![CDATA[default advice]]></Prescription>
+  <InputElement>
+  </InputElement>
+</DiagnosticTest>
+
+<DiagnosticTest>
+  <Title><![CDATA[Impact of Reduce tasks Re-Execution]]></Title>
+  <ClassName><![CDATA[org.apache.hadoop.vaidya.postexdiagnosis.tests.ReducesReExecutionImpact]]></ClassName>
+  <Description><![CDATA[This test rule checks percentage of reduce task re-execution impacting the job performance]]></Description>
+  <Importance><![CDATA[High]]></Importance> 
+  <SuccessThreshold><![CDATA[0.40]]></SuccessThreshold>
+  <Prescription><![CDATA[default advice]]></Prescription>
+  <InputElement>
+  </InputElement>
+</DiagnosticTest>
+
+<DiagnosticTest>
+  <Title><![CDATA[Map and/or Reduce tasks reading HDFS data as a side effect]]></Title>
+  <ClassName><![CDATA[org.apache.hadoop.vaidya.postexdiagnosis.tests.ReadingHDFSFilesAsSideEffect]]></ClassName>
+  <Description><![CDATA[This test rule checks if map/reduce tasks are reading data from HDFS as a side effect. More the data read as a side effect can potentially be a bottleneck across parallel execution of map/reduce tasks.]]></Description>
+  <Importance><![CDATA[High]]></Importance> 
+  <SuccessThreshold><![CDATA[0.05]]></SuccessThreshold>
+  <Prescription><![CDATA[default advice]]></Prescription>
+  <InputElement>
+  </InputElement>
+</DiagnosticTest>
+
+<DiagnosticTest>
+  <Title><![CDATA[Map side disk spill]]></Title>
+  <ClassName><![CDATA[org.apache.hadoop.vaidya.postexdiagnosis.tests.MapSideDiskSpill]]></ClassName>
+  <Description><![CDATA[This test rule checks if Map tasks are spilling the data on to the local disk during the map side sorting due to insufficient sort buffer size. The impact is calculated as ratio between local bytes written to map output bytes. Impact is normalized using NormalizationFactor given below and any value greater than or equal to normalization factor is treated as maximum (i.e. 1). ]]></Description>
+  <Importance><![CDATA[Low]]></Importance> 
+  <SuccessThreshold><![CDATA[0.3]]></SuccessThreshold>
+  <Prescription><![CDATA[default advice]]></Prescription>
+  <InputElement>
+    <NormalizationFactor>3.0</NormalizationFactor>
+  </InputElement>
+</DiagnosticTest>
+
+</PostExPerformanceDiagnosisTests>

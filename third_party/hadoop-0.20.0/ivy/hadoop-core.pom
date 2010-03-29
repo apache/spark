@@ -1,0 +1,257 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+  <!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+  -->
+
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.apache.hadoop</groupId>
+  <artifactId>hadoop-core</artifactId>
+  <packaging>jar</packaging>
+  <version>${hadoop.version}</version>
+  <description>
+    Hadoop is the distributed computing framework of Apache; hadoop-core contains
+    the filesystem, job tracker and map/reduce modules
+  </description>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>http://apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+  <dependencies>
+
+
+    <!-- always include commons-logging and log4J -->
+    <dependency>
+      <groupId>commons-logging</groupId>
+      <artifactId>commons-logging</artifactId>
+      <version>${commons-logging.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>avalon-framework</groupId>
+          <artifactId>avalon-framework</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>javax.servlet</groupId>
+          <artifactId>servlet-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>logkit</groupId>
+          <artifactId>logkit</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>log4j</groupId>
+          <artifactId>log4j</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+      <version>${log4j.version}</version>
+      <scope>optional</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>javax.mail</groupId>
+          <artifactId>mail</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>javax.jms</groupId>
+          <artifactId>jms</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.jdmk</groupId>
+          <artifactId>jmxtools</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.jmx</groupId>
+          <artifactId>jmxri</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!--SLF4J is a JAR-based dependency; this POM binds it to log4J-->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j-api.version}</version>
+      <scope>optional</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-log4j12</artifactId>
+      <version>${slf4j-log4j12.version}</version>
+      <scope>optional</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>log4j</groupId>
+          <artifactId>log4j</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!--Httpclient and its components are optional-->
+
+    <dependency>
+      <groupId>commons-httpclient</groupId>
+      <artifactId>commons-httpclient</artifactId>
+      <version>3.1</version>
+      <scope>optional</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+      <version>1.3</version>
+      <scope>optional</scope>
+    </dependency>
+
+    <!--CLI is needed to scan the command line, but only the 1.0 branch is released -->
+    <dependency>
+      <groupId>commons-cli</groupId>
+      <artifactId>commons-cli</artifactId>
+      <version>2.0-20070823</version>
+      <scope>optional</scope>
+    </dependency>
+
+
+   <!-- this is used for the ftp:// filesystem-->
+    <dependency>
+      <groupId>commons-net</groupId>
+      <artifactId>commons-net</artifactId>
+      <version>1.4.1</version>
+      <scope>optional</scope>
+    </dependency>
+
+    <!-- Jetty is used to serve up the application. It is marked as optional because
+    clients do not need it. All server-side deployments will need
+     all of these files.-->
+    <dependency>
+      <groupId>javax.servlet</groupId>
+      <artifactId>servlet-api</artifactId>
+      <version>${servlet-api.version}</version>
+      <scope>optional</scope>
+    </dependency>
+    <dependency>
+      <groupId>jetty</groupId>
+      <artifactId>org.mortbay.jetty</artifactId>
+      <version>${jetty.version}</version>
+      <scope>optional</scope>
+    </dependency>
+
+
+    <!--JSP support -->
+
+    <dependency>
+      <groupId>org.mortbay.jetty</groupId>
+      <artifactId>jsp-2.1</artifactId>
+      <version>${jetty.version}</version>
+      <scope>optional</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mortbay.jetty</groupId>
+      <artifactId>jsp-api-2.1</artifactId>
+      <version>${jetty.version}</version>
+      <scope>optional</scope>
+    </dependency>
+    <dependency>
+      <groupId>commons-el</groupId>
+      <artifactId>commons-el</artifactId>
+      <version>${commons-el.version}</version>
+      <scope>optional</scope>
+    </dependency>
+
+
+    <!--JSPC assistance-->
+
+    <dependency>
+      <groupId>org.eclipse.jdt</groupId>
+      <artifactId>core</artifactId>
+      <version>${core.version}</version>
+      <scope>optional</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.ant</groupId>
+      <artifactId>ant</artifactId>
+      <version>${apacheant.version}</version>
+      <scope>optional</scope>
+    </dependency>
+
+    <!-- JetS3t is a client library for S3.
+    -It is only needed if you want to work with S3 filesystems
+    -It pulls in commons-logging 1.1.1 and does not exclude all the cruft that comes with it.
+    By excluding it we stay in control of versions and dependencies
+    -->
+
+    <dependency>
+      <groupId>net.java.dev.jets3t</groupId>
+      <artifactId>jets3t</artifactId>
+      <version>${jets3t.version}</version>
+      <scope>optional</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!--Kosmos filesystem
+    http://kosmosfs.sourceforge.net/
+    This is not in the central repository
+    -->
+    <!--
+        <dependency>
+          <groupId>org.kosmix</groupId>
+          <artifactId>kfs</artifactId>
+          <version>0.1</version>
+          <scope>optional</scope>
+        </dependency>
+    -->
+
+    <!--
+     http://xmlenc.sourceforge.net/
+     "The xmlenc library is a fast stream-based XML output library for Java."
+    -->
+    <dependency>
+      <groupId>xmlenc</groupId>
+      <artifactId>xmlenc</artifactId>
+      <version>0.52</version>
+      <scope>optional</scope>
+    </dependency>
+  </dependencies>
+</project>

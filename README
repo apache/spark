@@ -1,0 +1,16 @@
+Spark requires Scala 2.7.7. It will currently not work with 2.8, or with
+earlier versions of the 2.7 branch.
+
+To build and run Spark, you will need to have Scala's bin in your $PATH,
+or you will need to set the SCALA_HOME environment variable to point
+to where you've installed Scala. Scala must be accessible through one
+of these methods on Nexus slave nodes as well as on the master.
+
+To build Spark and the example programs, run make.
+
+To run one of the examples, use ./run <class> <params>. For example,
+./run SparkLR will run the Logistic Regression example. Each of the
+example programs prints usage help if no params are given.
+
+Tip: If you are building Spark and examples repeatedly, export USE_FSC=1
+to have the Makefile use the fsc compiler daemon instead of scalac.

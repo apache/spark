@@ -1,0 +1,66 @@
+VERSION = 3.5
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+libdir = @libdir@
+bindir = @bindir@
+includedir = @includedir@
+
+VPATH = @srcdir@
+
+CC = @CC@
+CPPFLAGS = -I. @CPPFLAGS@
+CFLAGS = @CFLAGS@
+LDFLAGS = @LDFLAGS@
+RANLIB = @RANLIB@
+INSTALL = @INSTALL@
+INSTALL_DATA = @INSTALL_DATA@
+
+all: Makefile lzf
+
+clean:
+	-rm -f *.o *.a lzf bench
+
+lzf_c.o: lzf_c.c lzfP.h
+
+lzf_d.o: lzf_d.c lzfP.h
+
+lzf.o: lzf.c
+
+lzf: lzf.o liblzf.a
+
+lzfP.h: lzf.h config.h
+
+liblzf.a: lzf_c.o lzf_d.o
+	rm -f $@
+	$(AR) rc $@ $^
+	$(RANLIB) $@
+
+install: all
+	$(INSTALL) -d $(bindir)
+	$(INSTALL) -m 755 lzf $(bindir)
+	$(INSTALL) -d $(includedir)
+	$(INSTALL_DATA) lzf.h $(includedir)
+	$(INSTALL) -d $(libdir)
+	$(INSTALL_DATA) liblzf.a $(libdir)
+
+dist:
+	mkdir liblzf-$(VERSION)
+	tar c LICENSE README Makefile.in config.h.in \
+              configure configure.ac install-sh \
+	      cs/README cs/CLZF.cs \
+              lzf.h lzfP.h lzf_c.c lzf_d.c \
+              crc32.h lzf.c Changes \
+              | tar xpC liblzf-$(VERSION)
+	-chown -R root.root liblzf-$(VERSION)
+	chmod -R u=rwX,go=rX liblzf-$(VERSION)
+	tar cvf - liblzf-$(VERSION) | gzip -9 >liblzf-$(VERSION).tar.gz
+	rm -rf liblzf-$(VERSION)
+	ls -l liblzf-$(VERSION).tar.gz
+
+Makefile: Makefile.in
+	./config.status
+
+bench: Makefile liblzf.a bench.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -g -o bench bench.c -L. -llzf
+

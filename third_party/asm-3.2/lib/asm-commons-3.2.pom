@@ -1,0 +1,21 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <artifactId>asm-parent</artifactId>
+    <groupId>asm</groupId>
+    <version>3.2</version>
+  </parent>
+
+  <name>ASM Commons</name>
+  <artifactId>asm-commons</artifactId>
+  <packaging>jar</packaging>
+  
+  <dependencies>
+    <dependency>
+      <artifactId>asm-tree</artifactId>
+      <groupId>asm</groupId>
+    </dependency>
+  </dependencies>
+
+</project>

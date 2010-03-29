@@ -1,0 +1,5 @@
+#!/bin/sh
+echo "In spark-executor"
+FWDIR="`dirname $0`"
+echo Framework dir: $FWDIR
+exec $FWDIR/run spark.Executor

@@ -1,0 +1,248 @@
+HOD Change Log
+
+Release 0.20.0 - (unreleased changes)
+
+  INCOMPATIBLE CHANGES
+
+  NEW FEATURES
+
+  IMPROVEMENTS
+
+    HADOOP-4705. Grant read permissions for files/directories
+    created by HOD. (Peeyush Bishnoi via yhemanth)
+
+    HADOOP-4937. Include ringmaster RPC port in the notes
+    attribute. (Peeyush Bishnoi via yhemanth)
+
+  OPTIMIZATIONS
+
+  BUG FIXES
+
+    HADOOP-4782. Revert umask changes in HADOOP-4705 so that
+    files are still securely created. (Peeyush Bishnoi via
+    yhemanth)
+
+Release 0.19.0 - 2008-11-18
+
+  INCOMPATIBLE CHANGES
+
+  NEW FEATURES
+
+    HADOOP-3695. Provide an ability to start multiple workers per node.
+    (Vinod Kumar Vavilapalli via yhemanth)
+
+  IMPROVEMENTS
+
+  OPTIMIZATIONS
+
+  BUG FIXES
+
+    HADOOP-3959. Pass options specified in resource_manager.options to
+    job submission. 
+    (Craig Macdonald and Vinod Kumar Vavilapalli via yhemanth)
+
+    HADOOP-3814. Remove generation of dfs.client.buffer.dir for the generated
+    hadoop-site.xml. (Vinod Kumar Vavilapalli via acmurthy)
+
+Release 0.18.2 - Unreleased 
+
+  BUG FIXES
+
+    HADOOP-3786. Use HDFS instead of DFS in all docs and hyperlink to Torque.
+    (Vinod Kumar Vavilapalli via acmurthy)
+
+Release 0.18.1 - 2008-09-17
+
+  INCOMPATIBLE CHANGES
+
+    HADOOP-4060. Modified HOD to rotate log files on the client side.
+    (Vinod Kumar Vavilapalli via yhemanth)
+
+  IMPROVEMENTS
+
+    HADOOP-4145. Add an accounting plugin (script) for HOD.
+    (Hemanth Yamijala via nigel)
+
+  BUG FIXES
+
+    HADOOP-4161. Fixed bug in HOD cleanup that had the potential to
+    hang clients. (Vinod Kumar Vavilapalli via nigel)
+
+Release 0.18.0 - 2008-08-19
+
+  INCOMPATIBLE CHANGES
+
+    HADOOP-3483. Modified HOD to create a cluster directory if one does not
+    exist and to auto-deallocate a cluster while reallocating it, if it is
+    already dead. (Hemanth Yamijala via mukund)
+
+    HADOOP-3184. Modified HOD to handle master failures on bad nodes by trying 
+    to bring them up on another node in the ring. (Hemanth Yamijala via ddas)
+
+    HADOOP-3610. Modified HOD to create cluster directory if one does not
+    exist when using the script option. (Vinod Kumar Vavilapalli via yhemanth)
+
+    HADOOP-3808. Modified HOD to include RPC port of the JobTracker
+    into the notes attribute of the resource manager. (yhemanth)
+
+  NEW FEATURES
+
+  IMPROVEMENTS
+
+    HADOOP-3376: Provide a mechanism to detect and handle violations to 
+    resource manager limits. (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-3151. Improves error messages when reporting failures due to 
+    incorrect parameters passed to HOD. (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-3464. Implemented a mechanism to transfer HOD errors that occur on
+    compute nodes to the submit node running the HOD client, so users have good
+    feedback on why an allocation failed. (Vinod Kumar Vavilapalli via mukund)
+
+    HADOOP-3505. Updated HOD documentation with changes made for Hadoop
+    0.18. (Vinod Kumar Vavilapalli via yhemanth)
+ 
+  BUG FIXES
+
+    HADOOP-2961. Avoids unnecessary checks for some configuration parameters
+    related to service configuration. (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-3523. Fixes auto-deallocation of cluster if job id is not found in
+    Torque's job list (Hemanth Yamijala via ddas)
+
+    HADOOP-3531. Fixes a bug related to handling JobTracker failures because of
+    timing issues on slow nodes. (Hemanth Yamijala via ddas)
+
+    HADOOP-3564. HOD generates values for the parameter dfs.datanode.ipc.address
+    in the hadoop-site.xml created on datanodes. 
+    (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-3076. Fixes a bug related to a spurious message about the 
+    script.exitcode file when a cluster directory is specified as a relative
+    path. (Vinod Kumar Vavilapalli via yhemanth)
+
+    HADOOP-3668. Makes editorial changes to HOD documentation.
+    (Vinod Kumar Vavilapalli via yhemanth)
+
+    HADOOP-3703. Fixes logcondense.py to use the new format of hadoop dfs -lsr
+    command line output format. (Vinod Kumar Vavilapalli via yhemanth)
+
+Release 0.17.3 - Unreleased 
+
+  BUG FIXES
+
+    HADOOP-3217. Decrease the rate at which the hod queries the resource
+    manager for job status. (Hemanth Yamijala via acmurthy) 
+
+Release 0.17.0 - 2008-05-18
+
+  INCOMPATIBLE CHANGES
+
+    HADOOP-3137. Modified build script to pick up version automatically
+    from Hadoop build. (yhemanth)
+
+  IMPROVEMENTS
+
+    HADOOP-2775.  Adds unit test framework for HOD.
+    (Vinod Kumar Vavilapalli via ddas).
+
+    HADOOP-2848. [HOD]hod -o list and deallocate works even after deleting
+    the cluster directory. (Hemanth Yamijala via ddas)
+
+    HADOOP-2899. [HOD] Cleans up hdfs:///mapredsystem directory after
+    deallocation. (Hemanth Yamijala via ddas)
+
+    HADOOP-2796. Enables distinguishing exit codes from user code vis-a-vis
+    HOD's exit code. (Hemanth Yamijala via ddas)
+
+    HADOOP-2947. HOD redirects stdout and stderr of daemons to assist
+    getting stack traces. (Vinod Kumar Vavilapalli via yhemanth)
+
+  BUG FIXES
+
+    HADOOP-2924. Fixes an address problem to do with TaskTracker binding
+    to an address. (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-2970. Fixes a problem to do with Wrong class definition for
+    hodlib/Hod/hod.py for Python < 2.5.1.
+    (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-2783. Fixes a problem to do with import in
+    hod/hodlib/Common/xmlrpc.py. (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-2936. Fixes HOD in a way that it generates hdfs://host:port on the
+    client side configs. (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-2983. [HOD] Fixes the problem - local_fqdn() returns None when
+    gethostbyname_ex doesnt return any FQDNs. (Craig Macdonald via ddas)
+
+    HADOOP-2982. Fixes a problem in the way HOD looks for free nodes.
+    (Hemanth Yamijala via ddas)
+
+    HADOOP-2855. Fixes the way HOD handles relative paths for cluster
+    directory, script file and other options.
+    (Vinod Kumar Vavilapalli via yhemanth)
+
+    HADOOP-3153. Fixes the way HOD handles allocation if the user has no
+    permissions to update the clusters state file.
+    (Vinod Kumar Vavilapalli via yhemanth)
+
+Release 0.16.4 - 2008-05-05
+
+  BUG FIXES
+
+    HADOOP-3304. [HOD] Fixes the way the logcondense.py utility searches
+    for log files that need to be deleted. (yhemanth via mukund)
+
+Release 0.16.2 - 2008-04-02
+
+  BUG FIXES
+
+    HADOOP-3103. [HOD] Hadoop.tmp.dir should not be set to cluster
+    directory. (Vinod Kumar Vavilapalli via ddas).
+
+Release 0.16.1 - 2008-03-13
+
+  INCOMPATIBLE CHANGES
+
+    HADOOP-2861. Improve the user interface for the HOD commands.
+    Command line structure has changed. (Hemanth Yamijala via nigel)
+
+  IMPROVEMENTS
+
+    HADOOP-2730. HOD documentation update.
+    (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-2911. Make the information printed by the HOD allocate and
+    info commands less verbose and clearer. (Vinod Kumar via nigel)
+
+  BUG FIXES
+
+    HADOOP-2766. Enables setting of HADOOP_OPTS env variable for the hadoop
+    daemons through HOD. (Vinod Kumar Vavilapalli via ddas)
+
+    HADOOP-2809.  Fix HOD syslog config syslog-address so that it works.
+    (Hemanth Yamijala via nigel)
+
+    HADOOP-2847.  Ensure idle cluster cleanup works even if the JobTracker
+    becomes unresponsive to RPC calls. (Hemanth Yamijala via nigel)
+
+    HADOOP-2925. Fix HOD to create the mapred system directory using a
+    naming convention that will avoid clashes in multi-user shared
+    cluster scenario. (Hemanth Yamijala via nigel)
+
+Release 0.16.0 - 2008-02-07
+
+  NEW FEATURES
+
+    HADOOP-1301.  Hadoop-On-Demand (HOD): resource management
+    provisioning for Hadoop. (Hemanth Yamijala via nigel)
+
+  BUG FIXES
+
+    HADOOP-2720. Jumbo bug fix patch to HOD.  Final sync of Apache SVN with
+    internal Yahoo SVN.  (Hemanth Yamijala via nigel)
+
+    HADOOP-2740. Fix HOD to work with the configuration variables changed in
+    HADOOP-2404. (Hemanth Yamijala via omalley)
+

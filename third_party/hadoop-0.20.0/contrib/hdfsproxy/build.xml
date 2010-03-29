@@ -1,0 +1,183 @@
+<?xml version="1.0" ?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<project name="hdfsproxy" default="jar">
+	<property name="hdfsproxyVersion" value="1.0"/>
+	<property name="final.name" value="${ant.project.name}-${hdfsproxyVersion}"/>
+	<property name="bin.dir" value="${basedir}/bin"/>
+	<property name="lib.dir" value="${basedir}/lib"/>
+	<property name="conf.dir" value="${basedir}/conf"/>
+	<property name="docs.dir" value="${basedir}/docs"/>
+	<import file="../build-contrib.xml"/>
+
+	<target name="jar" depends="compile" description="Create jar">
+		<echo>
+            Building the .jar files.
+        </echo>
+		<jar jarfile="${build.dir}/${final.name}.jar" basedir="${build.classes}" includes="org/apache/hadoop/hdfsproxy/**/*.class" >
+                        <manifest>
+                            <section name="org/apache/hadoop/hdfsproxy">
+                                <attribute name="Implementation-Title" value="HdfsProxy"/>
+                                <attribute name="Implementation-Version" value="${hdfsproxyVersion}"/>
+                                <attribute name="Implementation-Vendor" value="Apache"/>
+                            </section>
+                        </manifest>
+
+		</jar>
+	</target>
+
+	<!-- ====================================================== -->
+	<!-- Macro definitions                                      -->
+	<!-- ====================================================== -->
+	<macrodef name="macro_tar" description="Worker Macro for tar">
+		<attribute name="param.destfile"/>
+		<element name="param.listofitems"/>
+		<sequential>
+			<tar compression="gzip" longfile="gnu"
+          destfile="@{param.destfile}">
+				<param.listofitems/>
+			</tar>
+		</sequential>
+	</macrodef>
+
+	<!-- ================================================================== -->
+	<!-- D I S T R I B U T I O N                                            -->
+	<!-- ================================================================== -->
+	<!--                                                                    -->
+	<!-- ================================================================== -->
+	<target name="local-package" depends="jar" description="Package in local build directory">
+		<mkdir dir="${build.dir}/${final.name}"/>
+		<mkdir dir="${build.dir}/${final.name}/logs"/>
+		<copy todir="${build.dir}/${final.name}" includeEmptyDirs="false">
+			<fileset dir="${build.dir}">
+				<include name="*.jar" />
+				<include name="*.war" />
+			</fileset>
+		</copy>
+		<copy todir="${build.dir}/${final.name}/lib" includeEmptyDirs="false">
+			<fileset dir="${common.ivy.lib.dir}">
+        <include name="commons-logging-${commons-logging.version}"/>
+        <include name="commons-logging-api-${commons-logging-api.version}.jar"/>
+        <include name="junit-${junit.version}.jar"/>
+        <include name="log4j-${log4j.version}.jar"/>
+        <include name="slf4j-api-${slf4j-api.version}.jar"/>
+        <include name="slf4j-log4j${slf4j-log4j.version}.jar"/>
+        <include name="xmlenc-${xmlenc.version}.jar"/>
+        <include name="jetty-${jetty.version}.jar"/>
+        <include name="servlet-api-${servlet-api-2.5.version}.jar"/>
+        <include name="core-${core.vesion}"/> 
+                       </fileset>
+		       <fileset dir="${hadoop.root}/lib/jsp-${jsp.version}">
+        <include name="jsp-${jsp.version}"/> 
+        <include name="jsp-api-${jsp-api.vesion}"/> 
+			</fileset>
+		</copy>
+
+		<copy todir="${build.dir}/${final.name}/lib" includeEmptyDirs="false">
+                  	<fileset dir="${hadoop.root}/build">
+                          	<include name="*-core.jar"/>
+                          	<include name="*-tools.jar"/>
+			</fileset>
+		</copy>
+
+		<copy todir="${build.dir}/${final.name}/bin">
+			<fileset dir="${bin.dir}"/>
+		</copy>
+
+		<copy todir="${build.dir}/${final.name}/conf">
+			<fileset dir="${conf.dir}"/>
+		</copy>
+
+		<copy todir="${build.dir}/${final.name}">
+			<fileset dir="${basedir}">
+				<include name="README" />
+				<include name="build.xml" />
+				<include name="*.txt" />
+			</fileset>
+		</copy>
+
+		<copy todir="${build.dir}/${final.name}/src" includeEmptyDirs="true">
+			<fileset dir="${src.dir}" excludes="**/*.template **/docs/build/**/*"/>
+		</copy>
+
+		<chmod perm="ugo+x" type="file" parallel="false">
+			<fileset dir="${build.dir}/${final.name}/bin"/>
+		</chmod>
+
+	</target>
+	
+	<target name="package" depends="local-package" description="Build distribution">
+    <mkdir dir="${dist.dir}/contrib/${name}"/>
+    <copy todir="${dist.dir}/contrib/${name}">
+      <fileset dir="${build.dir}/${final.name}">
+      	<exclude name="**/lib/**" />
+      	<exclude name="**/src/**" />
+      </fileset>
+    </copy>
+    <chmod dir="${dist.dir}/contrib/${name}/bin" perm="a+x" includes="*"/>                
+	</target>
+
+	<!-- ================================================================== -->
+	<!-- Make release tarball                                               -->
+	<!-- ================================================================== -->
+	<target name="tar" depends="local-package" description="Make release tarball">
+		<macro_tar param.destfile="${build.dir}/${final.name}.tar.gz">
+			<param.listofitems>
+				<tarfileset dir="${build.dir}" mode="664">
+					<exclude name="${final.name}/bin/*" />
+					<include name="${final.name}/**" />
+				</tarfileset>
+				<tarfileset dir="${build.dir}" mode="755">
+					<include name="${final.name}/bin/*" />
+				</tarfileset>
+			</param.listofitems>
+		</macro_tar>
+	</target>
+
+	<target name="binary" depends="local-package" description="Make tarball without source and documentation">
+		<macro_tar param.destfile="${build.dir}/${final.name}-bin.tar.gz">
+			<param.listofitems>
+				<tarfileset dir="${build.dir}" mode="664">
+					<exclude name="${final.name}/bin/*" />
+					<exclude name="${final.name}/src/**" />
+					<exclude name="${final.name}/docs/**" />
+					<include name="${final.name}/**" />
+				</tarfileset>
+				<tarfileset dir="${build.dir}" mode="755">
+					<include name="${final.name}/bin/*" />
+				</tarfileset>
+			</param.listofitems>
+		</macro_tar>
+	</target>
+
+  <!-- the unit test classpath -->
+  <path id="test.classpath">
+    <pathelement location="${build.test}" />
+    <pathelement location="${hadoop.root}/build/test/classes"/>
+    <pathelement location="${hadoop.root}/src/contrib/test"/>
+    <pathelement location="${hadoop.root}/conf"/>
+    <pathelement location="${hadoop.root}/build"/>
+    <pathelement location="${hadoop.root}/build/classes"/>
+    <pathelement location="${hadoop.root}/build/tools"/>
+    <pathelement location="${build.examples}"/>
+    <path refid="contrib-classpath"/>
+  </path>
+
+
+</project>

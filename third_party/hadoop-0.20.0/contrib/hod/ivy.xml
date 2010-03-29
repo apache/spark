@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+<ivy-module version="1.0">
+  <info organisation="org.apache.hadoop" module="${ant.project.name}">
+    <license name="Apache 2.0"/>
+    <ivyauthor name="Apache Hadoop Team" url="http://hadoop.apache.org"/>
+    <description>
+        Apache Hadoop 
+    </description>
+  </info>
+  <configurations defaultconfmapping="default">
+    <!--these match the Maven configurations-->
+    <conf name="default" extends="master,runtime"/>
+    <conf name="master" description="contains the artifact but no dependencies"/>
+    <conf name="runtime" description="runtime but not the artifact" />
+    <!--Private configurations. -->
+
+    <conf name="common" visibility="private" 
+      description="artifacts needed to compile/test the application"/>
+  </configurations>
+  <dependencies>
+  </dependencies>
+</ivy-module>

@@ -1,0 +1,11 @@
+#!/bin/sh
+# This script file is a stub for systems that might want to include
+# checks for the account name that is passed to HOD. It will be
+# launched by HOD with the account name as an argument. The script
+# should return a zero exit code if the account is valid, and a
+# non zero exit code otherwise. Any output that the script generates
+# would be reported to the user by HOD, in case of a non-zero exit
+# code.
+#
+# By default, the script does nothing and returns a zero exit code.
+exit 0

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- 
+
+This file defines the mappings from username to comma seperated list
+of directories/files that the user is allowed to use. One mapping
+per user. Wildcard characters, such as "*" and "?", are not recognized. 
+For example, to match "/output" directory, one can use "/output" or 
+"/output/", but not "/output/*". Any leading or trailing whitespaces 
+in the name field are stripped/ignored, while only leading whitespaces 
+in the value field are. Note that the special hdfsproxy admin user "Admin"
+doesn't automatically have access to any files, unless explicitly 
+specified in this file. Usernames can only comprise of 0-9a-zA-Z and 
+underscore.
+
+-->
+
+<configuration>
+
+<property>
+  <name></name>
+  <value></value>
+  <description>
+  </description>
+</property>
+
+</configuration>

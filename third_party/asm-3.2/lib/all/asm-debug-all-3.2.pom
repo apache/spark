@@ -1,0 +1,15 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>asm</groupId>
+    <artifactId>asm-parent</artifactId>
+    <version>3.2</version>
+  </parent>
+
+  <name>ASM All</name>
+  <groupId>asm</groupId>
+  <artifactId>asm-all</artifactId>
+  <packaging>jar</packaging>
+  
+</project>

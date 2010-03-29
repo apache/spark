@@ -1,0 +1,125 @@
+3.5  Fri May  1 02:28:42 CEST 2009
+	- lzf_compress did sometimes write one octet past the given output
+          buffer (analyzed and nice testcase by Salvatore Sanfilippo).
+
+3.4  Tue Sep  2 06:45:00 CEST 2008
+	- the fix from 3.3 introduced a compression bug, which is fixed in
+          this release (which explains the mysterious prerelease...). Thanks
+          once more to Clément Calmels.
+
+3.3  Mon Aug 25 03:17:42 CEST 2008
+	- lzf_compress could access memory after the given input buffer
+          when outputting back references. reported with nice testcase
+          by Clément Calmels.
+
+3.2  Fri May  9 18:52:23 CEST 2008
+	- include a workaround for failing POSIX and real-world compliance
+          on 64 bit windows (microsoft claims to support POSIX, but is far
+          from it). (bug found and analysed nicely by John Lilley).
+
+3.1  Fri Nov 30 11:33:04 CET 2007
+	- IMPORTANT BUGFIX: a too long final literal run would corrupt data
+          in the encoder (this was introduced in 3.0 only, earlier versions
+          are safe).
+
+3.0  Tue Nov 13 22:13:09 CET 2007
+	- switched to 2-clause bsd with "GPL v2 or any later version" option.
+        - speed up compression by ~10-15% in common cases
+          by some manual unrolling.
+        - import some compiler tricks from JSON::XS, for further speed-ups.
+        - tune hash functions depending on ULTRA_FAST or VERY_FAST settings.
+        - for typical binary data (e.g. /bin/bash, memory dumps,
+          canterbury corpus etc.), speed is now comparable to fastlz, but
+          with better compression ratio. with ULTRA_FAST, it's typically
+          3-15% faster than fastlz while still maintaining a similar ratio.
+          (amd64 and core 2 duo, ymmv). thanks a lot for the competition :)
+        - undo inline assembly in compressor, it is no longer helpful.
+        - no changes to the decompressor.
+        - use a HLOG of 16 by default now (formerly 15).
+
+2.1  Fri Nov  2 13:34:42 CET 2007
+	- switched to a 2-clause bsd license with GPL exception.
+	- get rid of memcpy.
+        - tentatively use rep movsb on x86 and x86_64 (gcc only) for a
+          moderate speed improvement.
+        - applied patch by Kein-Hong Man to maske lzf.c compile under
+          the crippled mingw32 environment.
+
+2.0  Fri Feb 16 23:11:18 CET 2007
+	- replaced lzf demo by industrial-strength lzf utility with behaviour
+          similar other compression utilities. Thanks for Stefan Traby for
+          rewriting it!
+        - fix state arg prototype.
+
+1.7  Wed Sep 27 17:29:15 CEST 2006
+	- remove bogus "unlzf" patch.
+          note to self: never accept well-meant patches.
+	- make lzf more robust in presence of padding bytes or sudden eof.
+
+1.6  Fri Jul  7 17:31:26 CEST 2006
+	- the lzf example utility will now uncompress if invoked
+          as "unlzf" (patch by Scott Feeney).
+        - add CHECK_INPUT option that adds more checks for input
+          data validity.
+        - help applications that do not pass in the correct length
+          (such as php) by returning either EINVAL or E2BIG.
+        - default HLOG size is now 15 (cpu caches have increased).
+        - documentation fixes.
+
+1.51 Thu Apr 14 22:15:46 CEST 2005
+	- incorporated C♯ implementation of both the en- and decoder,
+          written by "Oren J. Maurice".
+          You can find it in the cs/ subdirectory.
+        - make FRST, NEXT IDX overridable if lzf_c.c is directly included
+          in the code.
+
+1.5  Tue Mar  8 20:23:23 CET 2005
+	- incorporated improvements by Adam D. Moss,
+          which includes a new VERY_FAST mode which is
+          a bit slower than ULTRA_FAST but much better,
+          and enabled it as default.
+
+1.401 Thu Mar  3 18:00:52 CET 2005
+	- use cstring in c++, not string.h.
+        - change of contact address.
+
+1.4  Wed Dec 15 08:08:49 CET 2004
+	- very very slight tuning of the hashing function.
+
+1.3  Thu Mar 25 15:41:17 CET 2004
+	- changed license of lzf core code to explicitly allow
+          relicensing under the GPLv2.
+	- added VPATH support as suggested by Björn Eriksson.
+
+1.2  Mon Dec 29 13:47:28 CET 2003
+	- avoid spurious memory accesses after the to-be-compressed
+          memory region. originally reported by Michal Zalewski.
+        - flip LZF_STACK_ARG meaning (to be correct).
+
+1.1  Tue Dec 23 05:48:32 CET 2003
+	- removed #warn directive, it's not worth the hassle.
+        - add LZF_STACK_ARG and AVOID_ERRNO configurations
+          for embedded systems.
+        - make it compile cleanly as c++.
+        - some small documentation and code fixes.
+
+1.0  Sun Nov 17 12:37:37 CET 2002
+	- slightly better compression ratio, almost unmeasurably
+          slower.
+        - some documentation fixes.
+
+0.4  Thu Jun 13 14:11:10 CEST 2002
+	- typoe fix.
+        - lzf demo program now properly decompresses small files.
+        - fix another 64 bit issue, found by Laurent Deniel.
+
+0.3  Tue Jan 16 13:21:14 CET 2001
+	- fix silly beginners 32/64 bit mistake.
+
+0.2  Thu Jan  4 05:56:42 CET 2001
+	- now totally independent of autoconfig, for
+          easy inclusion into other programs.
+        - much better fine-tuning, faster and better than 0.1.
+
+0.1  2000
+	- initial release.
