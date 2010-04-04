@@ -119,18 +119,18 @@ object SparkALS {
 
     // Iteratively update movies then users
     val Rc  = spark.broadcast(R)
-    var msb = spark.broadcast(ms)
-    var usb = spark.broadcast(us)
+    var msc = spark.broadcast(ms)
+    var usc = spark.broadcast(us)
     for (iter <- 1 to ITERATIONS) {
       println("Iteration " + iter + ":")
       ms = spark.parallelize(0 until M, slices)
-                .map(i => updateMovie(i, msb.value(i), usb.value, Rc.value))
+                .map(i => updateMovie(i, msc.value(i), usc.value, Rc.value))
                 .toArray
-      msb = spark.broadcast(ms) // Re-broadcast ms because it was updated
+      msc = spark.broadcast(ms) // Re-broadcast ms because it was updated
       us = spark.parallelize(0 until U, slices)
-                .map(i => updateUser(i, usb.value(i), msb.value, Rc.value))
+                .map(i => updateUser(i, usc.value(i), msc.value, Rc.value))
                 .toArray
-      usb = spark.broadcast(us) // Re-broadcast us because it was updated
+      usc = spark.broadcast(us) // Re-broadcast us because it was updated
       println("RMSE = " + rmse(R, ms, us))
       println()
     }

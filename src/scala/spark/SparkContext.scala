@@ -6,7 +6,7 @@ import java.util.UUID
 import scala.collection.mutable.ArrayBuffer
 
 class SparkContext(master: String, frameworkName: String) {
-  Cache.initialize()
+  Broadcast.initialize(true)
 
   def parallelize[T](seq: Seq[T], numSlices: Int): ParallelArray[T] =
     new SimpleParallelArray[T](this, seq, numSlices)
@@ -17,7 +17,8 @@ class SparkContext(master: String, frameworkName: String) {
     new Accumulator(initialValue, param)
 
   // TODO: Keep around a weak hash map of values to Cached versions?
-  def broadcast[T](value: T) = new Cached(value, local)
+  def broadcast[T](value: T) = new ChainedStreamingBroadcast (value, local)
+  // def broadcast[T](value: T) = new CentralizedHDFSBroadcast (value, local)
 
   def textFile(path: String) = new HdfsTextFile(this, path)
 
