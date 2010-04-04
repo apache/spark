@@ -3,7 +3,7 @@ import spark.SparkContext
 object BroadcastTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: BroadcastTest <host> [<slices>]")
+      System.err.println("Usage: BroadcastTest <host> [<slices>] [<array-len>]")
       System.exit(1)
     }  
     val spark = new SparkContext(args(0), "Broadcast Test")
