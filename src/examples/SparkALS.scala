@@ -122,6 +122,8 @@ object SparkALS {
     var msc = spark.broadcast(ms)
     var usc = spark.broadcast(us)
     for (iter <- 1 to ITERATIONS) {
+      val start = System.nanoTime        
+      
       println("Iteration " + iter + ":")
       ms = spark.parallelize(0 until M, slices)
                 .map(i => updateMovie(i, msc.value(i), usc.value, Rc.value))
@@ -133,6 +135,9 @@ object SparkALS {
       usc = spark.broadcast(us) // Re-broadcast us because it was updated
       println("RMSE = " + rmse(R, ms, us))
       println()
+      
+      val time = (System.nanoTime - start) / 1e9
+      println( "This iteration took " + time + " s")                       
     }
   }
 }

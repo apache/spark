@@ -85,15 +85,15 @@ class ReplSuite extends FunSuite {
     assertContains("res2: Int = 100", output)
   }
   
-  test ("broadcast vars") {
-    // Test that the value that a broadcast var had when it was created is used,
-    // even if that broadcast var is then modified in the driver program
+  test ("cached vars") {
+    // Test that the value that a cached var had when it was created is used,
+    // even if that cached var is then modified in the driver program
     val output = runInterpreter("local", """
       var array = new Array[Int](5)
-      val broadcastedArray = sc.broadcast(array)
-      sc.parallelize(0 to 4).map(x => broadcastedArray.value(x)).toArray
+      val cachedArray = sc.cache(array)
+      sc.parallelize(0 to 4).map(x => cachedArray.value(x)).toArray
       array(0) = 5
-      sc.parallelize(0 to 4).map(x => broadcastedArray.value(x)).toArray
+      sc.parallelize(0 to 4).map(x => cachedArray.value(x)).toArray
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -109,10 +109,10 @@ class ReplSuite extends FunSuite {
       v = 10
       sc.parallelize(1 to 10).map(x => getV()).toArray.reduceLeft(_+_)
       var array = new Array[Int](5)
-      val broadcastedArray = sc.broadcast(array)
-      sc.parallelize(0 to 4).map(x => broadcastedArray.value(x)).toArray
+      val cachedArray = sc.cache(array)
+      sc.parallelize(0 to 4).map(x => cachedArray.value(x)).toArray
       array(0) = 5
-      sc.parallelize(0 to 4).map(x => broadcastedArray.value(x)).toArray
+      sc.parallelize(0 to 4).map(x => cachedArray.value(x)).toArray
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)

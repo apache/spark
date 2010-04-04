@@ -27,9 +27,9 @@ import org.apache.hadoop.mapred.Reporter
 abstract class DistributedFile[T, Split](@transient sc: SparkContext) {
   def splits: Array[Split]
   def iterator(split: Split): Iterator[T]
-  def preferredLocations(split: Split): Seq[String]
+  def prefers(split: Split, slot: SlaveOffer): Boolean
 
-  def taskStarted(split: Split, offer: SlaveOffer) {}
+  def taskStarted(split: Split, slot: SlaveOffer) {}
 
   def sparkContext = sc
 
@@ -87,8 +87,8 @@ abstract class DistributedFile[T, Split](@transient sc: SparkContext) {
 abstract class FileTask[U, T, Split](val file: DistributedFile[T, Split],
   val split: Split)
 extends Task[U] {
-  override def preferredLocations: Seq[String] = file.preferredLocations(split)
-  override def markStarted(offer: SlaveOffer) { file.taskStarted(split, offer) }
+  override def prefers(slot: SlaveOffer) = file.prefers(split, slot)
+  override def markStarted(slot: SlaveOffer) { file.taskStarted(split, slot) }
 }
 
 class ForeachTask[T, Split](file: DistributedFile[T, Split],
@@ -124,31 +124,31 @@ extends FileTask[Option[T], T, Split](file, split) {
 class MappedFile[U, T, Split](prev: DistributedFile[T, Split], f: T => U) 
 extends DistributedFile[U, Split](prev.sparkContext) {
   override def splits = prev.splits
-  override def preferredLocations(sp: Split) = prev.preferredLocations(sp)
+  override def prefers(split: Split, slot: SlaveOffer) = prev.prefers(split, slot)
   override def iterator(split: Split) = prev.iterator(split).map(f)
-  override def taskStarted(split: Split, offer: SlaveOffer) = prev.taskStarted(split, offer)
+  override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
 }
 
 class FilteredFile[T, Split](prev: DistributedFile[T, Split], f: T => Boolean) 
 extends DistributedFile[T, Split](prev.sparkContext) {
   override def splits = prev.splits
-  override def preferredLocations(sp: Split) = prev.preferredLocations(sp)
+  override def prefers(split: Split, slot: SlaveOffer) = prev.prefers(split, slot)
   override def iterator(split: Split) = prev.iterator(split).filter(f)
-  override def taskStarted(split: Split, offer: SlaveOffer) = prev.taskStarted(split, offer)
+  override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
 }
 
 class CachedFile[T, Split](prev: DistributedFile[T, Split])
 extends DistributedFile[T, Split](prev.sparkContext) {
   val id = CachedFile.newId()
-  @transient val cacheLocs = Map[Split, List[String]]()
+  @transient val cacheLocs = Map[Split, List[Int]]()
 
   override def splits = prev.splits
 
-  override def preferredLocations(split: Split): Seq[String] = {
+  override def prefers(split: Split, slot: SlaveOffer): Boolean = {
     if (cacheLocs.contains(split))
-      cacheLocs(split)
+      cacheLocs(split).contains(slot.getSlaveId)
     else
-      prev.preferredLocations(split)
+      prev.prefers(split, slot)
   }
   
   override def iterator(split: Split): Iterator[T] = {
@@ -183,11 +183,11 @@ extends DistributedFile[T, Split](prev.sparkContext) {
     }
   }
 
-  override def taskStarted(split: Split, offer: SlaveOffer) {
+  override def taskStarted(split: Split, slot: SlaveOffer) {
     val oldList = cacheLocs.getOrElse(split, Nil)
-    val host = offer.getHost
-    if (!oldList.contains(host))
-      cacheLocs(split) = host :: oldList
+    val slaveId = slot.getSlaveId
+    if (!oldList.contains(slaveId))
+      cacheLocs(split) = slaveId :: oldList
   }
 }
 
@@ -251,10 +251,8 @@ extends DistributedFile[String, HdfsSplit](sc) {
     }
   }
 
-  override def preferredLocations(split: HdfsSplit) = {
-    // TODO: Filtering out "localhost" in case of file:// URLs
-    split.value.getLocations().filter(_ != "localhost").toArray
-  }
+  override def prefers(split: HdfsSplit, slot: SlaveOffer) =
+    split.value.getLocations().contains(slot.getHost)
 }
 
 object ConfigureLock {}
