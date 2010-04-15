@@ -4,7 +4,7 @@
 FWDIR=`dirname $0`
 
 # Set JAVA_OPTS to be able to load libnexus.so and set various other misc options
-export JAVA_OPTS="-Djava.library.path=$FWDIR/third_party:$FWDIR/src/native -Xmx2000m -Dspark.broadcast.masterHostAddress=127.0.0.1 -Dspark.broadcast.masterTrackerPort=11111 -Dspark.broadcast.blockSize=4096 -Dspark.broadcast.maxRetryCount=2 -Dspark.broadcast.serverSocketTimout=50000 -Dspark.broadcast.dualMode=false"
+export JAVA_OPTS="-Djava.library.path=$FWDIR/third_party:$FWDIR/src/native -Xmx2000m -Dspark.broadcast.masterHostAddress=127.0.0.1 -Dspark.broadcast.masterTrackerPort=11111 -Dspark.broadcast.blockSize=4096 -Dspark.broadcast.maxRetryCount=2 -Dspark.broadcast.serverSocketTimout=5000 -Dspark.broadcast.dualMode=false"
 
 if [ -e $FWDIR/conf/java-opts ] ; then
   JAVA_OPTS+=" `cat $FWDIR/conf/java-opts`"
