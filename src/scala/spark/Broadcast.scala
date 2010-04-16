@@ -183,7 +183,6 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     var retVal = new Array[BroadcastBlock] (blockNum)
     var blockID = 0
 
-    // TODO: What happens in byteArray.length == 0 => blockNum == 0
     for (i <- 0 until (byteArray.length, blockSize)) {    
       val thisBlockSize = Math.min (blockSize, byteArray.length - i)
       var tempByteArray = new Array[Byte] (thisBlockSize)
@@ -300,10 +299,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       
       // println (System.currentTimeMillis + ": " +  "I got this from receiveSingleTransmission: " + retByteArray)
 
-      // TODO: Update sourceInfo to add error notifactions for Master
+      // Updating some statistics in sourceInfo. Master will be using them later
       if (retByteArray == null) { sourceInfo.receptionFailed = true }
-      
-      // Updating some statistics here. Master will be using them later
       sourceInfo.MBps = (sourceInfo.totalBytes.toDouble / 1048576) / time
 
       // Send back statistics to the Master
@@ -667,7 +664,7 @@ case class SourceInfo (val hostAddress: String, val listenPort: Int,
 
   var currentLeechers = 0
   var receptionFailed = false
-  var MBps: Double = 0.0
+  var MBps: Double = BroadcastCS.MaxMBps
   
   // Ascending sort based on leecher count
   // def compareTo (o: SourceInfo): Int = (currentLeechers - o.currentLeechers)
@@ -746,6 +743,8 @@ private object BroadcastCS {
 
   // newSpeed = ALPHA * oldSpeed + (1 - ALPHA) * curSpeed
   private val ALPHA = 0.7
+  // 125.0 MBps = 1 Gbps link
+  private val MaxMBps_ = 125.0 
 
   def initialize (isMaster__ : Boolean) {
     synchronized {
@@ -786,6 +785,8 @@ private object BroadcastCS {
 
   def isMaster = isMaster_ 
   
+  def MaxMBps = MaxMBps_
+  
   def registerValue (uuid: UUID, guidePort: Int) = {    
     valueToGuidePortMap.synchronized {    
       valueToGuidePortMap += (uuid -> guidePort)
@@ -803,13 +804,13 @@ private object BroadcastCS {
   
   def getSourceSpeed (hostAddress: String): Double = {
     sourceToSpeedMap.synchronized {
-      sourceToSpeedMap.getOrElseUpdate(hostAddress, 0.0)
+      sourceToSpeedMap.getOrElseUpdate(hostAddress, MaxMBps)
     }
   }
   
   def setSourceSpeed (hostAddress: String, MBps: Double) = {
     sourceToSpeedMap.synchronized {
-      var oldSpeed = sourceToSpeedMap.getOrElseUpdate(hostAddress, 0.0)
+      var oldSpeed = sourceToSpeedMap.getOrElseUpdate(hostAddress, MaxMBps)
       var newSpeed = ALPHA * oldSpeed + (1 - ALPHA) * MBps
       sourceToSpeedMap.update (hostAddress, newSpeed)
     }
