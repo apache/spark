@@ -10,6 +10,7 @@ JARS += third_party/hadoop-0.20.0/hadoop-0.20.0-core.jar
 JARS += third_party/hadoop-0.20.0/lib/commons-logging-1.0.4.jar
 JARS += third_party/scalatest-1.0/scalatest-1.0.jar
 JARS += third_party/ScalaCheck-1.5.jar
+JARS += third_party/FreePastry-2.1.jar
 CLASSPATH = $(subst $(SPACE),:,$(JARS))
 
 SCALA_SOURCES =  src/examples/*.scala src/scala/spark/*.scala src/scala/spark/repl/*.scala
