@@ -69,6 +69,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
   if (!local) { sendBroadcast }
   
   def sendBroadcast () {
+    // Store a persistent copy in HDFS    
+    val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
+    out.writeObject (value_)
+    out.close    
+    hasCopyInHDFS = true    
+
     // Create a variableInfo object and store it in valueInfos
     var variableInfo = blockifyObject (value_, BroadcastCS.blockSize)   
     
@@ -112,19 +118,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         guidePortLock.wait 
       }
     } 
-    BroadcastCS.registerValue (uuid, guidePort)
-    
-    // Now store a persistent copy in HDFS, in a separate thread
-    // new Runnable {
-      // override def run = {
-        // TODO: When threaded, its not written to file
-        // TODO: On second thought, its better to have it stored before anything starts
-        val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
-        out.writeObject (value_)
-        out.close    
-        hasCopyInHDFS = true    
-      // }
-    // }
+    BroadcastCS.registerValue (uuid, guidePort)  
   }
   
   private def readObject (in: ObjectInputStream) {
@@ -226,16 +220,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     in.close
     return retVal
   }
-  
-  private def getByteArrayOutputStream (obj: T): ByteArrayOutputStream = {
-    val bOut = new ByteArrayOutputStream
-    val out = new ObjectOutputStream (bOut)
-    out.writeObject (obj)
-    out.close
-    bOut.close
-    return bOut
-  }  
-  
+    
   // masterListenPort aka guidePort value legend
   //  0 = missed the broadcast, read from HDFS; 
   // <0 = hasn't started yet, wait & retry;
@@ -649,8 +634,18 @@ class SplitStreamBroadcast[T] (@transient var value_ : T, local: Boolean)
   
   if (!local) { sendBroadcast }
   
+  @transient var hasCopyInHDFS = false
+  
   def sendBroadcast () {
-    
+    // Store a persistent copy in HDFS    
+    val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
+    out.writeObject (value_)
+    out.close    
+    hasCopyInHDFS = true    
+
+    val ssClient = new SSClient (BroadcastSS.pastryNode)
+    ssClient.subscribe
+    ssClient.publish[T] (value, BroadcastSS.blockSize)    
   }
   
   private def readObject (in: ObjectInputStream) {
@@ -660,53 +655,43 @@ class SplitStreamBroadcast[T] (@transient var value_ : T, local: Boolean)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
-        
+        val ssClient = new SSClient (BroadcastSS.pastryNode)
+        ssClient.subscribe
       }
     }
   }
   
-  class SSClient (pastryNode: PastryNode) extends SplitStreamClient with Application {
-    // Length of a message in bytes.
-    val DATA_LENGTH = 10
-    // Number of messages to publish.
-    val NUM_PUBLISHES = 10
+  class PublishThread (ssClient: SSClient) extends Runnable {
+    def run = {
+      
+    }
+  }
     
-    /**
-     * The message sequence number.  Will be incremented after each send.
-     * Out of laziness we are encoding this as a byte in the stream, so the range is limited
-     */
-    var seqNum: Byte = 0    
-   
-    // Data source...
-    // protected RandomSource random;
+  class SSClient (pastryNode: PastryNode) extends SplitStreamClient 
+    with Application {
+    // Bytes reserved before each published block. 8 byte = 2 integer
+    val preAmbleSize = 8
 
-    //This task kicks off publishing and anycasting. We hold it around in case 
-    // we ever want to cancel the publishTask.
-    var publishTask: CancellableTask = null
-    
     // The Endpoint represents the underlying node. By making calls on the 
-    // Endpoint, it assures that the message will be delivered to a MyApp on 
+    // Endpoint, it assures that the message will be delivered to the App on 
     // whichever node the message is intended for.
-    protected val endpoint = pastryNode.buildEndpoint (this, "myInstance")
+    protected val endPoint = pastryNode.buildEndpoint (this, "myInstance")
 
-    // use this to generate data
-    // this.random = endpoint.getEnvironment().getRandomSource()
-    
     // Handle to a SplitStream implementation
-    val mySplitStream = new SplitStreamImpl (pastryNode, "splitStreamImpl")
+    val mySplitStream = new SplitStreamImpl (pastryNode, "mySplitStream")
 
-    // The ChannelId is constructed from a normal PastryId
-    val tmp = new PastryIdFactory (pastryNode.getEnvironment).buildId ("myChannel")
-    val myChannelId = new ChannelId (tmp)
+    // The ChannelId is constructed from a normal PastryId based on the UUID
+    val myChannelId = new ChannelId (new PastryIdFactory 
+      (pastryNode.getEnvironment).buildId ("myChannel"))
     
-    // The channel.
-    var myChannel: Channel= null
+    // The channel
+    var myChannel: Channel = null
     
     // The stripes. Acquired from myChannel.
     var myStripes: Array[Stripe] = null
 
     // Now we can receive messages
-    endpoint.register
+    endPoint.register
     
     // Subscribes to all stripes in myChannelId.
     def subscribe = {
@@ -719,65 +704,52 @@ class SplitStreamBroadcast[T] (@transient var value_ : T, local: Boolean)
       for (curStripe <- myStripes) { curStripe.subscribe (this) }
     }
     
-    // Starts the publish task.
-    def startPublishTask = {
-      // TODO: The last two parameters are delays to wait before delivering the 
-      // first and the subsequent messages. Needs tweaking.
-      publishTask = endpoint.scheduleMessage (new PublishContent, 5000, 5000)
-    }
-    
-    
-    // Part of the Application interface. Will receive PublishContent.
-    def deliver (id: rice.p2p.commonapi.Id, message: Message) = {
-      // TODO: Couldn't perform dynamic type checking. This can cause problems.
-      // if (message.isInstanceof[PublishContent]) 
-      { publish }
-    }
-    
-    // Called whenever we receive a published message.
+    // Part of SplitStreamClient. Called when a published message is received.
     def deliver (s: Stripe, data: Array[Byte]) = {
-      println(endpoint.getId()+" deliver("+s+"):seq:"+data(0)+" stripe:"+data(1)+" "+data+")")
-    }
-
-    /**
-     * Multicasts data.
-     */
-    def publish = {
-
-      for (curStripe <- myStripes) {
-        // format of the data:
-        // first byte: seqNum
-        // second byte: stripe
-        // rest: random
-        var data = new Array[Byte] (DATA_LENGTH)
-        
-        // yes, we waste some random bytes here
-        // random.nextBytes(data)
-        data(0) = seqNum
-        data(1) = 13 // curStripe
-        
-        // print what we are sending
-        println("Node "+endpoint.getLocalNodeHandle+" publishing "+seqNum+" "+data)
-
-        // publish the data
-        curStripe.publish (data) 
+      // TODO: Do real work here.
+      if (!BroadcastSS.isMaster) {      
       }
-      
-      // increment the sequence number
-      // seqNum = seqNum + 1
-      
-      // cancel after sending all the messages
-      if (seqNum >= NUM_PUBLISHES) { publishTask.cancel }
+      println(endPoint.getId + " deliver(" + s + "):seq:" + data(0) + " stripe:" + data(1) + " " + data + ")")
     }
 
-    class PublishContent extends Message {
-      def getPriority: Int = { Message.MEDIUM_PRIORITY }
+    private def objectToByteArray[A] (obj: A): Array[Byte] = {
+      val baos = new ByteArrayOutputStream
+      val oos = new ObjectOutputStream (baos)
+      oos.writeObject (obj)
+      oos.close
+      baos.close
+      return baos.toByteArray
     }
+
+    // Multicasts data.
+    def publish[A] (obj: A, blockSize: Int) = {
+      val byteArray = objectToByteArray[A] (obj)
+      
+      var blockNum = (byteArray.length / blockSize) 
+      if (byteArray.length % blockSize != 0) 
+        blockNum += 1 
+        
+      var blockID = 0
+      for (i <- 0 until (byteArray.length, blockSize)) {    
+        val thisBlockSize = Math.min (blockSize, byteArray.length - i)
+        var tempByteArray = new Array[Byte] (thisBlockSize + preAmbleSize)
+        System.arraycopy (byteArray, i * blockSize, 
+          tempByteArray, preAmbleSize, thisBlockSize)
+
+        myStripes(blockID % myStripes.length).publish (tempByteArray)
+        blockID += 1
+      }
+    }
+
+    /* class PublishContent extends Message {
+      def getPriority: Int = { Message.MEDIUM_PRIORITY }
+    } */
     
     // Error handling
     def joinFailed(s: Stripe) = { println ("joinFailed(" + s + ")") }
 
     // Rest of the Application interface. NOT USED.
+    def deliver (id: rice.p2p.commonapi.Id, message: Message) = { } 
     def forward (message: RouteMessage): Boolean = false
     def update (handle: rice.p2p.commonapi.NodeHandle, joined: Boolean) = { }    
   }
@@ -1053,7 +1025,7 @@ private object BroadcastSS {
   private var isMaster_ = false
     
   private var masterBootHost_ = "127.0.0.1"
-  private var masterBootPort_ : Int = 11111
+  private var masterBootPort_ : Int = 22222
   private var blockSize_ : Int = 512 * 1024
   private var maxRetryCount_ : Int = 2
   
@@ -1069,7 +1041,7 @@ private object BroadcastSS {
         masterBootHost_ = 
           System.getProperty ("spark.broadcast.masterHostAddress", "127.0.0.1")
         masterBootPort_ = 
-          System.getProperty ("spark.broadcast.masterTrackerPort", "11111").toInt
+          System.getProperty ("spark.broadcast.masterBootPort", "22222").toInt
           
         masterBootAddress_ = new InetSocketAddress(masterBootHost_, 
           masterBootPort_)
@@ -1112,9 +1084,7 @@ private object BroadcastSS {
 
   def isMaster = isMaster_ 
   
-  private def initializeSplitStream: PastryNode = {
-    if (pastryNode != null) { return pastryNode }
-  
+  private def initializeSplitStream = {
     pEnvironment_ = new Environment
     
     // Generate the NodeIds Randomly
@@ -1127,28 +1097,21 @@ private object BroadcastSS {
     // Construct a Pastry node
     pastryNode_ = pastryNodeFactory.newNode
     
-    // Boot the node. If its the Master, start a new ring.
-    if (isMaster) { pastryNode.boot (null) }
-    else { pastryNode.boot (masterBootAddress) }
+    // Boot the node. 
+    pastryNode.boot (masterBootAddress)
       
     // The node may require sending several messages to fully boot into the ring
     pastryNode.synchronized {
       while(!pastryNode.isReady && !pastryNode.joinFailed) {
         // Delay so we don't busy-wait
-        pastryNode.wait(500);
+        pastryNode.wait (500)
         
         // Abort if can't join
         if (pastryNode.joinFailed()) {
           // TODO: throw new IOException("Join failed " + node.joinFailedReason)
         }
       }       
-    }      
-    
-    return pastryNode
-    // construct a new splitstream application      
-    // val app = new MySplitStreamClient(pastryNode)
-    // app.subscribe
-    // if (isMaster) { app.startPublishTask }
+    }
   }  
 }
 
