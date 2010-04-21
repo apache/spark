@@ -666,7 +666,7 @@ class SplitStreamBroadcast[T] (@transient var value_ : T, local: Boolean)
       // TODO: Put some delay here to give time others to register
       Thread.sleep (10000)
       BroadcastSS.synchronized {
-        BroadcastSS.publish[T] (value)
+        BroadcastSS.publish[T] (uuid, value)
       }
     }
   }
@@ -1044,15 +1044,31 @@ private object BroadcastSS {
     ssClient.subscribe
   }
   
-  def publish[A] (obj: A) = {
-    ssClient.publish[A] (obj)
+  def publish[A] (uuid: UUID, obj: A) = {
+    ssClient.synchronized {
+      ssClient.publish[A] (uuid, obj)
+    }
   }
+  
+  // TODO: Receive function/callback!
   
   class SSClient (pastryNode: PastryNode) extends SplitStreamClient 
     with Application {
-    // Bytes reserved before each published block. 8 byte = 2 integer
-    val preAmbleSize = 8
-
+    // Magic bits: 11111100001100100100110000111111
+    val magicBits = 0xFC324C3F
+    
+    // Message Types
+    val INFO_MSG = 1
+    val DATA_MSG = 2
+    
+    // Current transmission state variables
+    var curUUID: UUID = null
+    var curTotalBlocks = -1
+    var curTotalBytes = -1
+    var curHasBlocks = -1
+    var curBlockBitmap: Array[Boolean] = null
+    var curArrayOfBytes: Array[Byte] = null
+    
     // The Endpoint represents the underlying node. By making calls on the 
     // Endpoint, it assures that the message will be delivered to the App on 
     // whichever node the message is intended for.
@@ -1086,11 +1102,55 @@ private object BroadcastSS {
     }
     
     // Part of SplitStreamClient. Called when a published message is received.
-    def deliver (s: Stripe, data: Array[Byte]) = {
-      // TODO: Do real work here.
-      if (!BroadcastSS.isMaster) {      
+    def deliver (s: Stripe, data: Array[Byte]) = { 
+      // Unpack and verify magicBits
+      val topLevelInfo = byteArrayToObject[(Int, Int, Array[Byte])] (data)
+      
+      // Process only if magicBits are OK
+      if (topLevelInfo._1 == magicBits) {
+        // Process only for slaves         
+        if (!BroadcastSS.isMaster) {
+          // Match on Message Type
+          topLevelInfo._2 match {
+            case INFO_MSG => {
+              val realInfo = byteArrayToObject[(UUID, Int, Int)] (
+                topLevelInfo._3)
+              
+              // Setup states for impending transmission
+              curUUID = realInfo._1 // TODO: 
+              curTotalBlocks = realInfo._2
+              curTotalBytes  = realInfo._3            
+              
+              curHasBlocks = 0
+              curBlockBitmap = new Array[Boolean] (curTotalBlocks)
+              curArrayOfBytes = new Array[Byte] (curTotalBytes)
+              
+              println (curUUID + " " + curTotalBlocks + " " + curTotalBytes)
+            } 
+            case DATA_MSG => {
+              val realInfo = byteArrayToObject[(Int, Array[Byte])] (
+                topLevelInfo._3)            
+              val blockIndex = realInfo._1
+              val blockData  = realInfo._2
+              
+              // Update everything
+              curHasBlocks += 1
+              curBlockBitmap(blockIndex) = true
+              System.arraycopy (blockData, 0, curArrayOfBytes, 
+                blockIndex * blockSize, blockData.length)
+                
+              // Done receiving
+              if (curHasBlocks == curTotalBlocks) { // TODO: 
+                
+              }
+            }
+            case _ => {
+              // Should never happen
+            }
+          } 
+        }
+        println(endPoint.getId + " deliver(" + s + "):seq:" + data(0) + " stripe:" + data(1) + " " + data + ")")
       }
-      println(endPoint.getId + " deliver(" + s + "):seq:" + data(0) + " stripe:" + data(1) + " " + data + ")")
     }
 
     private def objectToByteArray[A] (obj: A): Array[Byte] = {
@@ -1102,24 +1162,67 @@ private object BroadcastSS {
       return baos.toByteArray
     }
 
+    private def byteArrayToObject[A] (bytes: Array[Byte]): A = {
+      val in = new ObjectInputStream (new ByteArrayInputStream (bytes))
+      val retVal = in.readObject.asInstanceOf[A]
+      in.close
+      return retVal
+    }
+
+    private def intToByteArray (value: Int): Array[Byte] = {
+      var retVal = new Array[Byte] (4)
+      for (i <- 0 until 4) 
+        retVal(i) = (value >> ((4 - 1 - i) * 8)).toByte
+      return retVal
+    }
+
+    private def byteArrayToInt (arr: Array[Byte], offset: Int): Int = {
+      var retVal = 0
+      for (i <- 0 until 4) 
+        retVal += ((arr(i + offset).toInt & 0x000000FF) << ((4 - 1 - i) * 8))
+      return retVal
+    }
+
     // Multicasts data.
-    def publish[A] (obj: A) = {
+    def publish[A] (uuid: UUID, obj: A) = {
       val byteArray = objectToByteArray[A] (obj)
       
       var blockNum = (byteArray.length / blockSize) 
       if (byteArray.length % blockSize != 0) 
-        blockNum += 1 
-        
+        blockNum += 1       
+      
+      //           -------------------------------------
+      // INFO_MSG: | UUID | Total Blocks | Total Bytes |
+      //           -------------------------------------      
+      var infoByteArray = objectToByteArray[(UUID, Int, Int)] ((uuid, blockNum, 
+        byteArray.length))                  
+      doPublish (0, INFO_MSG, infoByteArray)
+      
+      //           ------------------------------
+      // DATA_MSG: | Block Index | Single Block |
+      //           ------------------------------      
       var blockID = 0
-      for (i <- 0 until (byteArray.length, blockSize)) {    
-        val thisBlockSize = Math.min (blockSize, byteArray.length - i)
-        var tempByteArray = new Array[Byte] (thisBlockSize + preAmbleSize)
-        System.arraycopy (byteArray, i * blockSize, 
-          tempByteArray, preAmbleSize, thisBlockSize)
+      for (i <- 0 until (byteArray.length, blockSize)) {          
+        val thisBlockSize = Math.min (blockSize, byteArray.length - i)        
+        var thisBlockData = new Array[Byte] (thisBlockSize)
+        System.arraycopy (byteArray, i * blockSize, thisBlockData, 0, 
+          thisBlockSize)
 
-        myStripes(blockID % myStripes.length).publish (tempByteArray)
+        var dataByteArray = objectToByteArray[(Int, Array[Byte])] ((blockID, 
+          thisBlockData)) 
+        doPublish (blockID % myStripes.length, DATA_MSG, dataByteArray)
+
         blockID += 1
       }
+    }
+    
+    //                 --------------------------------
+    // Message Format: | MagicBits | Type | Real Data |
+    //                 --------------------------------
+    private def doPublish (stripeID: Int, msgType: Int, data: Array[Byte]) = {
+      val bytesToSend = objectToByteArray[(Int, Int, Array[Byte])] ((magicBits, 
+        msgType, data))
+      myStripes(stripeID).publish (bytesToSend)
     }
 
     /* class PublishContent extends Message {
