@@ -144,13 +144,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         val receptionSucceeded = receiveBroadcast (uuid)
         // If does not succeed, then get from HDFS copy
         if (receptionSucceeded) {
-          // value_ = byteArrayToObject[T] (retByteArray)
           value_ = unBlockifyObject[T]
           BroadcastCS.values.put (uuid, value_)
         }  else {
           val fileIn = new ObjectInputStream(BroadcastCH.openFileForReading(uuid))
           value_ = fileIn.readObject.asInstanceOf[T]
-          BroadcastCH.values.put(uuid, value_)
+          BroadcastCS.values.put(uuid, value_)
           fileIn.close
         } 
         
@@ -655,6 +654,23 @@ class SplitStreamBroadcast[T] (@transient var value_ : T, local: Boolean)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
+        val start = System.nanoTime        
+
+        val receptionSucceeded = BroadcastSS.receiveVariable (uuid)
+        // If does not succeed, then get from HDFS copy
+        if (receptionSucceeded) {
+          value_ = BroadcastSS.values.get(uuid).asInstanceOf[T]
+        }  else {
+          val fileIn = new ObjectInputStream(BroadcastCH.openFileForReading(uuid))
+          value_ = fileIn.readObject.asInstanceOf[T]
+          BroadcastSS.values.put(uuid, value_)
+          fileIn.close
+        } 
+        
+        val time = (System.nanoTime - start) / 1e9
+        println( System.currentTimeMillis + ": " +  "Reading Broadcasted variable " + uuid + " took " + time + " s")                  
+
+
         // TODO: Do something
         Thread.sleep (10000)
       }
@@ -666,7 +682,7 @@ class SplitStreamBroadcast[T] (@transient var value_ : T, local: Boolean)
       // TODO: Put some delay here to give time others to register
       Thread.sleep (10000)
       BroadcastSS.synchronized {
-        BroadcastSS.publish[T] (uuid, value)
+        BroadcastSS.publishVariable[T] (uuid, value)
       }
     }
   }
@@ -749,12 +765,6 @@ case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
   val totalBlocks: Int, val totalBytes: Int) {
   
   @transient var hasBlocks = 0
-
-  val listenPortLock = new AnyRef
-  val totalBlocksLock = new AnyRef
-  val hasBlocksLock = new AnyRef
-  
-  @transient var pqOfSources = new PriorityQueue[SourceInfo]
 } 
 
 private object Broadcast {
@@ -938,6 +948,8 @@ private object BroadcastCS {
 private object BroadcastSS {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
+  private val valueBytes = new MapMaker().softValues().makeMap[UUID,Array[Byte]]
+
   private var initialized = false
   private var isMaster_ = false
     
@@ -953,6 +965,16 @@ private object BroadcastSS {
   private var pastryNode_ : PastryNode = null
   private var ssClient: SSClient = null
   
+  // Current transmission state variables
+  private var curUUID: UUID = null
+  private var curTotalBlocks = -1
+  private var curTotalBytes = -1
+  private var curHasBlocks = -1
+  private var curBlockBitmap: Array[Boolean] = null
+  private var curArrayOfBytes: Array[Byte] = null
+  
+  // TODO: Add stuff so that we can handle out of order variable broadcast
+
   def initialize (isMaster__ : Boolean) {
     synchronized {
       if (!initialized) {
@@ -1044,14 +1066,71 @@ private object BroadcastSS {
     ssClient.subscribe
   }
   
-  def publish[A] (uuid: UUID, obj: A) = {
+  def publishVariable[A] (uuid: UUID, obj: A) = {
     ssClient.synchronized {
       ssClient.publish[A] (uuid, obj)
     }
   }
   
-  // TODO: Receive function/callback!
+  // Return status of the reception
+  def receiveVariable[A] (uuid: UUID): Boolean = {
+    // TODO: Things will change if out-of-order variable recepetion is supported
+    
+    // Check in valueBytes
+    if (xferValueBytesToValues[A] (uuid)) { return true }
+    
+    // Check if its in progress
+    for (i <- 0 until maxRetryCount) {
+      while (uuid == curUUID) { Thread.sleep (100) } // TODO: How long to sleep
+      if (xferValueBytesToValues[A] (uuid)) { return true }
+      
+      // Wait for a while to see if we've reached here before xmission started
+      Thread.sleep (100) 
+    }    
+    return false
+  }
   
+  private def xferValueBytesToValues[A] (uuid: UUID): Boolean = {
+    var cachedValueBytes: Array[Byte] = null
+    valueBytes.synchronized { cachedValueBytes = valueBytes.get (uuid) }
+    if (cachedValueBytes != null) {
+      val cachedValue = byteArrayToObject[A] (cachedValueBytes)
+      values.synchronized { values.put (uuid, cachedValue) }
+      return true
+    }
+    return false
+  }
+  
+  private def objectToByteArray[A] (obj: A): Array[Byte] = {
+    val baos = new ByteArrayOutputStream
+    val oos = new ObjectOutputStream (baos)
+    oos.writeObject (obj)
+    oos.close
+    baos.close
+    return baos.toByteArray
+  }
+
+  private def byteArrayToObject[A] (bytes: Array[Byte]): A = {
+    val in = new ObjectInputStream (new ByteArrayInputStream (bytes))
+    val retVal = in.readObject.asInstanceOf[A]
+    in.close
+    return retVal
+  }
+
+  private def intToByteArray (value: Int): Array[Byte] = {
+    var retVal = new Array[Byte] (4)
+    for (i <- 0 until 4) 
+      retVal(i) = (value >> ((4 - 1 - i) * 8)).toByte
+    return retVal
+  }
+
+  private def byteArrayToInt (arr: Array[Byte], offset: Int): Int = {
+    var retVal = 0
+    for (i <- 0 until 4) 
+      retVal += ((arr(i + offset).toInt & 0x000000FF) << ((4 - 1 - i) * 8))
+    return retVal
+  }
+
   class SSClient (pastryNode: PastryNode) extends SplitStreamClient 
     with Application {
     // Magic bits: 11111100001100100100110000111111
@@ -1060,15 +1139,7 @@ private object BroadcastSS {
     // Message Types
     val INFO_MSG = 1
     val DATA_MSG = 2
-    
-    // Current transmission state variables
-    var curUUID: UUID = null
-    var curTotalBlocks = -1
-    var curTotalBytes = -1
-    var curHasBlocks = -1
-    var curBlockBitmap: Array[Boolean] = null
-    var curArrayOfBytes: Array[Byte] = null
-    
+        
     // The Endpoint represents the underlying node. By making calls on the 
     // Endpoint, it assures that the message will be delivered to the App on 
     // whichever node the message is intended for.
@@ -1128,10 +1199,16 @@ private object BroadcastSS {
               println (curUUID + " " + curTotalBlocks + " " + curTotalBytes)
             } 
             case DATA_MSG => {
-              val realInfo = byteArrayToObject[(Int, Array[Byte])] (
-                topLevelInfo._3)            
-              val blockIndex = realInfo._1
-              val blockData  = realInfo._2
+              val realInfo = byteArrayToObject[(UUID, Int, Array[Byte])] (
+                topLevelInfo._3)
+              val blockUUID  = realInfo._1
+              val blockIndex = realInfo._2
+              val blockData  = realInfo._3
+              
+              // TODO: Will change in future implementation. Right now we 
+              // require broadcast in order on the variable level. Blocks can 
+              // come out of order though
+              assert (blockUUID == curUUID)
               
               // Update everything
               curHasBlocks += 1
@@ -1140,8 +1217,14 @@ private object BroadcastSS {
                 blockIndex * blockSize, blockData.length)
                 
               // Done receiving
-              if (curHasBlocks == curTotalBlocks) { // TODO: 
+              if (curHasBlocks == curTotalBlocks) { 
+                // Store as a Array[Byte]
+                valueBytes.synchronized {
+                  valueBytes.put (curUUID, curArrayOfBytes)
+                }
                 
+                // RESET
+                curUUID = null
               }
             }
             case _ => {
@@ -1151,36 +1234,6 @@ private object BroadcastSS {
         }
         println(endPoint.getId + " deliver(" + s + "):seq:" + data(0) + " stripe:" + data(1) + " " + data + ")")
       }
-    }
-
-    private def objectToByteArray[A] (obj: A): Array[Byte] = {
-      val baos = new ByteArrayOutputStream
-      val oos = new ObjectOutputStream (baos)
-      oos.writeObject (obj)
-      oos.close
-      baos.close
-      return baos.toByteArray
-    }
-
-    private def byteArrayToObject[A] (bytes: Array[Byte]): A = {
-      val in = new ObjectInputStream (new ByteArrayInputStream (bytes))
-      val retVal = in.readObject.asInstanceOf[A]
-      in.close
-      return retVal
-    }
-
-    private def intToByteArray (value: Int): Array[Byte] = {
-      var retVal = new Array[Byte] (4)
-      for (i <- 0 until 4) 
-        retVal(i) = (value >> ((4 - 1 - i) * 8)).toByte
-      return retVal
-    }
-
-    private def byteArrayToInt (arr: Array[Byte], offset: Int): Int = {
-      var retVal = 0
-      for (i <- 0 until 4) 
-        retVal += ((arr(i + offset).toInt & 0x000000FF) << ((4 - 1 - i) * 8))
-      return retVal
     }
 
     // Multicasts data.
@@ -1198,9 +1251,9 @@ private object BroadcastSS {
         byteArray.length))                  
       doPublish (0, INFO_MSG, infoByteArray)
       
-      //           ------------------------------
-      // DATA_MSG: | Block Index | Single Block |
-      //           ------------------------------      
+      //           -------------------------------------
+      // DATA_MSG: | UUID | Block Index | Single Block |
+      //           -------------------------------------
       var blockID = 0
       for (i <- 0 until (byteArray.length, blockSize)) {          
         val thisBlockSize = Math.min (blockSize, byteArray.length - i)        
@@ -1208,8 +1261,8 @@ private object BroadcastSS {
         System.arraycopy (byteArray, i * blockSize, thisBlockData, 0, 
           thisBlockSize)
 
-        var dataByteArray = objectToByteArray[(Int, Array[Byte])] ((blockID, 
-          thisBlockData)) 
+        var dataByteArray = objectToByteArray[(UUID, Int, Array[Byte])] ((uuid, 
+          blockID, thisBlockData)) 
         doPublish (blockID % myStripes.length, DATA_MSG, dataByteArray)
 
         blockID += 1
