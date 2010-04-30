@@ -12,11 +12,11 @@ LIB = libspark_native.so
 
 all: $(LIB)
 
-spark_compress_lzf_LZF.h: $(SPARK)/classes/spark/compress/lzf/LZF.class
+spark_compress_lzf_LZF.h: $(SPARK)/build/classes/spark/compress/lzf/LZF.class
 ifeq ($(JAVA_HOME),)
 	$(error JAVA_HOME is not set)
 else
-	$(JAVA_HOME)/bin/javah -classpath $(SPARK)/classes spark.compress.lzf.LZF
+	$(JAVA_HOME)/bin/javah -classpath $(SPARK)/build/classes spark.compress.lzf.LZF
 endif
 
 $(LIB): spark_compress_lzf_LZF.h spark_compress_lzf_LZF.c
