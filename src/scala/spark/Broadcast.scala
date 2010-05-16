@@ -45,8 +45,6 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
 
   BroadcastCS.synchronized { BroadcastCS.values.put (uuid, value_) }
    
-  if (!local) { sendBroadcast }
-
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
@@ -68,6 +66,9 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
   
   @transient var hasCopyInHDFS = false
   
+  // Must call this after all the variables have been created/initialized
+  if (!local) { sendBroadcast }
+
   def sendBroadcast () {
     // Store a persistent copy in HDFS    
     val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
