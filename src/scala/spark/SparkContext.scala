@@ -17,8 +17,8 @@ class SparkContext(master: String, frameworkName: String) {
     new Accumulator(initialValue, param)
 
   // TODO: Keep around a weak hash map of values to Cached versions?
-  def broadcast[T](value: T) = new SplitStreamBroadcast (value, local)
-  // def broadcast[T](value: T) = new ChainedStreamingBroadcast (value, local)
+  // def broadcast[T](value: T) = new SplitStreamBroadcast (value, local)
+  def broadcast[T](value: T) = new ChainedStreamingBroadcast (value, local)
   // def broadcast[T](value: T) = new CentralizedHDFSBroadcast (value, local)
 
   def textFile(path: String) = new HdfsTextFile(this, path)

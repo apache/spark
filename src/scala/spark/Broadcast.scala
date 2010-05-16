@@ -779,7 +779,8 @@ private object Broadcast {
         // Initialization for ChainedStreamingBroadcast
         BroadcastCS.initialize (isMaster)
         // Initialization for SplitStreamBroadcast
-        BroadcastSS.initialize (isMaster)
+        // TODO: SplitStream turned OFF
+        // BroadcastSS.initialize (isMaster)
         
         initialized = true
       }
