@@ -227,8 +227,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
   // >0 = Read from this port 
   def getMasterListenPort (variableUUID: UUID): Int = {
     var clientSocketToTracker: Socket = null
-    var oisTracker: ObjectInputStream = null
     var oosTracker: ObjectOutputStream = null
+    var oisTracker: ObjectInputStream = null
     
     var masterListenPort: Int = -1
     
@@ -238,10 +238,10 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         // Connect to the tracker to find out the guide 
         val clientSocketToTracker = 
           new Socket(BroadcastCS.masterHostAddress, BroadcastCS.masterTrackerPort)  
-        val oisTracker = 
-          new ObjectInputStream (clientSocketToTracker.getInputStream)
         val oosTracker = 
           new ObjectOutputStream (clientSocketToTracker.getOutputStream)
+        val oisTracker = 
+          new ObjectInputStream (clientSocketToTracker.getInputStream)
       
         // Send UUID and receive masterListenPort
         oosTracker.writeObject (uuid)
@@ -284,10 +284,10 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         new Socket(BroadcastCS.masterHostAddress, masterListenPort)  
       // println (System.currentTimeMillis + ": " +  "Connected to Master's guiding object")
       // TODO: Guiding object connection is reusable
-      val oisMaster = 
-        new ObjectInputStream (clientSocketToMaster.getInputStream)
       val oosMaster = 
         new ObjectOutputStream (clientSocketToMaster.getOutputStream)
+      val oisMaster = 
+        new ObjectInputStream (clientSocketToMaster.getInputStream)
       
       oosMaster.writeObject(new SourceInfo (hostAddress, listenPort, -1, -1, 0))
       oosMaster.flush
@@ -330,8 +330,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
   // This might be called multiple times to retry a defined number of times.
   private def receiveSingleTransmission(sourceInfo: SourceInfo): Boolean = {
     var clientSocketToSource: Socket = null    
-    var oisSource: ObjectInputStream = null
     var oosSource: ObjectOutputStream = null
+    var oisSource: ObjectInputStream = null
     
     var receptionSucceeded = false    
     try {
