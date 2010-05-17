@@ -240,11 +240,13 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
           new Socket(BroadcastCS.masterHostAddress, BroadcastCS.masterTrackerPort)  
         val oosTracker = 
           new ObjectOutputStream (clientSocketToTracker.getOutputStream)
+        oosTracker.flush
         val oisTracker = 
           new ObjectInputStream (clientSocketToTracker.getInputStream)
       
         // Send UUID and receive masterListenPort
         oosTracker.writeObject (uuid)
+        oosTracker.flush
         masterListenPort = oisTracker.readObject.asInstanceOf[Int]
       } catch {
         // In case of any failure, set masterListenPort = 0 to read from HDFS        
@@ -286,6 +288,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       // TODO: Guiding object connection is reusable
       val oosMaster = 
         new ObjectOutputStream (clientSocketToMaster.getOutputStream)
+      oosMaster.flush
       val oisMaster = 
         new ObjectInputStream (clientSocketToMaster.getInputStream)
       
@@ -340,6 +343,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         new Socket (sourceInfo.hostAddress, sourceInfo.listenPort)        
       oosSource = 
         new ObjectOutputStream (clientSocketToSource.getOutputStream)
+      oosSource.flush
       oisSource = 
         new ObjectInputStream (clientSocketToSource.getInputStream)
         
@@ -348,6 +352,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       
       // Send the range       
       oosSource.writeObject((hasBlocks, totalBlocks))
+      oosSource.flush
       
       for (i <- hasBlocks until totalBlocks) {
         val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
@@ -420,6 +425,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     
     class GuideSingleRequest (val clientSocket: Socket) extends Runnable {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
+      oos.flush
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
 
       private var selectedSourceInfo: SourceInfo = null
@@ -567,6 +573,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     
     class ServeSingleRequest (val clientSocket: Socket) extends Runnable {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
+      oos.flush
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
       
       private var sendFrom = 0
@@ -912,6 +919,7 @@ private object BroadcastCS {
               threadPool.execute (new Runnable {
                 override def run = {
                   val oos = new ObjectOutputStream (clientSocket.getOutputStream)
+                  oos.flush
                   val ois = new ObjectInputStream (clientSocket.getInputStream)
                   try {
                     val uuid = ois.readObject.asInstanceOf[UUID]
