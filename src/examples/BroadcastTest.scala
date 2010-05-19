@@ -14,11 +14,14 @@ object BroadcastTest {
     for (i <- 0 until arr.length) 
       arr(i) = i
     
+    val start = System.nanoTime
     val barr = spark.broadcast(arr)
     spark.parallelize(1 to 10, slices).foreach {
       println("in task: barr = " + barr)
       i => println(barr.value.size)
     }
+    val time = (System.nanoTime - start) / 1e9
+    println("BroadcastTest took " + time + " s")                     
   }
 }
 
