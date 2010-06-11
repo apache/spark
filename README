@@ -1,5 +1,4 @@
-Spark requires Scala 2.7.7. It will currently not work with 2.8, or with
-earlier versions of the 2.7 branch.
+Spark requires Scala 2.8. This version has been tested with 2.8.0RC3.
 
 To build and run Spark, you will need to have Scala's bin in your $PATH,
 or you will need to set the SCALA_HOME environment variable to point
