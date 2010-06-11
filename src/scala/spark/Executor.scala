@@ -25,13 +25,11 @@ object Executor {
         // If the REPL is in use, create a ClassLoader that will be able to
         // read new classes defined by the REPL as the user types code
         classLoader = this.getClass.getClassLoader
-        /* // TODO: Fix for Scala 2.8
         val classDir = System.getProperty("spark.repl.classdir")
         if (classDir != null) {
           println("Using REPL classdir: " + classDir)
           classLoader = new repl.ExecutorClassLoader(classDir, classLoader)
         }
-        */
         Thread.currentThread.setContextClassLoader(classLoader)
         
         // Start worker thread pool (they will inherit our context ClassLoader)

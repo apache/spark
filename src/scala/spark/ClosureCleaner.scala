@@ -9,8 +9,10 @@ import org.objectweb.asm.Opcodes._
 
 
 object ClosureCleaner {
-  private def getClassReader(cls: Class[_]): ClassReader = new ClassReader(
-    cls.getResourceAsStream(cls.getName.replaceFirst("^.*\\.", "") + ".class"))
+  private def getClassReader(cls: Class[_]): ClassReader = {
+    new ClassReader(cls.getResourceAsStream(
+      cls.getName.replaceFirst("^.*\\.", "") + ".class"))
+  }
   
   private def getOuterClasses(obj: AnyRef): List[Class[_]] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
@@ -84,7 +86,6 @@ object ClosureCleaner {
   }
   
   private def instantiateClass(cls: Class[_], outer: AnyRef): AnyRef = {
-    /* // TODO: Fix for Scala 2.8
     if (spark.repl.Main.interp == null) {
       // This is a bona fide closure class, whose constructor has no effects
       // other than to set its fields, so use its constructor
@@ -94,7 +95,6 @@ object ClosureCleaner {
         params(0) = outer // First param is always outer object
       return cons.newInstance(params: _*).asInstanceOf[AnyRef]
     } else {
-    */
       // Use reflection to instantiate object without calling constructor
       val rf = sun.reflect.ReflectionFactory.getReflectionFactory();
       val parentCtor = classOf[java.lang.Object].getDeclaredConstructor();
@@ -107,9 +107,7 @@ object ClosureCleaner {
         field.set(obj, outer)
       }
       return obj
-    /*
     }
-    */
   }
 }
 
