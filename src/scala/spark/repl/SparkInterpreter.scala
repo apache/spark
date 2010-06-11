@@ -388,7 +388,7 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
    * MATEI: Copied from interpreter package object
    */
   def stripWrapperGunk(str: String): String = {
-    val wrapregex = """(line[0-9]+\$object[$.])?(\$VAL.?)*(\$iwC?(.this?)[$.])*"""
+    val wrapregex = """(line[0-9]+\$object[$.])?(\$?VAL.?)*(\$iwC?(.this)?[$.])*"""
     str.replaceAll(wrapregex, "")
   }
 
