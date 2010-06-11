@@ -65,7 +65,7 @@ extends nexus.Scheduler with spark.Scheduler
   override def getExecutorInfo(d: SchedulerDriver): ExecutorInfo =
     new ExecutorInfo(new File("spark-executor").getCanonicalPath(), execArg)
 
-  override def runTasks[T](tasks: Array[Task[T]]): Array[T] = {
+  override def runTasks[T: ClassManifest](tasks: Array[Task[T]]) : Array[T] = {
     val results = new Array[T](tasks.length)
     if (tasks.length == 0)
       return results

@@ -1,4 +1,5 @@
 import java.util.Random
+import scala.math.sqrt
 import cern.jet.math._
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
@@ -34,7 +35,7 @@ object LocalALS {
     //println("R: " + r)
     blas.daxpy(-1, targetR, r)
     val sumSqs = r.aggregate(Functions.plus, Functions.square)
-    return Math.sqrt(sumSqs / (M * U))
+    return sqrt(sumSqs / (M * U))
   }
 
   def updateMovie(i: Int, m: DoubleMatrix1D, us: Array[DoubleMatrix1D],

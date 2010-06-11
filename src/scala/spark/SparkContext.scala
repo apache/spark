@@ -8,10 +8,12 @@ import scala.collection.mutable.ArrayBuffer
 class SparkContext(master: String, frameworkName: String) {
   Cache.initialize()
 
-  def parallelize[T](seq: Seq[T], numSlices: Int): ParallelArray[T] =
+  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int)
+      : ParallelArray[T] =
     new SimpleParallelArray[T](this, seq, numSlices)
 
-  def parallelize[T](seq: Seq[T]): ParallelArray[T] = parallelize(seq, 2)
+  def parallelize[T: ClassManifest](seq: Seq[T]): ParallelArray[T] =
+    parallelize(seq, 2)
 
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
@@ -42,16 +44,17 @@ class SparkContext(master: String, frameworkName: String) {
       val entry = iter.next
       val (key, value) = (entry.getKey.toString, entry.getValue.toString)
       if (key.startsWith("spark."))
-        props += (key, value)
+        props += key -> value
     }
     return Utils.serialize(props.toArray)
   }
 
-  def runTasks[T](tasks: Array[() => T]): Array[T] = {
+  def runTasks[T: ClassManifest](tasks: Array[() => T]): Array[T] = {
     runTaskObjects(tasks.map(f => new FunctionTask(f)))
   }
 
-  private[spark] def runTaskObjects[T](tasks: Seq[Task[T]]): Array[T] = {
+  private[spark] def runTaskObjects[T: ClassManifest](tasks: Seq[Task[T]])
+      : Array[T] = {
     println("Running " + tasks.length + " tasks in parallel")
     val start = System.nanoTime
     val result = scheduler.runTasks(tasks.toArray)

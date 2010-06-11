@@ -24,7 +24,8 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 
 @serializable
-abstract class DistributedFile[T, Split](@transient sc: SparkContext) {
+abstract class DistributedFile[T: ClassManifest, Split](
+    @transient sc: SparkContext) {
   def splits: Array[Split]
   def iterator(split: Split): Iterator[T]
   def prefers(split: Split, slot: SlaveOffer): Boolean
@@ -74,7 +75,7 @@ abstract class DistributedFile[T, Split](@transient sc: SparkContext) {
     case _ => throw new UnsupportedOperationException("empty collection")
   }
 
-  def map[U](f: T => U) = new MappedFile(this, sc.clean(f))
+  def map[U: ClassManifest](f: T => U) = new MappedFile(this, sc.clean(f))
   def filter(f: T => Boolean) = new FilteredFile(this, sc.clean(f))
   def cache() = new CachedFile(this)
 
@@ -84,15 +85,15 @@ abstract class DistributedFile[T, Split](@transient sc: SparkContext) {
 }
 
 @serializable
-abstract class FileTask[U, T, Split](val file: DistributedFile[T, Split],
-  val split: Split)
+abstract class FileTask[U: ClassManifest, T: ClassManifest, Split](
+  val file: DistributedFile[T, Split], val split: Split)
 extends Task[U] {
   override def prefers(slot: SlaveOffer) = file.prefers(split, slot)
   override def markStarted(slot: SlaveOffer) { file.taskStarted(split, slot) }
 }
 
-class ForeachTask[T, Split](file: DistributedFile[T, Split],
-  split: Split, func: T => Unit)
+class ForeachTask[T: ClassManifest, Split](
+  file: DistributedFile[T, Split], split: Split, func: T => Unit)
 extends FileTask[Unit, T, Split](file, split) {
   override def run() {
     println("Processing " + split)
@@ -100,16 +101,17 @@ extends FileTask[Unit, T, Split](file, split) {
   }
 }
 
-class GetTask[T, Split](file: DistributedFile[T, Split], split: Split)
+class GetTask[T, Split](
+  file: DistributedFile[T, Split], split: Split)(implicit m: ClassManifest[T])
 extends FileTask[Array[T], T, Split](file, split) {
   override def run(): Array[T] = {
     println("Processing " + split)
-    file.iterator(split).collect.toArray
+    file.iterator(split).toArray(m)
   }
 }
 
-class ReduceTask[T, Split](file: DistributedFile[T, Split],
-  split: Split, f: (T, T) => T)
+class ReduceTask[T: ClassManifest, Split](
+  file: DistributedFile[T, Split], split: Split, f: (T, T) => T)
 extends FileTask[Option[T], T, Split](file, split) {
   override def run(): Option[T] = {
     println("Processing " + split)
@@ -121,7 +123,8 @@ extends FileTask[Option[T], T, Split](file, split) {
   }
 }
 
-class MappedFile[U, T, Split](prev: DistributedFile[T, Split], f: T => U) 
+class MappedFile[U: ClassManifest, T: ClassManifest, Split](
+  prev: DistributedFile[T, Split], f: T => U) 
 extends DistributedFile[U, Split](prev.sparkContext) {
   override def splits = prev.splits
   override def prefers(split: Split, slot: SlaveOffer) = prev.prefers(split, slot)
@@ -129,7 +132,8 @@ extends DistributedFile[U, Split](prev.sparkContext) {
   override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
 }
 
-class FilteredFile[T, Split](prev: DistributedFile[T, Split], f: T => Boolean) 
+class FilteredFile[T: ClassManifest, Split](
+  prev: DistributedFile[T, Split], f: T => Boolean) 
 extends DistributedFile[T, Split](prev.sparkContext) {
   override def splits = prev.splits
   override def prefers(split: Split, slot: SlaveOffer) = prev.prefers(split, slot)
@@ -137,7 +141,8 @@ extends DistributedFile[T, Split](prev.sparkContext) {
   override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
 }
 
-class CachedFile[T, Split](prev: DistributedFile[T, Split])
+class CachedFile[T, Split](
+  prev: DistributedFile[T, Split])(implicit m: ClassManifest[T])
 extends DistributedFile[T, Split](prev.sparkContext) {
   val id = CachedFile.newId()
   @transient val cacheLocs = Map[Split, List[Int]]()
@@ -173,7 +178,7 @@ extends DistributedFile[T, Split](prev.sparkContext) {
       }
       // If we got here, we have to load the split
       println("Loading and caching " + split)
-      val array = prev.iterator(split).collect.toArray
+      val array = prev.iterator(split).toArray(m)
       cache.put(key, array)
       loading.synchronized {
         loading.remove(key)

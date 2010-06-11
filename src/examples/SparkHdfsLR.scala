@@ -1,4 +1,5 @@
 import java.util.Random
+import scala.math.exp
 import Vector._
 import spark._
 
@@ -10,7 +11,7 @@ object SparkHdfsLR {
 
   def parsePoint(line: String): DataPoint = {
     //val nums = line.split(' ').map(_.toDouble)
-    //return DataPoint(new Vector(nums.subArray(1, D+1)), nums(0))
+    //return DataPoint(new Vector(nums.slice(1, D+1)), nums(0))
     val tok = new java.util.StringTokenizer(line, " ")
     var y = tok.nextToken.toDouble
     var x = new Array[Double](D)
@@ -39,7 +40,7 @@ object SparkHdfsLR {
       println("On iteration " + i)
       val gradient = sc.accumulator(Vector.zeros(D))
       for (p <- points) {
-        val scale = (1 / (1 + Math.exp(-p.y * (w dot p.x))) - 1) * p.y
+        val scale = (1 / (1 + exp(-p.y * (w dot p.x))) - 1) * p.y
         gradient +=  scale * p.x
       }
       w -= gradient.value

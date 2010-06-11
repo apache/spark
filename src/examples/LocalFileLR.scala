@@ -9,11 +9,11 @@ object LocalFileLR {
 
   def parsePoint(line: String): DataPoint = {
     val nums = line.split(' ').map(_.toDouble)
-    return DataPoint(new Vector(nums.subArray(1, D+1)), nums(0))
+    return DataPoint(new Vector(nums.slice(1, D+1)), nums(0))
   }
 
   def main(args: Array[String]) {
-    val lines = scala.io.Source.fromFile(args(0)).getLines
+    val lines = scala.io.Source.fromPath(args(0)).getLines()
     val points = lines.map(parsePoint _)
     val ITERATIONS = args(1).toInt
 
