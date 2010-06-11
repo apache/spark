@@ -13,7 +13,7 @@ JARS += third_party/scalacheck_2.8.0.RC3-1.7.jar
 CLASSPATH = $(subst $(SPACE),:,$(JARS))
 
 SCALA_SOURCES =  src/examples/*.scala src/scala/spark/*.scala src/scala/spark/repl/*.scala
-SCALA_SOURCES += src/test/spark/*.scala #src/test/spark/repl/*.scala
+SCALA_SOURCES += src/test/spark/*.scala src/test/spark/repl/*.scala
 
 JAVA_SOURCES = $(wildcard src/java/spark/compress/lzf/*.java)
 
