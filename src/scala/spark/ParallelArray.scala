@@ -1,14 +1,27 @@
 package spark
 
-abstract class ParallelArray[T: ClassManifest](sc: SparkContext) {
-  def filter(f: T => Boolean): ParallelArray[T] = {
-    val cleanF = sc.clean(f)
-    new FilteredParallelArray[T](sc, this, cleanF)
-  }
+import nexus.SlaveOffer
+
+@serializable
+class ParallelArraySplit[T: ClassManifest](values: Seq[T]) {
+  def iterator(): Iterator[T] = values.iterator
+}
+
+class ParallelArray[T: ClassManifest](
+  sc: SparkContext, @transient data: Seq[T], numSlices: Int)
+extends RDD[T, ParallelArraySplit[T]](sc) {
+  // TODO: Right now, each split sends along its full data, even if later down
+  // the RDD chain it gets cached. It might be worthwhile to write the data to
+  // a file in the DFS and read it in the split instead.
+
+  @transient val splits_ =
+    ParallelArray.slice(data, numSlices).map(new ParallelArraySplit(_)).toArray
+
+  override def splits = splits_
+
+  override def iterator(s: ParallelArraySplit[T]) = s.iterator
   
-  def foreach(f: T => Unit): Unit
-  
-  def map[U: ClassManifest](f: T => U): Array[U]
+  override def prefers(s: ParallelArraySplit[T], offer: SlaveOffer) = true
 }
 
 private object ParallelArray {
@@ -38,61 +51,5 @@ private object ParallelArray {
         })
       }
     }
-  }
-}
-
-private class SimpleParallelArray[T: ClassManifest](
-  sc: SparkContext, data: Seq[T], numSlices: Int)
-extends ParallelArray[T](sc) {
-  val slices = ParallelArray.slice(data, numSlices)
-  
-  def foreach(f: T => Unit) {
-    val cleanF = sc.clean(f)
-    var tasks = for (i <- 0 until numSlices) yield
-      new ForeachRunner(i, slices(i), cleanF)
-    sc.runTasks[Unit](tasks.toArray)
-  }
-
-  def map[U: ClassManifest](f: T => U): Array[U] = {
-    val cleanF = sc.clean(f)
-    var tasks = for (i <- 0 until numSlices) yield
-      new MapRunner(i, slices(i), cleanF)
-    return Array.concat(sc.runTasks[Array[U]](tasks.toArray): _*)
-  }
-}
-
-@serializable
-private class ForeachRunner[T](sliceNum: Int, data: Seq[T], f: T => Unit)
-extends Function0[Unit] {
-  def apply() = {
-    printf("Running slice %d of parallel foreach\n", sliceNum)
-    data.foreach(f)
-  }
-}
-
-@serializable
-private class MapRunner[T, U](sliceNum: Int, data: Seq[T], f: T => U)
-  (implicit m: ClassManifest[U])
-extends Function0[Array[U]] {
-  def apply(): Array[U] = {
-    printf("Running slice %d of parallel map\n", sliceNum)
-    return data.map(f).toArray(m)
-  }
-}
-
-private class FilteredParallelArray[T: ClassManifest](
-  sc: SparkContext, array: ParallelArray[T], predicate: T => Boolean)
-extends ParallelArray[T](sc) {
-  val cleanPred = sc.clean(predicate)
-  
-  def foreach(f: T => Unit) {
-    val cleanF = sc.clean(f)
-    array.foreach(t => if (cleanPred(t)) cleanF(t))
-  }
-
-  def map[U: ClassManifest](f: T => U): Array[U] = {
-    val cleanF = sc.clean(f)
-    throw new UnsupportedOperationException(
-      "Map is not yet supported on FilteredParallelArray")
   }
 }

@@ -8,9 +8,8 @@ import scala.collection.mutable.ArrayBuffer
 class SparkContext(master: String, frameworkName: String) {
   Cache.initialize()
 
-  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int)
-      : ParallelArray[T] =
-    new SimpleParallelArray[T](this, seq, numSlices)
+  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int) =
+    new ParallelArray[T](this, seq, numSlices)
 
   def parallelize[T: ClassManifest](seq: Seq[T]): ParallelArray[T] =
     parallelize(seq, 2)
