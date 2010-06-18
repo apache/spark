@@ -93,7 +93,8 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
   /** directory to save .class files to */
   //val virtualDirectory = new VirtualDirectory("(memory)", None)
   val virtualDirectory = {
-    val tmpDir = new File(System.getProperty("java.io.tmpdir"))
+    val rootDir = new File(System.getProperty("spark.repl.classdir",
+                           System.getProperty("java.io.tmpdir")))
     var attempts = 0
     val maxAttempts = 10
     var outputDir: File = null
@@ -104,12 +105,12 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
                               "after " + maxAttempts + " attempts!")
       }
       try {
-        outputDir = new File(tmpDir, "spark-" + UUID.randomUUID.toString)
+        outputDir = new File(rootDir, "spark-" + UUID.randomUUID.toString)
         if (outputDir.exists() || !outputDir.mkdirs())
           outputDir = null
       } catch { case e: IOException => ; }
     }
-    System.setProperty("spark.repl.classdir",
+    System.setProperty("spark.repl.current.classdir",
       "file://" + outputDir.getAbsolutePath + "/")
     if (SPARK_DEBUG_REPL)
       println("Output directory: " + outputDir)
