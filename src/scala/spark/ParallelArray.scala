@@ -38,7 +38,7 @@ extends RDD[T, ParallelArraySplit[T]](sc) {
 
   override def iterator(s: ParallelArraySplit[T]) = s.iterator
   
-  override def prefers(s: ParallelArraySplit[T], offer: SlaveOffer) = true
+  override def preferredLocations(s: ParallelArraySplit[T]): Seq[String] = Nil
 }
 
 private object ParallelArray {

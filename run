@@ -4,7 +4,7 @@
 FWDIR=`dirname $0`
 
 # Set JAVA_OPTS to be able to load libnexus.so and set various other misc options
-JAVA_OPTS="-Djava.library.path=$FWDIR/third_party:$FWDIR/src/native -Xmx750m"
+export JAVA_OPTS="-Djava.library.path=$FWDIR/third_party:$FWDIR/src/native -Xms100m -Xmx750m"
 if [ -e $FWDIR/conf/java-opts ] ; then
   JAVA_OPTS+=" `cat $FWDIR/conf/java-opts`"
 fi

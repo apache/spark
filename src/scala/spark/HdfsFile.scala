@@ -60,8 +60,10 @@ extends RDD[String, HdfsSplit](sc) {
     }
   }
 
-  override def prefers(split: HdfsSplit, slot: SlaveOffer) =
-    split.value.getLocations().contains(slot.getHost)
+  override def preferredLocations(split: HdfsSplit) = {
+    // TODO: Filtering out "localhost" in case of file:// URLs
+    split.value.getLocations().filter(_ != "localhost")
+  }
 }
 
 object ConfigureLock {}

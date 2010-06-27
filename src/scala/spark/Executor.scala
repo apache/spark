@@ -19,8 +19,8 @@ object Executor {
         for ((key, value) <- props)
           System.setProperty(key, value)
         
-        // Initialize cache (uses some properties read above)
-        Cache.initialize()
+        // Initialize broadcast system (uses some properties read above)
+        Broadcast.initialize(false)
         
         // If the REPL is in use, create a ClassLoader that will be able to
         // read new classes defined by the REPL as the user types code
