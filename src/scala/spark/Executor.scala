@@ -2,7 +2,8 @@ package spark
 
 import java.util.concurrent.{Executors, ExecutorService}
 
-import nexus.{ExecutorArgs, TaskDescription, TaskState, TaskStatus}
+import nexus.{ExecutorArgs, ExecutorDriver, NexusExecutorDriver}
+import nexus.{TaskDescription, TaskState, TaskStatus}
 
 object Executor {
   def main(args: Array[String]) {
@@ -12,7 +13,7 @@ object Executor {
       var classLoader: ClassLoader = null
       var threadPool: ExecutorService = null
 
-      override def init(args: ExecutorArgs) {
+      override def init(d: ExecutorDriver, args: ExecutorArgs) {
         // Read spark.* system properties
         val props = Utils.deserialize[Array[(String, String)]](args.getData)
         for ((key, value) <- props)
@@ -24,7 +25,7 @@ object Executor {
         // If the REPL is in use, create a ClassLoader that will be able to
         // read new classes defined by the REPL as the user types code
         classLoader = this.getClass.getClassLoader
-        val classDir = System.getProperty("spark.repl.classdir")
+        val classDir = System.getProperty("spark.repl.current.classdir")
         if (classDir != null) {
           println("Using REPL classdir: " + classDir)
           classLoader = new repl.ExecutorClassLoader(classDir, classLoader)
@@ -35,7 +36,7 @@ object Executor {
         threadPool = Executors.newCachedThreadPool()
       }
       
-      override def startTask(desc: TaskDescription) {
+      override def launchTask(d: ExecutorDriver, desc: TaskDescription) {
         // Pull taskId and arg out of TaskDescription because it won't be a
         // valid pointer after this method call (TODO: fix this in C++/SWIG)
         val taskId = desc.getTaskId
@@ -49,7 +50,7 @@ object Executor {
               val value = task.run
               val accumUpdates = Accumulators.values
               val result = new TaskResult(value, accumUpdates)
-              sendStatusUpdate(new TaskStatus(
+              d.sendStatusUpdate(new TaskStatus(
                 taskId, TaskState.TASK_FINISHED, Utils.serialize(result)))
               println("Finished task ID " + taskId)
             } catch {
@@ -65,6 +66,6 @@ object Executor {
       }
     }
 
-    exec.run()
+    new NexusExecutorDriver(exec).run()
   }
 }

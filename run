@@ -4,8 +4,7 @@
 FWDIR=`dirname $0`
 
 # Set JAVA_OPTS to be able to load libnexus.so and set various other misc options
-export JAVA_OPTS="-Djava.library.path=$FWDIR/third_party:$FWDIR/src/native -Xmx2000m -Dspark.broadcast.masterHostAddress=10.0.2.15 -Dspark.broadcast.masterTrackerPort=11111 -Dspark.broadcast.masterBootPort=22222 -Dspark.broadcast.blockSize=4096 -Dspark.broadcast.maxRetryCount=2 -Dspark.broadcast.serverSocketTimout=5000 -Dspark.broadcast.dualMode=false"
-
+export JAVA_OPTS="-Djava.library.path=$FWDIR/third_party:$FWDIR/src/native -Xms100m -Xmx750m"
 if [ -e $FWDIR/conf/java-opts ] ; then
   JAVA_OPTS+=" `cat $FWDIR/conf/java-opts`"
 fi
@@ -18,8 +17,8 @@ CLASSPATH+=:$FWDIR/third_party/asm-3.2/lib/all/asm-all-3.2.jar
 CLASSPATH+=:$FWDIR/third_party/colt.jar
 CLASSPATH+=:$FWDIR/third_party/google-collect-1.0-rc5/google-collect-1.0-rc5.jar
 CLASSPATH+=:$FWDIR/third_party/hadoop-0.20.0/hadoop-0.20.0-core.jar
-CLASSPATH+=:$FWDIR/third_party/scalatest-1.0/scalatest-1.0.jar
-CLASSPATH+=:$FWDIR/third_party/ScalaCheck-1.5.jar
+CLASSPATH+=:third_party/scalatest-1.2-for-scala-2.8.0.RC3-SNAPSHOT.jar
+CLASSPATH+=:third_party/scalacheck_2.8.0.RC3-1.7.jar
 CLASSPATH+=:$FWDIR/third_party/FreePastry-2.1.jar
 for jar in $FWDIR/third_party/hadoop-0.20.0/lib/*.jar; do
   CLASSPATH+=:$jar

@@ -1,18 +1,51 @@
 package spark
 
-abstract class ParallelArray[T](sc: SparkContext) {
-  def filter(f: T => Boolean): ParallelArray[T] = {
-    val cleanF = sc.clean(f)
-    new FilteredParallelArray[T](sc, this, cleanF)
+import nexus.SlaveOffer
+
+import java.util.concurrent.atomic.AtomicLong
+
+@serializable class ParallelArraySplit[T: ClassManifest](
+    val arrayId: Long, val slice: Int, values: Seq[T]) {
+  def iterator(): Iterator[T] = values.iterator
+
+  override def hashCode(): Int = (41 * (41 + arrayId) + slice).toInt
+
+  override def equals(other: Any): Boolean = other match {
+    case that: ParallelArraySplit[_] =>
+      (this.arrayId == that.arrayId && this.slice == that.slice)
+    case _ => false
   }
+
+  override def toString() =
+    "ParallelArraySplit(arrayId %d, slice %d)".format(arrayId, slice)
+}
+
+class ParallelArray[T: ClassManifest](
+  sc: SparkContext, @transient data: Seq[T], numSlices: Int)
+extends RDD[T, ParallelArraySplit[T]](sc) {
+  // TODO: Right now, each split sends along its full data, even if later down
+  // the RDD chain it gets cached. It might be worthwhile to write the data to
+  // a file in the DFS and read it in the split instead.
+
+  val id = ParallelArray.newId()
+
+  @transient val splits_ = {
+    val slices = ParallelArray.slice(data, numSlices).toArray
+    slices.indices.map(i => new ParallelArraySplit(id, i, slices(i))).toArray
+  }
+
+  override def splits = splits_
+
+  override def iterator(s: ParallelArraySplit[T]) = s.iterator
   
-  def foreach(f: T => Unit): Unit
-  
-  def map[U](f: T => U): Array[U]
+  override def preferredLocations(s: ParallelArraySplit[T]): Seq[String] = Nil
 }
 
 private object ParallelArray {
-  def slice[T](seq: Seq[T], numSlices: Int): Array[Seq[T]] = {
+  val nextId = new AtomicLong(0) // Creates IDs for ParallelArrays (on master)
+  def newId() = nextId.getAndIncrement()
+
+  def slice[T: ClassManifest](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
     if (numSlices < 1)
       throw new IllegalArgumentException("Positive number of slices required")
     seq match {
@@ -25,73 +58,18 @@ private object ParallelArray {
         (0 until numSlices).map(i => {
           val start = ((i * r.length.toLong) / numSlices).toInt
           val end = (((i+1) * r.length.toLong) / numSlices).toInt
-          new SerializableRange(
+          new Range(
             r.start + start * r.step, r.start + end * r.step, r.step)
-        }).asInstanceOf[Seq[Seq[T]]].toArray
+        }).asInstanceOf[Seq[Seq[T]]]
       }
       case _ => {
         val array = seq.toArray  // To prevent O(n^2) operations for List etc
         (0 until numSlices).map(i => {
           val start = ((i * array.length.toLong) / numSlices).toInt
           val end = (((i+1) * array.length.toLong) / numSlices).toInt
-          array.slice(start, end).toArray
-        }).toArray
+          array.slice(start, end).toSeq
+        })
       }
     }
-  }
-}
-
-private class SimpleParallelArray[T](
-  sc: SparkContext, data: Seq[T], numSlices: Int)
-extends ParallelArray[T](sc) {
-  val slices = ParallelArray.slice(data, numSlices)
-  
-  def foreach(f: T => Unit) {
-    val cleanF = sc.clean(f)
-    var tasks = for (i <- 0 until numSlices) yield
-      new ForeachRunner(i, slices(i), cleanF)
-    sc.runTasks[Unit](tasks.toArray)
-  }
-
-  def map[U](f: T => U): Array[U] = {
-    val cleanF = sc.clean(f)
-    var tasks = for (i <- 0 until numSlices) yield
-      new MapRunner(i, slices(i), cleanF)
-    return Array.concat(sc.runTasks[Array[U]](tasks.toArray): _*)
-  }
-}
-
-@serializable
-private class ForeachRunner[T](sliceNum: Int, data: Seq[T], f: T => Unit)
-extends Function0[Unit] {
-  def apply() = {
-    printf("Running slice %d of parallel foreach\n", sliceNum)
-    data.foreach(f)
-  }
-}
-
-@serializable
-private class MapRunner[T, U](sliceNum: Int, data: Seq[T], f: T => U)
-extends Function0[Array[U]] {
-  def apply(): Array[U] = {
-    printf("Running slice %d of parallel map\n", sliceNum)
-    return data.map(f).toArray
-  }
-}
-
-private class FilteredParallelArray[T](
-  sc: SparkContext, array: ParallelArray[T], predicate: T => Boolean)
-extends ParallelArray[T](sc) {
-  val cleanPred = sc.clean(predicate)
-  
-  def foreach(f: T => Unit) {
-    val cleanF = sc.clean(f)
-    array.foreach(t => if (cleanPred(t)) cleanF(t))
-  }
-
-  def map[U](f: T => U): Array[U] = {
-    val cleanF = sc.clean(f)
-    throw new UnsupportedOperationException(
-      "Map is not yet supported on FilteredParallelArray")
   }
 }

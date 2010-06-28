@@ -5,8 +5,8 @@ import nexus._
 @serializable
 trait Task[T] {
   def run: T
-  def prefers(slot: SlaveOffer): Boolean = true
-  def markStarted(slot: SlaveOffer) {}
+  def preferredLocations: Seq[String] = Nil
+  def markStarted(offer: SlaveOffer) {}
 }
 
 @serializable

@@ -1,4 +1,5 @@
 import java.util.Random
+import scala.math.exp
 import Vector._
 import spark._
 
@@ -37,7 +38,7 @@ object SparkLR {
       println("On iteration " + i)
       val gradient = sc.accumulator(Vector.zeros(D))
       for (p <- sc.parallelize(data, numSlices)) {
-        val scale = (1 / (1 + Math.exp(-p.y * (w dot p.x))) - 1) * p.y
+        val scale = (1 / (1 + exp(-p.y * (w dot p.x))) - 1) * p.y
         gradient +=  scale * p.x
       }
       w -= gradient.value

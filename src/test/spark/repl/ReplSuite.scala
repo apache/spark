@@ -46,7 +46,7 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 70", output)
-    assertContains("res2: Int = 100", output)
+    assertContains("res1: Int = 100", output)
   }
 
   test ("external classes") {
@@ -82,18 +82,19 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 70", output)
-    assertContains("res2: Int = 100", output)
+    assertContains("res1: Int = 100", output)
   }
   
-  test ("cached vars") {
-    // Test that the value that a cached var had when it was created is used,
-    // even if that cached var is then modified in the driver program
+  test ("broadcast vars") {
+    // Test that the value that a broadcast var had when it was created is used,
+    // even if that variable is then modified in the driver program
+    // TODO: This doesn't actually work for arrays when we run in local mode!
     val output = runInterpreter("local", """
       var array = new Array[Int](5)
-      val cachedArray = sc.cache(array)
-      sc.parallelize(0 to 4).map(x => cachedArray.value(x)).toArray
+      val broadcastArray = sc.broadcast(array)
+      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).toArray
       array(0) = 5
-      sc.parallelize(0 to 4).map(x => cachedArray.value(x)).toArray
+      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).toArray
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -101,7 +102,7 @@ class ReplSuite extends FunSuite {
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
   
-  test ("running on Nexus") {
+  test ("running on Mesos") {
     val output = runInterpreter("localquiet", """
       var v = 7
       def getV() = v
@@ -109,16 +110,16 @@ class ReplSuite extends FunSuite {
       v = 10
       sc.parallelize(1 to 10).map(x => getV()).toArray.reduceLeft(_+_)
       var array = new Array[Int](5)
-      val cachedArray = sc.cache(array)
-      sc.parallelize(0 to 4).map(x => cachedArray.value(x)).toArray
+      val broadcastArray = sc.broadcast(array)
+      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).toArray
       array(0) = 5
-      sc.parallelize(0 to 4).map(x => cachedArray.value(x)).toArray
+      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).toArray
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 70", output)
-    assertContains("res2: Int = 100", output)
-    assertContains("res3: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-    assertContains("res5: Array[Int] = Array(0, 0, 0, 0, 0)", output)
+    assertContains("res1: Int = 100", output)
+    assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
+    assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
   }
 }

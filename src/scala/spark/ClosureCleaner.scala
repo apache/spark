@@ -9,8 +9,10 @@ import org.objectweb.asm.Opcodes._
 
 
 object ClosureCleaner {
-  private def getClassReader(cls: Class[_]): ClassReader = new ClassReader(
-    cls.getResourceAsStream(cls.getName.replaceFirst("^.*\\.", "") + ".class"))
+  private def getClassReader(cls: Class[_]): ClassReader = {
+    new ClassReader(cls.getResourceAsStream(
+      cls.getName.replaceFirst("^.*\\.", "") + ".class"))
+  }
   
   private def getOuterClasses(obj: AnyRef): List[Class[_]] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {

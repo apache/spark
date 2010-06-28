@@ -81,7 +81,7 @@ class ParallelArraySplitSuite extends FunSuite with Checkers {
     val slices = ParallelArray.slice(data, 3)
     assert(slices.size === 3)
     assert(slices.map(_.size).reduceLeft(_+_) === 99)
-    assert(slices.forall(_.isInstanceOf[SerializableRange]))
+    assert(slices.forall(_.isInstanceOf[Range]))
   }
   
   test("inclusive ranges sliced into ranges") {
@@ -89,7 +89,7 @@ class ParallelArraySplitSuite extends FunSuite with Checkers {
     val slices = ParallelArray.slice(data, 3)
     assert(slices.size === 3)
     assert(slices.map(_.size).reduceLeft(_+_) === 100)
-    assert(slices.forall(_.isInstanceOf[SerializableRange]))
+    assert(slices.forall(_.isInstanceOf[Range]))
   }
 
   test("large ranges don't overflow") {
@@ -98,8 +98,8 @@ class ParallelArraySplitSuite extends FunSuite with Checkers {
     val slices = ParallelArray.slice(data, 40)
     assert(slices.size === 40)
     for (i <- 0 until 40) {
-      assert(slices(i).isInstanceOf[SerializableRange])
-      val range = slices(i).asInstanceOf[SerializableRange]
+      assert(slices(i).isInstanceOf[Range])
+      val range = slices(i).asInstanceOf[Range]
       assert(range.start === i * (N / 40), "slice " + i + " start")
       assert(range.end   === (i+1) * (N / 40), "slice " + i + " end")
       assert(range.step  === 1, "slice " + i + " step")
@@ -117,7 +117,7 @@ class ParallelArraySplitSuite extends FunSuite with Checkers {
         val n = tuple._2
         val slices = ParallelArray.slice(d, n)
         ("n slices"    |: slices.size == n) &&
-        ("concat to d" |: Array.concat(slices: _*).mkString(",") == d.mkString(",")) &&
+        ("concat to d" |: Seq.concat(slices: _*).mkString(",") == d.mkString(",")) &&
         ("equal sizes" |: slices.map(_.size).forall(x => x==d.size/n || x==d.size/n+1))
     }
     check(prop)
@@ -134,8 +134,8 @@ class ParallelArraySplitSuite extends FunSuite with Checkers {
       case (d: Range, n: Int) =>
         val slices = ParallelArray.slice(d, n)
         ("n slices"    |: slices.size == n) &&
-        ("all ranges"  |: slices.forall(_.isInstanceOf[SerializableRange])) &&
-        ("concat to d" |: Array.concat(slices: _*).mkString(",") == d.mkString(",")) &&
+        ("all ranges"  |: slices.forall(_.isInstanceOf[Range])) &&
+        ("concat to d" |: Seq.concat(slices: _*).mkString(",") == d.mkString(",")) &&
         ("equal sizes" |: slices.map(_.size).forall(x => x==d.size/n || x==d.size/n+1))
     }
     check(prop)
@@ -152,8 +152,8 @@ class ParallelArraySplitSuite extends FunSuite with Checkers {
       case (d: Range, n: Int) =>
         val slices = ParallelArray.slice(d, n)
         ("n slices"    |: slices.size == n) &&
-        ("all ranges"  |: slices.forall(_.isInstanceOf[SerializableRange])) &&
-        ("concat to d" |: Array.concat(slices: _*).mkString(",") == d.mkString(",")) &&
+        ("all ranges"  |: slices.forall(_.isInstanceOf[Range])) &&
+        ("concat to d" |: Seq.concat(slices: _*).mkString(",") == d.mkString(",")) &&
         ("equal sizes" |: slices.map(_.size).forall(x => x==d.size/n || x==d.size/n+1))
     }
     check(prop)

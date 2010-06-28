@@ -8,8 +8,8 @@ JARS += third_party/colt.jar
 JARS += third_party/google-collect-1.0-rc5/google-collect-1.0-rc5.jar
 JARS += third_party/hadoop-0.20.0/hadoop-0.20.0-core.jar
 JARS += third_party/hadoop-0.20.0/lib/commons-logging-1.0.4.jar
-JARS += third_party/scalatest-1.0/scalatest-1.0.jar
-JARS += third_party/ScalaCheck-1.5.jar
+JARS += third_party/scalatest-1.2-for-scala-2.8.0.RC3-SNAPSHOT.jar
+JARS += third_party/scalacheck_2.8.0.RC3-1.7.jar
 JARS += third_party/FreePastry-2.1.jar
 CLASSPATH = $(subst $(SPACE),:,$(JARS))
 
@@ -36,7 +36,7 @@ build/classes:
 	mkdir -p build/classes
 
 scala: build/classes java
-	$(COMPILER) -unchecked -d build/classes -classpath $(CLASSPATH) $(SCALA_SOURCES)
+	$(COMPILER) -unchecked -d build/classes -classpath build/classes:$(CLASSPATH) $(SCALA_SOURCES)
 
 java: $(JAVA_SOURCES) build/classes
 	javac -d build/classes $(JAVA_SOURCES)

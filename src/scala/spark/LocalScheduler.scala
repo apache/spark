@@ -13,7 +13,8 @@ private class LocalScheduler(threads: Int) extends Scheduler {
   
   override def waitForRegister() {}
   
-  override def runTasks[T](tasks: Array[Task[T]]): Array[T] = {
+  override def runTasks[T](tasks: Array[Task[T]])(implicit m: ClassManifest[T])
+      : Array[T] = {
     val futures = new Array[Future[TaskResult[T]]](tasks.length)
     
     for (i <- 0 until tasks.length) {
@@ -49,7 +50,7 @@ private class LocalScheduler(threads: Int) extends Scheduler {
     val taskResults = futures.map(_.get)
     for (result <- taskResults)
       Accumulators.add(currentThread, result.accumUpdates)
-    return taskResults.map(_.value).toArray
+    return taskResults.map(_.value).toArray(m)
   }
   
   override def stop() {}
