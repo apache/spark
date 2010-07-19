@@ -84,7 +84,7 @@ extends NScheduler with spark.Scheduler
     }
   }
 
-  override def registered(d: SchedulerDriver, frameworkId: Int) {
+  override def registered(d: SchedulerDriver, frameworkId: String) {
     println("Registered as framework ID " + frameworkId)
     registeredLock.synchronized {
       isRegistered = true
@@ -100,7 +100,7 @@ extends NScheduler with spark.Scheduler
   }
 
   override def resourceOffer(
-      d: SchedulerDriver, oid: Long, offers: SlaveOfferVector) {
+      d: SchedulerDriver, oid: String, offers: SlaveOfferVector) {
     synchronized {
       val tasks = new TaskDescriptionVector
       if (activeOp != null) {
@@ -223,7 +223,7 @@ extends ParallelOperation
         {
           val taskId = sched.newTaskId()
           tidToIndex(taskId) = i
-          printf("Starting task %d as TID %d on slave %d: %s (%s)\n",
+          printf("Starting task %d as TID %s on slave %s: %s (%s)\n",
             i, taskId, offer.getSlaveId, offer.getHost, 
             if(checkPref) "preferred" else "non-preferred")
           tasks(i).markStarted(offer)
