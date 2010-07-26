@@ -5,11 +5,11 @@ SPACE = $(EMPTY) $(EMPTY)
 JARS = third_party/nexus.jar
 JARS += third_party/asm-3.2/lib/all/asm-all-3.2.jar
 JARS += third_party/colt.jar
-JARS += third_party/google-collect-1.0-rc5/google-collect-1.0-rc5.jar
+JARS += third_party/guava-r06/guava-r06.jar
 JARS += third_party/hadoop-0.20.0/hadoop-0.20.0-core.jar
 JARS += third_party/hadoop-0.20.0/lib/commons-logging-1.0.4.jar
-JARS += third_party/scalatest-1.2-for-scala-2.8.0.RC3-SNAPSHOT.jar
-JARS += third_party/scalacheck_2.8.0.RC3-1.7.jar
+JARS += third_party/scalatest-1.2/scalatest-1.2.jar
+JARS += third_party/scalacheck_2.8.0-1.7.jar
 CLASSPATH = $(subst $(SPACE),:,$(JARS))
 
 SCALA_SOURCES =  src/examples/*.scala src/scala/spark/*.scala src/scala/spark/repl/*.scala
