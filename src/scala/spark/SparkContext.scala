@@ -28,8 +28,8 @@ class SparkContext(master: String, frameworkName: String) {
   private var scheduler: Scheduler = master match {
     case "local" => new LocalScheduler(1)
     case LOCAL_REGEX(threads) => new LocalScheduler(threads.toInt)
-    case _ => { System.loadLibrary("nexus");
-                new NexusScheduler(master, frameworkName, createExecArg()) }
+    case _ => { System.loadLibrary("mesos");
+                new MesosScheduler(master, frameworkName, createExecArg()) }
   }
 
   private val local = scheduler.isInstanceOf[LocalScheduler]  

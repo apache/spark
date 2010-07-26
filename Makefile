@@ -2,7 +2,7 @@ EMPTY =
 SPACE = $(EMPTY) $(EMPTY)
 
 # Build up classpath by concatenating some strings
-JARS = third_party/nexus.jar
+JARS = third_party/mesos.jar
 JARS += third_party/asm-3.2/lib/all/asm-all-3.2.jar
 JARS += third_party/colt.jar
 JARS += third_party/guava-r06/guava-r06.jar

@@ -1,6 +1,6 @@
 package spark
 
-import nexus.SlaveOffer
+import mesos.SlaveOffer
 
 import java.util.concurrent.atomic.AtomicLong
 

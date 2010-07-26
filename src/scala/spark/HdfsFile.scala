@@ -1,6 +1,6 @@
 package spark
 
-import nexus.SlaveOffer
+import mesos.SlaveOffer
 
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text

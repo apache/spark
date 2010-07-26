@@ -2,14 +2,14 @@ package spark
 
 import java.util.concurrent.{Executors, ExecutorService}
 
-import nexus.{ExecutorArgs, ExecutorDriver, NexusExecutorDriver}
-import nexus.{TaskDescription, TaskState, TaskStatus}
+import mesos.{ExecutorArgs, ExecutorDriver, MesosExecutorDriver}
+import mesos.{TaskDescription, TaskState, TaskStatus}
 
 object Executor {
   def main(args: Array[String]) {
-    System.loadLibrary("nexus")
+    System.loadLibrary("mesos")
 
-    val exec = new nexus.Executor() {
+    val exec = new mesos.Executor() {
       var classLoader: ClassLoader = null
       var threadPool: ExecutorService = null
 
@@ -66,6 +66,6 @@ object Executor {
       }
     }
 
-    new NexusExecutorDriver(exec).run()
+    new MesosExecutorDriver(exec).run()
   }
 }

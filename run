@@ -24,7 +24,7 @@ export JAVA_OPTS
 
 # Build up classpath
 SPARK_CLASSPATH="$SPARK_CLASSPATH:$FWDIR/build/classes"
-SPARK_CLASSPATH+=:$FWDIR/third_party/nexus.jar
+SPARK_CLASSPATH+=:$FWDIR/third_party/mesos.jar
 SPARK_CLASSPATH+=:$FWDIR/third_party/asm-3.2/lib/all/asm-all-3.2.jar
 SPARK_CLASSPATH+=:$FWDIR/third_party/colt.jar
 SPARK_CLASSPATH+=:$FWDIR/third_party/guava-r06/guava-r06.jar

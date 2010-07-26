@@ -4,10 +4,10 @@ import java.io.File
 
 import scala.collection.mutable.Map
 
-import nexus.{Scheduler => NScheduler}
-import nexus._
+import mesos.{Scheduler => NScheduler}
+import mesos._
 
-// The main Scheduler implementation, which talks to Nexus. Clients are expected
+// The main Scheduler implementation, which talks to Mesos. Clients are expected
 // to first call start(), then submit tasks through the runTasks method.
 //
 // This implementation is currently a little quick and dirty. The following
@@ -18,7 +18,7 @@ import nexus._
 // 2) Presenting a single slave in ParallelOperation.slaveOffer makes it
 //    difficult to balance tasks across nodes. It would be better to pass
 //    all the offers to the ParallelOperation and have it load-balance.
-private class NexusScheduler(
+private class MesosScheduler(
   master: String, frameworkName: String, execArg: Array[Byte])
 extends NScheduler with spark.Scheduler
 {
@@ -41,15 +41,15 @@ extends NScheduler with spark.Scheduler
     return id
   }
 
-  // Driver for talking to Nexus
+  // Driver for talking to Mesos
   var driver: SchedulerDriver = null
   
   override def start() {
     new Thread("Spark scheduler") {
       setDaemon(true)
       override def run {
-        val ns = NexusScheduler.this
-        ns.driver = new NexusSchedulerDriver(ns, master)
+        val ns = MesosScheduler.this
+        ns.driver = new MesosSchedulerDriver(ns, master)
         ns.driver.run()
       }
     }.start
@@ -142,7 +142,7 @@ extends NScheduler with spark.Scheduler
           case e: Exception => e.printStackTrace
         }
       } else {
-        val msg = "Nexus error: %s (error code: %d)".format(message, code)
+        val msg = "Mesos error: %s (error code: %d)".format(message, code)
         System.err.println(msg)
         System.exit(1)
       }
@@ -166,7 +166,7 @@ trait ParallelOperation {
 
 
 class SimpleParallelOperation[T: ClassManifest](
-  sched: NexusScheduler, tasks: Array[Task[T]])
+  sched: MesosScheduler, tasks: Array[Task[T]])
 extends ParallelOperation
 {
   // Maximum time to wait to run a task in a preferred location (in ms)

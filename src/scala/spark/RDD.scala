@@ -7,7 +7,7 @@ import java.util.HashSet
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 
-import nexus._
+import mesos._
 
 import com.google.common.collect.MapMaker
 
