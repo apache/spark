@@ -3,3 +3,5 @@
 build
 work
 .DS_Store
+third_party/libmesos.so
+third_party/libmesos.dylib
