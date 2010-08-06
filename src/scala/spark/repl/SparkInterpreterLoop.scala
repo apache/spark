@@ -267,7 +267,7 @@ extends InterpreterControl {
         if (prop != null) prop else "local"
       }
     }
-    new SparkContext(master, "Spark REPL")
+    new SparkContext(master, "Spark shell")
   }
 
   /** The main read-eval-print loop for the interpreter.  It calls
