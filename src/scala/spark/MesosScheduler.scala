@@ -279,7 +279,7 @@ extends ParallelOperation
   def taskLost(status: TaskStatus) {
     val tid = status.getTaskId
     println("Lost TID " + tid)
-    if (!finished(tid)) {
+    if (!finished(tidToIndex(tid))) {
       launched(tidToIndex(tid)) = false
       tasksLaunched -= 1
     } else {
