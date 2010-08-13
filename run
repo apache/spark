@@ -8,7 +8,12 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
-if [ "$SPARK_MEM" == "" ] ; then
+if [ "x$MESOS_HOME" != "x" ] ; then
+  SPARK_CLASSPATH="$MESOS_HOME/lib/java/mesos.jar:$SPARK_CLASSPATH"
+  SPARK_LIBRARY_PATH="$MESOS_HOME/lib/java:$SPARK_LIBARY_PATH"
+fi
+
+if [ "x$SPARK_MEM" == "x" ] ; then
   SPARK_MEM="300m"
 fi
 

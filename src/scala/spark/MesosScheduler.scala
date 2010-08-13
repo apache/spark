@@ -100,9 +100,9 @@ extends NScheduler with spark.Scheduler
   }
 
   override def resourceOffer(
-      d: SchedulerDriver, oid: String, offers: SlaveOfferVector) {
+      d: SchedulerDriver, oid: String, offers: java.util.List[SlaveOffer]) {
     synchronized {
-      val tasks = new TaskDescriptionVector
+      val tasks = new java.util.ArrayList[TaskDescription]
       if (activeOp != null) {
         try {
           for (i <- 0 until offers.size.toInt) {
@@ -115,8 +115,8 @@ extends NScheduler with spark.Scheduler
           case e: Exception => e.printStackTrace
         }
       }  
-      val params = new StringMap
-      params.set("timeout", "1")
+      val params = new java.util.HashMap[String, String]
+      params.put("timeout", "1")
       d.replyToOffer(oid, tasks, params) // TODO: use smaller timeout
     }
   }
@@ -212,9 +212,9 @@ extends ParallelOperation
         checkPrefVals = Array(true, false) // Allow non-preferred tasks
       // TODO: Make desiredCpus and desiredMem configurable
       val desiredCpus = 1
-      val desiredMem = 750L * 1024L * 1024L
+      val desiredMem = 750
       if (offer.getParams.get("cpus").toInt < desiredCpus || 
-          offer.getParams.get("mem").toLong < desiredMem)
+          offer.getParams.get("mem").toInt < desiredMem)
         return None
       for (checkPref <- checkPrefVals; i <- 0 until numTasks) {
         if (!launched(i) && (!checkPref ||
@@ -231,9 +231,9 @@ extends ParallelOperation
           tasksLaunched += 1
           if (checkPref)
             lastPreferredLaunchTime = time
-          val params = new StringMap
-          params.set("cpus", "" + desiredCpus)
-          params.set("mem", "" + desiredMem)
+          val params = new java.util.HashMap[String, String]
+          params.put("cpus", "" + desiredCpus)
+          params.put("mem", "" + desiredMem)
           val serializedTask = Utils.serialize(tasks(i))
           return Some(new TaskDescription(taskId, offer.getSlaveId,
             "task_" + taskId, params, serializedTask))
