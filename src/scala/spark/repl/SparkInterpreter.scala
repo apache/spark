@@ -956,7 +956,9 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
       """.stripMargin
 
       code println preamble
-      handlers foreach { _.resultExtractionCode(this, code) }
+      if (printResults) {
+        handlers foreach { _.resultExtractionCode(this, code) }
+      }
       code println postamble
     }
 
