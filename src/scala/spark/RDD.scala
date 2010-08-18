@@ -27,7 +27,7 @@ abstract class RDD[T: ClassManifest, Split](
   def filter(f: T => Boolean) = new FilteredRDD(this, sc.clean(f))
   def aggregateSplit() = new SplitRDD(this)
   def cache() = new CachedRDD(this)
-  def sample(frac: Double, seed: Int) = new SampledRDD(this, frac, seed)
+  def sample(withReplacement: Boolean, frac: Double, seed: Int) = new SampledRDD(this, withReplacement, frac, seed)
 
   def foreach(f: T => Unit) {
     val cleanF = sc.clean(f)
@@ -153,14 +153,28 @@ extends RDD[Array[T], Split](prev.sparkContext) {
 @serializable class SeededSplit[Split](val prev: Split, val seed: Int) {}
 
 class SampledRDD[T: ClassManifest, Split](
-  prev: RDD[T, Split], frac: Double, seed: Int) 
+  prev: RDD[T, Split], withReplacement: Boolean, frac: Double, seed: Int) 
 extends RDD[T, SeededSplit[Split]](prev.sparkContext) {
   @transient val splits_ = { val rg = new Random(seed); prev.splits.map(x => new SeededSplit(x, rg.nextInt)) }
   override def splits = splits_
   override def preferredLocations(split: SeededSplit[Split]) = prev.preferredLocations(split.prev)
-  override def iterator(split: SeededSplit[Split]) = { val rg = new Random(split.seed); prev.iterator(split.prev).filter(x => (rg.nextDouble <= frac)) }
+  override def iterator(split: SeededSplit[Split]) = { 
+    val rg = new Random(split.seed);
+    // Sampling with replacement (TODO: use reservoir sampling to make this more efficient?)
+    if (withReplacement) {
+      val oldData = prev.iterator(split.prev).toArray
+      val sampleSize = (oldData.size * frac).ceil.toInt
+      val sampledData = for (i <- 1 to sampleSize) yield oldData(rg.nextInt(oldData.size)) // all of oldData's indices are candidates, even if sampleSize < oldData.size
+      sampledData.iterator
+    }
+    // Sampling without replacement
+    else {
+      prev.iterator(split.prev).filter(x => (rg.nextDouble <= frac))
+    }
+  }
   override def taskStarted(split: SeededSplit[Split], slot: SlaveOffer) = prev.taskStarted(split.prev, slot)
 }
+
 
 class CachedRDD[T, Split](
   prev: RDD[T, Split])(implicit m: ClassManifest[T])
