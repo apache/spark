@@ -44,7 +44,12 @@ extends RDD[String, HdfsSplit](sc) {
 
     override def hasNext: Boolean = {
       if (!gotNext) {
-        finished = !reader.next(lineNum, text)
+        try {
+          finished = !reader.next(lineNum, text)
+        } catch {
+          case eofe: java.io.EOFException =>
+            finished = true
+        }
         gotNext = true
       }
       !finished

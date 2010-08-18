@@ -223,7 +223,8 @@ extends ParallelOperation
         {
           val taskId = sched.newTaskId()
           tidToIndex(taskId) = i
-          printf("Starting task %d as TID %s on slave %s: %s (%s)\n",
+          //printf("Starting task %d as TID %s on slave %s: %s (%s)\n",
+          printf("Starting task %d as TID %s on slave %s: %s (%s)",
             i, taskId, offer.getSlaveId, offer.getHost, 
             if(checkPref) "preferred" else "non-preferred")
           tasks(i).markStarted(offer)
@@ -235,6 +236,7 @@ extends ParallelOperation
           params.put("cpus", "" + desiredCpus)
           params.put("mem", "" + desiredMem)
           val serializedTask = Utils.serialize(tasks(i))
+          println("... Serialized size: " + serializedTask.size)
           return Some(new TaskDescription(taskId, offer.getSlaveId,
             "task_" + taskId, params, serializedTask))
         }

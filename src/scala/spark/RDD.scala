@@ -3,6 +3,7 @@ package spark
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentHashMap
 import java.util.HashSet
+import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
@@ -24,7 +25,9 @@ abstract class RDD[T: ClassManifest, Split](
 
   def map[U: ClassManifest](f: T => U) = new MappedRDD(this, sc.clean(f))
   def filter(f: T => Boolean) = new FilteredRDD(this, sc.clean(f))
+  def aggregateSplit() = new SplitRDD(this)
   def cache() = new CachedRDD(this)
+  def sample(frac: Double, seed: Int) = new SampledRDD(this, frac, seed)
 
   def foreach(f: T => Unit) {
     val cleanF = sc.clean(f)
@@ -77,6 +80,7 @@ abstract class RDD[T: ClassManifest, Split](
     new UnionRDD(sc, this, other)
 
   def ++[OtherSplit](other: RDD[T, OtherSplit]) = this.union(other)
+
 }
 
 @serializable
@@ -134,6 +138,28 @@ extends RDD[T, Split](prev.sparkContext) {
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
   override def iterator(split: Split) = prev.iterator(split).filter(f)
   override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
+}
+
+class SplitRDD[T: ClassManifest, Split](
+  prev: RDD[T, Split]) 
+extends RDD[Array[T], Split](prev.sparkContext) {
+  override def splits = prev.splits
+  override def preferredLocations(split: Split) = prev.preferredLocations(split)
+  override def iterator(split: Split) = Iterator.fromArray(Array(prev.iterator(split).toArray))
+  override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
+}
+
+
+@serializable class SeededSplit[Split](val prev: Split, val seed: Int) {}
+
+class SampledRDD[T: ClassManifest, Split](
+  prev: RDD[T, Split], frac: Double, seed: Int) 
+extends RDD[T, SeededSplit[Split]](prev.sparkContext) {
+  @transient val splits_ = { val rg = new Random(seed); prev.splits.map(x => new SeededSplit(x, rg.nextInt)) }
+  override def splits = splits_
+  override def preferredLocations(split: SeededSplit[Split]) = prev.preferredLocations(split.prev)
+  override def iterator(split: SeededSplit[Split]) = { val rg = new Random(split.seed); prev.iterator(split.prev).filter(x => (rg.nextDouble <= frac)) }
+  override def taskStarted(split: SeededSplit[Split], slot: SlaveOffer) = prev.taskStarted(split.prev, slot)
 }
 
 class CachedRDD[T, Split](
