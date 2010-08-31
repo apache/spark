@@ -54,6 +54,8 @@ private class LocalScheduler(threads: Int) extends Scheduler {
   }
   
   override def stop() {}
+
+  override def numCores() = threads
 }
 
 // A ThreadFactory that creates daemon threads

@@ -5,7 +5,8 @@ import mesos.SlaveOffer
 import java.util.concurrent.atomic.AtomicLong
 
 @serializable class ParallelArraySplit[T: ClassManifest](
-    val arrayId: Long, val slice: Int, values: Seq[T]) {
+    val arrayId: Long, val slice: Int, values: Seq[T])
+extends Split {
   def iterator(): Iterator[T] = values.iterator
 
   override def hashCode(): Int = (41 * (41 + arrayId) + slice).toInt
@@ -22,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 class ParallelArray[T: ClassManifest](
   sc: SparkContext, @transient data: Seq[T], numSlices: Int)
-extends RDD[T, ParallelArraySplit[T]](sc) {
+extends RDD[T](sc) {
   // TODO: Right now, each split sends along its full data, even if later down
   // the RDD chain it gets cached. It might be worthwhile to write the data to
   // a file in the DFS and read it in the split instead.
@@ -34,11 +35,11 @@ extends RDD[T, ParallelArraySplit[T]](sc) {
     slices.indices.map(i => new ParallelArraySplit(id, i, slices(i))).toArray
   }
 
-  override def splits = splits_
+  override def splits = splits_.asInstanceOf[Array[Split]]
 
-  override def iterator(s: ParallelArraySplit[T]) = s.iterator
+  override def iterator(s: Split) = s.asInstanceOf[ParallelArraySplit[T]].iterator
   
-  override def preferredLocations(s: ParallelArraySplit[T]): Seq[String] = Nil
+  override def preferredLocations(s: Split): Seq[String] = Nil
 }
 
 private object ParallelArray {

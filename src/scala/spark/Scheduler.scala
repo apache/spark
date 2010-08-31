@@ -6,4 +6,5 @@ private trait Scheduler {
   def waitForRegister()
   def runTasks[T](tasks: Array[Task[T]])(implicit m: ClassManifest[T]): Array[T]
   def stop()
+  def numCores(): Int
 }

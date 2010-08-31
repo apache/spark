@@ -153,6 +153,9 @@ extends NScheduler with spark.Scheduler
     if (driver != null)
       driver.stop()
   }
+
+  // TODO: query Mesos for number of cores
+  override def numCores() = System.getProperty("spark.default.parallelism", "2").toInt
 }
 
 

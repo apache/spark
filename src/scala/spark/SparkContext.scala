@@ -12,7 +12,7 @@ class SparkContext(master: String, frameworkName: String) {
     new ParallelArray[T](this, seq, numSlices)
 
   def parallelize[T: ClassManifest](seq: Seq[T]): ParallelArray[T] =
-    parallelize(seq, 2)
+    parallelize(seq, scheduler.numCores)
 
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
