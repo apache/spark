@@ -25,7 +25,7 @@ class SparkContext(master: String, frameworkName: String) {
 
   val LOCAL_REGEX = """local\[([0-9]+)\]""".r
 
-  private var scheduler: Scheduler = master match {
+  private[spark] var scheduler: Scheduler = master match {
     case "local" => new LocalScheduler(1)
     case LOCAL_REGEX(threads) => new LocalScheduler(threads.toInt)
     case _ => { System.loadLibrary("mesos");

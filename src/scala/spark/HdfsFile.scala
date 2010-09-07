@@ -25,7 +25,7 @@ extends RDD[String](sc) {
   ConfigureLock.synchronized { inputFormat.configure(conf) }
 
   @transient val splits_ =
-    inputFormat.getSplits(conf, 2).map(new HdfsSplit(_)).toArray
+    inputFormat.getSplits(conf, sc.scheduler.numCores).map(new HdfsSplit(_)).toArray
 
   override def splits = splits_.asInstanceOf[Array[Split]]
   

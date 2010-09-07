@@ -3,6 +3,7 @@ package spark
 import java.io.File
 
 import scala.collection.mutable.Map
+import scala.collection.JavaConversions._
 
 import mesos.{Scheduler => NScheduler}
 import mesos._
@@ -105,10 +106,20 @@ extends NScheduler with spark.Scheduler
       val tasks = new java.util.ArrayList[TaskDescription]
       if (activeOp != null) {
         try {
-          for (i <- 0 until offers.size.toInt) {
-            activeOp.slaveOffer(offers.get(i)) match {
-              case Some(task) => tasks.add(task)
-              case None => {}
+          val availableCpus = offers.map(_.getParams.get("cpus").toInt)
+          val availableMem = offers.map(_.getParams.get("mem").toInt)
+          var resourcesAvailable = true
+          while (resourcesAvailable) {
+            resourcesAvailable = false
+            for (i <- 0 until offers.size.toInt) {
+              activeOp.slaveOffer(offers.get(i), availableCpus(i), availableMem(i)) match {
+                case Some(task) =>
+                  tasks.add(task)
+                  availableCpus(i) -= task.getParams.get("cpus").toInt
+                  availableMem(i) -= task.getParams.get("mem").toInt
+                  resourcesAvailable = resourcesAvailable || true
+                case None => {}
+              }
             }
           }
         } catch {
@@ -162,7 +173,7 @@ extends NScheduler with spark.Scheduler
 // Trait representing an object that manages a parallel operation by
 // implementing various scheduler callbacks.
 trait ParallelOperation {
-  def slaveOffer(s: SlaveOffer): Option[TaskDescription]
+  def slaveOffer(s: SlaveOffer, availableCpus: Int, availableMem: Int): Option[TaskDescription]
   def statusUpdate(t: TaskStatus): Unit
   def error(code: Int, message: String): Unit
 }
@@ -207,7 +218,7 @@ extends ParallelOperation
     }
   }
 
-  def slaveOffer(offer: SlaveOffer): Option[TaskDescription] = {
+  def slaveOffer(offer: SlaveOffer, availableCpus: Int, availableMem: Int): Option[TaskDescription] = {
     if (tasksLaunched < numTasks) {
       var checkPrefVals: Array[Boolean] = Array(true)
       val time = System.currentTimeMillis
@@ -215,9 +226,8 @@ extends ParallelOperation
         checkPrefVals = Array(true, false) // Allow non-preferred tasks
       // TODO: Make desiredCpus and desiredMem configurable
       val desiredCpus = 1
-      val desiredMem = 750
-      if (offer.getParams.get("cpus").toInt < desiredCpus || 
-          offer.getParams.get("mem").toInt < desiredMem)
+      val desiredMem = 500
+      if ((availableCpus < desiredCpus) || (availableMem < desiredMem))
         return None
       for (checkPref <- checkPrefVals; i <- 0 until numTasks) {
         if (!launched(i) && (!checkPref ||
@@ -264,7 +274,7 @@ extends ParallelOperation
 
   def taskFinished(status: TaskStatus) {
     val tid = status.getTaskId
-    println("Finished TID " + tid)
+    print("Finished TID " + tid)
     if (!finished(tidToIndex(tid))) {
       // Deserialize task result
       val result = Utils.deserialize[TaskResult[T]](status.getData)
@@ -274,10 +284,12 @@ extends ParallelOperation
       // Mark finished and stop if we've finished all the tasks
       finished(tidToIndex(tid)) = true
       tasksFinished += 1
+
+      println(", finished " + tasksFinished + "/" + numTasks)
       if (tasksFinished == numTasks)
         setAllFinished()
     } else {
-      printf("Task %s had already finished, so ignoring it\n", tidToIndex(tid))
+      printf("... Task %s had already finished, so ignoring it\n", tidToIndex(tid))
     }
   }
 
