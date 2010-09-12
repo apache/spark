@@ -4,6 +4,17 @@ import java.io._
 import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
+import scala.actors.Actor._
+
+case class SparkAsyncLock(var finished: Boolean = false) {
+  def join() {
+    this.synchronized {
+      while (!finished) {
+        this.wait
+      }
+    }
+  }
+}
 
 class SparkContext(master: String, frameworkName: String) {
   Broadcast.initialize(true)
@@ -20,6 +31,18 @@ class SparkContext(master: String, frameworkName: String) {
   // TODO: Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = new CentralizedHDFSBroadcast(value, local)
   //def broadcast[T](value: T) = new ChainedStreamingBroadcast(value, local)
+
+  def fork(f: => Unit): SparkAsyncLock = {
+    val thisLock = new SparkAsyncLock
+    actor {
+      f
+      thisLock.synchronized {
+        thisLock.finished = true
+        thisLock.notifyAll()
+      }
+    }
+    thisLock
+  }
 
   def textFile(path: String) = new HdfsTextFile(this, path)
 
