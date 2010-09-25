@@ -304,6 +304,7 @@ extends ParallelOperation
       val result = Utils.deserialize[TaskResult[T]](status.getData)
       results(tidToIndex(tid)) = result.value
       // Update accumulators
+      print(" with " + result.accumUpdates.size + " accumulatedUpdates")
       Accumulators.add(callingThread, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(tidToIndex(tid)) = true
