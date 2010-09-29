@@ -10,6 +10,8 @@ JARS += third_party/hadoop-0.20.0/hadoop-0.20.0-core.jar
 JARS += third_party/hadoop-0.20.0/lib/commons-logging-1.0.4.jar
 JARS += third_party/scalatest-1.2/scalatest-1.2.jar
 JARS += third_party/scalacheck_2.8.0-1.7.jar
+JARS += third_party/jetty-7.1.6.v20100715/jetty-server-7.1.6.v20100715.jar
+JARS += third_party/jetty-7.1.6.v20100715/servlet-api-2.5.jar
 CLASSPATH = $(subst $(SPACE),:,$(JARS))
 
 SCALA_SOURCES =  src/examples/*.scala src/scala/spark/*.scala src/scala/spark/repl/*.scala
