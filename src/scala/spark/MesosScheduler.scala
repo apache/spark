@@ -157,7 +157,7 @@ extends NScheduler with spark.Scheduler
               activeOps(opId).statusUpdate(status)
             }
           case None =>
-            println("TID " + status.getTaskId + "already finished")
+            println("TID " + status.getTaskId + " already finished")
         }
 
       } catch {
