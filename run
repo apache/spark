@@ -38,6 +38,9 @@ SPARK_CLASSPATH+=:third_party/scalatest-1.2/scalatest-1.2.jar
 SPARK_CLASSPATH+=:third_party/scalacheck_2.8.0-1.7.jar
 SPARK_CLASSPATH+=:third_party/jetty-7.1.6.v20100715/jetty-server-7.1.6.v20100715.jar
 SPARK_CLASSPATH+=:third_party/jetty-7.1.6.v20100715/servlet-api-2.5.jar
+SPARK_CLASSPATH+=:third_party/apache-log4j-1.2.16/log4j-1.2.16.jar
+SPARK_CLASSPATH+=:third_party/slf4j-1.6.1/slf4j-api-1.6.1.jar
+SPARK_CLASSPATH+=:third_party/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
 for jar in $FWDIR/third_party/hadoop-0.20.0/lib/*.jar; do
   SPARK_CLASSPATH+=:$jar
 done
