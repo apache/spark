@@ -137,7 +137,7 @@ extends NScheduler with spark.Scheduler with Logging
                 case None => {}
               }
             } catch {
-              case e: Exception => e.printStackTrace
+              case e: Exception => logError("Exception in resourceOffer", e)
             }
           }
         }
@@ -161,7 +161,7 @@ extends NScheduler with spark.Scheduler with Logging
         }
 
       } catch {
-        case e: Exception => e.printStackTrace
+        case e: Exception => logError("Exception in statusUpdate", e)
       }
     }
   }
@@ -173,7 +173,7 @@ extends NScheduler with spark.Scheduler with Logging
           try {
             activeOp.error(code, message)
           } catch {
-            case e: Exception => e.printStackTrace
+            case e: Exception => logError("Exception in error callback", e)
           }
         }
       } else {
@@ -260,9 +260,11 @@ extends ParallelOperation with Logging
           val taskId = sched.newTaskId()
           sched.taskIdToOpId(taskId) = opId
           tidToIndex(taskId) = i
-          printf("Starting task %d as opId %d, TID %s on slave %s: %s (%s)",
-            i, opId, taskId, offer.getSlaveId, offer.getHost, 
-            if(checkPref) "preferred" else "non-preferred")
+          val preferred = if(checkPref) "preferred" else "non-preferred"
+          val message =
+            "Starting task %d as opId %d, TID %s on slave %s: %s (%s)".format(
+              i, opId, taskId, offer.getSlaveId, offer.getHost, preferred)
+          logInfo(message)
           tasks(i).markStarted(offer)
           launched(i) = true
           tasksLaunched += 1

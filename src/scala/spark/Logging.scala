@@ -13,10 +13,15 @@ trait Logging {
   // be serialized and used on another machine
   @transient private var log_ : Logger = null
 
-  // Method to get or create the logger
+  // Method to get or create the logger for this object
   def log: Logger = {
-    if (log_ == null)
-      log_ = LoggerFactory.getLogger(this.getClass())
+    if (log_ == null) {
+      var className = this.getClass().getName()
+      // Ignore trailing $'s in the class names for Scala objects
+      if (className.endsWith("$"))
+        className = className.substring(0, className.length - 1)
+      log_ = LoggerFactory.getLogger(className)
+    }
     return log_
   }
 
