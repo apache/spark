@@ -299,9 +299,11 @@ extends ParallelOperation with Logging
 
   def taskFinished(status: TaskStatus) {
     val tid = status.getTaskId
-    logInfo("Finished opId " + opId + " TID " + tid)
     val index = tidToIndex(tid)
     if (!finished(index)) {
+      tasksFinished += 1
+      logInfo("Finished opId %d TID %d (progress: %d/%d)".format(
+        opId, tid, tasksFinished, numTasks))
       // Deserialize task result
       val result = Utils.deserialize[TaskResult[T]](status.getData)
       results(index) = result.value
@@ -311,25 +313,25 @@ extends ParallelOperation with Logging
       finished(index) = true
       // Remove TID -> opId mapping from sched
       sched.taskIdToOpId.remove(tid)
-      tasksFinished += 1
-      logInfo("Progress: " + tasksFinished + "/" + numTasks)
       if (tasksFinished == numTasks)
         setAllFinished()
     } else {
-      logInfo("Task " + index + " has already finished, so ignoring it")
+      logInfo("Ignoring task-finished event for TID " + tid +
+        " because task " + index + " is already finished")
     }
   }
 
   def taskLost(status: TaskStatus) {
     val tid = status.getTaskId
-    logInfo("Lost opId " + opId + " TID " + tid)
     val index = tidToIndex(tid)
     if (!finished(index)) {
+      logInfo("Lost opId " + opId + " TID " + tid)
       launched(index) = false
       sched.taskIdToOpId.remove(tid)
       tasksLaunched -= 1
     } else {
-      logInfo("Task " + index + " has already finished, so ignoring it")
+      logInfo("Ignoring task-lost event for TID " + tid +
+        " because task " + index + " is already finished")
     }
   }
 
