@@ -8,7 +8,7 @@ import org.objectweb.asm.commons.EmptyVisitor
 import org.objectweb.asm.Opcodes._
 
 
-object ClosureCleaner {
+object ClosureCleaner extends Logging {
   private def getClassReader(cls: Class[_]): ClassReader = {
     new ClassReader(cls.getResourceAsStream(
       cls.getName.replaceFirst("^.*\\.", "") + ".class"))
@@ -72,13 +72,13 @@ object ClosureCleaner {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)
         val value = field.get(obj)
-        //println("1: Setting " + fieldName + " on " + cls + " to " + value);
+        //logInfo("1: Setting " + fieldName + " on " + cls + " to " + value);
         field.set(outer, value)
       }
     }
     
     if (outer != null) {
-      //println("2: Setting $outer on " + func.getClass + " to " + outer);
+      //logInfo("2: Setting $outer on " + func.getClass + " to " + outer);
       val field = func.getClass.getDeclaredField("$outer")
       field.setAccessible(true)
       field.set(func, outer)
@@ -101,7 +101,7 @@ object ClosureCleaner {
       val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
       val obj = newCtor.newInstance().asInstanceOf[AnyRef];
       if (outer != null) {
-        //println("3: Setting $outer on " + cls + " to " + outer);
+        //logInfo("3: Setting $outer on " + cls + " to " + outer);
         val field = cls.getDeclaredField("$outer")
         field.setAccessible(true)
         field.set(obj, outer)

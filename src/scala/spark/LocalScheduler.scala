@@ -4,8 +4,10 @@ import java.util.concurrent._
 
 import scala.collection.mutable.Map
 
-// A simple Scheduler implementation that runs tasks locally in a thread pool.
-private class LocalScheduler(threads: Int) extends Scheduler {
+/**
+ * A simple Scheduler implementation that runs tasks locally in a thread pool.
+ */
+private class LocalScheduler(threads: Int) extends Scheduler with Logging {
   var threadPool: ExecutorService =
     Executors.newFixedThreadPool(threads, DaemonThreadFactory)
   
@@ -20,25 +22,24 @@ private class LocalScheduler(threads: Int) extends Scheduler {
     for (i <- 0 until tasks.length) {
       futures(i) = threadPool.submit(new Callable[TaskResult[T]]() {
         def call(): TaskResult[T] = {
-          println("Running task " + i)
+          logInfo("Running task " + i)
           try {
             // Serialize and deserialize the task so that accumulators are
             // changed to thread-local ones; this adds a bit of unnecessary
             // overhead but matches how the Nexus Executor works
             Accumulators.clear
             val bytes = Utils.serialize(tasks(i))
-            println("Size of task " + i + " is " + bytes.size + " bytes")
+            logInfo("Size of task " + i + " is " + bytes.size + " bytes")
             val task = Utils.deserialize[Task[T]](
               bytes, currentThread.getContextClassLoader)
             val value = task.run
             val accumUpdates = Accumulators.values
-            println("Finished task " + i)
+            logInfo("Finished task " + i)
             new TaskResult[T](value, accumUpdates)
           } catch {
             case e: Exception => {
               // TODO: Do something nicer here
-              System.err.println("Exception in task " + i + ":")
-              e.printStackTrace()
+              logError("Exception in task " + i, e)
               System.exit(1)
               null
             }
@@ -58,7 +59,10 @@ private class LocalScheduler(threads: Int) extends Scheduler {
   override def numCores() = threads
 }
 
-// A ThreadFactory that creates daemon threads
+
+/**
+ * A ThreadFactory that creates daemon threads
+ */
 private object DaemonThreadFactory extends ThreadFactory {
   override def newThread(r: Runnable): Thread = {
     val t = new Thread(r);

@@ -8,6 +8,8 @@ import org.eclipse.jetty.server.handler.DefaultHandler
 import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.server.handler.ResourceHandler
 
+import spark.Logging
+
 
 /**
  * Exception type thrown by ClassServer when it is in the wrong state 
@@ -21,7 +23,7 @@ class ServerStateException(message: String) extends Exception(message)
  * class files created as the user types in lines of code. This is just a
  * wrapper around a Jetty embedded HTTP server.
  */
-class ClassServer(classDir: File) {
+class ClassServer(classDir: File) extends Logging {
   private var server: Server = null
   private var port: Int = -1
 
@@ -37,6 +39,7 @@ class ClassServer(classDir: File) {
       server.setHandler(handlerList)
       server.start()
       port = server.getConnectors()(0).getLocalPort()
+      logDebug("ClassServer started at " + uri)
     }
   }
 

@@ -12,6 +12,9 @@ JARS += third_party/scalatest-1.2/scalatest-1.2.jar
 JARS += third_party/scalacheck_2.8.0-1.7.jar
 JARS += third_party/jetty-7.1.6.v20100715/jetty-server-7.1.6.v20100715.jar
 JARS += third_party/jetty-7.1.6.v20100715/servlet-api-2.5.jar
+JARS += third_party/apache-log4j-1.2.16/log4j-1.2.16.jar
+JARS += third_party/slf4j-1.6.1/slf4j-api-1.6.1.jar
+JARS += third_party/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
 CLASSPATH = $(subst $(SPACE),:,$(JARS))
 
 SCALA_SOURCES =  src/examples/*.scala src/scala/spark/*.scala src/scala/spark/repl/*.scala

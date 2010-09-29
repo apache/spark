@@ -7,3 +7,4 @@ third_party/libmesos.so
 third_party/libmesos.dylib
 conf/java-opts
 conf/spark-env.sh
+conf/log4j.properties

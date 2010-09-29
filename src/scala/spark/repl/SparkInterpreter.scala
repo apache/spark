@@ -90,6 +90,7 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
   
   val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
 
+  /** Local directory to save .class files too */
   val outputDir = {
     val rootDir = new File(System.getProperty("spark.repl.classdir",
                            System.getProperty("java.io.tmpdir")))
@@ -108,22 +109,26 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
           dir = null
       } catch { case e: IOException => ; }
     }
-    if (SPARK_DEBUG_REPL)
+    if (SPARK_DEBUG_REPL) {
       println("Output directory: " + dir)
+    }
     dir
   }
 
-  /** directory to save .class files to */
+  /** Scala compiler virtual directory for outputDir */
   //val virtualDirectory = new VirtualDirectory("(memory)", None)
   val virtualDirectory = new PlainFile(outputDir)
 
   /** Jetty server that will serve our classes to worker nodes */
   val classServer = new ClassServer(outputDir)
 
-  // Start the classServer and remember its URI in a spark system property */
+  // Start the classServer and store its URI in a spark system property
+  // (which will be passed to executors so that they can connect to it)
   classServer.start()
-  println("ClassServer started, URI = " + classServer.uri)
   System.setProperty("spark.repl.class.uri", classServer.uri)
+  if (SPARK_DEBUG_REPL) {
+    println("ClassServer started, URI = " + classServer.uri)
+  }
   
   /** reporter */
   object reporter extends ConsoleReporter(settings, null, out) {

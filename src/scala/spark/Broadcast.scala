@@ -33,7 +33,7 @@ trait BroadcastRecipe {
 // TODO: Right, now no parallelization between multiple broadcasts
 @serializable
 class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean) 
-  extends BroadcastRecipe {
+extends BroadcastRecipe with Logging {
   
   def value = value_
 
@@ -92,7 +92,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         } 
         
         val time = (System.nanoTime - start) / 1e9
-        println( System.currentTimeMillis + ": " +  "Reading Broadcasted variable " + uuid + " took " + time + " s")                  
+        logInfo("Reading Broadcasted variable " + uuid + " took " + time + " s")                  
       }
     }
   }
@@ -149,7 +149,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
 
 @serializable 
 class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean) 
-  extends BroadcastRecipe {
+extends BroadcastRecipe with Logging {
   
   def value = value_
 
@@ -179,7 +179,7 @@ class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean)
         fileIn.close
         
         val time = (System.nanoTime - start) / 1e9
-        println( System.currentTimeMillis + ": " +  "Reading Broadcasted variable " + uuid + " took " + time + " s")
+        logInfo("Reading Broadcasted variable " + uuid + " took " + time + " s")
       }
     }
   }
@@ -188,7 +188,7 @@ class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean)
 @serializable
 case class SourceInfo (val hostAddress: String, val listenPort: Int, 
   val totalBlocks: Int, val totalBytes: Int, val replicaID: Int)  
-  extends Comparable [SourceInfo]{
+extends Comparable[SourceInfo]{
 
   var currentLeechers = 0
   var receptionFailed = false
@@ -231,7 +231,7 @@ private object Broadcast {
   }
 }
 
-private object BroadcastCS {
+private object BroadcastCS extends Logging {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
   // val valueInfos = new MapMaker ().softValues ().makeMap[UUID, Any]  
 
@@ -286,15 +286,15 @@ private object BroadcastCS {
           guideMR = new GuideMultipleRequests
           guideMR.setDaemon (true)
           guideMR.start
-          println (System.currentTimeMillis + ": " +  "GuideMultipleRequests started")
+          logInfo("GuideMultipleRequests started")
         }        
         serveMR = new ServeMultipleRequests
         serveMR.setDaemon (true)
         serveMR.start
         
-        println (System.currentTimeMillis + ": " +  "ServeMultipleRequests started")
+        logInfo("ServeMultipleRequests started")
         
-        println (System.currentTimeMillis + ": " +  "BroadcastCS object has been initialized")
+        logInfo("BroadcastCS object has been initialized")
                   
         initialized = true
       }
@@ -352,7 +352,7 @@ private object BroadcastCS {
       // Connect to Master and send this worker's Information
       val clientSocketToMaster = 
         new Socket(BroadcastCS.masterHostAddress, BroadcastCS.masterListenPort)  
-      println (System.currentTimeMillis + ": " +  "Connected to Master's guiding object")
+      logInfo("Connected to Master's guiding object")
       // TODO: Guiding object connection is reusable
       val oisMaster = 
         new ObjectInputStream (clientSocketToMaster.getInputStream)
@@ -371,11 +371,11 @@ private object BroadcastCS {
       }
       totalBytes = sourceInfo.totalBytes
       
-      println (System.currentTimeMillis + ": " +  "Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
+      logInfo("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
 
       retByteArray = receiveSingleTransmission (sourceInfo)
       
-      println (System.currentTimeMillis + ": " +  "I got this from receiveSingleTransmission: " + retByteArray)
+      logInfo("I got this from receiveSingleTransmission: " + retByteArray)
 
       // TODO: Update sourceInfo to add error notifactions for Master
       if (retByteArray == null) { sourceInfo.receptionFailed = true }
@@ -414,8 +414,8 @@ private object BroadcastCS {
       oisSource = 
         new ObjectInputStream (clientSocketToSource.getInputStream)
         
-      println (System.currentTimeMillis + ": " +  "Inside receiveSingleTransmission")
-      println (System.currentTimeMillis + ": " +  "totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
+      logInfo("Inside receiveSingleTransmission")
+      logInfo("totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
       retByteArray = new Array[Byte] (totalBytes)
       for (i <- 0 until totalBlocks) {
         val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
@@ -426,14 +426,14 @@ private object BroadcastCS {
         hasBlocksLock.synchronized {
           hasBlocksLock.notifyAll
         }
-        println (System.currentTimeMillis + ": " +  "Received block: " + i + " " + bcBlock)
+        logInfo("Received block: " + i + " " + bcBlock)
       } 
       assert (hasBlocks == totalBlocks)
-      println (System.currentTimeMillis + ": " +  "After the receive loop")
+      logInfo("After the receive loop")
     } catch {
       case e: Exception => { 
         retByteArray = null 
-        println (System.currentTimeMillis + ": " +  "receiveSingleTransmission had a " + e)
+        logInfo("receiveSingleTransmission had a " + e)
       }
     } finally {    
       if (oisSource != null) { oisSource.close }
@@ -446,13 +446,13 @@ private object BroadcastCS {
     return retByteArray
   } 
   
-  class TrackMultipleValues extends Thread {
+  class TrackMultipleValues extends Thread with Logging {
     override def run = {
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
       
       serverSocket = new ServerSocket (BroadcastCS.masterListenPort)
-      println (System.currentTimeMillis + ": " +  "TrackMultipleVariables" + serverSocket + " " + listenPort)
+      logInfo("TrackMultipleVariables" + serverSocket + " " + listenPort)
       
       var keepAccepting = true
       try {
@@ -463,11 +463,11 @@ private object BroadcastCS {
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
-              println ("TrackMultipleValues Timeout. Stopping listening...") 
+              logInfo("TrackMultipleValues Timeout. Stopping listening...") 
               keepAccepting = false 
             }
           }
-          println (System.currentTimeMillis + ": " +  "TrackMultipleValues:Got new request:" + clientSocket)
+          logInfo("TrackMultipleValues:Got new request:" + clientSocket)
           if (clientSocket != null) {
             try {            
               threadPool.execute (new Runnable {
@@ -506,14 +506,14 @@ private object BroadcastCS {
     
   }
   
-  class GuideMultipleRequests extends Thread {
+  class GuideMultipleRequests extends Thread with Logging {
     override def run = {
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket (BroadcastCS.masterListenPort)
       // listenPort = BroadcastCS.masterListenPort
-      println (System.currentTimeMillis + ": " +  "GuideMultipleRequests" + serverSocket + " " + listenPort)
+      logInfo("GuideMultipleRequests" + serverSocket + " " + listenPort)
       
       var keepAccepting = true
       try {
@@ -524,12 +524,12 @@ private object BroadcastCS {
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
-              println ("GuideMultipleRequests Timeout. Stopping listening...") 
+              logInfo("GuideMultipleRequests Timeout. Stopping listening...") 
               keepAccepting = false 
             }
           }
           if (clientSocket != null) {
-            println (System.currentTimeMillis + ": " +  "Guide:Accepted new client connection:" + clientSocket)
+            logInfo("Guide:Accepted new client connection:" + clientSocket)
             try {            
               threadPool.execute (new GuideSingleRequest (clientSocket))
             } catch {
@@ -543,7 +543,8 @@ private object BroadcastCS {
       }
     }
     
-    class GuideSingleRequest (val clientSocket: Socket) extends Runnable {
+    class GuideSingleRequest (val clientSocket: Socket)
+    extends Runnable with Logging {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
 
@@ -552,21 +553,21 @@ private object BroadcastCS {
       
       def run = {
         try {
-          println (System.currentTimeMillis + ": " +  "new GuideSingleRequest is running")
+          logInfo("new GuideSingleRequest is running")
           // Connecting worker is sending in its hostAddress and listenPort it will 
           // be listening to. ReplicaID is 0 and other fields are invalid (-1)
           var sourceInfo = ois.readObject.asInstanceOf[SourceInfo]
           
           // Select a suitable source and send it back to the worker
           selectedSourceInfo = selectSuitableSource (sourceInfo)
-          println (System.currentTimeMillis + ": " +  "Sending selectedSourceInfo:" + selectedSourceInfo)
+          logInfo("Sending selectedSourceInfo:" + selectedSourceInfo)
           oos.writeObject (selectedSourceInfo)
           oos.flush
 
           // Add this new (if it can finish) source to the PQ of sources
           thisWorkerInfo = new SourceInfo(sourceInfo.hostAddress, 
             sourceInfo.listenPort, totalBlocks, totalBytes, 0)  
-          println (System.currentTimeMillis + ": " +  "Adding possible new source to pqOfSources: " + thisWorkerInfo)    
+          logInfo("Adding possible new source to pqOfSources: " + thisWorkerInfo)    
           pqOfSources.synchronized {
             pqOfSources.add (thisWorkerInfo)
           }
@@ -642,14 +643,14 @@ private object BroadcastCS {
     }    
   }
 
-  class ServeMultipleRequests extends Thread {
+  class ServeMultipleRequests extends Thread with Logging {
     override def run = {
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket (0) 
       listenPort = serverSocket.getLocalPort
-      println (System.currentTimeMillis + ": " +  "ServeMultipleRequests" + serverSocket + " " + listenPort)
+      logInfo("ServeMultipleRequests" + serverSocket + " " + listenPort)
       
       listenPortLock.synchronized {
         listenPortLock.notifyAll
@@ -664,12 +665,12 @@ private object BroadcastCS {
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
-              println ("ServeMultipleRequests Timeout. Stopping listening...") 
+              logInfo("ServeMultipleRequests Timeout. Stopping listening...") 
               keepAccepting = false 
             }
           }
           if (clientSocket != null) {
-            println (System.currentTimeMillis + ": " +  "Serve:Accepted new client connection:" + clientSocket)
+            logInfo("Serve:Accepted new client connection:" + clientSocket)
             try {            
               threadPool.execute (new ServeSingleRequest (clientSocket))
             } catch {
@@ -683,23 +684,24 @@ private object BroadcastCS {
       }
     }
     
-    class ServeSingleRequest (val clientSocket: Socket) extends Runnable {
+    class ServeSingleRequest (val clientSocket: Socket)
+    extends Runnable with Logging {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
       
       def run  = {
         try {
-          println (System.currentTimeMillis + ": " +  "new ServeSingleRequest is running")
+          logInfo("new ServeSingleRequest is running")
           sendObject
         } catch {
           // TODO: Need to add better exception handling here
           // If something went wrong, e.g., the worker at the other end died etc. 
           // then close everything up
           case e: Exception => { 
-            println (System.currentTimeMillis + ": " +  "ServeSingleRequest had a " + e)
+            logInfo("ServeSingleRequest had a " + e)
           }
         } finally {
-          println (System.currentTimeMillis + ": " +  "ServeSingleRequest is closing streams and sockets")
+          logInfo("ServeSingleRequest is closing streams and sockets")
           ois.close
           oos.close
           clientSocket.close
@@ -726,7 +728,7 @@ private object BroadcastCS {
           } catch {
             case e: Exception => { }
           }
-          println (System.currentTimeMillis + ": " +  "Send block: " + i + " " + arrayOfBlocks(i))
+          logInfo("Send block: " + i + " " + arrayOfBlocks(i))
         }
       }    
     } 
@@ -734,7 +736,7 @@ private object BroadcastCS {
   }
 }
 
-private object BroadcastCH {
+private object BroadcastCH extends Logging {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
   private var initialized = false
