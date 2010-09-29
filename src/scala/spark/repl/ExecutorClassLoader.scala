@@ -1,7 +1,7 @@
 package spark.repl
 
 import java.io.{ByteArrayOutputStream, InputStream}
-import java.net.{URI, URL, URLClassLoader}
+import java.net.{URI, URL, URLClassLoader, URLEncoder}
 import java.util.concurrent.{Executors, ExecutorService}
 
 import org.apache.hadoop.conf.Configuration
@@ -12,18 +12,35 @@ import org.objectweb.asm.commons.EmptyVisitor
 import org.objectweb.asm.Opcodes._
 
 
-// A ClassLoader that reads classes from a Hadoop FileSystem URL, used to load
-// classes defined by the interpreter when the REPL is in use
-class ExecutorClassLoader(classDir: String, parent: ClassLoader)
+/**
+ * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
+ * used to load classes defined by the interpreter when the REPL is used
+ */
+class ExecutorClassLoader(classUri: String, parent: ClassLoader)
 extends ClassLoader(parent) {
-  val fileSystem = FileSystem.get(new URI(classDir), new Configuration())
-  val directory = new URI(classDir).getPath
+  val uri = new URI(classUri)
+  val directory = uri.getPath
+
+  // Hadoop FileSystem object for our URI, if it isn't using HTTP
+  var fileSystem: FileSystem = {
+    if (uri.getScheme() == "http")
+      null
+    else
+      FileSystem.get(uri, new Configuration())
+  }
   
   override def findClass(name: String): Class[_] = {
     try {
       //println("repl.ExecutorClassLoader resolving " + name)
-      val path = new Path(directory, name.replace('.', '/') + ".class")
-      val bytes = readAndTransformClass(name, fileSystem.open(path))
+      val pathInDirectory = name.replace('.', '/') + ".class"
+      val inputStream = {
+        if (fileSystem != null)
+          fileSystem.open(new Path(directory, pathInDirectory))
+        else
+          new URL(classUri + "/" + urlEncode(pathInDirectory)).openStream()
+      }
+      val bytes = readAndTransformClass(name, inputStream)
+      inputStream.close()
       return defineClass(name, bytes, 0, bytes.length)
     } catch {
       case e: Exception => throw new ClassNotFoundException(name, e)
@@ -56,6 +73,13 @@ extends ClassLoader(parent) {
       }
       return bos.toByteArray
     }
+  }
+
+  /**
+   * URL-encode a string, preserving only slashes
+   */
+  def urlEncode(str: String): String = {
+    str.split('/').map(part => URLEncoder.encode(part, "UTF-8")).mkString("/")
   }
 }
 
