@@ -6,7 +6,7 @@ import java.util.UUID
 import scala.collection.mutable.ArrayBuffer
 import scala.actors.Actor._
 
-class SparkContext(master: String, frameworkName: String) {
+class SparkContext(master: String, frameworkName: String) extends Logging {
   Broadcast.initialize(true)
 
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int) =
@@ -56,10 +56,10 @@ class SparkContext(master: String, frameworkName: String) {
 
   private[spark] def runTaskObjects[T: ClassManifest](tasks: Seq[Task[T]])
       : Array[T] = {
-    println("Running " + tasks.length + " tasks in parallel")
+    logInfo("Running " + tasks.length + " tasks in parallel")
     val start = System.nanoTime
     val result = scheduler.runTasks(tasks.toArray)
-    println("Tasks finished in " + (System.nanoTime - start) / 1e9 + " s")
+    logInfo("Tasks finished in " + (System.nanoTime - start) / 1e9 + " s")
     return result
   }
 

@@ -23,7 +23,7 @@ import mesos._
 //    all the offers to the ParallelOperation and have it load-balance.
 private class MesosScheduler(
   master: String, frameworkName: String, execArg: Array[Byte])
-extends NScheduler with spark.Scheduler
+extends NScheduler with spark.Scheduler with Logging
 {
   // Lock used by runTasks to ensure only one thread can be in it
   val runTasksMutex = new Object()
@@ -101,7 +101,7 @@ extends NScheduler with spark.Scheduler
   }
 
   override def registered(d: SchedulerDriver, frameworkId: String) {
-    println("Registered as framework ID " + frameworkId)
+    logInfo("Registered as framework ID " + frameworkId)
     registeredLock.synchronized {
       isRegistered = true
       registeredLock.notifyAll()
@@ -157,7 +157,7 @@ extends NScheduler with spark.Scheduler
               activeOps(opId).statusUpdate(status)
             }
           case None =>
-            println("TID " + status.getTaskId + " already finished")
+            logInfo("TID " + status.getTaskId + " already finished")
         }
 
       } catch {
@@ -177,8 +177,7 @@ extends NScheduler with spark.Scheduler
           }
         }
       } else {
-        val msg = "Mesos error: %s (error code: %d)".format(message, code)
-        System.err.println(msg)
+        logError("Mesos error: %s (error code: %d)".format(message, code))
         System.exit(1)
       }
     }
@@ -205,7 +204,7 @@ trait ParallelOperation {
 
 class SimpleParallelOperation[T: ClassManifest](
   sched: MesosScheduler, tasks: Array[Task[T]], val opId: Int)
-extends ParallelOperation
+extends ParallelOperation with Logging
 {
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "1000").toLong
@@ -273,7 +272,7 @@ extends ParallelOperation
           params.put("cpus", "" + desiredCpus)
           params.put("mem", "" + desiredMem)
           val serializedTask = Utils.serialize(tasks(i))
-          println("... Serialized size: " + serializedTask.size)
+          //logInfo("Serialized size: " + serializedTask.size)
           return Some(new TaskDescription(taskId, offer.getSlaveId,
             "task_" + taskId, params, serializedTask))
         }
@@ -298,36 +297,37 @@ extends ParallelOperation
 
   def taskFinished(status: TaskStatus) {
     val tid = status.getTaskId
-    print("Finished opId " + opId + " TID " + tid)
-    if (!finished(tidToIndex(tid))) {
+    logInfo("Finished opId " + opId + " TID " + tid)
+    val index = tidToIndex(tid)
+    if (!finished(index)) {
       // Deserialize task result
       val result = Utils.deserialize[TaskResult[T]](status.getData)
-      results(tidToIndex(tid)) = result.value
+      results(index) = result.value
       // Update accumulators
       Accumulators.add(callingThread, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
-      finished(tidToIndex(tid)) = true
+      finished(index) = true
       // Remove TID -> opId mapping from sched
       sched.taskIdToOpId.remove(tid)
       tasksFinished += 1
-
-      println(", finished " + tasksFinished + "/" + numTasks)
+      logInfo("Progress: " + tasksFinished + "/" + numTasks)
       if (tasksFinished == numTasks)
         setAllFinished()
     } else {
-      printf("... Task %s had already finished, so ignoring it\n", tidToIndex(tid))
+      logInfo("Task " + index + " has already finished, so ignoring it")
     }
   }
 
   def taskLost(status: TaskStatus) {
     val tid = status.getTaskId
-    println("Lost opId " + opId + " TID " + tid)
-    if (!finished(tidToIndex(tid))) {
-      launched(tidToIndex(tid)) = false
+    logInfo("Lost opId " + opId + " TID " + tid)
+    val index = tidToIndex(tid)
+    if (!finished(index)) {
+      launched(index) = false
       sched.taskIdToOpId.remove(tid)
       tasksLaunched -= 1
     } else {
-      printf("Task %s had already finished, so ignoring it\n", tidToIndex(tid))
+      logInfo("Task " + index + " has already finished, so ignoring it")
     }
   }
 

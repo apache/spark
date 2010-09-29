@@ -31,7 +31,6 @@ extends ClassLoader(parent) {
   
   override def findClass(name: String): Class[_] = {
     try {
-      //println("repl.ExecutorClassLoader resolving " + name)
       val pathInDirectory = name.replace('.', '/') + ".class"
       val inputStream = {
         if (fileSystem != null)
@@ -92,7 +91,6 @@ extends ClassAdapter(cv) {
       // This is the constructor, time to clean it; just output some new
       // instructions to mv that create the object and set the static MODULE$
       // field in the class to point to it, but do nothing otherwise.
-      //println("Cleaning constructor of " + className)
       mv.visitCode()
       mv.visitVarInsn(ALOAD, 0) // load this
       mv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V")

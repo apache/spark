@@ -93,27 +93,27 @@ extends Task[U] {
 
 class ForeachTask[T: ClassManifest](
   rdd: RDD[T], split: Split, func: T => Unit)
-extends RDDTask[Unit, T](rdd, split) {
+extends RDDTask[Unit, T](rdd, split) with Logging {
   override def run() {
-    println("Processing " + split)
+    logInfo("Processing " + split)
     rdd.iterator(split).foreach(func)
   }
 }
 
 class CollectTask[T](
   rdd: RDD[T], split: Split)(implicit m: ClassManifest[T])
-extends RDDTask[Array[T], T](rdd, split) {
+extends RDDTask[Array[T], T](rdd, split) with Logging {
   override def run(): Array[T] = {
-    println("Processing " + split)
+    logInfo("Processing " + split)
     rdd.iterator(split).toArray(m)
   }
 }
 
 class ReduceTask[T: ClassManifest](
   rdd: RDD[T], split: Split, f: (T, T) => T)
-extends RDDTask[Option[T], T](rdd, split) {
+extends RDDTask[Option[T], T](rdd, split) with Logging {
   override def run(): Option[T] = {
-    println("Processing " + split)
+    logInfo("Processing " + split)
     val iter = rdd.iterator(split)
     if (iter.hasNext)
       Some(iter.reduceLeft(f))
@@ -183,7 +183,7 @@ extends RDD[T](prev.sparkContext) {
 
 class CachedRDD[T](
   prev: RDD[T])(implicit m: ClassManifest[T])
-extends RDD[T](prev.sparkContext) {
+extends RDD[T](prev.sparkContext) with Logging {
   val id = CachedRDD.newId()
   @transient val cacheLocs = Map[Split, List[String]]()
 
@@ -217,7 +217,7 @@ extends RDD[T](prev.sparkContext) {
         }
       }
       // If we got here, we have to load the split
-      println("Loading and caching " + split)
+      logInfo("Loading and caching " + split)
       val array = prev.iterator(split).toArray(m)
       cache.put(key, array)
       loading.synchronized {
