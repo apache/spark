@@ -208,7 +208,7 @@ class SimpleParallelOperation[T: ClassManifest](
 extends ParallelOperation
 {
   // Maximum time to wait to run a task in a preferred location (in ms)
-  val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "1000").toLong
+  val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
 
   val callingThread = currentThread
   val numTasks = tasks.length
