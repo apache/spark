@@ -198,6 +198,7 @@ extends RDD[T](prev.sparkContext) with Logging {
   
   override def iterator(split: Split): Iterator[T] = {
     val key = id + "::" + split.toString
+    logInfo("CachedRDD split key is " + key)
     val cache = CachedRDD.cache
     val loading = CachedRDD.loading
     val cachedVal = cache.get(key)
