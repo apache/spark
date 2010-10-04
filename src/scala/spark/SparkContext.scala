@@ -85,9 +85,14 @@ object SparkContext {
     def add(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
   }
+
   implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
     def add(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
   }
+
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+
+  implicit def rddToPairRDDExtras[K, V](rdd: RDD[(K, V)]) =
+    new PairRDDExtras(rdd)
 }
