@@ -7,6 +7,7 @@ import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
+import scala.collection.mutable.HashMap
 
 import mesos._
 
@@ -27,7 +28,12 @@ abstract class RDD[T: ClassManifest](
   def filter(f: T => Boolean) = new FilteredRDD(this, sc.clean(f))
   def aggregateSplit() = new SplitRDD(this)
   def cache() = new CachedRDD(this)
-  def sample(withReplacement: Boolean, frac: Double, seed: Int) = new SampledRDD(this, withReplacement, frac, seed)
+
+  def sample(withReplacement: Boolean, frac: Double, seed: Int) =
+    new SampledRDD(this, withReplacement, frac, seed)
+
+  def flatMap[U: ClassManifest](f: T => Traversable[U]) =
+    new FlatMappedRDD(this, sc.clean(f))
 
   def foreach(f: T => Unit) {
     val cleanF = sc.clean(f)
@@ -137,6 +143,16 @@ extends RDD[T](prev.sparkContext) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
   override def iterator(split: Split) = prev.iterator(split).filter(f)
+  override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
+}
+
+class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
+  prev: RDD[T], f: T => Traversable[U]) 
+extends RDD[U](prev.sparkContext) {
+  override def splits = prev.splits
+  override def preferredLocations(split: Split) = prev.preferredLocations(split)
+  override def iterator(split: Split) =
+    prev.iterator(split).toStream.flatMap(f).iterator
   override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
 }
 
@@ -281,7 +297,7 @@ extends RDD[T](sc) {
     s.asInstanceOf[UnionSplit[T]].preferredLocations()
 }
 
-@serializable class CartesianSplit(val s1: Split, val s2: Split) extends Split {}
+@serializable class CartesianSplit(val s1: Split, val s2: Split) extends Split
 
 @serializable
 class CartesianRDD[T: ClassManifest, U:ClassManifest](
@@ -308,5 +324,20 @@ extends RDD[Pair[T, U]](sc) {
     val currSplit = split.asInstanceOf[CartesianSplit]
     rdd1.taskStarted(currSplit.s1, slot)
     rdd2.taskStarted(currSplit.s2, slot)
+  }
+}
+
+@serializable class PairRDDExtras[K, V](rdd: RDD[(K, V)]) {
+  def reduceByKey(func: (V, V) => V): Map[K, V] = {
+    def mergeMaps(m1: HashMap[K, V], m2: HashMap[K, V]): HashMap[K, V] = {
+      for ((k, v) <- m2) {
+        m1.get(k) match {
+          case None => m1(k) = v
+          case Some(w) => m1(k) = func(w, v)
+        }
+      }
+      return m1
+    }
+    rdd.map(pair => HashMap(pair)).reduce(mergeMaps)
   }
 }
