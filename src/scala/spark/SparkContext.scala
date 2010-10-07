@@ -82,12 +82,12 @@ class SparkContext(master: String, frameworkName: String) extends Logging {
 
 object SparkContext {
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
-    def add(t1: Double, t2: Double): Double = t1 + t2
+    def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
   }
 
   implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
-    def add(t1: Int, t2: Int): Int = t1 + t2
+    def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
   }
 
