@@ -6,7 +6,7 @@ import java.util.UUID
 import scala.collection.mutable.ArrayBuffer
 import scala.actors.Actor._
 
-class SparkContext(master: String, frameworkName: String) {
+class SparkContext(master: String, frameworkName: String) extends Logging {
   Broadcast.initialize(true)
 
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int) =
@@ -56,10 +56,10 @@ class SparkContext(master: String, frameworkName: String) {
 
   private[spark] def runTaskObjects[T: ClassManifest](tasks: Seq[Task[T]])
       : Array[T] = {
-    println("Running " + tasks.length + " tasks in parallel")
+    logInfo("Running " + tasks.length + " tasks in parallel")
     val start = System.nanoTime
     val result = scheduler.runTasks(tasks.toArray)
-    println("Tasks finished in " + (System.nanoTime - start) / 1e9 + " s")
+    logInfo("Tasks finished in " + (System.nanoTime - start) / 1e9 + " s")
     return result
   }
 
@@ -85,9 +85,14 @@ object SparkContext {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
   }
+
   implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
   }
+
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+
+  implicit def rddToPairRDDExtras[K, V](rdd: RDD[(K, V)]) =
+    new PairRDDExtras(rdd)
 }
