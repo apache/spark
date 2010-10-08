@@ -14,7 +14,9 @@ import org.apache.hadoop.mapred.Reporter
 @serializable class HdfsSplit(@transient s: InputSplit)
 extends Split { 
   val inputSplit = new SerializableWritable[InputSplit](s)
-  override def toString = inputSplit.toString
+
+  override def getId() = inputSplit.toString // Hadoop makes this unique
+                                             // for each split of each file
 }
 
 class HdfsTextFile(sc: SparkContext, path: String)
