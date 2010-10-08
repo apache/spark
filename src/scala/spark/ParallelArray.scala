@@ -17,7 +17,7 @@ extends Split {
     case _ => false
   }
 
-  override def toString() =
+  override def getId() =
     "ParallelArraySplit(arrayId %d, slice %d)".format(arrayId, slice)
 }
 

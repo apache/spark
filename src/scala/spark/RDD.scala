@@ -166,8 +166,8 @@ extends RDD[Array[T]](prev.sparkContext) {
 
 
 @serializable class SeededSplit(val prev: Split, val seed: Int) extends Split {
-  override def toString() =
-    "SeededSplit(" + prev.toString + ", seed " + seed + ")"
+  override def getId() =
+    "SeededSplit(" + prev.getId() + ", seed " + seed + ")"
 }
 
 class SampledRDD[T: ClassManifest](
@@ -216,7 +216,7 @@ extends RDD[T](prev.sparkContext) with Logging {
   }
   
   override def iterator(split: Split): Iterator[T] = {
-    val key = id + "::" + split.toString
+    val key = id + "::" + split.getId()
     logInfo("CachedRDD split key is " + key)
     val cache = CachedRDD.cache
     val loading = CachedRDD.loading
@@ -271,7 +271,7 @@ private object CachedRDD {
 abstract class UnionSplit[T: ClassManifest] extends Split {
   def iterator(): Iterator[T]
   def preferredLocations(): Seq[String]
-  def toString(): String
+  def getId(): String
 }
 
 @serializable
@@ -280,8 +280,8 @@ class UnionSplitImpl[T: ClassManifest](
 extends UnionSplit[T] {
   override def iterator() = rdd.iterator(split)
   override def preferredLocations() = rdd.preferredLocations(split)
-  override def toString() =
-    "UnionSplitImpl(" + split.toString + ")"
+  override def getId() =
+    "UnionSplitImpl(" + split.getId() + ")"
 }
 
 @serializable
@@ -304,8 +304,8 @@ extends RDD[T](sc) {
 }
 
 @serializable class CartesianSplit(val s1: Split, val s2: Split) extends Split {
-  override def toString() =
-    "CartesianSplit(" + s1.toString + ", " + s2.toString + ")"
+  override def getId() =
+    "CartesianSplit(" + s1.getId() + ", " + s2.getId() + ")"
 }
 
 @serializable
