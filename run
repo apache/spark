@@ -3,27 +3,49 @@
 # Figure out where the Scala framework is installed
 FWDIR=`dirname $0`
 
-# Set JAVA_OPTS to be able to load libnexus.so and set various other misc options
-export JAVA_OPTS="-Djava.library.path=$FWDIR/third_party:$FWDIR/src/native -Xms100m -Xmx750m"
+# Load environment variables from conf/spark-env.sh, if it exists
+if [ -e $FWDIR/conf/spark-env.sh ] ; then
+  . $FWDIR/conf/spark-env.sh
+fi
+
+if [ "x$MESOS_HOME" != "x" ] ; then
+  SPARK_CLASSPATH="$MESOS_HOME/lib/java/mesos.jar:$SPARK_CLASSPATH"
+  SPARK_LIBRARY_PATH="$MESOS_HOME/lib/java:$SPARK_LIBARY_PATH"
+fi
+
+if [ "x$SPARK_MEM" == "x" ] ; then
+  SPARK_MEM="300m"
+fi
+
+# Set JAVA_OPTS to be able to load native libraries and to set heap size
+JAVA_OPTS="$SPARK_JAVA_OPTS"
+JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH:$FWDIR/third_party:$FWDIR/src/native"
+JAVA_OPTS+=" -Xms$SPARK_MEM -Xmx$SPARK_MEM"
+# Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e $FWDIR/conf/java-opts ] ; then
   JAVA_OPTS+=" `cat $FWDIR/conf/java-opts`"
 fi
 export JAVA_OPTS
 
 # Build up classpath
-CLASSPATH=$FWDIR/build/classes
-CLASSPATH+=:$FWDIR/third_party/nexus.jar
+CLASSPATH="$SPARK_CLASSPATH:$FWDIR/build/classes"
+CLASSPATH+=:$FWDIR/conf
+CLASSPATH+=:$FWDIR/third_party/mesos.jar
 CLASSPATH+=:$FWDIR/third_party/asm-3.2/lib/all/asm-all-3.2.jar
 CLASSPATH+=:$FWDIR/third_party/colt.jar
-CLASSPATH+=:$FWDIR/third_party/google-collect-1.0-rc5/google-collect-1.0-rc5.jar
+CLASSPATH+=:$FWDIR/third_party/guava-r06/guava-r06.jar
 CLASSPATH+=:$FWDIR/third_party/hadoop-0.20.0/hadoop-0.20.0-core.jar
-CLASSPATH+=:third_party/scalatest-1.2-for-scala-2.8.0.RC3-SNAPSHOT.jar
-CLASSPATH+=:third_party/scalacheck_2.8.0.RC3-1.7.jar
-CLASSPATH+=:$FWDIR/third_party/FreePastry-2.1.jar
+CLASSPATH+=:$FWDIR/third_party/scalatest-1.2/scalatest-1.2.jar
+CLASSPATH+=:$FWDIR/third_party/scalacheck_2.8.0-1.7.jar
+CLASSPATH+=:$FWDIR/third_party/jetty-7.1.6.v20100715/jetty-server-7.1.6.v20100715.jar
+CLASSPATH+=:$FWDIR/third_party/jetty-7.1.6.v20100715/servlet-api-2.5.jar
+CLASSPATH+=:$FWDIR/third_party/apache-log4j-1.2.16/log4j-1.2.16.jar
+CLASSPATH+=:$FWDIR/third_party/slf4j-1.6.1/slf4j-api-1.6.1.jar
+CLASSPATH+=:$FWDIR/third_party/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
 for jar in $FWDIR/third_party/hadoop-0.20.0/lib/*.jar; do
   CLASSPATH+=:$jar
 done
-export CLASSPATH
+export CLASSPATH # Needed for spark-shell
 
 if [ -n "$SCALA_HOME" ]; then
   SCALA=${SCALA_HOME}/bin/scala

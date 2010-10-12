@@ -90,31 +90,44 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
   
   val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
 
-  /** directory to save .class files to */
-  //val virtualDirectory = new VirtualDirectory("(memory)", None)
-  val virtualDirectory = {
+  /** Local directory to save .class files too */
+  val outputDir = {
     val rootDir = new File(System.getProperty("spark.repl.classdir",
                            System.getProperty("java.io.tmpdir")))
     var attempts = 0
     val maxAttempts = 10
-    var outputDir: File = null
-    while (outputDir == null) {
+    var dir: File = null
+    while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
         throw new IOException("Failed to create a temp directory " +
                               "after " + maxAttempts + " attempts!")
       }
       try {
-        outputDir = new File(rootDir, "spark-" + UUID.randomUUID.toString)
-        if (outputDir.exists() || !outputDir.mkdirs())
-          outputDir = null
+        dir = new File(rootDir, "spark-" + UUID.randomUUID.toString)
+        if (dir.exists() || !dir.mkdirs())
+          dir = null
       } catch { case e: IOException => ; }
     }
-    System.setProperty("spark.repl.current.classdir",
-      "file://" + outputDir.getAbsolutePath + "/")
-    if (SPARK_DEBUG_REPL)
-      println("Output directory: " + outputDir)
-    new PlainFile(outputDir)
+    if (SPARK_DEBUG_REPL) {
+      println("Output directory: " + dir)
+    }
+    dir
+  }
+
+  /** Scala compiler virtual directory for outputDir */
+  //val virtualDirectory = new VirtualDirectory("(memory)", None)
+  val virtualDirectory = new PlainFile(outputDir)
+
+  /** Jetty server that will serve our classes to worker nodes */
+  val classServer = new ClassServer(outputDir)
+
+  // Start the classServer and store its URI in a spark system property
+  // (which will be passed to executors so that they can connect to it)
+  classServer.start()
+  System.setProperty("spark.repl.class.uri", classServer.uri)
+  if (SPARK_DEBUG_REPL) {
+    println("ClassServer started, URI = " + classServer.uri)
   }
   
   /** reporter */
@@ -714,6 +727,7 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
    */
   def close() {
     reporter.flush
+    classServer.stop()
   }
 
   /** A traverser that finds all mentioned identifiers, i.e. things
@@ -956,7 +970,9 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
       """.stripMargin
 
       code println preamble
-      handlers foreach { _.resultExtractionCode(this, code) }
+      if (printResults) {
+        handlers foreach { _.resultExtractionCode(this, code) }
+      }
       code println postamble
     }
 

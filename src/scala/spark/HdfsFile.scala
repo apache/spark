@@ -1,6 +1,6 @@
 package spark
 
-import nexus.SlaveOffer
+import mesos.SlaveOffer
 
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
@@ -11,11 +11,16 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 
-class HdfsSplit(@transient s: InputSplit)
-extends SerializableWritable[InputSplit](s) {}
+@serializable class HdfsSplit(@transient s: InputSplit)
+extends Split { 
+  val inputSplit = new SerializableWritable[InputSplit](s)
+
+  override def getId() = inputSplit.toString // Hadoop makes this unique
+                                             // for each split of each file
+}
 
 class HdfsTextFile(sc: SparkContext, path: String)
-extends RDD[String, HdfsSplit](sc) {
+extends RDD[String](sc) {
   @transient val conf = new JobConf()
   @transient val inputFormat = new TextInputFormat()
 
@@ -23,11 +28,12 @@ extends RDD[String, HdfsSplit](sc) {
   ConfigureLock.synchronized { inputFormat.configure(conf) }
 
   @transient val splits_ =
-    inputFormat.getSplits(conf, 2).map(new HdfsSplit(_)).toArray
+    inputFormat.getSplits(conf, sc.scheduler.numCores).map(new HdfsSplit(_)).toArray
 
-  override def splits = splits_
+  override def splits = splits_.asInstanceOf[Array[Split]]
   
-  override def iterator(split: HdfsSplit) = new Iterator[String] {
+  override def iterator(split_in: Split) = new Iterator[String] {
+    val split = split_in.asInstanceOf[HdfsSplit]
     var reader: RecordReader[LongWritable, Text] = null
     ConfigureLock.synchronized {
       val conf = new JobConf()
@@ -35,7 +41,7 @@ extends RDD[String, HdfsSplit](sc) {
           System.getProperty("spark.buffer.size", "65536"))
       val tif = new TextInputFormat()
       tif.configure(conf) 
-      reader = tif.getRecordReader(split.value, conf, Reporter.NULL)
+      reader = tif.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
     }
     val lineNum = new LongWritable()
     val text = new Text()
@@ -44,7 +50,12 @@ extends RDD[String, HdfsSplit](sc) {
 
     override def hasNext: Boolean = {
       if (!gotNext) {
-        finished = !reader.next(lineNum, text)
+        try {
+          finished = !reader.next(lineNum, text)
+        } catch {
+          case eofe: java.io.EOFException =>
+            finished = true
+        }
         gotNext = true
       }
       !finished
@@ -60,9 +71,9 @@ extends RDD[String, HdfsSplit](sc) {
     }
   }
 
-  override def preferredLocations(split: HdfsSplit) = {
+  override def preferredLocations(split: Split) = {
     // TODO: Filtering out "localhost" in case of file:// URLs
-    split.value.getLocations().filter(_ != "localhost")
+    split.asInstanceOf[HdfsSplit].inputSplit.value.getLocations().filter(_ != "localhost")
   }
 }
 

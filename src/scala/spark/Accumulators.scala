@@ -4,15 +4,17 @@ import java.io._
 
 import scala.collection.mutable.Map
 
-@serializable class Accumulator[T](initialValue: T, param: AccumulatorParam[T])
+@serializable class Accumulator[T](
+  @transient initialValue: T, param: AccumulatorParam[T])
 {
   val id = Accumulators.newId
-  @transient var value_ = initialValue
+  @transient var value_ = initialValue // Current value on master
+  val zero = param.zero(initialValue)  // Zero value to be passed to workers
   var deserialized = false
 
   Accumulators.register(this)
 
-  def += (term: T) { value_ = param.add(value_, term) }
+  def += (term: T) { value_ = param.addInPlace(value_, term) }
   def value = this.value_
   def value_= (t: T) {
     if (!deserialized) value_ = t
@@ -22,7 +24,7 @@ import scala.collection.mutable.Map
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject
-    value_ = param.zero(initialValue)
+    value_ = zero
     deserialized = true
     Accumulators.register(this)
   }
@@ -31,7 +33,7 @@ import scala.collection.mutable.Map
 }
 
 @serializable trait AccumulatorParam[T] {
-  def add(t1: T, t2: T): T
+  def addInPlace(t1: T, t2: T): T
   def zero(initialValue: T): T
 }
 

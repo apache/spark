@@ -15,16 +15,16 @@ import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
 
 import spark.compress.lzf.{LZFInputStream, LZFOutputStream}
 
-import rice.environment.Environment
-import rice.p2p.commonapi._
-import rice.p2p.commonapi.rawserialization.RawMessage
-import rice.pastry._
-import rice.pastry.commonapi.PastryIdFactory
-import rice.pastry.direct._
-import rice.pastry.socket.SocketPastryNodeFactory
-import rice.pastry.standard.RandomNodeIdFactory
-import rice.p2p.scribe._
-import rice.p2p.splitstream._
+//import rice.environment.Environment
+//import rice.p2p.commonapi._
+//import rice.p2p.commonapi.rawserialization.RawMessage
+//import rice.pastry._
+//import rice.pastry.commonapi.PastryIdFactory
+//import rice.pastry.direct._
+//import rice.pastry.socket.SocketPastryNodeFactory
+//import rice.pastry.standard.RandomNodeIdFactory
+//import rice.p2p.scribe._
+//import rice.p2p.splitstream._
 
 @serializable
 trait BroadcastRecipe {
@@ -39,7 +39,7 @@ trait BroadcastRecipe {
 
 @serializable
 class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean) 
-  extends BroadcastRecipe {
+  extends BroadcastRecipe  with Logging {
   
   def value = value_
 
@@ -71,7 +71,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     val start = System.nanoTime
     sendBroadcast 
     val time = (System.nanoTime - start) / 1e9
-    println("sendBroadcast took " + time + " s")                        
+    logInfo("sendBroadcast took " + time + " s")                        
   }
 
   def sendBroadcast () {    
@@ -86,14 +86,14 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     var variableInfo = blockifyObject (value_, BroadcastCS.blockSize)   
     
     guideMR = new GuideMultipleRequests
-    // guideMR.setDaemon (true)
+    guideMR.setDaemon (true)
     guideMR.start
-    // println (System.currentTimeMillis + ": " +  "GuideMultipleRequests started")
+    logInfo (System.currentTimeMillis + ": " +  "GuideMultipleRequests started")
     
     serveMR = new ServeMultipleRequests
-    // serveMR.setDaemon (true)
+    serveMR.setDaemon (true)
     serveMR.start
-    // println (System.currentTimeMillis + ": " +  "ServeMultipleRequests started")
+    logInfo (System.currentTimeMillis + ": " +  "ServeMultipleRequests started")
 
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
@@ -142,9 +142,9 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         initializeSlaveVariables
         
         serveMR = new ServeMultipleRequests
-        // serveMR.setDaemon (true)
+        serveMR.setDaemon (true)
         serveMR.start
-        // println (System.currentTimeMillis + ": " +  "ServeMultipleRequests started")
+        logInfo (System.currentTimeMillis + ": " +  "ServeMultipleRequests started")
         
         val start = System.nanoTime        
 
@@ -161,7 +161,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         } 
         
         val time = (System.nanoTime - start) / 1e9
-        println( System.currentTimeMillis + ": " + "Reading Broadcasted variable " + uuid + " took " + time + " s")                  
+        logInfo( System.currentTimeMillis + ": " + "Reading Broadcasted variable " + uuid + " took " + time + " s")                  
       }
     }
   }
@@ -265,7 +265,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       retriesLeft -= 1     
       // TODO: Should wait before retrying
     } while (retriesLeft > 0 && masterListenPort < 0)
-    // println (System.currentTimeMillis + ": " +  "Got this guidePort from Tracker: " + masterListenPort)
+    logInfo (System.currentTimeMillis + ": " +  "Got this guidePort from Tracker: " + masterListenPort)
     return masterListenPort
   }
   
@@ -290,7 +290,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       // Connect to Master and send this worker's Information
       val clientSocketToMaster = 
         new Socket(BroadcastCS.masterHostAddress, masterListenPort)  
-      // println (System.currentTimeMillis + ": " +  "Connected to Master's guiding object")
+      logInfo (System.currentTimeMillis + ": " +  "Connected to Master's guiding object")
       // TODO: Guiding object connection is reusable
       val oosMaster = 
         new ObjectOutputStream (clientSocketToMaster.getOutputStream)
@@ -310,14 +310,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       }
       totalBytes = sourceInfo.totalBytes
       
-      // println (System.currentTimeMillis + ": " +  "Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
+      logInfo (System.currentTimeMillis + ": " +  "Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
 
       val start = System.nanoTime  
       val receptionSucceeded = receiveSingleTransmission (sourceInfo)
       val time = (System.nanoTime - start) / 1e9      
       
-      // println (System.currentTimeMillis + ": " +  "I got this from receiveSingleTransmission: " + retByteArray)
-
       // Updating some statistics in sourceInfo. Master will be using them later
       if (!receptionSucceeded) { sourceInfo.receptionFailed = true }
       sourceInfo.MBps = (sourceInfo.totalBytes.toDouble / 1048576) / time
@@ -353,8 +351,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       oisSource = 
         new ObjectInputStream (clientSocketToSource.getInputStream)
         
-      // println (System.currentTimeMillis + ": " +  "Inside receiveSingleTransmission")
-      // println (System.currentTimeMillis + ": " +  "totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
+      logInfo (System.currentTimeMillis + ": " +  "Inside receiveSingleTransmission")
+      logInfo (System.currentTimeMillis + ": " +  "totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
       
       // Send the range       
       oosSource.writeObject((hasBlocks, totalBlocks))
@@ -369,12 +367,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         hasBlocksLock.synchronized {
           hasBlocksLock.notifyAll
         }
-        // println (System.currentTimeMillis + ": " +  "Received block: " + i + " " + bcBlock)
+        logInfo (System.currentTimeMillis + ": " +  "Received block: " + i + " " + bcBlock)
       } 
-      // println (System.currentTimeMillis + ": " +  "After the receive loop")
+      logInfo (System.currentTimeMillis + ": " +  "After the receive loop")
     } catch {
       case e: Exception => { 
-        // println (System.currentTimeMillis + ": " +  "receiveSingleTransmission had a " + e)
+        logInfo (System.currentTimeMillis + ": " +  "receiveSingleTransmission had a " + e)
       }
     } finally {    
       if (oisSource != null) { oisSource.close }
@@ -385,7 +383,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     return receptionSucceeded
   } 
 
-  class GuideMultipleRequests extends Thread {
+  class GuideMultipleRequests extends Thread with Logging {
     override def run = {
       // TODO: Cached threadpool has 60 s keep alive timer
       var threadPool = Executors.newCachedThreadPool
@@ -393,7 +391,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
 
       serverSocket = new ServerSocket (0)
       guidePort = serverSocket.getLocalPort
-      // println (System.currentTimeMillis + ": " +  "GuideMultipleRequests" + serverSocket + " " + guidePort)
+      logInfo (System.currentTimeMillis + ": " +  "GuideMultipleRequests" + serverSocket + " " + guidePort)
       
       guidePortLock.synchronized {
         guidePortLock.notifyAll
@@ -409,12 +407,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
-              // println ("GuideMultipleRequests Timeout. Stopping listening..." + hasCopyInHDFS) 
+              logInfo ("GuideMultipleRequests Timeout. Stopping listening..." + hasCopyInHDFS) 
               keepAccepting = false 
             }
           }
           if (clientSocket != null) {
-            // println (System.currentTimeMillis + ": " +  "Guide:Accepted new client connection:" + clientSocket)
+            logInfo (System.currentTimeMillis + ": " +  "Guide:Accepted new client connection:" + clientSocket)
             try {            
               threadPool.execute (new GuideSingleRequest (clientSocket))
             } catch {
@@ -429,7 +427,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       }
     }
     
-    class GuideSingleRequest (val clientSocket: Socket) extends Runnable {
+    class GuideSingleRequest (val clientSocket: Socket) 
+    extends Runnable with Logging {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
       oos.flush
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
@@ -439,7 +438,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       
       def run = {
         try {
-          // println (System.currentTimeMillis + ": " +  "new GuideSingleRequest is running")
+          logInfo (System.currentTimeMillis + ": " +  "new GuideSingleRequest is running")
           // Connecting worker is sending in its hostAddress and listenPort it will 
           // be listening to. ReplicaID is 0 and other fields are invalid (-1)
           var sourceInfo = ois.readObject.asInstanceOf[SourceInfo]
@@ -447,14 +446,14 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
           pqOfSources.synchronized {
             // Select a suitable source and send it back to the worker
             selectedSourceInfo = selectSuitableSource (sourceInfo)
-            // println (System.currentTimeMillis + ": " +  "Sending selectedSourceInfo:" + selectedSourceInfo)
+            logInfo (System.currentTimeMillis + ": " +  "Sending selectedSourceInfo:" + selectedSourceInfo)
             oos.writeObject (selectedSourceInfo)
             oos.flush
 
             // Add this new (if it can finish) source to the PQ of sources
             thisWorkerInfo = new SourceInfo(sourceInfo.hostAddress, 
               sourceInfo.listenPort, totalBlocks, totalBytes, 0)  
-            // println (System.currentTimeMillis + ": " +  "Adding possible new source to pqOfSources: " + thisWorkerInfo)    
+            logInfo (System.currentTimeMillis + ": " +  "Adding possible new source to pqOfSources: " + thisWorkerInfo)    
             pqOfSources.add (thisWorkerInfo)
           }
 
@@ -535,14 +534,14 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     }    
   }
 
-  class ServeMultipleRequests extends Thread {
+  class ServeMultipleRequests extends Thread with Logging {
     override def run = {
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket (0) 
       listenPort = serverSocket.getLocalPort
-      // println (System.currentTimeMillis + ": " +  "ServeMultipleRequests" + serverSocket + " " + listenPort)
+      logInfo (System.currentTimeMillis + ": " +  "ServeMultipleRequests" + serverSocket + " " + listenPort)
       
       listenPortLock.synchronized {
         listenPortLock.notifyAll
@@ -557,12 +556,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
-              // println ("ServeMultipleRequests Timeout. Stopping listening...") 
+              logInfo ("ServeMultipleRequests Timeout. Stopping listening...") 
               keepAccepting = false 
             }
           }
           if (clientSocket != null) {
-            // println (System.currentTimeMillis + ": " +  "Serve:Accepted new client connection:" + clientSocket)
+            logInfo (System.currentTimeMillis + ": " +  "Serve:Accepted new client connection:" + clientSocket)
             try {            
               threadPool.execute (new ServeSingleRequest (clientSocket))
             } catch {
@@ -576,7 +575,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       }
     }
     
-    class ServeSingleRequest (val clientSocket: Socket) extends Runnable {
+    class ServeSingleRequest (val clientSocket: Socket) 
+    extends Runnable with Logging {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
       oos.flush
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
@@ -586,7 +586,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       
       def run  = {
         try {
-          // println (System.currentTimeMillis + ": " +  "new ServeSingleRequest is running")
+          logInfo (System.currentTimeMillis + ": " +  "new ServeSingleRequest is running")
           
           // Receive range to send
           var sendRange = ois.readObject.asInstanceOf[(Int, Int)]
@@ -599,10 +599,10 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
           // If something went wrong, e.g., the worker at the other end died etc. 
           // then close everything up
           case e: Exception => { 
-            // println (System.currentTimeMillis + ": " +  "ServeSingleRequest had a " + e)
+            logInfo (System.currentTimeMillis + ": " +  "ServeSingleRequest had a " + e)
           }
         } finally {
-          // println (System.currentTimeMillis + ": " +  "ServeSingleRequest is closing streams and sockets")
+          logInfo (System.currentTimeMillis + ": " +  "ServeSingleRequest is closing streams and sockets")
           ois.close
           oos.close
           clientSocket.close
@@ -629,80 +629,80 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
           } catch {
             case e: Exception => { }
           }
-          // println (System.currentTimeMillis + ": " +  "Send block: " + i + " " + arrayOfBlocks(i))
+          logInfo (System.currentTimeMillis + ": " +  "Send block: " + i + " " + arrayOfBlocks(i))
         }
       }    
     } 
   }  
 }
 
-@serializable 
-class SplitStreamBroadcast[T] (@transient var value_ : T, local: Boolean) 
-  extends BroadcastRecipe {
+//@serializable 
+//class SplitStreamBroadcast[T] (@transient var value_ : T, local: Boolean) 
+//  extends BroadcastRecipe with Logging {
 
-  def value = value_
+//  def value = value_
 
-  BroadcastSS.synchronized { BroadcastSS.values.put (uuid, value_) }
-  
-  if (!local) { sendBroadcast }
-  
-  @transient var publishThread: PublishThread = null
-  @transient var hasCopyInHDFS = false
-  
-  def sendBroadcast () {
-    // Store a persistent copy in HDFS    
-    val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
-    out.writeObject (value_)
-    out.close    
-    hasCopyInHDFS = true    
-    
-    publishThread = new PublishThread
-    publishThread.start
-  }
-  
-  private def readObject (in: ObjectInputStream) {
-    in.defaultReadObject
-    BroadcastSS.synchronized {
-      val cachedVal = BroadcastSS.values.get(uuid)
-      if (cachedVal != null) {
-        value_ = cachedVal.asInstanceOf[T]
-      } else {
-        val start = System.nanoTime        
+//  BroadcastSS.synchronized { BroadcastSS.values.put (uuid, value_) }
+//  
+//  if (!local) { sendBroadcast }
+//  
+//  @transient var publishThread: PublishThread = null
+//  @transient var hasCopyInHDFS = false
+//  
+//  def sendBroadcast () {
+//    // Store a persistent copy in HDFS    
+//    val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
+//    out.writeObject (value_)
+//    out.close    
+//    hasCopyInHDFS = true    
+//    
+//    publishThread = new PublishThread
+//    publishThread.start
+//  }
+//  
+//  private def readObject (in: ObjectInputStream) {
+//    in.defaultReadObject
+//    BroadcastSS.synchronized {
+//      val cachedVal = BroadcastSS.values.get(uuid)
+//      if (cachedVal != null) {
+//        value_ = cachedVal.asInstanceOf[T]
+//      } else {
+//        val start = System.nanoTime        
 
-        // Thread.sleep (5000) // TODO:
-        val receptionSucceeded = BroadcastSS.receiveVariable (uuid)
-        // If does not succeed, then get from HDFS copy
-        if (receptionSucceeded) {
-          value_ = BroadcastSS.values.get(uuid).asInstanceOf[T]
-        }  else {
-          // println (System.currentTimeMillis + ": " +  "Reading from HDFS")
-          val fileIn = new ObjectInputStream(BroadcastCH.openFileForReading(uuid))
-          value_ = fileIn.readObject.asInstanceOf[T]
-          BroadcastSS.values.put(uuid, value_)
-          fileIn.close
-        } 
-        
-        val time = (System.nanoTime - start) / 1e9
-        println( System.currentTimeMillis + ": " +  "Reading Broadcasted variable " + uuid + " took " + time + " s")                  
-      }
-    }
-  }
-  
-  class PublishThread extends Thread {
-    override def run = {
-      // TODO: Put some delay here to give time others to register
-      // Thread.sleep (5000)
-      // println (System.currentTimeMillis + ": " +  "Waited. Now sending...")
-      BroadcastSS.synchronized {
-        BroadcastSS.publishVariable[T] (uuid, value)
-      }
-    }
-  }
-}
+//        // Thread.sleep (5000) // TODO:
+//        val receptionSucceeded = BroadcastSS.receiveVariable (uuid)
+//        // If does not succeed, then get from HDFS copy
+//        if (receptionSucceeded) {
+//          value_ = BroadcastSS.values.get(uuid).asInstanceOf[T]
+//        }  else {
+//          logInfo (System.currentTimeMillis + ": " +  "Reading from HDFS")
+//          val fileIn = new ObjectInputStream(BroadcastCH.openFileForReading(uuid))
+//          value_ = fileIn.readObject.asInstanceOf[T]
+//          BroadcastSS.values.put(uuid, value_)
+//          fileIn.close
+//        } 
+//        
+//        val time = (System.nanoTime - start) / 1e9
+//        logInfo( System.currentTimeMillis + ": " +  "Reading Broadcasted variable " + uuid + " took " + time + " s")                  
+//      }
+//    }
+//  }
+//  
+//  class PublishThread extends Thread with Logging {
+//    override def run = {
+//      // TODO: Put some delay here to give time others to register
+//      // Thread.sleep (5000)
+//      logInfo (System.currentTimeMillis + ": " +  "Waited. Now sending...")
+//      BroadcastSS.synchronized {
+//        BroadcastSS.publishVariable[T] (uuid, value)
+//      }
+//    }
+//  }
+//}
 
 @serializable 
 class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean) 
-  extends BroadcastRecipe {
+  extends BroadcastRecipe with Logging {
   
   def value = value_
 
@@ -724,7 +724,7 @@ class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
-        // println( System.currentTimeMillis + ": " +  "Started reading Broadcasted variable " + uuid)
+        logInfo( System.currentTimeMillis + ": " +  "Started reading Broadcasted variable " + uuid)
         val start = System.nanoTime
         
         val fileIn = new ObjectInputStream(BroadcastCH.openFileForReading(uuid))
@@ -733,7 +733,7 @@ class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean)
         fileIn.close
         
         val time = (System.nanoTime - start) / 1e9
-        println( System.currentTimeMillis + ": " +  "Reading Broadcasted variable " + uuid + " took " + time + " s")
+        logInfo( System.currentTimeMillis + ": " +  "Reading Broadcasted variable " + uuid + " took " + time + " s")
       }
     }
   }
@@ -742,7 +742,7 @@ class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean)
 @serializable
 case class SourceInfo (val hostAddress: String, val listenPort: Int, 
   val totalBlocks: Int, val totalBytes: Int, val replicaID: Int)  
-  extends Comparable [SourceInfo]{
+  extends Comparable [SourceInfo] with Logging {
 
   var currentLeechers = 0
   var receptionFailed = false
@@ -779,7 +779,7 @@ case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
   @transient var hasBlocks = 0
 } 
 
-private object Broadcast {
+private object Broadcast extends Logging {
   private var initialized = false 
 
   // Will be called by SparkContext or Executor before using Broadcast
@@ -801,7 +801,7 @@ private object Broadcast {
   }
 }
 
-private object BroadcastCS {
+private object BroadcastCS extends Logging {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
   var valueToGuidePortMap = Map[UUID, Int] ()
@@ -847,7 +847,7 @@ private object BroadcastCS {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon (true)
           trackMV.start
-          // println (System.currentTimeMillis + ": " +  "TrackMultipleValues started")         
+          logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues started")         
         }
                   
         initialized = true
@@ -869,7 +869,7 @@ private object BroadcastCS {
   def registerValue (uuid: UUID, guidePort: Int) = {    
     valueToGuidePortMap.synchronized {    
       valueToGuidePortMap += (uuid -> guidePort)
-      // println (System.currentTimeMillis + ": " +  "New value registered with the Tracker " + valueToGuidePortMap)             
+      logInfo (System.currentTimeMillis + ": " +  "New value registered with the Tracker " + valueToGuidePortMap)             
     }
   }
   
@@ -877,7 +877,7 @@ private object BroadcastCS {
     valueToGuidePortMap.synchronized {
       // Set to 0 to make sure that people read it from HDFS
       valueToGuidePortMap (uuid) = 0
-      // println (System.currentTimeMillis + ": " +  "Value unregistered from the Tracker " + valueToGuidePortMap)             
+      logInfo (System.currentTimeMillis + ": " +  "Value unregistered from the Tracker " + valueToGuidePortMap)             
     }
   }
   
@@ -895,13 +895,13 @@ private object BroadcastCS {
     }
   }
   
-  class TrackMultipleValues extends Thread {
+  class TrackMultipleValues extends Thread with Logging {
     override def run = {
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
       
       serverSocket = new ServerSocket (BroadcastCS.masterTrackerPort)
-      // println (System.currentTimeMillis + ": " +  "TrackMultipleValues" + serverSocket)
+      logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues" + serverSocket)
       
       var keepAccepting = true
       try {
@@ -913,7 +913,7 @@ private object BroadcastCS {
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
-              // println ("TrackMultipleValues Timeout. Stopping listening...") 
+              logInfo ("TrackMultipleValues Timeout. Stopping listening...") 
               // TODO: Tracking should be explicitly stopped by the SparkContext
               // keepAccepting = false 
             }
@@ -935,7 +935,7 @@ private object BroadcastCS {
                     var guidePort = if (valueToGuidePortMap.contains (uuid)) {
                       valueToGuidePortMap (uuid)
                     } else -1
-                    // println (System.currentTimeMillis + ": " +  "TrackMultipleValues:Got new request: " + clientSocket + " for " + uuid + " : " + guidePort)                    
+                    logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues:Got new request: " + clientSocket + " for " + uuid + " : " + guidePort)                    
                     oos.writeObject (guidePort)
                   } catch {
                     case e: Exception => { }
@@ -959,360 +959,360 @@ private object BroadcastCS {
   }
 }
 
-private object BroadcastSS {
-  val values = new MapMaker ().softValues ().makeMap[UUID, Any]
+//private object BroadcastSS {
+//  val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
-  private val valueBytes = new MapMaker().softValues().makeMap[UUID,Array[Byte]]
+//  private val valueBytes = new MapMaker().softValues().makeMap[UUID,Array[Byte]]
 
-  private var initialized = false
-  private var isMaster_ = false
-    
-  private var masterBootHost_ = "127.0.0.1"
-  private var masterBootPort_ : Int = 22222
-  private var blockSize_ : Int = 512 * 1024
-  private var maxRetryCount_ : Int = 2
-  
-  private var masterBootAddress_ : InetSocketAddress = null
-  private var localBindPort_ : Int = -1
-  
-  private var pEnvironment_ : Environment = null
-  private var pastryNode_ : PastryNode = null
-  private var ssClient: SSClient = null
-  
-  // Current transmission state variables
-  private var curUUID: UUID = null
-  private var curTotalBlocks = -1
-  private var curTotalBytes = -1
-  private var curHasBlocks = -1
-  private var curBlockBitmap: Array[Boolean] = null
-  private var curArrayOfBytes: Array[Byte] = null
-  
-  // TODO: Add stuff so that we can handle out of order variable broadcast
+//  private var initialized = false
+//  private var isMaster_ = false
+//    
+//  private var masterBootHost_ = "127.0.0.1"
+//  private var masterBootPort_ : Int = 22222
+//  private var blockSize_ : Int = 512 * 1024
+//  private var maxRetryCount_ : Int = 2
+//  
+//  private var masterBootAddress_ : InetSocketAddress = null
+//  private var localBindPort_ : Int = -1
+//  
+//  private var pEnvironment_ : Environment = null
+//  private var pastryNode_ : PastryNode = null
+//  private var ssClient: SSClient = null
+//  
+//  // Current transmission state variables
+//  private var curUUID: UUID = null
+//  private var curTotalBlocks = -1
+//  private var curTotalBytes = -1
+//  private var curHasBlocks = -1
+//  private var curBlockBitmap: Array[Boolean] = null
+//  private var curArrayOfBytes: Array[Byte] = null
+//  
+//  // TODO: Add stuff so that we can handle out of order variable broadcast
 
-  def initialize (isMaster__ : Boolean) {
-    synchronized {
-      if (!initialized) {
-        masterBootHost_ = 
-          System.getProperty ("spark.broadcast.masterHostAddress", "127.0.0.1")
-        masterBootPort_ = 
-          System.getProperty ("spark.broadcast.masterBootPort", "22222").toInt
-          
-        masterBootAddress_ = new InetSocketAddress(masterBootHost_, 
-          masterBootPort_)
-          
-        blockSize_ = 
-          System.getProperty ("spark.broadcast.blockSize", "512").toInt * 1024
-        maxRetryCount_ = 
-          System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
-      
-        isMaster_ = isMaster__
-        
-        // Initialize the SplitStream tree
-        initializeSplitStream
-        
-        initialized = true  
-      }
-    }
-  }    
-  
-  def masterBootAddress = masterBootAddress_
-  def blockSize = blockSize_
-  def maxRetryCount = maxRetryCount_
-  
-  def pEnvironment: Environment = {
-    if (pEnvironment_ == null) { initializeSplitStream }
-    pEnvironment_
-  }
-  
-  def pastryNode: PastryNode = {
-    if (pastryNode_ == null) { initializeSplitStream }
-    pastryNode_
-  }
-  
-  def localBindPort = {
-    if (localBindPort_ == -1) {
-      if (isMaster) { localBindPort_ = masterBootPort_ }
-      else {
-        // TODO: What's the best way of finding a free port?
-        val sSocket = new ServerSocket (0)
-        val sPort = sSocket.getLocalPort
-        sSocket.close
-        localBindPort_ = sPort        
-      }
-    }
-    localBindPort_
-  }
+//  def initialize (isMaster__ : Boolean) {
+//    synchronized {
+//      if (!initialized) {
+//        masterBootHost_ = 
+//          System.getProperty ("spark.broadcast.masterHostAddress", "127.0.0.1")
+//        masterBootPort_ = 
+//          System.getProperty ("spark.broadcast.masterBootPort", "22222").toInt
+//          
+//        masterBootAddress_ = new InetSocketAddress(masterBootHost_, 
+//          masterBootPort_)
+//          
+//        blockSize_ = 
+//          System.getProperty ("spark.broadcast.blockSize", "512").toInt * 1024
+//        maxRetryCount_ = 
+//          System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
+//      
+//        isMaster_ = isMaster__
+//        
+//        // Initialize the SplitStream tree
+//        initializeSplitStream
+//        
+//        initialized = true  
+//      }
+//    }
+//  }    
+//  
+//  def masterBootAddress = masterBootAddress_
+//  def blockSize = blockSize_
+//  def maxRetryCount = maxRetryCount_
+//  
+//  def pEnvironment: Environment = {
+//    if (pEnvironment_ == null) { initializeSplitStream }
+//    pEnvironment_
+//  }
+//  
+//  def pastryNode: PastryNode = {
+//    if (pastryNode_ == null) { initializeSplitStream }
+//    pastryNode_
+//  }
+//  
+//  def localBindPort = {
+//    if (localBindPort_ == -1) {
+//      if (isMaster) { localBindPort_ = masterBootPort_ }
+//      else {
+//        // TODO: What's the best way of finding a free port?
+//        val sSocket = new ServerSocket (0)
+//        val sPort = sSocket.getLocalPort
+//        sSocket.close
+//        localBindPort_ = sPort        
+//      }
+//    }
+//    localBindPort_
+//  }
 
-  def isMaster = isMaster_ 
-  
-  private def initializeSplitStream = {
-    pEnvironment_ = new Environment
-    
-    // Generate the NodeIds Randomly
-    val nidFactory = new RandomNodeIdFactory (pEnvironment)
-    
-    // Construct the PastryNodeFactory
-    val pastryNodeFactory = new SocketPastryNodeFactory (nidFactory, 
-      localBindPort, pEnvironment)    
-      
-    // Construct a Pastry node
-    pastryNode_ = pastryNodeFactory.newNode
-    
-    // Boot the node. 
-    pastryNode.boot (masterBootAddress)
-    // TODO: Some unknown messages are dropped in slaves at this point
-      
-    // The node may require sending several messages to fully boot into the ring
-    pastryNode.synchronized {
-      while(!pastryNode.isReady && !pastryNode.joinFailed) {
-        // Delay so we don't busy-wait
-        pastryNode.wait (500)
-        
-        // Abort if can't join
-        if (pastryNode.joinFailed()) {
-          // TODO: throw new IOException("Join failed " + node.joinFailedReason)
-        }
-      }       
-    }
-    
-    // Create the SplitStream client and subscribe
-    ssClient = new SSClient (BroadcastSS.pastryNode)
-    ssClient.subscribe
-  }
-  
-  def publishVariable[A] (uuid: UUID, obj: A) = {
-    ssClient.synchronized {
-      ssClient.publish[A] (uuid, obj)
-    }
-  }
-  
-  // Return status of the reception
-  def receiveVariable[A] (uuid: UUID): Boolean = {
-    // TODO: Things will change if out-of-order variable recepetion is supported
-    
-    // println (System.currentTimeMillis + ": " +  "In receiveVariable")
-    
-    // Check in valueBytes
-    if (xferValueBytesToValues[A] (uuid)) { return true }
-    
-    // Check if its in progress
-    for (i <- 0 until maxRetryCount) {
-      // println (System.currentTimeMillis + ": " +  uuid + " " + curUUID)
-      while (uuid == curUUID) { Thread.sleep (100) } // TODO: How long to sleep
-      if (xferValueBytesToValues[A] (uuid)) { return true }
-      
-      // Wait for a while to see if we've reached here before xmission started
-      Thread.sleep (100) 
-    }    
-    return false
-  }
-  
-  private def xferValueBytesToValues[A] (uuid: UUID): Boolean = {
-    var cachedValueBytes: Array[Byte] = null
-    valueBytes.synchronized { cachedValueBytes = valueBytes.get (uuid) }
-    if (cachedValueBytes != null) {
-      val cachedValue = byteArrayToObject[A] (cachedValueBytes)
-      values.synchronized { values.put (uuid, cachedValue) }
-      return true
-    }
-    return false
-  }
-  
-  private def objectToByteArray[A] (obj: A): Array[Byte] = {
-    val baos = new ByteArrayOutputStream
-    val oos = new ObjectOutputStream (baos)
-    oos.writeObject (obj)
-    oos.close
-    baos.close
-    return baos.toByteArray
-  }
+//  def isMaster = isMaster_ 
+//  
+//  private def initializeSplitStream = {
+//    pEnvironment_ = new Environment
+//    
+//    // Generate the NodeIds Randomly
+//    val nidFactory = new RandomNodeIdFactory (pEnvironment)
+//    
+//    // Construct the PastryNodeFactory
+//    val pastryNodeFactory = new SocketPastryNodeFactory (nidFactory, 
+//      localBindPort, pEnvironment)    
+//      
+//    // Construct a Pastry node
+//    pastryNode_ = pastryNodeFactory.newNode
+//    
+//    // Boot the node. 
+//    pastryNode.boot (masterBootAddress)
+//    // TODO: Some unknown messages are dropped in slaves at this point
+//      
+//    // The node may require sending several messages to fully boot into the ring
+//    pastryNode.synchronized {
+//      while(!pastryNode.isReady && !pastryNode.joinFailed) {
+//        // Delay so we don't busy-wait
+//        pastryNode.wait (500)
+//        
+//        // Abort if can't join
+//        if (pastryNode.joinFailed()) {
+//          // TODO: throw new IOException("Join failed " + node.joinFailedReason)
+//        }
+//      }       
+//    }
+//    
+//    // Create the SplitStream client and subscribe
+//    ssClient = new SSClient (BroadcastSS.pastryNode)
+//    ssClient.subscribe
+//  }
+//  
+//  def publishVariable[A] (uuid: UUID, obj: A) = {
+//    ssClient.synchronized {
+//      ssClient.publish[A] (uuid, obj)
+//    }
+//  }
+//  
+//  // Return status of the reception
+//  def receiveVariable[A] (uuid: UUID): Boolean = {
+//    // TODO: Things will change if out-of-order variable recepetion is supported
+//    
+//    logInfo (System.currentTimeMillis + ": " +  "In receiveVariable")
+//    
+//    // Check in valueBytes
+//    if (xferValueBytesToValues[A] (uuid)) { return true }
+//    
+//    // Check if its in progress
+//    for (i <- 0 until maxRetryCount) {
+//      logInfo (System.currentTimeMillis + ": " +  uuid + " " + curUUID)
+//      while (uuid == curUUID) { Thread.sleep (100) } // TODO: How long to sleep
+//      if (xferValueBytesToValues[A] (uuid)) { return true }
+//      
+//      // Wait for a while to see if we've reached here before xmission started
+//      Thread.sleep (100) 
+//    }    
+//    return false
+//  }
+//  
+//  private def xferValueBytesToValues[A] (uuid: UUID): Boolean = {
+//    var cachedValueBytes: Array[Byte] = null
+//    valueBytes.synchronized { cachedValueBytes = valueBytes.get (uuid) }
+//    if (cachedValueBytes != null) {
+//      val cachedValue = byteArrayToObject[A] (cachedValueBytes)
+//      values.synchronized { values.put (uuid, cachedValue) }
+//      return true
+//    }
+//    return false
+//  }
+//  
+//  private def objectToByteArray[A] (obj: A): Array[Byte] = {
+//    val baos = new ByteArrayOutputStream
+//    val oos = new ObjectOutputStream (baos)
+//    oos.writeObject (obj)
+//    oos.close
+//    baos.close
+//    return baos.toByteArray
+//  }
 
-  private def byteArrayToObject[A] (bytes: Array[Byte]): A = {
-    val in = new ObjectInputStream (new ByteArrayInputStream (bytes))
-    val retVal = in.readObject.asInstanceOf[A]
-    in.close
-    return retVal
-  }
+//  private def byteArrayToObject[A] (bytes: Array[Byte]): A = {
+//    val in = new ObjectInputStream (new ByteArrayInputStream (bytes))
+//    val retVal = in.readObject.asInstanceOf[A]
+//    in.close
+//    return retVal
+//  }
 
-  private def intToByteArray (value: Int): Array[Byte] = {
-    var retVal = new Array[Byte] (4)
-    for (i <- 0 until 4) 
-      retVal(i) = (value >> ((4 - 1 - i) * 8)).toByte
-    return retVal
-  }
+//  private def intToByteArray (value: Int): Array[Byte] = {
+//    var retVal = new Array[Byte] (4)
+//    for (i <- 0 until 4) 
+//      retVal(i) = (value >> ((4 - 1 - i) * 8)).toByte
+//    return retVal
+//  }
 
-  private def byteArrayToInt (arr: Array[Byte], offset: Int): Int = {
-    var retVal = 0
-    for (i <- 0 until 4) 
-      retVal += ((arr(i + offset).toInt & 0x000000FF) << ((4 - 1 - i) * 8))
-    return retVal
-  }
+//  private def byteArrayToInt (arr: Array[Byte], offset: Int): Int = {
+//    var retVal = 0
+//    for (i <- 0 until 4) 
+//      retVal += ((arr(i + offset).toInt & 0x000000FF) << ((4 - 1 - i) * 8))
+//    return retVal
+//  }
 
-  class SSClient (pastryNode: PastryNode) extends SplitStreamClient 
-    with Application {
-    // Magic bits: 11111100001100100100110000111111
-    val magicBits = 0xFC324C3F
-    
-    // Message Types
-    val INFO_MSG = 1
-    val DATA_MSG = 2
-        
-    // The Endpoint represents the underlying node. By making calls on the 
-    // Endpoint, it assures that the message will be delivered to the App on 
-    // whichever node the message is intended for.
-    protected val endPoint = pastryNode.buildEndpoint (this, "myInstance")
+//  class SSClient (pastryNode: PastryNode) extends SplitStreamClient 
+//    with Application {
+//    // Magic bits: 11111100001100100100110000111111
+//    val magicBits = 0xFC324C3F
+//    
+//    // Message Types
+//    val INFO_MSG = 1
+//    val DATA_MSG = 2
+//        
+//    // The Endpoint represents the underlying node. By making calls on the 
+//    // Endpoint, it assures that the message will be delivered to the App on 
+//    // whichever node the message is intended for.
+//    protected val endPoint = pastryNode.buildEndpoint (this, "myInstance")
 
-    // Handle to a SplitStream implementation
-    val mySplitStream = new SplitStreamImpl (pastryNode, "mySplitStream")
+//    // Handle to a SplitStream implementation
+//    val mySplitStream = new SplitStreamImpl (pastryNode, "mySplitStream")
 
-    // The ChannelId is constructed from a normal PastryId based on the UUID
-    val myChannelId = new ChannelId (new PastryIdFactory 
-      (pastryNode.getEnvironment).buildId ("myChannel"))
-    
-    // The channel
-    var myChannel: Channel = null
-    
-    // The stripes. Acquired from myChannel.
-    var myStripes: Array[Stripe] = null
+//    // The ChannelId is constructed from a normal PastryId based on the UUID
+//    val myChannelId = new ChannelId (new PastryIdFactory 
+//      (pastryNode.getEnvironment).buildId ("myChannel"))
+//    
+//    // The channel
+//    var myChannel: Channel = null
+//    
+//    // The stripes. Acquired from myChannel.
+//    var myStripes: Array[Stripe] = null
 
-    // Now we can receive messages
-    endPoint.register
-    
-    // Subscribes to all stripes in myChannelId.
-    def subscribe = {
-      // Attaching makes you part of the Channel, and volunteers to be an 
-      // internal node of one of the trees
-      myChannel = mySplitStream.attachChannel (myChannelId)
-      
-      // Subscribing notifies your application when data comes through the tree
-      myStripes = myChannel.getStripes
-      for (curStripe <- myStripes) { curStripe.subscribe (this) }
-    }
-    
-    // Part of SplitStreamClient. Called when a published message is received.
-    def deliver (s: Stripe, data: Array[Byte]) = { 
-      // Unpack and verify magicBits
-      val topLevelInfo = byteArrayToObject[(Int, Int, Array[Byte])] (data)
-      
-      // Process only if magicBits are OK
-      if (topLevelInfo._1 == magicBits) {
-        // Process only for slaves         
-        if (!BroadcastSS.isMaster) {
-          // Match on Message Type
-          topLevelInfo._2 match {
-            case INFO_MSG => {
-              val realInfo = byteArrayToObject[(UUID, Int, Int)] (
-                topLevelInfo._3)
-              
-              // Setup states for impending transmission
-              curUUID = realInfo._1 // TODO: 
-              curTotalBlocks = realInfo._2
-              curTotalBytes  = realInfo._3            
-              
-              curHasBlocks = 0
-              curBlockBitmap = new Array[Boolean] (curTotalBlocks)
-              curArrayOfBytes = new Array[Byte] (curTotalBytes)
-              
-              // println (System.currentTimeMillis + ": " +  curUUID + " " + curTotalBlocks + " " + curTotalBytes)
-            } 
-            case DATA_MSG => {
-              val realInfo = byteArrayToObject[(UUID, Int, Array[Byte])] (
-                topLevelInfo._3)
-              val blockUUID  = realInfo._1
-              val blockIndex = realInfo._2
-              val blockData  = realInfo._3
-              
-              // TODO: Will change in future implementation. Right now we 
-              // require broadcast in order on the variable level. Blocks can 
-              // come out of order though
-              assert (blockUUID == curUUID)
-              
-              // Update everything
-              curHasBlocks += 1
-              curBlockBitmap(blockIndex) = true
-              System.arraycopy (blockData, 0, curArrayOfBytes, 
-                blockIndex * blockSize, blockData.length)
-              
-              // println (System.currentTimeMillis + ": " +  "Got stuff for: " + blockUUID)
-                              
-              // Done receiving
-              if (curHasBlocks == curTotalBlocks) { 
-                // Store as a Array[Byte]
-                valueBytes.synchronized {
-                  valueBytes.put (curUUID, curArrayOfBytes)
-                }
-                
-                // println (System.currentTimeMillis + ": " +  "Finished reading. Stored in valueBytes")
-                
-                // RESET
-                curUUID = null
-              }
-            }
-            case _ => {
-              // Should never happen
-            }
-          } 
-        }
-      }
-    }
+//    // Now we can receive messages
+//    endPoint.register
+//    
+//    // Subscribes to all stripes in myChannelId.
+//    def subscribe = {
+//      // Attaching makes you part of the Channel, and volunteers to be an 
+//      // internal node of one of the trees
+//      myChannel = mySplitStream.attachChannel (myChannelId)
+//      
+//      // Subscribing notifies your application when data comes through the tree
+//      myStripes = myChannel.getStripes
+//      for (curStripe <- myStripes) { curStripe.subscribe (this) }
+//    }
+//    
+//    // Part of SplitStreamClient. Called when a published message is received.
+//    def deliver (s: Stripe, data: Array[Byte]) = { 
+//      // Unpack and verify magicBits
+//      val topLevelInfo = byteArrayToObject[(Int, Int, Array[Byte])] (data)
+//      
+//      // Process only if magicBits are OK
+//      if (topLevelInfo._1 == magicBits) {
+//        // Process only for slaves         
+//        if (!BroadcastSS.isMaster) {
+//          // Match on Message Type
+//          topLevelInfo._2 match {
+//            case INFO_MSG => {
+//              val realInfo = byteArrayToObject[(UUID, Int, Int)] (
+//                topLevelInfo._3)
+//              
+//              // Setup states for impending transmission
+//              curUUID = realInfo._1 // TODO: 
+//              curTotalBlocks = realInfo._2
+//              curTotalBytes  = realInfo._3            
+//              
+//              curHasBlocks = 0
+//              curBlockBitmap = new Array[Boolean] (curTotalBlocks)
+//              curArrayOfBytes = new Array[Byte] (curTotalBytes)
+//              
+//              logInfo (System.currentTimeMillis + ": " +  curUUID + " " + curTotalBlocks + " " + curTotalBytes)
+//            } 
+//            case DATA_MSG => {
+//              val realInfo = byteArrayToObject[(UUID, Int, Array[Byte])] (
+//                topLevelInfo._3)
+//              val blockUUID  = realInfo._1
+//              val blockIndex = realInfo._2
+//              val blockData  = realInfo._3
+//              
+//              // TODO: Will change in future implementation. Right now we 
+//              // require broadcast in order on the variable level. Blocks can 
+//              // come out of order though
+//              assert (blockUUID == curUUID)
+//              
+//              // Update everything
+//              curHasBlocks += 1
+//              curBlockBitmap(blockIndex) = true
+//              System.arraycopy (blockData, 0, curArrayOfBytes, 
+//                blockIndex * blockSize, blockData.length)
+//              
+//              logInfo (System.currentTimeMillis + ": " +  "Got stuff for: " + blockUUID)
+//                              
+//              // Done receiving
+//              if (curHasBlocks == curTotalBlocks) { 
+//                // Store as a Array[Byte]
+//                valueBytes.synchronized {
+//                  valueBytes.put (curUUID, curArrayOfBytes)
+//                }
+//                
+//                logInfo (System.currentTimeMillis + ": " +  "Finished reading. Stored in valueBytes")
+//                
+//                // RESET
+//                curUUID = null
+//              }
+//            }
+//            case _ => {
+//              // Should never happen
+//            }
+//          } 
+//        }
+//      }
+//    }
 
-    // Multicasts data.
-    def publish[A] (uuid: UUID, obj: A) = {
-      val byteArray = objectToByteArray[A] (obj)
-      
-      var blockNum = (byteArray.length / blockSize) 
-      if (byteArray.length % blockSize != 0) 
-        blockNum += 1       
-      
-      //           -------------------------------------
-      // INFO_MSG: | UUID | Total Blocks | Total Bytes |
-      //           -------------------------------------      
-      var infoByteArray = objectToByteArray[(UUID, Int, Int)] ((uuid, blockNum, 
-        byteArray.length))                  
-      doPublish (0, INFO_MSG, infoByteArray)
-      
-      //           -------------------------------------
-      // DATA_MSG: | UUID | Block Index | Single Block |
-      //           -------------------------------------
-      var blockID = 0
-      for (i <- 0 until (byteArray.length, blockSize)) {          
-        val thisBlockSize = Math.min (blockSize, byteArray.length - i)        
-        var thisBlockData = new Array[Byte] (thisBlockSize)
-        System.arraycopy (byteArray, i * blockSize, thisBlockData, 0, 
-          thisBlockSize)
+//    // Multicasts data.
+//    def publish[A] (uuid: UUID, obj: A) = {
+//      val byteArray = objectToByteArray[A] (obj)
+//      
+//      var blockNum = (byteArray.length / blockSize) 
+//      if (byteArray.length % blockSize != 0) 
+//        blockNum += 1       
+//      
+//      //           -------------------------------------
+//      // INFO_MSG: | UUID | Total Blocks | Total Bytes |
+//      //           -------------------------------------      
+//      var infoByteArray = objectToByteArray[(UUID, Int, Int)] ((uuid, blockNum, 
+//        byteArray.length))                  
+//      doPublish (0, INFO_MSG, infoByteArray)
+//      
+//      //           -------------------------------------
+//      // DATA_MSG: | UUID | Block Index | Single Block |
+//      //           -------------------------------------
+//      var blockID = 0
+//      for (i <- 0 until (byteArray.length, blockSize)) {          
+//        val thisBlockSize = Math.min (blockSize, byteArray.length - i)        
+//        var thisBlockData = new Array[Byte] (thisBlockSize)
+//        System.arraycopy (byteArray, i * blockSize, thisBlockData, 0, 
+//          thisBlockSize)
 
-        var dataByteArray = objectToByteArray[(UUID, Int, Array[Byte])] ((uuid, 
-          blockID, thisBlockData)) 
-        doPublish (blockID % myStripes.length, DATA_MSG, dataByteArray)
+//        var dataByteArray = objectToByteArray[(UUID, Int, Array[Byte])] ((uuid, 
+//          blockID, thisBlockData)) 
+//        doPublish (blockID % myStripes.length, DATA_MSG, dataByteArray)
 
-        blockID += 1
-      }
-    }
-    
-    //                 --------------------------------
-    // Message Format: | MagicBits | Type | Real Data |
-    //                 --------------------------------
-    private def doPublish (stripeID: Int, msgType: Int, data: Array[Byte]) = {
-      val bytesToSend = objectToByteArray[(Int, Int, Array[Byte])] ((magicBits, 
-        msgType, data))
-      myStripes(stripeID).publish (bytesToSend)
-    }
+//        blockID += 1
+//      }
+//    }
+//    
+//    //                 --------------------------------
+//    // Message Format: | MagicBits | Type | Real Data |
+//    //                 --------------------------------
+//    private def doPublish (stripeID: Int, msgType: Int, data: Array[Byte]) = {
+//      val bytesToSend = objectToByteArray[(Int, Int, Array[Byte])] ((magicBits, 
+//        msgType, data))
+//      myStripes(stripeID).publish (bytesToSend)
+//    }
 
-    /* class PublishContent extends Message {
-      def getPriority: Int = { Message.MEDIUM_PRIORITY }
-    } */
-    
-    // Error handling
-    def joinFailed(s: Stripe) = { println ("joinFailed(" + s + ")") }
+//    /* class PublishContent extends Message {
+//      def getPriority: Int = { Message.MEDIUM_PRIORITY }
+//    } */
+//    
+//    // Error handling
+//    def joinFailed(s: Stripe) = { logInfo ("joinFailed(" + s + ")") }
 
-    // Rest of the Application interface. NOT USED.
-    def deliver (id: rice.p2p.commonapi.Id, message: Message) = { } 
-    def forward (message: RouteMessage): Boolean = false
-    def update (handle: rice.p2p.commonapi.NodeHandle, joined: Boolean) = { }    
-  }  
-}
+//    // Rest of the Application interface. NOT USED.
+//    def deliver (id: rice.p2p.commonapi.Id, message: Message) = { } 
+//    def forward (message: RouteMessage): Boolean = false
+//    def update (handle: rice.p2p.commonapi.NodeHandle, joined: Boolean) = { }    
+//  }  
+//}
 
-private object BroadcastCH {
+private object BroadcastCH extends Logging {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
   private var initialized = false

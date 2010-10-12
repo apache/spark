@@ -57,7 +57,7 @@ object Vector {
   implicit def doubleToMultiplier(num: Double) = new Multiplier(num)
 
   implicit object VectorAccumParam extends spark.AccumulatorParam[Vector] {
-    def add(t1: Vector, t2: Vector) = t1 + t2
+    def addInPlace(t1: Vector, t2: Vector) = t1 + t2
     def zero(initialValue: Vector) = Vector.zeros(initialValue.length)
   }
 }

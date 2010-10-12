@@ -2,14 +2,18 @@ package spark
 
 import java.util.concurrent.{Executors, ExecutorService}
 
-import nexus.{ExecutorArgs, ExecutorDriver, NexusExecutorDriver}
-import nexus.{TaskDescription, TaskState, TaskStatus}
+import mesos.{ExecutorArgs, ExecutorDriver, MesosExecutorDriver}
+import mesos.{TaskDescription, TaskState, TaskStatus}
 
-object Executor {
+/**
+ * The Mesos executor for Spark.
+ */
+object Executor extends Logging {
   def main(args: Array[String]) {
-    System.loadLibrary("nexus")
+    System.loadLibrary("mesos")
 
-    val exec = new nexus.Executor() {
+    // Create a new Executor implementation that will run our tasks
+    val exec = new mesos.Executor() {
       var classLoader: ClassLoader = null
       var threadPool: ExecutorService = null
 
@@ -25,10 +29,10 @@ object Executor {
         // If the REPL is in use, create a ClassLoader that will be able to
         // read new classes defined by the REPL as the user types code
         classLoader = this.getClass.getClassLoader
-        val classDir = System.getProperty("spark.repl.current.classdir")
-        if (classDir != null) {
-          println("Using REPL classdir: " + classDir)
-          classLoader = new repl.ExecutorClassLoader(classDir, classLoader)
+        val classUri = System.getProperty("spark.repl.class.uri")
+        if (classUri != null) {
+          logInfo("Using REPL class URI: " + classUri)
+          classLoader = new repl.ExecutorClassLoader(classUri, classLoader)
         }
         Thread.currentThread.setContextClassLoader(classLoader)
         
@@ -43,7 +47,7 @@ object Executor {
         val arg = desc.getArg
         threadPool.execute(new Runnable() {
           def run() = {
-            println("Running task ID " + taskId)
+            logInfo("Running task ID " + taskId)
             try {
               Accumulators.clear
               val task = Utils.deserialize[Task[Any]](arg, classLoader)
@@ -52,12 +56,11 @@ object Executor {
               val result = new TaskResult(value, accumUpdates)
               d.sendStatusUpdate(new TaskStatus(
                 taskId, TaskState.TASK_FINISHED, Utils.serialize(result)))
-              println("Finished task ID " + taskId)
+              logInfo("Finished task ID " + taskId)
             } catch {
               case e: Exception => {
                 // TODO: Handle errors in tasks less dramatically
-                System.err.println("Exception in task ID " + taskId + ":")
-                e.printStackTrace
+                logError("Exception in task ID " + taskId, e)
                 System.exit(1)
               }
             }
@@ -66,6 +69,7 @@ object Executor {
       }
     }
 
-    new NexusExecutorDriver(exec).run()
+    // Start it running and connect it to the slave
+    new MesosExecutorDriver(exec).run()
   }
 }

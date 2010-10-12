@@ -1,6 +1,6 @@
 package spark
 
-import nexus._
+import mesos._
 
 @serializable
 trait Task[T] {
