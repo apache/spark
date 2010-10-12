@@ -10,4 +10,4 @@
 #   be in the same format as the JVM's -Xmx option, e.g. 300m or 1g).
 # - SPARK_LIBRARY_PATH, to add extra search paths for native libraries.
 
-
+MESOS_HOME=/home/mosharaf/Work/mesos

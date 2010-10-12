@@ -29,7 +29,6 @@ trait BroadcastRecipe {
   override def toString = "spark.Broadcast(" + uuid + ")"
 }
 
-// TODO: Should think about storing in HDFS in the future
 // TODO: Right, now no parallelization between multiple broadcasts
 @serializable
 class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean) 
@@ -66,6 +65,7 @@ extends BroadcastRecipe with Logging {
     out.close
   }
   
+  // Called by Java when deserializing an object
   private def readObject (in: ObjectInputStream) {
     in.defaultReadObject
     BroadcastCS.synchronized {
@@ -74,7 +74,7 @@ extends BroadcastRecipe with Logging {
         value_ = cachedVal.asInstanceOf[T]
       } else {
         // Only a single worker (the first one) in the same node can ever be 
-        // here. The rest will always get the value ready 
+        // here. The rest will always get the value ready. 
         val start = System.nanoTime        
 
         val retByteArray = BroadcastCS.receiveBroadcast (uuid)
@@ -223,7 +223,7 @@ private object Broadcast {
         // Initialization for CentralizedHDFSBroadcast
         BroadcastCH.initialize 
         // Initialization for ChainedStreamingBroadcast
-        //BroadcastCS.initialize (isMaster)
+        BroadcastCS.initialize (isMaster)
         
         initialized = true
       }
@@ -276,7 +276,7 @@ private object BroadcastCS extends Logging {
         maxRetryCount_ = 
           System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
         serverSocketTimout_ = 
-          System.getProperty ("spark.broadcast.serverSocketTimout", "50000").toInt          
+          System.getProperty ("spark.broadcast.serverSocketTimout", "50000").toInt
         dualMode_ = 
           System.getProperty ("spark.broadcast.dualMode", "false").toBoolean          
 
@@ -288,10 +288,10 @@ private object BroadcastCS extends Logging {
           guideMR.start
           logInfo("GuideMultipleRequests started")
         }        
+
         serveMR = new ServeMultipleRequests
         serveMR.setDaemon (true)
-        serveMR.start
-        
+        serveMR.start        
         logInfo("ServeMultipleRequests started")
         
         logInfo("BroadcastCS object has been initialized")
@@ -369,8 +369,7 @@ private object BroadcastCS extends Logging {
       totalBlocksLock.synchronized {
         totalBlocksLock.notifyAll
       }
-      totalBytes = sourceInfo.totalBytes
-      
+      totalBytes = sourceInfo.totalBytes      
       logInfo("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
 
       retByteArray = receiveSingleTransmission (sourceInfo)
@@ -415,7 +414,7 @@ private object BroadcastCS extends Logging {
         new ObjectInputStream (clientSocketToSource.getInputStream)
         
       logInfo("Inside receiveSingleTransmission")
-      logInfo("totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
+      logInfo("totalBlocks: " + totalBlocks + " " + "hasBlocks: " + hasBlocks)
       retByteArray = new Array[Byte] (totalBytes)
       for (i <- 0 until totalBlocks) {
         val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
@@ -437,74 +436,78 @@ private object BroadcastCS extends Logging {
       }
     } finally {    
       if (oisSource != null) { oisSource.close }
-      if (oosSource != null) { 
-        oosSource.close 
-      }
+      if (oosSource != null) { oosSource.close }
       if (clientSocketToSource != null) { clientSocketToSource.close }
     }
           
     return retByteArray
   } 
   
-  class TrackMultipleValues extends Thread with Logging {
-    override def run = {
-      var threadPool = Executors.newCachedThreadPool
-      var serverSocket: ServerSocket = null
-      
-      serverSocket = new ServerSocket (BroadcastCS.masterListenPort)
-      logInfo("TrackMultipleVariables" + serverSocket + " " + listenPort)
-      
-      var keepAccepting = true
-      try {
-        while (true) {
-          var clientSocket: Socket = null
-          try {
-            serverSocket.setSoTimeout (serverSocketTimout)
-            clientSocket = serverSocket.accept
-          } catch {
-            case e: Exception => { 
-              logInfo("TrackMultipleValues Timeout. Stopping listening...") 
-              keepAccepting = false 
-            }
-          }
-          logInfo("TrackMultipleValues:Got new request:" + clientSocket)
-          if (clientSocket != null) {
-            try {            
-              threadPool.execute (new Runnable {
-                def run = {
-                  val oos = new ObjectOutputStream (clientSocket.getOutputStream)
-                  val ois = new ObjectInputStream (clientSocket.getInputStream)
-                  try {
-                    val variableUUID = ois.readObject.asInstanceOf[UUID]
-                    var contactPort = 0
-                    // TODO: Add logic and data structures to find out UUID->port
-                    // mapping. 0 = missed the broadcast, read from HDFS; <0 = 
-                    // Haven't started yet, wait & retry; >0 = Read from this port
-                    oos.writeObject (contactPort)
-                  } catch {
-                    case e: Exception => { }
-                  } finally {
-                    ois.close
-                    oos.close
-                    clientSocket.close
-                  }
-                }
-              })
-            } catch {
-              // In failure, close the socket here; else, the thread will close it
-              case ioe: IOException => clientSocket.close
-            }
-          }
-        }
-      } finally {
-        serverSocket.close
-      }      
-    }
-  }
+//  class TrackMultipleValues extends Thread with Logging {
+//    override def run = {
+//      var threadPool = Executors.newCachedThreadPool
+//      var serverSocket: ServerSocket = null
+//      
+//      serverSocket = new ServerSocket (BroadcastCS.masterListenPort)
+//      logInfo("TrackMultipleVariables" + serverSocket + " " + listenPort)
+//      
+//      var keepAccepting = true
+//      try {
+//        while (keepAccepting) {
+//          var clientSocket: Socket = null
+//          try {
+//            serverSocket.setSoTimeout (serverSocketTimout)
+//            clientSocket = serverSocket.accept
+//          } catch {
+//            case e: Exception => { 
+//              logInfo("TrackMultipleValues Timeout. Stopping listening...") 
+//              keepAccepting = false 
+//            }
+//          }
+//          logInfo("TrackMultipleValues:Got new request:" + clientSocket)
+//          if (clientSocket != null) {
+//            try {            
+//              threadPool.execute (new Runnable {
+//                def run = {
+//                  val oos = new ObjectOutputStream (clientSocket.getOutputStream)
+//                  val ois = new ObjectInputStream (clientSocket.getInputStream)
+//                  try {
+//                    val variableUUID = ois.readObject.asInstanceOf[UUID]
+//                    var contactPort = 0
+//                    // TODO: Add logic and data structures to find out UUID->port
+//                    // mapping. 0 = missed the broadcast, read from HDFS; <0 = 
+//                    // Haven't started yet, wait & retry; >0 = Read from this port
+//                    oos.writeObject (contactPort)
+//                  } catch {
+//                    case e: Exception => { }
+//                  } finally {
+//                    ois.close
+//                    oos.close
+//                    clientSocket.close
+//                  }
+//                }
+//              })
+//            } catch {
+//              // In failure, close the socket here; else, the thread will close it
+//              case ioe: IOException => clientSocket.close
+//            }
+//          }
+//        }
+//      } finally {
+//        serverSocket.close
+//      }      
+//    }
+//  }
+//  
+//  class TrackSingleValue {
+//    
+//  }
   
-  class TrackSingleValue {
-    
-  }
+//  public static ExecutorService newCachedThreadPool() {
+//    return new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+//      new SynchronousQueue<Runnable>());
+//  }
+  
   
   class GuideMultipleRequests extends Thread with Logging {
     override def run = {
@@ -661,7 +664,7 @@ private object BroadcastCS extends Logging {
         while (keepAccepting) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (serverSocketTimout)
+            serverSocket.setSoTimeout (serverSocketTimout)            
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
@@ -731,8 +734,7 @@ private object BroadcastCS extends Logging {
           logInfo("Send block: " + i + " " + arrayOfBlocks(i))
         }
       }    
-    } 
-    
+    }    
   }
 }
 
