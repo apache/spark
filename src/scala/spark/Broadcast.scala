@@ -866,7 +866,7 @@ private object BroadcastCS extends Logging {
   
   def MaxMBps = MaxMBps_
   
-  def registerValue (uuid: UUID, guidePort: Int) = {    
+  def registerValue (uuid: UUID, guidePort: Int) = {
     valueToGuidePortMap.synchronized {    
       valueToGuidePortMap += (uuid -> guidePort)
       logInfo (System.currentTimeMillis + ": " +  "New value registered with the Tracker " + valueToGuidePortMap)             
@@ -896,26 +896,27 @@ private object BroadcastCS extends Logging {
   }
   
   class TrackMultipleValues extends Thread with Logging {
+    var keepAccepting = true
+    
     override def run = {
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
       
       serverSocket = new ServerSocket (BroadcastCS.masterTrackerPort)
-      logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues" + serverSocket)
+      logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues" + serverSocket)      
       
-      var keepAccepting = true
       try {
-        while (true) {
+        while (keepAccepting) {
           var clientSocket: Socket = null
           try {
             // TODO: 
-            // serverSocket.setSoTimeout (serverSocketTimout)
+            serverSocket.setSoTimeout (serverSocketTimout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
               logInfo ("TrackMultipleValues Timeout. Stopping listening...") 
               // TODO: Tracking should be explicitly stopped by the SparkContext
-              // keepAccepting = false 
+              keepAccepting = false 
             }
           }
 
@@ -932,9 +933,10 @@ private object BroadcastCS extends Logging {
                     //  0 = missed the broadcast, read from HDFS; 
                     // <0 = hasn't started yet, wait & retry;
                     // >0 = Read from this port 
-                    var guidePort = if (valueToGuidePortMap.contains (uuid)) {
-                      valueToGuidePortMap (uuid)
-                    } else -1
+                    var guidePort = 
+                      if (valueToGuidePortMap.contains (uuid)) {
+                        valueToGuidePortMap (uuid)
+                      } else -1
                     logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues:Got new request: " + clientSocket + " for " + uuid + " : " + guidePort)                    
                     oos.writeObject (guidePort)
                   } catch {
@@ -947,7 +949,7 @@ private object BroadcastCS extends Logging {
                 }
               })
             } catch {
-              // In failure, close the socket here; else, the thread will close it
+              // In failure, close socket here; else, client thread will close
               case ioe: IOException => clientSocket.close
             }
           }
