@@ -108,7 +108,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         guidePortLock.wait 
       }
     } 
-    BroadcastCS.registerValue (uuid, GuideInfo (hostAddress, guidePort))  
+    BroadcastCS.registerValue (uuid, GuideInfo (hostAddress, guidePort))
   }
   
   private def readObject (in: ObjectInputStream) {
@@ -178,7 +178,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     var retVal = new Array[BroadcastBlock] (blockNum)
     var blockID = 0
 
-    for (i <- 0 until (byteArray.length, blockSize)) {    
+    for (i <- 0 until (byteArray.length, blockSize)) {
       val thisBlockSize = Math.min (blockSize, byteArray.length - i)
       var tempByteArray = new Array[Byte] (thisBlockSize)
       val hasRead = bais.read (tempByteArray, 0, thisBlockSize)
@@ -215,7 +215,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     var oosTracker: ObjectOutputStream = null
     var oisTracker: ObjectInputStream = null
     
-    var gInfo: GuideInfo = GuideInfo ("", GuideInfo.TxNotStartedRetry)
+    var gInfo: GuideInfo = GuideInfo ("", GuideInfo.TxOverGoToHDFS)
     
     var retriesLeft = BroadcastCS.maxRetryCount
     do {
@@ -241,17 +241,16 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         if (clientSocketToTracker != null) { clientSocketToTracker.close }
       }
       retriesLeft -= 1     
-      // TODO: Should wait before retrying
+      // TODO: Should wait before retrying. 
+      // TODO: Implement waiting function.
     } while (retriesLeft > 0 && gInfo.listenPort < 0)
     logInfo (System.currentTimeMillis + ": " +  "Got this guidePort from Tracker: " + gInfo.listenPort)
     return gInfo
   }
   
   def receiveBroadcast (variableUUID: UUID): Boolean = {
-    // Get GuideInfo for this variable from the Tracker
     val gInfo = getGuideInfo (variableUUID) 
-    // If Tracker says that there is no guide for this object, read from HDFS
-    if (gInfo.listenPort == 0) { return false }
+    if (gInfo.listenPort == GuideInfo.TxOverGoToHDFS) { return false }
 
     // Wait until hostAddress and listenPort are created by the 
     // ServeMultipleRequests thread
@@ -306,6 +305,9 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       clientSocketToMaster.close
       
       retriesLeft -= 1
+      
+      //TODO: Implement waiting function
+      
     } while (retriesLeft > 0 && hasBlocks != totalBlocks)
     
     return (hasBlocks == totalBlocks)
@@ -553,19 +555,13 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       oos.flush
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
       
-      private var sendFrom = 0
-      private var sendUntil = totalBlocks
-      
       def run  = {
         try {
           logInfo (System.currentTimeMillis + ": " +  "new ServeSingleRequest is running")
           
           // Receive range to send
-          var sendRange = ois.readObject.asInstanceOf[(Int, Int)]
-          sendFrom = sendRange._1
-          sendUntil = sendRange._2
-          
-          sendObject
+          var sendRange = ois.readObject.asInstanceOf[(Int, Int)]          
+          sendObject (sendRange._1, sendRange._2)
         } catch {
           // TODO: Need to add better exception handling here
           // If something went wrong, e.g., the worker at the other end died etc. 
@@ -581,7 +577,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         }
       }
 
-      private def sendObject = {
+      private def sendObject (sendFrom: Int, sendUntil: Int) = {
         // Wait till receiving the SourceInfo from Master
         while (totalBlocks == -1) { 
           totalBlocksLock.synchronized {
