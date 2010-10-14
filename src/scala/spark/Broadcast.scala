@@ -101,12 +101,6 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     val masterSource_0 = 
       new SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes, 0) 
     pqOfSources.add (masterSource_0)
-    // Add one more time to have two replicas of any seeds in the PQ
-    if (BroadcastCS.dualMode) {
-      val masterSource_1 = 
-        new SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes, 1) 
-      pqOfSources.add (masterSource_1)
-    }      
 
     // Register with the Tracker
     while (guidePort == -1) { 
@@ -463,12 +457,6 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
               // Update global source speed statistics
               BroadcastCS.setSourceSpeed (
                 sourceInfo.hostAddress, sourceInfo.MBps)
-
-              // No need to find and update thisWorkerInfo, but add its replica
-              if (BroadcastCS.dualMode) {
-                pqOfSources.add (new SourceInfo (thisWorkerInfo.hostAddress, 
-                  thisWorkerInfo.listenPort, totalBlocks, totalBytes, 1))
-              }              
             }                        
           }      
         } catch {
@@ -744,7 +732,6 @@ private object BroadcastCS extends Logging {
   private var blockSize_ : Int = 512 * 1024
   private var maxRetryCount_ : Int = 2
   private var serverSocketTimout_ : Int = 50000
-  private var dualMode_ : Boolean = false
  
   private var trackMV: TrackMultipleValues = null
 
@@ -766,8 +753,6 @@ private object BroadcastCS extends Logging {
           System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
         serverSocketTimout_ = 
           System.getProperty ("spark.broadcast.serverSocketTimout", "50000").toInt          
-        dualMode_ = 
-          System.getProperty ("spark.broadcast.dualMode", "false").toBoolean          
 
         isMaster_ = isMaster__        
                   
@@ -788,7 +773,6 @@ private object BroadcastCS extends Logging {
   def blockSize = blockSize_
   def maxRetryCount = maxRetryCount_
   def serverSocketTimout = serverSocketTimout_
-  def dualMode = dualMode_
 
   def isMaster = isMaster_ 
   
@@ -823,8 +807,8 @@ private object BroadcastCS extends Logging {
       var newSpeed = ALPHA * oldSpeed + (1 - ALPHA) * MBps
       sourceToSpeedMap.update (hostAddress, newSpeed)
     }
-  }
-  
+  } 
+    
   class TrackMultipleValues extends Thread with Logging {
     var keepAccepting = true
     
