@@ -18,27 +18,28 @@ extends Job with Logging
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
 
-  // CPUs and memory to claim per task from Mesos
+  // CPUs and memory to request per task
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toInt
   val MEM_PER_TASK = System.getProperty("spark.task.mem", "512").toInt
+
+  // Maximum times a task is allowed to fail before failing the job
+  val MAX_TASK_FAILURES = 4
 
   val callingThread = currentThread
   val numTasks = tasks.length
   val results = new Array[T](numTasks)
   val launched = new Array[Boolean](numTasks)
   val finished = new Array[Boolean](numTasks)
+  val numFailures = new Array[Int](numTasks)
   val tidToIndex = HashMap[Int, Int]()
 
   var allFinished = false
   val joinLock = new Object() // Used to wait for all tasks to finish
 
-  var errorHappened = false
-  var errorCode = 0
-  var errorMessage = ""
-
   var tasksLaunched = 0
   var tasksFinished = 0
 
+  // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
 
   // Queue of pending tasks for each node
@@ -46,6 +47,10 @@ extends Job with Logging
 
   // Queue containing all pending tasks
   val allPendingTasks = new Queue[Int]
+
+  // Did the job fail?
+  var failed = false
+  var causeOfFailure = ""
 
   for (i <- 0 until numTasks) {
     addPendingTask(i)
@@ -58,6 +63,7 @@ extends Job with Logging
     }
   }
 
+  // Mark the job as finished and wake up any threads waiting on it
   def setAllFinished() {
     joinLock.synchronized {
       allFinished = true
@@ -65,10 +71,17 @@ extends Job with Logging
     }
   }
 
-  def join() {
+  // Wait until the job finishes and return its results
+  def join(): Array[T] = {
     joinLock.synchronized {
-      while (!allFinished)
+      while (!allFinished) {
         joinLock.wait()
+      }
+      if (failed) {
+        throw new SparkException(causeOfFailure)
+      } else {
+        return results
+      }
     }
   }
 
@@ -193,6 +206,17 @@ extends Job with Logging
       tasksLaunched -= 1
       // Re-enqueue the task as pending
       addPendingTask(index)
+      // Mark it as failed
+      if (status.getState == TaskState.TASK_FAILED ||
+          status.getState == TaskState.TASK_LOST) {
+        numFailures(index) += 1
+        if (numFailures(index) > MAX_TASK_FAILURES) {
+          logError("Task %d:%d failed more than %d times; aborting job".format(
+            jobId, index, MAX_TASK_FAILURES))
+          abort("Task %d failed more than %d times".format(
+            index, MAX_TASK_FAILURES))
+        }
+      }
     } else {
       logInfo("Ignoring task-lost event for TID " + tid +
         " because task " + index + " is already finished")
@@ -201,10 +225,16 @@ extends Job with Logging
 
   def error(code: Int, message: String) {
     // Save the error message
-    errorHappened = true
-    errorCode = code
-    errorMessage = message
-    // Indicate to caller thread that we're done
-    setAllFinished()
+    abort("Mesos error: %s (error code: %d)".format(message, code))
+  }
+
+  def abort(message: String) {
+    joinLock.synchronized {
+      failed = true
+      causeOfFailure = message
+      // TODO: Kill running tasks if we were not terminated due to a Mesos error
+      // Indicate to any joining thread that we're done
+      setAllFinished()
+    }
   }
 }

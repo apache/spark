@@ -88,18 +88,13 @@ extends MScheduler with spark.Scheduler with Logging
         this.activeJobsQueue += myJob
       }
       driver.reviveOffers();
-      myJob.join();
+      return myJob.join();
     } finally {
       this.synchronized {
         this.activeJobs.remove(myJob.jobId)
         this.activeJobsQueue.dequeueAll(x => (x == myJob))
       }
     }
-
-    if (myJob.errorHappened)
-      throw new SparkException(myJob.errorMessage, myJob.errorCode)
-    else
-      return myJob.results
   }
 
   override def registered(d: SchedulerDriver, frameworkId: String) {
