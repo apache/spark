@@ -7,6 +7,7 @@ import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.DefaultHandler
 import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.server.handler.ResourceHandler
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 
 /**
@@ -30,6 +31,9 @@ class HttpServer(resourceBase: File) extends Logging {
       throw new ServerStateException("Server is already started")
     } else {
       server = new Server(0)
+      val threadPool = new QueuedThreadPool
+      threadPool.setDaemon(true)
+      server.setThreadPool(threadPool)
       val resHandler = new ResourceHandler
       resHandler.setResourceBase(resourceBase.getAbsolutePath)
       val handlerList = new HandlerList
@@ -37,7 +41,6 @@ class HttpServer(resourceBase: File) extends Logging {
       server.setHandler(handlerList)
       server.start()
       port = server.getConnectors()(0).getLocalPort()
-      logDebug("HttpServer started at " + uri)
     }
   }
 

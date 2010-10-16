@@ -50,6 +50,8 @@ native: java
 
 jar: build/spark.jar build/spark-dep.jar
 
+depjar: build/spark-dep.jar
+
 build/spark.jar: scala java
 	jar cf build/spark.jar -C build/classes spark
 
@@ -67,4 +69,4 @@ clean:
 	$(MAKE) -C src/native clean
 	rm -rf build
 
-.phony: default all clean scala java native jar
+.phony: default all clean scala java native jar depjar

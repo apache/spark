@@ -1,12 +1,18 @@
 package spark
 
 import java.io._
-import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
 
 
-class SparkContext(master: String, frameworkName: String) extends Logging {
+class SparkContext(
+  master: String,
+  frameworkName: String,
+  val jars: Seq[String] = Nil)
+extends Logging {
+  // Spark home directory, used to resolve executor when running on Mesos
+  private var sparkHome: Option[String] = None
+
   private[spark] var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
@@ -17,17 +23,15 @@ class SparkContext(master: String, frameworkName: String) extends Logging {
         new LocalScheduler(threads.toInt)
       case _ =>
         System.loadLibrary("mesos")
-        new MesosScheduler(this, master, frameworkName, createExecArg())
+        new MesosScheduler(this, master, frameworkName)
     }
   }
 
-  private val local = scheduler.isInstanceOf[LocalScheduler]
+  private val isLocal = scheduler.isInstanceOf[LocalScheduler]
 
+  // Start the scheduler and the broadcast system
   scheduler.start()
-
   Broadcast.initialize(true)
-
-  private var sparkHome: Option[String] = None
 
   // Methods for creating RDDs
 
@@ -45,22 +49,8 @@ class SparkContext(master: String, frameworkName: String) extends Logging {
     new Accumulator(initialValue, param)
 
   // TODO: Keep around a weak hash map of values to Cached versions?
-  def broadcast[T](value: T) = new CentralizedHDFSBroadcast(value, local)
-  //def broadcast[T](value: T) = new ChainedStreamingBroadcast(value, local)
-
-  // Create and serialize an executor argument to use when running on Mesos
-  private def createExecArg(): Array[Byte] = {
-    // Our executor arg is an array containing all the spark.* system properties
-    val props = new ArrayBuffer[(String, String)]
-    val iter = System.getProperties.entrySet.iterator
-    while (iter.hasNext) {
-      val entry = iter.next
-      val (key, value) = (entry.getKey.toString, entry.getValue.toString)
-      if (key.startsWith("spark."))
-        props += key -> value
-    }
-    return Utils.serialize(props.toArray)
-  }
+  def broadcast[T](value: T) = new CentralizedHDFSBroadcast(value, isLocal)
+  //def broadcast[T](value: T) = new ChainedStreamingBroadcast(value, isLocal)
 
   // Stop the SparkContext
   def stop() {
@@ -93,7 +83,6 @@ class SparkContext(master: String, frameworkName: String) extends Logging {
     else
       None
   }
-
 
   // Submit an array of tasks (passed as functions) to the scheduler
   def runTasks[T: ClassManifest](tasks: Array[() => T]): Array[T] = {

@@ -1,10 +1,11 @@
 package spark
 
-import java.io.File
+import java.io.{File, FileInputStream, FileOutputStream}
 import java.util.{ArrayList => JArrayList}
 import java.util.{List => JList}
 import java.util.{HashMap => JHashMap}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Map
@@ -19,7 +20,7 @@ import mesos._
  * first call start(), then submit tasks through the runTasks method.
  */
 private class MesosScheduler(
-  sc: SparkContext, master: String, frameworkName: String, execArg: Array[Byte])
+  sc: SparkContext, master: String, frameworkName: String)
 extends MScheduler with spark.Scheduler with Logging
 {
   // Environment variables to pass to our executors
@@ -39,27 +40,37 @@ extends MScheduler with spark.Scheduler with Logging
   private var taskIdToJobId = new HashMap[Int, Int]
   private var jobTasks = new HashMap[Int, HashSet[Int]]
 
+  // Incrementing job and task IDs
   private var nextJobId = 0
-  
+  private var nextTaskId = 0
+
+  // Driver for talking to Mesos
+  var driver: SchedulerDriver = null
+
+  // JAR server, if any JARs were added by the user to the SparkContext
+  var jarServer: HttpServer = null
+
+  // URIs of JARs to pass to executor
+  var jarUris: String = ""
+
   def newJobId(): Int = this.synchronized {
     val id = nextJobId
     nextJobId += 1
     return id
   }
 
-  // Incrementing task ID
-  private var nextTaskId = 0
-
   def newTaskId(): Int = {
     val id = nextTaskId;
     nextTaskId += 1;
     return id
   }
-
-  // Driver for talking to Mesos
-  var driver: SchedulerDriver = null
   
   override def start() {
+    if (sc.jars.size > 0) {
+      // If the user added any JARS to the SparkContext, create an HTTP server
+      // to serve them to our executors
+      createJarServer()
+    }
     new Thread("Spark scheduler") {
       setDaemon(true)
       override def run {
@@ -83,10 +94,11 @@ extends MScheduler with spark.Scheduler with Logging
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val params = new JHashMap[String, String]
     for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
-      if (System.getenv(key) != null)
+      if (System.getenv(key) != null) {
         params("env." + key) = System.getenv(key)
+      }
     }
-    new ExecutorInfo(execScript, execArg)
+    new ExecutorInfo(execScript, createExecArg())
   }
 
   /**
@@ -220,10 +232,63 @@ extends MScheduler with spark.Scheduler with Logging
   }
 
   override def stop() {
-    if (driver != null)
+    if (driver != null) {
       driver.stop()
+    }
+    if (jarServer != null) {
+      jarServer.stop()
+    }
   }
 
   // TODO: query Mesos for number of cores
-  override def numCores() = System.getProperty("spark.default.parallelism", "2").toInt
+  override def numCores() =
+    System.getProperty("spark.default.parallelism", "2").toInt
+
+  // Create a server for all the JARs added by the user to SparkContext.
+  // We first copy the JARs to a temp directory for easier server setup.
+  private def createJarServer() {
+    val jarDir = Utils.createTempDir()
+    logInfo("Temp directory for JARs: " + jarDir)
+    val filenames = ArrayBuffer[String]()
+    // Copy each JAR to a unique filename in the jarDir
+    for ((path, index) <- sc.jars.zipWithIndex) {
+      val file = new File(path)
+      val filename = index + "_" + file.getName
+      copyFile(file, new File(jarDir, filename))
+      filenames += filename
+    }
+    // Create the server
+    jarServer = new HttpServer(jarDir)
+    jarServer.start()
+    // Build up the jar URI list
+    val serverUri = jarServer.uri
+    jarUris = filenames.map(f => serverUri + "/" + f).mkString(",")
+    logInfo("JAR server started at " + serverUri)
+  }
+
+  // Copy a file on the local file system
+  private def copyFile(source: File, dest: File) {
+    val in = new FileInputStream(source)
+    val out = new FileOutputStream(dest)
+    Utils.copyStream(in, out, true)
+  }
+
+  // Create and serialize the executor argument to pass to Mesos.
+  // Our executor arg is an array containing all the spark.* system properties
+  // in the form of (String, String) pairs.
+  private def createExecArg(): Array[Byte] = {
+    val props = new HashMap[String, String]
+    val iter = System.getProperties.entrySet.iterator
+    while (iter.hasNext) {
+      val entry = iter.next
+      val (key, value) = (entry.getKey.toString, entry.getValue.toString)
+      if (key.startsWith("spark.")) {
+        props(key) = value
+      }
+    }
+    // Set spark.jar.uris to our JAR URIs, regardless of system property
+    props("spark.jar.uris") = jarUris
+    // Serialize the map as an array of (String, String) pairs
+    return Utils.serialize(props.toArray)
+  }
 }
