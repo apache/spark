@@ -36,6 +36,8 @@ import scala.tools.nsc.{ InterpreterResults => IR }
 import interpreter._
 import SparkInterpreter._
 
+import spark.HttpServer
+
 /** <p>
  *    An interpreter for Scala code.
  *  </p>
@@ -120,14 +122,14 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
   val virtualDirectory = new PlainFile(outputDir)
 
   /** Jetty server that will serve our classes to worker nodes */
-  val classServer = new ClassServer(outputDir)
+  val classServer = new HttpServer(outputDir)
 
   // Start the classServer and store its URI in a spark system property
   // (which will be passed to executors so that they can connect to it)
   classServer.start()
   System.setProperty("spark.repl.class.uri", classServer.uri)
   if (SPARK_DEBUG_REPL) {
-    println("ClassServer started, URI = " + classServer.uri)
+    println("Class server started, URI = " + classServer.uri)
   }
   
   /** reporter */
