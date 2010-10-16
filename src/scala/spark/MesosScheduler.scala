@@ -28,6 +28,13 @@ private class MesosScheduler(
   master: String, frameworkName: String, execArg: Array[Byte])
 extends MScheduler with spark.Scheduler with Logging
 {
+  // Environment variables to pass to our executors
+  val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
+    "SPARK_MEM",
+    "SPARK_CLASSPATH",
+    "SPARK_LIBRARY_PATH"
+  )
+
   // Lock used to wait for  scheduler to be registered
   var isRegistered = false
   val registeredLock = new Object()
@@ -70,8 +77,28 @@ extends MScheduler with spark.Scheduler with Logging
 
   override def getFrameworkName(d: SchedulerDriver): String = frameworkName
   
-  override def getExecutorInfo(d: SchedulerDriver): ExecutorInfo =
-    new ExecutorInfo(new File("spark-executor").getCanonicalPath(), execArg)
+  // Get Spark's home location from either the spark.home Java property
+  // or the SPARK_HOME environment variable (in that order of preference).
+  // If neither of these is set, throws an exception.
+  def getSparkHome(): String = {
+    if (System.getProperty("spark.home") != null)
+      System.getProperty("spark.home")
+    else if (System.getenv("SPARK_HOME") != null)
+      System.getenv("SPARK_HOME")
+    else
+      throw new SparkException("Spark home is not set; either set the " +
+        "spark.home system property or the SPARK_HOME environment variable")
+  }
+
+  override def getExecutorInfo(d: SchedulerDriver): ExecutorInfo = {
+    val execScript = new File(getSparkHome, "spark-executor").getCanonicalPath
+    val params = new JHashMap[String, String]
+    for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
+      if (System.getenv(key) != null)
+        params(key) = System.getenv(key)
+    }
+    new ExecutorInfo(execScript, execArg)
+  }
 
   /**
    * The primary means to submit a job to the scheduler. Given a list of tasks,
