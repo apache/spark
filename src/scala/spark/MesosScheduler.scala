@@ -95,7 +95,7 @@ extends MScheduler with spark.Scheduler with Logging
     val params = new JHashMap[String, String]
     for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
       if (System.getenv(key) != null)
-        params(key) = System.getenv(key)
+        params("env." + key) = System.getenv(key)
     }
     new ExecutorInfo(execScript, execArg)
   }
