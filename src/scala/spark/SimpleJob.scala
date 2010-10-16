@@ -9,7 +9,7 @@ import mesos._
 
 
 /**
- * A simple implementation of Job that just runs each task in an array.
+ * A Job that runs a set of tasks with no interdependencies.
  */
 class SimpleJob[T: ClassManifest](
   sched: MesosScheduler, tasks: Array[Task[T]], val jobId: Int)
@@ -204,8 +204,6 @@ extends Job(jobId) with Logging
       Accumulators.add(callingThread, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
-      // Remove TID -> jobId mapping from sched
-      sched.taskIdToJobId.remove(tid)
       if (tasksFinished == numTasks)
         setAllFinished()
     } else {
@@ -220,7 +218,6 @@ extends Job(jobId) with Logging
     if (!finished(index)) {
       logInfo("Lost TID %d (task %d:%d)".format(tid, jobId, index))
       launched(index) = false
-      sched.taskIdToJobId.remove(tid)
       tasksLaunched -= 1
       // Re-enqueue the task as pending
       addPendingTask(index)
