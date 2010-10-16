@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Figure out where the Scala framework is installed
-FWDIR=`dirname $0`
+FWDIR="$(cd `dirname $0`; pwd)"
 
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"

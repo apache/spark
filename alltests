@@ -1,5 +1,5 @@
 #!/bin/bash
-FWDIR=`dirname $0`
+FWDIR="`dirname $0`"
 if [ "x$SPARK_MEM" == "x" ]; then
   export SPARK_MEM=500m
 fi
