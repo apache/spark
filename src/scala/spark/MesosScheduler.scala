@@ -87,9 +87,9 @@ extends MScheduler with spark.Scheduler with Logging
     val sparkHome = sc.getSparkHome match {
       case Some(path) => path
       case None =>
-        throw new SparkException("Spark home is not set; either set the " +
-          "spark.home system property or the SPARK_HOME environment variable " +
-          "or call SparkContext.setSparkHome")
+        throw new SparkException("Spark home is not set; set it through the " +
+          "spark.home system property, the SPARK_HOME environment variable " +
+          "or the SparkContext constructor")
     }
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val params = new JHashMap[String, String]

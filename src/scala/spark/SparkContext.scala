@@ -8,11 +8,9 @@ import scala.collection.mutable.ArrayBuffer
 class SparkContext(
   master: String,
   frameworkName: String,
+  val sparkHome: String = null,
   val jars: Seq[String] = Nil)
 extends Logging {
-  // Spark home directory, used to resolve executor when running on Mesos
-  private var sparkHome: Option[String] = None
-
   private[spark] var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
@@ -63,19 +61,12 @@ extends Logging {
     scheduler.waitForRegister()
   }
 
-  // Set the Spark home location
-  def setSparkHome(path: String) {
-    if (path == null)
-      throw new NullPointerException("Path passed to setSparkHome was null")
-    sparkHome = Some(path)
-  }
-
-  // Get Spark's home location from either a value set through setSparkHome,
+  // Get Spark's home location from either a value set through the constructor,
   // or the spark.home Java property, or the SPARK_HOME environment variable
   // (in that order of preference). If neither of these is set, return None.
   def getSparkHome(): Option[String] = {
-    if (sparkHome != None)
-      sparkHome
+    if (sparkHome != null)
+      Some(sparkHome)
     else if (System.getProperty("spark.home") != null)
       Some(System.getProperty("spark.home"))
     else if (System.getenv("SPARK_HOME") != null)
