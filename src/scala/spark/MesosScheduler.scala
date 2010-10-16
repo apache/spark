@@ -141,6 +141,7 @@ extends MScheduler with spark.Scheduler with Logging
               job.slaveOffer(offers(i), availableCpus(i), availableMem(i)) match {
                 case Some(task) =>
                   tasks.add(task)
+                  taskIdToJobId(task.getTaskId) = job.getId
                   availableCpus(i) -= task.getParams.get("cpus").toInt
                   availableMem(i) -= task.getParams.get("mem").toInt
                   launchedTask = true
