@@ -151,7 +151,7 @@ extends Job(jobId) with Logging
           val prefStr = if(preferred) "preferred" else "non-preferred"
           val message =
             "Starting task %d:%d as TID %s on slave %s: %s (%s)".format(
-              index, jobId, taskId, offer.getSlaveId, host, prefStr)
+              jobId, index, taskId, offer.getSlaveId, host, prefStr)
           logInfo(message)
           // Do various bookkeeping
           tidToIndex(taskId) = index
@@ -166,7 +166,7 @@ extends Job(jobId) with Logging
           params.put("mem", MEM_PER_TASK.toString)
           val serializedTask = Utils.serialize(task)
           logDebug("Serialized size: " + serializedTask.size)
-          val taskName = "task %d:%d".format(jobId, taskId)
+          val taskName = "task %d:%d".format(jobId, index)
           return Some(new TaskDescription(
             taskId, offer.getSlaveId, taskName, params, serializedTask))
         }
