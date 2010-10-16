@@ -13,19 +13,12 @@ import scala.collection.JavaConversions._
 import mesos.{Scheduler => MScheduler}
 import mesos._
 
-// The main Scheduler implementation, which talks to Mesos. Clients are expected
-// to first call start(), then submit tasks through the runTasks method.
-//
-// This implementation is currently a little quick and dirty. The following
-// improvements need to be made to it:
-// 1) Right now, the scheduler uses a linear scan through the tasks to find a
-//    local one for a given node. It would be faster to have a separate list of
-//    pending tasks for each node.
-// 2) Presenting a single slave in Job.slaveOffer makes it
-//    difficult to balance tasks across nodes. It would be better to pass
-//    all the offers to the Job and have it load-balance.
+/**
+ * The main Scheduler implementation, which runs jobs on Mesos. Clients should
+ * first call start(), then submit tasks through the runTasks method.
+ */
 private class MesosScheduler(
-  master: String, frameworkName: String, execArg: Array[Byte])
+  sc: SparkContext, master: String, frameworkName: String, execArg: Array[Byte])
 extends MScheduler with spark.Scheduler with Logging
 {
   // Environment variables to pass to our executors
@@ -77,21 +70,15 @@ extends MScheduler with spark.Scheduler with Logging
 
   override def getFrameworkName(d: SchedulerDriver): String = frameworkName
   
-  // Get Spark's home location from either the spark.home Java property
-  // or the SPARK_HOME environment variable (in that order of preference).
-  // If neither of these is set, throws an exception.
-  def getSparkHome(): String = {
-    if (System.getProperty("spark.home") != null)
-      System.getProperty("spark.home")
-    else if (System.getenv("SPARK_HOME") != null)
-      System.getenv("SPARK_HOME")
-    else
-      throw new SparkException("Spark home is not set; either set the " +
-        "spark.home system property or the SPARK_HOME environment variable")
-  }
-
   override def getExecutorInfo(d: SchedulerDriver): ExecutorInfo = {
-    val execScript = new File(getSparkHome, "spark-executor").getCanonicalPath
+    val sparkHome = sc.getSparkHome match {
+      case Some(path) => path
+      case None =>
+        throw new SparkException("Spark home is not set; either set the " +
+          "spark.home system property or the SPARK_HOME environment variable " +
+          "or call SparkContext.setSparkHome")
+    }
+    val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val params = new JHashMap[String, String]
     for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
       if (System.getenv(key) != null)
