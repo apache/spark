@@ -78,7 +78,7 @@ abstract class RDD[T: ClassManifest](
     case _ => throw new UnsupportedOperationException("empty collection")
   }
 
-  def count(): Long = 
+  def count(): Long =
     try { map(x => 1L).reduce(_+_) }
     catch { case e: UnsupportedOperationException => 0L }
 
@@ -128,7 +128,7 @@ extends RDDTask[Option[T], T](rdd, split) with Logging {
 }
 
 class MappedRDD[U: ClassManifest, T: ClassManifest](
-  prev: RDD[T], f: T => U) 
+  prev: RDD[T], f: T => U)
 extends RDD[U](prev.sparkContext) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
@@ -137,7 +137,7 @@ extends RDD[U](prev.sparkContext) {
 }
 
 class FilteredRDD[T: ClassManifest](
-  prev: RDD[T], f: T => Boolean) 
+  prev: RDD[T], f: T => Boolean)
 extends RDD[T](prev.sparkContext) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
@@ -146,7 +146,7 @@ extends RDD[T](prev.sparkContext) {
 }
 
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
-  prev: RDD[T], f: T => Traversable[U]) 
+  prev: RDD[T], f: T => Traversable[U])
 extends RDD[U](prev.sparkContext) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
@@ -155,7 +155,7 @@ extends RDD[U](prev.sparkContext) {
   override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
 }
 
-class SplitRDD[T: ClassManifest](prev: RDD[T]) 
+class SplitRDD[T: ClassManifest](prev: RDD[T])
 extends RDD[Array[T]](prev.sparkContext) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
@@ -170,16 +170,16 @@ extends RDD[Array[T]](prev.sparkContext) {
 }
 
 class SampledRDD[T: ClassManifest](
-  prev: RDD[T], withReplacement: Boolean, frac: Double, seed: Int) 
+  prev: RDD[T], withReplacement: Boolean, frac: Double, seed: Int)
 extends RDD[T](prev.sparkContext) {
-  
+
   @transient val splits_ = { val rg = new Random(seed); prev.splits.map(x => new SeededSplit(x, rg.nextInt)) }
 
   override def splits = splits_.asInstanceOf[Array[Split]]
 
   override def preferredLocations(split: Split) = prev.preferredLocations(split.asInstanceOf[SeededSplit].prev)
 
-  override def iterator(splitIn: Split) = { 
+  override def iterator(splitIn: Split) = {
     val split = splitIn.asInstanceOf[SeededSplit]
     val rg = new Random(split.seed);
     // Sampling with replacement (TODO: use reservoir sampling to make this more efficient?)
@@ -213,7 +213,7 @@ extends RDD[T](prev.sparkContext) with Logging {
     else
       prev.preferredLocations(split)
   }
-  
+
   override def iterator(split: Split): Iterator[T] = {
     val key = id + "::" + split.getId()
     logInfo("CachedRDD split key is " + key)
@@ -278,7 +278,7 @@ extends Split {
 class UnionRDD[T: ClassManifest](sc: SparkContext, rdds: Seq[RDD[T]])
 extends RDD[T](sc) {
   @transient val splits_ : Array[Split] = {
-    val splits: Seq[Split] = 
+    val splits: Seq[Split] =
       for (rdd <- rdds; split <- rdd.splits)
         yield new UnionSplit(rdd, split)
     splits.toArray
@@ -289,7 +289,7 @@ extends RDD[T](sc) {
   override def iterator(s: Split): Iterator[T] =
     s.asInstanceOf[UnionSplit[T]].iterator()
 
-  override def preferredLocations(s: Split): Seq[String] = 
+  override def preferredLocations(s: Split): Seq[String] =
     s.asInstanceOf[UnionSplit[T]].preferredLocations()
 }
 

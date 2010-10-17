@@ -11,7 +11,7 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 
 /**
- * Exception type thrown by HttpServer when it is in the wrong state 
+ * Exception type thrown by HttpServer when it is in the wrong state
  * for an operation.
  */
 class ServerStateException(message: String) extends Exception(message)

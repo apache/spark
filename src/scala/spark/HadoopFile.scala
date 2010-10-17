@@ -15,7 +15,7 @@ import org.apache.hadoop.util.ReflectionUtils
 
 /** A Spark split class that wraps around a Hadoop InputSplit */
 @serializable class HadoopSplit(@transient s: InputSplit)
-extends Split { 
+extends Split {
   val inputSplit = new SerializableWritable[InputSplit](s)
 
   // Hadoop gives each split a unique toString value, so use this as our ID
@@ -48,7 +48,7 @@ extends RDD[(K, V)](sc) {
   }
 
   override def splits = splits_
-  
+
   override def iterator(theSplit: Split) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[HadoopSplit]
     var reader: RecordReader[K, V] = null
