@@ -34,7 +34,9 @@ else
   COMPILER = $(SCALA_HOME)/bin/$(COMPILER_NAME)
 endif
 
-all: scala java
+CONF_FILES = conf/spark-env.sh conf/log4j.properties conf/java-opts
+
+all: scala java conf-files
 
 build/classes:
 	mkdir -p build/classes
@@ -50,7 +52,7 @@ native: java
 
 jar: build/spark.jar build/spark-dep.jar
 
-depjar: build/spark-dep.jar
+dep-jar: build/spark-dep.jar
 
 build/spark.jar: scala java
 	jar cf build/spark.jar -C build/classes spark
@@ -59,6 +61,11 @@ build/spark-dep.jar:
 	mkdir -p build/dep
 	cd build/dep &&	for i in $(JARS); do jar xf ../../$$i; done
 	jar cf build/spark-dep.jar -C build/dep .
+
+conf-files: $(CONF_FILES)
+
+$(CONF_FILES): %: %.template
+	if [ ! -e $@ ] ; then cp $^ $@; else touch $^; fi
 
 test: all
 	./alltests
@@ -69,4 +76,4 @@ clean:
 	$(MAKE) -C src/native clean
 	rm -rf build
 
-.phony: default all clean scala java native jar depjar
+.phony: default all clean scala java native jar dep-jar conf-files
