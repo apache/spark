@@ -11,15 +11,15 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 
-@serializable class HdfsSplit(@transient s: InputSplit)
+@serializable class HadoopSplit(@transient s: InputSplit)
 extends Split { 
   val inputSplit = new SerializableWritable[InputSplit](s)
 
-  override def getId() = inputSplit.toString // Hadoop makes this unique
-                                             // for each split of each file
+  // Hadoop gives each split a unique toString value, so use this as our ID
+  override def getId() = "HadoopSplit(" + inputSplit.toString + ")"
 }
 
-class HdfsTextFile(sc: SparkContext, path: String)
+class HadoopTextFile(sc: SparkContext, path: String)
 extends RDD[String](sc) {
   @transient val conf = new JobConf()
   @transient val inputFormat = new TextInputFormat()
@@ -28,12 +28,12 @@ extends RDD[String](sc) {
   ConfigureLock.synchronized { inputFormat.configure(conf) }
 
   @transient val splits_ =
-    inputFormat.getSplits(conf, sc.scheduler.numCores).map(new HdfsSplit(_)).toArray
+    inputFormat.getSplits(conf, sc.scheduler.numCores).map(new HadoopSplit(_)).toArray
 
   override def splits = splits_.asInstanceOf[Array[Split]]
   
   override def iterator(split_in: Split) = new Iterator[String] {
-    val split = split_in.asInstanceOf[HdfsSplit]
+    val split = split_in.asInstanceOf[HadoopSplit]
     var reader: RecordReader[LongWritable, Text] = null
     ConfigureLock.synchronized {
       val conf = new JobConf()
@@ -73,7 +73,8 @@ extends RDD[String](sc) {
 
   override def preferredLocations(split: Split) = {
     // TODO: Filtering out "localhost" in case of file:// URLs
-    split.asInstanceOf[HdfsSplit].inputSplit.value.getLocations().filter(_ != "localhost")
+    val hadoopSplit = split.asInstanceOf[HadoopSplit]
+    hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")
   }
 }
 

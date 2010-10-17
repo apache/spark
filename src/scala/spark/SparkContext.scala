@@ -40,7 +40,7 @@ extends Logging {
     parallelize(seq, scheduler.numCores)
 
   def textFile(path: String): RDD[String] =
-    new HdfsTextFile(this, path)
+    new HadoopTextFile(this, path)
 
   def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] =
     new UnionRDD(this, rdds)
