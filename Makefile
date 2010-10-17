@@ -64,8 +64,8 @@ build/spark-dep.jar:
 
 conf-files: $(CONF_FILES)
 
-$(CONF_FILES): %: %.template
-	if [ ! -e $@ ] ; then cp $^ $@; else touch $^; fi
+$(CONF_FILES): %: | %.template
+	cp $@.template $@
 
 test: all
 	./alltests
