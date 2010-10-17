@@ -33,13 +33,17 @@ extends Logging {
 
   // Methods for creating RDDs
 
-  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int) =
+  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int): RDD[T] =
     new ParallelArray[T](this, seq, numSlices)
 
-  def parallelize[T: ClassManifest](seq: Seq[T]): ParallelArray[T] =
+  def parallelize[T: ClassManifest](seq: Seq[T]): RDD[T] =
     parallelize(seq, scheduler.numCores)
 
-  def textFile(path: String) = new HdfsTextFile(this, path)
+  def textFile(path: String): RDD[String] =
+    new HdfsTextFile(this, path)
+
+  def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] =
+    new UnionRDD(this, rdds)
 
   // Methods for creating shared variables
 
