@@ -703,9 +703,6 @@ private object Broadcast extends Logging {
         BroadcastCH.initialize 
         // Initialization for ChainedStreamingBroadcast
         BroadcastCS.initialize (isMaster)
-        // Initialization for SplitStreamBroadcast
-        // TODO: SplitStream turned OFF
-        // BroadcastSS.initialize (isMaster)
         
         initialized = true
       }
