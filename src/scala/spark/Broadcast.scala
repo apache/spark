@@ -77,12 +77,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     guideMR = new GuideMultipleRequests
     guideMR.setDaemon (true)
     guideMR.start
-    logInfo (System.currentTimeMillis + ": " +  "GuideMultipleRequests started")
+    logInfo ("GuideMultipleRequests started")
     
     serveMR = new ServeMultipleRequests
     serveMR.setDaemon (true)
     serveMR.start
-    logInfo (System.currentTimeMillis + ": " +  "ServeMultipleRequests started")
+    logInfo ("ServeMultipleRequests started")
 
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
@@ -127,7 +127,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         serveMR = new ServeMultipleRequests
         serveMR.setDaemon (true)
         serveMR.start
-        logInfo (System.currentTimeMillis + ": " +  "ServeMultipleRequests started")
+        logInfo ("ServeMultipleRequests started")
         
         val start = System.nanoTime        
 
@@ -144,7 +144,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         } 
         
         val time = (System.nanoTime - start) / 1e9
-        logInfo( System.currentTimeMillis + ": " + "Reading Broadcasted variable " + uuid + " took " + time + " s")                  
+        logInfo("Reading Broadcasted variable " + uuid + " took " + time + " s")                  
       }
     }
   }
@@ -244,7 +244,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       // TODO: Should wait before retrying. 
       // TODO: Implement waiting function.
     } while (retriesLeft > 0 && gInfo.listenPort < 0)
-    logInfo (System.currentTimeMillis + ": " +  "Got this guidePort from Tracker: " + gInfo.listenPort)
+    logInfo ("Got this guidePort from Tracker: " + gInfo.listenPort)
     return gInfo
   }
   
@@ -267,7 +267,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       // Connect to Master and send this worker's Information
       val clientSocketToMaster = 
         new Socket(gInfo.hostAddress, gInfo.listenPort)  
-      logInfo (System.currentTimeMillis + ": " +  "Connected to Master's guiding object")
+      logInfo ("Connected to Master's guiding object")
       // TODO: Guiding object connection is reusable
       val oosMaster = 
         new ObjectOutputStream (clientSocketToMaster.getOutputStream)
@@ -287,7 +287,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       }
       totalBytes = sourceInfo.totalBytes
       
-      logInfo (System.currentTimeMillis + ": " +  "Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
+      logInfo ("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
 
       val start = System.nanoTime  
       val receptionSucceeded = receiveSingleTransmission (sourceInfo)
@@ -331,8 +331,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       oisSource = 
         new ObjectInputStream (clientSocketToSource.getInputStream)
         
-      logInfo (System.currentTimeMillis + ": " +  "Inside receiveSingleTransmission")
-      logInfo (System.currentTimeMillis + ": " +  "totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
+      logInfo ("Inside receiveSingleTransmission")
+      logInfo ("totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
       
       // Send the range       
       oosSource.writeObject((hasBlocks, totalBlocks))
@@ -347,12 +347,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         hasBlocksLock.synchronized {
           hasBlocksLock.notifyAll
         }
-        logInfo (System.currentTimeMillis + ": " +  "Received block: " + i + " " + bcBlock)
+        logInfo ("Received block: " + i + " " + bcBlock)
       } 
-      logInfo (System.currentTimeMillis + ": " +  "After the receive loop")
+      logInfo ("After the receive loop")
     } catch {
       case e: Exception => { 
-        logInfo (System.currentTimeMillis + ": " +  "receiveSingleTransmission had a " + e)
+        logInfo ("receiveSingleTransmission had a " + e)
       }
     } finally {    
       if (oisSource != null) { oisSource.close }
@@ -371,7 +371,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
 
       serverSocket = new ServerSocket (0)
       guidePort = serverSocket.getLocalPort
-      logInfo (System.currentTimeMillis + ": " +  "GuideMultipleRequests" + serverSocket + " " + guidePort)
+      logInfo ("GuideMultipleRequests" + serverSocket + " " + guidePort)
       
       guidePortLock.synchronized {
         guidePortLock.notifyAll
@@ -392,7 +392,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             }
           }
           if (clientSocket != null) {
-            logInfo (System.currentTimeMillis + ": " +  "Guide:Accepted new client connection:" + clientSocket)
+            logInfo ("Guide:Accepted new client connection:" + clientSocket)
             try {            
               threadPool.execute (new GuideSingleRequest (clientSocket))
             } catch {
@@ -418,7 +418,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       
       def run = {
         try {
-          logInfo (System.currentTimeMillis + ": " +  "new GuideSingleRequest is running")
+          logInfo ("new GuideSingleRequest is running")
           // Connecting worker is sending in its hostAddress and listenPort it will 
           // be listening to. ReplicaID is 0 and other fields are invalid (-1)
           var sourceInfo = ois.readObject.asInstanceOf[SourceInfo]
@@ -426,14 +426,14 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
           pqOfSources.synchronized {
             // Select a suitable source and send it back to the worker
             selectedSourceInfo = selectSuitableSource (sourceInfo)
-            logInfo (System.currentTimeMillis + ": " +  "Sending selectedSourceInfo:" + selectedSourceInfo)
+            logInfo ("Sending selectedSourceInfo:" + selectedSourceInfo)
             oos.writeObject (selectedSourceInfo)
             oos.flush
 
             // Add this new (if it can finish) source to the PQ of sources
             thisWorkerInfo = new SourceInfo(sourceInfo.hostAddress, 
               sourceInfo.listenPort, totalBlocks, totalBytes, 0)  
-            logInfo (System.currentTimeMillis + ": " +  "Adding possible new source to pqOfSources: " + thisWorkerInfo)    
+            logInfo ("Adding possible new source to pqOfSources: " + thisWorkerInfo)    
             pqOfSources.add (thisWorkerInfo)
           }
 
@@ -515,7 +515,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
 
       serverSocket = new ServerSocket (0) 
       listenPort = serverSocket.getLocalPort
-      logInfo (System.currentTimeMillis + ": " +  "ServeMultipleRequests" + serverSocket + " " + listenPort)
+      logInfo ("ServeMultipleRequests" + serverSocket + " " + listenPort)
       
       listenPortLock.synchronized {
         listenPortLock.notifyAll
@@ -535,7 +535,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             }
           }
           if (clientSocket != null) {
-            logInfo (System.currentTimeMillis + ": " +  "Serve:Accepted new client connection:" + clientSocket)
+            logInfo ("Serve:Accepted new client connection:" + clientSocket)
             try {            
               threadPool.execute (new ServeSingleRequest (clientSocket))
             } catch {
@@ -557,7 +557,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       
       def run  = {
         try {
-          logInfo (System.currentTimeMillis + ": " +  "new ServeSingleRequest is running")
+          logInfo ("new ServeSingleRequest is running")
           
           // Receive range to send
           var sendRange = ois.readObject.asInstanceOf[(Int, Int)]          
@@ -567,10 +567,10 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
           // If something went wrong, e.g., the worker at the other end died etc. 
           // then close everything up
           case e: Exception => { 
-            logInfo (System.currentTimeMillis + ": " +  "ServeSingleRequest had a " + e)
+            logInfo ("ServeSingleRequest had a " + e)
           }
         } finally {
-          logInfo (System.currentTimeMillis + ": " +  "ServeSingleRequest is closing streams and sockets")
+          logInfo ("ServeSingleRequest is closing streams and sockets")
           ois.close
           oos.close
           clientSocket.close
@@ -597,7 +597,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
           } catch {
             case e: Exception => { }
           }
-          logInfo (System.currentTimeMillis + ": " +  "Send block: " + i + " " + arrayOfBlocks(i))
+          logInfo ("Send block: " + i + " " + arrayOfBlocks(i))
         }
       }    
     } 
@@ -628,7 +628,7 @@ class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
-        logInfo( System.currentTimeMillis + ": " +  "Started reading Broadcasted variable " + uuid)
+        logInfo( "Started reading Broadcasted variable " + uuid)
         val start = System.nanoTime
         
         val fileIn = new ObjectInputStream(BroadcastCH.openFileForReading(uuid))
@@ -637,7 +637,7 @@ class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean)
         fileIn.close
         
         val time = (System.nanoTime - start) / 1e9
-        logInfo( System.currentTimeMillis + ": " +  "Reading Broadcasted variable " + uuid + " took " + time + " s")
+        logInfo( "Reading Broadcasted variable " + uuid + " took " + time + " s")
       }
     }
   }
@@ -753,7 +753,7 @@ private object BroadcastCS extends Logging {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon (true)
           trackMV.start
-          logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues started")         
+          logInfo ("TrackMultipleValues started")         
         }
                   
         initialized = true
@@ -774,14 +774,14 @@ private object BroadcastCS extends Logging {
   def registerValue (uuid: UUID, gInfo: GuideInfo) = {
     valueToGuideMap.synchronized {    
       valueToGuideMap += (uuid -> gInfo)
-      logInfo (System.currentTimeMillis + ": " +  "New value registered with the Tracker " + valueToGuideMap)             
+      logInfo ("New value registered with the Tracker " + valueToGuideMap)             
     }
   }
   
   def unregisterValue (uuid: UUID) = {
     valueToGuideMap.synchronized {
       valueToGuideMap (uuid) = GuideInfo ("", GuideInfo.TxOverGoToHDFS)
-      logInfo (System.currentTimeMillis + ": " +  "Value unregistered from the Tracker " + valueToGuideMap)             
+      logInfo ("Value unregistered from the Tracker " + valueToGuideMap)             
     }
   }
   
@@ -810,7 +810,7 @@ private object BroadcastCS extends Logging {
       var serverSocket: ServerSocket = null
       
       serverSocket = new ServerSocket (BroadcastCS.masterTrackerPort)
-      logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues" + serverSocket)      
+      logInfo ("TrackMultipleValues" + serverSocket)      
       
       try {
         while (keepAccepting) {
@@ -840,7 +840,7 @@ private object BroadcastCS extends Logging {
                       if (valueToGuideMap.contains (uuid)) {
                         valueToGuideMap (uuid)
                       } else GuideInfo ("", GuideInfo.TxNotStartedRetry)
-                    logInfo (System.currentTimeMillis + ": " +  "TrackMultipleValues:Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)                    
+                    logInfo ("TrackMultipleValues:Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)                    
                     oos.writeObject (gInfo)
                   } catch {
                     case e: Exception => { }
