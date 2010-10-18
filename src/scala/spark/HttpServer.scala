@@ -1,4 +1,4 @@
-package spark.repl
+package spark
 
 import java.io.File
 import java.net.InetAddress
@@ -7,23 +7,22 @@ import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.DefaultHandler
 import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.server.handler.ResourceHandler
-
-import spark.Logging
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 
 /**
- * Exception type thrown by ClassServer when it is in the wrong state 
+ * Exception type thrown by HttpServer when it is in the wrong state
  * for an operation.
  */
 class ServerStateException(message: String) extends Exception(message)
 
 
 /**
- * An HTTP server used by the interpreter to allow worker nodes to access
- * class files created as the user types in lines of code. This is just a
- * wrapper around a Jetty embedded HTTP server.
+ * An HTTP server for static content used to allow worker nodes to access JARs
+ * added to SparkContext as well as classes created by the interpreter when
+ * the user types in code. This is just a wrapper around a Jetty server.
  */
-class ClassServer(classDir: File) extends Logging {
+class HttpServer(resourceBase: File) extends Logging {
   private var server: Server = null
   private var port: Int = -1
 
@@ -32,14 +31,16 @@ class ClassServer(classDir: File) extends Logging {
       throw new ServerStateException("Server is already started")
     } else {
       server = new Server(0)
+      val threadPool = new QueuedThreadPool
+      threadPool.setDaemon(true)
+      server.setThreadPool(threadPool)
       val resHandler = new ResourceHandler
-      resHandler.setResourceBase(classDir.getAbsolutePath)
+      resHandler.setResourceBase(resourceBase.getAbsolutePath)
       val handlerList = new HandlerList
       handlerList.setHandlers(Array(resHandler, new DefaultHandler))
       server.setHandler(handlerList)
       server.start()
       port = server.getConnectors()(0).getLocalPort()
-      logDebug("ClassServer started at " + uri)
     }
   }
 
