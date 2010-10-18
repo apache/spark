@@ -342,6 +342,10 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       logInfo ("Inside receiveSingleTransmission")
       logInfo ("totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
       
+      // Send hasBlocksBitVector
+      oosSource.writeObject(hasBlocksBitVector)
+      oosSource.flush
+      
       // Send the range       
       oosSource.writeObject((hasBlocks, totalBlocks))
       oosSource.flush
@@ -567,6 +571,9 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       def run  = {
         try {
           logInfo ("new ServeSingleRequest is running")
+          
+          // Receive hasBlocksBitVector from the receiver
+          var rxHasBlocksBitVector = ois.readObject.asInstanceOf[BitSet]
           
           // Receive range to send
           var sendRange = ois.readObject.asInstanceOf[(Int, Int)]          
