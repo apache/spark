@@ -223,7 +223,7 @@ private object Broadcast {
         // Initialization for CentralizedHDFSBroadcast
         BroadcastCH.initialize 
         // Initialization for ChainedStreamingBroadcast
-        BroadcastCS.initialize (isMaster)
+        // BroadcastCS.initialize (isMaster)
         
         initialized = true
       }
