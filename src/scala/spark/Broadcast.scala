@@ -669,24 +669,7 @@ case class SourceInfo (val hostAddress: String, val listenPort: Int,
   var MBps: Double = BroadcastCS.MaxMBps
   
   // Ascending sort based on leecher count
-  def compareTo (o: SourceInfo): Int = (currentLeechers - o.currentLeechers)
-  
-  // Descending sort based on speed
-  // def compareTo (o: SourceInfo): Int = { 
-    // if (MBps > o.MBps) -1
-    // else if (MBps < o.MBps) 1
-    // else 0
-  // }
-  
-  // Descending sort based on globally stored speed
-  // def compareTo (o: SourceInfo): Int = { 
-    // val mySpeed = BroadcastCS.getSourceSpeed (hostAddress)
-    // val urSpeed = BroadcastCS.getSourceSpeed (o.hostAddress)
-
-    // if (mySpeed > urSpeed) -1
-    // else if (mySpeed < urSpeed) 1
-    // else 0
-  // } 
+  def compareTo (o: SourceInfo): Int = (currentLeechers - o.currentLeechers) 
 }
 
 @serializable
