@@ -378,7 +378,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
 
   class GuideMultipleRequests extends Thread with Logging {
     override def run = {
-      // TODO: Cached threadpool has 60 s keep alive timer
+      // TODO: Cached threadpool has 60s keep alive timer
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
 
@@ -409,7 +409,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             try {            
               threadPool.execute (new GuideSingleRequest (clientSocket))
             } catch {
-              // In failure, close the socket here; else, the thread will close it
+              // In failure, close the socket here; else, thread will close it
               case ioe: IOException => clientSocket.close
             }
           }
