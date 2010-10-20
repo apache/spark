@@ -2,13 +2,13 @@ package spark
 
 import java.io._
 import java.net._
-import java.util.{UUID, Vector, Comparator, BitSet}
+import java.util.{UUID, Comparator, BitSet}
 
 import com.google.common.collect.MapMaker
 
 import java.util.concurrent.{Executors, ExecutorService}
 
-import scala.collection.mutable.Map
+import scala.collection.mutable.{ListBuffer, Map}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
@@ -44,12 +44,17 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
   @transient var totalBlocksLock = new Object
   @transient var hasBlocksLock = new Object
   
-  @transient var listOfSources = new Vector[SourceInfo]
+  @transient var listOfSources = ListBuffer[SourceInfo] ()
   
   @transient var hasBlocksBitVector: BitSet = null
 
   @transient var serveMR: ServeMultipleRequests = null 
-  @transient var guideMR: GuideMultipleRequests = null 
+  
+  // Used only in Master
+  @transient var guideMR: GuideMultipleRequests = null
+  
+  // Used only in Slaves
+  @transient var ttGuide: TalkToGuide = null
 
   @transient var hostAddress = InetAddress.getLocalHost.getHostAddress
   @transient var listenPort = -1    
@@ -103,10 +108,9 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       }
     } 
 
-    listOfSources = new Vector[SourceInfo]
     val masterSource = 
       SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes) 
-    listOfSources.add (masterSource)
+    listOfSources = listOfSources + masterSource
 
     // Register with the Tracker
     while (guidePort == -1) { 
@@ -165,7 +169,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     listenPortLock = new Object
     totalBlocksLock = new Object
     hasBlocksLock = new Object
-    serveMR =  null
+    serveMR = null
+    ttGuide = null
     hostAddress = InetAddress.getLocalHost.getHostAddress
     listenPort = -1
   }
@@ -216,6 +221,50 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     val retVal = in.readObject.asInstanceOf[A]
     in.close
     return retVal
+  }
+
+  class TalkToGuide (gInfo: SourceInfo) 
+  extends Thread with Logging {
+    override def run = {
+      // Connect to Guide and send this worker's information
+      val clientSocketToGuide = 
+        new Socket(gInfo.hostAddress, gInfo.listenPort)
+      logInfo ("Sending local information to the Guide")
+      val oosGuide = 
+        new ObjectOutputStream (clientSocketToGuide.getOutputStream)
+      oosGuide.flush
+      val oisGuide = 
+        new ObjectInputStream (clientSocketToGuide.getInputStream)
+      
+      // TODO: Do we need a breaking mechanism out of this infinite loop?
+      while (true) {
+        oosGuide.writeObject(SourceInfo (hostAddress, listenPort, 
+          gInfo.totalBlocks, gInfo.totalBytes))
+        oosGuide.flush
+
+        // Receive source information from Master
+        var suitableSources = 
+          oisGuide.readObject.asInstanceOf[ListBuffer[SourceInfo]]
+        
+        // Update local list of sources by adding or replacing
+        // TODO: There might be some contradiciton on the use of listOfSources
+        listOfSources.synchronized {
+          suitableSources.foreach { srcInfo =>
+            if (listOfSources.contains(srcInfo)) 
+              { listOfSources = listOfSources - srcInfo }
+            listOfSources = listOfSources + srcInfo
+          }
+        }
+                
+        // TODO: DO NOT use constant sleep value here
+        // TODO: Guide should send back a backoff time, somehow
+        Thread.sleep (1234)
+      }
+      
+      oisGuide.close
+      oosGuide.close
+      clientSocketToGuide.close      
+    }          
   }
     
   def getGuideInfo (variableUUID: UUID): SourceInfo = {
@@ -269,7 +318,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       }
     } 
 
-    // 
+    // Setup initial states of variables
     totalBlocks = gInfo.totalBlocks
     arrayOfBlocks = new Array[BroadcastBlock] (totalBlocks)
     hasBlocksBitVector = new BitSet (totalBlocks)
@@ -278,52 +327,14 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     }
     totalBytes = gInfo.totalBytes
       
-    // TODO: MAJOR CHANGES REQUIRED BELOW: NEW THREAD REQUIRED
-    // Connect and receive broadcast from the specified source, retrying the
-    // specified number of times in case of failures
-    var retriesLeft = BroadcastCS.maxRetryCount
-    do {      
-      // Connect to Guide and send this worker's information
-      val clientSocketToGuide = 
-        new Socket(gInfo.hostAddress, gInfo.listenPort)
-      logInfo ("Connected to Master's guiding object")
-      // TODO: Guiding object connection is reusable
-      val oosGuide = 
-        new ObjectOutputStream (clientSocketToGuide.getOutputStream)
-      oosGuide.flush
-      val oisGuide = 
-        new ObjectInputStream (clientSocketToGuide.getInputStream)
-      
-      oosGuide.writeObject(SourceInfo (hostAddress, listenPort, 
-        gInfo.totalBlocks, gInfo.totalBytes))
-      oosGuide.flush
-
-      // Receive source information from Master
-      // TODO: THINGS HAVE CHANGED; SHOULD CHANGE ACTUALLY; sourceInfo is vector        
-      var sourceInfo = oisGuide.readObject.asInstanceOf[SourceInfo]
-      logInfo ("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
-
-      val start = System.nanoTime  
-      val receptionSucceeded = receiveSingleTransmission (sourceInfo)
-      val time = (System.nanoTime - start) / 1e9      
-      
-      // Updating some statistics in sourceInfo. Master will be using them later
-      if (!receptionSucceeded) { sourceInfo.receptionFailed = true }
-      sourceInfo.MBps = (sourceInfo.totalBytes.toDouble / 1048576) / time
-
-      // Send back statistics to the Master
-      oosGuide.writeObject (sourceInfo) 
+    // Start ttGuide to periodically talk to the Guide 
+    var ttGuide = new TalkToGuide (gInfo)
+    ttGuide.setDaemon (true)
+    ttGuide.start
+    logInfo ("TalkToGuide started")
     
-      oisGuide.close
-      oosGuide.close
-      clientSocketToGuide.close
-      
-      retriesLeft -= 1
-      
-      //TODO: Implement waiting function
-      
-    } while (retriesLeft > 0 && hasBlocks != totalBlocks)
-    
+    // TODO:
+          
     return (hasBlocks == totalBlocks)
   }
 
@@ -433,7 +444,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
 
       private var sourceInfo: SourceInfo = null
-      private var selectedSources: Vector[SourceInfo] = null
+      private var selectedSources: ListBuffer[SourceInfo] = null
       
       private var rollOverIndex = 0
       
@@ -451,15 +462,16 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             oos.flush
 
             // Add this source to the listOfSources
-            listOfSources.add (sourceInfo)
+            listOfSources = listOfSources + sourceInfo
           }
         } catch {
           case e: Exception => { 
-            // Assuming that exception caused due to receiver worker failure.
-            listOfSources.synchronized {
-              // Remove thisWorkerInfo
-              if (listOfSources != null) { listOfSources.remove (sourceInfo) }
-            }      
+            // Assuming exception caused by receiver failure: remove
+            if (listOfSources != null) { 
+              listOfSources.synchronized {
+                listOfSources = listOfSources - sourceInfo
+              }
+            }    
           }
         } finally {
           ois.close
@@ -471,15 +483,17 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       // TODO: Randomly select some sources to send back. 
       // Right now just rolls over the listOfSources to send back 
       // BroadcastCS.MaxPeersInGuideResponse number of possible sources
-      private def selectSuitableSources(skipSourceInfo: SourceInfo): Vector[SourceInfo] = { 
+      private def selectSuitableSources(skipSourceInfo: SourceInfo): ListBuffer[SourceInfo] = { 
         var curIndex = rollOverIndex
-        var selectedSources: Vector[SourceInfo] = new Vector[SourceInfo]
-        do {
-          if (listOfSources.get(curIndex) != skipSourceInfo)
-            { selectedSources.add (listOfSources.get(curIndex)) }
-          curIndex = (curIndex + 1) % listOfSources.size
-        } while (curIndex != rollOverIndex && 
-          selectedSources.size != BroadcastCS.MaxPeersInGuideResponse)
+        var selectedSources = ListBuffer[SourceInfo] ()
+        listOfSources.synchronized {
+          do {
+            if (listOfSources(curIndex) != skipSourceInfo)
+              { selectedSources = selectedSources + listOfSources(curIndex) }
+            curIndex = (curIndex + 1) % listOfSources.size
+          } while (curIndex != rollOverIndex && 
+            selectedSources.size != BroadcastCS.MaxPeersInGuideResponse)
+        }
         rollOverIndex = curIndex
         return selectedSources
       }
