@@ -224,7 +224,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     var oisTracker: ObjectInputStream = null
     
     var gInfo: SourceInfo = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
-      SourceInfo.InvalidParam, SourceInfo.InvalidParam)
+      SourceInfo.UnusedParam, SourceInfo.UnusedParam)
     
     var retriesLeft = BroadcastCS.maxRetryCount
     do {
@@ -243,16 +243,15 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         oosTracker.flush
         gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
       } catch {
-        case e: Exception => (gInfo = SourceInfo("", SourceInfo.TxOverGoToHDFS, 
-          SourceInfo.InvalidParam, SourceInfo.InvalidParam))
+        case e: Exception => (gInfo = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
+          SourceInfo.UnusedParam, SourceInfo.UnusedParam))
       } finally {   
         if (oisTracker != null) { oisTracker.close }
         if (oosTracker != null) { oosTracker.close }
         if (clientSocketToTracker != null) { clientSocketToTracker.close }
       }
       retriesLeft -= 1     
-      // TODO: Should wait before retrying. 
-      // TODO: Implement waiting function.
+      // TODO: Should wait before retrying. Implement wait function.
     } while (retriesLeft > 0 && gInfo.listenPort < 0)
     logInfo ("Got this guidePort from Tracker: " + gInfo.listenPort)
     return gInfo
@@ -270,36 +269,38 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       }
     } 
 
+    // 
+    totalBlocks = gInfo.totalBlocks
+    arrayOfBlocks = new Array[BroadcastBlock] (totalBlocks)
+    hasBlocksBitVector = new BitSet (totalBlocks)
+    totalBlocksLock.synchronized {
+      totalBlocksLock.notifyAll
+    }
+    totalBytes = gInfo.totalBytes
+      
     // TODO: MAJOR CHANGES REQUIRED BELOW: NEW THREAD REQUIRED
     // Connect and receive broadcast from the specified source, retrying the
     // specified number of times in case of failures
     var retriesLeft = BroadcastCS.maxRetryCount
     do {      
-      // Connect to Master and send this worker's information
-      val clientSocketToMaster = 
-        new Socket(gInfo.hostAddress, gInfo.listenPort)  
+      // Connect to Guide and send this worker's information
+      val clientSocketToGuide = 
+        new Socket(gInfo.hostAddress, gInfo.listenPort)
       logInfo ("Connected to Master's guiding object")
       // TODO: Guiding object connection is reusable
-      val oosMaster = 
-        new ObjectOutputStream (clientSocketToMaster.getOutputStream)
-      oosMaster.flush
-      val oisMaster = 
-        new ObjectInputStream (clientSocketToMaster.getInputStream)
+      val oosGuide = 
+        new ObjectOutputStream (clientSocketToGuide.getOutputStream)
+      oosGuide.flush
+      val oisGuide = 
+        new ObjectInputStream (clientSocketToGuide.getInputStream)
       
-      oosMaster.writeObject(SourceInfo (hostAddress, listenPort, -1, -1))
-      oosMaster.flush
+      oosGuide.writeObject(SourceInfo (hostAddress, listenPort, 
+        gInfo.totalBlocks, gInfo.totalBytes))
+      oosGuide.flush
 
       // Receive source information from Master
-      // TODO: THINGS HAVE CHANGED; SHOULD CHANGE ACTUALLY        
-      var sourceInfo = oisMaster.readObject.asInstanceOf[SourceInfo]
-      totalBlocks = sourceInfo.totalBlocks
-      arrayOfBlocks = new Array[BroadcastBlock] (totalBlocks)
-      hasBlocksBitVector = new BitSet (totalBlocks)
-      totalBlocksLock.synchronized {
-        totalBlocksLock.notifyAll
-      }
-      totalBytes = sourceInfo.totalBytes
-      
+      // TODO: THINGS HAVE CHANGED; SHOULD CHANGE ACTUALLY; sourceInfo is vector        
+      var sourceInfo = oisGuide.readObject.asInstanceOf[SourceInfo]
       logInfo ("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)    
 
       val start = System.nanoTime  
@@ -311,11 +312,11 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       sourceInfo.MBps = (sourceInfo.totalBytes.toDouble / 1048576) / time
 
       // Send back statistics to the Master
-      oosMaster.writeObject (sourceInfo) 
+      oosGuide.writeObject (sourceInfo) 
     
-      oisMaster.close
-      oosMaster.close
-      clientSocketToMaster.close
+      oisGuide.close
+      oosGuide.close
+      clientSocketToGuide.close
       
       retriesLeft -= 1
       
@@ -431,17 +432,16 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       oos.flush
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
 
+      private var sourceInfo: SourceInfo = null
       private var selectedSources: Vector[SourceInfo] = null
-      private var thisWorkerInfo:SourceInfo = null
       
       private var rollOverIndex = 0
       
       def run = {
         try {
           logInfo ("new GuideSingleRequest is running")
-          // Connecting worker is sending in its hostAddress and listenPort it 
-          // will be listening to. Other fields are invalid (-1)
-          var sourceInfo = ois.readObject.asInstanceOf[SourceInfo]
+          // Connecting worker is sending in its information
+          sourceInfo = ois.readObject.asInstanceOf[SourceInfo]
           
           listOfSources.synchronized {
             // Select a suitable source and send it back to the worker
@@ -450,20 +450,15 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             oos.writeObject (selectedSources)
             oos.flush
 
-            // Add this new (if it can finish) source to the PQ of sources
-            thisWorkerInfo = SourceInfo(sourceInfo.hostAddress, 
-              sourceInfo.listenPort, totalBlocks, totalBytes)  
-            logInfo ("Adding possible new source to listOfSources: " + thisWorkerInfo)    
-            listOfSources.add (thisWorkerInfo)
+            // Add this source to the listOfSources
+            listOfSources.add (sourceInfo)
           }
         } catch {
-          // If something went wrong, e.g., the worker at the other end died etc. 
-          // then close everything up
           case e: Exception => { 
             // Assuming that exception caused due to receiver worker failure.
             listOfSources.synchronized {
               // Remove thisWorkerInfo
-              if (listOfSources != null) { listOfSources.remove (thisWorkerInfo) }
+              if (listOfSources != null) { listOfSources.remove (sourceInfo) }
             }      
           }
         } finally {
@@ -474,8 +469,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       }
       
       // TODO: Randomly select some sources to send back. 
-      // Right now just rolls over the list to send back 
-      // BroadcastCS.MaxPeersInGuideResponse
+      // Right now just rolls over the listOfSources to send back 
+      // BroadcastCS.MaxPeersInGuideResponse number of possible sources
       private def selectSuitableSources(skipSourceInfo: SourceInfo): Vector[SourceInfo] = { 
         var curIndex = rollOverIndex
         var selectedSources: Vector[SourceInfo] = new Vector[SourceInfo]
@@ -637,6 +632,9 @@ case class SourceInfo (val hostAddress: String, val listenPort: Int,
   var currentLeechers = 0
   var receptionFailed = false
   var MBps: Double = BroadcastCS.MaxMBps
+  
+  assert (totalBlocks > 0)
+  var hasBlocksBitVector: BitSet = new BitSet (totalBlocks)
 }
 
 object SourceInfo {
@@ -644,7 +642,7 @@ object SourceInfo {
   val TxNotStartedRetry = -1
   val TxOverGoToHDFS = 0
   // Other constants
-  val InvalidParam = -1
+  val UnusedParam = 0
 }
 
 @serializable
@@ -752,7 +750,7 @@ private object BroadcastCS extends Logging {
   def unregisterValue (uuid: UUID) = {
     valueToGuideMap.synchronized {
       valueToGuideMap (uuid) = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
-        SourceInfo.InvalidParam, SourceInfo.InvalidParam)
+        SourceInfo.UnusedParam, SourceInfo.UnusedParam)
       logInfo ("Value unregistered from the Tracker " + valueToGuideMap)             
     }
   }
@@ -812,7 +810,7 @@ private object BroadcastCS extends Logging {
                       if (valueToGuideMap.contains (uuid)) {
                         valueToGuideMap (uuid)
                       } else SourceInfo ("", SourceInfo.TxNotStartedRetry, 
-                          SourceInfo.InvalidParam, SourceInfo.InvalidParam)
+                          SourceInfo.UnusedParam, SourceInfo.UnusedParam)
                     logInfo ("TrackMultipleValues:Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)                    
                     oos.writeObject (gInfo)
                   } catch {
