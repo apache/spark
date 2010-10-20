@@ -105,7 +105,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
 
     listOfSources = new Vector[SourceInfo]
     val masterSource = 
-      new SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes) 
+      SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes) 
     listOfSources.add (masterSource)
 
     // Register with the Tracker
@@ -114,7 +114,8 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         guidePortLock.wait 
       }
     } 
-    BroadcastCS.registerValue (uuid, GuideInfo (hostAddress, guidePort))
+    BroadcastCS.registerValue (uuid, 
+      SourceInfo (hostAddress, guidePort, totalBlocks, totalBytes))
   }
   
   private def readObject (in: ObjectInputStream) {
@@ -217,12 +218,13 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     return retVal
   }
     
-  def getGuideInfo (variableUUID: UUID): GuideInfo = {
+  def getGuideInfo (variableUUID: UUID): SourceInfo = {
     var clientSocketToTracker: Socket = null
     var oosTracker: ObjectOutputStream = null
     var oisTracker: ObjectInputStream = null
     
-    var gInfo: GuideInfo = GuideInfo ("", GuideInfo.TxOverGoToHDFS)
+    var gInfo: SourceInfo = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
+      SourceInfo.InvalidParam, SourceInfo.InvalidParam)
     
     var retriesLeft = BroadcastCS.maxRetryCount
     do {
@@ -239,9 +241,10 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         // Send UUID and receive GuideInfo
         oosTracker.writeObject (uuid)
         oosTracker.flush
-        gInfo = oisTracker.readObject.asInstanceOf[GuideInfo]
+        gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
       } catch {
-        case e: Exception => (gInfo = GuideInfo("", GuideInfo.TxOverGoToHDFS))
+        case e: Exception => (gInfo = SourceInfo("", SourceInfo.TxOverGoToHDFS, 
+          SourceInfo.InvalidParam, SourceInfo.InvalidParam))
       } finally {   
         if (oisTracker != null) { oisTracker.close }
         if (oosTracker != null) { oosTracker.close }
@@ -257,7 +260,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
   
   def receiveBroadcast (variableUUID: UUID): Boolean = {
     val gInfo = getGuideInfo (variableUUID) 
-    if (gInfo.listenPort == GuideInfo.TxOverGoToHDFS) { return false }
+    if (gInfo.listenPort == SourceInfo.TxOverGoToHDFS) { return false }
 
     // Wait until hostAddress and listenPort are created by the 
     // ServeMultipleRequests thread
@@ -283,7 +286,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       val oisMaster = 
         new ObjectInputStream (clientSocketToMaster.getInputStream)
       
-      oosMaster.writeObject(new SourceInfo (hostAddress, listenPort, -1, -1))
+      oosMaster.writeObject(SourceInfo (hostAddress, listenPort, -1, -1))
       oosMaster.flush
 
       // Receive source information from Master
@@ -448,7 +451,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             oos.flush
 
             // Add this new (if it can finish) source to the PQ of sources
-            thisWorkerInfo = new SourceInfo(sourceInfo.hostAddress, 
+            thisWorkerInfo = SourceInfo(sourceInfo.hostAddress, 
               sourceInfo.listenPort, totalBlocks, totalBytes)  
             logInfo ("Adding possible new source to listOfSources: " + thisWorkerInfo)    
             listOfSources.add (thisWorkerInfo)
@@ -636,6 +639,14 @@ case class SourceInfo (val hostAddress: String, val listenPort: Int,
   var MBps: Double = BroadcastCS.MaxMBps
 }
 
+object SourceInfo {
+  // Constants for special values of listenPort
+  val TxNotStartedRetry = -1
+  val TxOverGoToHDFS = 0
+  // Other constants
+  val InvalidParam = -1
+}
+
 @serializable
 case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) { }
 
@@ -644,15 +655,6 @@ case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
   val totalBlocks: Int, val totalBytes: Int) {  
   @transient var hasBlocks = 0
 } 
-
-@serializable
-case class GuideInfo (val hostAddress: String, val listenPort: Int) { }
-
-object GuideInfo {
-  // Constant values for special values of listenPort
-  val TxNotStartedRetry = -1
-  val TxOverGoToHDFS = 0
-}
 
 private object Broadcast extends Logging {
   private var initialized = false 
@@ -676,7 +678,7 @@ private object Broadcast extends Logging {
 private object BroadcastCS extends Logging {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
-  var valueToGuideMap = Map[UUID, GuideInfo] ()
+  var valueToGuideMap = Map[UUID, SourceInfo] ()
   
   var sourceToSpeedMap = Map[String, Double] ()
 
@@ -740,7 +742,7 @@ private object BroadcastCS extends Logging {
   
   def MaxPeersInGuideResponse = MaxPeersInGuideResponse_
   
-  def registerValue (uuid: UUID, gInfo: GuideInfo) = {
+  def registerValue (uuid: UUID, gInfo: SourceInfo) = {
     valueToGuideMap.synchronized {    
       valueToGuideMap += (uuid -> gInfo)
       logInfo ("New value registered with the Tracker " + valueToGuideMap)             
@@ -749,7 +751,8 @@ private object BroadcastCS extends Logging {
   
   def unregisterValue (uuid: UUID) = {
     valueToGuideMap.synchronized {
-      valueToGuideMap (uuid) = GuideInfo ("", GuideInfo.TxOverGoToHDFS)
+      valueToGuideMap (uuid) = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
+        SourceInfo.InvalidParam, SourceInfo.InvalidParam)
       logInfo ("Value unregistered from the Tracker " + valueToGuideMap)             
     }
   }
@@ -808,7 +811,8 @@ private object BroadcastCS extends Logging {
                     var gInfo = 
                       if (valueToGuideMap.contains (uuid)) {
                         valueToGuideMap (uuid)
-                      } else GuideInfo ("", GuideInfo.TxNotStartedRetry)
+                      } else SourceInfo ("", SourceInfo.TxNotStartedRetry, 
+                          SourceInfo.InvalidParam, SourceInfo.InvalidParam)
                     logInfo ("TrackMultipleValues:Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)                    
                     oos.writeObject (gInfo)
                   } catch {
