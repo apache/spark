@@ -27,12 +27,12 @@ trait BroadcastRecipe {
 }
 
 @serializable
-class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean) 
+class BitTorrentBroadcast[T] (@transient var value_ : T, local: Boolean) 
   extends BroadcastRecipe  with Logging {
   
   def value = value_
 
-  BroadcastCS.synchronized { BroadcastCS.values.put (uuid, value_) }
+  BroadcastBT.synchronized { BroadcastBT.values.put (uuid, value_) }
    
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
   @transient var totalBytes = -1
@@ -79,7 +79,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     hasCopyInHDFS = true    
 
     // Create a variableInfo object and store it in valueInfos
-    var variableInfo = blockifyObject (value_, BroadcastCS.blockSize)   
+    var variableInfo = blockifyObject (value_, BroadcastBT.blockSize)   
     
     guideMR = new GuideMultipleRequests
     guideMR.setDaemon (true)
@@ -118,14 +118,14 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         guidePortLock.wait 
       }
     } 
-    BroadcastCS.registerValue (uuid, 
+    BroadcastBT.registerValue (uuid, 
       SourceInfo (hostAddress, guidePort, totalBlocks, totalBytes))
   }
   
   private def readObject (in: ObjectInputStream) {
     in.defaultReadObject
-    BroadcastCS.synchronized {
-      val cachedVal = BroadcastCS.values.get (uuid)
+    BroadcastBT.synchronized {
+      val cachedVal = BroadcastBT.values.get (uuid)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
@@ -146,11 +146,11 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         // If does not succeed, then get from HDFS copy
         if (receptionSucceeded) {
           value_ = unBlockifyObject[T]
-          BroadcastCS.values.put (uuid, value_)
+          BroadcastBT.values.put (uuid, value_)
         }  else {
           val fileIn = new ObjectInputStream(BroadcastCH.openFileForReading(uuid))
           value_ = fileIn.readObject.asInstanceOf[T]
-          BroadcastCS.values.put(uuid, value_)
+          BroadcastBT.values.put(uuid, value_)
           fileIn.close
         } 
         
@@ -211,7 +211,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     var retByteArray = new Array[Byte] (totalBytes)
     for (i <- 0 until totalBlocks) {
       System.arraycopy (arrayOfBlocks(i).byteArray, 0, retByteArray, 
-        i * BroadcastCS.blockSize, arrayOfBlocks(i).byteArray.length)
+        i * BroadcastBT.blockSize, arrayOfBlocks(i).byteArray.length)
     }    
     byteArrayToObject (retByteArray)
   }
@@ -275,12 +275,12 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
     var gInfo: SourceInfo = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
       SourceInfo.UnusedParam, SourceInfo.UnusedParam)
     
-    var retriesLeft = BroadcastCS.maxRetryCount
+    var retriesLeft = BroadcastBT.maxRetryCount
     do {
       try {  
         // Connect to the tracker to find out GuideInfo
         val clientSocketToTracker = 
-          new Socket(BroadcastCS.masterHostAddress, BroadcastCS.masterTrackerPort)  
+          new Socket(BroadcastBT.masterHostAddress, BroadcastBT.masterTrackerPort)  
         val oosTracker = 
           new ObjectOutputStream (clientSocketToTracker.getOutputStream)
         oosTracker.flush
@@ -413,7 +413,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         while (keepAccepting || !hasCopyInHDFS) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (BroadcastCS.serverSocketTimout)
+            serverSocket.setSoTimeout (BroadcastBT.serverSocketTimout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
@@ -431,7 +431,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
             }
           }
         }
-        BroadcastCS.unregisterValue (uuid)
+        BroadcastBT.unregisterValue (uuid)
       } finally {
         serverSocket.close
       }
@@ -482,7 +482,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
       
       // TODO: Randomly select some sources to send back. 
       // Right now just rolls over the listOfSources to send back 
-      // BroadcastCS.MaxPeersInGuideResponse number of possible sources
+      // BroadcastBT.MaxPeersInGuideResponse number of possible sources
       private def selectSuitableSources(skipSourceInfo: SourceInfo): ListBuffer[SourceInfo] = { 
         var curIndex = rollOverIndex
         var selectedSources = ListBuffer[SourceInfo] ()
@@ -492,7 +492,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
               { selectedSources = selectedSources + listOfSources(curIndex) }
             curIndex = (curIndex + 1) % listOfSources.size
           } while (curIndex != rollOverIndex && 
-            selectedSources.size != BroadcastCS.MaxPeersInGuideResponse)
+            selectedSources.size != BroadcastBT.MaxPeersInGuideResponse)
         }
         rollOverIndex = curIndex
         return selectedSources
@@ -518,7 +518,7 @@ class ChainedStreamingBroadcast[T] (@transient var value_ : T, local: Boolean)
         while (keepAccepting) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (BroadcastCS.serverSocketTimout)
+            serverSocket.setSoTimeout (BroadcastBT.serverSocketTimout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
@@ -645,7 +645,7 @@ case class SourceInfo (val hostAddress: String, val listenPort: Int,
 
   var currentLeechers = 0
   var receptionFailed = false
-  var MBps: Double = BroadcastCS.MaxMBps
+  var MBps: Double = BroadcastBT.MaxMBps
   
   assert (totalBlocks > 0)
   var hasBlocksBitVector: BitSet = new BitSet (totalBlocks)
@@ -678,8 +678,8 @@ private object Broadcast extends Logging {
       if (!initialized) {
         // Initialization for CentralizedHDFSBroadcast
         BroadcastCH.initialize 
-        // Initialization for ChainedStreamingBroadcast
-        BroadcastCS.initialize (isMaster)
+        // Initialization for BitTorrentBroadcast
+        BroadcastBT.initialize (isMaster)
         
         initialized = true
       }
@@ -687,7 +687,7 @@ private object Broadcast extends Logging {
   }
 }
 
-private object BroadcastCS extends Logging {
+private object BroadcastBT extends Logging {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
   var valueToGuideMap = Map[UUID, SourceInfo] ()
@@ -793,7 +793,7 @@ private object BroadcastCS extends Logging {
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
       
-      serverSocket = new ServerSocket (BroadcastCS.masterTrackerPort)
+      serverSocket = new ServerSocket (BroadcastBT.masterTrackerPort)
       logInfo ("TrackMultipleValues" + serverSocket)      
       
       try {
