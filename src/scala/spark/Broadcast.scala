@@ -28,7 +28,7 @@ trait BroadcastRecipe {
 
 @serializable
 class BitTorrentBroadcast[T] (@transient var value_ : T, local: Boolean) 
-  extends BroadcastRecipe  with Logging {
+extends BroadcastRecipe  with Logging {
   
   def value = value_
 
@@ -394,7 +394,8 @@ class BitTorrentBroadcast[T] (@transient var value_ : T, local: Boolean)
     }
   }
 
-  class GuideMultipleRequests extends Thread with Logging {
+  class GuideMultipleRequests
+  extends Thread with Logging {
     override def run = {
       // TODO: Cached threadpool has 60s keep alive timer
       var threadPool = Executors.newCachedThreadPool
@@ -501,7 +502,8 @@ class BitTorrentBroadcast[T] (@transient var value_ : T, local: Boolean)
     }    
   }
 
-  class ServeMultipleRequests extends Thread with Logging {
+  class ServeMultipleRequests
+  extends Thread with Logging {
     override def run = {
       var threadPool = Executors.newCachedThreadPool
       var serverSocket: ServerSocket = null
@@ -606,7 +608,7 @@ class BitTorrentBroadcast[T] (@transient var value_ : T, local: Boolean)
 
 @serializable 
 class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean) 
-  extends BroadcastRecipe with Logging {
+extends BroadcastRecipe with Logging {
   
   def value = value_
 
@@ -673,7 +675,8 @@ case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
   @transient var hasBlocks = 0
 } 
 
-private object Broadcast extends Logging {
+private object Broadcast
+extends Logging {
   private var initialized = false 
 
   // Will be called by SparkContext or Executor before using Broadcast
@@ -692,7 +695,8 @@ private object Broadcast extends Logging {
   }
 }
 
-private object BroadcastBT extends Logging {
+private object BroadcastBT
+extends Logging {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
   var valueToGuideMap = Map[UUID, SourceInfo] ()
@@ -791,7 +795,8 @@ private object BroadcastBT extends Logging {
 //    }
 //  } 
     
-  class TrackMultipleValues extends Thread with Logging {
+  class TrackMultipleValues
+  extends Thread with Logging {
     var keepAccepting = true
     
     override def run = {
@@ -854,7 +859,8 @@ private object BroadcastBT extends Logging {
   }
 }
 
-private object BroadcastCH extends Logging {
+private object BroadcastCH
+extends Logging {
   val values = new MapMaker ().softValues ().makeMap[UUID, Any]
 
   private var initialized = false
