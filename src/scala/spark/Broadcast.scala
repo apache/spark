@@ -448,13 +448,18 @@ extends BroadcastRecipe  with Logging {
           // TODO: Who decides which blocks to move back and forth? 
                
           while (true) {
-            // Send hasBlocksBitVector
-            oosSource.writeObject(hasBlocksBitVector)
+            // Send latest SourceInfo
+            oosSource.writeObject(getLocalSourceInfo)
             oosSource.flush
             
-            // Receive hasBlocksBitVector
-            // TODO: Need to update this information in the listOfSources
-            var txHasBlocksBitVector = oisSource.readObject.asInstanceOf[BitSet]
+            // Receive latest SourceInfo from peerToTalkTo
+            var newPeerToTalkTo = oisSource.readObject.asInstanceOf[SourceInfo]
+            // Update listOfSources
+            listOfSources.synchronized {
+              if (listOfSources.contains(newPeerToTalkTo)) 
+                { listOfSources = listOfSources - newPeerToTalkTo }
+              listOfSources = listOfSources + newPeerToTalkTo
+            }
 
             val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
             arrayOfBlocks(hasBlocks) = bcBlock
@@ -652,16 +657,21 @@ extends BroadcastRecipe  with Logging {
           logInfo ("new ServeSingleRequest is running")
           
           do {
-          // Receive hasBlocksBitVector from the receiver
-          var rxHasBlocksBitVector = ois.readObject.asInstanceOf[BitSet]
-          // TODO: Update this info in listOfSources
-          
-          // Send hasBlocksBitVector to the receiver
-          oos.writeObject(hasBlocksBitVector)
-          oos.flush
-          
-          keepServing = pickAndSendBlock (rxHasBlocksBitVector)
-          // TODO: Perhaps we shouldn't close connection after only one try
+            // Receive latest SourceInfo from the receiver
+            var rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
+            // Update listOfSources
+            listOfSources.synchronized {
+              if (listOfSources.contains(rxSourceInfo)) 
+                { listOfSources = listOfSources - rxSourceInfo }
+              listOfSources = listOfSources + rxSourceInfo
+            }         
+            
+            // Send latest local SourceInfo to the receiver
+            oos.writeObject(getLocalSourceInfo)
+            oos.flush
+            
+            keepServing = pickAndSendBlock (rxSourceInfo.hasBlocksBitVector)
+            // TODO: Perhaps we shouldn't close connection after only one try
           } while (keepServing)
         } catch {
           // TODO: Need to add better exception handling here
