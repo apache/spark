@@ -6,7 +6,7 @@ import java.util.{UUID, Comparator, BitSet}
 
 import com.google.common.collect.MapMaker
 
-import java.util.concurrent.{Executors, ExecutorService}
+import java.util.concurrent.{Executors, ExecutorService, ThreadPoolExecutor}
 
 import scala.collection.mutable.{ListBuffer, Map}
 
@@ -333,67 +333,130 @@ extends BroadcastRecipe  with Logging {
     ttGuide.start
     logInfo ("TalkToGuide started")
     
-    // TODO:
-    
-
+    // Start pController to run TalkToPeer threads
+    var pcController = new PeerChatterController
+    pcController.setDaemon (true)
+    pcController.start
+    logInfo ("PeerChatterController started")
           
     return (hasBlocks == totalBlocks)
   }
 
-  class TalkToPeer (sourceInfo: SourceInfo) 
+  class PeerChatterController
   extends Thread with Logging {
-    override def run = {
-      var peerSocketToSource: Socket = null    
-      var oosSource: ObjectOutputStream = null
-      var oisSource: ObjectInputStream = null
-      
-      try {
-        // Connect to the source
-        peerSocketToSource = 
-          new Socket (sourceInfo.hostAddress, sourceInfo.listenPort)        
-        oosSource = 
-          new ObjectOutputStream (peerSocketToSource.getOutputStream)
-        oosSource.flush
-        oisSource = 
-          new ObjectInputStream (peerSocketToSource.getInputStream)
-          
-        // TODO: Who decides which blocks to move back and forth? 
-        // TODO: Letting the source decide for now
-             
-        while (true) {
-          // Send hasBlocksBitVector
-          oosSource.writeObject(hasBlocksBitVector)
-          oosSource.flush
-          
-          // Receive hasBlocksBitVector
-          // TODO: Need to update this information in the listOfSources
-          var txHasBlocksBitVector = oisSource.readObject.asInstanceOf[BitSet]
+    private var peersNowTalking = ListBuffer[SourceInfo] ()
 
-          val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
-          arrayOfBlocks(hasBlocks) = bcBlock
-          hasBlocksBitVector.set (bcBlock.blockID)
-          hasBlocks += 1
-          hasBlocksLock.synchronized {
-            hasBlocksLock.notifyAll
-          }
-          logInfo ("Received block: " + bcBlock.blockID + " " + bcBlock)
-        } 
-      } catch {
-        case e: Exception => { 
-          // TODO: Right now assuming an exception == the other end is dead
-          // Remove this pInfo from listOfSources
-          listOfSources.synchronized {
-            listOfSources = listOfSources - sourceInfo
+    override def run = {
+      // TODO: Using constant number of max peers to connect to
+      val MAX_PEERS = 4
+      // TODO: Look into ExecutorService shutdown and shutdownNow methods
+      var threadPool = 
+        Executors.newFixedThreadPool(MAX_PEERS).asInstanceOf[ThreadPoolExecutor]
+      
+      var keepWorking = true
+      while (keepWorking) {       
+        while (threadPool.getActiveCount != MAX_PEERS) {
+          var peerToTalkTo = pickPeerToTalkTo
+          if (peerToTalkTo != null) { 
+            threadPool.execute (new TalkToPeer (peerToTalkTo))
           }
         }
-      } finally {    
-        if (oisSource != null) { oisSource.close }
-        if (oosSource != null) { oosSource.close }
-        if (peerSocketToSource != null) { peerSocketToSource.close }
+        // Sleep for a while before starting some more threads
+        Thread.sleep (500)
       }
     }
-  }
+    
+    // TODO: Right now picking the one that has the most blocks this peer wants
+    private def pickPeerToTalkTo: SourceInfo = {
+      var curPeer: SourceInfo = null
+      var curMax = 0
+      
+      // Find peers that are not connected right now
+      var peersNotInUse = ListBuffer[SourceInfo] ()
+      listOfSources.synchronized {
+        peersNowTalking.synchronized {        
+          peersNotInUse = listOfSources -- peersNowTalking
+        }
+      }
+      
+      peersNotInUse.foreach { eachSource =>
+        var tempHasBlocksBitVector = hasBlocksBitVector
+        tempHasBlocksBitVector.flip (0, tempHasBlocksBitVector.size)        
+        tempHasBlocksBitVector.and (eachSource.hasBlocksBitVector)
+        
+        if (tempHasBlocksBitVector.cardinality > curMax) {
+          curPeer = eachSource
+          curMax = tempHasBlocksBitVector.cardinality
+        }
+      }
+      
+      return curPeer          
+    }
+    
+  class TalkToPeer (peerToTalkTo: SourceInfo) 
+    extends Thread with Logging {
+      override def run = {
+        var peerSocketToSource: Socket = null    
+        var oosSource: ObjectOutputStream = null
+        var oisSource: ObjectInputStream = null
+        
+        try {
+          // Connect to the source
+          peerSocketToSource = 
+            new Socket (peerToTalkTo.hostAddress, peerToTalkTo.listenPort)        
+          oosSource = 
+            new ObjectOutputStream (peerSocketToSource.getOutputStream)
+          oosSource.flush
+          oisSource = 
+            new ObjectInputStream (peerSocketToSource.getInputStream)
+            
+          // Add to peersNowTalking
+          peersNowTalking.synchronized { 
+            peersNowTalking = peersNowTalking + peerToTalkTo
+          }
+            
+          // TODO: Who decides which blocks to move back and forth? 
+               
+          while (true) {
+            // Send hasBlocksBitVector
+            oosSource.writeObject(hasBlocksBitVector)
+            oosSource.flush
+            
+            // Receive hasBlocksBitVector
+            // TODO: Need to update this information in the listOfSources
+            var txHasBlocksBitVector = oisSource.readObject.asInstanceOf[BitSet]
 
+            val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
+            arrayOfBlocks(hasBlocks) = bcBlock
+            hasBlocksBitVector.set (bcBlock.blockID)
+            hasBlocks += 1
+            hasBlocksLock.synchronized {
+              hasBlocksLock.notifyAll
+            }
+            logInfo ("Received block: " + bcBlock.blockID + " " + bcBlock)
+          } 
+        } catch {
+          case e: Exception => { 
+            // TODO: Right now assuming an exception == the other end is dead
+            // Remove this pInfo from listOfSources
+            listOfSources.synchronized {
+              listOfSources = listOfSources - peerToTalkTo
+            }
+          }
+        } finally {    
+          if (oisSource != null) { oisSource.close }
+          if (oosSource != null) { oosSource.close }
+          if (peerSocketToSource != null) { peerSocketToSource.close }
+          
+          // Delete from peersNowTalking
+          peersNowTalking.synchronized {
+            peersNowTalking = peersNowTalking - peerToTalkTo
+          }
+        }
+      }
+    }  
+  }
+  
   class GuideMultipleRequests
   extends Thread with Logging {
     override def run = {
@@ -440,7 +503,7 @@ extends BroadcastRecipe  with Logging {
     }
     
     class GuideSingleRequest (val clientSocket: Socket) 
-    extends Runnable with Logging {
+    extends Thread with Logging {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
       oos.flush
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
@@ -450,7 +513,7 @@ extends BroadcastRecipe  with Logging {
       
       private var rollOverIndex = 0
       
-      def run = {
+      override def run = {
         try {
           logInfo ("new GuideSingleRequest is running")
           // Connecting worker is sending in its information
@@ -545,14 +608,14 @@ extends BroadcastRecipe  with Logging {
     }
     
     class ServeSingleRequest (val clientSocket: Socket) 
-    extends Runnable with Logging {
+    extends Thread with Logging {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
       oos.flush
       private val ois = new ObjectInputStream (clientSocket.getInputStream)
       
       var keepServing = true
       
-      def run  = {
+      override def run  = {
         try {
           logInfo ("new ServeSingleRequest is running")
           
@@ -823,7 +886,7 @@ extends Logging {
 
           if (clientSocket != null) {
             try {            
-              threadPool.execute (new Runnable {
+              threadPool.execute (new Thread {
                 override def run = {
                   val oos = new ObjectOutputStream (clientSocket.getOutputStream)
                   oos.flush
