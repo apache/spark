@@ -53,7 +53,7 @@ extends BroadcastRecipe  with Logging {
   // Used only in Master
   @transient var guideMR: GuideMultipleRequests = null
   
-  // Used only in Slaves
+  // Used only in Workers
   @transient var ttGuide: TalkToGuide = null
 
   @transient var hostAddress = InetAddress.getLocalHost.getHostAddress
@@ -76,7 +76,7 @@ extends BroadcastRecipe  with Logging {
     // val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
     // out.writeObject (value_)
     // out.close    
-    hasCopyInHDFS = true    
+    hasCopyInHDFS = true
 
     // Create a variableInfo object and store it in valueInfos
     var variableInfo = blockifyObject (value_, BroadcastBT.blockSize)   
@@ -88,35 +88,38 @@ extends BroadcastRecipe  with Logging {
     totalBlocks = variableInfo.totalBlocks
     hasBlocks = variableInfo.totalBlocks
     
+    // Initialize to all 1
     hasBlocksBitVector = new BitSet (totalBlocks)
     hasBlocksBitVector.set (0, totalBlocks)    
    
-    while (listenPort == -1) { 
-      listenPortLock.synchronized {
-        listenPortLock.wait 
-      }
-    } 
-
     val masterSource = 
-      SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes) 
+      SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes)
+     
     listOfSources = listOfSources + masterSource
 
-    // Register with the Tracker
-    while (guidePort == -1) { 
-      guidePortLock.synchronized {
-        guidePortLock.wait 
-      }
-    }
-    
     guideMR = new GuideMultipleRequests
     guideMR.setDaemon (true)
     guideMR.start
     logInfo ("GuideMultipleRequests started")
     
+    // Must always come AFTER guideMR is created
+    while (guidePort == -1) { 
+      guidePortLock.synchronized {
+        guidePortLock.wait 
+      }
+    }
+
     serveMR = new ServeMultipleRequests
     serveMR.setDaemon (true)
     serveMR.start
     logInfo ("ServeMultipleRequests started")
+
+    // Must always come AFTER serveMR is created
+    while (listenPort == -1) { 
+      listenPortLock.synchronized {
+        listenPortLock.wait 
+      }
+    } 
 
     BroadcastBT.registerValue (uuid, 
       SourceInfo (hostAddress, guidePort, totalBlocks, totalBytes))
@@ -126,14 +129,13 @@ extends BroadcastRecipe  with Logging {
     in.defaultReadObject
     BroadcastBT.synchronized {
       val cachedVal = BroadcastBT.values.get (uuid)
+      
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
-        // Only a single worker (the first one) in the same node can ever be 
-        // here. The rest will always get the value ready 
+        // Only the first worker in a node can ever be here. 
 
-        // Initializing everything because Master will only send null/0 values
-        initializeSlaveVariables
+        initializeWorkerVariables
         
         serveMR = new ServeMultipleRequests
         serveMR.setDaemon (true)
@@ -160,7 +162,8 @@ extends BroadcastRecipe  with Logging {
     }
   }
   
-  private def initializeSlaveVariables = {
+  // Initialize variables in the worker node. Master sends everything as 0/null 
+  private def initializeWorkerVariables = {
     arrayOfBlocks = null
     hasBlocksBitVector = null
     totalBytes = -1
