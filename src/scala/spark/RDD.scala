@@ -13,9 +13,9 @@ import mesos._
 
 import com.google.common.collect.MapMaker
 
+
 @serializable
-abstract class RDD[T: ClassManifest](
-    @transient sc: SparkContext) {
+abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   def splits: Array[Split]
   def iterator(split: Split): Iterator[T]
   def preferredLocations(split: Split): Seq[String]
@@ -26,7 +26,6 @@ abstract class RDD[T: ClassManifest](
 
   def map[U: ClassManifest](f: T => U) = new MappedRDD(this, sc.clean(f))
   def filter(f: T => Boolean) = new FilteredRDD(this, sc.clean(f))
-  def aggregateSplit() = new SplitRDD(this)
   def cache() = new CachedRDD(this)
 
   def sample(withReplacement: Boolean, frac: Double, seed: Int) =
@@ -78,14 +77,22 @@ abstract class RDD[T: ClassManifest](
     case _ => throw new UnsupportedOperationException("empty collection")
   }
 
-  def count(): Long =
-    try { map(x => 1L).reduce(_+_) }
-    catch { case e: UnsupportedOperationException => 0L }
+  def count(): Long = {
+    try { 
+      map(x => 1L).reduce(_+_) 
+    } catch { 
+      case e: UnsupportedOperationException => 0L // No elements in RDD
+    }
+  }
 
   def union(other: RDD[T]) = new UnionRDD(sc, Array(this, other))
-  def cartesian[U: ClassManifest](other: RDD[U]) = new CartesianRDD(sc, this, other)
 
   def ++(other: RDD[T]) = this.union(other)
+
+  def splitRdd() = new SplitRDD(this)
+
+  def cartesian[U: ClassManifest](other: RDD[U]) =
+    new CartesianRDD(sc, this, other)
 }
 
 @serializable
