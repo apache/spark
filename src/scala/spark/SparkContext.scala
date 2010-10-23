@@ -20,8 +20,9 @@ class SparkContext(master: String, frameworkName: String) extends Logging {
 
   // TODO: Keep around a weak hash map of values to Cached versions?
   // def broadcast[T](value: T) = new CentralizedHDFSBroadcast(value, local)
-  def broadcast[T](value: T) = new ChainedStreamingBroadcast(value, local)
-
+  // def broadcast[T](value: T) = new ChainedStreamingBroadcast(value, local)
+  def broadcast[T](value: T) = new BitTorrentBroadcast(value, local)
+  
   def textFile(path: String) = new HdfsTextFile(this, path)
 
   val LOCAL_REGEX = """local\[([0-9]+)\]""".r
