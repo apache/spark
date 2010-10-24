@@ -4,8 +4,6 @@ import java.io._
 import java.net._
 import java.util.{UUID, PriorityQueue, Comparator}
 
-import com.google.common.collect.MapMaker
-
 import java.util.concurrent.{Executors, ExecutorService}
 
 import scala.actors.Actor
@@ -232,8 +230,7 @@ private object Broadcast {
 }
 
 private object BroadcastCS extends Logging {
-  val values = new MapMaker ().softValues ().makeMap[UUID, Any]
-  // val valueInfos = new MapMaker ().softValues ().makeMap[UUID, Any]  
+  val values = Cache.newKeySpace()
 
   // private var valueToPort = Map[UUID, Int] ()
 
@@ -739,7 +736,7 @@ private object BroadcastCS extends Logging {
 }
 
 private object BroadcastCH extends Logging {
-  val values = new MapMaker ().softValues ().makeMap[UUID, Any]
+  val values = Cache.newKeySpace()
 
   private var initialized = false
 

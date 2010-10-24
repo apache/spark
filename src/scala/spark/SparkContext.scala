@@ -30,8 +30,9 @@ extends Logging {
 
   private val isLocal = scheduler.isInstanceOf[LocalScheduler]
 
-  // Start the scheduler and the broadcast system
+  // Start the scheduler, the cache and the broadcast system
   scheduler.start()
+  Cache.initialize()
   Broadcast.initialize(true)
 
   // Methods for creating RDDs

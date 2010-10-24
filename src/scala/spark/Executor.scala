@@ -21,8 +21,9 @@ class Executor extends mesos.Executor with Logging {
     val props = Utils.deserialize[Array[(String, String)]](args.getData)
     for ((key, value) <- props)
       System.setProperty(key, value)
-    
-    // Initialize broadcast system (uses some properties read above)
+
+    // Initialize cache and broadcast system (uses some properties read above)
+    Cache.initialize()
     Broadcast.initialize(false)
     
     // Create our ClassLoader (using spark properties) and set it on this thread

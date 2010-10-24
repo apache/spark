@@ -1,7 +1,6 @@
 package spark
 
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.ConcurrentHashMap
 import java.util.HashSet
 import java.util.Random
 
@@ -10,8 +9,6 @@ import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 
 import mesos._
-
-import com.google.common.collect.MapMaker
 
 
 @serializable
@@ -267,7 +264,7 @@ private object CachedRDD {
   def newId() = nextId.getAndIncrement()
 
   // Stores map results for various splits locally (on workers)
-  val cache = new MapMaker().softValues().makeMap[String, AnyRef]()
+  val cache = Cache.newKeySpace()
 
   // Remembers which splits are currently being loaded (on workers)
   val loading = new HashSet[String]
