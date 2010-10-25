@@ -44,9 +44,9 @@ extends BroadcastRecipe  with Logging {
   @transient var totalBlocksLock = new Object
   @transient var hasBlocksLock = new Object
   
-  @transient var listOfSources = ListBuffer[SourceInfo] ()
-  
+  @transient var listOfSources = ListBuffer[SourceInfo] ()  
   @transient var hasBlocksBitVector: BitSet = null
+  @transient var numCopiesSent: Array[Int] = null
 
   @transient var serveMR: ServeMultipleRequests = null 
   
@@ -85,7 +85,10 @@ extends BroadcastRecipe  with Logging {
     
     // Guide has all the blocks
     hasBlocksBitVector = new BitSet (totalBlocks)
-    hasBlocksBitVector.set (0, totalBlocks)    
+    hasBlocksBitVector.set (0, totalBlocks)
+    
+    // Guide still hasn't sent any block
+    numCopiesSent = new Array[Int] (totalBlocks)
    
     guideMR = new GuideMultipleRequests
     guideMR.setDaemon (true)
@@ -168,6 +171,7 @@ extends BroadcastRecipe  with Logging {
   private def initializeWorkerVariables = {
     arrayOfBlocks = null
     hasBlocksBitVector = null
+    numCopiesSent = null
     totalBytes = -1
     totalBlocks = -1
     hasBlocks = 0
@@ -368,6 +372,7 @@ extends BroadcastRecipe  with Logging {
     totalBlocks = gInfo.totalBlocks
     arrayOfBlocks = new Array[BroadcastBlock] (totalBlocks)
     hasBlocksBitVector = new BitSet (totalBlocks)
+    numCopiesSent = new Array[Int] (totalBlocks)
     totalBlocksLock.synchronized {
       totalBlocksLock.notifyAll
     }
@@ -724,23 +729,38 @@ extends BroadcastRecipe  with Logging {
         }
       }
 
-      // TODO: Right now picking the first block that matches
+      // Right now picking the rarest first block 
       private def pickAndSendBlock (rxHasBlocksBitVector: BitSet): Boolean = {
+        var blockIndex = -1
+        var minCopies = Int.MaxValue
+        var nextIndex = -1
+        
         logInfo ("Picking a block to send...")
-        // Figure out which blocks to send
-        rxHasBlocksBitVector.flip (0, rxHasBlocksBitVector.size)        
-        hasBlocksBitVector.synchronized {          
+        
+        // Figure out which blocks the receiver doesn't have
+        rxHasBlocksBitVector.flip (0, rxHasBlocksBitVector.size)
+        hasBlocksBitVector.synchronized {
           rxHasBlocksBitVector.and (hasBlocksBitVector)
         }
         
-        var nextIndex = rxHasBlocksBitVector.nextSetBit (0)        
-        if (nextIndex == -1) { return false }
+        // Traverse over all the blocks
+        do {
+          nextIndex = rxHasBlocksBitVector.nextSetBit(nextIndex + 1)
+          if (nextIndex != -1 && numCopiesSent(nextIndex) < minCopies) {
+            minCopies = numCopiesSent(nextIndex)
+            numCopiesSent(nextIndex) = numCopiesSent(nextIndex) + 1
+            blockIndex = nextIndex
+          }
+        } while (nextIndex != -1)
+        
+        if (blockIndex == -1) { return false }
         
         try {
-          oos.writeObject (arrayOfBlocks(nextIndex))
+          oos.writeObject (arrayOfBlocks(blockIndex))
           oos.flush
         } catch { case e: Exception => { } }
-        logInfo ("Sent block: " + nextIndex + " " + arrayOfBlocks(nextIndex))
+        
+        logInfo ("Sent block: " + blockIndex + " " + arrayOfBlocks(blockIndex))
         return true
       }    
     } 
@@ -749,8 +769,7 @@ extends BroadcastRecipe  with Logging {
 
 @serializable 
 class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean) 
-extends BroadcastRecipe with Logging {
-  
+extends BroadcastRecipe with Logging {  
   def value = value_
 
   BroadcastCH.synchronized { BroadcastCH.values.put(uuid, value_) }
