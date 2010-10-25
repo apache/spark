@@ -433,11 +433,7 @@ extends BroadcastRecipe  with Logging {
       
       // Find peers that are not connected right now
       var peersNotInUse = ListBuffer[SourceInfo] ()
-      listOfSources.synchronized {
-        peersNowTalking.synchronized {        
-          peersNotInUse = listOfSources -- peersNowTalking
-        }
-      }
+      synchronized { peersNotInUse = listOfSources -- peersNowTalking }
       
       peersNotInUse.foreach { eachSource =>
         var tempHasBlocksBitVector: BitSet = null
