@@ -44,7 +44,6 @@ extends BroadcastRecipe  with Logging {
   @transient var listenPortLock = new Object
   @transient var guidePortLock = new Object
   @transient var totalBlocksLock = new Object
-  @transient var hasBlocksLock = new Object
   
   @transient var listOfSources = ListBuffer[SourceInfo] ()  
   @transient var hasBlocksBitVector: BitSet = null
@@ -182,7 +181,6 @@ extends BroadcastRecipe  with Logging {
     
     listenPortLock = new Object
     totalBlocksLock = new Object
-    hasBlocksLock = new Object
 
     serveMR = null
     ttGuide = null
@@ -524,9 +522,6 @@ extends BroadcastRecipe  with Logging {
                 hasBlocksBitVector.set (bcBlock.blockID)
               }
               hasBlocks += 1
-              hasBlocksLock.synchronized {
-                hasBlocksLock.notifyAll
-              }
               logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo)
             }
           }
@@ -606,7 +601,7 @@ extends BroadcastRecipe  with Logging {
       }
     }
     
-    class GuideSingleRequest (val clientSocket: Socket) 
+    class GuideSingleRequest (val clientSocket: Socket)
     extends Thread with Logging {
       private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
       oos.flush
