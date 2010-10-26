@@ -390,12 +390,11 @@ extends BroadcastRecipe  with Logging {
     pcController.start
     logInfo ("PeerChatterController started...")
     
-    // TODO: Must fix this. Right now blocking here so that others can finish
-    while (true) {Thread.sleep(1234)}
-    
-    logInfo ("NEVER HERE")
-    
-    return (hasBlocks == totalBlocks)
+    // TODO: Must fix this. This might never break if broadcast fails. 
+    // We should be able to break and send false. Also need to kill threads
+    while (hasBlocks != totalBlocks) { Thread.sleep(1234) }
+   
+    return true
   }
 
   class PeerChatterController
@@ -497,7 +496,7 @@ extends BroadcastRecipe  with Logging {
           }
 
           val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
-          arrayOfBlocks(hasBlocks) = bcBlock
+          arrayOfBlocks(bcBlock.blockID) = bcBlock
           hasBlocksBitVector.synchronized {
             hasBlocksBitVector.set (bcBlock.blockID)
           }
