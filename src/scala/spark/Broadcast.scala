@@ -305,7 +305,7 @@ extends BroadcastRecipe  with Logging {
 
         // TODO: DO NOT use constant sleep value here
         // TODO: Guide should send back a backoff time, somehow
-        Thread.sleep (1234)        
+        Thread.sleep (100)        
       }      
     }          
   }
@@ -441,14 +441,16 @@ extends BroadcastRecipe  with Logging {
       
       // Find peers that are not connected right now
       var peersNotInUse = ListBuffer[SourceInfo] ()
-      synchronized { peersNotInUse = listOfSources -- peersNowTalking }
+      synchronized {
+        peersNotInUse = listOfSources -- peersNowTalking
+      }
       
       peersNotInUse.foreach { eachSource =>
         var tempHasBlocksBitVector: BitSet = null
         hasBlocksBitVector.synchronized {
           tempHasBlocksBitVector = hasBlocksBitVector.clone.asInstanceOf[BitSet]
         }
-        tempHasBlocksBitVector.flip (0, tempHasBlocksBitVector.size)  
+        tempHasBlocksBitVector.flip (0, tempHasBlocksBitVector.size)
         tempHasBlocksBitVector.and (eachSource.hasBlocksBitVector)
         
         if (tempHasBlocksBitVector.cardinality > curMax) {
@@ -460,7 +462,7 @@ extends BroadcastRecipe  with Logging {
       if (curPeer != null)
         logInfo ("Peer chosen: " + curPeer + " with " + curPeer.hasBlocksBitVector)
       else
-        logInfo ("NO peer chosen...")
+        logInfo ("No peer chosen...")
       
       return curPeer
     }
@@ -503,15 +505,17 @@ extends BroadcastRecipe  with Logging {
           // TODO: There is a problem with closing this way
           while (hasBlocks < totalBlocks) {
             val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
-            arrayOfBlocks(bcBlock.blockID) = bcBlock
-            hasBlocksBitVector.synchronized {
-              hasBlocksBitVector.set (bcBlock.blockID)
+            if (!hasBlocksBitVector.get(bcBlock.blockID)) {
+              arrayOfBlocks(bcBlock.blockID) = bcBlock
+              hasBlocksBitVector.synchronized {
+                hasBlocksBitVector.set (bcBlock.blockID)
+              }
+              hasBlocks += 1
+              hasBlocksLock.synchronized {
+                hasBlocksLock.notifyAll
+              }
+              logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo)
             }
-            hasBlocks += 1
-            hasBlocksLock.synchronized {
-              hasBlocksLock.notifyAll
-            }
-            logInfo ("Received block: " + bcBlock.blockID + " " + bcBlock)
           }
         } catch {
           case e: Exception => { 
@@ -725,7 +729,12 @@ extends BroadcastRecipe  with Logging {
           var keepSending = true
           
           while (keepSending && curTime - startTime < MAX_MILLIS_TO_CHAT) {
-            keepSending = pickAndSendBlock (rxSourceInfo.hasBlocksBitVector)
+            val sentBlock = pickAndSendBlock (rxSourceInfo.hasBlocksBitVector)
+            if (sentBlock < 0) {
+              keepSending = false 
+            } else {
+              rxSourceInfo.hasBlocksBitVector.set (sentBlock)
+            }
             curTime = System.currentTimeMillis
           }
         } catch {
@@ -745,7 +754,7 @@ extends BroadcastRecipe  with Logging {
       }
 
       // Right now picking the rarest first block 
-      private def pickAndSendBlock (rxHasBlocksBitVector: BitSet): Boolean = {
+      private def pickAndSendBlock (rxHasBlocksBitVector: BitSet): Int = {
         var blockIndex = -1
         var minCopies = Int.MaxValue
         var nextIndex = -1
@@ -772,24 +781,19 @@ extends BroadcastRecipe  with Logging {
           } while (nextIndex != -1)
         }
         
-        if (blockIndex == -1) { 
+        if (blockIndex < 0) { 
           logInfo ("No block to send...")
-          return false 
+        } else {
+          try {
+            oos.writeObject (arrayOfBlocks(blockIndex))
+            oos.flush
+          } catch { 
+            case e: Exception => { } 
+          }
+          logInfo ("Sent block: " + blockIndex + " to " + clientSocket)
         }
         
-        try {
-          oos.writeObject (arrayOfBlocks(blockIndex))
-          oos.flush
-          
-          // Update local copy to avoid duplication
-          rxHasBlocksBitVector.set (blockIndex)
-        } catch { 
-          case e: Exception => { } 
-        }
-        
-        logInfo ("Sent block: " + blockIndex + " " + arrayOfBlocks(blockIndex))
-        
-        return true
+        return blockIndex
       }    
     } 
   }  
