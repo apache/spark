@@ -2,7 +2,7 @@ package spark
 
 import java.io._
 import java.net._
-import java.util.{UUID, Comparator, BitSet}
+import java.util.{BitSet, Comparator, Timer, TimerTask, UUID}
 
 import com.google.common.collect.MapMaker
 
@@ -413,14 +413,13 @@ extends BroadcastRecipe  with Logging {
     private var peersNowTalking = ListBuffer[SourceInfo] ()
 
     override def run = {
-      // TODO: Using constant number of max peers to connect to
-      val MAX_PEERS = 4
-      // TODO: Look into ExecutorService shutdown and shutdownNow methods
       var threadPool = 
-        Executors.newFixedThreadPool(MAX_PEERS).asInstanceOf[ThreadPoolExecutor]
+        Executors.newFixedThreadPool(
+          BroadcastBT.MaxTxPeers).asInstanceOf[ThreadPoolExecutor]
       
       while (hasBlocks < totalBlocks) {
-        var numThreadsToCreate = Math.min (listOfSources.size, MAX_PEERS) - 
+        var numThreadsToCreate = 
+          Math.min (listOfSources.size, BroadcastBT.MaxTxPeers) - 
           threadPool.getActiveCount
 
         while(numThreadsToCreate > 0 && hasBlocks < totalBlocks) {
@@ -480,10 +479,22 @@ extends BroadcastRecipe  with Logging {
     
   class TalkToPeer (peerToTalkTo: SourceInfo)
     extends Thread with Logging {
+      private var peerSocketToSource: Socket = null
+      private var oosSource: ObjectOutputStream = null
+      private var oisSource: ObjectInputStream = null     
+
       override def run = {
-        var peerSocketToSource: Socket = null    
-        var oosSource: ObjectOutputStream = null
-        var oisSource: ObjectInputStream = null
+        
+        // Setup the timeout mechanism
+        var timeOutTask = new TimerTask {
+          override def run = {
+            cleanUpConnections
+          }
+        }
+        
+        // TODO: Fix a value for timeout timer
+        var timeOutTimer = new Timer
+        timeOutTimer.schedule (timeOutTask, 1 * 1000)
         
         logInfo ("TalkToPeer started... => " + peerToTalkTo)
         
@@ -500,19 +511,23 @@ extends BroadcastRecipe  with Logging {
           // TODO: Who decides which blocks to move back and forth? 
           // TODO: Should we transfer multiple instead of just one?
           
-          // Send latest SourceInfo
-          oosSource.writeObject(getLocalSourceInfo)
-          oosSource.flush
-          
           // Receive latest SourceInfo from peerToTalkTo
           var newPeerToTalkTo = oisSource.readObject.asInstanceOf[SourceInfo]
           // Update listOfSources
           listOfSources.synchronized {
-            if (listOfSources.contains(newPeerToTalkTo))
-              { listOfSources = listOfSources - newPeerToTalkTo }
+            if (listOfSources.contains(newPeerToTalkTo)) { 
+              listOfSources = listOfSources - newPeerToTalkTo 
+            }
             listOfSources = listOfSources + newPeerToTalkTo
           }
 
+          // Turn the timer OFF, if the sender responds before timeout
+          timeOutTimer.cancel
+
+          // Send latest SourceInfo
+          oosSource.writeObject(getLocalSourceInfo)
+          oosSource.flush
+          
           // TODO: There is a problem with closing this way
           while (hasBlocks < totalBlocks) {
             val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
@@ -536,22 +551,26 @@ extends BroadcastRecipe  with Logging {
 //              listOfSources = listOfSources - peerToTalkTo
 //            }
           }
-        } finally {    
-          if (oisSource != null) { 
-            oisSource.close 
-          }
-          if (oosSource != null) { 
-            oosSource.close 
-          }
-          if (peerSocketToSource != null) { 
-            peerSocketToSource.close 
-          }
-          
-          // Delete from peersNowTalking
-          peersNowTalking.synchronized {
-            peersNowTalking = peersNowTalking - peerToTalkTo
-          }
+        } finally {
+          cleanUpConnections
         }
+      }
+      
+      private def cleanUpConnections = {
+        if (oisSource != null) { 
+          oisSource.close 
+        }
+        if (oosSource != null) { 
+          oosSource.close 
+        }
+        if (peerSocketToSource != null) { 
+          peerSocketToSource.close 
+        }
+        
+        // Delete from peersNowTalking
+        peersNowTalking.synchronized {
+          peersNowTalking = peersNowTalking - peerToTalkTo
+        }        
       }
     }  
   }
@@ -671,12 +690,17 @@ extends BroadcastRecipe  with Logging {
   class ServeMultipleRequests
   extends Thread with Logging {
     override def run = {
-      var threadPool = Executors.newCachedThreadPool
-      var serverSocket: ServerSocket = null
-
-      serverSocket = new ServerSocket (0) 
+      // TODO: Look into ExecutorService shutdown and shutdownNow methods
+      // TODO: Not sure if this will be able to fix the number of outgoing links
+      // We should have a timeout mechanism on the receiver side
+      var threadPool = 
+        Executors.newFixedThreadPool(
+          BroadcastBT.MaxRxPeers).asInstanceOf[ThreadPoolExecutor]
+    
+      var serverSocket = new ServerSocket (0) 
       listenPort = serverSocket.getLocalPort
-      logInfo ("ServeMultipleRequests " + serverSocket)
+
+      logInfo ("ServeMultipleRequests started with " + serverSocket)
       
       listenPortLock.synchronized {
         listenPortLock.notifyAll
@@ -701,7 +725,9 @@ extends BroadcastRecipe  with Logging {
               threadPool.execute (new ServeSingleRequest (clientSocket))
             } catch {
               // In failure, close socket here; else, the thread will close it
-              case ioe: IOException => clientSocket.close
+              case ioe: IOException => {                
+                clientSocket.close
+              }
             }
           }
         }
@@ -712,7 +738,7 @@ extends BroadcastRecipe  with Logging {
       }
     }
     
-    class ServeSingleRequest (val clientSocket: Socket) 
+    class ServeSingleRequest (val clientSocket: Socket)
     extends Thread with Logging {
       // TODO: This has to be fixed somehow
       private val MAX_MILLIS_TO_CHAT = 50
@@ -725,6 +751,12 @@ extends BroadcastRecipe  with Logging {
       
       override def run  = {
         try {
+          // Send latest local SourceInfo to the receiver
+          // In the case of receiver timeout and connection close, this will 
+          // throw a java.net.SocketException: Broken pipe
+          oos.writeObject(getLocalSourceInfo)
+          oos.flush
+          
           // Receive latest SourceInfo from the receiver
           val rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
           
@@ -738,11 +770,8 @@ extends BroadcastRecipe  with Logging {
             listOfSources = listOfSources + rxSourceInfo
           }         
           
-          // Send latest local SourceInfo to the receiver
-          oos.writeObject(getLocalSourceInfo)
-          oos.flush
-          
-          // TODO: NOT the most efficient way to do time-based break; but using timer can cause a break in the middle :-S
+          // TODO: NOT the most efficient way to do time-based break; 
+          // but using timer can cause a break in the middle :-S
           val startTime = System.currentTimeMillis
           var curTime = startTime
           var keepSending = true
@@ -767,6 +796,7 @@ extends BroadcastRecipe  with Logging {
         } finally {
           logInfo ("ServeSingleRequest is closing streams and sockets")
           ois.close
+          // TODO: The following line causes a "java.net.SocketException: Socket closed" 
           oos.close
           clientSocket.close
         }
@@ -934,6 +964,9 @@ extends Logging {
   private val MaxMBps_ = 125.0 
   
   private var MaxPeersInGuideResponse_ = 4
+  
+  private var MaxRxPeers_ = 4
+  private var MaxTxPeers_ = 4
 
   def initialize (isMaster__ : Boolean) {
     synchronized {
@@ -948,8 +981,14 @@ extends Logging {
           System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
         serverSocketTimout_ = 
           System.getProperty ("spark.broadcast.serverSocketTimout", "50000").toInt
+
         MaxPeersInGuideResponse_ = 
           System.getProperty ("spark.broadcast.MaxPeersInGuideResponse", "4").toInt
+
+        MaxRxPeers_ = 
+          System.getProperty ("spark.broadcast.MaxRxPeers", "4").toInt
+        MaxTxPeers_ = 
+          System.getProperty ("spark.broadcast.MaxTxPeers", "4").toInt
 
         isMaster_ = isMaster__        
                   
@@ -976,6 +1015,9 @@ extends Logging {
   def MaxMBps = MaxMBps_
   
   def MaxPeersInGuideResponse = MaxPeersInGuideResponse_
+  
+  def MaxRxPeers = MaxRxPeers_
+  def MaxTxPeers = MaxTxPeers_   
   
   def registerValue (uuid: UUID, gInfo: SourceInfo) = {
     valueToGuideMap.synchronized {    
