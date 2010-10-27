@@ -37,6 +37,9 @@ extends BroadcastRecipe  with Logging {
   }
    
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
+  @transient var hasBlocksBitVector: BitSet = null
+  @transient var numCopiesSent: Array[Int] = null
+  @transient var blockStatus: Array[Int] = null
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
   @transient var hasBlocks = 0
@@ -46,10 +49,8 @@ extends BroadcastRecipe  with Logging {
   @transient var totalBlocksLock = new Object
   
   @transient var listOfSources = ListBuffer[SourceInfo] ()  
-  @transient var hasBlocksBitVector: BitSet = null
-  @transient var numCopiesSent: Array[Int] = null
 
-  @transient var serveMR: ServeMultipleRequests = null 
+  @transient var serveMR: ServeMultipleRequests = null
   
   // Used only in Master
   @transient var guideMR: GuideMultipleRequests = null
@@ -92,6 +93,12 @@ extends BroadcastRecipe  with Logging {
     
     // Guide still hasn't sent any block
     numCopiesSent = new Array[Int] (totalBlocks)
+    
+    // Default status of all blocks in Guide is BroadcastBlock.HaveIt
+    blockStatus = new Array[Int] (totalBlocks)
+    (0 until totalBlocks).foreach { curIndex =>
+      blockStatus(curIndex) = BroadcastBlock.HaveIt
+    }
    
     guideMR = new GuideMultipleRequests
     guideMR.setDaemon (true)
@@ -175,6 +182,7 @@ extends BroadcastRecipe  with Logging {
     arrayOfBlocks = null
     hasBlocksBitVector = null
     numCopiesSent = null
+    blockStatus = null
     totalBytes = -1
     totalBlocks = -1
     hasBlocks = 0
@@ -383,6 +391,7 @@ extends BroadcastRecipe  with Logging {
     arrayOfBlocks = new Array[BroadcastBlock] (totalBlocks)
     hasBlocksBitVector = new BitSet (totalBlocks)
     numCopiesSent = new Array[Int] (totalBlocks)
+    blockStatus = new Array[Int] (totalBlocks)
     totalBlocksLock.synchronized {
       totalBlocksLock.notifyAll
     }
@@ -509,9 +518,6 @@ extends BroadcastRecipe  with Logging {
           oisSource = 
             new ObjectInputStream (peerSocketToSource.getInputStream)
             
-          // TODO: Who decides which blocks to move back and forth? 
-          // TODO: Should we transfer multiple instead of just one?
-          
           // Receive latest SourceInfo from peerToTalkTo
           var newPeerToTalkTo = oisSource.readObject.asInstanceOf[SourceInfo]
           // Update listOfSources
@@ -536,6 +542,9 @@ extends BroadcastRecipe  with Logging {
               arrayOfBlocks(bcBlock.blockID) = bcBlock
               hasBlocksBitVector.synchronized {
                 hasBlocksBitVector.set (bcBlock.blockID)
+              }
+              blockStatus.synchronized {
+                blockStatus (bcBlock.blockID) = BroadcastBlock.HaveIt
               }
               hasBlocks += 1
               logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo)
@@ -803,7 +812,7 @@ extends BroadcastRecipe  with Logging {
         }
       }
 
-      // Right now picking the rarest first block 
+      // Right now picking the rarest first block
       private def pickAndSendBlock (rxHasBlocksBitVector: BitSet): Int = {
         var blockIndex = -1
         var minCopies = Int.MaxValue
@@ -911,6 +920,13 @@ object SourceInfo {
 
 @serializable
 case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) { }
+
+object BroadcastBlock {
+  // Constants to express different states of a BroadcastBlock
+  val DontHaveIt = 0
+  val HaveIt = 1
+  val WillHaveIt = 2
+}
 
 @serializable
 case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock], 
