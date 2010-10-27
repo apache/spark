@@ -1017,7 +1017,7 @@ extends Logging {
           System.getProperty ("spark.broadcast.ServerSocketTimout", "50000").toInt
 
         MinKnockInterval_ = 
-          System.getProperty ("spark.broadcast.MinKnockInterval", "100").toInt
+          System.getProperty ("spark.broadcast.MinKnockInterval", "500").toInt
         MaxKnockInterval_ = 
           System.getProperty ("spark.broadcast.MaxKnockInterval", "999").toInt
 
@@ -1030,9 +1030,9 @@ extends Logging {
           System.getProperty ("spark.broadcast.MaxTxPeers", "4").toInt
 
         MaxChatTime_ = 
-          System.getProperty ("spark.broadcast.MaxChatTime", "4").toInt
+          System.getProperty ("spark.broadcast.MaxChatTime", "250").toInt
         MaxChatBlocks_ = 
-          System.getProperty ("spark.broadcast.MaxChatBlocks", "4").toInt        
+          System.getProperty ("spark.broadcast.MaxChatBlocks", "1024").toInt        
 
         isMaster_ = isMaster__        
                   
