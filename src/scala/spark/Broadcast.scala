@@ -272,8 +272,7 @@ extends BroadcastRecipe  with Logging {
       var oosGuide: ObjectOutputStream = null
       var oisGuide: ObjectInputStream = null
 
-      // TODO: Do we need a breaking mechanism out of this infinite loop?
-      while (true) {
+      while (hasBlocks < totalBlocks) {
         clientSocketToGuide = new Socket(gInfo.hostAddress, gInfo.listenPort)
         oosGuide = new ObjectOutputStream (clientSocketToGuide.getOutputStream)      
         oosGuide.flush
@@ -289,8 +288,7 @@ extends BroadcastRecipe  with Logging {
         
         logInfo("Received suitableSources from Master " + suitableSources)
         
-        // Update local list of sources by adding or replacing
-        // TODO: There might be some contradiciton on the use of listOfSources
+        // Update local list of known sources by adding or replacing
         listOfSources.synchronized {
           suitableSources.foreach { srcInfo =>
             // Removing old copy of srcInfo to be replaced with a new one
