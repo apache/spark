@@ -58,6 +58,9 @@ extends BroadcastRecipe  with Logging {
   // Used only in Workers
   @transient var ttGuide: TalkToGuide = null
 
+  @transient var rxSpeeds = new SpeedTracker
+  @transient var txSpeeds = new SpeedTracker
+
   @transient var hostAddress = InetAddress.getLocalHost.getHostAddress
   @transient var listenPort = -1    
   @transient var guidePort = -1
@@ -192,6 +195,9 @@ extends BroadcastRecipe  with Logging {
 
     serveMR = null
     ttGuide = null
+
+    rxSpeeds = new SpeedTracker
+    txSpeeds = new SpeedTracker
 
     hostAddress = InetAddress.getLocalHost.getHostAddress
     listenPort = -1
@@ -555,6 +561,8 @@ extends BroadcastRecipe  with Logging {
                 blockStatus (bcBlock.blockID) = BroadcastBlock.HaveIt
               }
               hasBlocks += 1
+              
+              rxSpeeds.addDataPoint (peerToTalkTo, receptionTime)
               logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
             }
             
@@ -812,7 +820,7 @@ extends BroadcastRecipe  with Logging {
           }
         } catch {
           // TODO: Need to add better exception handling here
-          // If something went wrong, e.g., the worker at the other end died etc. 
+          // If something went wrong, e.g., the worker at the other end died etc.
           // then close everything up
           // Exception can happen if the receiver stops receiving
           case e: Exception => { 
@@ -948,6 +956,32 @@ case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
   val totalBlocks: Int, val totalBytes: Int) {  
   @transient var hasBlocks = 0
 } 
+
+@serializable
+class SpeedTracker {
+  // Map[source -> (totalTime, numBlocks)]
+  private var sourceToSpeedMap = Map[SourceInfo, (Long, Int)] ()
+  
+  def addDataPoint (srcInfo: SourceInfo, timeInMillis: Long) = {
+    sourceToSpeedMap.synchronized {
+      if (!sourceToSpeedMap.contains(srcInfo)) {
+        sourceToSpeedMap += (srcInfo -> (timeInMillis, 1))
+      } else {
+        val tTnB = sourceToSpeedMap (srcInfo)
+        sourceToSpeedMap += (srcInfo -> (tTnB._1 + timeInMillis, tTnB._2 + 1))
+      }
+    }
+  }
+  
+  def getTimePerBlock (srcInfo: SourceInfo): Double = {
+    sourceToSpeedMap.synchronized {
+      val tTnB = sourceToSpeedMap (srcInfo)
+      return tTnB._1 / tTnB._2
+    }    
+  }
+  
+  override def toString = sourceToSpeedMap.toString
+}
 
 private object Broadcast
 extends Logging {
