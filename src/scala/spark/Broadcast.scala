@@ -286,8 +286,19 @@ extends BroadcastRecipe  with Logging {
       }
       listOfSources = listOfSources + newSourceInfo
     }         
-  }
+  }  
   
+  private def addToListOfSources (newSourceInfos: ListBuffer[SourceInfo]) = {
+    listOfSources.synchronized {
+      newSourceInfos.foreach { srcInfo =>
+        if (listOfSources.contains(srcInfo)) { 
+          listOfSources = listOfSources - srcInfo 
+        }
+        listOfSources = listOfSources + srcInfo
+      }
+    }         
+  }  
+
   class TalkToGuide (gInfo: SourceInfo) 
   extends Thread with Logging {
     override def run = {
@@ -308,21 +319,10 @@ extends BroadcastRecipe  with Logging {
 
         // Receive source information from Guide
         var suitableSources = 
-          oisGuide.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-        
+          oisGuide.readObject.asInstanceOf[ListBuffer[SourceInfo]]        
         logInfo("Received suitableSources from Master " + suitableSources)
         
-        // Update local list of known sources by adding or replacing
-        listOfSources.synchronized {
-          suitableSources.foreach { srcInfo =>
-            // Removing old copy of srcInfo to be replaced with a new one
-            // It works because case clases are compared by constructor params
-            if (listOfSources.contains(srcInfo)) { 
-              listOfSources = listOfSources - srcInfo 
-            }
-            listOfSources = listOfSources + srcInfo
-          }
-        }
+        addToListOfSources (suitableSources)
         
         oisGuide.close
         oosGuide.close
