@@ -928,7 +928,6 @@ case class SourceInfo (val hostAddress: String, val listenPort: Int,
 
   var currentLeechers = 0
   var receptionFailed = false
-  var MBps: Double = BroadcastBT.MaxMBps
   
   var hasBlocksBitVector: BitSet = new BitSet (totalBlocks)
 }
@@ -1129,20 +1128,6 @@ extends Logging {
 //  def startMultiTracker
 //  def stopMultiTracker
   
-//  def getSourceSpeed (hostAddress: String): Double = {
-//    sourceToSpeedMap.synchronized {
-//      sourceToSpeedMap.getOrElseUpdate(hostAddress, MaxMBps)
-//    }
-//  }
-  
-//  def setSourceSpeed (hostAddress: String, MBps: Double) = {
-//    sourceToSpeedMap.synchronized {
-//      var oldSpeed = sourceToSpeedMap.getOrElseUpdate(hostAddress, MaxMBps)
-//      var newSpeed = ALPHA * oldSpeed + (1 - ALPHA) * MBps
-//      sourceToSpeedMap.update (hostAddress, newSpeed)
-//    }
-//  } 
-    
   class TrackMultipleValues
   extends Thread with Logging {
     var keepAccepting = true
