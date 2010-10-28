@@ -542,7 +542,10 @@ extends BroadcastRecipe  with Logging {
           
           // TODO: There is a problem with closing this way
           while (hasBlocks < totalBlocks) {
+            val recvStartTime = System.currentTimeMillis
             val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
+            val receptionTime = (System.currentTimeMillis - recvStartTime)
+            
             if (!hasBlocksBitVector.get(bcBlock.blockID)) {
               arrayOfBlocks(bcBlock.blockID) = bcBlock
               hasBlocksBitVector.synchronized {
@@ -552,7 +555,7 @@ extends BroadcastRecipe  with Logging {
                 blockStatus (bcBlock.blockID) = BroadcastBlock.HaveIt
               }
               hasBlocks += 1
-              logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo)
+              logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
             }
             
             // Send the latest SourceInfo
@@ -560,6 +563,9 @@ extends BroadcastRecipe  with Logging {
             oosSource.flush
           }
         } catch {
+          // EOFException is expected to happen because sender can break 
+          // connection due to timeout
+          case eofe: java.io.EOFException => { }
           case e: Exception => { 
             logInfo ("TalktoPeer had a " + e)
             // Remove this pInfo from listOfSources
@@ -634,7 +640,9 @@ extends BroadcastRecipe  with Logging {
               threadPool.execute (new GuideSingleRequest (clientSocket))
             } catch {
               // In failure, close the socket here; else, thread will close it
-              case ioe: IOException => clientSocket.close
+              case ioe: IOException => {
+                clientSocket.close
+              }
             }
           }
         }
@@ -1154,7 +1162,9 @@ extends Logging {
               })
             } catch {
               // In failure, close socket here; else, client thread will close
-              case ioe: IOException => clientSocket.close
+              case ioe: IOException => {
+                clientSocket.close
+              }
             }
           }
         }
