@@ -102,8 +102,8 @@ class ReplSuite extends FunSuite {
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
   
-  test ("running on Mesos") {
-    if (System.getenv("MESOS_HOME") != null) {
+  if (System.getenv("MESOS_HOME") != null) {
+    test ("running on Mesos") {
       val output = runInterpreter("localquiet", """
         var v = 7
         def getV() = v
@@ -122,8 +122,6 @@ class ReplSuite extends FunSuite {
       assertContains("res1: Int = 100", output)
       assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
       assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-    } else {
-      info("Skipping \"running on Mesos\" test because MESOS_HOME is not set");
     }
   }
 }
