@@ -343,4 +343,12 @@ extends RDD[Pair[T, U]](sc) {
     }
     rdd.map(pair => HashMap(pair)).reduce(mergeMaps)
   }
+
+  def combineByKey[C](numSplits: Int,
+                      createCombiner: () => C,
+                      mergeValue: (C, V) => C,
+                      mergeCombiners: (C, C) => C)
+      : RDD[(K, C)] = {
+    new DfsShuffle(rdd, numSplits, createCombiner, mergeValue, mergeCombiners).compute()
+  }
 }
