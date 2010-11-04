@@ -84,7 +84,10 @@ extends Logging
         new ObjectOutputStream(fs.create(path, true))
       }).toArray
       for ((k, c) <- combiners) {
-        val bucket = k.hashCode % numOutputSplits
+        var bucket = k.hashCode % numOutputSplits
+        if (bucket < 0) {
+          bucket += numOutputSplits
+        }
         outputStreams(bucket).writeObject((k, c))
       }
       outputStreams.foreach(_.close())
