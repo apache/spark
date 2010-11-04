@@ -61,7 +61,8 @@ extends Logging
     })
 
     // Return an RDD that does each of the merges for a given partition
-    return sc.parallelize(0 until numOutputSplits).flatMap((myIndex: Int) => {
+    val indexes = sc.parallelize(0 until numOutputSplits, numOutputSplits)
+    return indexes.flatMap((myIndex: Int) => {
       val combiners = new HashMap[K, C]
       val fs = DfsShuffle.getFileSystem()
       for (i <- Utils.shuffle(0 until numInputSplits)) {
