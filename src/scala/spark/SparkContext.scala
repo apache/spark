@@ -14,7 +14,7 @@ class SparkContext(
   val sparkHome: String = null,
   val jars: Seq[String] = Nil)
 extends Logging {
-  private[spark] var scheduler: Scheduler = {
+  private var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     master match {
@@ -41,7 +41,7 @@ extends Logging {
     new ParallelArray[T](this, seq, numSlices)
 
   def parallelize[T: ClassManifest](seq: Seq[T]): RDD[T] =
-    parallelize(seq, scheduler.numCores)
+    parallelize(seq, numCores)
 
   def textFile(path: String): RDD[String] =
     new HadoopTextFile(this, path)
@@ -147,6 +147,9 @@ extends Logging {
     ClosureCleaner.clean(f)
     return f
   }
+
+  // Get the number of cores available to run tasks (as reported by Scheduler)
+  def numCores = scheduler.numCores
 }
 
 

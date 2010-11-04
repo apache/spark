@@ -38,7 +38,7 @@ extends RDD[(K, V)](sc) {
     val conf = new JobConf()
     FileInputFormat.setInputPaths(conf, path)
     val inputFormat = createInputFormat(conf)
-    val inputSplits = inputFormat.getSplits(conf, sc.scheduler.numCores)
+    val inputSplits = inputFormat.getSplits(conf, sc.numCores)
     inputSplits.map(x => new HadoopSplit(x): Split).toArray
   }
 

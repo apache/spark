@@ -330,8 +330,8 @@ extends RDD[Pair[T, U]](sc) {
   }
 }
 
-@serializable class PairRDDExtras[K, V](rdd: RDD[(K, V)]) {
-  def reduceByKey(func: (V, V) => V): Map[K, V] = {
+@serializable class PairRDDExtras[K, V](self: RDD[(K, V)]) {
+  def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = {
     def mergeMaps(m1: HashMap[K, V], m2: HashMap[K, V]): HashMap[K, V] = {
       for ((k, v) <- m2) {
         m1.get(k) match {
@@ -341,14 +341,66 @@ extends RDD[Pair[T, U]](sc) {
       }
       return m1
     }
-    rdd.map(pair => HashMap(pair)).reduce(mergeMaps)
+    self.map(pair => HashMap(pair)).reduce(mergeMaps)
   }
 
-  def combineByKey[C](numSplits: Int,
-                      createCombiner: () => C,
+  def combineByKey[C](createCombiner: V => C,
+                      mergeValue: (C, V) => C,
+                      mergeCombiners: (C, C) => C,
+                      numSplits: Int)
+  : RDD[(K, C)] = {
+    new DfsShuffle(self, numSplits, createCombiner, mergeValue, mergeCombiners).compute()
+  }
+
+  def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {
+    combineByKey[V]((v: V) => v, func, func, numSplits)
+  }
+
+  def groupByKey(numSplits: Int): RDD[(K, Seq[V])] = {
+    def createCombiner(v: V) = ArrayBuffer(v)
+    def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
+    def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
+    val bufs = combineByKey[ArrayBuffer[V]](
+      createCombiner _, mergeValue _, mergeCombiners _, numSplits)
+    bufs.asInstanceOf[RDD[(K, Seq[V])]]
+  }
+
+  def join[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, W))] = {
+    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
+    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
+    new PairRDDExtras(vs ++ ws).groupByKey(numSplits).flatMap {
+      case (k, seq) => {
+        val vbuf = new ArrayBuffer[V]
+        val wbuf = new ArrayBuffer[W]
+        seq.foreach(_ match {
+          case Left(v) => vbuf += v
+          case Right(w) => wbuf += w
+        })
+        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
+      }
+    }
+  }
+
+  def combineByKey[C](createCombiner: V => C,
                       mergeValue: (C, V) => C,
                       mergeCombiners: (C, C) => C)
-      : RDD[(K, C)] = {
-    new DfsShuffle(rdd, numSplits, createCombiner, mergeValue, mergeCombiners).compute()
+  : RDD[(K, C)] = {
+    combineByKey(createCombiner, mergeValue, mergeCombiners, numCores)
   }
+
+  def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
+    reduceByKey(func, numCores)
+  }
+
+  def groupByKey(): RDD[(K, Seq[V])] = {
+    groupByKey(numCores)
+  }
+
+  def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
+    join(other, numCores)
+  }
+
+  def numCores = self.sparkContext.numCores
+
+  def collectAsMap(): Map[K, V] = HashMap(self.collect(): _*)
 }
