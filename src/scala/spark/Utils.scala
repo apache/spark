@@ -4,13 +4,14 @@ import java.io._
 import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 /**
  * Various utility methods used by Spark.
  */
 object Utils {
   def serialize[T](o: T): Array[Byte] = {
-    val bos = new ByteArrayOutputStream
+    val bos = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(bos)
     oos.writeObject(o)
     oos.close
@@ -94,5 +95,20 @@ object Utils {
       in.close()
       out.close()
     }
+  }
+
+  // Shuffle the elements of a collection into a random order, returning the
+  // result in a new collection. Unlike scala.util.Random.shuffle, this method
+  // uses a local random number generator, avoiding inter-thread contention.
+  def shuffle[T](seq: Seq[T]): Seq[T] = {
+    val buf = ArrayBuffer(seq: _*)
+    val rand = new Random()
+    for (i <- (buf.size - 1) to 1 by -1) {
+      val j = rand.nextInt(i)
+      val tmp = buf(j)
+      buf(j) = buf(i)
+      buf(i) = tmp
+    }
+    buf
   }
 }

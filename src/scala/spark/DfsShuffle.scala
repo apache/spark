@@ -80,8 +80,8 @@ extends Logging
       }
       val fs = DfsShuffle.getFileSystem()
       val outputStreams = (0 until numOutputSplits).map(i => {
-        val path = new Path(dir, "intermediate-%d-%d".format(myIndex, i))
-        new ObjectOutputStream(fs.create(path, 1.toShort))
+        val path = new Path(dir, "%d-to-%d".format(myIndex, i))
+        new ObjectOutputStream(fs.create(path, true))
       }).toArray
       for ((k, c) <- combiners) {
         val bucket = k.hashCode % numOutputSplits
@@ -96,8 +96,8 @@ extends Logging
         override def default(key: K) = createCombiner()
       }
       val fs = DfsShuffle.getFileSystem()
-      for (i <- 0 until numInputSplits) {
-        val path = new Path(dir, "intermediate-%d-%d".format(i, myIndex))
+      for (i <- Utils.shuffle(0 until numInputSplits)) {
+        val path = new Path(dir, "%d-to-%d".format(i, myIndex))
         val inputStream = new ObjectInputStream(fs.open(path))
         try {
           while (true) {
