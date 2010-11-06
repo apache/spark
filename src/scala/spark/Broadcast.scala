@@ -669,7 +669,7 @@ extends BroadcastRecipe  with Logging {
             }
           }
           if (clientSocket != null) {
-            logInfo ("Guide:Accepted new client connection:" + clientSocket)
+            logInfo ("Guide: Accepted new client connection:" + clientSocket)
             try {            
               threadPool.execute (new GuideSingleRequest (clientSocket))
             } catch {
@@ -824,7 +824,7 @@ extends BroadcastRecipe  with Logging {
             }
           }
           if (clientSocket != null) {
-            logInfo ("Serve:Accepted new client connection:" + clientSocket)
+            logInfo ("Serve: Accepted new client connection:" + clientSocket)
             try {            
               threadPool.execute (new ServeSingleRequest (clientSocket))
             } catch {
@@ -1000,7 +1000,7 @@ extends BroadcastRecipe with Logging {
 @serializable
 case class SourceInfo (val hostAddress: String, val listenPort: Int, 
   val totalBlocks: Int, val totalBytes: Int)  
-  extends Logging {
+extends Logging {
 
   var currentLeechers = 0
   var receptionFailed = false
@@ -1164,7 +1164,7 @@ extends Logging {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon (true)
           trackMV.start
-          logInfo ("TrackMultipleValues started")         
+          logInfo ("TrackMultipleValues started...")         
         }
                   
         initialized = true
