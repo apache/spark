@@ -878,7 +878,7 @@ extends BroadcastRecipe  with Logging {
           
           // Receive latest SourceInfo from the receiver
           var rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
-          logInfo("rxSourceInfo: " + rxSourceInfo + " with " + rxSourceInfo.hasBlocksBitVector)
+          // logInfo("rxSourceInfo: " + rxSourceInfo + " with " + rxSourceInfo.hasBlocksBitVector)
           
           if (rxSourceInfo.listenPort == SourceInfo.StopBroadcast) {
             stopBroadcast = true
@@ -904,7 +904,7 @@ extends BroadcastRecipe  with Logging {
             
             // Receive latest SourceInfo from the receiver
             rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]          
-            logInfo("rxSourceInfo: " + rxSourceInfo + " with " + rxSourceInfo.hasBlocksBitVector)
+            // logInfo("rxSourceInfo: " + rxSourceInfo + " with " + rxSourceInfo.hasBlocksBitVector)
             addToListOfSources (rxSourceInfo)
 
             curTime = System.currentTimeMillis
