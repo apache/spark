@@ -7,8 +7,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-import spark.SparkContext._
-
 
 /**
  * A simple implementation of shuffle using local files served through HTTP.
@@ -32,7 +30,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
     val numInputSplits = splitRdd.splits.size
 
     // Run a parallel map and collect to write the intermediate data files,
-    // returning a hash table of inputSplitId -> serverUri pairs
+    // returning a list of inputSplitId -> serverUri pairs
     val outputLocs = splitRdd.map((pair: (Int, Iterator[(K, V)])) => {
       val myIndex = pair._1
       val myIterator = pair._2
@@ -55,7 +53,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         out.close()
       }
       (myIndex, LocalFileShuffle.serverUri)
-    }).collectAsMap()
+    }).collect()
 
     // Build a hashmap from server URI to list of splits (to facillitate
     // fetching all the URIs on a server within a single connection)
