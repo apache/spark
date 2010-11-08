@@ -100,8 +100,9 @@ object Utils {
   // Shuffle the elements of a collection into a random order, returning the
   // result in a new collection. Unlike scala.util.Random.shuffle, this method
   // uses a local random number generator, avoiding inter-thread contention.
-  def shuffle[T](seq: Seq[T]): Seq[T] = {
-    val buf = ArrayBuffer(seq: _*)
+  def shuffle[T](seq: TraversableOnce[T]): Seq[T] = {
+    val buf = new ArrayBuffer[T]()
+    buf ++= seq
     val rand = new Random()
     for (i <- (buf.size - 1) to 1 by -1) {
       val j = rand.nextInt(i)

@@ -356,8 +356,12 @@ extends RDD[Pair[T, U]](sc) {
                       mergeValue: (C, V) => C,
                       mergeCombiners: (C, C) => C,
                       numSplits: Int)
-  : RDD[(K, C)] = {
-    new DfsShuffle(self, numSplits, createCombiner, mergeValue, mergeCombiners).compute()
+  : RDD[(K, C)] =
+  {
+    val shufClass = Class.forName(System.getProperty(
+      "spark.shuffle.class", "spark.DfsShuffle"))
+    val shuf = shufClass.newInstance().asInstanceOf[Shuffle[K, V, C]]
+    shuf.compute(self, numSplits, createCombiner, mergeValue, mergeCombiners)
   }
 
   def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {

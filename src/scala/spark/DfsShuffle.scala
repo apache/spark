@@ -9,8 +9,6 @@ import scala.collection.mutable.HashMap
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
 
-import mesos.SlaveOffer
-
 
 /**
  * A simple implementation of shuffle using a distributed file system.
@@ -18,20 +16,19 @@ import mesos.SlaveOffer
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class DfsShuffle[K, V, C](
-  rdd: RDD[(K, V)],
-  numOutputSplits: Int,
-  createCombiner: V => C,
-  mergeValue: (C, V) => C,
-  mergeCombiners: (C, C) => C)
-extends Logging
-{
-  def compute(): RDD[(K, C)] = {
-    val sc = rdd.sparkContext
+class DfsShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
+  override def compute(input: RDD[(K, V)],
+                       numOutputSplits: Int,
+                       createCombiner: V => C,
+                       mergeValue: (C, V) => C,
+                       mergeCombiners: (C, C) => C)
+  : RDD[(K, C)] =
+  {
+    val sc = input.sparkContext
     val dir = DfsShuffle.newTempDirectory()
     logInfo("Intermediate data directory: " + dir)
 
-    val numberedSplitRdd = new NumberedSplitRDD(rdd)
+    val numberedSplitRdd = new NumberedSplitRDD(input)
     val numInputSplits = numberedSplitRdd.splits.size
 
     // Run a parallel foreach to write the intermediate data files
@@ -78,6 +75,7 @@ extends Logging
         } catch {
           case e: EOFException => {}
         }
+        inputStream.close()
       }
       combiners
     })
@@ -85,9 +83,14 @@ extends Logging
 }
 
 
+/**
+ * Companion object of DfsShuffle; responsible for initializing a Hadoop
+ * FileSystem object based on the spark.dfs property and generating names
+ * for temporary directories.
+ */
 object DfsShuffle {
-  var initialized = false
-  var fileSystem: FileSystem = null
+  private var initialized = false
+  private var fileSystem: FileSystem = null
 
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
@@ -97,8 +100,8 @@ object DfsShuffle {
       conf.setInt("io.file.buffer.size", bufferSize)
       conf.setInt("dfs.replication", 1)
       fileSystem = FileSystem.get(new URI(dfs), conf)
+      initialized = true
     }
-    initialized = true
   }
 
   def getFileSystem(): FileSystem = {
@@ -114,40 +117,4 @@ object DfsShuffle {
     fs.mkdirs(new Path(path))
     return path
   }
-}
-
-
-/**
- * An RDD that captures the splits of a parent RDD and gives them unique indexes.
- * This is useful for a variety of shuffle implementations.
- */
-class NumberedSplitRDD[T: ClassManifest](prev: RDD[T])
-extends RDD[(Int, Iterator[T])](prev.sparkContext) {
-  @transient val splits_ = {
-    prev.splits.zipWithIndex.map {
-      case (s, i) => new NumberedSplitRDDSplit(s, i): Split
-    }.toArray
-  }
-
-  override def splits = splits_
-
-  override def preferredLocations(split: Split) = {
-    val nsplit = split.asInstanceOf[NumberedSplitRDDSplit]
-    prev.preferredLocations(nsplit.prev)
-  }
-
-  override def iterator(split: Split) = {
-    val nsplit = split.asInstanceOf[NumberedSplitRDDSplit]
-    Iterator((nsplit.index, prev.iterator(nsplit.prev)))
-  }
-
-  override def taskStarted(split: Split, slot: SlaveOffer) = {
-    val nsplit = split.asInstanceOf[NumberedSplitRDDSplit]
-    prev.taskStarted(nsplit.prev, slot)
-  }
-}
-
-
-class NumberedSplitRDDSplit(val prev: Split, val index: Int) extends Split {
-  override def getId() = "NumberedSplitRDDSplit(%d)".format(index)
 }
