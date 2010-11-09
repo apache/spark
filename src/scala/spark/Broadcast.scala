@@ -951,7 +951,7 @@ extends Logging {
   private var isMaster_ = false
 
   private var MasterHostAddress_ = "127.0.0.1"
-  private var MasterTrackerPort_ : Int = 11111
+  private var MasterTrackerPort_ : Int = 22222
   private var BlockSize_ : Int = 512 * 1024
   private var MaxRetryCount_ : Int = 2
 
@@ -976,7 +976,7 @@ extends Logging {
         MasterHostAddress_ = 
           System.getProperty ("spark.broadcast.MasterHostAddress", "127.0.0.1")
         MasterTrackerPort_ = 
-          System.getProperty ("spark.broadcast.MasterTrackerPort", "11111").toInt
+          System.getProperty ("spark.broadcast.MasterTrackerPort", "22222").toInt
         BlockSize_ = 
           System.getProperty ("spark.broadcast.BlockSize", "512").toInt * 1024
         MaxRetryCount_ = 
