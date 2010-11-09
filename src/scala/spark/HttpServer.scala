@@ -61,18 +61,7 @@ class HttpServer(resourceBase: File) extends Logging {
     if (server == null) {
       throw new ServerStateException("Server is not started")
     } else {
-      return "http://" + getLocalIpAddress + ":" + port
+      return "http://" + Utils.localIpAddress + ":" + port
     }
-  }
-
-  /**
-   * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4)
-   */
-  private def getLocalIpAddress: String = {
-    // Get local IP as an array of four bytes
-    val bytes = InetAddress.getLocalHost().getAddress()
-    // Convert the bytes to ints (keeping in mind that they may be negative)
-    // and join them into a string
-    return bytes.map(b => (b.toInt + 256) % 256).mkString(".")
   }
 }

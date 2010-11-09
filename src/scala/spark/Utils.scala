@@ -1,6 +1,7 @@
 package spark
 
 import java.io._
+import java.net.InetAddress
 import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
@@ -111,5 +112,16 @@ object Utils {
       buf(i) = tmp
     }
     buf
+  }
+
+  /**
+   * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4)
+   */
+  def localIpAddress(): String = {
+    // Get local IP as an array of four bytes
+    val bytes = InetAddress.getLocalHost().getAddress()
+    // Convert the bytes to ints (keeping in mind that they may be negative)
+    // and join them into a string
+    return bytes.map(b => (b.toInt + 256) % 256).mkString(".")
   }
 }
