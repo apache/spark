@@ -286,23 +286,48 @@ extends BroadcastRecipe  with Logging {
 
   // Add new SourceInfo to the listOfSources. Update if it exists already.
   private def addToListOfSources (newSourceInfo: SourceInfo) = {
+    var sourceExists = false
+    
     listOfSources.synchronized {
-      if (listOfSources.contains(newSourceInfo)) { 
-        listOfSources = listOfSources - newSourceInfo 
+      var listIter = listOfSources.iterator
+      
+      while (listIter.hasNext && !sourceExists) {
+        val sourceInfo = listIter.next
+        
+        if (sourceInfo == newSourceInfo) {
+          sourceInfo.hasBlocksBitVector.or (newSourceInfo.hasBlocksBitVector)
+          sourceExists = true
+        }
       }
-      listOfSources = listOfSources + newSourceInfo
+      
+      if (!sourceExists) {
+        listOfSources = listOfSources + newSourceInfo
+      }
     }         
   }  
   
+  // Calling addToListOfSources (srcInfo) gives compile error! 
   private def addToListOfSources (newSourceInfos: ListBuffer[SourceInfo]) = {
-    listOfSources.synchronized {
-      newSourceInfos.foreach { srcInfo =>
-        if (listOfSources.contains(srcInfo)) { 
-          listOfSources = listOfSources - srcInfo 
+    newSourceInfos.foreach { newSourceInfo =>
+      var sourceExists = false
+      
+      listOfSources.synchronized {
+        var listIter = listOfSources.iterator
+        
+        while (listIter.hasNext && !sourceExists) {
+          val sourceInfo = listIter.next
+          
+          if (sourceInfo == newSourceInfo) {
+            sourceInfo.hasBlocksBitVector.or (newSourceInfo.hasBlocksBitVector)
+            sourceExists = true
+          }
         }
-        listOfSources = listOfSources + srcInfo
-      }
-    }         
+        
+        if (!sourceExists) {
+          listOfSources = listOfSources + newSourceInfo
+        }
+      }         
+    }
   }  
 
   class TalkToGuide (gInfo: SourceInfo)
@@ -444,7 +469,7 @@ extends BroadcastRecipe  with Logging {
     // TODO: Must fix this. This might never break if broadcast fails. 
     // We should be able to break and send false. Also need to kill threads
     while (hasBlocks < totalBlocks) { 
-      Thread.sleep(1234) 
+      Thread.sleep(500) 
     }
    
     return true
@@ -465,16 +490,18 @@ extends BroadcastRecipe  with Logging {
 
         while (hasBlocks < totalBlocks && numThreadsToCreate > 0) {
           var peerToTalkTo = pickPeerToTalkTo
+          
           if (peerToTalkTo != null) {
             threadPool.execute (new TalkToPeer (peerToTalkTo))
+
+            // Add to peersNowTalking. Remove in the thread. Do this ASAP so 
+            // that pickPeerToTalkTo does not pick same peer more than once
+            peersNowTalking.synchronized { 
+              peersNowTalking = peersNowTalking + peerToTalkTo
+            }
           }
           
-          // Add to peersNowTalking. Remove in the thread. We have to do this 
-          // ASAP, otherwise pickPeerToTalkTo picks the same peer more than once
-          peersNowTalking.synchronized { 
-            peersNowTalking = peersNowTalking + peerToTalkTo
-          }
-          
+          // Decrease the counter even if no thread was created => Go to sleep.
           numThreadsToCreate = numThreadsToCreate - 1
         }
         
