@@ -1262,17 +1262,7 @@ extends Logging {
 
   class TrackMultipleValues
   extends Thread with Logging {
-    var stopTracker = false
-    
     override def run = {
-      var myThreadFactory = new ThreadFactory {
-        def newThread(r: Runnable): Thread = {
-          var t = Executors.defaultThreadFactory.newThread(r)
-          t.setDaemon(true)
-          return t
-        }
-      }
-    
       var threadPool = BroadcastBT.newDaemonCachedThreadPool
       var serverSocket: ServerSocket = null
       
@@ -1280,16 +1270,14 @@ extends Logging {
       logInfo ("TrackMultipleValues" + serverSocket)
       
       try {
-        while (!stopTracker) {
+        while (true) {
           var clientSocket: Socket = null
           try {
-            // TODO: 
             serverSocket.setSoTimeout (TrackerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => {
               logInfo ("TrackMultipleValues Timeout. Stopping listening...") 
-              stopTracker = true 
             }
           }
 
