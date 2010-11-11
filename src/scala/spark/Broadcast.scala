@@ -39,7 +39,6 @@ extends BroadcastRecipe  with Logging {
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
   @transient var hasBlocksBitVector: BitSet = null
   @transient var numCopiesSent: Array[Int] = null
-  @transient var blockStatus: Array[Int] = null
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
   @transient var hasBlocks = 0
@@ -99,12 +98,6 @@ extends BroadcastRecipe  with Logging {
     // Guide still hasn't sent any block
     numCopiesSent = new Array[Int] (totalBlocks)
     
-    // Default status of all blocks in Guide is BroadcastBlock.HaveIt
-    blockStatus = new Array[Int] (totalBlocks)
-    (0 until totalBlocks).foreach { curIndex =>
-      blockStatus(curIndex) = BroadcastBlock.HaveIt
-    }
-   
     guideMR = new GuideMultipleRequests
     guideMR.setDaemon (true)
     guideMR.start
@@ -187,7 +180,6 @@ extends BroadcastRecipe  with Logging {
     arrayOfBlocks = null
     hasBlocksBitVector = null
     numCopiesSent = null
-    blockStatus = null
     totalBytes = -1
     totalBlocks = -1
     hasBlocks = 0
@@ -431,7 +423,6 @@ extends BroadcastRecipe  with Logging {
     arrayOfBlocks = new Array[BroadcastBlock] (totalBlocks)
     hasBlocksBitVector = new BitSet (totalBlocks)
     numCopiesSent = new Array[Int] (totalBlocks)
-    blockStatus = new Array[Int] (totalBlocks)
     totalBlocksLock.synchronized {
       totalBlocksLock.notifyAll
     }
@@ -461,6 +452,7 @@ extends BroadcastRecipe  with Logging {
   class PeerChatterController
   extends Thread with Logging {
     private var peersNowTalking = ListBuffer[SourceInfo] ()
+    private var blocksInRequestBitVector = new BitSet (totalBlocks)
 
     override def run: Unit = {
       var threadPool = 
@@ -531,13 +523,15 @@ extends BroadcastRecipe  with Logging {
       return curPeer
     }
     
-  class TalkToPeer (peerToTalkTo: SourceInfo)
+    class TalkToPeer (peerToTalkTo: SourceInfo)
     extends Thread with Logging {
       private var peerSocketToSource: Socket = null
       private var oosSource: ObjectOutputStream = null
       private var oisSource: ObjectInputStream = null     
 
       override def run: Unit = {
+        var blockToAskFor = -1
+      
         // Setup the timeout mechanism
         var timeOutTask = new TimerTask {
           override def run: Unit = {
@@ -573,33 +567,64 @@ extends BroadcastRecipe  with Logging {
           oosSource.writeObject(getLocalSourceInfo)
           oosSource.flush
           
-          // TODO: There is a problem with closing this way
-          while (hasBlocks < totalBlocks) {
-            val recvStartTime = System.currentTimeMillis
-            val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
-            val receptionTime = (System.currentTimeMillis - recvStartTime)
+          var keepReceiving = true
+          
+          while (hasBlocks < totalBlocks && keepReceiving) {
+            blockToAskFor = 
+              pickBlockToRequest (newPeerToTalkTo.hasBlocksBitVector)
             
-            logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
-
-            if (!hasBlocksBitVector.get(bcBlock.blockID)) {
-              arrayOfBlocks(bcBlock.blockID) = bcBlock
-              hasBlocksBitVector.synchronized {
-                hasBlocksBitVector.set (bcBlock.blockID)
+            // No block to request
+            if (blockToAskFor < 0) {
+              // Nothing to receive from newPeerToTalkTo
+              keepReceiving = false
+            } else {
+              // Let other thread know that blockToAskFor is being requested
+              blocksInRequestBitVector.synchronized {
+                blocksInRequestBitVector.set (blockToAskFor)
               }
-              blockStatus.synchronized {
-                blockStatus (bcBlock.blockID) = BroadcastBlock.HaveIt
-              }
-              hasBlocks += 1
               
-              rxSpeeds.addDataPoint (peerToTalkTo, receptionTime)
+              // Start with sending the blockID
+              oosSource.writeObject(blockToAskFor)
+              oosSource.flush
+              
+              // Receive the requested block
+              val recvStartTime = System.currentTimeMillis
+              val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
+              val receptionTime = (System.currentTimeMillis - recvStartTime)
+              
+              // Expecting sender to send the block that was asked for
+              assert (bcBlock.blockID == blockToAskFor)
+              
+              logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
+
+              if (!hasBlocksBitVector.get(bcBlock.blockID)) {
+                arrayOfBlocks(bcBlock.blockID) = bcBlock
+                
+                // Update the hasBlocksBitVector first
+                hasBlocksBitVector.synchronized {
+                  hasBlocksBitVector.set (bcBlock.blockID)
+                }
+                hasBlocks += 1
+                
+                rxSpeeds.addDataPoint (peerToTalkTo, receptionTime)
+
+                // blockToAskFor has arrived. Not in request any more
+                // Probably no need to update it though
+                blocksInRequestBitVector.synchronized {
+                  blocksInRequestBitVector.set (bcBlock.blockID, false)
+                }
+
+                // Reset blockToAskFor to -1. Else it will be considered missing
+                blockToAskFor = -1
+              }              
+              
+              // Send the latest SourceInfo
+              oosSource.writeObject(getLocalSourceInfo)
+              oosSource.flush
             }
-            
-            // Send the latest SourceInfo
-            oosSource.writeObject(getLocalSourceInfo)
-            oosSource.flush
           }
         } catch {
-          // EOFException is expected to happen because sender can break 
+          // EOFException is expected to happen because sender can break
           // connection due to timeout
           case eofe: java.io.EOFException => { }
           case e: Exception => { 
@@ -613,13 +638,52 @@ extends BroadcastRecipe  with Logging {
 //            }
           }
         } finally {
+          // blockToAskFor == -1 => there was an exception
+          if (blockToAskFor != -1) {
+            blocksInRequestBitVector.synchronized {
+              blocksInRequestBitVector.set (blockToAskFor, false)
+            }
+          }
+        
           cleanUpConnections
         }
       }
       
-      // Pick the first one
-      private def pickAndRequestBlock = {
-        // TODO: Will implement it later.
+      // Right now it picks a block uniformly that this peer does not have
+      // TODO: Implement more intelligent block selection policies
+      private def pickBlockToRequest (txHasBlocksBitVector: BitSet): Int = {
+        var needBlocksBitVector: BitSet = null
+        
+        // Blocks already present
+        hasBlocksBitVector.synchronized {
+          needBlocksBitVector = hasBlocksBitVector.clone.asInstanceOf[BitSet]
+        }
+        
+        blocksInRequestBitVector.synchronized {
+          // Include blocks already in transmission
+          needBlocksBitVector.or (blocksInRequestBitVector)
+        }
+
+        // Find blocks that are neither here nor in transit
+        needBlocksBitVector.flip (0, needBlocksBitVector.size)
+        
+        // Blocks that should be requested
+        needBlocksBitVector.and (txHasBlocksBitVector)
+        
+        if (needBlocksBitVector.cardinality == 0) {
+          return -1
+        } else {
+          // Pick uniformly the i'th required block
+          var i = BroadcastBT.ranGen.nextInt (needBlocksBitVector.cardinality)
+          var pickedBlockIndex = needBlocksBitVector.nextSetBit (0)
+          
+          while (i > 0) {
+            pickedBlockIndex = needBlocksBitVector.nextSetBit (i + 1)
+            i = i - 1
+          }
+
+          return pickedBlockIndex
+        }
       }
       
       private def cleanUpConnections: Unit = {
@@ -902,20 +966,28 @@ extends BroadcastRecipe  with Logging {
           val startTime = System.currentTimeMillis
           var curTime = startTime
           var keepSending = true
-          var blocksToSend = BroadcastBT.MaxChatBlocks
+          var numBlocksToSend = BroadcastBT.MaxChatBlocks
           
-          while (!stopBroadcast && keepSending &&  blocksToSend > 0 && 
+          while (!stopBroadcast && keepSending &&  numBlocksToSend > 0 && 
             (curTime - startTime) < BroadcastBT.MaxChatTime) {
-            val sentBlock = pickAndSendBlock (rxSourceInfo.hasBlocksBitVector)
-            if (sentBlock < 0) {
-              keepSending = false 
-            } else {
-              rxSourceInfo.hasBlocksBitVector.set (sentBlock)
-            }
-            blocksToSend = blocksToSend - 1
+            // Receive which block to send
+            val blockToSend = ois.readObject.asInstanceOf[Int]
+            
+            // Send the block
+            sendBlock (blockToSend)
+            rxSourceInfo.hasBlocksBitVector.set (blockToSend)
+            
+//            val sentBlock = pickAndSendBlock (rxSourceInfo.hasBlocksBitVector)
+//            if (sentBlock < 0) {
+//              keepSending = false 
+//            } else {
+//              rxSourceInfo.hasBlocksBitVector.set (sentBlock)
+//            }           
+
+            numBlocksToSend = numBlocksToSend - 1
             
             // Receive latest SourceInfo from the receiver
-            rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]          
+            rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
             // logInfo("rxSourceInfo: " + rxSourceInfo + " with " + rxSourceInfo.hasBlocksBitVector)
             addToListOfSources (rxSourceInfo)
 
@@ -936,6 +1008,18 @@ extends BroadcastRecipe  with Logging {
           oos.close
           clientSocket.close
         }
+      }
+      
+      private def sendBlock (blockToSend: Int): Unit = {
+        try {
+          oos.writeObject (arrayOfBlocks(blockToSend))
+          oos.flush
+        } catch { 
+          case e: Exception => { 
+            logInfo ("pickAndSendBlock had a " + e)
+          }
+        }
+        logInfo ("Sent block: " + blockToSend + " to " + clientSocket)
       }
 
       // Right now picking the rarest first block
@@ -967,19 +1051,11 @@ extends BroadcastRecipe  with Logging {
         if (blockIndex < 0) { 
           logInfo ("No block to send...")
         } else {
-          try {
-            oos.writeObject (arrayOfBlocks(blockIndex))
-            oos.flush
-          } catch { 
-            case e: Exception => { 
-              logInfo ("pickAndSendBlock had a " + e)
-            }
-          }
-          logInfo ("Sent block: " + blockIndex + " to " + clientSocket)
+          sendBlock (blockIndex)
         }
         
         return blockIndex
-      }    
+      }
     } 
   }  
 }
@@ -1050,13 +1126,6 @@ object SourceInfo {
 @serializable
 case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) { }
 
-object BroadcastBlock {
-  // Constants to express different states of a BroadcastBlock
-  val DontHaveIt = 0
-  val HaveIt = 1
-  val WillHaveIt = 2
-}
-
 @serializable
 case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock], 
   val totalBlocks: Int, val totalBytes: Int) {  
@@ -1118,6 +1187,7 @@ extends Logging {
 //  var sourceToSpeedMap = Map[String, Double] ()
 
   // Random number generator
+  // TODO: Find better way to generate random numbers
   var ranGen = new Random
 
   private var initialized = false
@@ -1231,7 +1301,7 @@ extends Logging {
     }
   }
   
-  def unregisterValue (uuid: UUID) = {
+  def unregisterValue (uuid: UUID): Unit = {
     valueToGuideMap.synchronized {
       valueToGuideMap (uuid) = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
         SourceInfo.UnusedParam, SourceInfo.UnusedParam)
