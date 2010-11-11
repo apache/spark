@@ -285,28 +285,16 @@ extends BroadcastRecipe  with Logging {
   }
 
   // Add new SourceInfo to the listOfSources. Update if it exists already.
+  // TODO: Optimizing just by OR-ing the BitVectors was BAD for performance
   private def addToListOfSources (newSourceInfo: SourceInfo): Unit = {
-    var sourceExists = false
-    
     listOfSources.synchronized {
-      var listIter = listOfSources.iterator
-      
-      while (listIter.hasNext && !sourceExists) {
-        val sourceInfo = listIter.next
-        
-        if (sourceInfo == newSourceInfo) {
-          sourceInfo.hasBlocksBitVector.or (newSourceInfo.hasBlocksBitVector)
-          sourceExists = true
-        }
+      if (listOfSources.contains(newSourceInfo)) { 
+        listOfSources = listOfSources - newSourceInfo 
       }
-      
-      if (!sourceExists) {
-        listOfSources = listOfSources + newSourceInfo
-      }
+      listOfSources = listOfSources + newSourceInfo
     }         
   }  
   
-  // Calling addToListOfSources (srcInfo) gives compile error! 
   private def addToListOfSources (newSourceInfos: ListBuffer[SourceInfo]): Unit = {
     newSourceInfos.foreach { newSourceInfo =>
       addToListOfSources (newSourceInfo)
@@ -452,7 +440,7 @@ extends BroadcastRecipe  with Logging {
     // TODO: Must fix this. This might never break if broadcast fails. 
     // We should be able to break and send false. Also need to kill threads
     while (hasBlocks < totalBlocks) { 
-      Thread.sleep(500) 
+      Thread.sleep(1000) 
     }
    
     return true
@@ -473,18 +461,16 @@ extends BroadcastRecipe  with Logging {
 
         while (hasBlocks < totalBlocks && numThreadsToCreate > 0) {
           var peerToTalkTo = pickPeerToTalkTo
-          
           if (peerToTalkTo != null) {
             threadPool.execute (new TalkToPeer (peerToTalkTo))
 
-            // Add to peersNowTalking. Remove in the thread. Do this ASAP so 
-            // that pickPeerToTalkTo does not pick same peer more than once
+            // Add to peersNowTalking. Remove in the thread. We have to do this 
+            // ASAP, otherwise pickPeerToTalkTo picks the same peer more than once
             peersNowTalking.synchronized { 
               peersNowTalking = peersNowTalking + peerToTalkTo
             }
           }
           
-          // Decrease the counter even if no thread was created => Go to sleep.
           numThreadsToCreate = numThreadsToCreate - 1
         }
         
