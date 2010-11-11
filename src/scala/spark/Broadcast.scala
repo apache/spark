@@ -678,7 +678,8 @@ extends BroadcastRecipe  with Logging {
           var pickedBlockIndex = needBlocksBitVector.nextSetBit (0)
           
           while (i > 0) {
-            pickedBlockIndex = needBlocksBitVector.nextSetBit (i + 1)
+            pickedBlockIndex = 
+              needBlocksBitVector.nextSetBit (pickedBlockIndex + 1)
             i = i - 1
           }
 
@@ -874,7 +875,7 @@ extends BroadcastRecipe  with Logging {
         listOfSources.synchronized {
           do {
             if (listOfSources(curIndex) != skipSourceInfo) { 
-              selectedSources = selectedSources + listOfSources(curIndex) 
+              selectedSources = selectedSources + listOfSources(curIndex)
             }
             curIndex = (curIndex + 1) % listOfSources.size
           } while (curIndex != rollOverIndex && 
@@ -1187,7 +1188,7 @@ extends Logging {
 //  var sourceToSpeedMap = Map[String, Double] ()
 
   // Random number generator
-  // TODO: Find better way to generate random numbers
+  // TODO: Need a better seed than the default System.currentTimeInMillis?
   var ranGen = new Random
 
   private var initialized = false
