@@ -664,9 +664,12 @@ extends BroadcastRecipe  with Logging {
           needBlocksBitVector = hasBlocksBitVector.clone.asInstanceOf[BitSet]
         }
         
-        blocksInRequestBitVector.synchronized {
-          // Include blocks already in transmission
-          needBlocksBitVector.or (blocksInRequestBitVector)
+        // Include blocks already in transmission ONLY IF 
+        // BroadcastBT.EndGameFraction has NOT been achieved
+        if ((1.0 * hasBlocks / totalBlocks) < BroadcastBT.EndGameFraction) {
+          blocksInRequestBitVector.synchronized {
+            needBlocksBitVector.or (blocksInRequestBitVector)
+          }
         }
 
         // Find blocks that are neither here nor in transit
@@ -1227,6 +1230,10 @@ extends Logging {
   // Peers can char at most this milliseconds or transfer this number of blocks
   private var MaxChatTime_ = 250
   private var MaxChatBlocks_ = 1024
+  
+  // Fraction of blocks to receive before entering the end game
+  private var EndGameFraction_ = 1.0
+  
 
   def initialize (isMaster__ : Boolean): Unit = {
     synchronized {
@@ -1262,6 +1269,9 @@ extends Logging {
           System.getProperty ("spark.broadcast.MaxChatTime", "250").toInt
         MaxChatBlocks_ = 
           System.getProperty ("spark.broadcast.MaxChatBlocks", "1024").toInt        
+
+        EndGameFraction_ = 
+          System.getProperty ("spark.broadcast.EndGameFraction", "1.0").toDouble
 
         isMaster_ = isMaster__        
                   
@@ -1299,6 +1309,8 @@ extends Logging {
   
   def MaxChatTime = MaxChatTime_
   def MaxChatBlocks = MaxChatBlocks_
+  
+  def EndGameFraction = EndGameFraction_
   
   def registerValue (uuid: UUID, gInfo: SourceInfo): Unit = {
     valueToGuideMap.synchronized {    
