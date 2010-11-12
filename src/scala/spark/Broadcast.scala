@@ -440,6 +440,8 @@ extends BroadcastRecipe  with Logging {
   class PeerChatterController
   extends Thread with Logging {
     private var peersNowTalking = ListBuffer[SourceInfo] ()
+    // TODO: There is a possible bug with blocksInRequestBitVector when a 
+    // certain bit is NOT unset upon failure resulting in an infinite loop.
     private var blocksInRequestBitVector = new BitSet (totalBlocks)
 
     override def run: Unit = {
@@ -475,6 +477,7 @@ extends BroadcastRecipe  with Logging {
     }
     
     // TODO: Right now picking the one that has the most blocks this peer wants
+    // Also picking peer randomly if no one has anything interesting
     private def pickPeerToTalkTo: SourceInfo = {
       var curPeer: SourceInfo = null
       var curMax = 0
@@ -501,6 +504,21 @@ extends BroadcastRecipe  with Logging {
         }
       }
       
+      // Always pick randomly or randomly pick randomly?
+      // TODO: Now its always
+      if (curPeer == null && peersNotInUse.size > 0) {
+        // Pick uniformly the i'th required peer
+        var i = BroadcastBT.ranGen.nextInt (peersNotInUse.size)
+
+        var peerIter = peersNotInUse.iterator        
+        curPeer = peerIter.next
+        
+        while (i > 0) {
+          curPeer = peerIter.next
+          i = i - 1
+        }
+      }
+      
       if (curPeer != null)
         logInfo ("Peer chosen: " + curPeer + " with " + curPeer.hasBlocksBitVector)
       else
@@ -513,9 +531,10 @@ extends BroadcastRecipe  with Logging {
     extends Thread with Logging {
       private var peerSocketToSource: Socket = null
       private var oosSource: ObjectOutputStream = null
-      private var oisSource: ObjectInputStream = null     
+      private var oisSource: ObjectInputStream = null
 
       override def run: Unit = {
+        // TODO: There is a possible bug here regarding blocksInRequestBitVector
         var blockToAskFor = -1
       
         // Setup the timeout mechanism
@@ -624,7 +643,7 @@ extends BroadcastRecipe  with Logging {
 //            }
           }
         } finally {
-          // blockToAskFor == -1 => there was an exception
+          // blockToAskFor != -1 => there was an exception
           if (blockToAskFor != -1) {
             blocksInRequestBitVector.synchronized {
               blocksInRequestBitVector.set (blockToAskFor, false)
