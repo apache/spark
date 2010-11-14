@@ -13,3 +13,6 @@ reports
 .project
 .classpath
 .scala_dependencies
+lib_managed/
+src_managed/
+project/boot/
