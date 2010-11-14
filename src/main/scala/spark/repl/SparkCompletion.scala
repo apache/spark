@@ -310,7 +310,7 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
       else xs.reduceLeft(_ zip _ takeWhile (x => x._1 == x._2) map (_._1) mkString)
 
     // This is jline's entry point for completion.
-    override def complete(_buf: String, cursor: Int, candidates: JList[_]): Int = {
+    override def complete(_buf: String, cursor: Int, candidates: java.util.List[java.lang.String]): Int = {
       val buf = onull(_buf)
       verbosity = if (isConsecutiveTabs(buf, cursor)) verbosity + 1 else 0
       DBG("complete(%s, %d) last = (%s, %d), verbosity: %s".format(buf, cursor, lastBuf, lastCursor, verbosity))
@@ -321,7 +321,7 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
           case Nil  => None
           case xs   =>
             // modify in place and return the position
-            xs.foreach(x => candidates.asInstanceOf[JList[AnyRef]].add(x))
+            xs.foreach(x => candidates.add(x))
 
             // update the last buffer unless this is an alternatives list
             if (xs contains "") Some(p.cursor)

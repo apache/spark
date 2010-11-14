@@ -17,6 +17,7 @@ define "spark" do
   project.group = GROUP
   manifest["Implementation-Vendor"] = COPYRIGHT
   compile.with THIRD_PARTY_JARS
+  compile.using :scalac
   package(:jar)
   test.using :scalatest, :fork => true
 end
