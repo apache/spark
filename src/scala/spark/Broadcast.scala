@@ -832,9 +832,6 @@ extends BroadcastRecipe  with Logging {
       private var sourceInfo: SourceInfo = null
       private var selectedSources: ListBuffer[SourceInfo] = null
       
-      // Used to select a rolling window of peers from listOfSources
-      private var rollOverIndex = 0
-      
       override def run: Unit = {
         try {
           logInfo ("new GuideSingleRequest is running")
@@ -878,18 +875,39 @@ extends BroadcastRecipe  with Logging {
           return selectedSources
         }
         
-        var curIndex = rollOverIndex
-
         listOfSources.synchronized {
-          do {
-            if (listOfSources(curIndex) != skipSourceInfo) { 
-              selectedSources = selectedSources + listOfSources(curIndex)
+          if (listOfSources.size <= BroadcastBT.MaxPeersInGuideResponse) {
+            selectedSources = listOfSources.clone
+          } else {
+            var picksLeft = BroadcastBT.MaxPeersInGuideResponse
+            var alreadyPicked = new BitSet (listOfSources.size)
+            
+            while (picksLeft > 0) {
+              var i = -1
+              
+              do {
+                i = BroadcastBT.ranGen.nextInt (listOfSources.size)
+              } while (alreadyPicked.get(i))
+              
+              var peerIter = listOfSources.iterator        
+              var curPeer = peerIter.next
+              
+              while (i > 0) {
+                curPeer = peerIter.next
+                i = i - 1
+              }
+              
+              selectedSources = selectedSources + curPeer
+              alreadyPicked.set (i)
+              
+              picksLeft = picksLeft - 1
             }
-            curIndex = (curIndex + 1) % listOfSources.size
-          } while (curIndex != rollOverIndex && 
-            selectedSources.size != BroadcastBT.MaxPeersInGuideResponse)
+          }
         }
-        rollOverIndex = curIndex
+        
+        // Remove the receiving source (if present)
+        selectedSources = selectedSources - skipSourceInfo
+        
         return selectedSources
       }
     }    
