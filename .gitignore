@@ -10,3 +10,6 @@ conf/spark-env.sh
 conf/log4j.properties
 target
 reports
+.project
+.classpath
+.scala_dependencies
