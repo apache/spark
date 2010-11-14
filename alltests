@@ -8,4 +8,4 @@ if [ -d $RESULTS_DIR ]; then
   rm -r $RESULTS_DIR
 fi
 mkdir -p $RESULTS_DIR
-$FWDIR/run org.scalatest.tools.Runner -p $FWDIR/build/classes -u $RESULTS_DIR -o $@
+$FWDIR/run org.scalatest.tools.Runner -p $FWDIR/target/test/classes -u $RESULTS_DIR -o $@

@@ -33,8 +33,8 @@ if [ -e $FWDIR/conf/java-opts ] ; then
 fi
 export JAVA_OPTS
 
-# Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$FWDIR/build/classes:$MESOS_CLASSPATH"
+# build up classpath
+CLASSPATH="$SPARK_CLASSPATH:$FWDIR/target/classes:$FWDIR/target/test/classes:$MESOS_CLASSPATH"
 CLASSPATH+=:$FWDIR/conf
 CLASSPATH+=:$FWDIR/third_party/mesos.jar
 CLASSPATH+=:$FWDIR/third_party/asm-3.2/lib/all/asm-all-3.2.jar

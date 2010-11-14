@@ -129,7 +129,8 @@ extends InterpreterControl {
       settings.classpath append addedClasspath
       
     interpreter = new SparkInterpreter(settings, out) {
-      override protected def parentClassLoader = classOf[SparkInterpreterLoop].getClassLoader
+      override protected def parentClassLoader = 
+        classOf[SparkInterpreterLoop].getClassLoader
     }
     interpreter.setContextClassLoader()
     // interpreter.quietBind("settings", "spark.repl.SparkInterpreterSettings", interpreter.isettings)

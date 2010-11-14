@@ -1,6 +1,10 @@
 package spark.repl
 
 import java.io._
+import java.net.URLClassLoader
+
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions._
 
 import org.scalatest.FunSuite
 
@@ -8,9 +12,20 @@ class ReplSuite extends FunSuite {
   def runInterpreter(master: String, input: String): String = {
     val in = new BufferedReader(new StringReader(input + "\n"))
     val out = new StringWriter()
+    val cl = getClass.getClassLoader
+    var paths = new ArrayBuffer[String]
+    if (cl.isInstanceOf[URLClassLoader]) {
+      val urlLoader = cl.asInstanceOf[URLClassLoader]
+      for (url <- urlLoader.getURLs) {
+        if (url.getProtocol == "file") {
+          paths += url.getFile
+        }
+      }
+    }
     val interp = new SparkInterpreterLoop(in, new PrintWriter(out), master)
     spark.repl.Main.interp = interp
-    interp.main(new Array[String](0))
+    val separator = System.getProperty("path.separator")
+    interp.main(Array("-classpath", paths.mkString(separator)))
     spark.repl.Main.interp = null
     return out.toString
   }
