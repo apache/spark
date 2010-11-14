@@ -42,7 +42,7 @@ build/classes:
 	mkdir -p build/classes
 
 scala: build/classes java
-	$(COMPILER) -unchecked -d build/classes -classpath build/classes:$(CLASSPATH) $(SCALA_SOURCES)
+	$(COMPILER) -d build/classes -classpath build/classes:$(CLASSPATH) $(SCALA_SOURCES)
 
 java: $(JAVA_SOURCES) build/classes
 	javac -d build/classes $(JAVA_SOURCES)
