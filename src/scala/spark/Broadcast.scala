@@ -150,6 +150,8 @@ extends BroadcastRecipe  with Logging {
         // Only the first worker in a node can ever be inside this 'else'
         initializeWorkerVariables
         
+        logInfo ("Local host address: " + hostAddress)
+
         // Start local ServeMultipleRequests thread first
         serveMR = new ServeMultipleRequests
         serveMR.setDaemon (true)
