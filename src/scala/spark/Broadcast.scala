@@ -73,6 +73,8 @@ extends BroadcastRecipe  with Logging {
   }
 
   def sendBroadcast (): Unit = {
+    logInfo ("Local host address: " + hostAddress)
+    
     // Store a persistent copy in HDFS    
     // TODO: Turned OFF for now
     // val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
