@@ -144,6 +144,8 @@ extends BroadcastRecipe  with Logging {
         // Initializing everything because Master will only send null/0 values
         initializeSlaveVariables
         
+        logInfo ("Local host address: " + hostAddress)
+
         serveMR = new ServeMultipleRequests
         serveMR.setDaemon (true)
         serveMR.start
