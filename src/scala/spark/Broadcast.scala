@@ -866,9 +866,7 @@ extends BroadcastRecipe  with Logging {
         }
       }
       
-      // TODO: Randomly select some sources to send back. 
-      // Right now just rolls over the listOfSources to send back
-      // BroadcastBT.MaxPeersInGuideResponse number of possible sources
+      // Randomly select some sources to send back
       private def selectSuitableSources(skipSourceInfo: SourceInfo): ListBuffer[SourceInfo] = {
         var selectedSources = ListBuffer[SourceInfo] ()
         
@@ -1218,7 +1216,6 @@ extends Logging {
 //  var sourceToSpeedMap = Map[String, Double] ()
 
   // Random number generator
-  // TODO: Need a better seed than the default System.currentTimeInMillis?
   var ranGen = new Random
 
   private var initialized = false
