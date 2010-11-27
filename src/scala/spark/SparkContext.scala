@@ -22,6 +22,20 @@ class SparkContext(master: String, frameworkName: String) extends Logging {
   // def broadcast[T](value: T) = new DfsBroadcast(value, local)
   def broadcast[T](value: T) = new ChainedBroadcast(value, local)
 
+//  def broadcast[T](value: T) = { 
+//    val broadcastClass = System.getProperty("spark.broadcast.Class",
+//      "spark.ChainedBroadcast")
+//    val booleanArgs = Array[AnyRef] (local.asInstanceOf[AnyRef])
+//    Class.forName(broadcastClass).getConstructors()(0).newInstance(booleanArgs:_*).asInstanceOf[Class.forName(broadcastClass)]
+//  }
+
+// def initialize() {
+//    val cacheClass = System.getProperty("spark.cache.class",
+//      "spark.SoftReferenceCache")
+//    instance = Class.forName(cacheClass).newInstance().asInstanceOf[Cache]
+//  }
+
+
   def textFile(path: String) = new HdfsTextFile(this, path)
 
   val LOCAL_REGEX = """local\[([0-9]+)\]""".r

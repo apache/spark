@@ -6,8 +6,6 @@ import java.util.{Comparator, PriorityQueue, Random, UUID}
 
 import com.google.common.collect.MapMaker
 
-import java.util.concurrent.{Executors, ThreadPoolExecutor, ThreadFactory}
-
 import scala.collection.mutable.{Map, Set}
 
 @serializable
@@ -397,7 +395,7 @@ extends Broadcast with Logging {
     private var setOfCompletedSources = Set[SourceInfo] ()
   
     override def run: Unit = {
-      var threadPool = ChainedBroadcast.newDaemonCachedThreadPool
+      var threadPool = Broadcast.newDaemonCachedThreadPool
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket (0)
@@ -602,7 +600,7 @@ extends Broadcast with Logging {
   class ServeMultipleRequests
   extends Thread with Logging {
     override def run: Unit = {
-      var threadPool = ChainedBroadcast.newDaemonCachedThreadPool
+      var threadPool = Broadcast.newDaemonCachedThreadPool
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket (0) 
@@ -671,7 +669,6 @@ extends Broadcast with Logging {
             sendObject
           }
         } catch {
-          // TODO: Need to add better exception handling here
           // If something went wrong, e.g., the worker at the other end died etc. 
           // then close everything up
           case e: Exception => { 
@@ -802,41 +799,10 @@ extends Logging {
     }
   }
   
-  // Returns a standard ThreadFactory except all threads are daemons
-  private def newDaemonThreadFactory: ThreadFactory = {
-    new ThreadFactory {
-      def newThread(r: Runnable): Thread = {
-        var t = Executors.defaultThreadFactory.newThread (r)
-        t.setDaemon (true)
-        return t
-      }
-    }  
-  }
-  
-  // Wrapper over newCachedThreadPool
-  def newDaemonCachedThreadPool: ThreadPoolExecutor = {
-    var threadPool = 
-      Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
-  
-    threadPool.setThreadFactory (newDaemonThreadFactory)
-    
-    return threadPool
-  }
-  
-  // Wrapper over newFixedThreadPool
-  def newDaemonFixedThreadPool (nThreads: Int): ThreadPoolExecutor = {
-    var threadPool = 
-      Executors.newFixedThreadPool (nThreads).asInstanceOf[ThreadPoolExecutor]
-  
-    threadPool.setThreadFactory (newDaemonThreadFactory)
-    
-    return threadPool
-  }
-
   class TrackMultipleValues
   extends Thread with Logging {
     override def run: Unit = {
-      var threadPool = ChainedBroadcast.newDaemonCachedThreadPool
+      var threadPool = Broadcast.newDaemonCachedThreadPool
       var serverSocket: ServerSocket = null
       
       serverSocket = new ServerSocket (ChainedBroadcast.MasterTrackerPort)
