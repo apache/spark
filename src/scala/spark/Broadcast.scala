@@ -750,7 +750,7 @@ extends Broadcast with Logging {
 
 @serializable 
 class CentralizedHDFSBroadcast[T](@transient var value_ : T, local: Boolean) 
-extends BroadcastRecipe with Logging {
+extends Broadcast with Logging {
   
   def value = value_
 
