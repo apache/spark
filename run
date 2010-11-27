@@ -1,16 +1,22 @@
 #!/bin/bash
 
 # Figure out where the Scala framework is installed
-FWDIR=`dirname $0`
+FWDIR="$(cd `dirname $0`; pwd)"
+
+# Export this as SPARK_HOME
+export SPARK_HOME="$FWDIR"
 
 # Load environment variables from conf/spark-env.sh, if it exists
 if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
+MESOS_CLASSPATH=""
+MESOS_LIBRARY_PATH=""
+
 if [ "x$MESOS_HOME" != "x" ] ; then
-  SPARK_CLASSPATH="$MESOS_HOME/lib/java/mesos.jar:$SPARK_CLASSPATH"
-  SPARK_LIBRARY_PATH="$MESOS_HOME/lib/java:$SPARK_LIBARY_PATH"
+  MESOS_CLASSPATH="$MESOS_HOME/lib/java/mesos.jar"
+  MESOS_LIBRARY_PATH="$MESOS_HOME/lib/java"
 fi
 
 if [ "x$SPARK_MEM" == "x" ] ; then
@@ -19,7 +25,7 @@ fi
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$SPARK_JAVA_OPTS"
-JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH:$FWDIR/third_party:$FWDIR/src/native"
+JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH:$FWDIR/third_party:$FWDIR/src/native:$MESOS_LIBRARY_PATH"
 JAVA_OPTS+=" -Xms$SPARK_MEM -Xmx$SPARK_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e $FWDIR/conf/java-opts ] ; then
@@ -28,12 +34,12 @@ fi
 export JAVA_OPTS
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$FWDIR/build/classes"
+CLASSPATH="$SPARK_CLASSPATH:$FWDIR/build/classes:$MESOS_CLASSPATH"
 CLASSPATH+=:$FWDIR/conf
 CLASSPATH+=:$FWDIR/third_party/mesos.jar
 CLASSPATH+=:$FWDIR/third_party/asm-3.2/lib/all/asm-all-3.2.jar
 CLASSPATH+=:$FWDIR/third_party/colt.jar
-CLASSPATH+=:$FWDIR/third_party/guava-r06/guava-r06.jar
+CLASSPATH+=:$FWDIR/third_party/guava-r07/guava-r07.jar
 CLASSPATH+=:$FWDIR/third_party/hadoop-0.20.0/hadoop-0.20.0-core.jar
 CLASSPATH+=:$FWDIR/third_party/scalatest-1.2/scalatest-1.2.jar
 CLASSPATH+=:$FWDIR/third_party/scalacheck_2.8.0-1.7.jar

@@ -39,9 +39,9 @@ class ReplSuite extends FunSuite {
   test ("external vars") {
     val output = runInterpreter("local", """
       var v = 7
-      sc.parallelize(1 to 10).map(x => v).toArray.reduceLeft(_+_)
+      sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
       v = 10
-      sc.parallelize(1 to 10).map(x => v).toArray.reduceLeft(_+_)
+      sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -54,7 +54,7 @@ class ReplSuite extends FunSuite {
       class C {
         def foo = 5
       }
-      sc.parallelize(1 to 10).map(x => (new C).foo).toArray.reduceLeft(_+_)
+      sc.parallelize(1 to 10).map(x => (new C).foo).collect.reduceLeft(_+_)
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -64,7 +64,7 @@ class ReplSuite extends FunSuite {
   test ("external functions") {
     val output = runInterpreter("local", """
       def double(x: Int) = x + x
-      sc.parallelize(1 to 10).map(x => double(x)).toArray.reduceLeft(_+_)
+      sc.parallelize(1 to 10).map(x => double(x)).collect.reduceLeft(_+_)
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -75,9 +75,9 @@ class ReplSuite extends FunSuite {
     val output = runInterpreter("local", """
       var v = 7
       def getV() = v
-      sc.parallelize(1 to 10).map(x => getV()).toArray.reduceLeft(_+_)
+      sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
       v = 10
-      sc.parallelize(1 to 10).map(x => getV()).toArray.reduceLeft(_+_)
+      sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -92,9 +92,9 @@ class ReplSuite extends FunSuite {
     val output = runInterpreter("local", """
       var array = new Array[Int](5)
       val broadcastArray = sc.broadcast(array)
-      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).toArray
+      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
       array(0) = 5
-      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).toArray
+      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
       """)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -102,24 +102,26 @@ class ReplSuite extends FunSuite {
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
   
-  test ("running on Mesos") {
-    val output = runInterpreter("localquiet", """
-      var v = 7
-      def getV() = v
-      sc.parallelize(1 to 10).map(x => getV()).toArray.reduceLeft(_+_)
-      v = 10
-      sc.parallelize(1 to 10).map(x => getV()).toArray.reduceLeft(_+_)
-      var array = new Array[Int](5)
-      val broadcastArray = sc.broadcast(array)
-      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).toArray
-      array(0) = 5
-      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).toArray
-      """)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-    assertContains("res0: Int = 70", output)
-    assertContains("res1: Int = 100", output)
-    assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-    assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
+  if (System.getenv("MESOS_HOME") != null) {
+    test ("running on Mesos") {
+      val output = runInterpreter("localquiet", """
+        var v = 7
+        def getV() = v
+        sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        v = 10
+        sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        var array = new Array[Int](5)
+        val broadcastArray = sc.broadcast(array)
+        sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        array(0) = 5
+        sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        """)
+      assertDoesNotContain("error:", output)
+      assertDoesNotContain("Exception", output)
+      assertContains("res0: Int = 70", output)
+      assertContains("res1: Int = 100", output)
+      assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
+      assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
+    }
   }
 }
