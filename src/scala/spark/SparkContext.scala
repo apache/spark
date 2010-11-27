@@ -20,7 +20,7 @@ class SparkContext(master: String, frameworkName: String) extends Logging {
 
   // TODO: Keep around a weak hash map of values to Cached versions?
   // def broadcast[T](value: T) = new DfsBroadcast(value, local)
-  def broadcast[T](value: T) = new ChainedStreamingBroadcast(value, local)
+  def broadcast[T](value: T) = new ChainedBroadcast(value, local)
 
   def textFile(path: String) = new HdfsTextFile(this, path)
 
