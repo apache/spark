@@ -73,7 +73,7 @@ extends BroadcastRecipe with Logging {
       } else {
         // Only a single worker (the first one) in the same node can ever be 
         // here. The rest will always get the value ready. 
-        val start = System.nanoTime        
+        val start = System.nanoTime
 
         val retByteArray = BroadcastCS.receiveBroadcast (uuid)
         // If does not succeed, then get from HDFS copy
