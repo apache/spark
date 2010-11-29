@@ -1,15 +1,15 @@
 package spark
 
+import com.google.common.collect.MapMaker
+
 import java.io._
 import java.net._
 import java.util.{Comparator, PriorityQueue, Random, UUID}
 
-import com.google.common.collect.MapMaker
-
 import scala.collection.mutable.{Map, Set}
 
 @serializable
-class ChainedBroadcast[T] (@transient var value_ : T, local: Boolean) 
+class ChainedBroadcast[T] (@transient var value_ : T, isLocal: Boolean) 
 extends Broadcast with Logging {
   
   def value = value_
@@ -41,7 +41,7 @@ extends Broadcast with Logging {
   @transient var stopBroadcast = false
   
   // Must call this after all the variables have been created/initialized
-  if (!local) { 
+  if (!isLocal) { 
     sendBroadcast 
   }
 
