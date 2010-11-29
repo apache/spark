@@ -1,3 +1,11 @@
 #!/bin/bash
-FWDIR=`dirname $0`
-$FWDIR/run org.scalatest.tools.Runner -p $FWDIR/build/classes -o $@
+FWDIR="`dirname $0`"
+if [ "x$SPARK_MEM" == "x" ]; then
+  export SPARK_MEM=500m
+fi
+RESULTS_DIR="$FWDIR/build/test_results"
+if [ -d $RESULTS_DIR ]; then
+  rm -r $RESULTS_DIR
+fi
+mkdir -p $RESULTS_DIR
+$FWDIR/run org.scalatest.tools.Runner -p $FWDIR/build/classes -u $RESULTS_DIR -o $@

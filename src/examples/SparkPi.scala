@@ -5,7 +5,7 @@ import SparkContext._
 object SparkPi {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: SparkLR <host> [<slices>]")
+      System.err.println("Usage: SparkPi <host> [<slices>]")
       System.exit(1)
     }
     val spark = new SparkContext(args(0), "SparkPi")

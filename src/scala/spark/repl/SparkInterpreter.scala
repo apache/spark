@@ -36,6 +36,9 @@ import scala.tools.nsc.{ InterpreterResults => IR }
 import interpreter._
 import SparkInterpreter._
 
+import spark.HttpServer
+import spark.Utils
+
 /** <p>
  *    An interpreter for Scala code.
  *  </p>
@@ -92,27 +95,12 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
 
   /** Local directory to save .class files too */
   val outputDir = {
-    val rootDir = new File(System.getProperty("spark.repl.classdir",
-                           System.getProperty("java.io.tmpdir")))
-    var attempts = 0
-    val maxAttempts = 10
-    var dir: File = null
-    while (dir == null) {
-      attempts += 1
-      if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory " +
-                              "after " + maxAttempts + " attempts!")
-      }
-      try {
-        dir = new File(rootDir, "spark-" + UUID.randomUUID.toString)
-        if (dir.exists() || !dir.mkdirs())
-          dir = null
-      } catch { case e: IOException => ; }
-    }
-    if (SPARK_DEBUG_REPL) {
-      println("Output directory: " + dir)
-    }
-    dir
+    val tmp = System.getProperty("java.io.tmpdir")
+    val rootDir = System.getProperty("spark.repl.classdir", tmp)
+    Utils.createTempDir(rootDir)
+  }
+  if (SPARK_DEBUG_REPL) {
+    println("Output directory: " + outputDir)
   }
 
   /** Scala compiler virtual directory for outputDir */
@@ -120,14 +108,14 @@ class SparkInterpreter(val settings: Settings, out: PrintWriter) {
   val virtualDirectory = new PlainFile(outputDir)
 
   /** Jetty server that will serve our classes to worker nodes */
-  val classServer = new ClassServer(outputDir)
+  val classServer = new HttpServer(outputDir)
 
   // Start the classServer and store its URI in a spark system property
   // (which will be passed to executors so that they can connect to it)
   classServer.start()
   System.setProperty("spark.repl.class.uri", classServer.uri)
   if (SPARK_DEBUG_REPL) {
-    println("ClassServer started, URI = " + classServer.uri)
+    println("Class server started, URI = " + classServer.uri)
   }
   
   /** reporter */
