@@ -10,7 +10,7 @@ import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 import scala.collection.mutable.{ListBuffer, Map, Set}
 
 @serializable
-class BitTorrentBroadcast[T] (@transient var value_ : T, local: Boolean) 
+class BitTorrentBroadcast[T] (@transient var value_ : T, isLocal: Boolean) 
 extends Broadcast  with Logging {
   
   def value = value_
@@ -51,7 +51,7 @@ extends Broadcast  with Logging {
   @transient var stopBroadcast = false
   
   // Must call this after all the variables have been created/initialized
-  if (!local) { 
+  if (!isLocal) { 
     sendBroadcast 
   }
 
