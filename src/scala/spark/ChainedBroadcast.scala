@@ -1,7 +1,5 @@
 package spark
 
-import com.google.common.collect.MapMaker
-
 import java.io._
 import java.net._
 import java.util.{Comparator, PriorityQueue, Random, UUID}
@@ -84,7 +82,7 @@ extends Broadcast with Logging {
 
     pqOfSources = new PriorityQueue[SourceInfo]
     val masterSource_0 = 
-      SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes, 0) 
+      SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes) 
     pqOfSources.add (masterSource_0)
 
     // Register with the Tracker
@@ -288,7 +286,7 @@ extends Broadcast with Logging {
       logInfo ("Connected to Master's guiding object")
 
       // Send local source information
-      oosMaster.writeObject(SourceInfo (hostAddress, listenPort, -1, -1, 0))
+      oosMaster.writeObject(SourceInfo (hostAddress, listenPort, -1, -1))
       oosMaster.flush
 
       // Receive source information from Master        
@@ -520,7 +518,7 @@ extends Broadcast with Logging {
 
             // Add this new (if it can finish) source to the PQ of sources
             thisWorkerInfo = SourceInfo (sourceInfo.hostAddress, 
-              sourceInfo.listenPort, totalBlocks, totalBytes, 0)
+              sourceInfo.listenPort, totalBlocks, totalBytes)
             logInfo ("Adding possible new source to pqOfSources: " + thisWorkerInfo)    
             pqOfSources.add (thisWorkerInfo)
           }
@@ -713,7 +711,7 @@ extends Broadcast with Logging {
 
 private object ChainedBroadcast
 extends Logging {
-  val values = new MapMaker ().softValues ().makeMap[UUID, Any]
+  val values = Cache.newKeySpace()
 
   var valueToGuidePortMap = Map[UUID, Int] ()
   

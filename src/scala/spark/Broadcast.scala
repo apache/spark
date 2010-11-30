@@ -67,7 +67,7 @@ extends Logging {
 
 @serializable
 case class SourceInfo (val hostAddress: String, val listenPort: Int, 
-  val totalBlocks: Int, val totalBytes: Int, val replicaID: Int)  
+  val totalBlocks: Int, val totalBytes: Int)  
 extends Comparable [SourceInfo] with Logging {
 
   var currentLeechers = 0
