@@ -359,7 +359,7 @@ extends RDD[Pair[T, U]](sc) {
   : RDD[(K, C)] =
   {
     val shufClass = Class.forName(System.getProperty(
-      "spark.shuffle.class", "spark.DfsShuffle"))
+      "spark.shuffle.class", "spark.LocalFileShuffle"))
     val shuf = shufClass.newInstance().asInstanceOf[Shuffle[K, V, C]]
     shuf.compute(self, numSplits, createCombiner, mergeValue, mergeCombiners)
   }
