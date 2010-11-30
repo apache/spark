@@ -1,7 +1,5 @@
 package spark
 
-import com.google.common.collect.MapMaker
-
 import java.io._
 import java.net._
 import java.util.{BitSet, Comparator, Random, Timer, TimerTask, UUID}
@@ -150,7 +148,7 @@ extends Broadcast  with Logging {
           BitTorrentBroadcast.values.put (uuid, value_)
         }  else {
           // TODO: This part won't work, cause HDFS writing is turned OFF
-          val fileIn = new ObjectInputStream(BroadcastCH.openFileForReading(uuid))
+          val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
           value_ = fileIn.readObject.asInstanceOf[T]
           BitTorrentBroadcast.values.put(uuid, value_)
           fileIn.close
@@ -1028,7 +1026,7 @@ extends Broadcast  with Logging {
 
 private object BitTorrentBroadcast
 extends Logging {
-  val values = new MapMaker ().softValues ().makeMap[UUID, Any]
+  val values = Cache.newKeySpace()
 
   var valueToGuideMap = Map[UUID, SourceInfo] ()
   

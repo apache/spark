@@ -1,7 +1,5 @@
 package spark
 
-import com.google.common.collect.MapMaker
-
 import java.io._
 import java.net._
 import java.util.UUID
@@ -56,7 +54,7 @@ extends Broadcast with Logging {
 
 private object DfsBroadcast
 extends Logging {
-  val values = new MapMaker ().softValues ().makeMap[UUID, Any]
+  val values = Cache.newKeySpace()
 
   private var initialized = false
 
