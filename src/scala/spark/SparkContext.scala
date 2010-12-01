@@ -97,10 +97,7 @@ extends Logging {
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
 
-  // TODO: Keep around a weak hash map of values to Cached versions?
-  // def broadcast[T](value: T) = new DfsBroadcast(value, isLocal)
-  // def broadcast[T](value: T) = new ChainedBroadcast(value, isLocal)
-  // def broadcast[T](value: T) = new BitTorrentBroadcast(value, isLocal)
+  // Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = 
     Broadcast.getBroadcastFactory.newBroadcast[T] (value, isLocal)
 

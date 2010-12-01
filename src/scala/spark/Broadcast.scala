@@ -85,14 +85,16 @@ extends Logging {
 @serializable
 case class SourceInfo (val hostAddress: String, val listenPort: Int, 
   val totalBlocks: Int, val totalBytes: Int)  
-extends Logging {
+extends Comparable[SourceInfo] with Logging {
 
   var currentLeechers = 0
   var receptionFailed = false
   
   var hasBlocks = 0
   var hasBlocksBitVector: BitSet = new BitSet (totalBlocks)
-}
+  
+  // Ascending sort based on leecher count
+  def compareTo (o: SourceInfo): Int = (currentLeechers - o.currentLeechers)}
 
 object SourceInfo {
   // Constants for special values of listenPort
