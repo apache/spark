@@ -4,14 +4,82 @@ import java.util.{BitSet, UUID}
 import java.util.concurrent.{Executors, ThreadPoolExecutor, ThreadFactory}
 
 @serializable
-trait Broadcast {
+trait Broadcast[T] {
   val uuid = UUID.randomUUID
+
+  def value: T
 
   // We cannot have an abstract readObject here due to some weird issues with 
   // readObject having to be 'private' in sub-classes. Possibly a Scala bug!
+
   def sendBroadcast: Unit
 
   override def toString = "spark.Broadcast(" + uuid + ")"
+}
+
+trait BroadcastFactory {
+  def initialize (isMaster: Boolean): Unit
+  def newBroadcast[T] (value_ : T, isLocal: Boolean): Broadcast[T]
+}
+
+private object Broadcast
+extends Logging {
+  private var initialized = false 
+  private var broadcastFactory: BroadcastFactory = null
+
+  // Called by SparkContext or Executor before using Broadcast
+  def initialize (isMaster: Boolean): Unit = {
+    if (!initialized) {
+      val broadcastFactoryClass = System.getProperty("spark.broadcast.Factory",
+        "spark.BitTorrentBroadcastFactory")
+      val booleanArgs = Array[AnyRef] (isMaster.asInstanceOf[AnyRef])
+//      broadcastFactory = Class.forName(broadcastFactoryClass).getConstructors()(0).newInstance(booleanArgs:_*).asInstanceOf[BroadcastFactory]
+      broadcastFactory = Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
+      
+      // Initialize appropriate BroadcastFactory and BroadcastObject
+      broadcastFactory.initialize(isMaster)
+      
+      initialized = true
+    }
+  }
+  
+  def getBroadcastFactory: BroadcastFactory = {
+    if (broadcastFactory == null) {
+      throw new SparkException ("Broadcast.getBroadcastFactory called before initialize")
+    }
+    broadcastFactory
+  }
+  
+  // Returns a standard ThreadFactory except all threads are daemons
+  private def newDaemonThreadFactory: ThreadFactory = {
+    new ThreadFactory {
+      def newThread(r: Runnable): Thread = {
+        var t = Executors.defaultThreadFactory.newThread (r)
+        t.setDaemon (true)
+        return t
+      }
+    }  
+  }
+  
+  // Wrapper over newCachedThreadPool
+  def newDaemonCachedThreadPool: ThreadPoolExecutor = {
+    var threadPool = 
+      Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
+  
+    threadPool.setThreadFactory (newDaemonThreadFactory)
+    
+    return threadPool
+  }
+  
+  // Wrapper over newFixedThreadPool
+  def newDaemonFixedThreadPool (nThreads: Int): ThreadPoolExecutor = {
+    var threadPool = 
+      Executors.newFixedThreadPool (nThreads).asInstanceOf[ThreadPoolExecutor]
+  
+    threadPool.setThreadFactory (newDaemonThreadFactory)
+    
+    return threadPool
+  }  
 }
 
 @serializable
@@ -68,55 +136,4 @@ class SpeedTracker {
   }
   
   override def toString = sourceToSpeedMap.toString
-}
-
-private object Broadcast
-extends Logging {
-  private var initialized = false 
-
-  // Called by SparkContext or Executor before using Broadcast
-  // Calls all other initializers here
-  def initialize (isMaster: Boolean): Unit = {
-    synchronized {
-      if (!initialized) {
-        // Initialization for DfsBroadcast
-        DfsBroadcast.initialize 
-        // Initialization for BitTorrentBroadcast
-        BitTorrentBroadcast.initialize (isMaster)
-        
-        initialized = true
-      }
-    }
-  }
-  
-  // Returns a standard ThreadFactory except all threads are daemons
-  private def newDaemonThreadFactory: ThreadFactory = {
-    new ThreadFactory {
-      def newThread(r: Runnable): Thread = {
-        var t = Executors.defaultThreadFactory.newThread (r)
-        t.setDaemon (true)
-        return t
-      }
-    }  
-  }
-  
-  // Wrapper over newCachedThreadPool
-  def newDaemonCachedThreadPool: ThreadPoolExecutor = {
-    var threadPool = 
-      Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
-  
-    threadPool.setThreadFactory (newDaemonThreadFactory)
-    
-    return threadPool
-  }
-  
-  // Wrapper over newFixedThreadPool
-  def newDaemonFixedThreadPool (nThreads: Int): ThreadPoolExecutor = {
-    var threadPool = 
-      Executors.newFixedThreadPool (nThreads).asInstanceOf[ThreadPoolExecutor]
-  
-    threadPool.setThreadFactory (newDaemonThreadFactory)
-    
-    return threadPool
-  }  
 }

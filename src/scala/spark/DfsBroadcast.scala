@@ -10,8 +10,8 @@ import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
 import spark.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 @serializable 
-class DfsBroadcast[T](@transient var value_ : T, local: Boolean) 
-extends Broadcast with Logging {
+class DfsBroadcast[T](@transient var value_ : T, isLocal: Boolean) 
+extends Broadcast[T] with Logging {
   
   def value = value_
 
@@ -19,7 +19,7 @@ extends Broadcast with Logging {
     DfsBroadcast.values.put(uuid, value_) 
   }
 
-  if (!local) { 
+  if (!isLocal) { 
     sendBroadcast 
   }
 
@@ -50,6 +50,13 @@ extends Broadcast with Logging {
       }
     }
   }
+}
+
+class DfsBroadcastFactory 
+extends BroadcastFactory {
+  def initialize (isMaster: Boolean) = DfsBroadcast.initialize
+  def newBroadcast[T] (value_ : T, isLocal: Boolean) = 
+    new DfsBroadcast[T] (value_, isLocal)
 }
 
 private object DfsBroadcast

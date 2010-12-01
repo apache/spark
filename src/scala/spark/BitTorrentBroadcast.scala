@@ -9,7 +9,7 @@ import scala.collection.mutable.{ListBuffer, Map, Set}
 
 @serializable
 class BitTorrentBroadcast[T] (@transient var value_ : T, isLocal: Boolean) 
-extends Broadcast  with Logging {
+extends Broadcast[T] with Logging {
   
   def value = value_
 
@@ -1028,6 +1028,13 @@ extends Broadcast  with Logging {
   }  
 }
 
+class BitTorrentBroadcastFactory 
+extends BroadcastFactory {
+  def initialize (isMaster: Boolean) = BitTorrentBroadcast.initialize (isMaster)
+  def newBroadcast[T] (value_ : T, isLocal: Boolean) = 
+    new BitTorrentBroadcast[T] (value_, isLocal)
+}
+
 private object BitTorrentBroadcast
 extends Logging {
   val values = Cache.newKeySpace()
@@ -1115,7 +1122,10 @@ extends Logging {
           trackMV.start
           logInfo ("TrackMultipleValues started...")         
         }
-                  
+        
+        // Initialize DfsBroadcast to be used for broadcast variable persistence
+        DfsBroadcast.initialize
+        
         initialized = true
       }
     }
