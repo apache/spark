@@ -28,7 +28,7 @@ extends Logging {
   private var broadcastFactory: BroadcastFactory = null
 
   // Called by SparkContext or Executor before using Broadcast
-  def initialize (isMaster: Boolean): Unit = {
+  def initialize (isMaster: Boolean): Unit = synchronized {
     if (!initialized) {
       val broadcastFactoryClass = System.getProperty("spark.broadcast.Factory",
         "spark.BitTorrentBroadcastFactory")
