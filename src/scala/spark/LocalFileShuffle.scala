@@ -62,7 +62,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
 
     // Load config option to decide whether or not to use HTTP pipelining
     val UseHttpPipelining = 
-        System.getProperty("spark.shuffle.UseHttpPipelining", "false").toBoolean
+        System.getProperty("spark.shuffle.UseHttpPipelining", "true").toBoolean
 
     // Build a traversable list of pairs of server URI and split. Needs to be 
     // of type TraversableOnce[(String, ArrayBuffer[Int])]
@@ -94,6 +94,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
           val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, myId)
           val readStartTime = System.currentTimeMillis
           logInfo ("BEGIN READ: " + url)
+          // TODO: Insert data transfer code before this place
           val inputStream = new ObjectInputStream(new URL(url).openStream())
           try {
             while (true) {
