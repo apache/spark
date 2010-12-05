@@ -150,7 +150,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
 
     override def run: Unit = {
       val readStartTime = System.currentTimeMillis
-      logInfo ("BEGIN READ: " + requestPath)
+      logInfo ("BEGIN READ: http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestPath))
 
       // Setup the timeout mechanism
       var timeOutTask = new TimerTask {
@@ -216,9 +216,9 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
           
           receptionSucceeded = true
 
-          logInfo ("END READ: " + requestPath)
+          logInfo ("END READ: http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestPath))
           val readTime = (System.currentTimeMillis - readStartTime)
-          logInfo ("Reading " + requestPath + " took " + readTime + " millis.")
+          logInfo ("Reading http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestPath) + " took " + readTime + " millis.")
         } else {
           throw new SparkException("ShuffleServer " + hostAddress + " does not have " + requestPath)
         }
