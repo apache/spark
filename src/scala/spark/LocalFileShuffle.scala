@@ -1,9 +1,10 @@
 package spark
 
 import java.io._
-import java.net.URL
-import java.util.UUID
+import java.net._
+import java.util.{BitSet, Random, Timer, TimerTask, UUID}
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.{Executors, ThreadPoolExecutor, ThreadFactory}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
@@ -15,6 +16,13 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  */
 @serializable
 class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
+  @transient var totalSplits = 0
+  @transient var hasSplits = 0
+  @transient var hasSplitsBitVector: BitSet = null
+  @transient var splitsInRequestBitVector: BitSet = null
+
+  @transient var combiners: HashMap[K,C] = null
+  
   override def compute(input: RDD[(K, V)],
                        numOutputSplits: Int,
                        createCombiner: V => C,
@@ -60,66 +68,146 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       (myIndex, LocalFileShuffle.serverUri)
     }).collect()
 
-    // Load config option to decide whether or not to use HTTP pipelining
-    val UseHttpPipelining = 
-        System.getProperty("spark.shuffle.UseHttpPipelining", "true").toBoolean
-
-    // Build a traversable list of pairs of server URI and split. Needs to be 
-    // of type TraversableOnce[(String, ArrayBuffer[Int])]
-    val splitsByUri = if (UseHttpPipelining) {
-      // Build a hashmap from server URI to list of splits (to facillitate
-      // fetching all the URIs on a server within a single connection)
-      val splitsByUriHM = new HashMap[String, ArrayBuffer[Int]]
+    val splitsByUri = new ArrayBuffer[(String, Int)]
       for ((inputId, serverUri) <- outputLocs) {
-        splitsByUriHM.getOrElseUpdate(serverUri, ArrayBuffer()) += inputId
+        splitsByUri += ((serverUri, inputId))
       }
-      splitsByUriHM
-    } else {
-      // Don't use HTTP pipelining
-      val splitsByUriAB = new ArrayBuffer[(String, ArrayBuffer[Int])]
-      for ((inputId, serverUri) <- outputLocs) {
-        splitsByUriAB += ((serverUri, new ArrayBuffer[Int] += inputId))
-      }
-      splitsByUriAB
-    }
 
     // TODO: Could broadcast splitsByUri
 
     // Return an RDD that does each of the merges for a given partition
     val indexes = sc.parallelize(0 until numOutputSplits, numOutputSplits)
     return indexes.flatMap((myId: Int) => {
-      val combiners = new HashMap[K, C]
-      for ((serverUri, inputIds) <- Utils.shuffle(splitsByUri)) {
-        for (i <- inputIds) {
-          val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, myId)
-          val readStartTime = System.currentTimeMillis
-          logInfo ("BEGIN READ: " + url)
-          // TODO: Insert data transfer code before this place
-          val inputStream = new ObjectInputStream(new URL(url).openStream())
-          try {
-            while (true) {
-              val (k, c) = inputStream.readObject().asInstanceOf[(K, C)]
+      totalSplits = splitsByUri.size
+      hasSplits = 0
+      hasSplitsBitVector = new BitSet (totalSplits)
+      splitsInRequestBitVector = new BitSet (totalSplits)
+      combiners = new HashMap[K, C]
+      
+      var threadPool = LocalFileShuffle.newDaemonFixedThreadPool (
+        LocalFileShuffle.MaxConnections)
+        
+      while (hasSplits < totalSplits) {
+        var numThreadsToCreate =
+          Math.min (totalSplits, LocalFileShuffle.MaxConnections) -
+          threadPool.getActiveCount
+      
+        while (hasSplits < totalSplits && numThreadsToCreate > 0) {
+          // Select a random split to pull
+          val splitIndex = selectRandomSplit
+          
+          if (splitIndex != -1) {
+            val (serverUri, inputId) = splitsByUri (splitIndex)
+            val url = 
+              "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, inputId, myId)
+
+            threadPool.execute (
+              new ShuffleClient (url, splitIndex, mergeCombiners))
+              
+            // splitIndex is in transit. Will be unset in the ShuffleClient
+            splitsInRequestBitVector.synchronized {
+              splitsInRequestBitVector.set (splitIndex)
+            }
+          }
+          
+          numThreadsToCreate = numThreadsToCreate - 1
+        }
+        
+        // Sleep for a while before creating new threads
+        Thread.sleep (LocalFileShuffle.MinKnockInterval)
+      }
+      combiners
+    })
+  }
+  
+  def selectRandomSplit: Int = {
+    var requiredSplits = new ArrayBuffer[Int]
+    
+    synchronized {
+      for (i <- 0 until totalSplits) {
+        if (!hasSplitsBitVector.get(i) && !splitsInRequestBitVector.get(i)) {
+          requiredSplits += i
+        }
+      }
+    }
+    
+    if (requiredSplits.size > 0) {
+      requiredSplits(LocalFileShuffle.ranGen.nextInt (requiredSplits.size))
+    } else {
+      -1
+    }
+  }
+  
+  class ShuffleClient (url: String, splitIndex: Int, 
+    mergeCombiners: (C, C) => C)
+  extends Thread with Logging {
+    private var receptionSucceeded = false
+
+    override def run: Unit = {
+      val readStartTime = System.currentTimeMillis
+      logInfo ("BEGIN READ: " + url)
+      
+      try {    
+        val inputStream = new ObjectInputStream(new URL(url).openStream())
+        try {
+          while (true) {
+            val (k, c) = inputStream.readObject().asInstanceOf[(K, C)]
+            combiners.synchronized {
               combiners(k) = combiners.get(k) match {
                 case Some(oldC) => mergeCombiners(oldC, c)
                 case None => c
               }
             }
-          } catch {
-            case e: EOFException => {}
           }
-          inputStream.close()
-          logInfo ("END READ: " + url)
-          val readTime = (System.currentTimeMillis - readStartTime)
-          logInfo ("Reading " + url + " took " + readTime + " millis.")
+        } catch {
+          case e: EOFException => {}
+        }
+        inputStream.close()
+        
+        // Reception completed. Update stats.
+        hasSplitsBitVector.synchronized {
+          hasSplitsBitVector.set (splitIndex)
+        }
+        hasSplits += 1
+
+        // We have received splitIndex
+        splitsInRequestBitVector.synchronized {
+          splitsInRequestBitVector.set (splitIndex, false)
+        }
+        
+        receptionSucceeded = true
+                  
+        logInfo ("END READ: " + url)
+        val readTime = (System.currentTimeMillis - readStartTime)
+        logInfo ("Reading " + url + " took " + readTime + " millis.")        
+      } catch {
+        // EOFException is expected to happen because sender can break
+        // connection due to timeout
+        case eofe: java.io.EOFException => { }
+        case e: Exception => {
+          logInfo ("ShuffleClient had a " + e)
+        }
+      } finally {
+        // If reception failed, unset for future retry
+        if (!receptionSucceeded) {
+          splitsInRequestBitVector.synchronized {
+            splitsInRequestBitVector.set (splitIndex, false)
+          }
         }
       }
-      combiners
-    })
-  }
+    }
+  }     
 }
 
 
 object LocalFileShuffle extends Logging {
+  // Used thoughout the code for small and large waits/timeouts
+  private var MinKnockInterval_ = 1000
+  private var MaxKnockInterval_ = 5000
+  
+  // Maximum number of connections
+  private var MaxConnections_ = 4
+  
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
 
@@ -128,8 +216,20 @@ object LocalFileShuffle extends Logging {
   private var server: HttpServer = null
   private var serverUri: String = null
   
+  // Random number generator
+  var ranGen = new Random
+  
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
+      // Load config parameters
+      MinKnockInterval_ =
+        System.getProperty ("spark.shuffle.MinKnockInterval", "1000").toInt
+      MaxKnockInterval_ =
+        System.getProperty ("spark.shuffle.MaxKnockInterval", "5000").toInt
+
+      MaxConnections_ =
+        System.getProperty ("spark.shuffle.MaxConnections", "4").toInt
+      
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
       val localDirRoot = System.getProperty("spark.local.dir", "/tmp")
@@ -180,6 +280,11 @@ object LocalFileShuffle extends Logging {
     }
   }
   
+  def MinKnockInterval = MinKnockInterval_
+  def MaxKnockInterval = MaxKnockInterval_
+  
+  def MaxConnections = MaxConnections_
+  
   def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int): File = {
     initializeIfNeeded()
     val dir = new File(shuffleDir, shuffleId + "/" + inputId)
@@ -196,4 +301,25 @@ object LocalFileShuffle extends Logging {
   def newShuffleId(): Long = {
     nextShuffleId.getAndIncrement()
   }
+  
+  // Returns a standard ThreadFactory except all threads are daemons
+  private def newDaemonThreadFactory: ThreadFactory = {
+    new ThreadFactory {
+      def newThread(r: Runnable): Thread = {
+        var t = Executors.defaultThreadFactory.newThread (r)
+        t.setDaemon (true)
+        return t
+      }
+    }
+  }
+
+  // Wrapper over newFixedThreadPool
+  def newDaemonFixedThreadPool (nThreads: Int): ThreadPoolExecutor = {
+    var threadPool =
+      Executors.newFixedThreadPool (nThreads).asInstanceOf[ThreadPoolExecutor]
+
+    threadPool.setThreadFactory (newDaemonThreadFactory)
+    
+    return threadPool
+  }   
 }
