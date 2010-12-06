@@ -15,12 +15,13 @@ JARS += third_party/jetty-7.1.6.v20100715/servlet-api-2.5.jar
 JARS += third_party/apache-log4j-1.2.16/log4j-1.2.16.jar
 JARS += third_party/slf4j-1.6.1/slf4j-api-1.6.1.jar
 JARS += third_party/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
+JARS += third_party/compress-lzf-0.6.0/compress-lzf-0.6.0.jar
+
 CLASSPATH = $(subst $(SPACE),:,$(JARS))
 
 SCALA_SOURCES =  src/examples/*.scala src/scala/spark/*.scala src/scala/spark/repl/*.scala
 SCALA_SOURCES += src/test/spark/*.scala src/test/spark/repl/*.scala
 
-JAVA_SOURCES = $(wildcard src/java/spark/compress/lzf/*.java)
 
 ifeq ($(USE_FSC),1)
   COMPILER_NAME = fsc
@@ -36,25 +37,19 @@ endif
 
 CONF_FILES = conf/spark-env.sh conf/log4j.properties conf/java-opts
 
-all: scala java conf-files
+all: scala conf-files
 
 build/classes:
 	mkdir -p build/classes
 
-scala: build/classes java
+scala: build/classes
 	$(COMPILER) -d build/classes -classpath build/classes:$(CLASSPATH) $(SCALA_SOURCES)
-
-java: $(JAVA_SOURCES) build/classes
-	javac -d build/classes $(JAVA_SOURCES)
-
-native: java
-	$(MAKE) -C src/native
 
 jar: build/spark.jar build/spark-dep.jar
 
 dep-jar: build/spark-dep.jar
 
-build/spark.jar: scala java
+build/spark.jar: scala
 	jar cf build/spark.jar -C build/classes spark
 
 build/spark-dep.jar:
@@ -73,7 +68,6 @@ test: all
 default: all
 
 clean:
-	$(MAKE) -C src/native clean
 	rm -rf build
 
-.phony: default all clean scala java native jar dep-jar conf-files
+.phony: default all clean scala jar dep-jar conf-files
