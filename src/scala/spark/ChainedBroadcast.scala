@@ -729,7 +729,7 @@ extends Logging {
   private var initialized = false
   private var isMaster_ = false
 
-  private var MasterHostAddress_ = "127.0.0.1"
+  private var MasterHostAddress_ = InetAddress.getLocalHost.getHostAddress
   private var MasterTrackerPort_ : Int = 22222
   private var BlockSize_ : Int = 512 * 1024
   private var MaxRetryCount_ : Int = 2
@@ -745,24 +745,22 @@ extends Logging {
   def initialize (isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
-        MasterHostAddress_ = 
-          System.getProperty ("spark.broadcast.MasterHostAddress", "127.0.0.1")
         MasterTrackerPort_ = 
-          System.getProperty ("spark.broadcast.MasterTrackerPort", "22222").toInt
+          System.getProperty ("spark.broadcast.masterTrackerPort", "22222").toInt
         BlockSize_ = 
-          System.getProperty ("spark.broadcast.BlockSize", "512").toInt * 1024
+          System.getProperty ("spark.broadcast.blockSize", "512").toInt * 1024
         MaxRetryCount_ = 
-          System.getProperty ("spark.broadcast.MaxRetryCount", "2").toInt          
+          System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
 
         TrackerSocketTimeout_ = 
-          System.getProperty ("spark.broadcast.TrackerSocketTimeout", "50000").toInt          
+          System.getProperty ("spark.broadcast.trackerSocketTimeout", "50000").toInt          
         ServerSocketTimeout_ = 
-          System.getProperty ("spark.broadcast.ServerSocketTimeout", "10000").toInt          
+          System.getProperty ("spark.broadcast.serverSocketTimeout", "10000").toInt          
 
         MinKnockInterval_ =
-          System.getProperty ("spark.broadcast.MinKnockInterval", "500").toInt
+          System.getProperty ("spark.broadcast.minKnockInterval", "500").toInt
         MaxKnockInterval_ =
-          System.getProperty ("spark.broadcast.MaxKnockInterval", "999").toInt
+          System.getProperty ("spark.broadcast.maxKnockInterval", "999").toInt
 
         isMaster_ = isMaster__        
                   

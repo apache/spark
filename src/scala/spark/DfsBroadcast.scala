@@ -82,7 +82,7 @@ extends Logging {
           conf.setInt("dfs.replication", rep)
           fileSystem = FileSystem.get(new URI(dfs), conf)
         }
-        workDir = System.getProperty("spark.dfs.workdir", "/tmp")
+        workDir = System.getProperty("spark.dfs.workDir", "/tmp")
         compress = System.getProperty("spark.compress", "false").toBoolean
 
         initialized = true

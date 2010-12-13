@@ -1047,7 +1047,7 @@ extends Logging {
   private var initialized = false
   private var isMaster_ = false
 
-  private var MasterHostAddress_ = "127.0.0.1"
+  private var MasterHostAddress_ = InetAddress.getLocalHost.getHostAddress
   private var MasterTrackerPort_ : Int = 11111
   private var BlockSize_ : Int = 512 * 1024
   private var MaxRetryCount_ : Int = 2
@@ -1079,40 +1079,38 @@ extends Logging {
   def initialize (isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
-        MasterHostAddress_ = 
-          System.getProperty ("spark.broadcast.MasterHostAddress", "127.0.0.1")
         MasterTrackerPort_ = 
-          System.getProperty ("spark.broadcast.MasterTrackerPort", "11111").toInt
+          System.getProperty ("spark.broadcast.masterTrackerPort", "11111").toInt
         BlockSize_ = 
-          System.getProperty ("spark.broadcast.BlockSize", "512").toInt * 1024
+          System.getProperty ("spark.broadcast.blockSize", "512").toInt * 1024
         MaxRetryCount_ = 
-          System.getProperty ("spark.broadcast.MaxRetryCount", "2").toInt          
+          System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
 
         TrackerSocketTimeout_ = 
-          System.getProperty ("spark.broadcast.TrackerSocketTimeout", "50000").toInt
+          System.getProperty ("spark.broadcast.trackerSocketTimeout", "50000").toInt
         ServerSocketTimeout_ = 
-          System.getProperty ("spark.broadcast.ServerSocketTimeout", "10000").toInt
+          System.getProperty ("spark.broadcast.serverSocketTimeout", "10000").toInt
 
         MinKnockInterval_ = 
-          System.getProperty ("spark.broadcast.MinKnockInterval", "500").toInt
+          System.getProperty ("spark.broadcast.minKnockInterval", "500").toInt
         MaxKnockInterval_ = 
-          System.getProperty ("spark.broadcast.MaxKnockInterval", "999").toInt
+          System.getProperty ("spark.broadcast.maxKnockInterval", "999").toInt
 
         MaxPeersInGuideResponse_ = 
-          System.getProperty ("spark.broadcast.MaxPeersInGuideResponse", "4").toInt
+          System.getProperty ("spark.broadcast.maxPeersInGuideResponse", "4").toInt
 
         MaxRxPeers_ = 
-          System.getProperty ("spark.broadcast.MaxRxPeers", "4").toInt
+          System.getProperty ("spark.broadcast.maxRxPeers", "4").toInt
         MaxTxPeers_ = 
-          System.getProperty ("spark.broadcast.MaxTxPeers", "4").toInt
+          System.getProperty ("spark.broadcast.maxTxPeers", "4").toInt
 
         MaxChatTime_ = 
-          System.getProperty ("spark.broadcast.MaxChatTime", "250").toInt
+          System.getProperty ("spark.broadcast.maxChatTime", "250").toInt
         MaxChatBlocks_ = 
-          System.getProperty ("spark.broadcast.MaxChatBlocks", "1024").toInt        
+          System.getProperty ("spark.broadcast.maxChatBlocks", "1024").toInt        
 
         EndGameFraction_ = 
-          System.getProperty ("spark.broadcast.EndGameFraction", "1.0").toDouble
+          System.getProperty ("spark.broadcast.endGameFraction", "1.0").toDouble
 
         isMaster_ = isMaster__        
                   

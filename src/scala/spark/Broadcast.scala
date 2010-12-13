@@ -12,8 +12,6 @@ trait Broadcast[T] {
   // We cannot have an abstract readObject here due to some weird issues with 
   // readObject having to be 'private' in sub-classes. Possibly a Scala bug!
 
-  def sendBroadcast: Unit
-
   override def toString = "spark.Broadcast(" + uuid + ")"
 }
 
@@ -30,11 +28,12 @@ extends Logging {
   // Called by SparkContext or Executor before using Broadcast
   def initialize (isMaster: Boolean): Unit = synchronized {
     if (!initialized) {
-      val broadcastFactoryClass = System.getProperty("spark.broadcast.Factory",
-        "spark.BitTorrentBroadcastFactory")
+      val broadcastFactoryClass = System.getProperty("spark.broadcast.factory",
+        "spark.DfsBroadcastFactory")
       val booleanArgs = Array[AnyRef] (isMaster.asInstanceOf[AnyRef])
-//      broadcastFactory = Class.forName(broadcastFactoryClass).getConstructors()(0).newInstance(booleanArgs:_*).asInstanceOf[BroadcastFactory]
-      broadcastFactory = Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
+
+      broadcastFactory = 
+        Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
       
       // Initialize appropriate BroadcastFactory and BroadcastObject
       broadcastFactory.initialize(isMaster)
