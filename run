@@ -48,6 +48,7 @@ CLASSPATH+=:$FWDIR/third_party/jetty-7.1.6.v20100715/servlet-api-2.5.jar
 CLASSPATH+=:$FWDIR/third_party/apache-log4j-1.2.16/log4j-1.2.16.jar
 CLASSPATH+=:$FWDIR/third_party/slf4j-1.6.1/slf4j-api-1.6.1.jar
 CLASSPATH+=:$FWDIR/third_party/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
+CLASSPATH+=:$FWDIR/third_party/compress-lzf-0.6.0/compress-lzf-0.6.0.jar
 for jar in $FWDIR/third_party/hadoop-0.20.0/lib/*.jar; do
   CLASSPATH+=:$jar
 done
