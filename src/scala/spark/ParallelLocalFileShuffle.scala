@@ -244,13 +244,13 @@ object ParallelLocalFileShuffle extends Logging {
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
       // Load config parameters
-      MinKnockInterval_ =
-        System.getProperty ("spark.shuffle.MinKnockInterval", "1000").toInt
-      MaxKnockInterval_ =
-        System.getProperty ("spark.shuffle.MaxKnockInterval", "5000").toInt
+      MinKnockInterval_ = System.getProperty (
+          "spark.parallelLocalFileShuffle.MinKnockInterval", "1000").toInt
+      MaxKnockInterval_ = System.getProperty (
+        "spark.parallelLocalFileShuffle.MaxKnockInterval", "5000").toInt
 
-      MaxConnections_ =
-        System.getProperty ("spark.shuffle.MaxConnections", "4").toInt
+      MaxConnections_ = System.getProperty (
+          "spark.parallelLocalFileShuffle.MaxConnections", "4").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
@@ -280,6 +280,7 @@ object ParallelLocalFileShuffle extends Logging {
       shuffleDir = new File(localDir, "shuffle")
       shuffleDir.mkdirs()
       logInfo("Shuffle dir: " + shuffleDir)
+      
       val extServerPort = System.getProperty(
         "spark.localFileShuffle.external.server.port", "-1").toInt
       if (extServerPort != -1) {

@@ -141,6 +141,7 @@ object BasicLocalFileShuffle extends Logging {
       shuffleDir = new File(localDir, "shuffle")
       shuffleDir.mkdirs()
       logInfo("Shuffle dir: " + shuffleDir)
+      
       val extServerPort = System.getProperty(
         "spark.localFileShuffle.external.server.port", "-1").toInt
       if (extServerPort != -1) {
