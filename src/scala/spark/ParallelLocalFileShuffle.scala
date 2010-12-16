@@ -10,7 +10,9 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 
 /**
- * A simple implementation of shuffle using local files served through HTTP.
+ * An implementation of shuffle using local files served through HTTP where 
+ * receivers create simultaneous connections to multiple servers by setting the
+ * 'spark.parallelLocalFileShuffle.maxConnections' config option.
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
@@ -221,12 +223,12 @@ object ParallelLocalFileShuffle extends Logging {
     if (!initialized) {
       // Load config parameters
       MinKnockInterval_ = System.getProperty (
-          "spark.parallelLocalFileShuffle.minKnockInterval", "1000").toInt
+        "spark.parallelLocalFileShuffle.minKnockInterval", "1000").toInt
       MaxKnockInterval_ = System.getProperty (
         "spark.parallelLocalFileShuffle.maxKnockInterval", "5000").toInt
 
       MaxConnections_ = System.getProperty (
-          "spark.parallelLocalFileShuffle.maxConnections", "4").toInt
+        "spark.parallelLocalFileShuffle.maxConnections", "4").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc

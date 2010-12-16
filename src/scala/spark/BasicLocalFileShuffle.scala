@@ -9,7 +9,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 
 /**
- * A simple implementation of shuffle using local files served through HTTP.
+ * A basic implementation of shuffle using local files served through HTTP.
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
