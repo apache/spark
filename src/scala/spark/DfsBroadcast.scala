@@ -7,7 +7,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
 
-import spark.compress.lzf.{LZFInputStream, LZFOutputStream}
+import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 @serializable 
 class DfsBroadcast[T](@transient var value_ : T, isLocal: Boolean) 
