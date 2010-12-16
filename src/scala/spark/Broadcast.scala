@@ -1,20 +1,7 @@
 package spark
 
-import java.io._
-import java.net._
-import java.util.{BitSet, UUID, PriorityQueue, Comparator}
-
+import java.util.{BitSet, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
-
-import scala.actors.Actor
-import scala.actors.Actor._
-
-import scala.collection.mutable.Map
-
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
-
-import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 @serializable
 trait Broadcast[T] {
