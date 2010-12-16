@@ -221,12 +221,12 @@ object ParallelLocalFileShuffle extends Logging {
     if (!initialized) {
       // Load config parameters
       MinKnockInterval_ = System.getProperty (
-          "spark.parallelLocalFileShuffle.MinKnockInterval", "1000").toInt
+          "spark.parallelLocalFileShuffle.minKnockInterval", "1000").toInt
       MaxKnockInterval_ = System.getProperty (
-        "spark.parallelLocalFileShuffle.MaxKnockInterval", "5000").toInt
+        "spark.parallelLocalFileShuffle.maxKnockInterval", "5000").toInt
 
       MaxConnections_ = System.getProperty (
-          "spark.parallelLocalFileShuffle.MaxConnections", "4").toInt
+          "spark.parallelLocalFileShuffle.maxConnections", "4").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
