@@ -1,1 +1,1 @@
--Dspark.shuffle.class=spark.ParallelLocalFileShuffle -Dspark.shuffle.UseHttpPipelining=true -Dspark.parallelLocalFileShuffle.MaxConnections=2
+-Dspark.shuffle.class=spark.ParallelLocalFileShuffle -Dspark.parallelLocalFileShuffle.MaxConnections=2
