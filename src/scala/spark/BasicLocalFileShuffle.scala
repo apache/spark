@@ -46,6 +46,7 @@ class BasicLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
           case None => createCombiner(v)
         }
       }
+      
       for (i <- 0 until numOutputSplits) {
         val file = BasicLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
         val writeStartTime = System.currentTimeMillis
@@ -57,6 +58,7 @@ class BasicLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         val writeTime = (System.currentTimeMillis - writeStartTime)
         logInfo ("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
       }
+      
       (myIndex, BasicLocalFileShuffle.serverUri)
     }).collect()
 

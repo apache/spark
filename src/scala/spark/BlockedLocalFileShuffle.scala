@@ -12,14 +12,22 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 /**
  * An implementation of shuffle using local files served through HTTP where 
  * receivers create simultaneous connections to multiple servers by setting the
- * 'spark.parallelLocalFileShuffle.maxConnections' config option.
+ * 'spark.blockedLocalFileShuffle.maxConnections' config option.
+ *
+ * By controlling the 'spark.blockedLocalFileShuffle.blockSize' config option
+ * one can also control the largest block size to divide each map output into.
+ * Essentially, instead of creating one large output file for each reducer, maps
+ * create multiple smaller files to enable finer level of engagement.
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
+class BlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   @transient var totalSplits = 0
   @transient var hasSplits = 0
+  
+  @transient var totalBlocksInSplit: Array[Int] = null
+  @transient var hasBlocksInSplit: Array[Int] = null
   
   @transient var hasSplitsBitVector: BitSet = null
   @transient var splitsInRequestBitVector: BitSet = null
@@ -34,7 +42,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   : RDD[(K, C)] =
   {
     val sc = input.sparkContext
-    val shuffleId = ParallelLocalFileShuffle.newShuffleId()
+    val shuffleId = BlockedLocalFileShuffle.newShuffleId()
     logInfo("Shuffle ID: " + shuffleId)
 
     val splitRdd = new NumberedSplitRDD(input)
@@ -59,18 +67,58 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       }
       
       for (i <- 0 until numOutputSplits) {
-        val file = ParallelLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
-        val writeStartTime = System.currentTimeMillis
-        logInfo ("BEGIN WRITE: " + file)
-        val out = new ObjectOutputStream(new FileOutputStream(file))
-        buckets(i).foreach(pair => out.writeObject(pair))
+        var blockNum = 0
+        var isDirty = false
+        var file: File = null
+        var out: ObjectOutputStream = null
+        
+        var writeStartTime: Long = 0
+        
+        buckets(i).foreach(pair => {
+          // Open a new file if necessary
+          if (!isDirty) {
+            file = BlockedLocalFileShuffle.getOutputFile(shuffleId, myIndex, i, 
+              blockNum)
+            writeStartTime = System.currentTimeMillis
+            logInfo ("BEGIN WRITE: " + file)
+            
+            out = new ObjectOutputStream(new FileOutputStream(file))
+          }
+          
+          out.writeObject(pair)
+          out.flush()
+          isDirty = true
+          
+          // Close the old file if has crossed the blockSize limit
+          if (file.length > BlockedLocalFileShuffle.BlockSize) {
+            out.close()
+            logInfo ("END WRITE: " + file)
+            val writeTime = (System.currentTimeMillis - writeStartTime)
+            logInfo ("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+
+            blockNum = blockNum + 1
+            isDirty = false
+          }
+        })
+        
+        if (isDirty) {
+          out.close()
+          logInfo ("END WRITE: " + file)
+          val writeTime = (System.currentTimeMillis - writeStartTime)
+          logInfo ("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+
+          blockNum = blockNum + 1
+        }
+        
+        // Write the BLOCKNUM file
+        file = 
+          BlockedLocalFileShuffle.getBlockNumOutputFile(shuffleId, myIndex, i)
+        out = new ObjectOutputStream(new FileOutputStream(file))
+        out.writeObject(blockNum)
         out.close()
-        logInfo ("END WRITE: " + file)
-        val writeTime = (System.currentTimeMillis - writeStartTime)
-        logInfo ("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
       }
       
-      (myIndex, ParallelLocalFileShuffle.serverUri)
+      (myIndex, BlockedLocalFileShuffle.serverUri)
     }).collect()
 
     // TODO: Could broadcast outputLocs
@@ -81,17 +129,20 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       totalSplits = outputLocs.size
       hasSplits = 0
       
+      totalBlocksInSplit = Array.tabulate(totalSplits)(_ => -1)
+      hasBlocksInSplit = Array.tabulate(totalSplits)(_ => 0)
+      
       hasSplitsBitVector = new BitSet (totalSplits)
       splitsInRequestBitVector = new BitSet (totalSplits)
       
       combiners = new HashMap[K, C]
       
-      var threadPool = ParallelLocalFileShuffle.newDaemonFixedThreadPool (
-        ParallelLocalFileShuffle.MaxConnections)
+      var threadPool = BlockedLocalFileShuffle.newDaemonFixedThreadPool (
+        BlockedLocalFileShuffle.MaxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate =
-          Math.min (totalSplits, ParallelLocalFileShuffle.MaxConnections) -
+          Math.min (totalSplits, BlockedLocalFileShuffle.MaxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -114,7 +165,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         }
         
         // Sleep for a while before creating new threads
-        Thread.sleep (ParallelLocalFileShuffle.MinKnockInterval)
+        Thread.sleep (BlockedLocalFileShuffle.MinKnockInterval)
       }
       combiners
     })
@@ -132,7 +183,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
     }
     
     if (requiredSplits.size > 0) {
-      requiredSplits(ParallelLocalFileShuffle.ranGen.nextInt (
+      requiredSplits(BlockedLocalFileShuffle.ranGen.nextInt (
         requiredSplits.size))
     } else {
       -1
@@ -146,9 +197,22 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
     private var receptionSucceeded = false
 
     override def run: Unit = {
-      try {    
+      try {
+        // TODO: Everything will break if BLOCKNUM is not correctly received
+        // First get the BLOCKNUM file if totalBlocksInSplit(inputId) is unknown
+        if (totalBlocksInSplit(inputId) == -1) {
+          val url = "%s/shuffle/%d/%d/BLOCKNUM-%d".format(serverUri, shuffleId, 
+            inputId, myId)
+          logInfo (url)
+          val inputStream = new ObjectInputStream(new URL(url).openStream())
+          totalBlocksInSplit(inputId) = 
+            inputStream.readObject().asInstanceOf[Int]
+          inputStream.close()
+        }
+          
         val url = 
-          "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, inputId, myId)
+          "%s/shuffle/%d/%d/%d-%d".format(serverUri, shuffleId, inputId, 
+            myId, hasBlocksInSplit(inputId))
         
         val readStartTime = System.currentTimeMillis
         logInfo ("BEGIN READ: " + url)
@@ -174,10 +238,15 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         logInfo ("Reading " + url + " took " + readTime + " millis.")
 
         // Reception completed. Update stats.
-        hasSplitsBitVector.synchronized {
-          hasSplitsBitVector.set (splitIndex)
+        hasBlocksInSplit(inputId) = hasBlocksInSplit(inputId) + 1
+        
+        // Split has been received only if all the blocks have been received
+        if (hasBlocksInSplit(inputId) == totalBlocksInSplit(inputId)) {
+          hasSplitsBitVector.synchronized {
+            hasSplitsBitVector.set (splitIndex)
+          }
+          hasSplits += 1
         }
-        hasSplits += 1
 
         // We have received splitIndex
         splitsInRequestBitVector.synchronized {
@@ -205,8 +274,10 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
 }
 
 
-object ParallelLocalFileShuffle extends Logging {
+object BlockedLocalFileShuffle extends Logging {
   // Used thoughout the code for small and large waits/timeouts
+  private var BlockSize_ = 1024 * 1024
+  
   private var MinKnockInterval_ = 1000
   private var MaxKnockInterval_ = 5000
   
@@ -227,13 +298,16 @@ object ParallelLocalFileShuffle extends Logging {
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
       // Load config parameters
+      BlockSize_ = System.getProperty (
+        "spark.blockedLocalFileShuffle.blockSize", "1024").toInt * 1024
+      
       MinKnockInterval_ = System.getProperty (
-        "spark.parallelLocalFileShuffle.minKnockInterval", "1000").toInt
+        "spark.blockedLocalFileShuffle.minKnockInterval", "1000").toInt
       MaxKnockInterval_ = System.getProperty (
-        "spark.parallelLocalFileShuffle.maxKnockInterval", "5000").toInt
+        "spark.blockedLocalFileShuffle.maxKnockInterval", "5000").toInt
 
       MaxConnections_ = System.getProperty (
-        "spark.parallelLocalFileShuffle.maxConnections", "4").toInt
+        "spark.blockedLocalFileShuffle.maxConnections", "4").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
@@ -286,16 +360,28 @@ object ParallelLocalFileShuffle extends Logging {
     }
   }
   
+  def BlockSize = BlockSize_
+  
   def MinKnockInterval = MinKnockInterval_
   def MaxKnockInterval = MaxKnockInterval_
   
   def MaxConnections = MaxConnections_
   
-  def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int): File = {
+  def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int, 
+    blockId: Int): File = {
     initializeIfNeeded()
     val dir = new File(shuffleDir, shuffleId + "/" + inputId)
     dir.mkdirs()
-    val file = new File(dir, "" + outputId)
+    val file = new File(dir, "%d-%d".format(outputId, blockId))
+    return file
+  }
+  
+  def getBlockNumOutputFile(shuffleId: Long, inputId: Int, 
+    outputId: Int): File = {
+    initializeIfNeeded()
+    val dir = new File(shuffleDir, shuffleId + "/" + inputId)
+    dir.mkdirs()
+    val file = new File(dir, "BLOCKNUM-" + outputId)
     return file
   }
 

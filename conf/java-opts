@@ -1,1 +1,1 @@
--Dspark.shuffle.class=spark.ParallelLocalFileShuffle -Dspark.parallelLocalFileShuffle.maxConnections=2
+-Dspark.shuffle.class=spark.BlockedLocalFileShuffle -Dspark.blockedLocalFileShuffle.maxConnections=2 -Dspark.blockedLocalFileShuffle.blockSize=256 -Dspark.blockedLocalFileShuffle.minKnockInterval=50
