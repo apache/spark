@@ -1,11 +1,11 @@
 import spark.SparkContext
 
-object BroadcastTest {
+object MultiBroadcastTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
       System.err.println("Usage: BroadcastTest <host> [<slices>] [numElem]")
       System.exit(1)
-    }  
+    }
     
     val spark = new SparkContext(args(0), "Broadcast Test")
     val slices = if (args.length > 1) args(1).toInt else 2
@@ -15,9 +15,14 @@ object BroadcastTest {
     for (i <- 0 until arr1.length) 
       arr1(i) = i
     
+    var arr2 = new Array[Int](num * 2)
+    for (i <- 0 until arr2.length)
+      arr2(i) = i
+
     val barr1 = spark.broadcast(arr1)
+    val barr2 = spark.broadcast(arr2)
     spark.parallelize(1 to 10, slices).foreach {
-      i => println(barr1.value.size)
+      i => println(barr1.value.size + barr2.value.size)
     }
   }
 }
