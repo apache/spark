@@ -61,13 +61,13 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       for (i <- 0 until numOutputSplits) {
         val file = ParallelLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
         val writeStartTime = System.currentTimeMillis
-        logInfo ("BEGIN WRITE: " + file)
+        logInfo("BEGIN WRITE: " + file)
         val out = new ObjectOutputStream(new FileOutputStream(file))
         buckets(i).foreach(pair => out.writeObject(pair))
         out.close()
-        logInfo ("END WRITE: " + file)
-        val writeTime = (System.currentTimeMillis - writeStartTime)
-        logInfo ("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+        logInfo("END WRITE: " + file)
+        val writeTime = System.currentTimeMillis - writeStartTime
+        logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
       }
       
       (myIndex, ParallelLocalFileShuffle.serverUri)
@@ -81,17 +81,17 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       totalSplits = outputLocs.size
       hasSplits = 0
       
-      hasSplitsBitVector = new BitSet (totalSplits)
-      splitsInRequestBitVector = new BitSet (totalSplits)
+      hasSplitsBitVector = new BitSet(totalSplits)
+      splitsInRequestBitVector = new BitSet(totalSplits)
       
       combiners = new HashMap[K, C]
       
-      var threadPool = ParallelLocalFileShuffle.newDaemonFixedThreadPool (
+      var threadPool = ParallelLocalFileShuffle.newDaemonFixedThreadPool(
         ParallelLocalFileShuffle.MaxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate =
-          Math.min (totalSplits, ParallelLocalFileShuffle.MaxConnections) -
+          Math.min(totalSplits, ParallelLocalFileShuffle.MaxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -99,14 +99,14 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
           val splitIndex = selectRandomSplit
           
           if (splitIndex != -1) {
-            val (inputId, serverUri) = outputLocs (splitIndex)
+            val (inputId, serverUri) = outputLocs(splitIndex)
 
-            threadPool.execute ( new ShuffleClient (serverUri, shuffleId.toInt, 
+            threadPool.execute(new ShuffleClient(serverUri, shuffleId.toInt, 
               inputId, myId, splitIndex, mergeCombiners))
               
             // splitIndex is in transit. Will be unset in the ShuffleClient
             splitsInRequestBitVector.synchronized {
-              splitsInRequestBitVector.set (splitIndex)
+              splitsInRequestBitVector.set(splitIndex)
             }
           }
           
@@ -114,7 +114,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         }
         
         // Sleep for a while before creating new threads
-        Thread.sleep (ParallelLocalFileShuffle.MinKnockInterval)
+        Thread.sleep(ParallelLocalFileShuffle.MinKnockInterval)
       }
       combiners
     })
@@ -132,14 +132,14 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
     }
     
     if (requiredSplits.size > 0) {
-      requiredSplits(ParallelLocalFileShuffle.ranGen.nextInt (
+      requiredSplits(ParallelLocalFileShuffle.ranGen.nextInt(
         requiredSplits.size))
     } else {
       -1
     }
   }
   
-  class ShuffleClient (serverUri: String, shuffleId: Int, 
+  class ShuffleClient(serverUri: String, shuffleId: Int, 
     inputId: Int, myId: Int, splitIndex: Int, 
     mergeCombiners: (C, C) => C)
   extends Thread with Logging {
@@ -151,7 +151,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
           "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, inputId, myId)
         
         val readStartTime = System.currentTimeMillis
-        logInfo ("BEGIN READ: " + url)
+        logInfo("BEGIN READ: " + url)
       
         val inputStream = new ObjectInputStream(new URL(url).openStream())
         try {
@@ -169,19 +169,19 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         }
         inputStream.close()
                   
-        logInfo ("END READ: " + url)
-        val readTime = (System.currentTimeMillis - readStartTime)
-        logInfo ("Reading " + url + " took " + readTime + " millis.")
+        logInfo("END READ: " + url)
+        val readTime = System.currentTimeMillis - readStartTime
+        logInfo("Reading " + url + " took " + readTime + " millis.")
 
         // Reception completed. Update stats.
         hasSplitsBitVector.synchronized {
-          hasSplitsBitVector.set (splitIndex)
+          hasSplitsBitVector.set(splitIndex)
         }
         hasSplits += 1
 
         // We have received splitIndex
         splitsInRequestBitVector.synchronized {
-          splitsInRequestBitVector.set (splitIndex, false)
+          splitsInRequestBitVector.set(splitIndex, false)
         }
         
         receptionSucceeded = true
@@ -190,13 +190,13 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         // connection due to timeout
         case eofe: java.io.EOFException => { }
         case e: Exception => {
-          logInfo ("ShuffleClient had a " + e)
+          logInfo("ShuffleClient had a " + e)
         }
       } finally {
         // If reception failed, unset for future retry
         if (!receptionSucceeded) {
           splitsInRequestBitVector.synchronized {
-            splitsInRequestBitVector.set (splitIndex, false)
+            splitsInRequestBitVector.set(splitIndex, false)
           }
         }
       }
@@ -227,12 +227,12 @@ object ParallelLocalFileShuffle extends Logging {
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
       // Load config parameters
-      MinKnockInterval_ = System.getProperty (
+      MinKnockInterval_ = System.getProperty(
         "spark.parallelLocalFileShuffle.minKnockInterval", "1000").toInt
-      MaxKnockInterval_ = System.getProperty (
+      MaxKnockInterval_ = System.getProperty(
         "spark.parallelLocalFileShuffle.maxKnockInterval", "5000").toInt
 
-      MaxConnections_ = System.getProperty (
+      MaxConnections_ = System.getProperty(
         "spark.parallelLocalFileShuffle.maxConnections", "4").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
@@ -245,9 +245,9 @@ object ParallelLocalFileShuffle extends Logging {
       while (!foundLocalDir && tries < 10) {
         tries += 1
         try {
-          localDirUuid = UUID.randomUUID()
+          localDirUuid = UUID.randomUUID
           localDir = new File(localDirRoot, "spark-local-" + localDirUuid)
-          if (!localDir.exists()) {
+          if (!localDir.exists) {
             localDir.mkdirs()
             foundLocalDir = true
           }
@@ -282,7 +282,7 @@ object ParallelLocalFileShuffle extends Logging {
         serverUri = server.uri
       }
       initialized = true
-      logInfo ("Local URI: " + serverUri)
+      logInfo("Local URI: " + serverUri)
     }
   }
   
@@ -312,19 +312,19 @@ object ParallelLocalFileShuffle extends Logging {
   private def newDaemonThreadFactory: ThreadFactory = {
     new ThreadFactory {
       def newThread(r: Runnable): Thread = {
-        var t = Executors.defaultThreadFactory.newThread (r)
-        t.setDaemon (true)
+        var t = Executors.defaultThreadFactory.newThread(r)
+        t.setDaemon(true)
         return t
       }
     }
   }
 
   // Wrapper over newFixedThreadPool
-  def newDaemonFixedThreadPool (nThreads: Int): ThreadPoolExecutor = {
+  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
     var threadPool =
-      Executors.newFixedThreadPool (nThreads).asInstanceOf[ThreadPoolExecutor]
+      Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
 
-    threadPool.setThreadFactory (newDaemonThreadFactory)
+    threadPool.setThreadFactory(newDaemonThreadFactory)
     
     return threadPool
   }   

@@ -50,13 +50,13 @@ class BasicLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       for (i <- 0 until numOutputSplits) {
         val file = BasicLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
         val writeStartTime = System.currentTimeMillis
-        logInfo ("BEGIN WRITE: " + file)
+        logInfo("BEGIN WRITE: " + file)
         val out = new ObjectOutputStream(new FileOutputStream(file))
         buckets(i).foreach(pair => out.writeObject(pair))
         out.close()
-        logInfo ("END WRITE: " + file)
+        logInfo("END WRITE: " + file)
         val writeTime = (System.currentTimeMillis - writeStartTime)
-        logInfo ("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+        logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
       }
       
       (myIndex, BasicLocalFileShuffle.serverUri)
@@ -79,7 +79,7 @@ class BasicLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         for (i <- inputIds) {
           val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, myId)
           val readStartTime = System.currentTimeMillis
-          logInfo ("BEGIN READ: " + url)
+          logInfo("BEGIN READ: " + url)
           val inputStream = new ObjectInputStream(new URL(url).openStream())
           try {
             while (true) {
@@ -93,16 +93,15 @@ class BasicLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
             case e: EOFException => {}
           }
           inputStream.close()
-          logInfo ("END READ: " + url)
-          val readTime = (System.currentTimeMillis - readStartTime)
-          logInfo ("Reading " + url + " took " + readTime + " millis.")
+          logInfo("END READ: " + url)
+          val readTime = System.currentTimeMillis - readStartTime
+          logInfo("Reading " + url + " took " + readTime + " millis.")
         }
       }
       combiners
     })
   }
 }
-
 
 object BasicLocalFileShuffle extends Logging {
   private var initialized = false
@@ -125,9 +124,9 @@ object BasicLocalFileShuffle extends Logging {
       while (!foundLocalDir && tries < 10) {
         tries += 1
         try {
-          localDirUuid = UUID.randomUUID()
+          localDirUuid = UUID.randomUUID
           localDir = new File(localDirRoot, "spark-local-" + localDirUuid)
-          if (!localDir.exists()) {
+          if (!localDir.exists) {
             localDir.mkdirs()
             foundLocalDir = true
           }
@@ -162,7 +161,7 @@ object BasicLocalFileShuffle extends Logging {
         serverUri = server.uri
       }
       initialized = true
-      logInfo ("Local URI: " + serverUri)
+      logInfo("Local URI: " + serverUri)
     }
   }
 
