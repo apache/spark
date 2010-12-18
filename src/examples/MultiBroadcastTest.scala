@@ -15,7 +15,7 @@ object MultiBroadcastTest {
     for (i <- 0 until arr1.length) 
       arr1(i) = i
     
-    var arr2 = new Array[Int](num * 2)
+    var arr2 = new Array[Int](num)
     for (i <- 0 until arr2.length)
       arr2(i) = i
 
