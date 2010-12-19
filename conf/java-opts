@@ -1,1 +1,1 @@
--Dspark.shuffle.class=spark.LocalFileShuffle -Dspark.shuffle.UseHttpPipelining=true
+-Dspark.shuffle.class=spark.CustomParallelLocalFileShuffle
