@@ -8,7 +8,6 @@ import java.util.concurrent.{Executors, ThreadPoolExecutor, ThreadFactory}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-
 /**
  * An implementation of shuffle using local files served through HTTP where 
  * receivers create simultaneous connections to multiple servers by setting the
@@ -271,7 +270,6 @@ class CustomBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Loggi
     }
   }     
 }
-
 
 object CustomBlockedLocalFileShuffle extends Logging {
   // Used thoughout the code for small and large waits/timeouts

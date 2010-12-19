@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-
 /**
  * A basic implementation of shuffle using local files served through HTTP.
  *

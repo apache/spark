@@ -8,16 +8,15 @@ import java.util.concurrent.{Executors, ThreadPoolExecutor, ThreadFactory}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-
 /**
  * An implementation of shuffle using local files served through HTTP where 
  * receivers create simultaneous connections to multiple servers by setting the
  * 'spark.blockedLocalFileShuffle.maxConnections' config option.
  *
  * By controlling the 'spark.blockedLocalFileShuffle.blockSize' config option
- * one can also control the largest block size to divide each map output into.
- * Essentially, instead of creating one large output file for each reducer, maps
- * create multiple smaller files to enable finer level of engagement.
+ * one can also control the largest block size to retrieve by each reducers.
+ * An INDEX file keeps track of block boundaries instead of creating many 
+ * smaller files. 
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */

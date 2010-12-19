@@ -8,7 +8,6 @@ import java.util.concurrent.{Executors, ThreadPoolExecutor, ThreadFactory}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-
 /**
  * An implementation of shuffle using local files served through HTTP where 
  * receivers create simultaneous connections to multiple servers by setting the
@@ -17,7 +16,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
+class HttpParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   @transient var totalSplits = 0
   @transient var hasSplits = 0
   
@@ -34,7 +33,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   : RDD[(K, C)] =
   {
     val sc = input.sparkContext
-    val shuffleId = ParallelLocalFileShuffle.newShuffleId()
+    val shuffleId = HttpParallelLocalFileShuffle.newShuffleId()
     logInfo("Shuffle ID: " + shuffleId)
 
     val splitRdd = new NumberedSplitRDD(input)
@@ -59,7 +58,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       }
       
       for (i <- 0 until numOutputSplits) {
-        val file = ParallelLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
+        val file = HttpParallelLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
         val writeStartTime = System.currentTimeMillis
         logInfo("BEGIN WRITE: " + file)
         val out = new ObjectOutputStream(new FileOutputStream(file))
@@ -70,7 +69,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
       }
       
-      (myIndex, ParallelLocalFileShuffle.serverUri)
+      (myIndex, HttpParallelLocalFileShuffle.serverUri)
     }).collect()
 
     // TODO: Could broadcast outputLocs
@@ -86,12 +85,12 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       
       combiners = new HashMap[K, C]
       
-      var threadPool = ParallelLocalFileShuffle.newDaemonFixedThreadPool(
-        ParallelLocalFileShuffle.MaxConnections)
+      var threadPool = HttpParallelLocalFileShuffle.newDaemonFixedThreadPool(
+        HttpParallelLocalFileShuffle.MaxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate =
-          Math.min(totalSplits, ParallelLocalFileShuffle.MaxConnections) -
+          Math.min(totalSplits, HttpParallelLocalFileShuffle.MaxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -114,7 +113,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
         }
         
         // Sleep for a while before creating new threads
-        Thread.sleep(ParallelLocalFileShuffle.MinKnockInterval)
+        Thread.sleep(HttpParallelLocalFileShuffle.MinKnockInterval)
       }
       combiners
     })
@@ -132,7 +131,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
     }
     
     if (requiredSplits.size > 0) {
-      requiredSplits(ParallelLocalFileShuffle.ranGen.nextInt(
+      requiredSplits(HttpParallelLocalFileShuffle.ranGen.nextInt(
         requiredSplits.size))
     } else {
       -1
@@ -204,8 +203,7 @@ class ParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   }     
 }
 
-
-object ParallelLocalFileShuffle extends Logging {
+object HttpParallelLocalFileShuffle extends Logging {
   // Used thoughout the code for small and large waits/timeouts
   private var MinKnockInterval_ = 1000
   private var MaxKnockInterval_ = 5000
