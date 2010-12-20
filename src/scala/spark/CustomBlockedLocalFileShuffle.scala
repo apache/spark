@@ -21,7 +21,8 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class CustomBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
+class CustomBlockedLocalFileShuffle[K, V, C] 
+extends Shuffle[K, V, C] with Logging {
   @transient var totalSplits = 0
   @transient var hasSplits = 0
   
@@ -76,8 +77,8 @@ class CustomBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Loggi
         buckets(i).foreach(pair => {
           // Open a new file if necessary
           if (!isDirty) {
-            file = CustomBlockedLocalFileShuffle.getOutputFile(shuffleId, myIndex, i, 
-              blockNum)
+            file = CustomBlockedLocalFileShuffle.getOutputFile(shuffleId, 
+              myIndex, i, blockNum)
             writeStartTime = System.currentTimeMillis
             logInfo("BEGIN WRITE: " + file)
             
@@ -110,8 +111,8 @@ class CustomBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Loggi
         }
         
         // Write the BLOCKNUM file
-        file = 
-          CustomBlockedLocalFileShuffle.getBlockNumOutputFile(shuffleId, myIndex, i)
+        file = CustomBlockedLocalFileShuffle.getBlockNumOutputFile(shuffleId, 
+          myIndex, i)
         out = new ObjectOutputStream(new FileOutputStream(file))
         out.writeObject(blockNum)
         out.close()
@@ -166,6 +167,8 @@ class CustomBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Loggi
         // Sleep for a while before creating new threads
         Thread.sleep(CustomBlockedLocalFileShuffle.MinKnockInterval)
       }
+
+      threadPool.shutdown()
       combiners
     })
   }

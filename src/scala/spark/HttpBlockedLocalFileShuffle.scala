@@ -21,7 +21,8 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class HttpBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
+class HttpBlockedLocalFileShuffle[K, V, C] 
+extends Shuffle[K, V, C] with Logging {
   @transient var totalSplits = 0
   @transient var hasSplits = 0
   
@@ -69,7 +70,8 @@ class HttpBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging
       for (i <- 0 until numOutputSplits) {
         // Open the INDEX file
         var indexFile: File = 
-          HttpBlockedLocalFileShuffle.getBlockIndexOutputFile(shuffleId, myIndex, i)
+          HttpBlockedLocalFileShuffle.getBlockIndexOutputFile(shuffleId, 
+            myIndex, i)
         var indexOut = new ObjectOutputStream(new FileOutputStream(indexFile))
         var indexDirty: Boolean = true
         var alreadyWritten: Long = 0
@@ -88,7 +90,8 @@ class HttpBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging
           indexDirty = true
           
           // Update the INDEX file if more than blockSize limit has been written
-          if (file.length - alreadyWritten > HttpBlockedLocalFileShuffle.BlockSize) {
+          if (file.length - alreadyWritten > 
+              HttpBlockedLocalFileShuffle.BlockSize) {
             indexOut.writeObject(file.length)
             indexDirty = false
             alreadyWritten = file.length
@@ -158,6 +161,8 @@ class HttpBlockedLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging
         // Sleep for a while before creating new threads
         Thread.sleep(HttpBlockedLocalFileShuffle.MinKnockInterval)
       }
+
+      threadPool.shutdown()
       combiners
     })
   }

@@ -16,7 +16,8 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class HttpParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
+class HttpParallelLocalFileShuffle[K, V, C] 
+extends Shuffle[K, V, C] with Logging {
   @transient var totalSplits = 0
   @transient var hasSplits = 0
   
@@ -58,7 +59,8 @@ class HttpParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Loggin
       }
       
       for (i <- 0 until numOutputSplits) {
-        val file = HttpParallelLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
+        val file = 
+          HttpParallelLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
         val writeStartTime = System.currentTimeMillis
         logInfo("BEGIN WRITE: " + file)
         val out = new ObjectOutputStream(new FileOutputStream(file))
@@ -115,6 +117,8 @@ class HttpParallelLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Loggin
         // Sleep for a while before creating new threads
         Thread.sleep(HttpParallelLocalFileShuffle.MinKnockInterval)
       }
+
+      threadPool.shutdown()
       combiners
     })
   }
