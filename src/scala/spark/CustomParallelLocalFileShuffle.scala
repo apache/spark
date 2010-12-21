@@ -155,9 +155,6 @@ extends Shuffle[K, V, C] with Logging {
     private var receptionSucceeded = false
 
     override def run: Unit = {
-      val readStartTime = System.currentTimeMillis
-      logInfo("BEGIN READ: http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestPath))
-
       // Setup the timeout mechanism
       var timeOutTask = new TimerTask {
         override def run: Unit = {
@@ -190,6 +187,9 @@ extends Shuffle[K, V, C] with Logging {
         // Turn the timer OFF, if the sender responds before timeout
         timeOutTimer.cancel()
         
+        val readStartTime = System.currentTimeMillis
+        logInfo("BEGIN READ: http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestPath))
+
         // Receive the file
         if (requestedFileLen != -1) {
           // Add this to combiners
