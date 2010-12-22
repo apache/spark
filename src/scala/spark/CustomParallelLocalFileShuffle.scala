@@ -11,7 +11,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 /**
  * An implementation of shuffle using local files served through custom server 
  * where receivers create simultaneous connections to multiple servers by 
- * setting the 'spark.parallelLocalFileShuffle.maxConnections' config option.
+ * setting the 'spark.parallelLocalFileShuffle.maxRxConnections' config option.
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
@@ -90,11 +90,11 @@ extends Shuffle[K, V, C] with Logging {
       combiners = new HashMap[K, C]
       
       var threadPool = CustomParallelLocalFileShuffle.newDaemonFixedThreadPool(
-        CustomParallelLocalFileShuffle.MaxConnections)
+        CustomParallelLocalFileShuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate = Math.min(totalSplits, 
-          CustomParallelLocalFileShuffle.MaxConnections) - 
+          CustomParallelLocalFileShuffle.MaxRxConnections) - 
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {        
@@ -267,7 +267,8 @@ object CustomParallelLocalFileShuffle extends Logging {
   private var MaxKnockInterval_ = 5000
   
   // Maximum number of connections
-  private var MaxConnections_ = 4
+  private var MaxRxConnections_ = 4
+  private var MaxTxConnections_ = 8
   
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
@@ -286,12 +287,14 @@ object CustomParallelLocalFileShuffle extends Logging {
     if (!initialized) {
       // Load config parameters
       MinKnockInterval_ = System.getProperty(
-        "spark.parallelLocalFileShuffle.MinKnockInterval", "1000").toInt
+        "spark.parallelLocalFileShuffle.minKnockInterval", "1000").toInt
       MaxKnockInterval_ =  System.getProperty(
-        "spark.parallelLocalFileShuffle.MaxKnockInterval", "5000").toInt
+        "spark.parallelLocalFileShuffle.maxKnockInterval", "5000").toInt
 
-      MaxConnections_ = System.getProperty(
-        "spark.parallelLocalFileShuffle.MaxConnections", "4").toInt
+      MaxRxConnections_ = System.getProperty(
+        "spark.parallelLocalFileShuffle.maxRxConnections", "4").toInt
+      MaxTxConnections_ = System.getProperty(
+        "spark.parallelLocalFileShuffle.maxTxConnections", "8").toInt
         
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
@@ -336,7 +339,8 @@ object CustomParallelLocalFileShuffle extends Logging {
   def MinKnockInterval = MinKnockInterval_
   def MaxKnockInterval = MaxKnockInterval_
   
-  def MaxConnections = MaxConnections_
+  def MaxRxConnections = MaxRxConnections_
+  def MaxTxConnections = MaxTxConnections_
   
   def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int): File = {
     initializeIfNeeded()
@@ -374,7 +378,7 @@ object CustomParallelLocalFileShuffle extends Logging {
   class ShuffleServer
   extends Thread with Logging {
     var threadPool = 
-      newDaemonFixedThreadPool(CustomParallelLocalFileShuffle.MaxConnections)
+      newDaemonFixedThreadPool(CustomParallelLocalFileShuffle.MaxTxConnections)
 
     var serverSocket: ServerSocket = null
 

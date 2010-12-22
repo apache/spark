@@ -11,7 +11,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 /**
  * An implementation of shuffle using local files served through HTTP where 
  * receivers create simultaneous connections to multiple servers by setting the
- * 'spark.blockedLocalFileShuffle.maxConnections' config option.
+ * 'spark.blockedLocalFileShuffle.maxRxConnections' config option.
  *
  * By controlling the 'spark.blockedLocalFileShuffle.blockSize' config option
  * one can also control the largest block size to retrieve by each reducers.
@@ -132,11 +132,11 @@ extends Shuffle[K, V, C] with Logging {
       combiners = new HashMap[K, C]
       
       var threadPool = HttpBlockedLocalFileShuffle.newDaemonFixedThreadPool(
-        HttpBlockedLocalFileShuffle.MaxConnections)
+        HttpBlockedLocalFileShuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate =
-          Math.min(totalSplits, HttpBlockedLocalFileShuffle.MaxConnections) -
+          Math.min(totalSplits, HttpBlockedLocalFileShuffle.MaxRxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -304,7 +304,7 @@ object HttpBlockedLocalFileShuffle extends Logging {
   private var MaxKnockInterval_ = 5000
   
   // Maximum number of connections
-  private var MaxConnections_ = 4
+  private var MaxRxConnections_ = 4
   
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
@@ -328,8 +328,8 @@ object HttpBlockedLocalFileShuffle extends Logging {
       MaxKnockInterval_ = System.getProperty(
         "spark.blockedLocalFileShuffle.maxKnockInterval", "5000").toInt
 
-      MaxConnections_ = System.getProperty(
-        "spark.blockedLocalFileShuffle.maxConnections", "4").toInt
+      MaxRxConnections_ = System.getProperty(
+        "spark.blockedLocalFileShuffle.maxRxConnections", "4").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
@@ -387,7 +387,7 @@ object HttpBlockedLocalFileShuffle extends Logging {
   def MinKnockInterval = MinKnockInterval_
   def MaxKnockInterval = MaxKnockInterval_
   
-  def MaxConnections = MaxConnections_
+  def MaxRxConnections = MaxRxConnections_
   
   def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int): File = {
     initializeIfNeeded()
