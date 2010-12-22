@@ -4,7 +4,7 @@ import java.io._
 import java.net._
 import java.util.{BitSet, Random, Timer, TimerTask, UUID}
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.{Executors, ThreadPoolExecutor, ThreadFactory}
+import java.util.concurrent.{LinkedBlockingQueue, Executors, ThreadPoolExecutor, ThreadFactory}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
@@ -24,6 +24,7 @@ extends Shuffle[K, V, C] with Logging {
   @transient var hasSplitsBitVector: BitSet = null
   @transient var splitsInRequestBitVector: BitSet = null
 
+  @transient var receivedData: LinkedBlockingQueue[(Int, Array[Byte])] = null  
   @transient var combiners: HashMap[K,C] = null
   
   override def compute(input: RDD[(K, V)],
@@ -61,14 +62,26 @@ extends Shuffle[K, V, C] with Logging {
       for (i <- 0 until numOutputSplits) {
         val file = 
           HttpParallelLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
+
         val writeStartTime = System.currentTimeMillis
         logInfo("BEGIN WRITE: " + file)
+
         val out = new ObjectOutputStream(new FileOutputStream(file))
         buckets(i).foreach(pair => out.writeObject(pair))
-        out.close()
+
         logInfo("END WRITE: " + file)
         val writeTime = System.currentTimeMillis - writeStartTime
         logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+        
+        // Write the SPLITSIZE file
+        val splitSizeFile = HttpParallelLocalFileShuffle.getSplitSizeOutputFile(
+          shuffleId, myIndex, i)
+        val splitSizeOut = 
+          new ObjectOutputStream(new FileOutputStream(splitSizeFile))
+        splitSizeOut.writeObject(file.length.toInt)
+
+        splitSizeOut.close()
+        out.close()
       }
       
       (myIndex, HttpParallelLocalFileShuffle.serverUri)
@@ -85,11 +98,18 @@ extends Shuffle[K, V, C] with Logging {
       hasSplitsBitVector = new BitSet(totalSplits)
       splitsInRequestBitVector = new BitSet(totalSplits)
       
+      receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
       var threadPool = HttpParallelLocalFileShuffle.newDaemonFixedThreadPool(
         HttpParallelLocalFileShuffle.MaxRxConnections)
         
+      // Start consumer
+      var shuffleConsumer = new ShuffleConsumer(mergeCombiners)
+      shuffleConsumer.setDaemon(true)
+      shuffleConsumer.start()
+      logInfo("ShuffleConsumer started...")
+
       while (hasSplits < totalSplits) {
         var numThreadsToCreate =
           Math.min(totalSplits, HttpParallelLocalFileShuffle.MaxRxConnections) -
@@ -103,7 +123,7 @@ extends Shuffle[K, V, C] with Logging {
             val (inputId, serverUri) = outputLocs(splitIndex)
 
             threadPool.execute(new ShuffleClient(serverUri, shuffleId.toInt, 
-              inputId, myId, splitIndex, mergeCombiners))
+              inputId, myId, splitIndex))
               
             // splitIndex is in transit. Will be unset in the ShuffleClient
             splitsInRequestBitVector.synchronized {
@@ -142,41 +162,41 @@ extends Shuffle[K, V, C] with Logging {
     }
   }
   
-  class ShuffleClient(serverUri: String, shuffleId: Int, 
-    inputId: Int, myId: Int, splitIndex: Int, 
-    mergeCombiners: (C, C) => C)
-  extends Thread with Logging {
-    private var receptionSucceeded = false
-
+  class ShuffleConsumer(mergeCombiners: (C, C) => C)
+  extends Thread with Logging {   
     override def run: Unit = {
-      try {    
-        val url = 
-          "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, inputId, myId)
-        
-        val readStartTime = System.currentTimeMillis
-        logInfo("BEGIN READ: " + url)
+      // Run until all splits are here
+      while (hasSplits < totalSplits) {
+        var splitIndex = -1
+        var recvByteArray: Array[Byte] = null
       
-        val inputStream = new ObjectInputStream(new URL(url).openStream())
         try {
+          var tempPair = receivedData.take().asInstanceOf[(Int, Array[Byte])]
+          splitIndex = tempPair._1
+          recvByteArray = tempPair._2
+        } catch {
+          case e: Exception => {
+            logInfo("Exception during taking data from receivedData")
+          }
+        }      
+      
+        val inputStream = 
+          new ObjectInputStream(new ByteArrayInputStream(recvByteArray))
+          
+        try{
           while (true) {
-            val (k, c) = inputStream.readObject().asInstanceOf[(K, C)]
-            combiners.synchronized {
-              combiners(k) = combiners.get(k) match {
-                case Some(oldC) => mergeCombiners(oldC, c)
-                case None => c
-              }
+            val (k, c) = inputStream.readObject.asInstanceOf[(K, C)]
+            combiners(k) = combiners.get(k) match {
+              case Some(oldC) => mergeCombiners(oldC, c)
+              case None => c
             }
           }
         } catch {
-          case e: EOFException => {}
+          case e: EOFException => { }
         }
         inputStream.close()
-                  
-        logInfo("END READ: " + url)
-        val readTime = System.currentTimeMillis - readStartTime
-        logInfo("Reading " + url + " took " + readTime + " millis.")
-
-        // Reception completed. Update stats.
+        
+        // Consumption completed. Update stats.
         hasSplitsBitVector.synchronized {
           hasSplitsBitVector.set(splitIndex)
         }
@@ -187,7 +207,66 @@ extends Shuffle[K, V, C] with Logging {
           splitsInRequestBitVector.set(splitIndex, false)
         }
         
+      }
+    }
+  }
+  
+  class ShuffleClient(serverUri: String, shuffleId: Int, 
+    inputId: Int, myId: Int, splitIndex: Int)
+  extends Thread with Logging {
+    private var receptionSucceeded = false
+
+    override def run: Unit = {
+      try {
+        // First read the SPLITSIZE file
+        var requestedFileLen = -1
+        
+        var url = "%s/shuffle/%d/%d/SPLITSIZE-%d".format(serverUri, shuffleId, 
+          inputId, myId)
+        val inputStream = new ObjectInputStream(new URL(url).openStream())
+        
+        try {
+          requestedFileLen = inputStream.readObject().asInstanceOf[Int]
+        } catch {
+          case e: EOFException => {}
+        }        
+        inputStream.close()        
+      
+        url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, inputId, myId)
+        
+        val readStartTime = System.currentTimeMillis
+        logInfo("BEGIN READ: " + url)
+      
+        // Receive data in an Array[Byte]
+        var recvByteArray = new Array[Byte](requestedFileLen)
+        var alreadyRead = 0
+        var bytesRead = 0
+        
+        val isSource = new URL(url).openStream()
+        while (alreadyRead != requestedFileLen) {
+          bytesRead = isSource.read(recvByteArray, alreadyRead, 
+            requestedFileLen - alreadyRead)
+          if (bytesRead > 0) {
+            alreadyRead  = alreadyRead + bytesRead
+          }
+        } 
+        
+        // Make it available to the consumer
+        try {
+          receivedData.put((splitIndex, recvByteArray))
+        } catch {
+          case e: Exception => {
+            logInfo("Exception during putting data into receivedData")
+          }
+        }
+        
+        // NOTE: Update of bitVectors are now done by the consumer
+                  
         receptionSucceeded = true
+
+        logInfo("END READ: " + url)
+        val readTime = System.currentTimeMillis - readStartTime
+        logInfo("Reading " + url + " took " + readTime + " millis.")
       } catch {
         // EOFException is expected to happen because sender can break
         // connection due to timeout
@@ -298,6 +377,15 @@ object HttpParallelLocalFileShuffle extends Logging {
     val dir = new File(shuffleDir, shuffleId + "/" + inputId)
     dir.mkdirs()
     val file = new File(dir, "" + outputId)
+    return file
+  }
+
+  def getSplitSizeOutputFile(shuffleId: Long, inputId: Int, 
+    outputId: Int): File = {
+    initializeIfNeeded()
+    val dir = new File(shuffleDir, shuffleId + "/" + inputId)
+    dir.mkdirs()
+    val file = new File(dir, "SPLITSIZE-" + outputId)
     return file
   }
 

@@ -89,7 +89,7 @@ extends Shuffle[K, V, C] with Logging {
       hasSplitsBitVector = new BitSet(totalSplits)
       splitsInRequestBitVector = new BitSet(totalSplits)
 
-      receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]      
+      receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
       var threadPool = CustomParallelLocalFileShuffle.newDaemonFixedThreadPool(

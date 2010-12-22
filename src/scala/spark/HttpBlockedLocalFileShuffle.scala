@@ -155,7 +155,7 @@ extends Shuffle[K, V, C] with Logging {
             val (inputId, serverUri) = outputLocs(splitIndex)
 
             threadPool.execute(new ShuffleClient(serverUri, shuffleId.toInt, 
-              inputId, myId, splitIndex, mergeCombiners))
+              inputId, myId, splitIndex))
               
             // splitIndex is in transit. Will be unset in the ShuffleClient
             splitsInRequestBitVector.synchronized {
@@ -251,8 +251,7 @@ extends Shuffle[K, V, C] with Logging {
   }
   
   class ShuffleClient(serverUri: String, shuffleId: Int, 
-    inputId: Int, myId: Int, splitIndex: Int, 
-    mergeCombiners: (C, C) => C)
+    inputId: Int, myId: Int, splitIndex: Int)
   extends Thread with Logging {
     private var receptionSucceeded = false
 
