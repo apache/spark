@@ -33,7 +33,7 @@ extends Shuffle[K, V, C] with Logging {
   @transient var hasSplitsBitVector: BitSet = null
   @transient var splitsInRequestBitVector: BitSet = null
 
-  @transient var receivedData: LinkedBlockingQueue[(Int, Int, Array[Byte])] = null  
+  @transient var receivedData: LinkedBlockingQueue[(Int, Array[Byte])] = null  
   @transient var combiners: HashMap[K,C] = null
   
   override def compute(input: RDD[(K, V)],
@@ -130,7 +130,7 @@ extends Shuffle[K, V, C] with Logging {
       hasSplitsBitVector = new BitSet(totalSplits)
       splitsInRequestBitVector = new BitSet(totalSplits)
       
-      receivedData = new LinkedBlockingQueue[(Int, Int, Array[Byte])]      
+      receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]      
       combiners = new HashMap[K, C]
       
       // Start consumer
@@ -199,16 +199,13 @@ extends Shuffle[K, V, C] with Logging {
     override def run: Unit = {
       // Run until all splits are here
       while (hasSplits < totalSplits) {
-        var inputId = -1
         var splitIndex = -1
         var recvByteArray: Array[Byte] = null
       
         try {
-          var tempTuple = 
-            receivedData.take().asInstanceOf[(Int, Int, Array[Byte])]
-          inputId = tempTuple._1
-          splitIndex = tempTuple._2
-          recvByteArray = tempTuple._3
+          var tempPair = receivedData.take().asInstanceOf[(Int, Array[Byte])]
+          splitIndex = tempPair._1
+          recvByteArray = tempPair._2
         } catch {
           case e: Exception => {
             logInfo("Exception during taking data from receivedData")
@@ -232,10 +229,10 @@ extends Shuffle[K, V, C] with Logging {
         inputStream.close()
         
         // Consumption completed. Update stats.
-        hasBlocksInSplit(inputId) = hasBlocksInSplit(inputId) + 1
+        hasBlocksInSplit(splitIndex) = hasBlocksInSplit(splitIndex) + 1
         
         // Split has been received only if all the blocks have been received
-        if (hasBlocksInSplit(inputId) == totalBlocksInSplit(inputId)) {
+        if (hasBlocksInSplit(splitIndex) == totalBlocksInSplit(splitIndex)) {
           hasSplitsBitVector.synchronized {
             hasSplitsBitVector.set(splitIndex)
           }
@@ -257,22 +254,22 @@ extends Shuffle[K, V, C] with Logging {
 
     override def run: Unit = {
       try {
-        // First get the INDEX file if totalBlocksInSplit(inputId) is unknown
-        if (totalBlocksInSplit(inputId) == -1) {
+        // First get the INDEX file if totalBlocksInSplit(splitIndex) is unknown
+        if (totalBlocksInSplit(splitIndex) == -1) {
           val url = "%s/shuffle/%d/%d/INDEX-%d".format(serverUri, shuffleId, 
             inputId, myId)
           val inputStream = new ObjectInputStream(new URL(url).openStream())
           
           try {
             while (true) {
-              blocksInSplit(inputId) += 
+              blocksInSplit(splitIndex) += 
                 inputStream.readObject().asInstanceOf[Long]
             }
           } catch {
             case e: EOFException => {}
           }
           
-          totalBlocksInSplit(inputId) = blocksInSplit(inputId).size
+          totalBlocksInSplit(splitIndex) = blocksInSplit(splitIndex).size
           inputStream.close()
         }
         
@@ -284,11 +281,11 @@ extends Shuffle[K, V, C] with Logging {
           url.openConnection().asInstanceOf[HttpURLConnection]
         
         // Set the range to download
-        val blockStartsAt = hasBlocksInSplit(inputId) match {
+        val blockStartsAt = hasBlocksInSplit(splitIndex) match {
           case 0 => 0
-          case _ => blocksInSplit(inputId)(hasBlocksInSplit(inputId) - 1) + 1
+          case _ => blocksInSplit(splitIndex)(hasBlocksInSplit(splitIndex) - 1) + 1
         }
-        val blockEndsAt = blocksInSplit(inputId)(hasBlocksInSplit(inputId))
+        val blockEndsAt = blocksInSplit(splitIndex)(hasBlocksInSplit(splitIndex))
         httpConnection.setRequestProperty("Range", 
           "bytes=" + blockStartsAt + "-" + blockEndsAt)
         
@@ -320,7 +317,7 @@ extends Shuffle[K, V, C] with Logging {
 
         // Make it available to the consumer
         try {
-          receivedData.put((inputId, splitIndex, recvByteArray))
+          receivedData.put((splitIndex, recvByteArray))
         } catch {
           case e: Exception => {
             logInfo("Exception during putting data into receivedData")
