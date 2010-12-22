@@ -187,11 +187,11 @@ extends Shuffle[K, V, C] with Logging {
         // Turn the timer OFF, if the sender responds before timeout
         timeOutTimer.cancel()
         
-        val readStartTime = System.currentTimeMillis
-        logInfo("BEGIN READ: http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestPath))
-
         // Receive the file
         if (requestedFileLen != -1) {
+          val readStartTime = System.currentTimeMillis
+          logInfo("BEGIN READ: http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestPath))
+
           // Add this to combiners
           val inputStream = new ObjectInputStream(isSource)
             
