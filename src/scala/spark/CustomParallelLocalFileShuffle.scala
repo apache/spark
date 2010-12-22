@@ -154,7 +154,7 @@ extends Shuffle[K, V, C] with Logging {
     }
   }
   
-  class ShuffleConsumer(mergeCombiners: (C, C) => C) 
+  class ShuffleConsumer(mergeCombiners: (C, C) => C)
   extends Thread with Logging {   
     override def run: Unit = {
       // Run until all splits are here
@@ -272,7 +272,7 @@ extends Shuffle[K, V, C] with Logging {
             }
           }
           
-          // NOTE: Update of bitVectors are now done by the consumer. 
+          // NOTE: Update of bitVectors are now done by the consumer
           
           receptionSucceeded = true
 
