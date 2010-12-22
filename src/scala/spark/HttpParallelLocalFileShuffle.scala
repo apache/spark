@@ -73,14 +73,6 @@ extends Shuffle[K, V, C] with Logging {
         val writeTime = System.currentTimeMillis - writeStartTime
         logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
         
-        // Write the SPLITSIZE file
-        val splitSizeFile = HttpParallelLocalFileShuffle.getSplitSizeOutputFile(
-          shuffleId, myIndex, i)
-        val splitSizeOut = 
-          new ObjectOutputStream(new FileOutputStream(splitSizeFile))
-        splitSizeOut.writeObject(file.length.toInt)
-
-        splitSizeOut.close()
         out.close()
       }
       
@@ -218,31 +210,28 @@ extends Shuffle[K, V, C] with Logging {
 
     override def run: Unit = {
       try {
-        // First read the SPLITSIZE file
-        var requestedFileLen = -1
+        // Open connection      
+        val urlString = 
+          "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, inputId, myId)
+        val url = new URL(urlString)
+        val httpConnection = 
+          url.openConnection().asInstanceOf[HttpURLConnection]
         
-        var url = "%s/shuffle/%d/%d/SPLITSIZE-%d".format(serverUri, shuffleId, 
-          inputId, myId)
-        val inputStream = new ObjectInputStream(new URL(url).openStream())
+        // Connect to the server
+        httpConnection.connect()
         
-        try {
-          requestedFileLen = inputStream.readObject().asInstanceOf[Int]
-        } catch {
-          case e: EOFException => {}
-        }        
-        inputStream.close()        
-      
-        url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, inputId, myId)
-        
+        // Receive file length
+        var requestedFileLen = httpConnection.getContentLength
+
         val readStartTime = System.currentTimeMillis
-        logInfo("BEGIN READ: " + url)
+        logInfo("BEGIN READ: " + urlString)
       
         // Receive data in an Array[Byte]
         var recvByteArray = new Array[Byte](requestedFileLen)
         var alreadyRead = 0
         var bytesRead = 0
         
-        val isSource = new URL(url).openStream()
+        val isSource = httpConnection.getInputStream()
         while (alreadyRead != requestedFileLen) {
           bytesRead = isSource.read(recvByteArray, alreadyRead, 
             requestedFileLen - alreadyRead)
@@ -251,6 +240,9 @@ extends Shuffle[K, V, C] with Logging {
           }
         } 
         
+        // Disconnect
+        httpConnection.disconnect()
+
         // Make it available to the consumer
         try {
           receivedData.put((splitIndex, recvByteArray))
@@ -264,9 +256,9 @@ extends Shuffle[K, V, C] with Logging {
                   
         receptionSucceeded = true
 
-        logInfo("END READ: " + url)
+        logInfo("END READ: " + urlString)
         val readTime = System.currentTimeMillis - readStartTime
-        logInfo("Reading " + url + " took " + readTime + " millis.")
+        logInfo("Reading " + urlString + " took " + readTime + " millis.")
       } catch {
         // EOFException is expected to happen because sender can break
         // connection due to timeout
@@ -377,15 +369,6 @@ object HttpParallelLocalFileShuffle extends Logging {
     val dir = new File(shuffleDir, shuffleId + "/" + inputId)
     dir.mkdirs()
     val file = new File(dir, "" + outputId)
-    return file
-  }
-
-  def getSplitSizeOutputFile(shuffleId: Long, inputId: Int, 
-    outputId: Int): File = {
-    initializeIfNeeded()
-    val dir = new File(shuffleDir, shuffleId + "/" + inputId)
-    dir.mkdirs()
-    val file = new File(dir, "SPLITSIZE-" + outputId)
     return file
   }
 
