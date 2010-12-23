@@ -359,6 +359,7 @@ object HttpBlockedLocalFileShuffle extends Logging {
   
   // Maximum number of connections
   private var MaxRxConnections_ = 4
+  private var MaxTxConnections_ = 8
   
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
@@ -384,6 +385,8 @@ object HttpBlockedLocalFileShuffle extends Logging {
 
       MaxRxConnections_ = System.getProperty(
         "spark.blockedLocalFileShuffle.maxRxConnections", "4").toInt
+      MaxTxConnections_ = System.getProperty(
+        "spark.blockedLocalFileShuffle.maxTxConnections", "8").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
@@ -442,6 +445,7 @@ object HttpBlockedLocalFileShuffle extends Logging {
   def MaxKnockInterval = MaxKnockInterval_
   
   def MaxRxConnections = MaxRxConnections_
+  def MaxTxConnections = MaxTxConnections_
   
   def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int): File = {
     initializeIfNeeded()

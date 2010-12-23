@@ -261,7 +261,7 @@ extends Shuffle[K, V, C] with Logging {
 
     override def run: Unit = {
       try {
-        // TODO: Everything will break if BLOCKNUM is not correctly received
+        // Everything will break if BLOCKNUM is not correctly received
         // First get BLOCKNUM file if totalBlocksInSplit(splitIndex) is unknown
         if (totalBlocksInSplit(splitIndex) == -1) {
           val url = "%s/shuffle/%d/%d/BLOCKNUM-%d".format(serverUri, shuffleId, 
@@ -350,6 +350,7 @@ object ManualBlockedLocalFileShuffle extends Logging {
   
   // Maximum number of connections
   private var MaxRxConnections_ = 4
+  private var MaxTxConnections_ = 8
   
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
@@ -375,6 +376,8 @@ object ManualBlockedLocalFileShuffle extends Logging {
 
       MaxRxConnections_ = System.getProperty(
         "spark.blockedLocalFileShuffle.maxRxConnections", "4").toInt
+      MaxTxConnections_ = System.getProperty(
+        "spark.blockedLocalFileShuffle.maxTxConnections", "8").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
@@ -433,6 +436,7 @@ object ManualBlockedLocalFileShuffle extends Logging {
   def MaxKnockInterval = MaxKnockInterval_
   
   def MaxRxConnections = MaxRxConnections_
+  def MaxTxConnections = MaxTxConnections_
   
   def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int, 
     blockId: Int): File = {
