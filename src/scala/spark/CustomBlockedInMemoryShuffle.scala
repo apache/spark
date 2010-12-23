@@ -13,15 +13,27 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * 
  * An implementation of shuffle using local memory served through custom server 
  * where receivers create simultaneous connections to multiple servers by 
- * setting the 'spark.parallelLocalFileShuffle.maxRxConnections' config option.
+ * setting the 'spark.blockedLocalFileShuffle.maxRxConnections' config option.
+ *
+ * By controlling the 'spark.blockedLocalFileShuffle.blockSize' config option
+ * one can also control the largest block size to divide each map output into.
+ * Essentially, instead of creating one large output file for each reducer, maps
+ * create multiple smaller files to enable finer level of engagement.
+ *
+ * 'spark.parallelLocalFileShuffle.maxTxConnections' enforces server-side cap. 
+ * Ideally maxTxConnections >= maxRxConnections * numReducersPerMachine
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class CustomParallelInMemoryShuffle[K, V, C] 
+class CustomBlockedInMemoryShuffle[K, V, C] 
 extends Shuffle[K, V, C] with Logging {
   @transient var totalSplits = 0
-  @transient var hasSplits = 0 
+  @transient var hasSplits = 0
+  
+  @transient var totalBlocksInSplit: Array[Int] = null
+  @transient var hasBlocksInSplit: Array[Int] = null
+  
   @transient var hasSplitsBitVector: BitSet = null
   @transient var splitsInRequestBitVector: BitSet = null
 
@@ -36,7 +48,7 @@ extends Shuffle[K, V, C] with Logging {
   : RDD[(K, C)] =
   {
     val sc = input.sparkContext
-    val shuffleId = CustomParallelInMemoryShuffle.newShuffleId()
+    val shuffleId = CustomBlockedInMemoryShuffle.newShuffleId()
     logInfo("Shuffle ID: " + shuffleId)
 
     val splitRdd = new NumberedSplitRDD(input)
@@ -60,31 +72,72 @@ extends Shuffle[K, V, C] with Logging {
         }
       }
       
-      for (i <- 0 until numOutputSplits) {        
-        val splitName = 
-          CustomParallelInMemoryShuffle.getSplitName(shuffleId, myIndex, i)
+      for (i <- 0 until numOutputSplits) {
+        var blockNum = 0
+        var isDirty = false
 
-        val writeStartTime = System.currentTimeMillis
-        logInfo("BEGIN WRITE: " + splitName)
+        var splitName = ""
+        var baos: ByteArrayOutputStream = null
+        var oos: ObjectOutputStream = null
+        
+        var writeStartTime: Long = 0
+        
+        buckets(i).foreach(pair => {
+          // Open a new file if necessary
+          if (!isDirty) {
+            splitName = CustomBlockedInMemoryShuffle.getSplitName(shuffleId, 
+              myIndex, i, blockNum)
+              
+            baos = new ByteArrayOutputStream
+            oos = new ObjectOutputStream(baos)
+          
+            writeStartTime = System.currentTimeMillis
+            logInfo("BEGIN WRITE: " + splitName)
+          }
+          
+          oos.writeObject(pair)
+          isDirty = true
+          
+          // Close the old file if has crossed the blockSize limit
+          if (baos.size > CustomBlockedInMemoryShuffle.BlockSize) {
+            CustomBlockedInMemoryShuffle.splitsCache(splitName) = 
+              baos.toByteArray
+          
+            logInfo("END WRITE: " + splitName)
+            val writeTime = System.currentTimeMillis - writeStartTime
+            logInfo("Writing " + splitName + " of size " + baos.size + " bytes took " + writeTime + " millis.")
 
-        // Write buckets(i) to a byte array & put in splitsCache instead of file
-        val baos = new ByteArrayOutputStream
-        val oos = new ObjectOutputStream(baos)
-        buckets(i).foreach(pair => oos.writeObject(pair))
-        oos.close
-        baos.close
+            blockNum = blockNum + 1
+            isDirty = false            
+            oos.close()
+          }
+        })
+
+        if (isDirty) {
+          CustomBlockedInMemoryShuffle.splitsCache(splitName) = baos.toByteArray
+
+          logInfo("END WRITE: " + splitName)
+          val writeTime = System.currentTimeMillis - writeStartTime
+          logInfo("Writing " + splitName + " of size " + baos.size + " bytes took " + writeTime + " millis.")
+
+          blockNum = blockNum + 1
+          oos.close()
+        }
         
-        CustomParallelInMemoryShuffle.splitsCache(splitName) = baos.toByteArray
-        val splitLen = 
-          CustomParallelInMemoryShuffle.splitsCache(splitName).length
-        
-        logInfo("END WRITE: " + splitName)
-        val writeTime = System.currentTimeMillis - writeStartTime
-        logInfo("Writing " + splitName + " of size " + splitLen + " bytes took " + writeTime + " millis.")
+        // Store BLOCKNUM info
+        splitName = CustomBlockedInMemoryShuffle.getBlockNumOutputName(
+          shuffleId, myIndex, i)
+        baos = new ByteArrayOutputStream
+        oos = new ObjectOutputStream(baos)
+        oos.writeObject(blockNum)
+        CustomBlockedInMemoryShuffle.splitsCache(splitName) = baos.toByteArray
+
+        // Close streams        
+        oos.close()
       }
       
-      (myIndex, CustomParallelInMemoryShuffle.serverAddress, 
-        CustomParallelInMemoryShuffle.serverPort)
+      (myIndex, CustomBlockedInMemoryShuffle.serverAddress, 
+        CustomBlockedInMemoryShuffle.serverPort)
     }).collect()
 
     val splitsByUri = new ArrayBuffer[(String, Int, Int)]
@@ -92,31 +145,35 @@ extends Shuffle[K, V, C] with Logging {
       splitsByUri += ((serverAddress, serverPort, inputId))
     }
 
-    // TODO: Could broadcast splitsByUri
+    // TODO: Could broadcast outputLocs
 
     // Return an RDD that does each of the merges for a given partition
     val indexes = sc.parallelize(0 until numOutputSplits, numOutputSplits)
     return indexes.flatMap((myId: Int) => {
-      totalSplits = splitsByUri.size
+      totalSplits = outputLocs.size
       hasSplits = 0
+      
+      totalBlocksInSplit = Array.tabulate(totalSplits)(_ => -1)
+      hasBlocksInSplit = Array.tabulate(totalSplits)(_ => 0)
+      
       hasSplitsBitVector = new BitSet(totalSplits)
       splitsInRequestBitVector = new BitSet(totalSplits)
-
+      
       receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
-      var threadPool = CustomParallelInMemoryShuffle.newDaemonFixedThreadPool(
-        CustomParallelInMemoryShuffle.MaxRxConnections)
-        
       // Start consumer
       var shuffleConsumer = new ShuffleConsumer(mergeCombiners)
       shuffleConsumer.setDaemon(true)
       shuffleConsumer.start()
       logInfo("ShuffleConsumer started...")
+
+      var threadPool = CustomBlockedInMemoryShuffle.newDaemonFixedThreadPool(
+        CustomBlockedInMemoryShuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
-        var numThreadsToCreate = Math.min(totalSplits, 
-          CustomParallelInMemoryShuffle.MaxRxConnections) - 
+        var numThreadsToCreate =
+          Math.min(totalSplits, CustomBlockedInMemoryShuffle.MaxRxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -125,10 +182,9 @@ extends Shuffle[K, V, C] with Logging {
           
           if (splitIndex != -1) {
             val (serverAddress, serverPort, inputId) = splitsByUri(splitIndex)
-            val requestSplit = "%d/%d/%d".format(shuffleId, inputId, myId)
 
-            threadPool.execute(new ShuffleClient(splitIndex, serverAddress, 
-              serverPort, requestSplit))
+            threadPool.execute(new ShuffleClient(serverAddress, serverPort, 
+              shuffleId.toInt, inputId, myId, splitIndex))
               
             // splitIndex is in transit. Will be unset in the ShuffleClient
             splitsInRequestBitVector.synchronized {
@@ -140,9 +196,9 @@ extends Shuffle[K, V, C] with Logging {
         }
         
         // Sleep for a while before creating new threads
-        Thread.sleep(CustomParallelInMemoryShuffle.MinKnockInterval)
+        Thread.sleep(CustomBlockedInMemoryShuffle.MinKnockInterval)
       }
-      
+
       threadPool.shutdown()
       combiners
     })
@@ -160,7 +216,7 @@ extends Shuffle[K, V, C] with Logging {
     }
     
     if (requiredSplits.size > 0) {
-      requiredSplits(CustomParallelInMemoryShuffle.ranGen.nextInt(
+      requiredSplits(CustomBlockedInMemoryShuffle.ranGen.nextInt(
         requiredSplits.size))
     } else {
       -1
@@ -202,27 +258,31 @@ extends Shuffle[K, V, C] with Logging {
         inputStream.close()
         
         // Consumption completed. Update stats.
-        hasSplitsBitVector.synchronized {
-          hasSplitsBitVector.set(splitIndex)
+        hasBlocksInSplit(splitIndex) = hasBlocksInSplit(splitIndex) + 1
+        
+        // Split has been received only if all the blocks have been received
+        if (hasBlocksInSplit(splitIndex) == totalBlocksInSplit(splitIndex)) {
+          hasSplitsBitVector.synchronized {
+            hasSplitsBitVector.set(splitIndex)
+          }
+          hasSplits += 1
         }
-        hasSplits += 1
 
         // We have received splitIndex
         splitsInRequestBitVector.synchronized {
           splitsInRequestBitVector.set(splitIndex, false)
         }
-        
       }
     }
   }
-  
-  class ShuffleClient(splitIndex: Int, hostAddress: String, listenPort: Int, 
-    requestSplit: String)
+
+  class ShuffleClient(hostAddress: String, listenPort: Int, shuffleId: Int, 
+    inputId: Int, myId: Int, splitIndex: Int)
   extends Thread with Logging {
     private var peerSocketToSource: Socket = null
     private var oosSource: ObjectOutputStream = null
     private var oisSource: ObjectInputStream = null
-    
+
     private var receptionSucceeded = false
 
     override def run: Unit = {
@@ -235,12 +295,11 @@ extends Shuffle[K, V, C] with Logging {
       
       var timeOutTimer = new Timer
       timeOutTimer.schedule(timeOutTask, 
-        CustomParallelInMemoryShuffle.MaxKnockInterval)
-      
-      logInfo("ShuffleClient started... => %s:%d#%s".format(hostAddress, listenPort, requestSplit))
+        CustomParallelLocalFileShuffle.MaxKnockInterval)
       
       try {
-        // Connect to the source
+        // Everything will break if BLOCKNUM is not correctly received
+        // First get BLOCKNUM file if totalBlocksInSplit(splitIndex) is unknown
         peerSocketToSource = new Socket(hostAddress, listenPort)
         oosSource =
           new ObjectOutputStream(peerSocketToSource.getOutputStream)
@@ -248,15 +307,25 @@ extends Shuffle[K, V, C] with Logging {
         var isSource = peerSocketToSource.getInputStream
         oisSource = new ObjectInputStream(isSource)
         
-        // Send the request
-        oosSource.writeObject(requestSplit)
+        // Send path information
+        oosSource.writeObject((shuffleId, inputId, myId))   
         
-        // Receive the length of the requested file
+        // TODO: Can be optimized. No need to do it everytime.
+        // Receive BLOCKNUM
+        totalBlocksInSplit(splitIndex) = oisSource.readObject.asInstanceOf[Int]
+
+        // Request specific block
+        oosSource.writeObject(hasBlocksInSplit(splitIndex))
+        
+        // Good to go. First, receive the length of the requested file
         var requestedFileLen = oisSource.readObject.asInstanceOf[Int]
         logInfo("Received requestedFileLen = " + requestedFileLen)
 
         // Turn the timer OFF, if the sender responds before timeout
         timeOutTimer.cancel()
+        
+        val requestSplit = "%d/%d/%d-%d".format(shuffleId, inputId, myId, 
+          hasBlocksInSplit(splitIndex))
         
         // Receive the file
         if (requestedFileLen != -1) {
@@ -284,16 +353,16 @@ extends Shuffle[K, V, C] with Logging {
               logInfo("Exception during putting data into receivedData")
             }
           }
-          
+                  
           // NOTE: Update of bitVectors are now done by the consumer
-          
+
           receptionSucceeded = true
 
           logInfo("END READ: http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestSplit))
           val readTime = System.currentTimeMillis - readStartTime
           logInfo("Reading http://%s:%d/shuffle/%s".format(hostAddress, listenPort, requestSplit) + " took " + readTime + " millis.")
         } else {
-          throw new SparkException("ShuffleServer " + hostAddress + " does not have " + requestSplit)
+            throw new SparkException("ShuffleServer " + hostAddress + " does not have " + requestSplit)
         }
       } catch {
         // EOFException is expected to happen because sender can break
@@ -309,7 +378,7 @@ extends Shuffle[K, V, C] with Logging {
             splitsInRequestBitVector.set(splitIndex, false)
           }
         }
-        cleanUpConnections()
+        cleanUpConnections()       
       }
     }
     
@@ -323,15 +392,17 @@ extends Shuffle[K, V, C] with Logging {
       if (peerSocketToSource != null) {
         peerSocketToSource.close()
       }
-    }
-  }  
+    }   
+  }     
 }
 
-object CustomParallelInMemoryShuffle extends Logging {
+object CustomBlockedInMemoryShuffle extends Logging {
   // Cache for keeping the splits around
   val splitsCache = new HashMap[String, Array[Byte]]
 
   // Used thoughout the code for small and large waits/timeouts
+  private var BlockSize_ = 1024 * 1024
+  
   private var MinKnockInterval_ = 1000
   private var MaxKnockInterval_ = 5000
   
@@ -344,7 +415,7 @@ object CustomParallelInMemoryShuffle extends Logging {
 
   // Variables initialized by initializeIfNeeded()
   private var shuffleDir: File = null
-  
+
   private var shuffleServer: ShuffleServer = null
   private var serverAddress = InetAddress.getLocalHost.getHostAddress
   private var serverPort: Int = -1
@@ -355,16 +426,19 @@ object CustomParallelInMemoryShuffle extends Logging {
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
       // Load config parameters
+      BlockSize_ = System.getProperty(
+        "spark.blockedInMemoryShuffle.blockSize", "1024").toInt * 1024
+      
       MinKnockInterval_ = System.getProperty(
-        "spark.parallelInMemoryShuffle.minKnockInterval", "1000").toInt
-      MaxKnockInterval_ =  System.getProperty(
-        "spark.parallelInMemoryShuffle.maxKnockInterval", "5000").toInt
+        "spark.blockedInMemoryShuffle.minKnockInterval", "1000").toInt
+      MaxKnockInterval_ = System.getProperty(
+        "spark.blockedInMemoryShuffle.maxKnockInterval", "5000").toInt
 
       MaxRxConnections_ = System.getProperty(
-        "spark.parallelInMemoryShuffle.maxRxConnections", "4").toInt
+        "spark.blockedInMemoryShuffle.maxRxConnections", "4").toInt
       MaxTxConnections_ = System.getProperty(
-        "spark.parallelInMemoryShuffle.maxTxConnections", "8").toInt
-        
+        "spark.blockedInMemoryShuffle.maxTxConnections", "8").toInt
+      
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
       val localDirRoot = System.getProperty("spark.local.dir", "/tmp")
@@ -372,12 +446,11 @@ object CustomParallelInMemoryShuffle extends Logging {
       var foundLocalDir = false
       var localDir: File = null
       var localDirUuid: UUID = null
-      
       while (!foundLocalDir && tries < 10) {
         tries += 1
         try {
           localDirUuid = UUID.randomUUID
-          localDir = new File(localDirRoot, "spark-local-" + localDirUuid)          
+          localDir = new File(localDirRoot, "spark-local-" + localDirUuid)
           if (!localDir.exists) {
             localDir.mkdirs()
             foundLocalDir = true
@@ -394,16 +467,18 @@ object CustomParallelInMemoryShuffle extends Logging {
       shuffleDir = new File(localDir, "shuffle")
       shuffleDir.mkdirs()
       logInfo("Shuffle dir: " + shuffleDir)
-
+      
       // Create and start the shuffleServer      
       shuffleServer = new ShuffleServer
       shuffleServer.setDaemon(true)
       shuffleServer.start()
       logInfo("ShuffleServer started...")
-      
+
       initialized = true
     }
   }
+  
+  def BlockSize = BlockSize_
   
   def MinKnockInterval = MinKnockInterval_
   def MaxKnockInterval = MaxKnockInterval_
@@ -411,10 +486,19 @@ object CustomParallelInMemoryShuffle extends Logging {
   def MaxRxConnections = MaxRxConnections_
   def MaxTxConnections = MaxTxConnections_
   
-  def getSplitName(shuffleId: Long, inputId: Int, outputId: Int): String = {
+  def getSplitName(shuffleId: Long, inputId: Int, outputId: Int, 
+    blockId: Int): String = {
     initializeIfNeeded()
     // Adding shuffleDir is unnecessary. Added to keep the parsers working
-    return "%s/%d/%d/%d".format(shuffleDir, shuffleId, inputId, outputId)
+    return "%s/%d/%d/%d-%d".format(shuffleDir, shuffleId, inputId, outputId, 
+      blockId)
+  }
+
+  def getBlockNumOutputName(shuffleId: Long, inputId: Int, 
+    outputId: Int): String = {
+    initializeIfNeeded()
+    return "%s/%d/%d/BLOCKNUM-%d".format(shuffleDir, shuffleId, inputId, 
+      outputId)
   }
 
   def newShuffleId(): Long = {
@@ -445,7 +529,7 @@ object CustomParallelInMemoryShuffle extends Logging {
   class ShuffleServer
   extends Thread with Logging {
     var threadPool = 
-      newDaemonFixedThreadPool(CustomParallelInMemoryShuffle.MaxTxConnections)
+      newDaemonFixedThreadPool(CustomBlockedInMemoryShuffle.MaxTxConnections)
 
     var serverSocket: ServerSocket = null
 
@@ -500,11 +584,30 @@ object CustomParallelInMemoryShuffle extends Logging {
       
       override def run: Unit = {
         try {
-          // Receive requestedSplit from the receiver
-          // Adding shuffleDir is unnecessary. Added to keep the parsers working
+          // Receive basic path information
+          val (shuffleId, myIndex, outputId) = 
+            ois.readObject.asInstanceOf[(Int, Int, Int)]
+            
           var requestedSplit = 
-            shuffleDir + "/" + ois.readObject.asInstanceOf[String]
+            "%s/%d/%d/%d".format(shuffleDir, shuffleId, myIndex, outputId)
           logInfo("requestedSplit: " + requestedSplit)
+          
+          // Read BLOCKNUM and send back the total number of blocks
+          val blockNumName = "%s/%d/%d/BLOCKNUM-%d".format(shuffleDir, 
+            shuffleId, myIndex, outputId)
+            
+          val blockNumIn = new ObjectInputStream(new ByteArrayInputStream(
+            CustomBlockedInMemoryShuffle.splitsCache(blockNumName)))
+          val BLOCKNUM = blockNumIn.readObject.asInstanceOf[Int]
+          blockNumIn.close()
+          
+          oos.writeObject(BLOCKNUM)
+          
+          // Receive specific block request
+          val blockId = ois.readObject.asInstanceOf[Int]
+          
+          // Ready to send
+          requestedSplit = requestedSplit + "-" + blockId
           
           // Send the length of the requestedSplit to let the receiver know that 
           // transfer is about to start
@@ -514,7 +617,7 @@ object CustomParallelInMemoryShuffle extends Logging {
           
           try {
             requestedSplitLen =
-              CustomParallelInMemoryShuffle.splitsCache(requestedSplit).length
+              CustomBlockedInMemoryShuffle.splitsCache(requestedSplit).length
           } catch {
             case e: Exception => { }
           }
@@ -524,10 +627,10 @@ object CustomParallelInMemoryShuffle extends Logging {
           
           logInfo("requestedSplitLen = " + requestedSplitLen)
 
-          // Read and send the requested split
+          // Read and send the requested file
           if (requestedSplitLen != -1) {
             // Send
-            bos.write(CustomParallelInMemoryShuffle.splitsCache(requestedSplit),
+            bos.write(CustomBlockedInMemoryShuffle.splitsCache(requestedSplit),
               0, requestedSplitLen)
             bos.flush()
           } else {
@@ -550,5 +653,5 @@ object CustomParallelInMemoryShuffle extends Logging {
         }
       }
     }
-  }
+  }  
 }
