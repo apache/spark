@@ -13,9 +13,9 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * 
  * An implementation of shuffle using local memory served through custom server 
  * where receivers create simultaneous connections to multiple servers by 
- * setting the 'spark.blockedLocalFileShuffle.maxRxConnections' config option.
+ * setting the 'spark.blockedInMemoryShuffle.maxRxConnections' config option.
  *
- * By controlling the 'spark.blockedLocalFileShuffle.blockSize' config option
+ * By controlling the 'spark.blockedInMemoryShuffle.blockSize' config option
  * one can also control the largest block size to divide each map output into.
  * Essentially, instead of creating one large output file for each reducer, maps
  * create multiple smaller files to enable finer level of engagement.

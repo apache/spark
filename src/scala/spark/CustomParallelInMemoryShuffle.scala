@@ -13,7 +13,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * 
  * An implementation of shuffle using local memory served through custom server 
  * where receivers create simultaneous connections to multiple servers by 
- * setting the 'spark.parallelLocalFileShuffle.maxRxConnections' config option.
+ * setting the 'spark.parallelInMemoryShuffle.maxRxConnections' config option.
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
