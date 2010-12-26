@@ -30,7 +30,6 @@ extends Logging {
     if (!initialized) {
       val broadcastFactoryClass = System.getProperty("spark.broadcast.factory",
         "spark.DfsBroadcastFactory")
-      val booleanArgs = Array[AnyRef] (isMaster.asInstanceOf[AnyRef])
 
       broadcastFactory = 
         Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
@@ -93,7 +92,8 @@ extends Comparable[SourceInfo] with Logging {
   var hasBlocksBitVector: BitSet = new BitSet (totalBlocks)
   
   // Ascending sort based on leecher count
-  def compareTo (o: SourceInfo): Int = (currentLeechers - o.currentLeechers)}
+  def compareTo (o: SourceInfo): Int = (currentLeechers - o.currentLeechers)
+}
 
 object SourceInfo {
   // Constants for special values of listenPort

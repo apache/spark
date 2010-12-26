@@ -208,12 +208,12 @@ extends Broadcast[T] with Logging {
     do {
       try {  
         // Connect to the tracker to find out the guide 
-        val clientSocketToTracker = 
+        clientSocketToTracker = 
           new Socket(ChainedBroadcast.MasterHostAddress, ChainedBroadcast.MasterTrackerPort)  
-        val oosTracker = 
+        oosTracker = 
           new ObjectOutputStream (clientSocketToTracker.getOutputStream)
         oosTracker.flush
-        val oisTracker = 
+        oisTracker = 
           new ObjectInputStream (clientSocketToTracker.getInputStream)
       
         // Send UUID and receive masterListenPort
