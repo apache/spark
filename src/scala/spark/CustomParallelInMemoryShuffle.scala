@@ -13,7 +13,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * 
  * An implementation of shuffle using local memory served through custom server 
  * where receivers create simultaneous connections to multiple servers by 
- * setting the 'spark.parallelInMemoryShuffle.maxRxConnections' config option.
+ * setting the 'spark.shuffle.maxRxConnections' config option.
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
@@ -356,14 +356,14 @@ object CustomParallelInMemoryShuffle extends Logging {
     if (!initialized) {
       // Load config parameters
       MinKnockInterval_ = System.getProperty(
-        "spark.parallelInMemoryShuffle.minKnockInterval", "1000").toInt
+        "spark.shuffle.minKnockInterval", "1000").toInt
       MaxKnockInterval_ =  System.getProperty(
-        "spark.parallelInMemoryShuffle.maxKnockInterval", "5000").toInt
+        "spark.shuffle.maxKnockInterval", "5000").toInt
 
       MaxRxConnections_ = System.getProperty(
-        "spark.parallelInMemoryShuffle.maxRxConnections", "4").toInt
+        "spark.shuffle.maxRxConnections", "4").toInt
       MaxTxConnections_ = System.getProperty(
-        "spark.parallelInMemoryShuffle.maxTxConnections", "8").toInt
+        "spark.shuffle.maxTxConnections", "8").toInt
         
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc

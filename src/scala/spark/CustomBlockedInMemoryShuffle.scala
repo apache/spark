@@ -13,15 +13,15 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * 
  * An implementation of shuffle using local memory served through custom server 
  * where receivers create simultaneous connections to multiple servers by 
- * setting the 'spark.blockedInMemoryShuffle.maxRxConnections' config option.
+ * setting the 'spark.shuffle.maxRxConnections' config option.
  *
- * By controlling the 'spark.blockedInMemoryShuffle.blockSize' config option
- * one can also control the largest block size to divide each map output into.
- * Essentially, instead of creating one large output file for each reducer, maps
- * create multiple smaller files to enable finer level of engagement.
+ * By controlling the 'spark.shuffle.blockSize' config option one can also 
+ * control the largest block size to divide each map output into. Essentially, 
+ * instead of creating one large output file for each reducer, maps create 
+ * multiple smaller files to enable finer level of engagement.
  *
- * 'spark.parallelLocalFileShuffle.maxTxConnections' enforces server-side cap. 
- * Ideally maxTxConnections >= maxRxConnections * numReducersPerMachine
+ * 'spark.shuffle.maxTxConnections' enforces server-side cap.  Ideally,
+ * maxTxConnections >= maxRxConnections * numReducersPerMachine
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
@@ -427,17 +427,17 @@ object CustomBlockedInMemoryShuffle extends Logging {
     if (!initialized) {
       // Load config parameters
       BlockSize_ = System.getProperty(
-        "spark.blockedInMemoryShuffle.blockSize", "1024").toInt * 1024
+        "spark.shuffle.blockSize", "1024").toInt * 1024
       
       MinKnockInterval_ = System.getProperty(
-        "spark.blockedInMemoryShuffle.minKnockInterval", "1000").toInt
+        "spark.shuffle.minKnockInterval", "1000").toInt
       MaxKnockInterval_ = System.getProperty(
-        "spark.blockedInMemoryShuffle.maxKnockInterval", "5000").toInt
+        "spark.shuffle.maxKnockInterval", "5000").toInt
 
       MaxRxConnections_ = System.getProperty(
-        "spark.blockedInMemoryShuffle.maxRxConnections", "4").toInt
+        "spark.shuffle.maxRxConnections", "4").toInt
       MaxTxConnections_ = System.getProperty(
-        "spark.blockedInMemoryShuffle.maxTxConnections", "8").toInt
+        "spark.shuffle.maxTxConnections", "8").toInt
       
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
