@@ -29,6 +29,9 @@ extends Logging {
   private var MasterTrackerPort_ = System.getProperty(
     "spark.shuffle.masterTrackerPort", "22222").toInt
 
+  private var BlockSize_ = System.getProperty(
+    "spark.shuffle.blockSize", "1024").toInt * 1024
+
   // Used thoughout the code for small and large waits/timeouts
   private var MinKnockInterval_ = System.getProperty(
     "spark.shuffle.minKnockInterval", "1000").toInt
@@ -43,6 +46,8 @@ extends Logging {
 
   def MasterHostAddress = MasterHostAddress_
   def MasterTrackerPort = MasterTrackerPort_
+
+  def BlockSize = BlockSize_
 
   def MinKnockInterval = MinKnockInterval_
   def MaxKnockInterval = MaxKnockInterval_

@@ -295,7 +295,7 @@ extends Shuffle[K, V, C] with Logging {
       
       var timeOutTimer = new Timer
       timeOutTimer.schedule(timeOutTask, 
-        CustomParallelLocalFileShuffle.MaxKnockInterval)
+        CustomBlockedLocalFileShuffle.MaxKnockInterval)
       
       try {
         // Everything will break if BLOCKNUM is not correctly received

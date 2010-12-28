@@ -13,7 +13,12 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * where receivers create simultaneous connections to multiple servers by 
  * setting the 'spark.shuffle.maxRxConnections' config option.
  *
- * 'spark.shuffle.maxTxConnections' enforces server-side cap. Ideally,
+ * By controlling the 'spark.shuffle.blockSize' config option one can also 
+ * control the largest block size to divide each map output into. Essentially, 
+ * instead of creating one large output file for each reducer, maps create
+ * multiple smaller files to enable finer level of engagement.
+ *
+ * 'spark.shuffle.maxTxConnections' enforces server-side cap. Ideally, 
  * maxTxConnections >= maxRxConnections * numReducersPerMachine
  *
  * 'spark.shuffle.TrackerStrategy' decides which strategy to use in the tracker
@@ -21,13 +26,17 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class TrackedCustomParallelLocalFileShuffle[K, V, C] 
+class TrackedCustomBlockedLocalFileShuffle[K, V, C] 
 extends Shuffle[K, V, C] with Logging {
   @transient var totalSplits = 0
-  @transient var hasSplits = 0 
+  @transient var hasSplits = 0
+  
+  @transient var totalBlocksInSplit: Array[Int] = null
+  @transient var hasBlocksInSplit: Array[Int] = null
+  
   @transient var hasSplitsBitVector: BitSet = null
   @transient var splitsInRequestBitVector: BitSet = null
-  
+
   @transient var receivedData: LinkedBlockingQueue[(Int, Array[Byte])] = null  
   @transient var combiners: HashMap[K,C] = null
   
@@ -39,13 +48,14 @@ extends Shuffle[K, V, C] with Logging {
   : RDD[(K, C)] =
   {
     val sc = input.sparkContext
-    val shuffleId = TrackedCustomParallelLocalFileShuffle.newShuffleId()
+    val shuffleId = TrackedCustomBlockedLocalFileShuffle.newShuffleId()
     logInfo("Shuffle ID: " + shuffleId)
 
     val splitRdd = new NumberedSplitRDD(input)
     val numInputSplits = splitRdd.splits.size
 
-    // Run a parallel map and collect to write the intermediate data files
+    // Run a parallel map and collect to write the intermediate data files,
+    // returning a list of inputSplitId -> serverUri pairs
     val outputLocs = splitRdd.map((pair: (Int, Iterator[(K, V)])) => {
       val myIndex = pair._1
       val myIterator = pair._2
@@ -63,20 +73,59 @@ extends Shuffle[K, V, C] with Logging {
       }
       
       for (i <- 0 until numOutputSplits) {
-        val file = TrackedCustomParallelLocalFileShuffle.getOutputFile(shuffleId, 
+        var blockNum = 0
+        var isDirty = false
+        var file: File = null
+        var out: ObjectOutputStream = null
+        
+        var writeStartTime: Long = 0
+        
+        buckets(i).foreach(pair => {
+          // Open a new file if necessary
+          if (!isDirty) {
+            file = TrackedCustomBlockedLocalFileShuffle.getOutputFile(shuffleId, 
+              myIndex, i, blockNum)
+            writeStartTime = System.currentTimeMillis
+            logInfo("BEGIN WRITE: " + file)
+            
+            out = new ObjectOutputStream(new FileOutputStream(file))
+          }
+          
+          out.writeObject(pair)
+          out.flush()
+          isDirty = true
+          
+          // Close the old file if has crossed the blockSize limit
+          if (file.length > Shuffle.BlockSize) {
+            out.close()
+            logInfo("END WRITE: " + file)
+            val writeTime = System.currentTimeMillis - writeStartTime
+            logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+
+            blockNum = blockNum + 1
+            isDirty = false
+          }
+        })
+        
+        if (isDirty) {
+          out.close()
+          logInfo("END WRITE: " + file)
+          val writeTime = System.currentTimeMillis - writeStartTime
+          logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+
+          blockNum = blockNum + 1
+        }
+        
+        // Write the BLOCKNUM file
+        file = TrackedCustomBlockedLocalFileShuffle.getBlockNumOutputFile(shuffleId, 
           myIndex, i)
-        val writeStartTime = System.currentTimeMillis
-        logInfo("BEGIN WRITE: " + file)
-        val out = new ObjectOutputStream(new FileOutputStream(file))
-        buckets(i).foreach(pair => out.writeObject(pair))
+        out = new ObjectOutputStream(new FileOutputStream(file))
+        out.writeObject(blockNum)
         out.close()
-        logInfo("END WRITE: " + file)
-        val writeTime = System.currentTimeMillis - writeStartTime
-        logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
       }
       
-      (SplitInfo (TrackedCustomParallelLocalFileShuffle.serverAddress, 
-        TrackedCustomParallelLocalFileShuffle.serverPort, myIndex))
+      (SplitInfo (TrackedCustomBlockedLocalFileShuffle.serverAddress, 
+        TrackedCustomBlockedLocalFileShuffle.serverPort, myIndex))
     }).collect()
 
     // Start tracker
@@ -90,24 +139,28 @@ extends Shuffle[K, V, C] with Logging {
     return indexes.flatMap((myId: Int) => {
       totalSplits = outputLocs.size
       hasSplits = 0
+      
+      totalBlocksInSplit = Array.tabulate(totalSplits)(_ => -1)
+      hasBlocksInSplit = Array.tabulate(totalSplits)(_ => 0)
+      
       hasSplitsBitVector = new BitSet(totalSplits)
       splitsInRequestBitVector = new BitSet(totalSplits)
-
+      
       receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
-      var threadPool = 
-        Shuffle.newDaemonFixedThreadPool(Shuffle.MaxRxConnections)
-        
       // Start consumer
       var shuffleConsumer = new ShuffleConsumer(mergeCombiners)
       shuffleConsumer.setDaemon(true)
       shuffleConsumer.start()
       logInfo("ShuffleConsumer started...")
+
+      var threadPool = Shuffle.newDaemonFixedThreadPool(
+        Shuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
-        var numThreadsToCreate = 
-          Math.min(totalSplits, Shuffle.MaxRxConnections) - 
+        var numThreadsToCreate =
+          Math.min(totalSplits, Shuffle.MaxRxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -134,7 +187,7 @@ extends Shuffle[K, V, C] with Logging {
         // Sleep for a while before creating new threads
         Thread.sleep(Shuffle.MinKnockInterval)
       }
-      
+
       threadPool.shutdown()
       combiners
     })
@@ -158,9 +211,8 @@ extends Shuffle[K, V, C] with Logging {
     
     return localSplitInfo
   }  
-  
-  // Selects a random split using local information
-  private def selectRandomSplit: Int = {
+
+  def selectRandomSplit: Int = {
     var requiredSplits = new ArrayBuffer[Int]
     
     synchronized {
@@ -172,7 +224,7 @@ extends Shuffle[K, V, C] with Logging {
     }
     
     if (requiredSplits.size > 0) {
-      requiredSplits(TrackedCustomParallelLocalFileShuffle.ranGen.nextInt(
+      requiredSplits(TrackedCustomBlockedLocalFileShuffle.ranGen.nextInt(
         requiredSplits.size))
     } else {
       -1
@@ -202,7 +254,7 @@ extends Shuffle[K, V, C] with Logging {
     try {
       // Send intention
       oosTracker.writeObject(
-        TrackedCustomParallelLocalFileShuffle.ReducerEntering)
+        TrackedCustomBlockedLocalFileShuffle.ReducerEntering)
       oosTracker.flush()
       
       // Send what this reducer has
@@ -269,10 +321,10 @@ extends Shuffle[K, V, C] with Logging {
                     val reducerIntention = ois.readObject.asInstanceOf[Int]
                     
                     if (reducerIntention == 
-                      TrackedCustomParallelLocalFileShuffle.ReducerEntering) {
+                      TrackedCustomBlockedLocalFileShuffle.ReducerEntering) {
                       // Receive what the reducer has
                       val reducerSplitInfo = 
-                        ois.readObject.asInstanceOf[SplitInfo]                      
+                        ois.readObject.asInstanceOf[SplitInfo]
                       
                       // Select split and update stats if necessary
                       val selectedSplitIndex = 
@@ -284,7 +336,7 @@ extends Shuffle[K, V, C] with Logging {
                       oos.flush()
                     }
                     else if (reducerIntention == 
-                      TrackedCustomParallelLocalFileShuffle.ReducerLeaving) {
+                      TrackedCustomBlockedLocalFileShuffle.ReducerLeaving) {
                       // Receive reducerSplitInfo and serverSplitIndex
                       val reducerSplitInfo = 
                         ois.readObject.asInstanceOf[SplitInfo]                      
@@ -327,9 +379,9 @@ extends Shuffle[K, V, C] with Logging {
       threadPool.shutdown()
     }  
   }  
-  
+
   class ShuffleConsumer(mergeCombiners: (C, C) => C)
-  extends Thread with Logging {
+  extends Thread with Logging {   
     override def run: Unit = {
       // Run until all splits are here
       while (hasSplits < totalSplits) {
@@ -364,16 +416,16 @@ extends Shuffle[K, V, C] with Logging {
       }
     }
   }
-  
+
   class ShuffleClient(splitIndex: Int, serversplitInfo: SplitInfo, 
     requestSplit: String)
   extends Thread with Logging {
     private var peerSocketToSource: Socket = null
     private var oosSource: ObjectOutputStream = null
     private var oisSource: ObjectInputStream = null
-    
+
     private var receptionSucceeded = false
-    
+
     // Make sure that multiple messages don't go to the tracker
     private var alreadySentLeavingNotification = false
 
@@ -387,15 +439,10 @@ extends Shuffle[K, V, C] with Logging {
       
       var timeOutTimer = new Timer
       timeOutTimer.schedule(timeOutTask, Shuffle.MaxKnockInterval)
-        
-      // Create a temp variable to be used in different places
-      val requestPath = "http://%s:%d/shuffle/%s".format(
-        serversplitInfo.hostAddress, serversplitInfo.listenPort, requestSplit)      
-
-      logInfo("ShuffleClient started... => " + requestPath)
       
       try {
-        // Connect to the source
+        // Everything will break if BLOCKNUM is not correctly received
+        // First get BLOCKNUM file if totalBlocksInSplit(splitIndex) is unknown
         peerSocketToSource = new Socket(
           serversplitInfo.hostAddress, serversplitInfo.listenPort)
         oosSource =
@@ -404,17 +451,28 @@ extends Shuffle[K, V, C] with Logging {
         var isSource = peerSocketToSource.getInputStream
         oisSource = new ObjectInputStream(isSource)
         
-        // Send the request
-        oosSource.writeObject(requestSplit)
-        oosSource.flush()
+        // Send path information
+        oosSource.writeObject(requestSplit)   
         
-        // Receive the length of the requested file
+        // TODO: Can be optimized. No need to do it everytime.
+        // Receive BLOCKNUM
+        totalBlocksInSplit(splitIndex) = oisSource.readObject.asInstanceOf[Int]
+
+        // Request specific block
+        oosSource.writeObject(hasBlocksInSplit(splitIndex))
+        
+        // Good to go. First, receive the length of the requested file
         var requestedFileLen = oisSource.readObject.asInstanceOf[Int]
         logInfo("Received requestedFileLen = " + requestedFileLen)
 
         // Turn the timer OFF, if the sender responds before timeout
         timeOutTimer.cancel()
         
+        // Create a temp variable to be used in different places
+        val requestPath = "http://%s:%d/shuffle/%s-%d".format(
+          serversplitInfo.hostAddress, serversplitInfo.listenPort, requestSplit, 
+          hasBlocksInSplit(splitIndex))
+
         // Receive the file
         if (requestedFileLen != -1) {
           val readStartTime = System.currentTimeMillis
@@ -425,7 +483,7 @@ extends Shuffle[K, V, C] with Logging {
           var alreadyRead = 0
           var bytesRead = 0
           
-          while (alreadyRead < requestedFileLen) {
+          while (alreadyRead != requestedFileLen) {
             bytesRead = isSource.read(recvByteArray, alreadyRead, 
               requestedFileLen - alreadyRead)
             if (bytesRead > 0) {
@@ -441,18 +499,23 @@ extends Shuffle[K, V, C] with Logging {
               logInfo("Exception during putting data into receivedData")
             }
           }
-          
+                  
           // TODO: Updating stats before consumption is completed
-          hasSplitsBitVector.synchronized {
-            hasSplitsBitVector.set(splitIndex)
+          hasBlocksInSplit(splitIndex) = hasBlocksInSplit(splitIndex) + 1
+          
+          // Split has been received only if all the blocks have been received
+          if (hasBlocksInSplit(splitIndex) == totalBlocksInSplit(splitIndex)) {
+            hasSplitsBitVector.synchronized {
+              hasSplitsBitVector.set(splitIndex)
+            }
+            hasSplits += 1
           }
-          hasSplits += 1
 
           // We have received splitIndex
           splitsInRequestBitVector.synchronized {
             splitsInRequestBitVector.set(splitIndex, false)
-          }        
-          
+          }
+
           receptionSucceeded = true
 
           logInfo("END READ: " + requestPath)
@@ -493,7 +556,7 @@ extends Shuffle[K, V, C] with Logging {
         try {
           // Send intention
           oosTracker.writeObject(
-            TrackedCustomParallelLocalFileShuffle.ReducerLeaving)
+            TrackedCustomBlockedLocalFileShuffle.ReducerLeaving)
           oosTracker.flush()
           
           // Send reducerSplitInfo
@@ -535,21 +598,23 @@ extends Shuffle[K, V, C] with Logging {
       if (peerSocketToSource != null) {
         peerSocketToSource.close()
       }
+      
+      logInfo("Leaving client")
     }
-  }  
+  }     
 }
 
-object TrackedCustomParallelLocalFileShuffle extends Logging {
+object TrackedCustomBlockedLocalFileShuffle extends Logging {
   // Tracker communication constants
   val ReducerEntering = 0
   val ReducerLeaving = 1
-  
+
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
 
   // Variables initialized by initializeIfNeeded()
   private var shuffleDir: File = null
-  
+
   private var shuffleServer: ShuffleServer = null
   private var serverAddress = InetAddress.getLocalHost.getHostAddress
   private var serverPort: Int = -1
@@ -566,12 +631,11 @@ object TrackedCustomParallelLocalFileShuffle extends Logging {
       var foundLocalDir = false
       var localDir: File = null
       var localDirUuid: UUID = null
-      
       while (!foundLocalDir && tries < 10) {
         tries += 1
         try {
           localDirUuid = UUID.randomUUID
-          localDir = new File(localDirRoot, "spark-local-" + localDirUuid)          
+          localDir = new File(localDirRoot, "spark-local-" + localDirUuid)
           if (!localDir.exists) {
             localDir.mkdirs()
             foundLocalDir = true
@@ -588,22 +652,32 @@ object TrackedCustomParallelLocalFileShuffle extends Logging {
       shuffleDir = new File(localDir, "shuffle")
       shuffleDir.mkdirs()
       logInfo("Shuffle dir: " + shuffleDir)
-
+      
       // Create and start the shuffleServer      
       shuffleServer = new ShuffleServer
       shuffleServer.setDaemon(true)
       shuffleServer.start()
       logInfo("ShuffleServer started...")
-      
+
       initialized = true
     }
   }
   
-  def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int): File = {
+  def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int, 
+    blockId: Int): File = {
     initializeIfNeeded()
     val dir = new File(shuffleDir, shuffleId + "/" + inputId)
     dir.mkdirs()
-    val file = new File(dir, "" + outputId)
+    val file = new File(dir, "%d-%d".format(outputId, blockId))
+    return file
+  }
+  
+  def getBlockNumOutputFile(shuffleId: Long, inputId: Int, 
+    outputId: Int): File = {
+    initializeIfNeeded()
+    val dir = new File(shuffleDir, shuffleId + "/" + inputId)
+    dir.mkdirs()
+    val file = new File(dir, outputId + "-BLOCKNUM")
     return file
   }
 
@@ -668,9 +742,26 @@ object TrackedCustomParallelLocalFileShuffle extends Logging {
       
       override def run: Unit = {
         try {
-          // Receive requestPath from the receiver
+          // Receive basic path information
           var requestPath = ois.readObject.asInstanceOf[String]
-          logInfo("requestPath: " + shuffleDir + "/" + requestPath)
+
+          logInfo("requestPath: " + requestPath)
+          
+          // Read BLOCKNUM file and send back the total number of blocks
+          val blockNumFilePath = "%s/%s-BLOCKNUM".format(shuffleDir, 
+            requestPath)
+          val blockNumIn = 
+            new ObjectInputStream(new FileInputStream(blockNumFilePath))
+          val BLOCKNUM = blockNumIn.readObject.asInstanceOf[Int]
+          blockNumIn.close()
+          
+          oos.writeObject(BLOCKNUM)
+          
+          // Receive specific block request
+          val blockId = ois.readObject.asInstanceOf[Int]
+          
+          // Ready to send
+          requestPath = requestPath + "-" + blockId
           
           // Open the file
           var requestedFile: File = null
@@ -733,5 +824,5 @@ object TrackedCustomParallelLocalFileShuffle extends Logging {
         }
       }
     }
-  }
+  }  
 }

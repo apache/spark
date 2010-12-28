@@ -21,6 +21,7 @@ trait ShuffleTrackerStrategy {
  */
 class BalanceConnectionsShuffleTrackerStrategy
 extends ShuffleTrackerStrategy with Logging {
+  var numSources = -1
   var outputLocs: Array[SplitInfo] = null
   var curConnectionsPerLoc: Array[Int] = null
   var totalConnectionsPerLoc: Array[Int] = null
@@ -29,17 +30,18 @@ extends ShuffleTrackerStrategy with Logging {
   // information back and forth between the tracker, mappers, and reducers
   def initialize(outputLocs_ : Array[SplitInfo]): Unit = {
     outputLocs = outputLocs_
+    numSources = outputLocs.size
     
     // Now initialize other data structures
-    curConnectionsPerLoc = Array.tabulate(outputLocs.size)(_ => 0)
-    totalConnectionsPerLoc = Array.tabulate(outputLocs.size)(_ => 0)
+    curConnectionsPerLoc = Array.tabulate(numSources)(_ => 0)
+    totalConnectionsPerLoc = Array.tabulate(numSources)(_ => 0)
   }
   
   def selectSplitAndAddReducer(reducerSplitInfo: SplitInfo): Int = synchronized {
     var minConnections = Int.MaxValue
     var splitIndex = -1
     
-    for (i <- 0 until curConnectionsPerLoc.size) {
+    for (i <- 0 until numSources) {
       // TODO: Use of MaxRxConnections instead of MaxTxConnections is 
       // intentional here. MaxTxConnections is per machine whereas 
       // MaxRxConnections is per mapper/reducer. Will have to find a better way.
