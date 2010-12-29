@@ -2,7 +2,7 @@ import spark.SparkContext
 import spark.SparkContext._
 import java.util.Random
 
-object GroupByTest {
+object SkewedGroupByTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
       System.err.println("Usage: GroupByTest <host> [numMappers] [numKVPairs] [KeySize] [numReducers]")
@@ -18,6 +18,10 @@ object GroupByTest {
     
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random
+
+      // map output sizes lineraly increase from the 1st to the last
+      numKVPairs = (1. * (p + 1) / numMappers * numKVPairs).toInt
+
       var arr1 = new Array[(Int, Array[Byte])](numKVPairs)
       for (i <- 0 until numKVPairs) {
         val byteArr = new Array[Byte](valSize)
