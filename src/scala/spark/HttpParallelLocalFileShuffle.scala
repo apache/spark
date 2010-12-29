@@ -187,18 +187,6 @@ extends Shuffle[K, V, C] with Logging {
           case e: EOFException => { }
         }
         inputStream.close()
-        
-        // Consumption completed. Update stats.
-        hasSplitsBitVector.synchronized {
-          hasSplitsBitVector.set(splitIndex)
-        }
-        hasSplits += 1
-
-        // We have received splitIndex
-        splitsInRequestBitVector.synchronized {
-          splitsInRequestBitVector.set(splitIndex, false)
-        }
-        
       }
     }
   }
@@ -252,7 +240,16 @@ extends Shuffle[K, V, C] with Logging {
           }
         }
         
-        // NOTE: Update of bitVectors are now done by the consumer
+        // TODO: Updating stats before consumption is completed
+        hasSplitsBitVector.synchronized {
+          hasSplitsBitVector.set(splitIndex)
+        }
+        hasSplits += 1
+
+        // We have received splitIndex
+        splitsInRequestBitVector.synchronized {
+          splitsInRequestBitVector.set(splitIndex, false)
+        }        
                   
         receptionSucceeded = true
 
