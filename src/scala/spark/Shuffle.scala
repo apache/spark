@@ -44,6 +44,12 @@ extends Logging {
   private var MaxTxConnections_ = System.getProperty(
     "spark.shuffle.maxTxConnections", "8").toInt
 
+  // Upper limit on receiving in blocked implementations (whichever comes first)
+  private var MaxChatTime_ = System.getProperty(
+    "spark.shuffle.maxChatTime", "250").toInt
+  private var MaxChatBlocks_ = System.getProperty(
+    "spark.shuffle.maxChatBlocks", "1024").toInt
+
   def MasterHostAddress = MasterHostAddress_
   def MasterTrackerPort = MasterTrackerPort_
 
@@ -55,6 +61,9 @@ extends Logging {
   def MaxRxConnections = MaxRxConnections_
   def MaxTxConnections = MaxTxConnections_
 
+  def MaxChatTime = MaxChatTime_
+  def MaxChatBlocks = MaxChatBlocks_
+  
   // Returns a standard ThreadFactory except all threads are daemons
   private def newDaemonThreadFactory: ThreadFactory = {
     new ThreadFactory {

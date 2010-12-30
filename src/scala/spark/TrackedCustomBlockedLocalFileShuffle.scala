@@ -458,6 +458,9 @@ extends Shuffle[K, V, C] with Logging {
         // Receive BLOCKNUM
         totalBlocksInSplit(splitIndex) = oisSource.readObject.asInstanceOf[Int]
 
+        // Turn the timer OFF, if the sender responds before timeout
+        timeOutTimer.cancel()
+        
         // Request specific block
         oosSource.writeObject(hasBlocksInSplit(splitIndex))
         
@@ -465,9 +468,6 @@ extends Shuffle[K, V, C] with Logging {
         var requestedFileLen = oisSource.readObject.asInstanceOf[Int]
         logInfo("Received requestedFileLen = " + requestedFileLen)
 
-        // Turn the timer OFF, if the sender responds before timeout
-        timeOutTimer.cancel()
-        
         // Create a temp variable to be used in different places
         val requestPath = "http://%s:%d/shuffle/%s-%d".format(
           serversplitInfo.hostAddress, serversplitInfo.listenPort, requestSplit, 
