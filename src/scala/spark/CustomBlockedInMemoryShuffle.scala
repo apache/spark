@@ -569,7 +569,7 @@ object CustomBlockedInMemoryShuffle extends Logging {
             
           var requestedSplitBase = "%s/%d/%d/%d".format(
             shuffleDir, shuffleId, myIndex, outputId)
-          logInfo("requestedSplit: " + requestedSplitBase)
+          logInfo("requestedSplitBase: " + requestedSplitBase)
           
           // Read BLOCKNUM and send back the total number of blocks
           val blockNumName = "%s/%d/%d/BLOCKNUM-%d".format(shuffleDir, 
