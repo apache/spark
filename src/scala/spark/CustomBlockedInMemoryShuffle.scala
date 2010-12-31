@@ -99,7 +99,7 @@ extends Shuffle[K, V, C] with Logging {
           isDirty = true
           
           // Close the old file if has crossed the blockSize limit
-          if (baos.size > CustomBlockedInMemoryShuffle.BlockSize) {
+          if (baos.size > Shuffle.BlockSize) {
             CustomBlockedInMemoryShuffle.splitsCache(splitName) = 
               baos.toByteArray
           
@@ -162,12 +162,12 @@ extends Shuffle[K, V, C] with Logging {
       receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
-      var threadPool = CustomBlockedInMemoryShuffle.newDaemonFixedThreadPool(
-        CustomBlockedInMemoryShuffle.MaxRxConnections)
+      var threadPool = Shuffle.newDaemonFixedThreadPool(
+        Shuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate =
-          Math.min(totalSplits, CustomBlockedInMemoryShuffle.MaxRxConnections) -
+          Math.min(totalSplits, Shuffle.MaxRxConnections) - 
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -190,7 +190,7 @@ extends Shuffle[K, V, C] with Logging {
         }
         
         // Sleep for a while before creating new threads
-        Thread.sleep(CustomBlockedInMemoryShuffle.MinKnockInterval)
+        Thread.sleep(Shuffle.MinKnockInterval)
       }
 
       threadPool.shutdown()
@@ -206,7 +206,7 @@ extends Shuffle[K, V, C] with Logging {
       // Don't return until consumption is finished
       // TODO: Replace with a lock later. 
       while (receivedData.size > 0) {
-        Thread.sleep(CustomBlockedLocalFileShuffle.MinKnockInterval)
+        Thread.sleep(Shuffle.MinKnockInterval)
       }
       
       combiners
@@ -287,8 +287,7 @@ extends Shuffle[K, V, C] with Logging {
       }
       
       var timeOutTimer = new Timer
-      timeOutTimer.schedule(timeOutTask, 
-        CustomBlockedLocalFileShuffle.MaxKnockInterval)
+      timeOutTimer.schedule(timeOutTask, Shuffle.MaxKnockInterval)
       
       try {
         // Everything will break if BLOCKNUM is not correctly received
@@ -407,16 +406,6 @@ object CustomBlockedInMemoryShuffle extends Logging {
   // Cache for keeping the splits around
   val splitsCache = new HashMap[String, Array[Byte]]
 
-  // Used thoughout the code for small and large waits/timeouts
-  private var BlockSize_ = 1024 * 1024
-  
-  private var MinKnockInterval_ = 1000
-  private var MaxKnockInterval_ = 5000
-  
-  // Maximum number of connections
-  private var MaxRxConnections_ = 4
-  private var MaxTxConnections_ = 8
-  
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
 
@@ -432,20 +421,6 @@ object CustomBlockedInMemoryShuffle extends Logging {
   
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
-      // Load config parameters
-      BlockSize_ = System.getProperty(
-        "spark.shuffle.blockSize", "1024").toInt * 1024
-      
-      MinKnockInterval_ = System.getProperty(
-        "spark.shuffle.minKnockInterval", "1000").toInt
-      MaxKnockInterval_ = System.getProperty(
-        "spark.shuffle.maxKnockInterval", "5000").toInt
-
-      MaxRxConnections_ = System.getProperty(
-        "spark.shuffle.maxRxConnections", "4").toInt
-      MaxTxConnections_ = System.getProperty(
-        "spark.shuffle.maxTxConnections", "8").toInt
-      
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
       val localDirRoot = System.getProperty("spark.local.dir", "/tmp")
@@ -484,14 +459,6 @@ object CustomBlockedInMemoryShuffle extends Logging {
       initialized = true
     }
   }
-  
-  def BlockSize = BlockSize_
-  
-  def MinKnockInterval = MinKnockInterval_
-  def MaxKnockInterval = MaxKnockInterval_
-  
-  def MaxRxConnections = MaxRxConnections_
-  def MaxTxConnections = MaxTxConnections_
   
   def getSplitName(shuffleId: Long, inputId: Int, outputId: Int, 
     blockId: Int): String = {
@@ -535,8 +502,7 @@ object CustomBlockedInMemoryShuffle extends Logging {
   
   class ShuffleServer
   extends Thread with Logging {
-    var threadPool = 
-      newDaemonFixedThreadPool(CustomBlockedInMemoryShuffle.MaxTxConnections)
+    var threadPool = newDaemonFixedThreadPool(Shuffle.MaxTxConnections)
 
     var serverSocket: ServerSocket = null
 

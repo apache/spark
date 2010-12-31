@@ -91,7 +91,7 @@ extends Shuffle[K, V, C] with Logging {
           isDirty = true
           
           // Close the old file if has crossed the blockSize limit
-          if (file.length > ManualBlockedLocalFileShuffle.BlockSize) {
+          if (file.length > Shuffle.BlockSize) {
             out.close()
             logInfo("END WRITE: " + file)
             val writeTime = System.currentTimeMillis - writeStartTime
@@ -139,12 +139,12 @@ extends Shuffle[K, V, C] with Logging {
       receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
-      var threadPool = ManualBlockedLocalFileShuffle.newDaemonFixedThreadPool(
-        ManualBlockedLocalFileShuffle.MaxRxConnections)
+      var threadPool = Shuffle.newDaemonFixedThreadPool(
+        Shuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate =
-          Math.min(totalSplits, ManualBlockedLocalFileShuffle.MaxRxConnections) -
+          Math.min(totalSplits, Shuffle.MaxRxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -167,7 +167,7 @@ extends Shuffle[K, V, C] with Logging {
         }
         
         // Sleep for a while before creating new threads
-        Thread.sleep(ManualBlockedLocalFileShuffle.MinKnockInterval)
+        Thread.sleep(Shuffle.MinKnockInterval)
       }
 
       threadPool.shutdown()
@@ -183,7 +183,7 @@ extends Shuffle[K, V, C] with Logging {
       // Don't return until consumption is finished
       // TODO: Replace with a lock later. 
       while (receivedData.size > 0) {
-        Thread.sleep(CustomBlockedLocalFileShuffle.MinKnockInterval)
+        Thread.sleep(Shuffle.MinKnockInterval)
       }
       
       combiners
@@ -349,16 +349,6 @@ extends Shuffle[K, V, C] with Logging {
 }
 
 object ManualBlockedLocalFileShuffle extends Logging {
-  // Used thoughout the code for small and large waits/timeouts
-  private var BlockSize_ = 1024 * 1024
-  
-  private var MinKnockInterval_ = 1000
-  private var MaxKnockInterval_ = 5000
-  
-  // Maximum number of connections
-  private var MaxRxConnections_ = 4
-  private var MaxTxConnections_ = 8
-  
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
 
@@ -372,20 +362,6 @@ object ManualBlockedLocalFileShuffle extends Logging {
   
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
-      // Load config parameters
-      BlockSize_ = System.getProperty(
-        "spark.shuffle.blockSize", "1024").toInt * 1024
-      
-      MinKnockInterval_ = System.getProperty(
-        "spark.shuffle.minKnockInterval", "1000").toInt
-      MaxKnockInterval_ = System.getProperty(
-        "spark.shuffle.maxKnockInterval", "5000").toInt
-
-      MaxRxConnections_ = System.getProperty(
-        "spark.shuffle.maxRxConnections", "4").toInt
-      MaxTxConnections_ = System.getProperty(
-        "spark.shuffle.maxTxConnections", "8").toInt
-      
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
       val localDirRoot = System.getProperty("spark.local.dir", "/tmp")
@@ -436,14 +412,6 @@ object ManualBlockedLocalFileShuffle extends Logging {
       logInfo("Local URI: " + serverUri)
     }
   }
-  
-  def BlockSize = BlockSize_
-  
-  def MinKnockInterval = MinKnockInterval_
-  def MaxKnockInterval = MaxKnockInterval_
-  
-  def MaxRxConnections = MaxRxConnections_
-  def MaxTxConnections = MaxTxConnections_
   
   def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int, 
     blockId: Int): File = {

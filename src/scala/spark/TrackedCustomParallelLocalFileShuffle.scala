@@ -142,7 +142,7 @@ extends Shuffle[K, V, C] with Logging {
       // Don't return until consumption is finished
       // TODO: Replace with a lock later. 
       while (receivedData.size > 0) {
-        Thread.sleep(CustomBlockedLocalFileShuffle.MinKnockInterval)
+        Thread.sleep(Shuffle.MinKnockInterval)
       }
       
       combiners

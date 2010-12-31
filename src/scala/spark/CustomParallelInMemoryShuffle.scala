@@ -105,12 +105,12 @@ extends Shuffle[K, V, C] with Logging {
       receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
-      var threadPool = CustomParallelInMemoryShuffle.newDaemonFixedThreadPool(
-        CustomParallelInMemoryShuffle.MaxRxConnections)
+      var threadPool = Shuffle.newDaemonFixedThreadPool(
+        Shuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate = Math.min(totalSplits, 
-          CustomParallelInMemoryShuffle.MaxRxConnections) - 
+          Shuffle.MaxRxConnections) - 
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
@@ -134,7 +134,7 @@ extends Shuffle[K, V, C] with Logging {
         }
         
         // Sleep for a while before creating new threads
-        Thread.sleep(CustomParallelInMemoryShuffle.MinKnockInterval)
+        Thread.sleep(Shuffle.MinKnockInterval)
       }
       
       threadPool.shutdown()
@@ -150,7 +150,7 @@ extends Shuffle[K, V, C] with Logging {
       // Don't return until consumption is finished
       // TODO: Replace with a lock later. 
       while (receivedData.size > 0) {
-        Thread.sleep(CustomBlockedLocalFileShuffle.MinKnockInterval)
+        Thread.sleep(Shuffle.MinKnockInterval)
       }
       
       combiners
@@ -231,8 +231,7 @@ extends Shuffle[K, V, C] with Logging {
       }
       
       var timeOutTimer = new Timer
-      timeOutTimer.schedule(timeOutTask, 
-        CustomParallelInMemoryShuffle.MaxKnockInterval)
+      timeOutTimer.schedule(timeOutTask, Shuffle.MaxKnockInterval)
       
       logInfo("ShuffleClient started... => %s:%d#%s".format(hostAddress, listenPort, requestSplit))
       
@@ -337,14 +336,6 @@ object CustomParallelInMemoryShuffle extends Logging {
   // Cache for keeping the splits around
   val splitsCache = new HashMap[String, Array[Byte]]
 
-  // Used thoughout the code for small and large waits/timeouts
-  private var MinKnockInterval_ = 1000
-  private var MaxKnockInterval_ = 5000
-  
-  // Maximum number of connections
-  private var MaxRxConnections_ = 4
-  private var MaxTxConnections_ = 8
-  
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
 
@@ -360,17 +351,6 @@ object CustomParallelInMemoryShuffle extends Logging {
   
   private def initializeIfNeeded() = synchronized {
     if (!initialized) {
-      // Load config parameters
-      MinKnockInterval_ = System.getProperty(
-        "spark.shuffle.minKnockInterval", "1000").toInt
-      MaxKnockInterval_ =  System.getProperty(
-        "spark.shuffle.maxKnockInterval", "5000").toInt
-
-      MaxRxConnections_ = System.getProperty(
-        "spark.shuffle.maxRxConnections", "4").toInt
-      MaxTxConnections_ = System.getProperty(
-        "spark.shuffle.maxTxConnections", "8").toInt
-        
       // TODO: localDir should be created by some mechanism common to Spark
       // so that it can be shared among shuffle, broadcast, etc
       val localDirRoot = System.getProperty("spark.local.dir", "/tmp")
@@ -411,12 +391,6 @@ object CustomParallelInMemoryShuffle extends Logging {
     }
   }
   
-  def MinKnockInterval = MinKnockInterval_
-  def MaxKnockInterval = MaxKnockInterval_
-  
-  def MaxRxConnections = MaxRxConnections_
-  def MaxTxConnections = MaxTxConnections_
-  
   def getSplitName(shuffleId: Long, inputId: Int, outputId: Int): String = {
     initializeIfNeeded()
     // Adding shuffleDir is unnecessary. Added to keep the parsers working
@@ -450,8 +424,7 @@ object CustomParallelInMemoryShuffle extends Logging {
   
   class ShuffleServer
   extends Thread with Logging {
-    var threadPool = 
-      newDaemonFixedThreadPool(CustomParallelInMemoryShuffle.MaxTxConnections)
+    var threadPool = newDaemonFixedThreadPool(Shuffle.MaxTxConnections)
 
     var serverSocket: ServerSocket = null
 
