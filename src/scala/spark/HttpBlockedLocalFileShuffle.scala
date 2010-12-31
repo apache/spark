@@ -132,12 +132,6 @@ extends Shuffle[K, V, C] with Logging {
       receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]      
       combiners = new HashMap[K, C]
       
-      // Start consumer
-      var shuffleConsumer = new ShuffleConsumer(mergeCombiners)
-      shuffleConsumer.setDaemon(true)
-      shuffleConsumer.start()
-      logInfo("ShuffleConsumer started...")
-
       var threadPool = HttpBlockedLocalFileShuffle.newDaemonFixedThreadPool(
         HttpBlockedLocalFileShuffle.MaxRxConnections)
         
@@ -170,6 +164,21 @@ extends Shuffle[K, V, C] with Logging {
       }
 
       threadPool.shutdown()
+
+      // Start consumer
+      // TODO: Consumption is delayed until everything has been received. 
+      // Otherwise it interferes with network performance
+      var shuffleConsumer = new ShuffleConsumer(mergeCombiners)
+      shuffleConsumer.setDaemon(true)
+      shuffleConsumer.start()
+      logInfo("ShuffleConsumer started...")
+
+      // Don't return until consumption is finished
+      // TODO: Replace with a lock later. 
+      while (receivedData.size > 0) {
+        Thread.sleep(CustomBlockedLocalFileShuffle.MinKnockInterval)
+      }
+      
       combiners
     })
   }
@@ -197,7 +206,7 @@ extends Shuffle[K, V, C] with Logging {
   extends Thread with Logging {   
     override def run: Unit = {
       // Run until all splits are here
-      while (hasSplits < totalSplits) {
+      while (receivedData.size > 0) {
         var splitIndex = -1
         var recvByteArray: Array[Byte] = null
       
