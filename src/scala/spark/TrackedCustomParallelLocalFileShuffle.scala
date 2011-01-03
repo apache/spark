@@ -96,8 +96,8 @@ extends Shuffle[K, V, C] with Logging {
       receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
-      var threadPool = 
-        Shuffle.newDaemonFixedThreadPool(Shuffle.MaxRxConnections)
+      var threadPool = Shuffle.newDaemonFixedThreadPool(
+        Shuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate = 
@@ -106,15 +106,15 @@ extends Shuffle[K, V, C] with Logging {
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
           // Receive which split to pull from the tracker
-          val splitIndex = getTrackerSelectedSplit(outputLocs)
+          val splitIndex = getTrackerSelectedSplit(myId)
           
           if (splitIndex != -1) {
             val selectedSplitInfo = outputLocs(splitIndex)
             val requestSplit = 
-              "%d/%d/%d".format(shuffleId, selectedSplitInfo.inputId, myId)
+              "%d/%d/%d".format(shuffleId, selectedSplitInfo.splitId, myId)
 
             threadPool.execute(new ShuffleClient(splitIndex, selectedSplitInfo, 
-              requestSplit))
+              requestSplit, myId))
               
             // splitIndex is in transit. Will be unset in the ShuffleClient
             splitsInRequestBitVector.synchronized {
@@ -149,9 +149,9 @@ extends Shuffle[K, V, C] with Logging {
     })
   }
   
-  private def getLocalSplitInfo: SplitInfo = {
+  private def getLocalSplitInfo(myId: Int): SplitInfo = {
     var localSplitInfo = SplitInfo(InetAddress.getLocalHost.getHostAddress, 
-      SplitInfo.UnusedParam, SplitInfo.UnusedParam)
+      SplitInfo.UnusedParam, myId)
       
     localSplitInfo.hasSplits = hasSplits
     
@@ -189,9 +189,9 @@ extends Shuffle[K, V, C] with Logging {
   }
   
   // Talks to the tracker and receives instruction
-  private def getTrackerSelectedSplit(outputLocs: Array[SplitInfo]): Int = {
+  private def getTrackerSelectedSplit(myId: Int): Int = {
     // Local status of hasSplitsBitVector and splitsInRequestBitVector
-    val localSplitInfo = getLocalSplitInfo
+    val localSplitInfo = getLocalSplitInfo(myId)
 
     // DO NOT talk to the tracker if all the required splits are already busy
     if (localSplitInfo.hasSplitsBitVector.cardinality == totalSplits) {
@@ -294,17 +294,20 @@ extends Shuffle[K, V, C] with Logging {
                     }
                     else if (reducerIntention == 
                       TrackedCustomParallelLocalFileShuffle.ReducerLeaving) {
-                      // Receive reducerSplitInfo and serverSplitIndex
                       val reducerSplitInfo = 
-                        ois.readObject.asInstanceOf[SplitInfo]                      
-                      val serverSplitIndex = ois.readObject.asInstanceOf[Int]
+                        ois.readObject.asInstanceOf[SplitInfo]
+
+                      // Receive reception stats: how many blocks the reducer 
+                      // read in how much time and from where
+                      val receptionStat = 
+                        ois.readObject.asInstanceOf[ReceptionStats]
                       
                       // Update stats
                       trackerStrategy.deleteReducerFrom(reducerSplitInfo, 
-                        serverSplitIndex)
+                        receptionStat)
                         
                       // Send ACK
-                      oos.writeObject(serverSplitIndex)
+                      oos.writeObject(receptionStat.serverSplitIndex)
                       oos.flush()
                     }
                     else {
@@ -375,7 +378,7 @@ extends Shuffle[K, V, C] with Logging {
   }
   
   class ShuffleClient(splitIndex: Int, serversplitInfo: SplitInfo, 
-    requestSplit: String)
+    requestSplit: String, myId: Int)
   extends Thread with Logging {
     private var peerSocketToSource: Socket = null
     private var oosSource: ObjectOutputStream = null
@@ -385,6 +388,10 @@ extends Shuffle[K, V, C] with Logging {
     
     // Make sure that multiple messages don't go to the tracker
     private var alreadySentLeavingNotification = false
+
+    // Keep track of bytes received and time spent
+    private var numBytesReceived = 0
+    private var totalTimeSpent = 0
 
     override def run: Unit = {
       // Setup the timeout mechanism
@@ -467,6 +474,10 @@ extends Shuffle[K, V, C] with Logging {
           logInfo("END READ: " + requestPath)
           val readTime = System.currentTimeMillis - readStartTime
           logInfo("Reading " + requestPath + " took " + readTime + " millis.")
+
+          // Update stats
+          numBytesReceived = numBytesReceived + requestedFileLen
+          totalTimeSpent = totalTimeSpent + readTime.toInt
         } else {
             throw new SparkException("ShuffleServer " + serversplitInfo.hostAddress + " does not have " + requestSplit)
         }
@@ -506,11 +517,12 @@ extends Shuffle[K, V, C] with Logging {
           oosTracker.flush()
           
           // Send reducerSplitInfo
-          oosTracker.writeObject(getLocalSplitInfo)
+          oosTracker.writeObject(getLocalSplitInfo(myId))
           oosTracker.flush()
           
-          // Send serverSplitInfo so that tracker can update its stats
-          oosTracker.writeObject(splitIndex)
+          // Send reception stats
+          oosTracker.writeObject(ReceptionStats(
+            numBytesReceived, totalTimeSpent, splitIndex))
           oosTracker.flush()
           
           // Receive ACK. No need to do anything with that

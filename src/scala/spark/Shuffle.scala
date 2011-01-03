@@ -49,6 +49,11 @@ extends Logging {
     "spark.shuffle.maxChatTime", "250").toInt
   private var MaxChatBlocks_ = System.getProperty(
     "spark.shuffle.maxChatBlocks", "1024").toInt
+    
+  // A reducer is throttled if it is this much faster 
+  private var ThrottleFraction_ = System.getProperty(
+    "spark.shuffle.throttleFraction", "2.0").toDouble
+  
 
   def MasterHostAddress = MasterHostAddress_
   def MasterTrackerPort = MasterTrackerPort_
@@ -63,6 +68,8 @@ extends Logging {
 
   def MaxChatTime = MaxChatTime_
   def MaxChatBlocks = MaxChatBlocks_
+  
+  def ThrottleFraction = ThrottleFraction_
   
   // Returns a standard ThreadFactory except all threads are daemons
   private def newDaemonThreadFactory: ThreadFactory = {
@@ -98,10 +105,15 @@ extends Logging {
 
 @serializable
 case class SplitInfo(val hostAddress: String, val listenPort: Int,
-  val inputId: Int) { 
+  val splitId: Int) { 
 
   var hasSplits = 0
   var hasSplitsBitVector: BitSet = null
+  
+  // Used by mappers of dim |numOutputSplits|
+  var totalBlocksPerOutputSplit: Array[Int] = null
+  // Used by reducers of dim |numInputSplits|
+  var hasBlocksPerInputSplit: Array[Int] = null
 }
 
 object SplitInfo {
