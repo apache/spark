@@ -548,11 +548,6 @@ extends Shuffle[K, V, C] with Logging {
               hasSplits += 1
             }
 
-            // We have received splitIndex
-            splitsInRequestBitVector.synchronized {
-              splitsInRequestBitVector.set(splitIndex, false)
-            }
-
             receptionSucceeded = true
 
             logInfo("END READ: " + requestPath)
@@ -574,11 +569,8 @@ extends Shuffle[K, V, C] with Logging {
           logInfo("ShuffleClient had a " + e)
         }
       } finally {
-        // If reception failed, unset for future retry
-        if (!receptionSucceeded) {
-          splitsInRequestBitVector.synchronized {
-            splitsInRequestBitVector.set(splitIndex, false)
-          }
+        splitsInRequestBitVector.synchronized {
+          splitsInRequestBitVector.set(splitIndex, false)
         }
         cleanUp()
       }
