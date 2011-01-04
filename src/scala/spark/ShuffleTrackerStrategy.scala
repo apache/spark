@@ -128,28 +128,21 @@ extends ShuffleTrackerStrategy with Logging {
     var splitIndex = -1
 
     // Estimate time remaining to finish receiving for all reducer/mapper pairs
-    var individualEstimates = Array.tabulate(numReducers, numMappers)((i,j) => 
-      (totalBlocksPerInputSplit(i)(j) - hasBlocksPerInputSplit(i)(j)) * 
-      Shuffle.BlockSize / 
-      speedPerInputSplit(i)(j))
-
-    println("reducerSplitInfo = " + reducerSplitInfo.splitId)
+    var individualEstimates = Array.tabulate(numReducers, numMappers)((_,_) => 0)
+    for (i <- 0 until numReducers; j <- 0 until numMappers) {
+      var blocksRemaining = totalBlocksPerInputSplit(i)(j) - 
+        hasBlocksPerInputSplit(i)(j)
+      assert(blocksRemaining >= 0)
       
-    for (i <- 0 until numReducers) {
-      for (j <- 0 until numMappers) {
-        print(individualEstimates(i)(j) + " ")
-      }
-      println("")
+      individualEstimates(i)(j) = 
+        {if (blocksRemaining < 0) 0 else blocksRemaining} * 
+        Shuffle.BlockSize / 
+        {if (speedPerInputSplit(i)(j) == 0) 1 else speedPerInputSplit(i)(j)}
     }
-
+    
     // Estimate time remaining to finish receiving for each reducer
     var completionEstimates = Array.tabulate(numReducers)(
       individualEstimates(_).foldLeft(Int.MinValue)(Math.max(_,_)))
-
-    for (i <- 0 until numReducers) {
-      print(completionEstimates(i) + " ")
-    }
-    println("")
 
     // Check if all individualEstimates entries have non-zero values
     var estimationComplete = true
@@ -159,21 +152,28 @@ extends ShuffleTrackerStrategy with Logging {
       }
     }  
       
-    // Take this reducers estimate out
+    // Save this reducers estimate
     val myCompletionEstimate = completionEstimates(reducerSplitInfo.splitId)
 
     // Sort everyone's time
     quickSort(completionEstimates)
+    
+    // Find a Shuffle.ThrottleFraction amount of gap between consecutive times
+    var gapIndex = -1
+    for (i <- 0 until numReducers - 1) {
+      if (Shuffle.ThrottleFraction * completionEstimates(i) < 
+          completionEstimates(i + 1)) {
+        gapIndex = i
+      }
+    }
 
-    // If this reducer is going to complete F times faster than the 2nd 
-    // fastest one just block this one for a while
-    // TODO: Must be able to support group division instead of singling one out
-    // TODO: Must have a endGame fraction
-    if (estimationComplete && numReducers > 1 && 
-        Shuffle.ThrottleFraction * myCompletionEstimate < 
-          completionEstimates(1)) {
-        splitIndex = -1
-        println("Throttling reducer-" + reducerSplitInfo.splitId)
+    // If estimation matrix can be calculated and there is a visible gap between 
+    // completion times of two groups of reducers and this reducer is in the 
+    // faster group, then throttle it.
+    if (estimationComplete && numReducers > 1 && gapIndex != -1 && 
+        myCompletionEstimate <= completionEstimates(gapIndex)) {
+      splitIndex = -1
+      logInfo("Throttling reducer-" + reducerSplitInfo.splitId)
     } else {
       var minConnections = Int.MaxValue
       for (i <- 0 until numMappers) {
