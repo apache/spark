@@ -9,8 +9,11 @@ trait ShuffleTrackerStrategy {
   // Initialize
   def initialize(outputLocs_ : Array[SplitInfo]): Unit
   
-  // Select a split, update internal stats, and send it back
-  def selectSplitAndAddReducer(reducerSplitInfo: SplitInfo): Int
+  // Select a split and send it back
+  def selectSplit(reducerSplitInfo: SplitInfo): Int
+  
+  // Update internal stats if things could be sent back successfully
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit
   
   // A reducer is done. Update internal stats
   def deleteReducerFrom(reducerSplitInfo: SplitInfo, 
@@ -45,7 +48,7 @@ extends ShuffleTrackerStrategy with Logging {
     totalConnectionsPerLoc = Array.tabulate(numSources)(_ => 0)
   }
   
-  def selectSplitAndAddReducer(reducerSplitInfo: SplitInfo): Int = synchronized {
+  def selectSplit(reducerSplitInfo: SplitInfo): Int = synchronized {
     var minConnections = Int.MaxValue
     var splitIndex = -1
     
@@ -61,22 +64,31 @@ extends ShuffleTrackerStrategy with Logging {
       }
     }
   
+    return splitIndex
+  }
+  
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit = synchronized {
     if (splitIndex != -1) {
       curConnectionsPerLoc(splitIndex) = curConnectionsPerLoc(splitIndex) + 1
       totalConnectionsPerLoc(splitIndex) = 
         totalConnectionsPerLoc(splitIndex) + 1
     }
-  
-    return splitIndex
   }
-  
+
   def deleteReducerFrom(reducerSplitInfo: SplitInfo, 
     receptionStat: ReceptionStats): Unit = synchronized {
     // Decrease number of active connections
     curConnectionsPerLoc(receptionStat.serverSplitIndex) = 
       curConnectionsPerLoc(receptionStat.serverSplitIndex) - 1
 
-    assert(curConnectionsPerLoc(receptionStat.serverSplitIndex) >= 0)
+    // TODO: This assertion can legally fail when ShuffleClient times out while
+    // waiting for tracker response and decides to go to a random server
+    // assert(curConnectionsPerLoc(receptionStat.serverSplitIndex) >= 0)
+
+    // Just in case
+    if (curConnectionsPerLoc(receptionStat.serverSplitIndex) < 0) {
+      curConnectionsPerLoc(receptionStat.serverSplitIndex) = 0
+    }
   }
 }
 
@@ -124,10 +136,11 @@ extends ShuffleTrackerStrategy with Logging {
     totalConnectionsPerLoc = Array.tabulate(numMappers)(_ => 0)
   }
   
-  def selectSplitAndAddReducer(reducerSplitInfo: SplitInfo): Int = synchronized {
+  def selectSplit(reducerSplitInfo: SplitInfo): Int = synchronized {
     var splitIndex = -1
 
     // Estimate time remaining to finish receiving for all reducer/mapper pairs
+    // If speed is unknown or zero then make it 1 to give a large estimate
     var individualEstimates = Array.tabulate(numReducers, numMappers)((_,_) => 0)
     for (i <- 0 until numReducers; j <- 0 until numMappers) {
       var blocksRemaining = totalBlocksPerInputSplit(i)(j) - 
@@ -135,84 +148,109 @@ extends ShuffleTrackerStrategy with Logging {
       assert(blocksRemaining >= 0)
       
       individualEstimates(i)(j) = 
-        {if (blocksRemaining < 0) 0 else blocksRemaining} * 
+        { if (blocksRemaining < 0) 0 else blocksRemaining } * 
         Shuffle.BlockSize / 
-        {if (speedPerInputSplit(i)(j) == 0) 1 else speedPerInputSplit(i)(j)}
+        { if (speedPerInputSplit(i)(j) <= 0) 1 else speedPerInputSplit(i)(j) }
     }
     
-    // Estimate time remaining to finish receiving for each reducer
-    var completionEstimates = Array.tabulate(numReducers)(
-      individualEstimates(_).foldLeft(Int.MinValue)(Math.max(_,_)))
-
     // Check if all individualEstimates entries have non-zero values
     var estimationComplete = true
     for (i <- 0 until numReducers; j <- 0 until numMappers) {
-      if (individualEstimates(i)(j) < 0) {
+      if (speedPerInputSplit(i)(j) < 0) {
         estimationComplete = false
       }
     }  
+
+    // Mark mappers where this reducer is too fast 
+    var throttleFromMapper = Array.tabulate(numMappers)(_ => false)
+    
+    for (i <- 0 until numMappers) {
+      var estimatesFromAMapper = 
+        Array.tabulate(numReducers)(j => individualEstimates(j)(i))
+        
+      val estimateOfThisReducer = estimatesFromAMapper(reducerSplitInfo.splitId)
       
-    // Save this reducers estimate
-    val myCompletionEstimate = completionEstimates(reducerSplitInfo.splitId)
-
-    // Sort everyone's time
-    quickSort(completionEstimates)
-    
-    // Find a Shuffle.ThrottleFraction amount of gap between consecutive times
-    var gapIndex = -1
-    for (i <- 0 until numReducers - 1) {
-      if (Shuffle.ThrottleFraction * completionEstimates(i) < 
-          completionEstimates(i + 1)) {
-        gapIndex = i
-      }
-    }
-
-    // If estimation matrix can be calculated and there is a visible gap between 
-    // completion times of two groups of reducers and this reducer is in the 
-    // faster group, then throttle it.
-    if (estimationComplete && numReducers > 1 && gapIndex != -1 && 
-        myCompletionEstimate <= completionEstimates(gapIndex)) {
-      splitIndex = -1
-      logInfo("Throttling reducer-" + reducerSplitInfo.splitId)
-    } else {
-      var minConnections = Int.MaxValue
-      for (i <- 0 until numMappers) {
-        // TODO: Use of MaxRxConnections instead of MaxTxConnections is 
-        // intentional here. MaxTxConnections is per machine whereas 
-        // MaxRxConnections is per mapper/reducer. Will have to find a better way.
-        if (curConnectionsPerLoc(i) < Shuffle.MaxRxConnections &&
-          totalConnectionsPerLoc(i) < minConnections && 
-          !reducerSplitInfo.hasSplitsBitVector.get(i)) {
-          minConnections = totalConnectionsPerLoc(i)
-          splitIndex = i
+      // Only care if this reducer yet has something to receive from this mapper
+      if (estimateOfThisReducer > 0) {
+        // Sort the estimated times
+        quickSort(estimatesFromAMapper)
+        
+        // Find a Shuffle.ThrottleFraction amount of gap
+        var gapIndex = -1
+        for (i <- 0 until numReducers - 1) {
+          if (gapIndex == -1 && estimatesFromAMapper(i) > 0 && 
+              (Shuffle.ThrottleFraction * estimatesFromAMapper(i) < 
+              estimatesFromAMapper(i + 1))) {
+            gapIndex = i
+          }
+          
+          assert (estimatesFromAMapper(i) <= estimatesFromAMapper(i + 1))
         }
+        
+        // TODO: Pick a configurable parameter
+        if (gapIndex != -1 && (1.0 * gapIndex < (1.0 - 0.1 * Shuffle.ThrottleFraction) * numReducers) && 
+            estimateOfThisReducer <= estimatesFromAMapper(gapIndex)) {
+          throttleFromMapper(i) = true
+          logInfo("Throttling R-%d at M-%d with %d and cut-off %d at %d".format(reducerSplitInfo.splitId, i, estimateOfThisReducer, estimatesFromAMapper(gapIndex + 1), gapIndex))
+//          for (i <- 0 until numReducers) {
+//            print(estimatesFromAMapper(i) + " ")
+//          }
+//          println("")
+        }
+      } else {
+        throttleFromMapper(i) = true
       }
     }
     
-    if (splitIndex != -1) {
-      curConnectionsPerLoc(splitIndex) = curConnectionsPerLoc(splitIndex) + 1
-      totalConnectionsPerLoc(splitIndex) = 
-        totalConnectionsPerLoc(splitIndex) + 1
+    var minConnections = Int.MaxValue
+    for (i <- 0 until numMappers) {
+      // TODO: Use of MaxRxConnections instead of MaxTxConnections is 
+      // intentional here. MaxTxConnections is per machine whereas 
+      // MaxRxConnections is per mapper/reducer. Will have to find a better way.
+      if (curConnectionsPerLoc(i) < Shuffle.MaxRxConnections &&
+          totalConnectionsPerLoc(i) < minConnections && 
+          !reducerSplitInfo.hasSplitsBitVector.get(i) &&
+          !throttleFromMapper(i)) {
+        minConnections = totalConnectionsPerLoc(i)
+        splitIndex = i
+      }
     }
     
     return splitIndex
   }
   
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit = synchronized {
+    if (splitIndex != -1) {
+      curConnectionsPerLoc(splitIndex) = curConnectionsPerLoc(splitIndex) + 1
+      totalConnectionsPerLoc(splitIndex) = 
+        totalConnectionsPerLoc(splitIndex) + 1
+    }
+  }
+
   def deleteReducerFrom(reducerSplitInfo: SplitInfo, 
     receptionStat: ReceptionStats): Unit = synchronized {
     // Update hasBlocksPerInputSplit for reducerSplitInfo
     hasBlocksPerInputSplit(reducerSplitInfo.splitId) = 
       reducerSplitInfo.hasBlocksPerInputSplit
       
-    // Store the last known speed. Add 1 to avoid divide-by-zero.
+    // Store the last known speed. Add 1 to avoid divide-by-zero. Ignore 0 bytes
     // TODO: We are forgetting the old speed. Can use averaging at some point.
-    speedPerInputSplit(reducerSplitInfo.splitId)(receptionStat.serverSplitIndex) = 
-      receptionStat.bytesReceived / (receptionStat.timeSpent + 1)
-
+    if (receptionStat.bytesReceived > 0) {
+      speedPerInputSplit(reducerSplitInfo.splitId)(receptionStat.serverSplitIndex) = 
+        receptionStat.bytesReceived / (receptionStat.timeSpent + 1)
+    }
+    
     // Update current connections to the mapper 
     curConnectionsPerLoc(receptionStat.serverSplitIndex) = 
       curConnectionsPerLoc(receptionStat.serverSplitIndex) - 1
 
-    assert(curConnectionsPerLoc(receptionStat.serverSplitIndex) >= 0)
+    // TODO: This assertion can legally fail when ShuffleClient times out while
+    // waiting for tracker response and decides to go to a random server
+    // assert(curConnectionsPerLoc(receptionStat.serverSplitIndex) >= 0)
+    
+    // Just in case
+    if (curConnectionsPerLoc(receptionStat.serverSplitIndex) < 0) {
+      curConnectionsPerLoc(receptionStat.serverSplitIndex) = 0
+    }
   }
 }

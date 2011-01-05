@@ -100,13 +100,21 @@ extends Shuffle[K, V, C] with Logging {
         Shuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
-        var numThreadsToCreate = 
-          Math.min(totalSplits, Shuffle.MaxRxConnections) - 
+        // Local status of hasSplitsBitVector and splitsInRequestBitVector
+        val localSplitInfo = getLocalSplitInfo(myId)
+
+        // DO NOT talk to the tracker if all the required splits are already busy
+        val hasOrWillHaveSplits = localSplitInfo.hasSplitsBitVector.cardinality
+
+        var numThreadsToCreate =
+          Math.min(totalSplits - hasOrWillHaveSplits, Shuffle.MaxRxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
           // Receive which split to pull from the tracker
+          logInfo("Talking to tracker...")
           val splitIndex = getTrackerSelectedSplit(myId)
+          logInfo("Got %d from tracker...".format(splitIndex))
           
           if (splitIndex != -1) {
             val selectedSplitInfo = outputLocs(splitIndex)
@@ -120,6 +128,9 @@ extends Shuffle[K, V, C] with Logging {
             splitsInRequestBitVector.synchronized {
               splitsInRequestBitVector.set(splitIndex)
             }
+          } else {
+            // Tracker replied back with a NO. Sleep for a while.
+            Thread.sleep(Shuffle.MinKnockInterval)
           }
           
           numThreadsToCreate = numThreadsToCreate - 1
@@ -208,6 +219,24 @@ extends Shuffle[K, V, C] with Logging {
 
     var selectedSplitIndex = -1
 
+    // Setup the timeout mechanism
+    var timeOutTask = new TimerTask {
+      override def run: Unit = {
+        logInfo("Waited enough for tracker response... Take random response...")
+  
+        // sockets will be closed  in finally
+        
+        // TODO: Selecting randomly here. Tracker won't know about it and get an
+        // asssertion failure when this thread leaves
+        
+        selectedSplitIndex = selectRandomSplit
+      }
+    }
+    
+    var timeOutTimer = new Timer
+    // TODO: Which timeout to use?
+    timeOutTimer.schedule(timeOutTask, Shuffle.MinKnockInterval)
+
     try {
       // Send intention
       oosTracker.writeObject(
@@ -220,6 +249,9 @@ extends Shuffle[K, V, C] with Logging {
       
       // Receive reply from the tracker
       selectedSplitIndex = oisTracker.readObject.asInstanceOf[Int]
+      
+      // Turn the timer OFF
+      timeOutTimer.cancel()
     } catch {
       case e: Exception => {
         logInfo("getTrackerSelectedSplit had a " + e)
@@ -284,13 +316,16 @@ extends Shuffle[K, V, C] with Logging {
                         ois.readObject.asInstanceOf[SplitInfo]                      
                       
                       // Select split and update stats if necessary
-                      val selectedSplitIndex = 
-                        trackerStrategy.selectSplitAndAddReducer(
-                          reducerSplitInfo)
+                      val selectedSplitIndex = trackerStrategy.selectSplit(
+                        reducerSplitInfo)
                       
                       // Send reply back
                       oos.writeObject(selectedSplitIndex)
                       oos.flush()
+
+                      // Update internal stats, only if receiver got the reply
+                      trackerStrategy.AddReducerToSplit(reducerSplitInfo, 
+                        selectedSplitIndex)
                     }
                     else if (reducerIntention == 
                       TrackedCustomParallelLocalFileShuffle.ReducerLeaving) {
@@ -314,6 +349,9 @@ extends Shuffle[K, V, C] with Logging {
                       throw new SparkException("Undefined reducerIntention")
                     }
                   } catch {
+                    // EOFException is expected to happen because receiver can 
+                    // break connection due to timeout and pick random instead
+                    case eofe: java.io.EOFException => { }
                     case e: Exception => {
                       logInfo("ShuffleTracker had a " + e)
                     }
