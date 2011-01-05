@@ -385,16 +385,21 @@ extends Shuffle[K, V, C] with Logging {
                         ois.readObject.asInstanceOf[SplitInfo]
                       
                       // Select split and update stats if necessary
-                      val selectedSplitIndex = trackerStrategy.selectSplit(
-                        reducerSplitInfo)
+                      var selectedSplitIndex = -1
+                      trackerStrategy.synchronized {
+                        selectedSplitIndex = trackerStrategy.selectSplit(
+                          reducerSplitInfo)
+                      }
                       
                       // Send reply back
                       oos.writeObject(selectedSplitIndex)
                       oos.flush()
                       
                       // Update internal stats, only if receiver got the reply
-                      trackerStrategy.AddReducerToSplit(reducerSplitInfo, 
-                        selectedSplitIndex)
+                      trackerStrategy.synchronized {
+                        trackerStrategy.AddReducerToSplit(reducerSplitInfo, 
+                          selectedSplitIndex)
+                      }
                     }
                     else if (reducerIntention == 
                       TrackedCustomBlockedLocalFileShuffle.ReducerLeaving) {
@@ -407,8 +412,10 @@ extends Shuffle[K, V, C] with Logging {
                         ois.readObject.asInstanceOf[ReceptionStats]
                       
                       // Update stats
-                      trackerStrategy.deleteReducerFrom(reducerSplitInfo, 
-                        receptionStat)
+                      trackerStrategy.synchronized {
+                        trackerStrategy.deleteReducerFrom(reducerSplitInfo, 
+                          receptionStat)
+                      }
                         
                       // Send ACK
                       oos.writeObject(receptionStat.serverSplitIndex)
