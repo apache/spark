@@ -539,7 +539,9 @@ extends Broadcast[T] with Logging {
             // Update sourceInfo and put it back in, IF reception succeeded
             if (!sourceInfo.receptionFailed) {
               // Add thisWorkerInfo to sources that have completed reception
-              setOfCompletedSources += thisWorkerInfo
+              setOfCompletedSources.synchronized {
+                setOfCompletedSources += thisWorkerInfo
+              }
                             
               selectedSourceInfo.currentLeechers -= 1
               
@@ -731,7 +733,7 @@ extends Logging {
 
   private var MasterHostAddress_ = InetAddress.getLocalHost.getHostAddress
   private var MasterTrackerPort_ : Int = 22222
-  private var BlockSize_ : Int = 512 * 1024
+  private var BlockSize_ : Int = 4096 * 1024
   private var MaxRetryCount_ : Int = 2
 
   private var TrackerSocketTimeout_ : Int = 50000
@@ -750,7 +752,7 @@ extends Logging {
         MasterTrackerPort_ = 
           System.getProperty ("spark.broadcast.masterTrackerPort", "22222").toInt
         BlockSize_ = 
-          System.getProperty ("spark.broadcast.blockSize", "512").toInt * 1024
+          System.getProperty ("spark.broadcast.blockSize", "4096").toInt * 1024
         MaxRetryCount_ = 
           System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
 

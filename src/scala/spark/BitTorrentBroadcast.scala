@@ -852,7 +852,9 @@ extends Broadcast[T] with Logging {
         // If skipSourceInfo.hasBlocksBitVector has all bits set to 'true'
         // then add skipSourceInfo to setOfCompletedSources. Return blank. 
         if (skipSourceInfo.hasBlocks == totalBlocks) {
-          setOfCompletedSources += skipSourceInfo
+          setOfCompletedSources.synchronized {
+            setOfCompletedSources += skipSourceInfo
+          }
           return selectedSources
         }
         
@@ -1049,7 +1051,7 @@ extends Logging {
 
   private var MasterHostAddress_ = InetAddress.getLocalHost.getHostAddress
   private var MasterTrackerPort_ : Int = 11111
-  private var BlockSize_ : Int = 512 * 1024
+  private var BlockSize_ : Int = 4096 * 1024
   private var MaxRetryCount_ : Int = 2
   
   private var TrackerSocketTimeout_ : Int = 50000
@@ -1069,11 +1071,11 @@ extends Logging {
   private var MaxTxPeers_ = 4
   
   // Peers can char at most this milliseconds or transfer this number of blocks
-  private var MaxChatTime_ = 250
+  private var MaxChatTime_ = 500
   private var MaxChatBlocks_ = 1024
   
   // Fraction of blocks to receive before entering the end game
-  private var EndGameFraction_ = 1.0
+  private var EndGameFraction_ = 0.95
   
 
   def initialize (isMaster__ : Boolean): Unit = {
@@ -1084,7 +1086,7 @@ extends Logging {
         MasterTrackerPort_ = 
           System.getProperty ("spark.broadcast.masterTrackerPort", "11111").toInt
         BlockSize_ = 
-          System.getProperty ("spark.broadcast.blockSize", "512").toInt * 1024
+          System.getProperty ("spark.broadcast.blockSize", "4096").toInt * 1024
         MaxRetryCount_ = 
           System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
 
@@ -1107,12 +1109,12 @@ extends Logging {
           System.getProperty ("spark.broadcast.maxTxPeers", "4").toInt
 
         MaxChatTime_ = 
-          System.getProperty ("spark.broadcast.maxChatTime", "250").toInt
+          System.getProperty ("spark.broadcast.maxChatTime", "500").toInt
         MaxChatBlocks_ = 
           System.getProperty ("spark.broadcast.maxChatBlocks", "1024").toInt        
 
         EndGameFraction_ = 
-          System.getProperty ("spark.broadcast.endGameFraction", "1.0").toDouble
+          System.getProperty ("spark.broadcast.endGameFraction", "0.95").toDouble
 
         isMaster_ = isMaster__        
                   
