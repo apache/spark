@@ -187,8 +187,14 @@ extends ShuffleTrackerStrategy with Logging {
           assert (estimatesFromAMapper(i) <= estimatesFromAMapper(i + 1))
         }
         
+        // Keep track of how many have completed
+        var numComplete = estimatesFromAMapper.findIndexOf(i => (i > 0)) 
+        if (numComplete == -1) {
+          numComplete = numReducers
+        }
+
         // TODO: Pick a configurable parameter
-        if (gapIndex != -1 && (1.0 * gapIndex < (1.0 - 0.1 * Shuffle.ThrottleFraction) * numReducers) && 
+        if (gapIndex != -1 && (1.0 * (gapIndex - numComplete + 1) < 0.1 * Shuffle.ThrottleFraction * (numReducers - numComplete)) && 
             estimateOfThisReducer <= estimatesFromAMapper(gapIndex)) {
           throttleFromMapper(i) = true
           logInfo("Throttling R-%d at M-%d with %d and cut-off %d at %d".format(reducerSplitInfo.splitId, i, estimateOfThisReducer, estimatesFromAMapper(gapIndex + 1), gapIndex))
