@@ -14,6 +14,9 @@ class SparkContext(
   val sparkHome: String = null,
   val jars: Seq[String] = Nil)
 extends Logging {
+  // TODO: Added dummy log line. See #45
+  logInfo("")
+
   private var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
