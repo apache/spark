@@ -24,12 +24,13 @@ object SimpleSkewedGroupByTest {
       for (i <- 0 until numKVPairs) {
         val byteArr = new Array[Byte](valSize)
         ranGen.nextBytes(byteArr)
+        val offset = ranGen.nextInt(1000) * numReducers
         if (ranGen.nextDouble < ratio / (numReducers + ratio - 1)) {
           // give ratio times higher chance of generating key 0 (for reducer 0)
-          result(i) = (0, byteArr)
+          result(i) = (offset, byteArr)
         } else {
           // generate a key for one of the other reducers
-          val key = 1 + ranGen.nextInt(numReducers-1)
+          val key = 1 + ranGen.nextInt(numReducers-1) + offset
           result(i) = (key, byteArr)
         }
       }
