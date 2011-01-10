@@ -1,1 +1,14 @@
--Dspark.shuffle.class=spark.TrackedCustomBlockedLocalFileShuffle -Dspark.shuffle.masterHostAddress=127.0.0.1 -Dspark.shuffle.masterTrackerPort=22222 -Dspark.shuffle.trackerStrategy=spark.BalanceRemainingShuffleTrackerStrategy -Dspark.shuffle.maxRxConnections=2 -Dspark.shuffle.maxTxConnections=2 -Dspark.shuffle.blockSize=4096 -Dspark.shuffle.minKnockInterval=100 -Dspark.shuffle.maxKnockInterval=2000 -Dspark.shuffle.maxChatTime=10 -Dspark.shuffle.throttleFraction=2.0
+-Dspark.shuffle.class=spark.CustomParallelLocalFileShuffle
+-Dspark.shuffle.masterHostAddress=127.0.0.1
+-Dspark.shuffle.masterTrackerPort=22222 
+-Dspark.shuffle.trackerStrategy=spark.BalanceRemainingShuffleTrackerStrategy 
+-Dspark.shuffle.maxRxConnections=40
+-Dspark.shuffle.maxTxConnections=120 
+-Dspark.shuffle.blockSize=4096
+-Dspark.shuffle.minKnockInterval=100 
+-Dspark.shuffle.maxKnockInterval=5000 
+-Dspark.shuffle.maxChatTime=500 
+-Dspark.shuffle.throttleFraction=2.0
+-verbose:gc
+-XX:+PrintGCTimeStamps
+-XX:+PrintGCDetails
