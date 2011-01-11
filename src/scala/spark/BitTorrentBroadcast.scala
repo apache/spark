@@ -874,14 +874,16 @@ extends Broadcast[T] with Logging {
               
               var peerIter = listOfSources.iterator        
               var curPeer = peerIter.next
-              
+
+              // Set the BitSet before i is decremented              
+              alreadyPicked.set (i)
+
               while (i > 0) {
                 curPeer = peerIter.next
                 i = i - 1
               }
               
               selectedSources = selectedSources + curPeer
-              alreadyPicked.set (i)
               
               picksLeft = picksLeft - 1
             }
