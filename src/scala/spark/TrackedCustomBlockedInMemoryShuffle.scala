@@ -9,7 +9,7 @@ import java.util.concurrent.{LinkedBlockingQueue, Executors, ThreadPoolExecutor,
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 /**
- * An implementation of shuffle using local files served through custom server 
+ * An implementation of shuffle using memory served through custom server 
  * where receivers create simultaneous connections to multiple servers by 
  * setting the 'spark.shuffle.maxRxConnections' config option.
  *
@@ -26,7 +26,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class TrackedCustomBlockedLocalFileShuffle[K, V, C] 
+class TrackedCustomBlockedInMemoryShuffle[K, V, C] 
 extends Shuffle[K, V, C] with Logging {
   @transient var totalSplits = 0
   @transient var hasSplits = 0
@@ -48,7 +48,7 @@ extends Shuffle[K, V, C] with Logging {
   : RDD[(K, C)] =
   {
     val sc = input.sparkContext
-    val shuffleId = TrackedCustomBlockedLocalFileShuffle.newShuffleId()
+    val shuffleId = TrackedCustomBlockedInMemoryShuffle.newShuffleId()
     logInfo("Shuffle ID: " + shuffleId)
 
     val splitRdd = new NumberedSplitRDD(input)
@@ -78,60 +78,72 @@ extends Shuffle[K, V, C] with Logging {
       for (i <- 0 until numOutputSplits) {
         var blockNum = 0
         var isDirty = false
-        var file: File = null
-        var out: ObjectOutputStream = null
+
+        var splitName = ""
+        var baos: ByteArrayOutputStream = null
+        var oos: ObjectOutputStream = null
         
         var writeStartTime: Long = 0
         
         buckets(i).foreach(pair => {
-          // Open a new file if necessary
+          // Open a new stream if necessary
           if (!isDirty) {
-            file = TrackedCustomBlockedLocalFileShuffle.getOutputFile(shuffleId, 
+            splitName = TrackedCustomBlockedInMemoryShuffle.getSplitName(shuffleId, 
               myIndex, i, blockNum)
+              
+            baos = new ByteArrayOutputStream
+            oos = new ObjectOutputStream(baos)
+          
             writeStartTime = System.currentTimeMillis
-            logInfo("BEGIN WRITE: " + file)
-            
-            out = new ObjectOutputStream(new FileOutputStream(file))
+            logInfo("BEGIN WRITE: " + splitName)
           }
           
-          out.writeObject(pair)
-          out.flush()
+          oos.writeObject(pair)
           isDirty = true
           
-          // Close the old file if has crossed the blockSize limit
-          if (file.length > Shuffle.BlockSize) {
-            out.close()
-            logInfo("END WRITE: " + file)
+          // Close the old stream if has crossed the blockSize limit
+          if (baos.size > Shuffle.BlockSize) {
+            TrackedCustomBlockedInMemoryShuffle.splitsCache(splitName) = 
+              baos.toByteArray
+          
+            logInfo("END WRITE: " + splitName)
             val writeTime = System.currentTimeMillis - writeStartTime
-            logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+            logInfo("Writing " + splitName + " of size " + baos.size + " bytes took " + writeTime + " millis.")
 
             blockNum = blockNum + 1
-            isDirty = false
+            isDirty = false            
+            oos.close()
           }
         })
-        
+
         if (isDirty) {
-          out.close()
-          logInfo("END WRITE: " + file)
+          TrackedCustomBlockedInMemoryShuffle.splitsCache(splitName) = baos.toByteArray
+
+          logInfo("END WRITE: " + splitName)
           val writeTime = System.currentTimeMillis - writeStartTime
-          logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
+          logInfo("Writing " + splitName + " of size " + baos.size + " bytes took " + writeTime + " millis.")
 
           blockNum = blockNum + 1
+          oos.close()
         }
         
-        // Write the BLOCKNUM file
-        file = TrackedCustomBlockedLocalFileShuffle.getBlockNumOutputFile(shuffleId, 
-          myIndex, i)
-        out = new ObjectOutputStream(new FileOutputStream(file))
-        out.writeObject(blockNum)
-        out.close()
-        
+        // Store BLOCKNUM info
+        splitName = TrackedCustomBlockedInMemoryShuffle.getBlockNumOutputName(
+          shuffleId, myIndex, i)
+        baos = new ByteArrayOutputStream
+        oos = new ObjectOutputStream(baos)
+        oos.writeObject(blockNum)
+        TrackedCustomBlockedInMemoryShuffle.splitsCache(splitName) = baos.toByteArray
+
+        // Close streams
+        oos.close()
+
         // Store number of blocks for this outputSplit
         numBlocksPerOutputSplit(i) = blockNum
       }
       
-      var retVal = SplitInfo(TrackedCustomBlockedLocalFileShuffle.serverAddress, 
-        TrackedCustomBlockedLocalFileShuffle.serverPort, myIndex)
+      var retVal = SplitInfo(TrackedCustomBlockedInMemoryShuffle.serverAddress, 
+        TrackedCustomBlockedInMemoryShuffle.serverPort, myIndex)
       retVal.totalBlocksPerOutputSplit = numBlocksPerOutputSplit
 
       (retVal)
@@ -261,7 +273,7 @@ extends Shuffle[K, V, C] with Logging {
     }
     
     if (requiredSplits.size > 0) {
-      requiredSplits(TrackedCustomBlockedLocalFileShuffle.ranGen.nextInt(
+      requiredSplits(TrackedCustomBlockedInMemoryShuffle.ranGen.nextInt(
         requiredSplits.size))
     } else {
       -1
@@ -309,7 +321,7 @@ extends Shuffle[K, V, C] with Logging {
     try {
       // Send intention
       oosTracker.writeObject(
-        TrackedCustomBlockedLocalFileShuffle.ReducerEntering)
+        TrackedCustomBlockedInMemoryShuffle.ReducerEntering)
       oosTracker.flush()
       
       // Send what this reducer has
@@ -379,7 +391,7 @@ extends Shuffle[K, V, C] with Logging {
                     val reducerIntention = ois.readObject.asInstanceOf[Int]
                     
                     if (reducerIntention == 
-                      TrackedCustomBlockedLocalFileShuffle.ReducerEntering) {
+                      TrackedCustomBlockedInMemoryShuffle.ReducerEntering) {
                       // Receive what the reducer has
                       val reducerSplitInfo = 
                         ois.readObject.asInstanceOf[SplitInfo]
@@ -402,7 +414,7 @@ extends Shuffle[K, V, C] with Logging {
                       }
                     }
                     else if (reducerIntention == 
-                      TrackedCustomBlockedLocalFileShuffle.ReducerLeaving) {
+                      TrackedCustomBlockedInMemoryShuffle.ReducerLeaving) {
                       val reducerSplitInfo = 
                         ois.readObject.asInstanceOf[SplitInfo]
 
@@ -635,7 +647,7 @@ extends Shuffle[K, V, C] with Logging {
         try {
           // Send intention
           oosTracker.writeObject(
-            TrackedCustomBlockedLocalFileShuffle.ReducerLeaving)
+            TrackedCustomBlockedInMemoryShuffle.ReducerLeaving)
           oosTracker.flush()
           
           // Send reducerSplitInfo
@@ -684,10 +696,13 @@ extends Shuffle[K, V, C] with Logging {
   }     
 }
 
-object TrackedCustomBlockedLocalFileShuffle extends Logging {
+object TrackedCustomBlockedInMemoryShuffle extends Logging {
   // Tracker communication constants
   val ReducerEntering = 0
   val ReducerLeaving = 1
+
+  // Cache for keeping the splits around
+  val splitsCache = new HashMap[String, Array[Byte]]
 
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
@@ -743,22 +758,19 @@ object TrackedCustomBlockedLocalFileShuffle extends Logging {
     }
   }
   
-  def getOutputFile(shuffleId: Long, inputId: Int, outputId: Int, 
-    blockId: Int): File = {
+  def getSplitName(shuffleId: Long, inputId: Int, outputId: Int, 
+    blockId: Int): String = {
     initializeIfNeeded()
-    val dir = new File(shuffleDir, shuffleId + "/" + inputId)
-    dir.mkdirs()
-    val file = new File(dir, "%d-%d".format(outputId, blockId))
-    return file
+    // Adding shuffleDir is unnecessary. Added to keep the parsers working
+    return "%s/%d/%d/%d-%d".format(shuffleDir, shuffleId, inputId, outputId, 
+      blockId)
   }
-  
-  def getBlockNumOutputFile(shuffleId: Long, inputId: Int, 
-    outputId: Int): File = {
+
+  def getBlockNumOutputName(shuffleId: Long, inputId: Int, 
+    outputId: Int): String = {
     initializeIfNeeded()
-    val dir = new File(shuffleDir, shuffleId + "/" + inputId)
-    dir.mkdirs()
-    val file = new File(dir, outputId + "-BLOCKNUM")
-    return file
+    return "%s/%d/%d/%d-BLOCKNUM".format(shuffleDir, shuffleId, inputId, 
+      outputId)
   }
 
   def newShuffleId(): Long = {
@@ -823,15 +835,16 @@ object TrackedCustomBlockedLocalFileShuffle extends Logging {
       override def run: Unit = {
         try {
           // Receive basic path information
-          var requestPathBase = ois.readObject.asInstanceOf[String]
-
-          logInfo("requestPathBase: " + requestPathBase)
+          var requestedSplitBase = ois.readObject.asInstanceOf[String]
           
-          // Read BLOCKNUM file and send back the total number of blocks
-          val blockNumFilePath = "%s/%s-BLOCKNUM".format(shuffleDir, 
-            requestPathBase)
-          val blockNumIn = 
-            new ObjectInputStream(new FileInputStream(blockNumFilePath))
+          logInfo("requestedSplitBase: " + requestedSplitBase)
+          
+          // Read BLOCKNUM and send back the total number of blocks
+          val blockNumName = "%s/%s-BLOCKNUM".format(shuffleDir, 
+            requestedSplitBase)
+            
+          val blockNumIn = new ObjectInputStream(new ByteArrayInputStream(
+            TrackedCustomBlockedInMemoryShuffle.splitsCache(blockNumName)))
           val BLOCKNUM = blockNumIn.readObject.asInstanceOf[Int]
           blockNumIn.close()
           
@@ -848,50 +861,33 @@ object TrackedCustomBlockedLocalFileShuffle extends Logging {
             val blockId = ois.readObject.asInstanceOf[Int]
             
             // Ready to send
-            var requestPath = requestPathBase + "-" + blockId
+            var requestedSplit = shuffleDir + "/" + requestedSplitBase + "-" + blockId
             
-            // Open the file
-            var requestedFile: File = null
-            var requestedFileLen = -1
-            try {
-              requestedFile = new File(shuffleDir + "/" + requestPath)
-              requestedFileLen = requestedFile.length.toInt
-            } catch {
-              case e: Exception => { }
-            }
-            
-            // Send the length of the requestPath to let the receiver know that 
+            // Send the length of the requestedSplit to let the receiver know that 
             // transfer is about to start
             // In the case of receiver timeout and connection close, this will
             // throw a java.net.SocketException: Broken pipe
-            oos.writeObject(requestedFileLen)
+            var requestedSplitLen = -1
+            
+            try {
+              requestedSplitLen =
+                TrackedCustomBlockedInMemoryShuffle.splitsCache(requestedSplit).length
+            } catch {
+              case e: Exception => { }
+            }
+
+            oos.writeObject(requestedSplitLen)
             oos.flush()
             
-            logInfo("requestedFileLen = " + requestedFileLen)
+            logInfo("requestedSplitLen = " + requestedSplitLen)
 
             // Read and send the requested file
-            if (requestedFileLen != -1) {
-              // Read
-              var byteArray = new Array[Byte](requestedFileLen)
-              val bis = 
-                new BufferedInputStream(new FileInputStream(requestedFile))
-
-              var bytesRead = bis.read(byteArray, 0, byteArray.length)
-              var alreadyRead = bytesRead
-
-              while (alreadyRead < requestedFileLen) {
-                bytesRead = bis.read(byteArray, alreadyRead,
-                  (byteArray.length - alreadyRead))
-                if(bytesRead > 0) {
-                  alreadyRead = alreadyRead + bytesRead
-                }
-              }            
-              bis.close()
-              
+            if (requestedSplitLen != -1) {
               // Send
-              bos.write(byteArray, 0, byteArray.length)
+              bos.write(TrackedCustomBlockedInMemoryShuffle.splitsCache(requestedSplit),
+                0, requestedSplitLen)
               bos.flush()
-              
+
               // Update loop variables
               numBlocksToSend = numBlocksToSend - 1
               
