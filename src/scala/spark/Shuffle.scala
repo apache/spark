@@ -23,6 +23,10 @@ trait Shuffle[K, V, C] {
  */
 private object Shuffle 
 extends Logging {
+  // Tracker communication constants
+  val ReducerEntering = 0
+  val ReducerLeaving = 1
+
   // ShuffleTracker info
   private var MasterHostAddress_ = System.getProperty(
     "spark.shuffle.masterHostAddress", InetAddress.getLocalHost.getHostAddress)
@@ -54,7 +58,6 @@ extends Logging {
   private var ThrottleFraction_ = System.getProperty(
     "spark.shuffle.throttleFraction", "2.0").toDouble
   
-
   def MasterHostAddress = MasterHostAddress_
   def MasterTrackerPort = MasterTrackerPort_
 

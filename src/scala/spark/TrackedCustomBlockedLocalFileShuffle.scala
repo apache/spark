@@ -176,20 +176,22 @@ extends Shuffle[K, V, C] with Logging {
           // Receive which split to pull from the tracker
           logInfo("Talking to tracker...")
           val startTime = System.currentTimeMillis
-          val splitIndex = getTrackerSelectedSplit(myId)
-          logInfo("Got %d from tracker in %d millis".format(splitIndex, System.currentTimeMillis - startTime))
+          val splitIndices = getTrackerSelectedSplit(myId)
+          logInfo("Got %s from tracker in %d millis".format(splitIndices, System.currentTimeMillis - startTime))
           
-          if (splitIndex != -1) {
-            val selectedSplitInfo = outputLocs(splitIndex)
-            val requestSplit = 
-              "%d/%d/%d".format(shuffleId, selectedSplitInfo.splitId, myId)
+          if (splitIndices.size > 0) {
+            splitIndices.foreach { splitIndex =>
+              val selectedSplitInfo = outputLocs(splitIndex)
+              val requestSplit = 
+                "%d/%d/%d".format(shuffleId, selectedSplitInfo.splitId, myId)
 
-            threadPool.execute(new ShuffleClient(splitIndex, selectedSplitInfo, 
-              requestSplit, myId))
-              
-            // splitIndex is in transit. Will be unset in the ShuffleClient
-            splitsInRequestBitVector.synchronized {
-              splitsInRequestBitVector.set(splitIndex)
+              threadPool.execute(new ShuffleClient(splitIndex, selectedSplitInfo, 
+                requestSplit, myId))
+                
+              // splitIndex is in transit. Will be unset in the ShuffleClient
+              splitsInRequestBitVector.synchronized {
+                splitsInRequestBitVector.set(splitIndex)
+              }
             }
           } else {
             // Tracker replied back with a NO. Sleep for a while.
@@ -270,13 +272,13 @@ extends Shuffle[K, V, C] with Logging {
   }
   
   // Talks to the tracker and receives instruction
-  private def getTrackerSelectedSplit(myId: Int): Int = {
+  private def getTrackerSelectedSplit(myId: Int): ArrayBuffer[Int] = {
     // Local status of hasSplitsBitVector and splitsInRequestBitVector
     val localSplitInfo = getLocalSplitInfo(myId)
 
     // DO NOT talk to the tracker if all the required splits are already busy
     if (localSplitInfo.hasSplitsBitVector.cardinality == totalSplits) {
-      return -1
+      return ArrayBuffer[Int]()
     }
 
     val clientSocketToTracker = new Socket(Shuffle.MasterHostAddress, 
@@ -287,30 +289,30 @@ extends Shuffle[K, V, C] with Logging {
     val oisTracker =
       new ObjectInputStream(clientSocketToTracker.getInputStream)
 
-    var selectedSplitIndex = -1
+    var selectedSplitIndices = ArrayBuffer[Int]()
 
     // Setup the timeout mechanism
     var timeOutTask = new TimerTask {
       override def run: Unit = {
         logInfo("Waited enough for tracker response... Take random response...")
   
-        // sockets will be closed  in finally
+        // sockets will be closed in finally
+        // TODO: Sometimes timer wont go off
         
         // TODO: Selecting randomly here. Tracker won't know about it and get an
         // asssertion failure when this thread leaves
         
-        selectedSplitIndex = selectRandomSplit
+        selectedSplitIndices = ArrayBuffer(selectRandomSplit)
       }
     }
     
     var timeOutTimer = new Timer
     // TODO: Which timeout to use?
-    timeOutTimer.schedule(timeOutTask, Shuffle.MinKnockInterval)
+    // timeOutTimer.schedule(timeOutTask, Shuffle.MinKnockInterval)
 
     try {
       // Send intention
-      oosTracker.writeObject(
-        TrackedCustomBlockedLocalFileShuffle.ReducerEntering)
+      oosTracker.writeObject(Shuffle.ReducerEntering)
       oosTracker.flush()
       
       // Send what this reducer has
@@ -318,7 +320,7 @@ extends Shuffle[K, V, C] with Logging {
       oosTracker.flush()
       
       // Receive reply from the tracker
-      selectedSplitIndex = oisTracker.readObject.asInstanceOf[Int]
+      selectedSplitIndices = oisTracker.readObject.asInstanceOf[ArrayBuffer[Int]]
       
       // Turn the timer OFF
       timeOutTimer.cancel()
@@ -332,7 +334,7 @@ extends Shuffle[K, V, C] with Logging {
       clientSocketToTracker.close()
     }
     
-    return selectedSplitIndex
+    return selectedSplitIndices
   }
   
   class ShuffleTracker(outputLocs: Array[SplitInfo])
@@ -379,31 +381,29 @@ extends Shuffle[K, V, C] with Logging {
                     // Receive intention
                     val reducerIntention = ois.readObject.asInstanceOf[Int]
                     
-                    if (reducerIntention == 
-                      TrackedCustomBlockedLocalFileShuffle.ReducerEntering) {
+                    if (reducerIntention == Shuffle.ReducerEntering) {
                       // Receive what the reducer has
                       val reducerSplitInfo = 
                         ois.readObject.asInstanceOf[SplitInfo]
                       
-                      // Select split and update stats if necessary
-                      var selectedSplitIndex = -1
+                      // Select splits and update stats if necessary
+                      var selectedSplitIndices = ArrayBuffer[Int]()
                       trackerStrategy.synchronized {
-                        selectedSplitIndex = trackerStrategy.selectSplit(
+                        selectedSplitIndices = trackerStrategy.selectSplit(
                           reducerSplitInfo)
                       }
                       
                       // Send reply back
-                      oos.writeObject(selectedSplitIndex)
+                      oos.writeObject(selectedSplitIndices)
                       oos.flush()
                       
                       // Update internal stats, only if receiver got the reply
                       trackerStrategy.synchronized {
                         trackerStrategy.AddReducerToSplit(reducerSplitInfo, 
-                          selectedSplitIndex)
+                          selectedSplitIndices)
                       }
                     }
-                    else if (reducerIntention == 
-                      TrackedCustomBlockedLocalFileShuffle.ReducerLeaving) {
+                    else if (reducerIntention == Shuffle.ReducerLeaving) {
                       val reducerSplitInfo = 
                         ois.readObject.asInstanceOf[SplitInfo]
 
@@ -635,8 +635,7 @@ extends Shuffle[K, V, C] with Logging {
 
         try {
           // Send intention
-          oosTracker.writeObject(
-            TrackedCustomBlockedLocalFileShuffle.ReducerLeaving)
+          oosTracker.writeObject(Shuffle.ReducerLeaving)
           oosTracker.flush()
           
           // Send reducerSplitInfo
@@ -686,10 +685,6 @@ extends Shuffle[K, V, C] with Logging {
 }
 
 object TrackedCustomBlockedLocalFileShuffle extends Logging {
-  // Tracker communication constants
-  val ReducerEntering = 0
-  val ReducerLeaving = 1
-
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
 

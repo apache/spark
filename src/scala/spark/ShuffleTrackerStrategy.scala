@@ -1,7 +1,8 @@
 package spark
 
-import java.util.Random
+import java.util.{BitSet, Random}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Sorting._
 
 /**
@@ -11,11 +12,11 @@ trait ShuffleTrackerStrategy {
   // Initialize
   def initialize(outputLocs_ : Array[SplitInfo]): Unit
   
-  // Select a split and send it back
-  def selectSplit(reducerSplitInfo: SplitInfo): Int
+  // Select a set of splits and send back
+  def selectSplit(reducerSplitInfo: SplitInfo): ArrayBuffer[Int]
   
   // Update internal stats if things could be sent back successfully
-  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndices: ArrayBuffer[Int]): Unit
   
   // A reducer is done. Update internal stats
   def deleteReducerFrom(reducerSplitInfo: SplitInfo, 
@@ -50,9 +51,11 @@ extends ShuffleTrackerStrategy with Logging {
     totalConnectionsPerLoc = Array.tabulate(numSources)(_ => 0)
   }
   
-  def selectSplit(reducerSplitInfo: SplitInfo): Int = synchronized {
+  def selectSplit(reducerSplitInfo: SplitInfo): ArrayBuffer[Int] = synchronized {
     var minConnections = Int.MaxValue
-    var splitIndex = -1
+    var minIndex = -1
+    
+    var splitIndices = ArrayBuffer[Int]()
     
     for (i <- 0 until numSources) {
       // TODO: Use of MaxRxConnections instead of MaxTxConnections is 
@@ -62,15 +65,19 @@ extends ShuffleTrackerStrategy with Logging {
         totalConnectionsPerLoc(i) < minConnections && 
         !reducerSplitInfo.hasSplitsBitVector.get(i)) {
         minConnections = totalConnectionsPerLoc(i)
-        splitIndex = i
+        minIndex = i
       }
     }
+    
+    if (minIndex != -1) {
+      splitIndices += minIndex
+    }
   
-    return splitIndex
+    return splitIndices
   }
   
-  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit = synchronized {
-    if (splitIndex != -1) {
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndices: ArrayBuffer[Int]): Unit = synchronized {
+    splitIndices.foreach { splitIndex => 
       curConnectionsPerLoc(splitIndex) = curConnectionsPerLoc(splitIndex) + 1
       totalConnectionsPerLoc(splitIndex) = 
         totalConnectionsPerLoc(splitIndex) + 1
@@ -111,17 +118,17 @@ extends ShuffleTrackerStrategy with Logging {
     numMappers = outputLocs.size
   }
   
-  def selectSplit(reducerSplitInfo: SplitInfo): Int = synchronized {
+  def selectSplit(reducerSplitInfo: SplitInfo): ArrayBuffer[Int] = synchronized {
     var splitIndex = -1
     
     do {
       splitIndex = ranGen.nextInt(numMappers)
     } while (reducerSplitInfo.hasSplitsBitVector.get(splitIndex))
     
-    return splitIndex
+    return ArrayBuffer(splitIndex)
   }
   
-  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit = synchronized {
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndices: ArrayBuffer[Int]): Unit = synchronized {
   }
 
   def deleteReducerFrom(reducerSplitInfo: SplitInfo, 
@@ -176,7 +183,7 @@ extends ShuffleTrackerStrategy with Logging {
     totalConnectionsPerLoc = Array.tabulate(numMappers)(_ => 0)
   }
   
-  def selectSplit(reducerSplitInfo: SplitInfo): Int = synchronized {
+  def selectSplit(reducerSplitInfo: SplitInfo): ArrayBuffer[Int] = synchronized {
     var splitIndex = -1
 
     // Estimate time remaining to finish receiving for all reducer/mapper pairs
@@ -260,11 +267,11 @@ extends ShuffleTrackerStrategy with Logging {
       }
     }
     
-    return splitIndex
+    return ArrayBuffer(splitIndex)
   }
   
-  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit = synchronized {
-    if (splitIndex != -1) {
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndices: ArrayBuffer[Int]): Unit = synchronized {
+    splitIndices.foreach { splitIndex => 
       curConnectionsPerLoc(splitIndex) += 1
       totalConnectionsPerLoc(splitIndex) += 1
     }
@@ -345,8 +352,8 @@ extends ShuffleTrackerStrategy with Logging {
     maxConnectionsPerReducer = Array.tabulate(numReducers)(_ => Shuffle.MaxRxConnections)
   }
   
-  def selectSplit(reducerSplitInfo: SplitInfo): Int = synchronized {
-    var splitIndex = -1
+  def selectSplit(reducerSplitInfo: SplitInfo): ArrayBuffer[Int] = synchronized {
+    var splitIndices = ArrayBuffer[Int]()
 
     // Estimate time remaining to finish receiving for all reducer/mapper pairs
     // If speed is unknown or zero then make it 1 to give a large estimate
@@ -389,17 +396,33 @@ extends ShuffleTrackerStrategy with Logging {
     // Send back a splitIndex if this reducer is within its limit
     if (curConnectionsPerReducer(reducerSplitInfo.splitId) < 
       maxConnectionsPerReducer(reducerSplitInfo.splitId)) {
+      
+      var i = maxConnectionsPerReducer(reducerSplitInfo.splitId) - 
+        curConnectionsPerReducer(reducerSplitInfo.splitId)
+        
+      var temp = reducerSplitInfo.hasSplitsBitVector.clone.asInstanceOf[BitSet]
+      temp.flip(0, numMappers)
+      
+      i = Math.min(i, temp.cardinality)
     
-      do {
-        splitIndex = ranGen.nextInt(numMappers)
-      } while (reducerSplitInfo.hasSplitsBitVector.get(splitIndex))   
+      while (i > 0) {
+        var splitIndex = -1
+
+        do {
+          splitIndex = ranGen.nextInt(numMappers)
+        } while (reducerSplitInfo.hasSplitsBitVector.get(splitIndex))   
+
+        reducerSplitInfo.hasSplitsBitVector.set(splitIndex)
+        splitIndices += splitIndex
+        i -= 1
+      }
     }
     
-    return splitIndex
+    return splitIndices
   }
   
-  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit = synchronized {
-    if (splitIndex != -1) {
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndices: ArrayBuffer[Int]): Unit = synchronized {
+    splitIndices.foreach { splitIndex => 
       curConnectionsPerReducer(reducerSplitInfo.splitId) += 1
     }
   }
