@@ -1,5 +1,7 @@
 package spark
 
+import java.util.Random
+
 import scala.util.Sorting._
 
 /**
@@ -89,6 +91,46 @@ extends ShuffleTrackerStrategy with Logging {
     if (curConnectionsPerLoc(receptionStat.serverSplitIndex) < 0) {
       curConnectionsPerLoc(receptionStat.serverSplitIndex) = 0
     }
+  }
+}
+
+/**
+ * A simple ShuffleTrackerStrategy that randomly selects mapper for each reducer
+ */
+class SelectRandomShuffleTrackerStrategy
+extends ShuffleTrackerStrategy with Logging {
+  private var numMappers = -1
+  private var outputLocs: Array[SplitInfo] = null
+  
+  private var ranGen = new Random
+  
+  // The order of elements in the outputLocs (splitIndex) is used to pass 
+  // information back and forth between the tracker, mappers, and reducers
+  def initialize(outputLocs_ : Array[SplitInfo]): Unit = {
+    outputLocs = outputLocs_
+    numMappers = outputLocs.size
+  }
+  
+  def selectSplit(reducerSplitInfo: SplitInfo): Int = synchronized {
+    var splitIndex = -1
+    
+    do {
+      splitIndex = ranGen.nextInt(numMappers)
+    } while (reducerSplitInfo.hasSplitsBitVector.get(splitIndex))
+    
+    logInfo("%d".format(splitIndex))
+    
+    return splitIndex
+  }
+  
+  def AddReducerToSplit(reducerSplitInfo: SplitInfo, splitIndex: Int): Unit = synchronized {
+  }
+
+  def deleteReducerFrom(reducerSplitInfo: SplitInfo, 
+    receptionStat: ReceptionStats): Unit = synchronized {
+    // TODO: This assertion can legally fail when ShuffleClient times out while
+    // waiting for tracker response and decides to go to a random server
+    // assert(curConnectionsPerLoc(receptionStat.serverSplitIndex) >= 0)
   }
 }
 
