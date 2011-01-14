@@ -187,8 +187,9 @@ extends Shuffle[K, V, C] with Logging {
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
           // Receive which split to pull from the tracker
           logInfo("Talking to tracker...")
+          val startTime = System.currentTimeMillis
           val splitIndex = getTrackerSelectedSplit(myId)
-          logInfo("Got %d from tracker...".format(splitIndex))
+          logInfo("Got %d from tracker in %d millis".format(splitIndex, System.currentTimeMillis - startTime))
           
           if (splitIndex != -1) {
             val selectedSplitInfo = outputLocs(splitIndex)
