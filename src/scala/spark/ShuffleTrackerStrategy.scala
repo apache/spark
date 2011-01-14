@@ -290,7 +290,7 @@ extends ShuffleTrackerStrategy with Logging {
         1.0 * receptionStat.bytesReceived / (receptionStat.timeSpent + 1.0)
     }
     
-    logInfo("%d received %d bytes in %d millis".format(reducerSplitInfo.splitId, receptionStat.bytesReceived, receptionStat.timeSpent))
+    // logInfo("%d received %d bytes in %d millis".format(reducerSplitInfo.splitId, receptionStat.bytesReceived, receptionStat.timeSpent))
 
     // Update current connections to the mapper 
     curConnectionsPerLoc(receptionStat.serverSplitIndex) -= 1
@@ -375,11 +375,24 @@ extends ShuffleTrackerStrategy with Logging {
       }
     }
     
-    if (estimationComplete) {
-      // Estimate time remaining to finish receiving for each reducer
-      var completionEstimates = Array.tabulate(numReducers)(
-        individualEstimates(_).foldLeft(Double.MinValue)(Math.max(_,_)))
-        
+    // Estimate time remaining to finish receiving for each reducer
+    var completionEstimates = Array.tabulate(numReducers)(
+      individualEstimates(_).foldLeft(Double.MinValue)(Math.max(_,_)))
+      
+    var numFinished = 0
+    for (i <- 0 until numReducers) {
+      if (completionEstimates(i).toInt == 0) {
+        numFinished += 1
+      }
+    }
+
+    // If a certain number of reducers have finished already, then don't bother
+    if (numFinished  >= ((1.0 - 0.1 * Shuffle.ThrottleFraction) * numReducers)) {
+      for (i <- 0 until numReducers) {
+        maxConnectionsPerReducer(i) = Shuffle.MaxRxConnections
+      }      
+      // Otherwise, if estimation is complete give reducers proportional threads
+    } else if (estimationComplete) {
       val fastestEstimate = 
         completionEstimates.foldLeft(Double.MaxValue)(Math.min(_,_))
       val slowestEstimate = 
@@ -440,7 +453,7 @@ extends ShuffleTrackerStrategy with Logging {
         1.0 * receptionStat.bytesReceived / (receptionStat.timeSpent + 1.0)
     }
     
-    logInfo("%d received %d bytes in %d millis".format(reducerSplitInfo.splitId, receptionStat.bytesReceived, receptionStat.timeSpent))
+    // logInfo("%d received %d bytes in %d millis".format(reducerSplitInfo.splitId, receptionStat.bytesReceived, receptionStat.timeSpent))
     
     // Update current threads by this reducer
     curConnectionsPerReducer(reducerSplitInfo.splitId) -= 1

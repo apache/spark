@@ -196,9 +196,10 @@ extends Shuffle[K, V, C] with Logging {
           } else {
             // Tracker replied back with a NO. Sleep for a while.
             Thread.sleep(Shuffle.MinKnockInterval)
+            numThreadsToCreate = 0
           }
           
-          numThreadsToCreate = numThreadsToCreate - 1
+          numThreadsToCreate = numThreadsToCreate - splitIndices.size
         }
         
         // Sleep for a while before creating new threads

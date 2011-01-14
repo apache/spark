@@ -4,7 +4,7 @@
 -Dspark.shuffle.trackerStrategy=spark.BalanceRemainingShuffleTrackerStrategy 
 -Dspark.shuffle.maxRxConnections=40
 -Dspark.shuffle.maxTxConnections=120 
--Dspark.shuffle.blockSize=512
+-Dspark.shuffle.blockSize=4096
 -Dspark.shuffle.minKnockInterval=100 
 -Dspark.shuffle.maxKnockInterval=5000 
 -Dspark.shuffle.maxChatTime=500 
