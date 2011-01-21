@@ -242,7 +242,7 @@ extends ShuffleTrackerStrategy with Logging {
         if (gapIndex != -1 && (1.0 * (gapIndex - numComplete + 1) < 0.1 * Shuffle.ThrottleFraction * (numReducers - numComplete)) && 
             estimateOfThisReducer <= estimatesFromAMapper(gapIndex)) {
           throttleFromMapper(i) = true
-          logInfo("Throttling R-%d at M-%d with %d and cut-off %d at %d".format(reducerSplitInfo.splitId, i, estimateOfThisReducer, estimatesFromAMapper(gapIndex + 1), gapIndex))
+          logInfo("Throttling R-%d at M-%d with %f and cut-off %f at %d".format(reducerSplitInfo.splitId, i, estimateOfThisReducer, estimatesFromAMapper(gapIndex + 1), gapIndex))
 //          for (i <- 0 until numReducers) {
 //            print(estimatesFromAMapper(i) + " ")
 //          }
