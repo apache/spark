@@ -275,8 +275,8 @@ extends Shuffle[K, V, C] with Logging {
           // TODO: Updating stats before consumption is completed
           hasSplitsBitVector.synchronized {
             hasSplitsBitVector.set(splitIndex)
+            hasSplits += 1
           }
-          hasSplits += 1
 
           // We have received splitIndex
           splitsInRequestBitVector.synchronized {

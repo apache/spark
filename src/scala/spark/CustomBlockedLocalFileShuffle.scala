@@ -344,8 +344,8 @@ extends Shuffle[K, V, C] with Logging {
             if (hasBlocksInSplit(splitIndex) == totalBlocksInSplit(splitIndex)) {
               hasSplitsBitVector.synchronized {
                 hasSplitsBitVector.set(splitIndex)
+                hasSplits += 1
               }
-              hasSplits += 1
             }
 
             // Consistent state in accounting variables
