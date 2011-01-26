@@ -191,10 +191,12 @@ extends Shuffle[K, V, C] with Logging {
       logInfo("ShuffleConsumer started...")
 
       // Don't return until consumption is finished
-      // TODO: Replace with a lock later. 
-      while (receivedData.size > 0) {
-        Thread.sleep(Shuffle.MinKnockInterval)
-      }
+      // while (receivedData.size > 0) {
+        // Thread.sleep(Shuffle.MinKnockInterval)
+      // }
+      
+      // Wait till shuffleConsumer is done
+      shuffleConsumer.join
       
       combiners
     })
