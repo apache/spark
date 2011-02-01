@@ -1,46 +1,52 @@
 import sbt._
 import de.element34.sbteclipsify._
 
-import Process._
+import sbt.Process._
 
-class SparkProject(info: ProjectInfo)
-extends DefaultProject(info) with Eclipsify
+class SparkProject(info: ProjectInfo) extends ParentProject(info)
 {
-  val TARGET = path("target") / "scala_2.8.1"
+  lazy val core = project("core", "Spark Core", new CoreProject(_))
 
-  val NATIVE_DIR = path("src") / "main" / "native"
+  lazy val examples = project("examples", "Spark Examples", core)
 
-  val NATIVE_SOURCES = NATIVE_DIR * "*.c"
+  class CoreProject(info: ProjectInfo) extends DefaultProject(info) with Eclipsify
+  {
+    val TARGET = path("target") / "scala_2.8.1"
 
-  val NATIVE_LIB = {
-    if (System.getProperty("os.name") == "Mac OS X")
-      "libspark_native.dylib"
-    else
-      "libspark_native.so"
-  }
+    val TEST_REPORT_DIR = TARGET / "test-report"
 
-  lazy val native = fileTask(TARGET / NATIVE_LIB from NATIVE_SOURCES) {
-    val makeTarget = " ../../../target/scala_2.8.1/native/" + NATIVE_LIB
-    (("make -C " + NATIVE_DIR + " " + makeTarget) ! log)
-    None
-  } dependsOn(compile) describedAs("Compiles native library.")
+    val NATIVE_DIR = path("src") / "main" / "native"
 
-  val TEST_REPORT_DIR = TARGET / "test-report"
+    val NATIVE_SOURCES = NATIVE_DIR * "*.c"
 
-  lazy val testReport = task {
-    log.info("Creating " + TEST_REPORT_DIR + "...")
-    if (!TEST_REPORT_DIR.exists) {
-      TEST_REPORT_DIR.asFile.mkdirs()
+    val NATIVE_LIB = {
+      if (System.getProperty("os.name") == "Mac OS X")
+        "libspark_native.dylib"
+      else
+        "libspark_native.so"
     }
 
-    log.info("Executing org.scalatest.tools.Runner...")
-    val command = ("scala -classpath " + testClasspath.absString + 
-                   " org.scalatest.tools.Runner -o " + 
-                   " -u " + TEST_REPORT_DIR.absolutePath +
-                   " -p " + (TARGET / "test-classes").absolutePath)
-    val process = Process(command, path("."), "JAVA_OPTS" -> "-Xmx500m")
-    process !
+    lazy val native = fileTask(TARGET / NATIVE_LIB from NATIVE_SOURCES) {
+      val makeTarget = " ../../../target/scala_2.8.1/native/" + NATIVE_LIB
+      (("make -C " + NATIVE_DIR + " " + makeTarget) ! log)
+      None
+    } dependsOn(compile) describedAs("Compiles native library.")
 
-    None
-  } dependsOn(compile, testCompile) describedAs("Generate XML test report.")
+    lazy val testReport = task {
+      log.info("Creating " + TEST_REPORT_DIR + "...")
+      if (!TEST_REPORT_DIR.exists) {
+        TEST_REPORT_DIR.asFile.mkdirs()
+      }
+
+      log.info("Executing org.scalatest.tools.Runner...")
+      val command = ("scala -classpath " + testClasspath.absString + 
+                     " org.scalatest.tools.Runner -o " + 
+                     " -u " + TEST_REPORT_DIR.absolutePath +
+                     " -p " + (TARGET / "test-classes").absolutePath)
+      val process = Process(command, path("."), "JAVA_OPTS" -> "-Xmx500m")
+      process !
+
+      None
+    } dependsOn(compile, testCompile) describedAs("Generate XML test report.")
+  }
 }
