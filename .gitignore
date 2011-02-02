@@ -1,5 +1,7 @@
 *~
 *.swp
+*.iml
+.idea/
 /build/
 work/
 .DS_Store

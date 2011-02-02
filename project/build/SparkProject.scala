@@ -3,13 +3,16 @@ import de.element34.sbteclipsify._
 
 import sbt.Process._
 
-class SparkProject(info: ProjectInfo) extends ParentProject(info)
+class SparkProject(info: ProjectInfo)
+extends ParentProject(info) with IdeaProject
 {
   lazy val core = project("core", "Spark Core", new CoreProject(_))
 
-  lazy val examples = project("examples", "Spark Examples", core)
+  lazy val examples =
+    project("examples", "Spark Examples", new ExamplesProject(_), core)
 
-  class CoreProject(info: ProjectInfo) extends DefaultProject(info) with Eclipsify
+  class CoreProject(info: ProjectInfo)
+  extends DefaultProject(info) with Eclipsify with IdeaProject
   {
     val TARGET = path("target") / "scala_2.8.1"
 
@@ -30,7 +33,7 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info)
       val makeTarget = " ../../../target/scala_2.8.1/native/" + NATIVE_LIB
       (("make -C " + NATIVE_DIR + " " + makeTarget) ! log)
       None
-    } dependsOn(compile) describedAs("Compiles native library.")
+    }.dependsOn(compile).describedAs("Compiles native library.")
 
     lazy val testReport = task {
       log.info("Creating " + TEST_REPORT_DIR + "...")
@@ -47,6 +50,11 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info)
       process !
 
       None
-    } dependsOn(compile, testCompile) describedAs("Generate XML test report.")
+    }.dependsOn(compile, testCompile).describedAs("Generate XML test report.")
+  }
+
+  class ExamplesProject(info: ProjectInfo)
+  extends DefaultProject(info) with Eclipsify with IdeaProject
+  {
   }
 }
