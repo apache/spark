@@ -51,6 +51,7 @@ CLASSPATH+=:$CORE_DIR/lib/jetty-7.1.6.v20100715/servlet-api-2.5.jar
 CLASSPATH+=:$CORE_DIR/lib/apache-log4j-1.2.16/log4j-1.2.16.jar
 CLASSPATH+=:$CORE_DIR/lib/slf4j-1.6.1/slf4j-api-1.6.1.jar
 CLASSPATH+=:$CORE_DIR/lib/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
+CLASSPATH+=:$CORE_DIR/lib/compress-lzf-0.6.0/compress-lzf-0.6.0.jar
 CLASSPATH+=:$EXAMPLES_DIR/target/scala_2.8.1/classes
 for jar in $CORE_DIR/lib/hadoop-0.20.0/lib/*.jar; do
   CLASSPATH+=:$jar

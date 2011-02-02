@@ -97,9 +97,9 @@ extends Logging {
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
 
-  // TODO: Keep around a weak hash map of values to Cached versions?
-  def broadcast[T](value: T) = new CentralizedHDFSBroadcast(value, isLocal)
-  //def broadcast[T](value: T) = new ChainedStreamingBroadcast(value, isLocal)
+  // Keep around a weak hash map of values to Cached versions?
+  def broadcast[T](value: T) = 
+    Broadcast.getBroadcastFactory.newBroadcast[T] (value, isLocal)
 
   // Stop the SparkContext
   def stop() {

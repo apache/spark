@@ -98,7 +98,7 @@ extends MScheduler with spark.Scheduler with Logging
         params("env." + key) = System.getenv(key)
       }
     }
-    new ExecutorInfo(execScript, createExecArg())
+    new ExecutorInfo(execScript, createExecArg(), params)
   }
 
   /**

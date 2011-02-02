@@ -18,23 +18,9 @@ extends ParentProject(info) with IdeaProject
 
     val TEST_REPORT_DIR = TARGET / "test-report"
 
-    val NATIVE_DIR = path("src") / "main" / "native"
-
-    val NATIVE_SOURCES = NATIVE_DIR * "*.c"
-
-    val NATIVE_LIB = {
-      if (System.getProperty("os.name") == "Mac OS X")
-        "libspark_native.dylib"
-      else
-        "libspark_native.so"
-    }
-
-    lazy val native = fileTask(TARGET / NATIVE_LIB from NATIVE_SOURCES) {
-      val makeTarget = " ../../../target/scala_2.8.1/native/" + NATIVE_LIB
-      (("make -C " + NATIVE_DIR + " " + makeTarget) ! log)
-      None
-    }.dependsOn(compile).describedAs("Compiles native library.")
-
+    // Create an XML test report using ScalaTest's -u option. Unfortunately
+    // there is currently no way to call this directly from SBT without
+    // executing a subprocess.
     lazy val testReport = task {
       log.info("Creating " + TEST_REPORT_DIR + "...")
       if (!TEST_REPORT_DIR.exists) {
