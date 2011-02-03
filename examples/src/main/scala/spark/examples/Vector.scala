@@ -1,3 +1,5 @@
+package spark.examples
+
 @serializable class Vector(val elements: Array[Double]) {
   def length = elements.length
   

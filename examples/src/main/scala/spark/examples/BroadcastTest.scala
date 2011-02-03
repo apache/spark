@@ -1,3 +1,5 @@
+package spark.examples
+
 import spark.SparkContext
 
 object BroadcastTest {

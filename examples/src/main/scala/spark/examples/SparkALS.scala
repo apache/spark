@@ -1,3 +1,5 @@
+package spark.examples
+
 import java.io.Serializable
 import java.util.Random
 import scala.math.sqrt

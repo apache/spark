@@ -1,3 +1,5 @@
+package spark.examples
+
 import scala.math.random
 import spark._
 import SparkContext._

@@ -10,8 +10,8 @@ of these methods on Mesos slave nodes as well as on the master.
 To build Spark and the example programs, run make.
 
 To run one of the examples, use ./run <class> <params>. For example,
-./run SparkLR will run the Logistic Regression example. Each of the
-example programs prints usage help if no params are given.
+./run spark.examples.SparkLR will run the Logistic Regression example.
+Each of the example programs prints usage help if no params are given.
 
 All of the Spark samples take a <host> parameter that is the Mesos master
 to connect to. This can be a Mesos URL, or "local" to run locally with one

@@ -1,3 +1,5 @@
+package spark.examples
+
 import java.util.Random
 import Vector._
 
