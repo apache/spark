@@ -1,13 +1,14 @@
 BUILDING
 
-Spark requires Scala 2.8. This version has been tested with 2.8.0.final.
+Spark requires Scala 2.8. This version has been tested with 2.8.1.final.
 
-To build and run Spark, you will need to have Scala's bin in your $PATH,
-or you will need to set the SCALA_HOME environment variable to point
-to where you've installed Scala. Scala must be accessible through one
-of these methods on Mesos slave nodes as well as on the master.
+The project is built using Simple Build Tool (SBT), which is packaged with it.
+To build Spark and its example programs, run sbt/sbt compile.
 
-To build Spark and the example programs, run make.
+To run Spark, you will need to have Scala's bin in your $PATH, or you
+will need to set the SCALA_HOME environment variable to point to where
+you've installed Scala. Scala must be accessible through one of these
+methods on Mesos slave nodes as well as on the master.
 
 To run one of the examples, use ./run <class> <params>. For example,
 ./run spark.examples.SparkLR will run the Logistic Regression example.
@@ -17,8 +18,6 @@ All of the Spark samples take a <host> parameter that is the Mesos master
 to connect to. This can be a Mesos URL, or "local" to run locally with one
 thread, or "local[N]" to run locally with N threads.
 
-Tip: If you are building Spark and examples repeatedly, export USE_FSC=1
-to have the Makefile use the fsc compiler daemon instead of scalac.
 
 CONFIGURATION
 
