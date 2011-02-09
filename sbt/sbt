@@ -1,2 +1,2 @@
 #!/bin/bash
-java -Xmx512M -jar `dirname $0`/sbt-launch-*.jar "$@"
+java -Xmx700M -jar `dirname $0`/sbt-launch-*.jar "$@"
