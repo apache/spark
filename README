@@ -1,3 +1,9 @@
+ONLINE DOCUMENTATION
+
+You can find the latest Spark documentation, including a programming guide, on the project wiki at http://github.com/mesos/spark/wiki. This file only contains basic instructions for getting set up.
+
+
+
 BUILDING
 
 Spark requires Scala 2.8. This version has been tested with 2.8.1.final.
@@ -17,6 +23,7 @@ Each of the example programs prints usage help if no params are given.
 All of the Spark samples take a <host> parameter that is the Mesos master
 to connect to. This can be a Mesos URL, or "local" to run locally with one
 thread, or "local[N]" to run locally with N threads.
+
 
 
 CONFIGURATION
