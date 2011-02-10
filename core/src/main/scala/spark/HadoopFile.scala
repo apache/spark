@@ -76,6 +76,9 @@ extends RDD[(K, V)](sc) {
         }
         gotNext = true
       }
+      if (finished) {
+        reader.close()
+      }
       !finished
     }
 
