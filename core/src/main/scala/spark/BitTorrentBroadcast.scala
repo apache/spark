@@ -726,19 +726,30 @@ extends Broadcast[T] with Logging {
             }
           }
           
-          // Find the block with the minimum copies that this peer does not have
+          // Find the minimum
           var minVal = Integer.MAX_VALUE
-          var minIndex = -1
           for (i <- 0 until totalBlocks) {
-            if (needBlocksBitVector.get (i) &&
-                numCopiesPerBlock(i) > 0 &&
-                numCopiesPerBlock(i) < minVal) {
+            if (numCopiesPerBlock(i) > 0 && numCopiesPerBlock(i) < minVal) {
               minVal = numCopiesPerBlock(i)
-              minIndex = i
             }
           }
-        
-          return minIndex
+          
+          // Find the blocks with the least copies that this peer does not have
+          var minBlocksIndices = ListBuffer[Int] ()
+          for (i <- 0 until totalBlocks) {
+            if (needBlocksBitVector.get (i) && numCopiesPerBlock(i) == minVal) {
+              minBlocksIndices += i
+            }
+          }
+          
+          // Now select a random index from minBlocksIndices
+          if (minBlocksIndices.size == 0) {
+            return -1
+          } else {
+            // Pick uniformly the i'th index
+            var i = BitTorrentBroadcast.ranGen.nextInt (minBlocksIndices.size)
+            return minBlocksIndices(i)
+          }
         }        
       }
       
