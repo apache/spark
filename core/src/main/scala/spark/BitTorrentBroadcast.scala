@@ -552,25 +552,25 @@ extends Broadcast[T] with Logging {
           // Turn the timer OFF, if the sender responds before timeout
           timeOutTimer.cancel
 
-          // Receive gossiped listOfSources and add to local list
-          var gossipedLOS = oisSource.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-          addToListOfSources (gossipedLOS)
+//          // Receive gossiped listOfSources and add to local list
+//          var gossipedLOS = oisSource.readObject.asInstanceOf[ListBuffer[SourceInfo]]
+//          addToListOfSources (gossipedLOS)
 
           // Send the latest SourceInfo
           oosSource.writeObject(getLocalSourceInfo)
           oosSource.flush
           
-          // Send gossiped listOfSources
-          listOfSources.synchronized {
-            oosSource.writeObject(listOfSources)
-          }
-          oosSource.flush
+//          // Send gossiped listOfSources
+//          listOfSources.synchronized {
+//            oosSource.writeObject(listOfSources)
+//          }
+//          oosSource.flush
           
           var keepReceiving = true
           
           while (hasBlocks < totalBlocks && keepReceiving) {
             blockToAskFor = 
-              pickBlockRarestFirst (newPeerToTalkTo.hasBlocksBitVector)
+              pickBlockRandom (newPeerToTalkTo.hasBlocksBitVector)
             
             // No block to request
             if (blockToAskFor < 0) {
@@ -1038,11 +1038,11 @@ extends Broadcast[T] with Logging {
           oos.writeObject(getLocalSourceInfo)
           oos.flush
           
-          // Gossip local listOfSources
-          listOfSources.synchronized {
-            oos.writeObject(listOfSources)
-          }
-          oos.flush
+//          // Gossip local listOfSources
+//          listOfSources.synchronized {
+//            oos.writeObject(listOfSources)
+//          }
+//          oos.flush
           
           // Receive latest SourceInfo from the receiver
           var rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
@@ -1053,9 +1053,9 @@ extends Broadcast[T] with Logging {
             // Carry on
             addToListOfSources (rxSourceInfo)
 
-            // Received gossiped listOfSources
-            var gossipedLOS = ois.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-            addToListOfSources (gossipedLOS)
+//            // Received gossiped listOfSources
+//            var gossipedLOS = ois.readObject.asInstanceOf[ListBuffer[SourceInfo]]
+//            addToListOfSources (gossipedLOS)
           }
           
           val startTime = System.currentTimeMillis
