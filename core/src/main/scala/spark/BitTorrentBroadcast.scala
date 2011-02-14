@@ -3,6 +3,7 @@ package spark
 import java.io._
 import java.net._
 import java.util.{BitSet, Comparator, Random, Timer, TimerTask, UUID}
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 
 import scala.collection.mutable.{ListBuffer, Map, Set}
@@ -24,6 +25,9 @@ extends Broadcast[T] with Logging {
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
   @transient var hasBlocks = 0
+  
+  // Used ONLY by Master to track how many unique blocks have been sent out
+  @transient var sentBlocks = new AtomicInteger(0)
 
   @transient var listenPortLock = new Object
   @transient var guidePortLock = new Object
@@ -592,7 +596,10 @@ extends Broadcast[T] with Logging {
               val receptionTime = (System.currentTimeMillis - recvStartTime)
               
               // Expecting sender to send the block that was asked for
-              assert (bcBlock.blockID == blockToAskFor)
+              // assert (bcBlock.blockID == blockToAskFor)
+              // There is an exception to the above rule now. The master might 
+              // send some other block than the one requested to ensure quick 
+              // spreading of at least one copy of all the blocks
               
               logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
 
@@ -607,10 +614,10 @@ extends Broadcast[T] with Logging {
                 
                 rxSpeeds.addDataPoint (peerToTalkTo, receptionTime)
 
-                // blockToAskFor has arrived. Not in request any more
-                // Probably no need to update it though
+                // Some block (may be NOT blockToAskFor) has arrived. 
+                // In any case, blockToAskFor is not in request any more
                 blocksInRequestBitVector.synchronized {
-                  blocksInRequestBitVector.set (bcBlock.blockID, false)
+                  blocksInRequestBitVector.set (blockToAskFor, false)
                 }
 
                 // Reset blockToAskFor to -1. Else it will be considered missing
@@ -1065,7 +1072,13 @@ extends Broadcast[T] with Logging {
           
           while (!stopBroadcast && keepSending &&  numBlocksToSend > 0) {
             // Receive which block to send
-            val blockToSend = ois.readObject.asInstanceOf[Int]
+            var blockToSend = ois.readObject.asInstanceOf[Int]
+            
+            // If it is master AND at least one copy of each block has not been 
+            // sent out already, MODIFY blockToSend
+            if (BitTorrentBroadcast.isMaster && sentBlocks.get < totalBlocks) {
+              blockToSend = sentBlocks.getAndIncrement
+            }
             
             // Send the block
             sendBlock (blockToSend)
