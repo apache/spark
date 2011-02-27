@@ -12,25 +12,51 @@ import SparkContext._
 
 import mesos._
 
+abstract class Dependency[T](val rdd: RDD[T], val isShuffle: Boolean)
+
+abstract class NarrowDependency[T](rdd: RDD[T])
+extends Dependency(rdd, false) {
+  def getParents(outputPartition: Int): Seq[Int]
+}
+
+class ShuffleDependency[K, V, C](
+  rdd: RDD[(K, V)],
+  val spec: ShuffleSpec[K, V, C]
+) extends Dependency(rdd, true)
+
+class ShuffleSpec[K, V, C] (
+  val createCombiner: V => C,
+  val mergeValue: (C, V) => C,
+  val mergeCombiners: (C, C) => C,
+  val partitioner: Partitioner[K]
+)
+
+abstract class Partitioner[K] {
+  def numPartitions: Int
+  def getPartition(key: K): Int
+}
 
 @serializable
 abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   def splits: Array[Split]
   def iterator(split: Split): Iterator[T]
   def preferredLocations(split: Split): Seq[String]
+  
+  def dependencies: List[Dependency[_]] = Nil
+  def partitioner: Option[Partitioner[_]] = None
 
   def taskStarted(split: Split, slot: SlaveOffer) {}
 
   def sparkContext = sc
 
-  def map[U: ClassManifest](f: T => U) = new MappedRDD(this, sc.clean(f))
-  def filter(f: T => Boolean) = new FilteredRDD(this, sc.clean(f))
+  def map[U: ClassManifest](f: T => U): RDD[U] = new MappedRDD(this, sc.clean(f))
+  def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
   def cache() = new CachedRDD(this)
 
-  def sample(withReplacement: Boolean, frac: Double, seed: Int) =
+  def sample(withReplacement: Boolean, frac: Double, seed: Int): RDD[T] =
     new SampledRDD(this, withReplacement, frac, seed)
 
-  def flatMap[U: ClassManifest](f: T => Traversable[U]) =
+  def flatMap[U: ClassManifest](f: T => Traversable[U]): RDD[U] =
     new FlatMappedRDD(this, sc.clean(f))
 
   def foreach(f: T => Unit) {
@@ -40,8 +66,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
 
   def collect(): Array[T] = {
-    val tasks = splits.map(s => new CollectTask(this, s))
-    val results = sc.runTaskObjects(tasks)
+    val results = sc.scheduler.runJob(this, (iter: Iterator[T]) => iter.toArray)
     Array.concat(results: _*)
   }
 
@@ -49,9 +74,15 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
 
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
-    val tasks = splits.map(s => new ReduceTask(this, s, f))
+    val reducePartition: Iterator[T] => Option[T] = iter => {
+      if (iter.hasNext)
+        Some(iter.reduceLeft(f))
+      else
+        None
+    }
+    val options = sc.scheduler.runJob(this, reducePartition)
     val results = new ArrayBuffer[T]
-    for (option <- sc.runTaskObjects(tasks); elem <- option)
+    for (opt <- options; elem <- opt)
       results += elem
     if (results.size == 0)
       throw new UnsupportedOperationException("empty collection")
@@ -77,20 +108,20 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
 
   def count(): Long = {
-    try { 
+    try {
       map(x => 1L).reduce(_+_) 
     } catch { 
       case e: UnsupportedOperationException => 0L // No elements in RDD
     }
   }
 
-  def union(other: RDD[T]) = new UnionRDD(sc, Array(this, other))
+  def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
 
-  def ++(other: RDD[T]) = this.union(other)
+  def ++(other: RDD[T]): RDD[T] = this.union(other)
 
-  def splitRdd() = new SplitRDD(this)
+  def splitRdd(): RDD[Array[T]] = new SplitRDD(this)
 
-  def cartesian[U: ClassManifest](other: RDD[U]) =
+  def cartesian[U: ClassManifest](other: RDD[U]): RDD[(T, U)] =
     new CartesianRDD(sc, this, other)
 
   def groupBy[K](func: T => K, numSplits: Int): RDD[(K, Seq[T])] =

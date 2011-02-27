@@ -14,7 +14,7 @@ class SparkContext(
   val sparkHome: String = null,
   val jars: Seq[String] = Nil)
 extends Logging {
-  private var scheduler: Scheduler = {
+  private[spark] var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     master match {
@@ -126,19 +126,17 @@ extends Logging {
       None
   }
 
-  // Submit an array of tasks (passed as functions) to the scheduler
-  def runTasks[T: ClassManifest](tasks: Array[() => T]): Array[T] = {
-    runTaskObjects(tasks.map(f => new FunctionTask(f)))
-  }
-
   // Run an array of spark.Task objects
   private[spark] def runTaskObjects[T: ClassManifest](tasks: Seq[Task[T]])
       : Array[T] = {
+    return null;
+    /*
     logInfo("Running " + tasks.length + " tasks in parallel")
     val start = System.nanoTime
     val result = scheduler.runTasks(tasks.toArray)
     logInfo("Tasks finished in " + (System.nanoTime - start) / 1e9 + " s")
     return result
+    */
   }
 
   // Clean a closure to make it ready to serialized and send to tasks

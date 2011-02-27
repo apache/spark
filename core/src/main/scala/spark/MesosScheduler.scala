@@ -105,7 +105,7 @@ extends MScheduler with spark.Scheduler with Logging
    * The primary means to submit a job to the scheduler. Given a list of tasks,
    * runs them and returns an array of the results.
    */
-  override def runTasks[T: ClassManifest](tasks: Array[Task[T]]): Array[T] = {
+  def runTasks[T: ClassManifest](tasks: Array[Task[T]]): Array[T] = {
     waitForRegister()
     val jobId = newJobId()
     val myJob = new SimpleJob(this, tasks, jobId)
@@ -290,5 +290,10 @@ extends MScheduler with spark.Scheduler with Logging
     props("spark.jar.uris") = jarUris
     // Serialize the map as an array of (String, String) pairs
     return Utils.serialize(props.toArray)
+  }
+
+  override def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)(implicit m: ClassManifest[U])
+      : Array[U] = {
+    new Array[U](0)
   }
 }
