@@ -13,6 +13,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
+/*
 @serializable
 class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   override def compute(input: RDD[(K, V)],
@@ -90,7 +91,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
     })
   }
 }
-
+*/
 
 object LocalFileShuffle extends Logging {
   private var initialized = false

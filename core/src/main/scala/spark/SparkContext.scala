@@ -89,8 +89,8 @@ extends Logging {
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] =
-    new UnionRDD(this, rdds)
+  //def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] =
+  //  new UnionRDD(this, rdds)
 
   // Methods for creating shared variables
 
@@ -157,6 +157,14 @@ extends Logging {
 
   // Get the number of cores available to run tasks (as reported by Scheduler)
   def numCores = scheduler.numCores
+
+  private var nextShuffleId: Int = 0
+
+  private[spark] def newShuffleId(): Int = {
+    val id = nextShuffleId
+    nextShuffleId += 1
+    id
+  }
 }
 
 

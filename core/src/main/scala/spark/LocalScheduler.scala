@@ -25,12 +25,12 @@ private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
             Accumulators.clear
             val bytes = Utils.serialize(tasks(i))
             logInfo("Size of task " + i + " is " + bytes.size + " bytes")
-            val task = Utils.deserialize[Task[_]](
+            val deserializedTask = Utils.deserialize[Task[_]](
               bytes, currentThread.getContextClassLoader)
-            val result: Any = task.run
+            val result: Any = deserializedTask.run
             val accumUpdates = Accumulators.values
             logInfo("Finished task " + i)
-            taskEnded(task, true, result, accumUpdates)
+            taskEnded(tasks(i), true, result, accumUpdates)
           } catch {
             case e: Exception => {
               // TODO: Do something nicer here

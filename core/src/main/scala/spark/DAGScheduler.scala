@@ -1,10 +1,7 @@
 package spark
 
-import java.util.concurrent._
-
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
-import scala.collection.mutable.Map
+import java.util.concurrent.LinkedBlockingQueue
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
 /**
  * A Scheduler subclass that implements stage-oriented scheduling. It computes
@@ -56,17 +53,15 @@ private abstract class DAGScheduler extends Scheduler with Logging {
     shuffleToMapStage.get(shuf) match {
       case Some(stage) => stage
       case None =>
-        val stage = newStage(
-          true, shuf.rdd, shuf.spec.partitioner.numPartitions)
+        val stage = newStage(shuf.rdd, Some(shuf))
         shuffleToMapStage(shuf) = stage
         stage
     }
   }
 
-  def newStage(isShuffleMap: Boolean, rdd: RDD[_], numPartitions: Int): Stage = {
+  def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_,_]]): Stage = {
     val id = newStageId()
-    val parents = getParentStages(rdd)
-    val stage = new Stage(id, isShuffleMap, rdd, parents, numPartitions)
+    val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd))
     idToStage(id) = stage
     stage
   }
@@ -121,7 +116,7 @@ private abstract class DAGScheduler extends Scheduler with Logging {
   override def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)(implicit m: ClassManifest[U])
       : Array[U] = {
     val numOutputParts: Int = rdd.splits.size
-    val finalStage = newStage(false, rdd, numOutputParts)
+    val finalStage = newStage(rdd, None)
     val results = new Array[U](numOutputParts)
     val finished = new Array[Boolean](numOutputParts)
     var numFinished = 0
@@ -129,6 +124,10 @@ private abstract class DAGScheduler extends Scheduler with Logging {
     val waiting = new HashSet[Stage]
     val running = new HashSet[Stage]
     val pendingTasks = new HashMap[Stage, HashSet[Task[_]]]
+
+    logInfo("Final stage: " + finalStage)
+    logInfo("Parents of final stage: " + finalStage.parents)
+    logInfo("Missing parents: " + getMissingParentStages(finalStage))
 
     def submitStage(stage: Stage) {
       if (!waiting(stage) && !running(stage)) {
@@ -146,13 +145,20 @@ private abstract class DAGScheduler extends Scheduler with Logging {
     }
 
     def submitMissingTasks(stage: Stage) {
-      var tasks: List[Task[_]] = Nil
+      val myPending = pendingTasks.getOrElseUpdate(stage, new HashSet)
+      var tasks = ArrayBuffer[Task[_]]()
       if (stage == finalStage) {
         for (p <- 0 until numOutputParts if (!finished(p))) {
           val locs = getPreferredLocs(rdd, p)
-          tasks = new ResultTask(rdd, func, p, locs) :: tasks
+          tasks += new ResultTask(finalStage.id, rdd, func, p, locs)
+        }
+      } else {
+        for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
+          val locs = getPreferredLocs(stage.rdd, p)
+          tasks += new ShuffleMapTask(stage.id, stage.rdd, stage.shuffleDep.get, p, locs)
         }
       }
+      myPending ++= tasks
       submitTasks(tasks)
     }
 
@@ -161,13 +167,35 @@ private abstract class DAGScheduler extends Scheduler with Logging {
     while (numFinished != numOutputParts) {
       val evt = completionEvents.take()
       if (evt.successful) {
+        logInfo("Completed " + evt.task)
         Accumulators.add(currentThread, evt.accumUpdates)
         evt.task match {
           case rt: ResultTask[_, _] =>
             results(rt.partition) = evt.result.asInstanceOf[U]
             finished(rt.partition) = true
             numFinished += 1
-          // case smt: ShuffleMapTask
+            pendingTasks(finalStage) -= rt
+          case smt: ShuffleMapTask =>
+            val stage = idToStage(smt.stageId)
+            stage.addOutputLoc(smt.partition, evt.result.asInstanceOf[String])
+            val pending = pendingTasks(stage)
+            pending -= smt
+            MapOutputTracker.registerMapOutputs(
+                stage.shuffleDep.get.shuffleId,
+                stage.outputLocs.map(_.first).toArray)
+            if (pending.isEmpty) {
+              logInfo(stage + " finished; looking for newly runnable stages")
+              running -= stage
+              val newlyRunnable = new ArrayBuffer[Stage]
+              for (stage <- waiting if getMissingParentStages(stage) == Nil) {
+                newlyRunnable += stage
+              }
+              waiting --= newlyRunnable
+              running ++= newlyRunnable
+              for (stage <- newlyRunnable) {
+                submitMissingTasks(stage)
+              }
+            }
         }
       } else {
         throw new SparkException("Task failed: " + evt.task)
@@ -199,53 +227,10 @@ private abstract class DAGScheduler extends Scheduler with Logging {
           if (locs != Nil)
             return locs;
         }
+      case _ =>
     })
     return Nil
   }
 }
 
 case class CompletionEvent(task: Task[_], successful: Boolean, result: Any, accumUpdates: Map[Long, Any])
-
-class Stage(val id: Int, val isShuffleMap: Boolean, val rdd: RDD[_], val parents: List[Stage], val numPartitions: Int) {
-  val outputLocs = Array.fill[List[String]](numPartitions)(Nil)
-  var numAvailableOutputs = 0
-
-  def isAvailable: Boolean = {
-    if (parents.size == 0 && !isShuffleMap)
-      true
-    else
-      numAvailableOutputs == numPartitions
-  }
-
-  def addOutputLoc(partition: Int, host: String) {
-    val prevList = outputLocs(partition)
-    outputLocs(partition) = host :: prevList
-    if (prevList == Nil)
-      numAvailableOutputs += 1
-  }
-
-  def removeOutputLoc(partition: Int, host: String) {
-    val prevList = outputLocs(partition)
-    val newList = prevList - host
-    outputLocs(partition) = newList
-    if (prevList != Nil && newList == Nil)
-      numAvailableOutputs -= 1
-  }
-
-  override def toString = "Stage " + id
-
-  override def hashCode(): Int = id
-}
-
-class ResultTask[T, U](rdd: RDD[T], func: Iterator[T] => U, val partition: Int, locs: Seq[String])
-extends Task[U] {
-  val split = rdd.splits(partition)
-
-  override def run: U = {
-    func(rdd.iterator(split))
-  }
-
-  override def preferredLocations: Seq[String] = locs
-
-  override def toString = "ResultTask " + partition
-}
