@@ -12,6 +12,7 @@ import SparkContext._
 
 import mesos._
 
+@serializable
 abstract class Dependency[T](val rdd: RDD[T], val isShuffle: Boolean)
 
 abstract class NarrowDependency[T](rdd: RDD[T])
@@ -19,11 +20,16 @@ extends Dependency(rdd, false) {
   def getParents(outputPartition: Int): Seq[Int]
 }
 
+class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
+  override def getParents(partitionId: Int) = List(partitionId)
+}
+
 class ShuffleDependency[K, V, C](
   rdd: RDD[(K, V)],
   val spec: ShuffleSpec[K, V, C]
 ) extends Dependency(rdd, true)
 
+@serializable
 class ShuffleSpec[K, V, C] (
   val createCombiner: V => C,
   val mergeValue: (C, V) => C,
@@ -31,6 +37,7 @@ class ShuffleSpec[K, V, C] (
   val partitioner: Partitioner[K]
 )
 
+@serializable
 abstract class Partitioner[K] {
   def numPartitions: Int
   def getPartition(key: K): Int
@@ -42,8 +49,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   def iterator(split: Split): Iterator[T]
   def preferredLocations(split: Split): Seq[String]
   
-  def dependencies: List[Dependency[_]] = Nil
-  def partitioner: Option[Partitioner[_]] = None
+  val dependencies: List[Dependency[_]] = Nil
+  val partitioner: Option[Partitioner[_]] = None
 
   def taskStarted(split: Split, slot: SlaveOffer) {}
 
@@ -66,7 +73,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
 
   def collect(): Array[T] = {
-    val results = sc.scheduler.runJob(this, (iter: Iterator[T]) => iter.toArray)
+    val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
     Array.concat(results: _*)
   }
 
@@ -80,7 +87,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
       else
         None
     }
-    val options = sc.scheduler.runJob(this, reducePartition)
+    val options = sc.runJob(this, reducePartition)
     val results = new ArrayBuffer[T]
     for (opt <- options; elem <- opt)
       results += elem
@@ -177,6 +184,7 @@ extends RDD[U](prev.sparkContext) {
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
   override def iterator(split: Split) = prev.iterator(split).map(f)
   override def taskStarted(split: Split, slot: SlaveOffer) = prev.taskStarted(split, slot)
+  override val dependencies = List(new OneToOneDependency(prev))
 }
 
 class FilteredRDD[T: ClassManifest](

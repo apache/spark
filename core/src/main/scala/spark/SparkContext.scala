@@ -14,7 +14,7 @@ class SparkContext(
   val sparkHome: String = null,
   val jars: Seq[String] = Nil)
 extends Logging {
-  private[spark] var scheduler: Scheduler = {
+  private var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     master match {
@@ -137,6 +137,15 @@ extends Logging {
     logInfo("Tasks finished in " + (System.nanoTime - start) / 1e9 + " s")
     return result
     */
+  }
+
+  private[spark] def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)(implicit m: ClassManifest[U])
+      : Array[U] = {
+    logInfo("Starting job...")
+    val start = System.nanoTime
+    val result = scheduler.runJob(rdd, func)
+    logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
+    result
   }
 
   // Clean a closure to make it ready to serialized and send to tasks
