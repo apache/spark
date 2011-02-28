@@ -124,4 +124,11 @@ object Utils {
     // and join them into a string
     return bytes.map(b => (b.toInt + 256) % 256).mkString(".")
   }
+
+  /**
+   * Get the local machine's hostname
+   */
+  def localHostName(): String = {
+    return InetAddress.getLocalHost().getHostName
+  }
 }

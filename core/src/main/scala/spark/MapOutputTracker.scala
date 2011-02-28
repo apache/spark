@@ -2,7 +2,34 @@ package spark
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.actors._
+import scala.actors.Actor._
+import scala.actors.remote._
+
+class MapOutputTracker extends DaemonActor with Logging {
+  def act() {
+    val port = System.getProperty("spark.master.port", "50501").toInt
+    RemoteActor.alive(port)
+    RemoteActor.register('MapOutputTracker, self)
+    logInfo("Started on port " + port)
+  }
+}
+
 object MapOutputTracker {
+  var trackerActor: AbstractActor = null
+  
+  def initialize(isMaster: Boolean) {
+    if (isMaster) {
+      val tracker = new MapOutputTracker
+      tracker.start
+      trackerActor = tracker
+    } else {
+      val host = System.getProperty("spark.master.host")
+      val port = System.getProperty("spark.master.port").toInt
+      trackerActor = RemoteActor.select(Node(host, port), 'MapOutputTracker)
+    }
+  }
+  
   private val serverUris = new ConcurrentHashMap[Int, Array[String]]
   
   def registerMapOutput(shuffleId: Int, numMaps: Int, mapId: Int, serverUri: String) {

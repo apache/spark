@@ -16,83 +16,77 @@ import SparkContext._
 import mesos._
 
 @serializable
-abstract class Dependency[T](val rdd: RDD[T], val isShuffle: Boolean)
-
-abstract class NarrowDependency[T](rdd: RDD[T])
-extends Dependency(rdd, false) {
-  def getParents(outputPartition: Int): Seq[Int]
-}
-
-class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
-  override def getParents(partitionId: Int) = List(partitionId)
-}
-
-class ShuffleDependency[K, V, C](
-  val shuffleId: Int,
-  rdd: RDD[(K, V)],
-  val aggregator: Aggregator[K, V, C],
-  val partitioner: Partitioner[K]
-) extends Dependency(rdd, true)
-
-@serializable
-class Aggregator[K, V, C] (
-  val createCombiner: V => C,
-  val mergeValue: (C, V) => C,
-  val mergeCombiners: (C, C) => C
-)
-
-@serializable
-abstract class Partitioner[K] {
-  def numPartitions: Int
-  def getPartition(key: K): Int
-}
-
-class HashPartitioner[K](partitions: Int) extends Partitioner[K] {
-  def numPartitions = partitions
-
-  def getPartition(key: K) = {
-    val mod = key.hashCode % partitions
-    if (mod < 0) mod + partitions else mod   // Careful of negative hash codes
-  }
-}
-
-@serializable
 abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
+  // Methods that must be implemented by subclasses
   def splits: Array[Split]
-  def iterator(split: Split): Iterator[T]
+  def compute(split: Split): Iterator[T]
   def preferredLocations(split: Split): Seq[String]
+  val dependencies: List[Dependency[_]]
   
-  val dependencies: List[Dependency[_]] = Nil
+  // Optionally overridden by subclasses to specify how they are partitioned
   val partitioner: Option[Partitioner[_]] = None
-
-  def sparkContext = sc
-
+  
+  def context = sc
+  
+  // Get a unique ID for this RDD
+  val id = sc.newRddId()
+  
+  // Variables relating to caching
+  private var shouldCache = false
+  
+  // Change this RDD's caching
+  def cache(): RDD[T] = {
+    shouldCache = true
+    this
+  }
+  
+  // Read this RDD; will read from cache if applicable, or otherwise compute
+  final def iterator(split: Split): Iterator[T] = {
+    if (shouldCache) {
+      RDDCache.getOrCompute[T](this, split)
+    } else {
+      compute(split)
+    }
+  }
+  
+  // Transformations
+  
   def map[U: ClassManifest](f: T => U): RDD[U] = new MappedRDD(this, sc.clean(f))
   
   def flatMap[U: ClassManifest](f: T => Traversable[U]): RDD[U] =
     new FlatMappedRDD(this, sc.clean(f))
-
-  /*
+  
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
-
-  def cache() = new CachedRDD(this)
 
   def sample(withReplacement: Boolean, frac: Double, seed: Int): RDD[T] =
     new SampledRDD(this, withReplacement, frac, seed)
 
+  def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
+
+  def ++(other: RDD[T]): RDD[T] = this.union(other)
+
+  def glom(): RDD[Array[T]] = new SplitRDD(this)
+
+  def cartesian[U: ClassManifest](other: RDD[U]): RDD[(T, U)] =
+    new CartesianRDD(sc, this, other)
+
+  def groupBy[K](func: T => K, numSplits: Int): RDD[(K, Seq[T])] =
+    this.map(t => (func(t), t)).groupByKey(numSplits)
+
+  def groupBy[K](func: T => K): RDD[(K, Seq[T])] =
+    groupBy[K](func, sc.numCores)
+
+  // Parallel operations
+  
   def foreach(f: T => Unit) {
     val cleanF = sc.clean(f)
-    val tasks = splits.map(s => new ForeachTask(this, s, cleanF)).toArray
-    sc.runTaskObjects(tasks)
+    sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
   }
-  */
 
   def collect(): Array[T] = {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
     Array.concat(results: _*)
   }
-
-  def toArray(): Array[T] = collect()
 
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
@@ -111,7 +105,15 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
     else
       return results.reduceLeft(f)
   }
+  
+  def count(): Long = {
+    sc.runJob(this, (iter: Iterator[T]) => iter.size.toLong).sum
+  }
 
+  def toArray(): Array[T] = collect()
+
+  // TODO: Reimplement these to properly build any shuffle dependencies on
+  // the cluster rather than attempting to compute a partiton on the master
   /*
   def take(num: Int): Array[T] = {
     if (num == 0)
@@ -130,279 +132,43 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
     case _ => throw new UnsupportedOperationException("empty collection")
   }
   */
-
-  def count(): Long = {
-    try {
-      map(x => 1L).reduce(_+_) 
-    } catch { 
-      case e: UnsupportedOperationException => 0L // No elements in RDD
-    }
-  }
-
-  def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
-
-  def ++(other: RDD[T]): RDD[T] = this.union(other)
-
-  //def splitRdd(): RDD[Array[T]] = new SplitRDD(this)
-
-  //def cartesian[U: ClassManifest](other: RDD[U]): RDD[(T, U)] =
-  //  new CartesianRDD(sc, this, other)
-
-  def groupBy[K](func: T => K, numSplits: Int): RDD[(K, Seq[T])] =
-    this.map(t => (func(t), t)).groupByKey(numSplits)
-
-  def groupBy[K](func: T => K): RDD[(K, Seq[T])] =
-    groupBy[K](func, sc.numCores)
 }
 
 class MappedRDD[U: ClassManifest, T: ClassManifest](
   prev: RDD[T], f: T => U)
-extends RDD[U](prev.sparkContext) {
+extends RDD[U](prev.context) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
   override val dependencies = List(new OneToOneDependency(prev))
-  override def iterator(split: Split) = prev.iterator(split).map(f)
+  override def compute(split: Split) = prev.iterator(split).map(f)
 }
 
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
   prev: RDD[T], f: T => Traversable[U])
-extends RDD[U](prev.sparkContext) {
+extends RDD[U](prev.context) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
   override val dependencies = List(new OneToOneDependency(prev))
-  override def iterator(split: Split) = prev.iterator(split).toStream.flatMap(f).iterator
+  override def compute(split: Split) = prev.iterator(split).toStream.flatMap(f).iterator
 }
 
-/*
 class FilteredRDD[T: ClassManifest](
   prev: RDD[T], f: T => Boolean)
-extends RDD[T](prev.sparkContext) {
+extends RDD[T](prev.context) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
-  override def iterator(split: Split) = prev.iterator(split).filter(f)
+  override val dependencies = List(new OneToOneDependency(prev))
+  override def compute(split: Split) = prev.iterator(split).filter(f)
 }
 
 class SplitRDD[T: ClassManifest](prev: RDD[T])
-extends RDD[Array[T]](prev.sparkContext) {
+extends RDD[Array[T]](prev.context) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
-  override def iterator(split: Split) = Iterator.fromArray(Array(prev.iterator(split).toArray))
+  override val dependencies = List(new OneToOneDependency(prev))
+  override def compute(split: Split) = Iterator.fromArray(Array(prev.iterator(split).toArray))
 }
 
-
-@serializable class SeededSplit(val prev: Split, val seed: Int) extends Split {
-  override def getId() =
-    "SeededSplit(" + prev.getId() + ", seed " + seed + ")"
-}
-
-class SampledRDD[T: ClassManifest](
-  prev: RDD[T], withReplacement: Boolean, frac: Double, seed: Int)
-extends RDD[T](prev.sparkContext) {
-
-  @transient val splits_ = { val rg = new Random(seed); prev.splits.map(x => new SeededSplit(x, rg.nextInt)) }
-
-  override def splits = splits_.asInstanceOf[Array[Split]]
-
-  override def preferredLocations(split: Split) = prev.preferredLocations(split.asInstanceOf[SeededSplit].prev)
-
-  override def iterator(splitIn: Split) = {
-    val split = splitIn.asInstanceOf[SeededSplit]
-    val rg = new Random(split.seed);
-    // Sampling with replacement (TODO: use reservoir sampling to make this more efficient?)
-    if (withReplacement) {
-      val oldData = prev.iterator(split.prev).toArray
-      val sampleSize = (oldData.size * frac).ceil.toInt
-      val sampledData = for (i <- 1 to sampleSize) yield oldData(rg.nextInt(oldData.size)) // all of oldData's indices are candidates, even if sampleSize < oldData.size
-      sampledData.iterator
-    }
-    // Sampling without replacement
-    else {
-      prev.iterator(split.prev).filter(x => (rg.nextDouble <= frac))
-    }
-  }
-}
-
-
-class CachedRDD[T](
-  prev: RDD[T])(implicit m: ClassManifest[T])
-extends RDD[T](prev.sparkContext) with Logging {
-  val id = CachedRDD.newId()
-  @transient val cacheLocs = Map[Split, List[String]]()
-
-  override def splits = prev.splits
-
-  override def preferredLocations(split: Split) = {
-    if (cacheLocs.contains(split))
-      cacheLocs(split)
-    else
-      prev.preferredLocations(split)
-  }
-
-  override def iterator(split: Split): Iterator[T] = {
-    val key = id + "::" + split.getId()
-    logInfo("CachedRDD split key is " + key)
-    val cache = CachedRDD.cache
-    val loading = CachedRDD.loading
-    val cachedVal = cache.get(key)
-    if (cachedVal != null) {
-      // Split is in cache, so just return its values
-      return Iterator.fromArray(cachedVal.asInstanceOf[Array[T]])
-    } else {
-      // Mark the split as loading (unless someone else marks it first)
-      loading.synchronized {
-        if (loading.contains(key)) {
-          while (loading.contains(key)) {
-            try {loading.wait()} catch {case _ =>}
-          }
-          return Iterator.fromArray(cache.get(key).asInstanceOf[Array[T]])
-        } else {
-          loading.add(key)
-        }
-      }
-      // If we got here, we have to load the split
-      logInfo("Loading and caching " + split)
-      val array = prev.iterator(split).toArray(m)
-      cache.put(key, array)
-      loading.synchronized {
-        loading.remove(key)
-        loading.notifyAll()
-      }
-      return Iterator.fromArray(array)
-    }
-  }
-
-  override def taskStarted(split: Split, slot: SlaveOffer) {
-    val oldList = cacheLocs.getOrElse(split, Nil)
-    val host = slot.getHost
-    if (!oldList.contains(host))
-      cacheLocs(split) = host :: oldList
-  }
-}
-
-private object CachedRDD {
-  val nextId = new AtomicLong(0) // Generates IDs for cached RDDs (on master)
-  def newId() = nextId.getAndIncrement()
-
-  // Stores map results for various splits locally (on workers)
-  val cache = Cache.newKeySpace()
-
-  // Remembers which splits are currently being loaded (on workers)
-  val loading = new HashSet[String]
-}
-*/
-
-@serializable
-class UnionSplit[T: ClassManifest](rdd: RDD[T], index: Int, split: Split)
-extends Split {
-  def iterator() = rdd.iterator(split)
-  def preferredLocations() = rdd.preferredLocations(split)
-  override def getId() = "UnionSplit(" + index + ", " + split.getId() + ")"
-}
-
-@serializable
-class UnionRDD[T: ClassManifest](sc: SparkContext, rdds: Seq[RDD[T]])
-extends RDD[T](sc) {
-  @transient val splits_ : Array[Split] = {
-    val splits: Seq[Split] =
-      for ((rdd, index) <- rdds.zipWithIndex; split <- rdd.splits)
-        yield new UnionSplit(rdd, index, split)
-    splits.toArray
-  }
-
-  override def splits = splits_
-
-  override def iterator(s: Split): Iterator[T] =
-    s.asInstanceOf[UnionSplit[T]].iterator()
-
-  override def preferredLocations(s: Split): Seq[String] =
-    s.asInstanceOf[UnionSplit[T]].preferredLocations()
-}
-
-/*
-@serializable class CartesianSplit(val s1: Split, val s2: Split) extends Split {
-  override def getId() =
-    "CartesianSplit(" + s1.getId() + ", " + s2.getId() + ")"
-}
-
-@serializable
-class CartesianRDD[T: ClassManifest, U:ClassManifest](
-  sc: SparkContext, rdd1: RDD[T], rdd2: RDD[U])
-extends RDD[Pair[T, U]](sc) {
-  @transient val splits_ = {
-    // create the cross product split
-    rdd2.splits.map(y => rdd1.splits.map(x => new CartesianSplit(x, y))).flatten
-  }
-
-  override def splits = splits_.asInstanceOf[Array[Split]]
-
-  override def preferredLocations(split: Split) = {
-    val currSplit = split.asInstanceOf[CartesianSplit]
-    rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
-  }
-
-  override def iterator(split: Split) = {
-    val currSplit = split.asInstanceOf[CartesianSplit]
-    for (x <- rdd1.iterator(currSplit.s1); y <- rdd2.iterator(currSplit.s2)) yield (x, y)
-  }
-
-  override def taskStarted(split: Split, slot: SlaveOffer) = {
-    val currSplit = split.asInstanceOf[CartesianSplit]
-    rdd1.taskStarted(currSplit.s1, slot)
-    rdd2.taskStarted(currSplit.s2, slot)
-  }
-}
-*/
-
-class ShuffledRDDSplit(val id: Int) extends Split {
-  override def getId() = "ShuffleRDDSplit(" + id + ")"
-}
-
-class ShuffledRDD[K, V, C](
-  parent: RDD[(K, V)],
-  aggregator: Aggregator[K, V, C],
-  partitioner: Partitioner[K])
-extends RDD[(K, C)](parent.sparkContext) {
-  @transient val splits_ =
-    Array.tabulate[Split](partitioner.numPartitions)(i => new ShuffledRDDSplit(i))
-  
-  val dep = new ShuffleDependency(sparkContext.newShuffleId, parent, aggregator, partitioner)
-
-  override def splits = splits_
-
-  override def preferredLocations(split: Split) = Nil
-
-  override def iterator(split: Split): Iterator[(K, C)] = {
-    val shuffleId = dep.shuffleId
-    val splitId = split.asInstanceOf[ShuffledRDDSplit].id
-    val splitsByUri = new HashMap[String, ArrayBuffer[Int]]
-    val serverUris = MapOutputTracker.getServerUris(shuffleId)
-    for ((serverUri, index) <- serverUris.zipWithIndex) {
-      splitsByUri.getOrElseUpdate(serverUri, ArrayBuffer()) += index
-    }
-    val combiners = new HashMap[K, C]
-    for ((serverUri, inputIds) <- Utils.shuffle(splitsByUri)) {
-      for (i <- inputIds) {
-        val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, splitId)
-        val inputStream = new ObjectInputStream(new URL(url).openStream())
-        try {
-          while (true) {
-            val (k, c) = inputStream.readObject().asInstanceOf[(K, C)]
-            combiners(k) = combiners.get(k) match {
-              case Some(oldC) => aggregator.mergeCombiners(oldC, c)
-              case None => c
-            }
-          }
-        } catch {
-          case e: EOFException => {}
-        }
-        inputStream.close()
-      }
-    }
-    combiners.iterator
-  }
-
-  override val dependencies = List(dep)
-}
 
 @serializable class PairRDDExtras[K, V](self: RDD[(K, V)]) {
   def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = {
@@ -427,13 +193,6 @@ extends RDD[(K, C)](parent.sparkContext) {
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     val partitioner = new HashPartitioner[K](numSplits)
     new ShuffledRDD(self, aggregator, partitioner)
-    // TODO
-    /*
-    val shufClass = Class.forName(System.getProperty(
-      "spark.shuffle.class", "spark.LocalFileShuffle"))
-    val shuf = shufClass.newInstance().asInstanceOf[Shuffle[K, V, C]]
-    shuf.compute(self, numSplits, createCombiner, mergeValue, mergeCombiners)
-    */
   }
 
   def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {
@@ -484,7 +243,7 @@ extends RDD[(K, C)](parent.sparkContext) {
     join(other, numCores)
   }
 
-  def numCores = self.sparkContext.numCores
+  def numCores = self.context.numCores
 
   def collectAsMap(): Map[K, V] = HashMap(self.collect(): _*)
 }

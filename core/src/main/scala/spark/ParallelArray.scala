@@ -17,8 +17,7 @@ extends Split {
     case _ => false
   }
 
-  override def getId() =
-    "ParallelArraySplit(arrayId %d, slice %d)".format(arrayId, slice)
+  override val index = slice
 }
 
 class ParallelArray[T: ClassManifest](
@@ -28,8 +27,6 @@ extends RDD[T](sc) {
   // the RDD chain it gets cached. It might be worthwhile to write the data to
   // a file in the DFS and read it in the split instead.
 
-  val id = ParallelArray.newId()
-
   @transient val splits_ = {
     val slices = ParallelArray.slice(data, numSlices).toArray
     slices.indices.map(i => new ParallelArraySplit(id, i, slices(i))).toArray
@@ -37,9 +34,11 @@ extends RDD[T](sc) {
 
   override def splits = splits_.asInstanceOf[Array[Split]]
 
-  override def iterator(s: Split) = s.asInstanceOf[ParallelArraySplit[T]].iterator
+  override def compute(s: Split) = s.asInstanceOf[ParallelArraySplit[T]].iterator
   
   override def preferredLocations(s: Split): Seq[String] = Nil
+  
+  override val dependencies: List[Dependency[_]] = Nil
 }
 
 private object ParallelArray {
