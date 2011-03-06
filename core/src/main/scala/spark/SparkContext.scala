@@ -175,6 +175,7 @@ extends Logging {
   
   private var nextRddId = new AtomicInteger(0)
 
+  // Register a new RDD, returning its RDD ID
   private[spark] def newRddId(): Int = {
     nextRddId.getAndIncrement()
   }

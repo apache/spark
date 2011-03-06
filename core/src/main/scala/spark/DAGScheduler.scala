@@ -33,20 +33,14 @@ private abstract class DAGScheduler extends Scheduler with Logging {
 
   val shuffleToMapStage = new HashMap[ShuffleDependency[_,_,_], Stage]
 
-  val cacheLocs = new HashMap[RDD[_], Array[List[String]]]
+  var cacheLocs = new HashMap[Int, Array[List[String]]]
 
   def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
-    cacheLocs.getOrElseUpdate(rdd, Array.fill[List[String]](rdd.splits.size)(Nil))
+    cacheLocs(rdd.id)
   }
-
-  def addCacheLoc(rdd: RDD[_], partition: Int, host: String) {
-    val locs = getCacheLocs(rdd)
-    locs(partition) = host :: locs(partition)
-  }
-
-  def removeCacheLoc(rdd: RDD[_], partition: Int, host: String) {
-    val locs = getCacheLocs(rdd)
-    locs(partition) -= host
+  
+  def updateCacheLocs() {
+    cacheLocs = RDDCache.getLocationsSnapshot()
   }
 
   def getShuffleMapStage(shuf: ShuffleDependency[_,_,_]): Stage = {
@@ -60,6 +54,9 @@ private abstract class DAGScheduler extends Scheduler with Logging {
   }
 
   def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_,_]]): Stage = {
+    // Kind of ugly: need to register RDDs with the cache here since
+    // we can't do it in its constructor because # of splits is unknown
+    RDDCache.registerRDD(rdd.id, rdd.splits.size)
     val id = newStageId()
     val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd))
     idToStage(id) = stage
@@ -113,10 +110,10 @@ private abstract class DAGScheduler extends Scheduler with Logging {
     missing.toList
   }
 
-  override def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)(implicit m: ClassManifest[U])
+  override def runJob[T, U](finalRdd: RDD[T], func: Iterator[T] => U)(implicit m: ClassManifest[U])
       : Array[U] = {
-    val numOutputParts: Int = rdd.splits.size
-    val finalStage = newStage(rdd, None)
+    val numOutputParts: Int = finalRdd.splits.size
+    val finalStage = newStage(finalRdd, None)
     val results = new Array[U](numOutputParts)
     val finished = new Array[Boolean](numOutputParts)
     var numFinished = 0
@@ -125,6 +122,8 @@ private abstract class DAGScheduler extends Scheduler with Logging {
     val running = new HashSet[Stage]
     val pendingTasks = new HashMap[Stage, HashSet[Task[_]]]
 
+    updateCacheLocs()
+    
     logInfo("Final stage: " + finalStage)
     logInfo("Parents of final stage: " + finalStage.parents)
     logInfo("Missing parents: " + getMissingParentStages(finalStage))
@@ -145,12 +144,13 @@ private abstract class DAGScheduler extends Scheduler with Logging {
     }
 
     def submitMissingTasks(stage: Stage) {
+      // Get our pending tasks and remember them in our pendingTasks entry
       val myPending = pendingTasks.getOrElseUpdate(stage, new HashSet)
       var tasks = ArrayBuffer[Task[_]]()
       if (stage == finalStage) {
         for (p <- 0 until numOutputParts if (!finished(p))) {
-          val locs = getPreferredLocs(rdd, p)
-          tasks += new ResultTask(finalStage.id, rdd, func, p, locs)
+          val locs = getPreferredLocs(finalRdd, p)
+          tasks += new ResultTask(finalStage.id, finalRdd, func, p, locs)
         }
       } else {
         for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
@@ -186,6 +186,7 @@ private abstract class DAGScheduler extends Scheduler with Logging {
             if (pending.isEmpty) {
               logInfo(stage + " finished; looking for newly runnable stages")
               running -= stage
+              updateCacheLocs()
               val newlyRunnable = new ArrayBuffer[Stage]
               for (stage <- waiting if getMissingParentStages(stage) == Nil) {
                 newlyRunnable += stage

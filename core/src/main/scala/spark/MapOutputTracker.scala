@@ -11,7 +11,7 @@ class MapOutputTracker extends DaemonActor with Logging {
     val port = System.getProperty("spark.master.port", "50501").toInt
     RemoteActor.alive(port)
     RemoteActor.register('MapOutputTracker, self)
-    logInfo("Started on port " + port)
+    logInfo("Registered actor on port " + port)
   }
 }
 
