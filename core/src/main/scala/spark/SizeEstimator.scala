@@ -5,6 +5,7 @@ import java.lang.reflect.Modifier
 import java.lang.reflect.{Array => JArray}
 import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -98,8 +99,20 @@ object SizeEstimator {
       state.size += length * primitiveSize(elementClass)
     } else {
       state.size += length * POINTER_SIZE
-      for (i <- 0 until length) {
-        state.enqueue(JArray.get(array, i))
+      if (length <= 100) {
+        for (i <- 0 until length) {
+          state.enqueue(JArray.get(array, i))
+        }
+      } else {
+        // Estimate the size of a large array by sampling elements.
+        // TODO: Add a config setting for turning this off?
+        var size = 0.0
+        val rand = new Random(42)
+        for (i <- 0 until 100) {
+          val elem = JArray.get(array, rand.nextInt(length))
+          size += SizeEstimator.estimate(elem)
+        }
+        state.size += ((length / 100.0) * size).toLong
       }
     }
   }
