@@ -246,4 +246,46 @@ extends RDD[Array[T]](prev.context) {
   def numCores = self.context.numCores
 
   def collectAsMap(): Map[K, V] = HashMap(self.collect(): _*)
+  
+  def mapValues[U](f: V => U): RDD[(K, U)] =
+  {
+    val cleanF = self.context.clean(f)
+    new MappedValuesRDD(self, cleanF)
+  }
+  
+  /*
+  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
+    if (self.partitioner != None) {
+      val part = self.partitoner.get
+      if (other.partitioner != None && other.partitioner.get == part) {
+        // Can do a partition-wise cogroup
+        return new PartitionWiseGroupedRDD(self, other)
+      }
+    }
+    
+    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
+    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
+    (vs ++ ws).groupByKey(numSplits).flatMap {
+      case (k, seq) => {
+        val vbuf = new ArrayBuffer[V]
+        val wbuf = new ArrayBuffer[W]
+        seq.foreach(_ match {
+          case Left(v) => vbuf += v
+          case Right(w) => wbuf += w
+        })
+        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
+      }
+    }
+  }
+  */
+}
+
+class MappedValuesRDD[K, V, U](
+  prev: RDD[(K, V)], f: V => U)
+extends RDD[(K, U)](prev.context) {
+  override def splits = prev.splits
+  override def preferredLocations(split: Split) = prev.preferredLocations(split)
+  override val dependencies = List(new OneToOneDependency(prev))
+  override def compute(split: Split) = prev.iterator(split).map{case (k, v) => (k, f(v))}
+  override val partitioner = prev.partitioner
 }

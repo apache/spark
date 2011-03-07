@@ -16,7 +16,8 @@ class ShuffledRDD[K, V, C](
   aggregator: Aggregator[K, V, C],
   part : Partitioner[K])
 extends RDD[(K, C)](parent.context) {
-  override val partitioner = Some(part)
+  //override val partitioner = Some(part)
+  override val partitioner: Option[Partitioner[_]] = Some(part.asInstanceOf[Partitioner[_]])
   
   @transient val splits_ =
     Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))
