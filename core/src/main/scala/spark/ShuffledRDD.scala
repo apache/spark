@@ -14,10 +14,10 @@ class ShuffledRDDSplit(val idx: Int) extends Split {
 class ShuffledRDD[K, V, C](
   parent: RDD[(K, V)],
   aggregator: Aggregator[K, V, C],
-  part : Partitioner[K])
+  part : Partitioner)
 extends RDD[(K, C)](parent.context) {
   //override val partitioner = Some(part)
-  override val partitioner: Option[Partitioner[_]] = Some(part.asInstanceOf[Partitioner[_]])
+  override val partitioner = Some(part)
   
   @transient val splits_ =
     Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))

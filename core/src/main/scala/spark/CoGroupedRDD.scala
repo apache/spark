@@ -19,23 +19,25 @@ extends Split {
 }
 
 @serializable
-class CoGroupAggregator[K] extends Aggregator[K, Any, ArrayBuffer[Any]] (
+class CoGroupAggregator extends Aggregator[Any, Any, ArrayBuffer[Any]] (
   { x => ArrayBuffer(x) },
   { (b, x) => b += x },
   { (b1, b2) => b1 ++ b2 }
 )
 
-class CoGroupedRDD[K](rdds: Seq[RDD[(K, _)]], part: Partitioner[K])
-extends RDD[(K, Seq[Seq[_]])](rdds.first.context) {
-  val aggr = new CoGroupAggregator[K]
+class CoGroupedRDD[K](rdds: Seq[RDD[(_, _)]], part: Partitioner)
+extends RDD[(K, Seq[Seq[_]])](rdds.first.context) with Logging {
+  val aggr = new CoGroupAggregator
   
   override val dependencies = {
     val deps = new ArrayBuffer[Dependency[_]]
     for ((rdd, index) <- rdds.zipWithIndex) {
       if (rdd.partitioner == Some(part)) {
+        logInfo("Adding one-to-one dependency with " + rdd)
         deps += new OneToOneDependency(rdd)
       } else {
-        deps += new ShuffleDependency[K, Any, ArrayBuffer[Any]](
+        logInfo("Adding shuffle dependency with " + rdd)
+        deps += new ShuffleDependency[Any, Any, ArrayBuffer[Any]](
             context.newShuffleId, rdd, aggr, part)
       }
     }
@@ -60,7 +62,7 @@ extends RDD[(K, Seq[Seq[_]])](rdds.first.context) {
 
   override def splits = splits_
   
-  override val partitioner: Option[Partitioner[_]] = Some(part.asInstanceOf[Partitioner[_]])
+  override val partitioner = Some(part)
   
   override def preferredLocations(s: Split) = Nil
   
@@ -70,15 +72,16 @@ extends RDD[(K, Seq[Seq[_]])](rdds.first.context) {
     def getSeq(k: K): Seq[ArrayBuffer[Any]] = {
       map.getOrElseUpdate(k, Array.fill(rdds.size)(new ArrayBuffer[Any]))
     }
-    for ((dep, index) <- split.deps.zipWithIndex) dep match {
+    for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, itsSplit) => {
         // Read them from the parent
         for ((k: K, v) <- rdd.iterator(itsSplit)) {
-          getSeq(k)(index) += v
+          getSeq(k)(depNum) += v
         }
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
+        logInfo("Grabbing map outputs for shuffle ID " + shuffleId)
         val splitsByUri = new HashMap[String, ArrayBuffer[Int]]
         val serverUris = MapOutputTracker.getServerUris(shuffleId)
         for ((serverUri, index) <- serverUris.zipWithIndex) {
@@ -86,14 +89,15 @@ extends RDD[(K, Seq[Seq[_]])](rdds.first.context) {
         }
         for ((serverUri, inputIds) <- Utils.shuffle(splitsByUri)) {
           for (i <- inputIds) {
-            val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, index)
+            val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, split.index)
             val inputStream = new ObjectInputStream(new URL(url).openStream())
+            logInfo("Opened stream to " + url)
             try {
               while (true) {
                 val (k, vs) = inputStream.readObject().asInstanceOf[(K, Seq[Any])]
                 val mySeq = getSeq(k)
                 for (v <- vs)
-                  mySeq(index) += v
+                  mySeq(depNum) += v
               }
             } catch {
               case e: EOFException => {}

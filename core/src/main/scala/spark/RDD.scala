@@ -24,7 +24,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   val dependencies: List[Dependency[_]]
   
   // Optionally overridden by subclasses to specify how they are partitioned
-  val partitioner: Option[Partitioner[_]] = None
+  val partitioner: Option[Partitioner] = None
   
   def context = sc
   
@@ -111,6 +111,10 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
 
   def toArray(): Array[T] = collect()
+  
+  override def toString(): String = {
+    "%s(%d)".format(getClass.getSimpleName, id)
+  }
 
   // TODO: Reimplement these to properly build any shuffle dependencies on
   // the cluster rather than attempting to compute a partiton on the master
@@ -191,7 +195,7 @@ extends RDD[Array[T]](prev.context) {
   : RDD[(K, C)] =
   {
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    val partitioner = new HashPartitioner[K](numSplits)
+    val partitioner = new HashPartitioner(numSplits)
     new ShuffledRDD(self, aggregator, partitioner)
   }
 
@@ -251,6 +255,33 @@ extends RDD[Array[T]](prev.context) {
   {
     val cleanF = self.context.clean(f)
     new MappedValuesRDD(self, cleanF)
+  }
+  
+  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
+    val part = self.partitioner match {
+      case Some(p) => p
+      case None => new HashPartitioner(numCores)
+    }
+    new CoGroupedRDD[K](Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]), part).map {
+      case (k, Seq(vs, ws)) =>
+        (k, (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]]))
+    }
+  }
+  
+  def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
+      : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
+    val part = self.partitioner match {
+      case Some(p) => p
+      case None => new HashPartitioner(numCores)
+    }
+    new CoGroupedRDD[K](
+        Seq(self.asInstanceOf[RDD[(_, _)]], 
+            other1.asInstanceOf[RDD[(_, _)]], 
+            other2.asInstanceOf[RDD[(_, _)]]),
+        part).map {
+      case (k, Seq(vs, w1s, w2s)) =>
+        (k, (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]]))
+    }
   }
   
   /*

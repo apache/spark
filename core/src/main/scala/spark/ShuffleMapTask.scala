@@ -12,7 +12,7 @@ extends Task[String] {
   override def run: String = {
     val numOutputSplits = dep.partitioner.numPartitions
     val aggregator = dep.aggregator.asInstanceOf[Aggregator[Any, Any, Any]]
-    val partitioner = dep.partitioner.asInstanceOf[Partitioner[Any]]
+    val partitioner = dep.partitioner.asInstanceOf[Partitioner]
     val buckets = Array.tabulate(numOutputSplits)(_ => new HashMap[Any, Any])
     for (elem <- rdd.iterator(split)) {
       val (k, v) = elem.asInstanceOf[(Any, Any)]

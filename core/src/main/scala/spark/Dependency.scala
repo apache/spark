@@ -12,7 +12,7 @@ class ShuffleDependency[K, V, C](
   val shuffleId: Int,
   rdd: RDD[(K, V)],
   val aggregator: Aggregator[K, V, C],
-  val partitioner: Partitioner[K]
+  val partitioner: Partitioner
 ) extends Dependency(rdd, true)
 
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
