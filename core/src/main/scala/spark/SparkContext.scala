@@ -15,6 +15,12 @@ class SparkContext(
   val sparkHome: String = null,
   val jars: Seq[String] = Nil)
 extends Logging {
+  // Set Spark master host and port system properties
+  if (System.getProperty("spark.master.host") == null)
+    System.setProperty("spark.master.host", Utils.localHostName)
+  if (System.getProperty("spark.master.port") == null)
+    System.setProperty("spark.master.port", "50501")
+    
   private var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
@@ -30,7 +36,7 @@ extends Logging {
   }
 
   private val isLocal = scheduler.isInstanceOf[LocalScheduler]
-
+  
   // Start the scheduler, the cache and the broadcast system
   scheduler.start()
   Cache.initialize()

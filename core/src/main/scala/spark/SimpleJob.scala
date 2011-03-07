@@ -11,8 +11,8 @@ import mesos._
 /**
  * A Job that runs a set of tasks with no interdependencies.
  */
-class SimpleJob[T: ClassManifest](
-  sched: MesosScheduler, tasks: Array[Task[T]], val jobId: Int)
+class SimpleJob(
+  sched: MesosScheduler, tasksSeq: Seq[Task[_]], val jobId: Int)
 extends Job(jobId) with Logging
 {
   // Maximum time to wait to run a task in a preferred location (in ms)
@@ -26,8 +26,8 @@ extends Job(jobId) with Logging
   val MAX_TASK_FAILURES = 4
 
   val callingThread = currentThread
+  val tasks = tasksSeq.toArray
   val numTasks = tasks.length
-  val results = new Array[T](numTasks)
   val launched = new Array[Boolean](numTasks)
   val finished = new Array[Boolean](numTasks)
   val numFailures = new Array[Int](numTasks)
@@ -87,20 +87,7 @@ extends Job(jobId) with Logging
       allFinished = true
       joinLock.notifyAll()
     }
-  }
-
-  // Wait until the job finishes and return its results
-  def join(): Array[T] = {
-    joinLock.synchronized {
-      while (!allFinished) {
-        joinLock.wait()
-      }
-      if (failed) {
-        throw new SparkException(causeOfFailure)
-      } else {
-        return results
-      }
-    }
+    sched.jobFinished(this)
   }
 
   // Return the pending tasks list for a given host, or an empty list if
@@ -145,7 +132,7 @@ extends Job(jobId) with Logging
   // Does a host count as a preferred location for a task? This is true if
   // either the task has preferred locations and this host is one, or it has
   // no preferred locations (in which we still count the launch as preferred).
-  def isPreferredLocation(task: Task[T], host: String): Boolean = {
+  def isPreferredLocation(task: Task[_], host: String): Boolean = {
     val locs = task.preferredLocations
     return (locs.contains(host) || locs.isEmpty)
   }
@@ -215,10 +202,8 @@ extends Job(jobId) with Logging
       logInfo("Finished TID %d (progress: %d/%d)".format(
         tid, tasksFinished, numTasks))
       // Deserialize task result
-      val result = Utils.deserialize[TaskResult[T]](status.getData)
-      results(index) = result.value
-      // Update accumulators
-      Accumulators.add(callingThread, result.accumUpdates)
+      val result = Utils.deserialize[TaskResult[_]](status.getData)
+      sched.taskEnded(tasks(index), true, result.value, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
       if (tasksFinished == numTasks)

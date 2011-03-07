@@ -10,7 +10,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
  * only need to implement the code to send a task to the cluster and to report
  * failures from it (the submitTasks method, and code to add completionEvents).
  */
-private abstract class DAGScheduler extends Scheduler with Logging {
+private trait DAGScheduler extends Scheduler with Logging {
   // Must be implemented by subclasses to start running a set of tasks
   def submitTasks(tasks: Seq[Task[_]]): Unit
 
@@ -69,6 +69,9 @@ private abstract class DAGScheduler extends Scheduler with Logging {
     def visit(r: RDD[_]) {
       if (!visited(r)) {
         visited += r
+        // Kind of ugly: need to register RDDs with the cache here since
+        // we can't do it in its constructor because # of splits is unknown
+        RDDCache.registerRDD(r.id, r.splits.size)
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_,_,_] =>
@@ -180,12 +183,14 @@ private abstract class DAGScheduler extends Scheduler with Logging {
             stage.addOutputLoc(smt.partition, evt.result.asInstanceOf[String])
             val pending = pendingTasks(stage)
             pending -= smt
-            MapOutputTracker.registerMapOutputs(
-                stage.shuffleDep.get.shuffleId,
-                stage.outputLocs.map(_.first).toArray)
             if (pending.isEmpty) {
               logInfo(stage + " finished; looking for newly runnable stages")
               running -= stage
+              if (stage.shuffleDep != None) {
+                MapOutputTracker.registerMapOutputs(
+                  stage.shuffleDep.get.shuffleId,
+                  stage.outputLocs.map(_.first).toArray)
+              }
               updateCacheLocs()
               val newlyRunnable = new ArrayBuffer[Stage]
               for (stage <- waiting if getMissingParentStages(stage) == Nil) {

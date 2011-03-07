@@ -21,7 +21,7 @@ import mesos._
  */
 private class MesosScheduler(
   sc: SparkContext, master: String, frameworkName: String)
-extends MScheduler with spark.Scheduler with Logging
+extends MScheduler with DAGScheduler with Logging
 {
   // Environment variables to pass to our executors
   val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
@@ -52,7 +52,7 @@ extends MScheduler with spark.Scheduler with Logging
 
   // URIs of JARs to pass to executor
   var jarUris: String = ""
-
+  
   def newJobId(): Int = this.synchronized {
     val id = nextJobId
     nextJobId += 1
@@ -101,6 +101,31 @@ extends MScheduler with spark.Scheduler with Logging
     new ExecutorInfo(execScript, createExecArg(), params)
   }
 
+  
+  def submitTasks(tasks: Seq[Task[_]]) {
+    logInfo("Got a job with " + tasks.size + " tasks")
+    waitForRegister()
+    this.synchronized {
+      val jobId = newJobId()
+      val myJob = new SimpleJob(this, tasks, jobId)
+      activeJobs(jobId) = myJob
+      activeJobsQueue += myJob
+      logInfo("Adding job with ID " + jobId)
+      jobTasks(jobId) = new HashSet()
+    }
+    driver.reviveOffers();
+  }
+  
+  def jobFinished(job: Job) {
+    this.synchronized {
+      activeJobs -= job.getId
+      activeJobsQueue.dequeueAll(x => (x == job))
+      taskIdToJobId --= jobTasks(job.getId)
+      jobTasks.remove(job.getId)
+    }
+  }
+  
+  /*
   /**
    * The primary means to submit a job to the scheduler. Given a list of tasks,
    * runs them and returns an array of the results.
@@ -126,6 +151,7 @@ extends MScheduler with spark.Scheduler with Logging
       }
     }
   }
+  */
 
   override def registered(d: SchedulerDriver, frameworkId: String) {
     logInfo("Registered as framework ID " + frameworkId)
@@ -199,7 +225,8 @@ extends MScheduler with spark.Scheduler with Logging
             }
             if (isFinished(status.getState)) {
               taskIdToJobId.remove(status.getTaskId)
-              jobTasks(jobId) -= status.getTaskId
+              if (jobTasks.contains(jobId))
+                jobTasks(jobId) -= status.getTaskId
             }
           case None =>
             logInfo("TID " + status.getTaskId + " already finished")
@@ -290,10 +317,5 @@ extends MScheduler with spark.Scheduler with Logging
     props("spark.jar.uris") = jarUris
     // Serialize the map as an array of (String, String) pairs
     return Utils.serialize(props.toArray)
-  }
-
-  override def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)(implicit m: ClassManifest[U])
-      : Array[U] = {
-    new Array[U](0)
   }
 }

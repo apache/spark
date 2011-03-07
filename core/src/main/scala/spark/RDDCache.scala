@@ -82,6 +82,7 @@ private object RDDCache extends Logging {
   def registerRDD(rddId: Int, numPartitions: Int) {
     registeredRddIds.synchronized {
       if (!registeredRddIds.contains(rddId)) {
+        logInfo("Registering RDD ID " + rddId + " with cache")
         registeredRddIds += rddId
         trackerActor !? RegisterRDD(rddId, numPartitions)
       }
