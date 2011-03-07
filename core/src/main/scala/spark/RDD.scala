@@ -283,32 +283,6 @@ extends RDD[Array[T]](prev.context) {
         (k, (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]]))
     }
   }
-  
-  /*
-  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
-    if (self.partitioner != None) {
-      val part = self.partitoner.get
-      if (other.partitioner != None && other.partitioner.get == part) {
-        // Can do a partition-wise cogroup
-        return new PartitionWiseGroupedRDD(self, other)
-      }
-    }
-    
-    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
-    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
-    (vs ++ ws).groupByKey(numSplits).flatMap {
-      case (k, seq) => {
-        val vbuf = new ArrayBuffer[V]
-        val wbuf = new ArrayBuffer[W]
-        seq.foreach(_ match {
-          case Left(v) => vbuf += v
-          case Right(w) => wbuf += w
-        })
-        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
-      }
-    }
-  }
-  */
 }
 
 class MappedValuesRDD[K, V, U](
