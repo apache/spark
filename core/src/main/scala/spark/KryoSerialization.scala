@@ -117,7 +117,7 @@ class KryoSerialization extends SerializationStrategy with Logging {
     val kryo = new Kryo()
     val toRegister: Seq[AnyRef] = Seq(
       // Arrays
-      Array(1), Array(1.0), Array(1.0f), Array(1L), Array(""),
+      Array(1), Array(1.0), Array(1.0f), Array(1L), Array(""), Array(("", "")),
       // Specialized Tuple2s
       ("", ""), (1, 1), (1.0, 1.0), (1L, 1L),
       (1, 1.0), (1.0, 1), (1L, 1.0), (1.0, 1L), (1, 1L), (1L, 1),
