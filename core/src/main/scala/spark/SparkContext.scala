@@ -33,6 +33,7 @@ extends Logging {
   // Start the scheduler, the cache and the broadcast system
   scheduler.start()
   Cache.initialize()
+  Serializer.initialize()
   Broadcast.initialize(true)
 
   // Methods for creating RDDs

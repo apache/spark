@@ -24,6 +24,7 @@ class Executor extends mesos.Executor with Logging {
 
     // Initialize cache and broadcast system (uses some properties read above)
     Cache.initialize()
+    Serializer.initialize()
     Broadcast.initialize(false)
     
     // Create our ClassLoader (using spark properties) and set it on this thread
