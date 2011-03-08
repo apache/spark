@@ -130,7 +130,6 @@ class KryoSerialization extends SerializationStrategy with Logging {
       (1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1, 1)
     )
     for (obj <- toRegister) {
-      logInfo("Registering class " + obj.getClass.getName)
       kryo.register(obj.getClass)
     }
     val regCls = System.getProperty("spark.kryo.registrator")
