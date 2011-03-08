@@ -8,6 +8,7 @@ import scala.collection.immutable
 import scala.collection.mutable
 
 import com.esotericsoftware.kryo._
+import com.esotericsoftware.kryo.{Serializer => KSerializer}
 
 object ZigZag {
   def writeInt(n: Int, out: OutputStream) {
@@ -115,6 +116,8 @@ class KryoSerialization extends SerializationStrategy with Logging {
 
   def createKryo(): Kryo = {
     val kryo = new Kryo()
+
+    // Register some commonly used classes
     val toRegister: Seq[AnyRef] = Seq(
       // Arrays
       Array(1), Array(1.0), Array(1.0f), Array(1L), Array(""), Array(("", "")),
@@ -123,16 +126,29 @@ class KryoSerialization extends SerializationStrategy with Logging {
       ("", ""), (1, 1), (1.0, 1.0), (1L, 1L),
       (1, 1.0), (1.0, 1), (1L, 1.0), (1.0, 1L), (1, 1L), (1L, 1),
       // Scala collections
-      Nil, List(1), immutable.Map(1 -> 1), immutable.HashMap(1 -> 1),
+      List(1), immutable.Map(1 -> 1), immutable.HashMap(1 -> 1),
       mutable.Map(1 -> 1), mutable.HashMap(1 -> 1), mutable.ArrayBuffer(1),
       // Options and Either
-      Some(1), None, Left(1), Right(1),
+      Some(1), Left(1), Right(1),
       // Higher-dimensional tuples
       (1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1, 1)
     )
     for (obj <- toRegister) {
       kryo.register(obj.getClass)
     }
+
+    // Register some commonly used Scala singleton objects. Because these
+    // are singletons, we must return the exact same local object when we
+    // deserialize rather than returning a clone as FieldSerializer would.
+    kryo.register(None.getClass, new KSerializer {
+      override def writeObjectData(buf: ByteBuffer, obj: AnyRef) {}
+      override def readObjectData[T](buf: ByteBuffer, cls: Class[T]): T = None.asInstanceOf[T]
+    })
+    kryo.register(Nil.getClass, new KSerializer {
+      override def writeObjectData(buf: ByteBuffer, obj: AnyRef) {}
+      override def readObjectData[T](buf: ByteBuffer, cls: Class[T]): T = Nil.asInstanceOf[T]
+    })
+
     val regCls = System.getProperty("spark.kryo.registrator")
     if (regCls != null) {
       logInfo("Running user registrator: " + regCls)
