@@ -40,6 +40,7 @@ extends Logging {
   // Start the scheduler, the cache and the broadcast system
   scheduler.start()
   Cache.initialize()
+  Serializer.initialize()
   Broadcast.initialize(true)
   MapOutputTracker.initialize(true)
   RDDCache.initialize(true)
