@@ -2,7 +2,7 @@ package spark
 
 import java.io.{File, FileOutputStream}
 import java.net.{URI, URL, URLClassLoader}
-import java.util.concurrent.{Executors, ExecutorService}
+import java.util.concurrent._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -32,7 +32,7 @@ class Executor extends mesos.Executor with Logging {
     Thread.currentThread.setContextClassLoader(classLoader)
     
     // Start worker thread pool (they will inherit our context ClassLoader)
-    threadPool = Executors.newCachedThreadPool()
+    threadPool = new ThreadPoolExecutor(1, 128, 600, TimeUnit.SECONDS, new LinkedBlockingQueue[Runnable])
   }
   
   override def launchTask(d: ExecutorDriver, desc: TaskDescription) {

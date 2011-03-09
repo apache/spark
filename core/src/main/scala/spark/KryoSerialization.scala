@@ -111,11 +111,11 @@ class KryoSerialization extends SerializationStrategy with Logging {
   val kryo = createKryo()
 
   val threadBuf = new ThreadLocal[ObjectBuffer] {
-    override def initialValue = new ObjectBuffer(kryo, 128*1024*1024)
+    override def initialValue = new ObjectBuffer(kryo, 257*1024*1024)
   }
 
   val threadByteBuf = new ThreadLocal[ByteBuffer] {
-    override def initialValue = ByteBuffer.allocate(128*1024*1024)
+    override def initialValue = ByteBuffer.allocate(257*1024*1024)
   }
 
   def createKryo(): Kryo = {
