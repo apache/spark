@@ -444,7 +444,7 @@ extends Broadcast[T] with Logging {
           threadPool.getActiveCount
 
         while (hasBlocks < totalBlocks && numThreadsToCreate > 0) {
-          var peerToTalkTo = pickPeerToTalkToRarestFirst
+          var peerToTalkTo = pickPeerToTalkToRandom
 
           if (peerToTalkTo != null)
             logInfo ("Peer chosen: " + peerToTalkTo + " with " + peerToTalkTo.hasBlocksBitVector)
