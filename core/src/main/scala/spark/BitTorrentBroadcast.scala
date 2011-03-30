@@ -62,10 +62,10 @@ extends Broadcast[T] with Logging {
     logInfo("Local host address: " + hostAddress)
 
     // Store a persistent copy in HDFS
-    // TODO: Turned OFF for now
+    // TODO: Turned OFF for now. Related to persistence
     // val out = new ObjectOutputStream(BroadcastCH.openFileForWriting(uuid))
     // out.writeObject(value_)
-    // out.close
+    // out.close()
     // TODO: Fix this at some point
     hasCopyInHDFS = true
 
@@ -88,7 +88,7 @@ extends Broadcast[T] with Logging {
 
     guideMR = new GuideMultipleRequests
     guideMR.setDaemon(true)
-    guideMR.start
+    guideMR.start()
     logInfo("GuideMultipleRequests started...")
 
     // Must always come AFTER guideMR is created
@@ -100,7 +100,7 @@ extends Broadcast[T] with Logging {
 
     serveMR = new ServeMultipleRequests
     serveMR.setDaemon(true)
-    serveMR.start
+    serveMR.start()
     logInfo("ServeMultipleRequests started...")
 
     // Must always come AFTER serveMR is created
@@ -141,7 +141,7 @@ extends Broadcast[T] with Logging {
         // Start local ServeMultipleRequests thread first
         serveMR = new ServeMultipleRequests
         serveMR.setDaemon(true)
-        serveMR.start
+        serveMR.start()
         logInfo("ServeMultipleRequests started...")
 
         val start = System.nanoTime
@@ -156,7 +156,7 @@ extends Broadcast[T] with Logging {
           val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
           value_ = fileIn.readObject.asInstanceOf[T]
           BitTorrentBroadcast.values.put(uuid, value_)
-          fileIn.close
+          fileIn.close()
         }
 
         val time = (System.nanoTime - start) / 1e9
@@ -195,8 +195,8 @@ extends Broadcast[T] with Logging {
     val baos = new ByteArrayOutputStream
     val oos = new ObjectOutputStream(baos)
     oos.writeObject(obj)
-    oos.close
-    baos.close
+    oos.close()
+    baos.close()
     val byteArray = baos.toByteArray
     val bais = new ByteArrayInputStream(byteArray)
 
@@ -215,7 +215,7 @@ extends Broadcast[T] with Logging {
       retVal(blockID) = new BroadcastBlock(blockID, tempByteArray)
       blockID += 1
     }
-    bais.close
+    bais.close()
 
     var variableInfo = VariableInfo(retVal, blockNum, byteArray.length)
     variableInfo.hasBlocks = blockNum
@@ -235,7 +235,7 @@ extends Broadcast[T] with Logging {
   private def byteArrayToObject[A](bytes: Array[Byte]): A = {
     val in = new ObjectInputStream(new ByteArrayInputStream(bytes))
     val retVal = in.readObject.asInstanceOf[A]
-    in.close
+    in.close()
     return retVal
   }
 
@@ -307,12 +307,12 @@ extends Broadcast[T] with Logging {
 
       clientSocketToGuide = new Socket(gInfo.hostAddress, gInfo.listenPort)
       oosGuide = new ObjectOutputStream(clientSocketToGuide.getOutputStream)
-      oosGuide.flush
+      oosGuide.flush()
       oisGuide = new ObjectInputStream(clientSocketToGuide.getInputStream)
 
       // Send local information
       oosGuide.writeObject(getLocalSourceInfo)
-      oosGuide.flush
+      oosGuide.flush()
 
       // Receive source information from Guide
       var suitableSources =
@@ -321,9 +321,9 @@ extends Broadcast[T] with Logging {
 
       addToListOfSources(suitableSources)
 
-      oisGuide.close
-      oosGuide.close
-      clientSocketToGuide.close
+      oisGuide.close()
+      oosGuide.close()
+      clientSocketToGuide.close()
     }
   }
 
@@ -343,13 +343,13 @@ extends Broadcast[T] with Logging {
           new Socket(BitTorrentBroadcast.MasterHostAddress, BitTorrentBroadcast.MasterTrackerPort)
         oosTracker =
           new ObjectOutputStream(clientSocketToTracker.getOutputStream)
-        oosTracker.flush
+        oosTracker.flush()
         oisTracker =
           new ObjectInputStream(clientSocketToTracker.getInputStream)
 
         // Send UUID and receive GuideInfo
         oosTracker.writeObject(uuid)
-        oosTracker.flush
+        oosTracker.flush()
         gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
       } catch {
         case e: Exception => {
@@ -357,13 +357,13 @@ extends Broadcast[T] with Logging {
         }
       } finally {
         if (oisTracker != null) {
-          oisTracker.close
+          oisTracker.close()
         }
         if (oosTracker != null) {
-          oosTracker.close
+          oosTracker.close()
         }
         if (clientSocketToTracker != null) {
-          clientSocketToTracker.close
+          clientSocketToTracker.close()
         }
       }
 
@@ -409,13 +409,13 @@ extends Broadcast[T] with Logging {
     // Start ttGuide to periodically talk to the Guide
     var ttGuide = new TalkToGuide(gInfo)
     ttGuide.setDaemon(true)
-    ttGuide.start
+    ttGuide.start()
     logInfo("TalkToGuide started...")
 
     // Start pController to run TalkToPeer threads
     var pcController = new PeerChatterController
     pcController.setDaemon(true)
-    pcController.start
+    pcController.start()
     logInfo("PeerChatterController started...")
 
     // TODO: Must fix this. This might never break if broadcast fails.
@@ -468,7 +468,7 @@ extends Broadcast[T] with Logging {
         Thread.sleep(BitTorrentBroadcast.MinKnockInterval)
       }
       // Shutdown the thread pool
-      threadPool.shutdown
+      threadPool.shutdown()
     }
 
     // Right now picking the one that has the most blocks this peer wants
@@ -610,7 +610,7 @@ extends Broadcast[T] with Logging {
         // Setup the timeout mechanism
         var timeOutTask = new TimerTask {
           override def run: Unit = {
-            cleanUpConnections
+            cleanUpConnections()
           }
         }
 
@@ -625,7 +625,7 @@ extends Broadcast[T] with Logging {
             new Socket(peerToTalkTo.hostAddress, peerToTalkTo.listenPort)
           oosSource =
             new ObjectOutputStream(peerSocketToSource.getOutputStream)
-          oosSource.flush
+          oosSource.flush()
           oisSource =
             new ObjectInputStream(peerSocketToSource.getInputStream)
 
@@ -637,19 +637,9 @@ extends Broadcast[T] with Logging {
           // Turn the timer OFF, if the sender responds before timeout
           timeOutTimer.cancel
 
-//          // Receive gossiped listOfSources and add to local list
-//          var gossipedLOS = oisSource.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-//          addToListOfSources(gossipedLOS)
-
           // Send the latest SourceInfo
           oosSource.writeObject(getLocalSourceInfo)
-          oosSource.flush
-
-//          // Send gossiped listOfSources
-//          listOfSources.synchronized {
-//            oosSource.writeObject(listOfSources)
-//          }
-//          oosSource.flush
+          oosSource.flush()
 
           var keepReceiving = true
 
@@ -662,26 +652,21 @@ extends Broadcast[T] with Logging {
               // Nothing to receive from newPeerToTalkTo
               keepReceiving = false
             } else {
-              // Let other thread know that blockToAskFor is being requested
+              // Let other threads know that blockToAskFor is being requested
               blocksInRequestBitVector.synchronized {
                 blocksInRequestBitVector.set(blockToAskFor)
               }
 
               // Start with sending the blockID
               oosSource.writeObject(blockToAskFor)
-              oosSource.flush
+              oosSource.flush()
 
-              // Receive the requested block
+              // CHANGED: Master might send some other block than the one 
+              // requested to ensure fast spreading of all blocks. 
               val recvStartTime = System.currentTimeMillis
               val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
               val receptionTime = (System.currentTimeMillis - recvStartTime)
-
-              // Expecting sender to send the block that was asked for
-              // assert(bcBlock.blockID == blockToAskFor)
-              // There is an exception to the above rule now. The master might
-              // send some other block than the one requested to ensure quick
-              // spreading of at least one copy of all the blocks
-
+              
               logInfo("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
 
               if (!hasBlocksBitVector.get(bcBlock.blockID)) {
@@ -695,7 +680,7 @@ extends Broadcast[T] with Logging {
 
                 rxSpeeds.addDataPoint(peerToTalkTo, receptionTime)
 
-                // Some block(may be NOT blockToAskFor) has arrived.
+                // Some block(may NOT be blockToAskFor) has arrived.
                 // In any case, blockToAskFor is not in request any more
                 blocksInRequestBitVector.synchronized {
                   blocksInRequestBitVector.set(blockToAskFor, false)
@@ -707,7 +692,7 @@ extends Broadcast[T] with Logging {
 
               // Send the latest SourceInfo
               oosSource.writeObject(getLocalSourceInfo)
-              oosSource.flush
+              oosSource.flush()
             }
           }
         } catch {
@@ -732,7 +717,7 @@ extends Broadcast[T] with Logging {
             }
           }
 
-          cleanUpConnections
+          cleanUpConnections()
         }
       }
 
@@ -769,7 +754,7 @@ extends Broadcast[T] with Logging {
           while (i > 0) {
             pickedBlockIndex =
               needBlocksBitVector.nextSetBit(pickedBlockIndex + 1)
-            i = i - 1
+            i -= 1
           }
 
           return pickedBlockIndex
@@ -843,13 +828,13 @@ extends Broadcast[T] with Logging {
 
       private def cleanUpConnections: Unit = {
         if (oisSource != null) {
-          oisSource.close
+          oisSource.close()
         }
         if (oosSource != null) {
-          oosSource.close
+          oosSource.close()
         }
         if (peerSocketToSource != null) {
-          peerSocketToSource.close
+          peerSocketToSource.close()
         }
 
         // Delete from peersNowTalking
@@ -883,7 +868,7 @@ extends Broadcast[T] with Logging {
           var clientSocket: Socket = null
           try {
             serverSocket.setSoTimeout(BitTorrentBroadcast.ServerSocketTimeout)
-            clientSocket = serverSocket.accept
+            clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
               logInfo("GuideMultipleRequests Timeout.")
@@ -904,14 +889,14 @@ extends Broadcast[T] with Logging {
             } catch {
               // In failure, close the socket here; else, thread will close it
               case ioe: IOException => {
-                clientSocket.close
+                clientSocket.close()
               }
             }
           }
         }
 
         // Shutdown the thread pool
-        threadPool.shutdown
+        threadPool.shutdown()
 
         logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
@@ -920,7 +905,7 @@ extends Broadcast[T] with Logging {
       } finally {
         if (serverSocket != null) {
           logInfo("GuideMultipleRequests now stopping...")
-          serverSocket.close
+          serverSocket.close()
         }
       }
     }
@@ -939,7 +924,7 @@ extends Broadcast[T] with Logging {
               new Socket(sourceInfo.hostAddress, sourceInfo.listenPort)
             gosSource =
               new ObjectOutputStream(guideSocketToSource.getOutputStream)
-            gosSource.flush
+            gosSource.flush()
             gisSource =
               new ObjectInputStream(guideSocketToSource.getInputStream)
 
@@ -949,20 +934,20 @@ extends Broadcast[T] with Logging {
             // Send stopBroadcast signal. listenPort = SourceInfo.StopBroadcast
             gosSource.writeObject(SourceInfo("", SourceInfo.StopBroadcast,
                 SourceInfo.UnusedParam, SourceInfo.UnusedParam))
-            gosSource.flush
+            gosSource.flush()
           } catch {
             case e: Exception => {
               logInfo("sendStopBroadcastNotifications had a " + e)
             }
           } finally {
             if (gisSource != null) {
-              gisSource.close
+              gisSource.close()
             }
             if (gosSource != null) {
-              gosSource.close
+              gosSource.close()
             }
             if (guideSocketToSource != null) {
-              guideSocketToSource.close
+              guideSocketToSource.close()
             }
           }
         }
@@ -972,7 +957,7 @@ extends Broadcast[T] with Logging {
     class GuideSingleRequest(val clientSocket: Socket)
     extends Thread with Logging {
       private val oos = new ObjectOutputStream(clientSocket.getOutputStream)
-      oos.flush
+      oos.flush()
       private val ois = new ObjectInputStream(clientSocket.getInputStream)
 
       private var sourceInfo: SourceInfo = null
@@ -988,7 +973,7 @@ extends Broadcast[T] with Logging {
           selectedSources = selectSuitableSources(sourceInfo)
           logInfo("Sending selectedSources:" + selectedSources)
           oos.writeObject(selectedSources)
-          oos.flush
+          oos.flush()
 
           // Add this source to the listOfSources
           addToListOfSources(sourceInfo)
@@ -1002,9 +987,9 @@ extends Broadcast[T] with Logging {
             }
           }
         } finally {
-          ois.close
-          oos.close
-          clientSocket.close
+          ois.close()
+          oos.close()
+          clientSocket.close()
         }
       }
 
@@ -1082,7 +1067,7 @@ extends Broadcast[T] with Logging {
           var clientSocket: Socket = null
           try {
             serverSocket.setSoTimeout(BitTorrentBroadcast.ServerSocketTimeout)
-            clientSocket = serverSocket.accept
+            clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
               logInfo("ServeMultipleRequests Timeout.")
@@ -1095,7 +1080,7 @@ extends Broadcast[T] with Logging {
             } catch {
               // In failure, close socket here; else, the thread will close it
               case ioe: IOException => {
-                clientSocket.close
+                clientSocket.close()
               }
             }
           }
@@ -1103,17 +1088,17 @@ extends Broadcast[T] with Logging {
       } finally {
         if (serverSocket != null) {
           logInfo("ServeMultipleRequests now stopping...")
-          serverSocket.close
+          serverSocket.close()
         }
       }
       // Shutdown the thread pool
-      threadPool.shutdown
+      threadPool.shutdown()
     }
 
     class ServeSingleRequest(val clientSocket: Socket)
     extends Thread with Logging {
       private val oos = new ObjectOutputStream(clientSocket.getOutputStream)
-      oos.flush
+      oos.flush()
       private val ois = new ObjectInputStream(clientSocket.getInputStream)
 
       logInfo("new ServeSingleRequest is running")
@@ -1124,13 +1109,7 @@ extends Broadcast[T] with Logging {
           // In the case of receiver timeout and connection close, this will
           // throw a java.net.SocketException: Broken pipe
           oos.writeObject(getLocalSourceInfo)
-          oos.flush
-
-//          // Gossip local listOfSources
-//          listOfSources.synchronized {
-//            oos.writeObject(listOfSources)
-//          }
-//          oos.flush
+          oos.flush()
 
           // Receive latest SourceInfo from the receiver
           var rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
@@ -1140,10 +1119,6 @@ extends Broadcast[T] with Logging {
           } else {
             // Carry on
             addToListOfSources(rxSourceInfo)
-
-//            // Received gossiped listOfSources
-//            var gossipedLOS = ois.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-//            addToListOfSources(gossipedLOS)
           }
 
           val startTime = System.currentTimeMillis
@@ -1165,7 +1140,7 @@ extends Broadcast[T] with Logging {
             sendBlock(blockToSend)
             rxSourceInfo.hasBlocksBitVector.set(blockToSend)
 
-            numBlocksToSend = numBlocksToSend - 1
+            numBlocksToSend -= 1
 
             // Receive latest SourceInfo from the receiver
             rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
@@ -1188,17 +1163,17 @@ extends Broadcast[T] with Logging {
           }
         } finally {
           logInfo("ServeSingleRequest is closing streams and sockets")
-          ois.close
+          ois.close()
           // TODO: The following line causes a "java.net.SocketException: Socket closed"
-          oos.close
-          clientSocket.close
+          oos.close()
+          clientSocket.close()
         }
       }
 
       private def sendBlock(blockToSend: Int): Unit = {
         try {
           oos.writeObject(arrayOfBlocks(blockToSend))
-          oos.flush
+          oos.flush()
         } catch {
           case e: Exception => {
             logInfo("sendBlock had a " + e)
@@ -1260,7 +1235,6 @@ extends Logging {
   // Fraction of blocks to receive before entering the end game
   private var EndGameFraction_ = 0.95
 
-
   def initialize(isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
@@ -1273,18 +1247,18 @@ extends Logging {
         MaxRetryCount_ =
           System.getProperty("spark.broadcast.maxRetryCount", "2").toInt
 
-        TrackerSocketTimeout_ =
-          System.getProperty("spark.broadcast.trackerSocketTimeout", "50000").toInt
-        ServerSocketTimeout_ =
-          System.getProperty("spark.broadcast.serverSocketTimeout", "10000").toInt
+        TrackerSocketTimeout_ = System.getProperty(
+          "spark.broadcast.trackerSocketTimeout", "50000").toInt
+        ServerSocketTimeout_ = System.getProperty(
+          "spark.broadcast.serverSocketTimeout", "10000").toInt
 
         MinKnockInterval_ =
           System.getProperty("spark.broadcast.minKnockInterval", "500").toInt
         MaxKnockInterval_ =
           System.getProperty("spark.broadcast.maxKnockInterval", "999").toInt
 
-        MaxPeersInGuideResponse_ =
-          System.getProperty("spark.broadcast.maxPeersInGuideResponse", "4").toInt
+        MaxPeersInGuideResponse_ = System.getProperty(
+          "spark.broadcast.maxPeersInGuideResponse", "4").toInt
 
         MaxRxPeers_ =
           System.getProperty("spark.broadcast.maxRxPeers", "4").toInt
@@ -1304,13 +1278,14 @@ extends Logging {
         if (isMaster) {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon(true)
-          trackMV.start
+          trackMV.start()
           // TODO: Logging the following line makes the Spark framework ID not
           // getting logged, cause it calls logInfo before log4j is initialized
           // logInfo("TrackMultipleValues started...")
         }
 
         // Initialize DfsBroadcast to be used for broadcast variable persistence
+        // TODO: Think about persistence
         DfsBroadcast.initialize
 
         initialized = true
@@ -1370,7 +1345,7 @@ extends Logging {
           var clientSocket: Socket = null
           try {
             serverSocket.setSoTimeout(TrackerSocketTimeout)
-            clientSocket = serverSocket.accept
+            clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
               logInfo("TrackMultipleValues Timeout. Stopping listening...")
@@ -1382,7 +1357,7 @@ extends Logging {
               threadPool.execute(new Thread {
                 override def run: Unit = {
                   val oos = new ObjectOutputStream(clientSocket.getOutputStream)
-                  oos.flush
+                  oos.flush()
                   val ois = new ObjectInputStream(clientSocket.getInputStream)
                   try {
                     val uuid = ois.readObject.asInstanceOf[UUID]
@@ -1398,25 +1373,25 @@ extends Logging {
                       logInfo("TrackMultipleValues had a " + e)
                     }
                   } finally {
-                    ois.close
-                    oos.close
-                    clientSocket.close
+                    ois.close()
+                    oos.close()
+                    clientSocket.close()
                   }
                 }
               })
             } catch {
               // In failure, close socket here; else, client thread will close
               case ioe: IOException => {
-                clientSocket.close
+                clientSocket.close()
               }
             }
           }
         }
       } finally {
-        serverSocket.close
+        serverSocket.close()
       }
       // Shutdown the thread pool
-      threadPool.shutdown
+      threadPool.shutdown()
     }
   }
 }
