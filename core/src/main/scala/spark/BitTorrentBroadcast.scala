@@ -10,36 +10,36 @@ import scala.collection.mutable.{ListBuffer, Map, Set}
 import scala.math
 
 @serializable
-class BitTorrentBroadcast[T] (@transient var value_ : T, isLocal: Boolean) 
+class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean)
 extends Broadcast[T] with Logging {
-  
+
   def value = value_
 
-  BitTorrentBroadcast.synchronized { 
-    BitTorrentBroadcast.values.put (uuid, value_) 
+  BitTorrentBroadcast.synchronized {
+    BitTorrentBroadcast.values.put(uuid, value_)
   }
-   
+
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
   @transient var hasBlocksBitVector: BitSet = null
   @transient var numCopiesSent: Array[Int] = null
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
   @transient var hasBlocks = 0
-  
+
   // Used ONLY by Master to track how many unique blocks have been sent out
   @transient var sentBlocks = new AtomicInteger(0)
 
   @transient var listenPortLock = new Object
   @transient var guidePortLock = new Object
   @transient var totalBlocksLock = new Object
-  
-  @transient var listOfSources = ListBuffer[SourceInfo] ()  
+
+  @transient var listOfSources = ListBuffer[SourceInfo]()
 
   @transient var serveMR: ServeMultipleRequests = null
-  
+
   // Used only in Master
   @transient var guideMR: GuideMultipleRequests = null
-  
+
   // Used only in Workers
   @transient var ttGuide: TalkToGuide = null
 
@@ -47,110 +47,110 @@ extends Broadcast[T] with Logging {
   @transient var txSpeeds = new SpeedTracker
 
   @transient var hostAddress = InetAddress.getLocalHost.getHostAddress
-  @transient var listenPort = -1    
+  @transient var listenPort = -1
   @transient var guidePort = -1
-  
+
   @transient var hasCopyInHDFS = false
   @transient var stopBroadcast = false
-  
+
   // Must call this after all the variables have been created/initialized
-  if (!isLocal) { 
-    sendBroadcast 
+  if (!isLocal) {
+    sendBroadcast
   }
 
-  def sendBroadcast (): Unit = {
-    logInfo ("Local host address: " + hostAddress)
-    
-    // Store a persistent copy in HDFS    
+  def sendBroadcast(): Unit = {
+    logInfo("Local host address: " + hostAddress)
+
+    // Store a persistent copy in HDFS
     // TODO: Turned OFF for now
-    // val out = new ObjectOutputStream (BroadcastCH.openFileForWriting(uuid))
-    // out.writeObject (value_)
+    // val out = new ObjectOutputStream(BroadcastCH.openFileForWriting(uuid))
+    // out.writeObject(value_)
     // out.close
-    // TODO: Fix this at some point  
+    // TODO: Fix this at some point
     hasCopyInHDFS = true
 
     // Create a variableInfo object and store it in valueInfos
-    var variableInfo = blockifyObject (value_, BitTorrentBroadcast.BlockSize)   
-    
+    var variableInfo = blockifyObject(value_, BitTorrentBroadcast.BlockSize)
+
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
     arrayOfBlocks = variableInfo.arrayOfBlocks
     totalBytes = variableInfo.totalBytes
     totalBlocks = variableInfo.totalBlocks
     hasBlocks = variableInfo.totalBlocks
-    
+
     // Guide has all the blocks
-    hasBlocksBitVector = new BitSet (totalBlocks)
-    hasBlocksBitVector.set (0, totalBlocks)
-    
+    hasBlocksBitVector = new BitSet(totalBlocks)
+    hasBlocksBitVector.set(0, totalBlocks)
+
     // Guide still hasn't sent any block
-    numCopiesSent = new Array[Int] (totalBlocks)
-    
+    numCopiesSent = new Array[Int](totalBlocks)
+
     guideMR = new GuideMultipleRequests
-    guideMR.setDaemon (true)
+    guideMR.setDaemon(true)
     guideMR.start
-    logInfo ("GuideMultipleRequests started...")
-    
+    logInfo("GuideMultipleRequests started...")
+
     // Must always come AFTER guideMR is created
-    while (guidePort == -1) { 
+    while (guidePort == -1) {
       guidePortLock.synchronized {
-        guidePortLock.wait 
+        guidePortLock.wait
       }
     }
 
     serveMR = new ServeMultipleRequests
-    serveMR.setDaemon (true)
+    serveMR.setDaemon(true)
     serveMR.start
-    logInfo ("ServeMultipleRequests started...")
+    logInfo("ServeMultipleRequests started...")
 
     // Must always come AFTER serveMR is created
-    while (listenPort == -1) { 
+    while (listenPort == -1) {
       listenPortLock.synchronized {
-        listenPortLock.wait 
+        listenPortLock.wait
       }
-    } 
+    }
 
     // Must always come AFTER listenPort is created
-    val masterSource = 
-      SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes)
+    val masterSource =
+      SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes)
     hasBlocksBitVector.synchronized {
       masterSource.hasBlocksBitVector = hasBlocksBitVector
     }
-    
+
     // In the beginning, this is the only known source to Guide
     listOfSources += masterSource
 
     // Register with the Tracker
-    BitTorrentBroadcast.registerValue (uuid, 
-      SourceInfo (hostAddress, guidePort, totalBlocks, totalBytes))
+    BitTorrentBroadcast.registerValue(uuid,
+      SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes))
   }
-  
-  private def readObject (in: ObjectInputStream): Unit = {
+
+  private def readObject(in: ObjectInputStream): Unit = {
     in.defaultReadObject
     BitTorrentBroadcast.synchronized {
-      val cachedVal = BitTorrentBroadcast.values.get (uuid)
-      
+      val cachedVal = BitTorrentBroadcast.values.get(uuid)
+
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
         // Only the first worker in a node can ever be inside this 'else'
         initializeWorkerVariables
-        
-        logInfo ("Local host address: " + hostAddress)
+
+        logInfo("Local host address: " + hostAddress)
 
         // Start local ServeMultipleRequests thread first
         serveMR = new ServeMultipleRequests
-        serveMR.setDaemon (true)
+        serveMR.setDaemon(true)
         serveMR.start
-        logInfo ("ServeMultipleRequests started...")
-        
+        logInfo("ServeMultipleRequests started...")
+
         val start = System.nanoTime
 
-        val receptionSucceeded = receiveBroadcast (uuid)
+        val receptionSucceeded = receiveBroadcast(uuid)
         // If does not succeed, then get from HDFS copy
         if (receptionSucceeded) {
           value_ = unBlockifyObject[T]
-          BitTorrentBroadcast.values.put (uuid, value_)
+          BitTorrentBroadcast.values.put(uuid, value_)
         }  else {
           // TODO: This part won't work, cause HDFS writing is turned OFF
           val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
@@ -158,14 +158,14 @@ extends Broadcast[T] with Logging {
           BitTorrentBroadcast.values.put(uuid, value_)
           fileIn.close
         }
-        
+
         val time = (System.nanoTime - start) / 1e9
         logInfo("Reading Broadcasted variable " + uuid + " took " + time + " s")
       }
     }
   }
-  
-  // Initialize variables in the worker node. Master sends everything as 0/null 
+
+  // Initialize variables in the worker node. Master sends everything as 0/null
   private def initializeWorkerVariables: Unit = {
     arrayOfBlocks = null
     hasBlocksBitVector = null
@@ -173,7 +173,7 @@ extends Broadcast[T] with Logging {
     totalBytes = -1
     totalBlocks = -1
     hasBlocks = 0
-    
+
     listenPortLock = new Object
     totalBlocksLock = new Object
 
@@ -185,55 +185,55 @@ extends Broadcast[T] with Logging {
 
     hostAddress = InetAddress.getLocalHost.getHostAddress
     listenPort = -1
-    
-    listOfSources = ListBuffer[SourceInfo] ()
-    
+
+    listOfSources = ListBuffer[SourceInfo]()
+
     stopBroadcast = false
   }
-  
-  private def blockifyObject (obj: T, blockSize: Int): VariableInfo = {
+
+  private def blockifyObject(obj: T, blockSize: Int): VariableInfo = {
     val baos = new ByteArrayOutputStream
-    val oos = new ObjectOutputStream (baos)
-    oos.writeObject (obj)
+    val oos = new ObjectOutputStream(baos)
+    oos.writeObject(obj)
     oos.close
     baos.close
     val byteArray = baos.toByteArray
-    val bais = new ByteArrayInputStream (byteArray)
-    
-    var blockNum = (byteArray.length / blockSize) 
-    if (byteArray.length % blockSize != 0) 
-      blockNum += 1      
-      
-    var retVal = new Array[BroadcastBlock] (blockNum)
+    val bais = new ByteArrayInputStream(byteArray)
+
+    var blockNum = (byteArray.length / blockSize)
+    if (byteArray.length % blockSize != 0)
+      blockNum += 1
+
+    var retVal = new Array[BroadcastBlock](blockNum)
     var blockID = 0
 
     for (i <- 0 until (byteArray.length, blockSize)) {
-      val thisBlockSize = math.min (blockSize, byteArray.length - i)
-      var tempByteArray = new Array[Byte] (thisBlockSize)
-      val hasRead = bais.read (tempByteArray, 0, thisBlockSize)
-      
-      retVal (blockID) = new BroadcastBlock (blockID, tempByteArray)
+      val thisBlockSize = math.min(blockSize, byteArray.length - i)
+      var tempByteArray = new Array[Byte](thisBlockSize)
+      val hasRead = bais.read(tempByteArray, 0, thisBlockSize)
+
+      retVal(blockID) = new BroadcastBlock(blockID, tempByteArray)
       blockID += 1
-    } 
+    }
     bais.close
 
-    var variableInfo = VariableInfo (retVal, blockNum, byteArray.length)
+    var variableInfo = VariableInfo(retVal, blockNum, byteArray.length)
     variableInfo.hasBlocks = blockNum
-    
+
     return variableInfo
-  }  
-  
-  private def unBlockifyObject[A]: A = {
-    var retByteArray = new Array[Byte] (totalBytes)
-    for (i <- 0 until totalBlocks) {
-      System.arraycopy (arrayOfBlocks(i).byteArray, 0, retByteArray, 
-        i * BitTorrentBroadcast.BlockSize, arrayOfBlocks(i).byteArray.length)
-    }    
-    byteArrayToObject (retByteArray)
   }
-  
-  private def byteArrayToObject[A] (bytes: Array[Byte]): A = {
-    val in = new ObjectInputStream (new ByteArrayInputStream (bytes))
+
+  private def unBlockifyObject[A]: A = {
+    var retByteArray = new Array[Byte](totalBytes)
+    for (i <- 0 until totalBlocks) {
+      System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
+        i * BitTorrentBroadcast.BlockSize, arrayOfBlocks(i).byteArray.length)
+    }
+    byteArrayToObject(retByteArray)
+  }
+
+  private def byteArrayToObject[A](bytes: Array[Byte]): A = {
+    val in = new ObjectInputStream(new ByteArrayInputStream(bytes))
     val retVal = in.readObject.asInstanceOf[A]
     in.close
     return retVal
@@ -241,310 +241,310 @@ extends Broadcast[T] with Logging {
 
   private def getLocalSourceInfo: SourceInfo = {
     // Wait till hostName and listenPort are OK
-    while (listenPort == -1) { 
+    while (listenPort == -1) {
       listenPortLock.synchronized {
-        listenPortLock.wait 
+        listenPortLock.wait
       }
-    } 
-    
-    // Wait till totalBlocks and totalBytes are OK
-    while (totalBlocks == -1) { 
-      totalBlocksLock.synchronized {
-        totalBlocksLock.wait 
-      }
-    } 
+    }
 
-    var localSourceInfo = SourceInfo (hostAddress, listenPort, totalBlocks, 
+    // Wait till totalBlocks and totalBytes are OK
+    while (totalBlocks == -1) {
+      totalBlocksLock.synchronized {
+        totalBlocksLock.wait
+      }
+    }
+
+    var localSourceInfo = SourceInfo(hostAddress, listenPort, totalBlocks,
       totalBytes)
-      
+
     localSourceInfo.hasBlocks = hasBlocks
-    
+
     hasBlocksBitVector.synchronized {
       localSourceInfo.hasBlocksBitVector = hasBlocksBitVector
     }
-    
+
     return localSourceInfo
   }
 
   // Add new SourceInfo to the listOfSources. Update if it exists already.
   // TODO: Optimizing just by OR-ing the BitVectors was BAD for performance
-  private def addToListOfSources (newSourceInfo: SourceInfo): Unit = {
+  private def addToListOfSources(newSourceInfo: SourceInfo): Unit = {
     listOfSources.synchronized {
-      if (listOfSources.contains(newSourceInfo)) { 
-        listOfSources = listOfSources - newSourceInfo 
+      if (listOfSources.contains(newSourceInfo)) {
+        listOfSources = listOfSources - newSourceInfo
       }
       listOfSources += newSourceInfo
-    }         
-  }  
-  
-  private def addToListOfSources (newSourceInfos: ListBuffer[SourceInfo]): Unit = {
-    newSourceInfos.foreach { newSourceInfo =>
-      addToListOfSources (newSourceInfo)
     }
-  }  
+  }
 
-  class TalkToGuide (gInfo: SourceInfo)
+  private def addToListOfSources(newSourceInfos: ListBuffer[SourceInfo]): Unit = {
+    newSourceInfos.foreach { newSourceInfo =>
+      addToListOfSources(newSourceInfo)
+    }
+  }
+
+  class TalkToGuide(gInfo: SourceInfo)
   extends Thread with Logging {
     override def run: Unit = {
 
       // Keep exchaning information until all blocks have been received
       while (hasBlocks < totalBlocks) {
         talkOnce
-        Thread.sleep (BitTorrentBroadcast.ranGen.nextInt (
-          BitTorrentBroadcast.MaxKnockInterval - BitTorrentBroadcast.MinKnockInterval) + 
+        Thread.sleep(BitTorrentBroadcast.ranGen.nextInt(
+          BitTorrentBroadcast.MaxKnockInterval - BitTorrentBroadcast.MinKnockInterval) +
           BitTorrentBroadcast.MinKnockInterval)
       }
 
       // Talk one more time to let the Guide know of reception completion
       talkOnce
     }
-    
+
     // Connect to Guide and send this worker's information
     private def talkOnce: Unit = {
-      var clientSocketToGuide: Socket = null        
+      var clientSocketToGuide: Socket = null
       var oosGuide: ObjectOutputStream = null
       var oisGuide: ObjectInputStream = null
 
       clientSocketToGuide = new Socket(gInfo.hostAddress, gInfo.listenPort)
-      oosGuide = new ObjectOutputStream (clientSocketToGuide.getOutputStream)      
+      oosGuide = new ObjectOutputStream(clientSocketToGuide.getOutputStream)
       oosGuide.flush
-      oisGuide = new ObjectInputStream (clientSocketToGuide.getInputStream)
+      oisGuide = new ObjectInputStream(clientSocketToGuide.getInputStream)
 
       // Send local information
       oosGuide.writeObject(getLocalSourceInfo)
       oosGuide.flush
 
       // Receive source information from Guide
-      var suitableSources = 
-        oisGuide.readObject.asInstanceOf[ListBuffer[SourceInfo]]        
+      var suitableSources =
+        oisGuide.readObject.asInstanceOf[ListBuffer[SourceInfo]]
       logInfo("Received suitableSources from Master " + suitableSources)
-      
-      addToListOfSources (suitableSources)
-      
+
+      addToListOfSources(suitableSources)
+
       oisGuide.close
       oosGuide.close
       clientSocketToGuide.close
     }
   }
-    
-  def getGuideInfo (variableUUID: UUID): SourceInfo = {
+
+  def getGuideInfo(variableUUID: UUID): SourceInfo = {
     var clientSocketToTracker: Socket = null
     var oosTracker: ObjectOutputStream = null
     var oisTracker: ObjectInputStream = null
-    
-    var gInfo: SourceInfo = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
+
+    var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxOverGoToHDFS,
       SourceInfo.UnusedParam, SourceInfo.UnusedParam)
-    
+
     var retriesLeft = BitTorrentBroadcast.MaxRetryCount
     do {
-      try {  
+      try {
         // Connect to the tracker to find out GuideInfo
-        clientSocketToTracker = 
-          new Socket(BitTorrentBroadcast.MasterHostAddress, BitTorrentBroadcast.MasterTrackerPort)  
-        oosTracker = 
-          new ObjectOutputStream (clientSocketToTracker.getOutputStream)
+        clientSocketToTracker =
+          new Socket(BitTorrentBroadcast.MasterHostAddress, BitTorrentBroadcast.MasterTrackerPort)
+        oosTracker =
+          new ObjectOutputStream(clientSocketToTracker.getOutputStream)
         oosTracker.flush
-        oisTracker = 
-          new ObjectInputStream (clientSocketToTracker.getInputStream)
-      
+        oisTracker =
+          new ObjectInputStream(clientSocketToTracker.getInputStream)
+
         // Send UUID and receive GuideInfo
-        oosTracker.writeObject (uuid)
+        oosTracker.writeObject(uuid)
         oosTracker.flush
         gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
       } catch {
-        case e: Exception => { 
-          logInfo ("getGuideInfo had a " + e)
+        case e: Exception => {
+          logInfo("getGuideInfo had a " + e)
         }
-      } finally {   
-        if (oisTracker != null) { 
-          oisTracker.close 
+      } finally {
+        if (oisTracker != null) {
+          oisTracker.close
         }
         if (oosTracker != null) {
-          oosTracker.close 
+          oosTracker.close
         }
-        if (clientSocketToTracker != null) { 
-          clientSocketToTracker.close 
+        if (clientSocketToTracker != null) {
+          clientSocketToTracker.close
         }
       }
 
-      Thread.sleep (BitTorrentBroadcast.ranGen.nextInt (
-        BitTorrentBroadcast.MaxKnockInterval - BitTorrentBroadcast.MinKnockInterval) + 
+      Thread.sleep(BitTorrentBroadcast.ranGen.nextInt(
+        BitTorrentBroadcast.MaxKnockInterval - BitTorrentBroadcast.MinKnockInterval) +
         BitTorrentBroadcast.MinKnockInterval)
 
       retriesLeft -= 1
     } while (retriesLeft > 0 && gInfo.listenPort == SourceInfo.TxNotStartedRetry)
 
-    logInfo ("Got this guidePort from Tracker: " + gInfo.listenPort)
+    logInfo("Got this guidePort from Tracker: " + gInfo.listenPort)
     return gInfo
   }
-  
-  def receiveBroadcast (variableUUID: UUID): Boolean = {
-    val gInfo = getGuideInfo (variableUUID)    
-        
-    if (gInfo.listenPort == SourceInfo.TxOverGoToHDFS || 
-        gInfo.listenPort == SourceInfo.TxNotStartedRetry) { 
+
+  def receiveBroadcast(variableUUID: UUID): Boolean = {
+    val gInfo = getGuideInfo(variableUUID)
+
+    if (gInfo.listenPort == SourceInfo.TxOverGoToHDFS ||
+        gInfo.listenPort == SourceInfo.TxNotStartedRetry) {
       // TODO: SourceInfo.TxNotStartedRetry is not really in use because we go
       // to HDFS anyway when receiveBroadcast returns false
-      return false 
+      return false
     }
 
-    // Wait until hostAddress and listenPort are created by the 
+    // Wait until hostAddress and listenPort are created by the
     // ServeMultipleRequests thread
-    while (listenPort == -1) { 
+    while (listenPort == -1) {
       listenPortLock.synchronized {
-        listenPortLock.wait 
+        listenPortLock.wait
       }
     }
 
     // Setup initial states of variables
     totalBlocks = gInfo.totalBlocks
-    arrayOfBlocks = new Array[BroadcastBlock] (totalBlocks)
-    hasBlocksBitVector = new BitSet (totalBlocks)
-    numCopiesSent = new Array[Int] (totalBlocks)
+    arrayOfBlocks = new Array[BroadcastBlock](totalBlocks)
+    hasBlocksBitVector = new BitSet(totalBlocks)
+    numCopiesSent = new Array[Int](totalBlocks)
     totalBlocksLock.synchronized {
       totalBlocksLock.notifyAll
     }
     totalBytes = gInfo.totalBytes
-      
-    // Start ttGuide to periodically talk to the Guide 
-    var ttGuide = new TalkToGuide (gInfo)
-    ttGuide.setDaemon (true)
+
+    // Start ttGuide to periodically talk to the Guide
+    var ttGuide = new TalkToGuide(gInfo)
+    ttGuide.setDaemon(true)
     ttGuide.start
-    logInfo ("TalkToGuide started...")
-    
+    logInfo("TalkToGuide started...")
+
     // Start pController to run TalkToPeer threads
     var pcController = new PeerChatterController
-    pcController.setDaemon (true)
+    pcController.setDaemon(true)
     pcController.start
-    logInfo ("PeerChatterController started...")
-    
-    // TODO: Must fix this. This might never break if broadcast fails. 
+    logInfo("PeerChatterController started...")
+
+    // TODO: Must fix this. This might never break if broadcast fails.
     // We should be able to break and send false. Also need to kill threads
-    while (hasBlocks < totalBlocks) { 
-      Thread.sleep(BitTorrentBroadcast.MaxKnockInterval) 
+    while (hasBlocks < totalBlocks) {
+      Thread.sleep(BitTorrentBroadcast.MaxKnockInterval)
     }
-   
+
     return true
   }
 
   class PeerChatterController
   extends Thread with Logging {
-    private var peersNowTalking = ListBuffer[SourceInfo] ()
-    // TODO: There is a possible bug with blocksInRequestBitVector when a 
+    private var peersNowTalking = ListBuffer[SourceInfo]()
+    // TODO: There is a possible bug with blocksInRequestBitVector when a
     // certain bit is NOT unset upon failure resulting in an infinite loop.
-    private var blocksInRequestBitVector = new BitSet (totalBlocks)
+    private var blocksInRequestBitVector = new BitSet(totalBlocks)
 
     override def run: Unit = {
-      var threadPool = 
-        Broadcast.newDaemonFixedThreadPool (BitTorrentBroadcast.MaxTxPeers)
-      
+      var threadPool =
+        Broadcast.newDaemonFixedThreadPool(BitTorrentBroadcast.MaxTxPeers)
+
       while (hasBlocks < totalBlocks) {
-        var numThreadsToCreate = 
-          math.min (listOfSources.size, BitTorrentBroadcast.MaxTxPeers) - 
+        var numThreadsToCreate =
+          math.min(listOfSources.size, BitTorrentBroadcast.MaxTxPeers) -
           threadPool.getActiveCount
 
         while (hasBlocks < totalBlocks && numThreadsToCreate > 0) {
           var peerToTalkTo = pickPeerToTalkToRandom
 
           if (peerToTalkTo != null)
-            logInfo ("Peer chosen: " + peerToTalkTo + " with " + peerToTalkTo.hasBlocksBitVector)
+            logInfo("Peer chosen: " + peerToTalkTo + " with " + peerToTalkTo.hasBlocksBitVector)
           else
-            logInfo ("No peer chosen...")
+            logInfo("No peer chosen...")
 
           if (peerToTalkTo != null) {
-            threadPool.execute (new TalkToPeer (peerToTalkTo))
+            threadPool.execute(new TalkToPeer(peerToTalkTo))
 
-            // Add to peersNowTalking. Remove in the thread. We have to do this 
+            // Add to peersNowTalking. Remove in the thread. We have to do this
             // ASAP, otherwise pickPeerToTalkTo picks the same peer more than once
-            peersNowTalking.synchronized { 
+            peersNowTalking.synchronized {
               peersNowTalking += peerToTalkTo
             }
           }
-          
+
           numThreadsToCreate = numThreadsToCreate - 1
         }
-        
+
         // Sleep for a while before starting some more threads
-        Thread.sleep (BitTorrentBroadcast.MinKnockInterval)
+        Thread.sleep(BitTorrentBroadcast.MinKnockInterval)
       }
-      // Shutdown the thread pool      
+      // Shutdown the thread pool
       threadPool.shutdown
     }
-    
+
     // Right now picking the one that has the most blocks this peer wants
     // Also picking peer randomly if no one has anything interesting
     private def pickPeerToTalkToRandom: SourceInfo = {
       var curPeer: SourceInfo = null
       var curMax = 0
-      
-      logInfo ("Picking peers to talk to...")
-      
+
+      logInfo("Picking peers to talk to...")
+
       // Find peers that are not connected right now
-      var peersNotInUse = ListBuffer[SourceInfo] ()
+      var peersNotInUse = ListBuffer[SourceInfo]()
       listOfSources.synchronized {
         peersNowTalking.synchronized {
           peersNotInUse = listOfSources -- peersNowTalking
         }
       }
-      
+
       // Select the peer that has the most blocks that this receiver does not
       peersNotInUse.foreach { eachSource =>
         var tempHasBlocksBitVector: BitSet = null
         hasBlocksBitVector.synchronized {
           tempHasBlocksBitVector = hasBlocksBitVector.clone.asInstanceOf[BitSet]
         }
-        tempHasBlocksBitVector.flip (0, tempHasBlocksBitVector.size)
-        tempHasBlocksBitVector.and (eachSource.hasBlocksBitVector)
-        
+        tempHasBlocksBitVector.flip(0, tempHasBlocksBitVector.size)
+        tempHasBlocksBitVector.and(eachSource.hasBlocksBitVector)
+
         if (tempHasBlocksBitVector.cardinality > curMax) {
           curPeer = eachSource
           curMax = tempHasBlocksBitVector.cardinality
         }
       }
-      
+
       // TODO: Always pick randomly or randomly pick randomly?
       // Now always picking randomly
       if (curPeer == null && peersNotInUse.size > 0) {
         // Pick uniformly the i'th required peer
-        var i = BitTorrentBroadcast.ranGen.nextInt (peersNotInUse.size)
+        var i = BitTorrentBroadcast.ranGen.nextInt(peersNotInUse.size)
 
-        var peerIter = peersNotInUse.iterator        
+        var peerIter = peersNotInUse.iterator
         curPeer = peerIter.next
-        
+
         while (i > 0) {
           curPeer = peerIter.next
           i = i - 1
         }
       }
-      
+
       return curPeer
     }
-    
-    // Picking peer with the weight of rare blocks it has    
+
+    // Picking peer with the weight of rare blocks it has
     private def pickPeerToTalkToRarestFirst: SourceInfo = {
       // Find peers that are not connected right now
-      var peersNotInUse = ListBuffer[SourceInfo] ()
+      var peersNotInUse = ListBuffer[SourceInfo]()
       listOfSources.synchronized {
         peersNowTalking.synchronized {
           peersNotInUse = listOfSources -- peersNowTalking
         }
       }
-      
+
       // Count the number of copies of each block in the neighborhood
-      var numCopiesPerBlock = Array.tabulate [Int] (totalBlocks) (_ => 0)
+      var numCopiesPerBlock = Array.tabulate [Int](totalBlocks)(_ => 0)
 
       listOfSources.synchronized {
-        listOfSources.foreach { eachSource => 
+        listOfSources.foreach { eachSource =>
           for (i <- 0 until totalBlocks) {
-            numCopiesPerBlock(i) += 
-              ( if (eachSource.hasBlocksBitVector.get (i)) 1 else 0 )
+            numCopiesPerBlock(i) +=
+              ( if (eachSource.hasBlocksBitVector.get(i)) 1 else 0 )
           }
         }
       }
-      
+
       // TODO: A block is rare if there are at most 2 copies of that block
       // TODO: This CONSTANT could be a function of the neighborhood size
-      var rareBlocksIndices = ListBuffer[Int] ()
+      var rareBlocksIndices = ListBuffer[Int]()
       for (i <- 0 until totalBlocks) {
         if (numCopiesPerBlock(i) > 0 && numCopiesPerBlock(i) <= 2) {
           rareBlocksIndices += i
@@ -552,31 +552,31 @@ extends Broadcast[T] with Logging {
       }
 
       // Find peers with rare blocks
-      var peersWithRareBlocks = ListBuffer[(SourceInfo, Int)] ()
+      var peersWithRareBlocks = ListBuffer[(SourceInfo, Int)]()
       var totalRareBlocks = 0
-      
+
       peersNotInUse.foreach { eachPeer =>
         var hasRareBlocks = 0
         rareBlocksIndices.foreach { rareBlock =>
-          if (eachPeer.hasBlocksBitVector.get (rareBlock)) {
+          if (eachPeer.hasBlocksBitVector.get(rareBlock)) {
             hasRareBlocks += 1
-          }          
+          }
         }
-        
+
         if (hasRareBlocks > 0) {
           peersWithRareBlocks += ((eachPeer, hasRareBlocks))
         }
         totalRareBlocks += hasRareBlocks
       }
-      
-      // Select a peer from peersWithRareBlocks based on weight calculated from 
+
+      // Select a peer from peersWithRareBlocks based on weight calculated from
       // unique rare blocks
       var selectedPeerToTalkTo: SourceInfo = null
 
       if (peersWithRareBlocks.size > 0) {
         // Sort the peers based on how many rare blocks they have
         peersWithRareBlocks.sortBy(_._2)
-        
+
         var randomNumber = BitTorrentBroadcast.ranGen.nextDouble
         var tempSum = 0.0
 
@@ -589,15 +589,15 @@ extends Broadcast[T] with Logging {
           i += 1
         } while (i < peersWithRareBlocks.size && selectedPeerToTalkTo == null)
       }
-      
+
       if (selectedPeerToTalkTo == null) {
         selectedPeerToTalkTo = pickPeerToTalkToRandom
       }
-      
+
       return selectedPeerToTalkTo
     }
-    
-    class TalkToPeer (peerToTalkTo: SourceInfo)
+
+    class TalkToPeer(peerToTalkTo: SourceInfo)
     extends Thread with Logging {
       private var peerSocketToSource: Socket = null
       private var oosSource: ObjectOutputStream = null
@@ -606,57 +606,57 @@ extends Broadcast[T] with Logging {
       override def run: Unit = {
         // TODO: There is a possible bug here regarding blocksInRequestBitVector
         var blockToAskFor = -1
-      
+
         // Setup the timeout mechanism
         var timeOutTask = new TimerTask {
           override def run: Unit = {
             cleanUpConnections
           }
         }
-        
+
         var timeOutTimer = new Timer
-        timeOutTimer.schedule (timeOutTask, BitTorrentBroadcast.MaxKnockInterval)
-        
-        logInfo ("TalkToPeer started... => " + peerToTalkTo)
-        
+        timeOutTimer.schedule(timeOutTask, BitTorrentBroadcast.MaxKnockInterval)
+
+        logInfo("TalkToPeer started... => " + peerToTalkTo)
+
         try {
           // Connect to the source
-          peerSocketToSource = 
-            new Socket (peerToTalkTo.hostAddress, peerToTalkTo.listenPort)        
-          oosSource = 
-            new ObjectOutputStream (peerSocketToSource.getOutputStream)
+          peerSocketToSource =
+            new Socket(peerToTalkTo.hostAddress, peerToTalkTo.listenPort)
+          oosSource =
+            new ObjectOutputStream(peerSocketToSource.getOutputStream)
           oosSource.flush
-          oisSource = 
-            new ObjectInputStream (peerSocketToSource.getInputStream)
-          
+          oisSource =
+            new ObjectInputStream(peerSocketToSource.getInputStream)
+
           // Receive latest SourceInfo from peerToTalkTo
           var newPeerToTalkTo = oisSource.readObject.asInstanceOf[SourceInfo]
           // Update listOfSources
-          addToListOfSources (newPeerToTalkTo)
-          
+          addToListOfSources(newPeerToTalkTo)
+
           // Turn the timer OFF, if the sender responds before timeout
           timeOutTimer.cancel
 
 //          // Receive gossiped listOfSources and add to local list
 //          var gossipedLOS = oisSource.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-//          addToListOfSources (gossipedLOS)
+//          addToListOfSources(gossipedLOS)
 
           // Send the latest SourceInfo
           oosSource.writeObject(getLocalSourceInfo)
           oosSource.flush
-          
+
 //          // Send gossiped listOfSources
 //          listOfSources.synchronized {
 //            oosSource.writeObject(listOfSources)
 //          }
 //          oosSource.flush
-          
+
           var keepReceiving = true
-          
+
           while (hasBlocks < totalBlocks && keepReceiving) {
-            blockToAskFor = 
-              pickBlockRandom (newPeerToTalkTo.hasBlocksBitVector)
-            
+            blockToAskFor =
+              pickBlockRandom(newPeerToTalkTo.hasBlocksBitVector)
+
             // No block to request
             if (blockToAskFor < 0) {
               // Nothing to receive from newPeerToTalkTo
@@ -664,47 +664,47 @@ extends Broadcast[T] with Logging {
             } else {
               // Let other thread know that blockToAskFor is being requested
               blocksInRequestBitVector.synchronized {
-                blocksInRequestBitVector.set (blockToAskFor)
+                blocksInRequestBitVector.set(blockToAskFor)
               }
-              
+
               // Start with sending the blockID
               oosSource.writeObject(blockToAskFor)
               oosSource.flush
-              
+
               // Receive the requested block
               val recvStartTime = System.currentTimeMillis
               val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
               val receptionTime = (System.currentTimeMillis - recvStartTime)
-              
+
               // Expecting sender to send the block that was asked for
-              // assert (bcBlock.blockID == blockToAskFor)
-              // There is an exception to the above rule now. The master might 
-              // send some other block than the one requested to ensure quick 
+              // assert(bcBlock.blockID == blockToAskFor)
+              // There is an exception to the above rule now. The master might
+              // send some other block than the one requested to ensure quick
               // spreading of at least one copy of all the blocks
-              
-              logInfo ("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
+
+              logInfo("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
 
               if (!hasBlocksBitVector.get(bcBlock.blockID)) {
                 arrayOfBlocks(bcBlock.blockID) = bcBlock
-                
+
                 // Update the hasBlocksBitVector first
                 hasBlocksBitVector.synchronized {
-                  hasBlocksBitVector.set (bcBlock.blockID)
+                  hasBlocksBitVector.set(bcBlock.blockID)
                   hasBlocks += 1
                 }
-                
-                rxSpeeds.addDataPoint (peerToTalkTo, receptionTime)
 
-                // Some block (may be NOT blockToAskFor) has arrived. 
+                rxSpeeds.addDataPoint(peerToTalkTo, receptionTime)
+
+                // Some block(may be NOT blockToAskFor) has arrived.
                 // In any case, blockToAskFor is not in request any more
                 blocksInRequestBitVector.synchronized {
-                  blocksInRequestBitVector.set (blockToAskFor, false)
+                  blocksInRequestBitVector.set(blockToAskFor, false)
                 }
 
                 // Reset blockToAskFor to -1. Else it will be considered missing
                 blockToAskFor = -1
-              }              
-              
+              }
+
               // Send the latest SourceInfo
               oosSource.writeObject(getLocalSourceInfo)
               oosSource.flush
@@ -714,13 +714,13 @@ extends Broadcast[T] with Logging {
           // EOFException is expected to happen because sender can break
           // connection due to timeout
           case eofe: java.io.EOFException => { }
-          case e: Exception => { 
-            logInfo ("TalktoPeer had a " + e)
+          case e: Exception => {
+            logInfo("TalktoPeer had a " + e)
             // TODO: Remove 'newPeerToTalkTo' from listOfSources
-            // We probably should have the following in some form, but not 
+            // We probably should have the following in some form, but not
             // really here. This exception can happen if the sender just breaks connection
             // listOfSources.synchronized {
-              // logInfo ("Exception in TalkToPeer. Removing source: " + peerToTalkTo)
+              // logInfo("Exception in TalkToPeer. Removing source: " + peerToTalkTo)
               // listOfSources = listOfSources - peerToTalkTo
             // }
           }
@@ -728,92 +728,92 @@ extends Broadcast[T] with Logging {
           // blockToAskFor != -1 => there was an exception
           if (blockToAskFor != -1) {
             blocksInRequestBitVector.synchronized {
-              blocksInRequestBitVector.set (blockToAskFor, false)
+              blocksInRequestBitVector.set(blockToAskFor, false)
             }
           }
-        
+
           cleanUpConnections
         }
-      }      
-      
+      }
+
       // Right now it picks a block uniformly that this peer does not have
-      private def pickBlockRandom (txHasBlocksBitVector: BitSet): Int = {
+      private def pickBlockRandom(txHasBlocksBitVector: BitSet): Int = {
         var needBlocksBitVector: BitSet = null
-        
+
         // Blocks already present
         hasBlocksBitVector.synchronized {
           needBlocksBitVector = hasBlocksBitVector.clone.asInstanceOf[BitSet]
         }
-        
-        // Include blocks already in transmission ONLY IF 
+
+        // Include blocks already in transmission ONLY IF
         // BitTorrentBroadcast.EndGameFraction has NOT been achieved
         if ((1.0 * hasBlocks / totalBlocks) < BitTorrentBroadcast.EndGameFraction) {
           blocksInRequestBitVector.synchronized {
-            needBlocksBitVector.or (blocksInRequestBitVector)
+            needBlocksBitVector.or(blocksInRequestBitVector)
           }
         }
 
         // Find blocks that are neither here nor in transit
-        needBlocksBitVector.flip (0, needBlocksBitVector.size)
-        
+        needBlocksBitVector.flip(0, needBlocksBitVector.size)
+
         // Blocks that should/can be requested
-        needBlocksBitVector.and (txHasBlocksBitVector)
-        
+        needBlocksBitVector.and(txHasBlocksBitVector)
+
         if (needBlocksBitVector.cardinality == 0) {
           return -1
         } else {
           // Pick uniformly the i'th required block
-          var i = BitTorrentBroadcast.ranGen.nextInt (needBlocksBitVector.cardinality)
-          var pickedBlockIndex = needBlocksBitVector.nextSetBit (0)
-          
+          var i = BitTorrentBroadcast.ranGen.nextInt(needBlocksBitVector.cardinality)
+          var pickedBlockIndex = needBlocksBitVector.nextSetBit(0)
+
           while (i > 0) {
-            pickedBlockIndex = 
-              needBlocksBitVector.nextSetBit (pickedBlockIndex + 1)
+            pickedBlockIndex =
+              needBlocksBitVector.nextSetBit(pickedBlockIndex + 1)
             i = i - 1
           }
 
           return pickedBlockIndex
         }
       }
-      
+
       // Pick the block that seems to be the rarest across sources
-      private def pickBlockRarestFirst (txHasBlocksBitVector: BitSet): Int = {
+      private def pickBlockRarestFirst(txHasBlocksBitVector: BitSet): Int = {
         var needBlocksBitVector: BitSet = null
-        
+
         // Blocks already present
         hasBlocksBitVector.synchronized {
           needBlocksBitVector = hasBlocksBitVector.clone.asInstanceOf[BitSet]
         }
-        
-        // Include blocks already in transmission ONLY IF 
+
+        // Include blocks already in transmission ONLY IF
         // BitTorrentBroadcast.EndGameFraction has NOT been achieved
         if ((1.0 * hasBlocks / totalBlocks) < BitTorrentBroadcast.EndGameFraction) {
           blocksInRequestBitVector.synchronized {
-            needBlocksBitVector.or (blocksInRequestBitVector)
+            needBlocksBitVector.or(blocksInRequestBitVector)
           }
         }
 
         // Find blocks that are neither here nor in transit
-        needBlocksBitVector.flip (0, needBlocksBitVector.size)
-        
+        needBlocksBitVector.flip(0, needBlocksBitVector.size)
+
         // Blocks that should/can be requested
-        needBlocksBitVector.and (txHasBlocksBitVector)
-        
+        needBlocksBitVector.and(txHasBlocksBitVector)
+
         if (needBlocksBitVector.cardinality == 0) {
           return -1
-        } else {          
+        } else {
           // Count the number of copies for each block across all sources
-          var numCopiesPerBlock = Array.tabulate [Int] (totalBlocks) (_ => 0)
-          
+          var numCopiesPerBlock = Array.tabulate [Int](totalBlocks)(_ => 0)
+
           listOfSources.synchronized {
-            listOfSources.foreach { eachSource => 
+            listOfSources.foreach { eachSource =>
               for (i <- 0 until totalBlocks) {
-                numCopiesPerBlock(i) += 
-                  ( if (eachSource.hasBlocksBitVector.get (i)) 1 else 0 )
+                numCopiesPerBlock(i) +=
+                  ( if (eachSource.hasBlocksBitVector.get(i)) 1 else 0 )
               }
             }
           }
-          
+
           // Find the minimum
           var minVal = Integer.MAX_VALUE
           for (i <- 0 until totalBlocks) {
@@ -821,58 +821,58 @@ extends Broadcast[T] with Logging {
               minVal = numCopiesPerBlock(i)
             }
           }
-          
+
           // Find the blocks with the least copies that this peer does not have
-          var minBlocksIndices = ListBuffer[Int] ()
+          var minBlocksIndices = ListBuffer[Int]()
           for (i <- 0 until totalBlocks) {
-            if (needBlocksBitVector.get (i) && numCopiesPerBlock(i) == minVal) {
+            if (needBlocksBitVector.get(i) && numCopiesPerBlock(i) == minVal) {
               minBlocksIndices += i
             }
           }
-          
+
           // Now select a random index from minBlocksIndices
           if (minBlocksIndices.size == 0) {
             return -1
           } else {
             // Pick uniformly the i'th index
-            var i = BitTorrentBroadcast.ranGen.nextInt (minBlocksIndices.size)
+            var i = BitTorrentBroadcast.ranGen.nextInt(minBlocksIndices.size)
             return minBlocksIndices(i)
           }
-        }        
+        }
       }
-      
+
       private def cleanUpConnections: Unit = {
-        if (oisSource != null) { 
-          oisSource.close 
+        if (oisSource != null) {
+          oisSource.close
         }
-        if (oosSource != null) { 
-          oosSource.close 
+        if (oosSource != null) {
+          oosSource.close
         }
-        if (peerSocketToSource != null) { 
-          peerSocketToSource.close 
+        if (peerSocketToSource != null) {
+          peerSocketToSource.close
         }
-        
+
         // Delete from peersNowTalking
         peersNowTalking.synchronized {
           peersNowTalking = peersNowTalking - peerToTalkTo
-        }        
+        }
       }
-    }  
+    }
   }
-  
+
   class GuideMultipleRequests
   extends Thread with Logging {
     // Keep track of sources that have completed reception
-    private var setOfCompletedSources = Set[SourceInfo] ()
-  
+    private var setOfCompletedSources = Set[SourceInfo]()
+
     override def run: Unit = {
       var threadPool = Broadcast.newDaemonCachedThreadPool
       var serverSocket: ServerSocket = null
 
-      serverSocket = new ServerSocket (0)
+      serverSocket = new ServerSocket(0)
       guidePort = serverSocket.getLocalPort
-      logInfo ("GuideMultipleRequests => " + serverSocket + " " + guidePort)
-      
+      logInfo("GuideMultipleRequests => " + serverSocket + " " + guidePort)
+
       guidePortLock.synchronized {
         guidePortLock.notifyAll
       }
@@ -882,25 +882,25 @@ extends Broadcast[T] with Logging {
         while (!stopBroadcast || !hasCopyInHDFS) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (BitTorrentBroadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout(BitTorrentBroadcast.ServerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => {
-              logInfo ("GuideMultipleRequests Timeout.") 
-              
-              // Stop broadcast if at least one worker has connected and 
-              // everyone connected so far are done. Comparing with 
+              logInfo("GuideMultipleRequests Timeout.")
+
+              // Stop broadcast if at least one worker has connected and
+              // everyone connected so far are done. Comparing with
               // listOfSources.size - 1, because it includes the Guide itself
-              if (listOfSources.size > 1 && 
+              if (listOfSources.size > 1 &&
                 setOfCompletedSources.size == listOfSources.size - 1) {
                 stopBroadcast = true
               }
             }
           }
           if (clientSocket != null) {
-            logInfo ("Guide: Accepted new client connection:" + clientSocket)
-            try {            
-              threadPool.execute (new GuideSingleRequest (clientSocket))
+            logInfo("Guide: Accepted new client connection:" + clientSocket)
+            try {
+              threadPool.execute(new GuideSingleRequest(clientSocket))
             } catch {
               // In failure, close the socket here; else, thread will close it
               case ioe: IOException => {
@@ -909,50 +909,50 @@ extends Broadcast[T] with Logging {
             }
           }
         }
-        
+
         // Shutdown the thread pool
         threadPool.shutdown
 
-        logInfo ("Sending stopBroadcast notifications...")
+        logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
 
-        BitTorrentBroadcast.unregisterValue (uuid)
+        BitTorrentBroadcast.unregisterValue(uuid)
       } finally {
         if (serverSocket != null) {
-          logInfo ("GuideMultipleRequests now stopping...")
+          logInfo("GuideMultipleRequests now stopping...")
           serverSocket.close
         }
       }
     }
-    
+
     private def sendStopBroadcastNotifications: Unit = {
       listOfSources.synchronized {
-        listOfSources.foreach { sourceInfo => 
+        listOfSources.foreach { sourceInfo =>
 
           var guideSocketToSource: Socket = null
           var gosSource: ObjectOutputStream = null
           var gisSource: ObjectInputStream = null
-        
+
           try {
             // Connect to the source
             guideSocketToSource =
-              new Socket (sourceInfo.hostAddress, sourceInfo.listenPort)
+              new Socket(sourceInfo.hostAddress, sourceInfo.listenPort)
             gosSource =
-              new ObjectOutputStream (guideSocketToSource.getOutputStream)
+              new ObjectOutputStream(guideSocketToSource.getOutputStream)
             gosSource.flush
             gisSource =
-              new ObjectInputStream (guideSocketToSource.getInputStream)
-            
+              new ObjectInputStream(guideSocketToSource.getInputStream)
+
             // Throw away whatever comes in
             gisSource.readObject.asInstanceOf[SourceInfo]
 
             // Send stopBroadcast signal. listenPort = SourceInfo.StopBroadcast
-            gosSource.writeObject(SourceInfo("", SourceInfo.StopBroadcast, 
+            gosSource.writeObject(SourceInfo("", SourceInfo.StopBroadcast,
                 SourceInfo.UnusedParam, SourceInfo.UnusedParam))
             gosSource.flush
           } catch {
-            case e: Exception => { 
-              logInfo ("sendStopBroadcastNotifications had a " + e)
+            case e: Exception => {
+              logInfo("sendStopBroadcastNotifications had a " + e)
             }
           } finally {
             if (gisSource != null) {
@@ -968,38 +968,38 @@ extends Broadcast[T] with Logging {
         }
       }
     }
-    
-    class GuideSingleRequest (val clientSocket: Socket)
+
+    class GuideSingleRequest(val clientSocket: Socket)
     extends Thread with Logging {
-      private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
+      private val oos = new ObjectOutputStream(clientSocket.getOutputStream)
       oos.flush
-      private val ois = new ObjectInputStream (clientSocket.getInputStream)
+      private val ois = new ObjectInputStream(clientSocket.getInputStream)
 
       private var sourceInfo: SourceInfo = null
       private var selectedSources: ListBuffer[SourceInfo] = null
-      
+
       override def run: Unit = {
         try {
-          logInfo ("new GuideSingleRequest is running")
+          logInfo("new GuideSingleRequest is running")
           // Connecting worker is sending in its information
           sourceInfo = ois.readObject.asInstanceOf[SourceInfo]
-          
+
           // Select a suitable source and send it back to the worker
-          selectedSources = selectSuitableSources (sourceInfo)
-          logInfo ("Sending selectedSources:" + selectedSources)
-          oos.writeObject (selectedSources)
+          selectedSources = selectSuitableSources(sourceInfo)
+          logInfo("Sending selectedSources:" + selectedSources)
+          oos.writeObject(selectedSources)
           oos.flush
 
           // Add this source to the listOfSources
-          addToListOfSources (sourceInfo)
+          addToListOfSources(sourceInfo)
         } catch {
-          case e: Exception => { 
+          case e: Exception => {
             // Assuming exception caused by receiver failure: remove
             if (listOfSources != null) {
               listOfSources.synchronized {
                 listOfSources = listOfSources - sourceInfo
               }
-            }    
+            }
           }
         } finally {
           ois.close
@@ -1007,94 +1007,94 @@ extends Broadcast[T] with Logging {
           clientSocket.close
         }
       }
-      
+
       // Randomly select some sources to send back
       private def selectSuitableSources(skipSourceInfo: SourceInfo): ListBuffer[SourceInfo] = {
-        var selectedSources = ListBuffer[SourceInfo] ()
-        
+        var selectedSources = ListBuffer[SourceInfo]()
+
         // If skipSourceInfo.hasBlocksBitVector has all bits set to 'true'
-        // then add skipSourceInfo to setOfCompletedSources. Return blank. 
+        // then add skipSourceInfo to setOfCompletedSources. Return blank.
         if (skipSourceInfo.hasBlocks == totalBlocks) {
           setOfCompletedSources.synchronized {
             setOfCompletedSources += skipSourceInfo
           }
           return selectedSources
         }
-        
+
         listOfSources.synchronized {
           if (listOfSources.size <= BitTorrentBroadcast.MaxPeersInGuideResponse) {
             selectedSources = listOfSources.clone
           } else {
             var picksLeft = BitTorrentBroadcast.MaxPeersInGuideResponse
-            var alreadyPicked = new BitSet (listOfSources.size)
-            
+            var alreadyPicked = new BitSet(listOfSources.size)
+
             while (picksLeft > 0) {
               var i = -1
-              
+
               do {
-                i = BitTorrentBroadcast.ranGen.nextInt (listOfSources.size)
+                i = BitTorrentBroadcast.ranGen.nextInt(listOfSources.size)
               } while (alreadyPicked.get(i))
-              
-              var peerIter = listOfSources.iterator        
+
+              var peerIter = listOfSources.iterator
               var curPeer = peerIter.next
 
-              // Set the BitSet before i is decremented              
-              alreadyPicked.set (i)
+              // Set the BitSet before i is decremented
+              alreadyPicked.set(i)
 
               while (i > 0) {
                 curPeer = peerIter.next
                 i = i - 1
               }
-              
+
               selectedSources += curPeer
-              
+
               picksLeft = picksLeft - 1
             }
           }
         }
-        
+
         // Remove the receiving source (if present)
         selectedSources = selectedSources - skipSourceInfo
-        
+
         return selectedSources
       }
-    }    
+    }
   }
 
   class ServeMultipleRequests
   extends Thread with Logging {
     // Server at most BitTorrentBroadcast.MaxRxPeers peers
-    var threadPool = 
+    var threadPool =
       Broadcast.newDaemonFixedThreadPool(BitTorrentBroadcast.MaxRxPeers)
 
     override def run: Unit = {
-      var serverSocket = new ServerSocket (0) 
+      var serverSocket = new ServerSocket(0)
       listenPort = serverSocket.getLocalPort
 
-      logInfo ("ServeMultipleRequests started with " + serverSocket)
-      
+      logInfo("ServeMultipleRequests started with " + serverSocket)
+
       listenPortLock.synchronized {
         listenPortLock.notifyAll
       }
-            
+
       try {
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (BitTorrentBroadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout(BitTorrentBroadcast.ServerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
-            case e: Exception => { 
-              logInfo ("ServeMultipleRequests Timeout.") 
+            case e: Exception => {
+              logInfo("ServeMultipleRequests Timeout.")
             }
           }
           if (clientSocket != null) {
-            logInfo ("Serve: Accepted new client connection:" + clientSocket)
-            try {            
-              threadPool.execute (new ServeSingleRequest (clientSocket))
+            logInfo("Serve: Accepted new client connection:" + clientSocket)
+            try {
+              threadPool.execute(new ServeSingleRequest(clientSocket))
             } catch {
               // In failure, close socket here; else, the thread will close it
-              case ioe: IOException => {                
+              case ioe: IOException => {
                 clientSocket.close
               }
             }
@@ -1102,79 +1102,79 @@ extends Broadcast[T] with Logging {
         }
       } finally {
         if (serverSocket != null) {
-          logInfo ("ServeMultipleRequests now stopping...") 
-          serverSocket.close 
+          logInfo("ServeMultipleRequests now stopping...")
+          serverSocket.close
         }
-      }    
-      // Shutdown the thread pool  
+      }
+      // Shutdown the thread pool
       threadPool.shutdown
     }
-    
-    class ServeSingleRequest (val clientSocket: Socket)
-    extends Thread with Logging {
-      private val oos = new ObjectOutputStream (clientSocket.getOutputStream)
-      oos.flush
-      private val ois = new ObjectInputStream (clientSocket.getInputStream)
 
-      logInfo ("new ServeSingleRequest is running")
-      
+    class ServeSingleRequest(val clientSocket: Socket)
+    extends Thread with Logging {
+      private val oos = new ObjectOutputStream(clientSocket.getOutputStream)
+      oos.flush
+      private val ois = new ObjectInputStream(clientSocket.getInputStream)
+
+      logInfo("new ServeSingleRequest is running")
+
       override def run: Unit  = {
         try {
           // Send latest local SourceInfo to the receiver
-          // In the case of receiver timeout and connection close, this will 
+          // In the case of receiver timeout and connection close, this will
           // throw a java.net.SocketException: Broken pipe
           oos.writeObject(getLocalSourceInfo)
           oos.flush
-          
+
 //          // Gossip local listOfSources
 //          listOfSources.synchronized {
 //            oos.writeObject(listOfSources)
 //          }
 //          oos.flush
-          
+
           // Receive latest SourceInfo from the receiver
           var rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
-          
+
           if (rxSourceInfo.listenPort == SourceInfo.StopBroadcast) {
             stopBroadcast = true
           } else {
             // Carry on
-            addToListOfSources (rxSourceInfo)
+            addToListOfSources(rxSourceInfo)
 
 //            // Received gossiped listOfSources
 //            var gossipedLOS = ois.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-//            addToListOfSources (gossipedLOS)
+//            addToListOfSources(gossipedLOS)
           }
-          
+
           val startTime = System.currentTimeMillis
           var curTime = startTime
           var keepSending = true
           var numBlocksToSend = BitTorrentBroadcast.MaxChatBlocks
-          
-          while (!stopBroadcast && keepSending &&  numBlocksToSend > 0) {
+
+          while (!stopBroadcast && keepSending && numBlocksToSend > 0) {
             // Receive which block to send
             var blockToSend = ois.readObject.asInstanceOf[Int]
-            
-            // If it is master AND at least one copy of each block has not been 
+
+            // If it is master AND at least one copy of each block has not been
             // sent out already, MODIFY blockToSend
             if (BitTorrentBroadcast.isMaster && sentBlocks.get < totalBlocks) {
               blockToSend = sentBlocks.getAndIncrement
             }
-            
+
             // Send the block
-            sendBlock (blockToSend)
-            rxSourceInfo.hasBlocksBitVector.set (blockToSend)
-            
+            sendBlock(blockToSend)
+            rxSourceInfo.hasBlocksBitVector.set(blockToSend)
+
             numBlocksToSend = numBlocksToSend - 1
-            
+
             // Receive latest SourceInfo from the receiver
             rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
             // logInfo("rxSourceInfo: " + rxSourceInfo + " with " + rxSourceInfo.hasBlocksBitVector)
-            addToListOfSources (rxSourceInfo)
+            addToListOfSources(rxSourceInfo)
 
             curTime = System.currentTimeMillis
             // Revoke sending only if there is anyone waiting in the queue
-            if (curTime - startTime >= BitTorrentBroadcast.MaxChatTime && 
+            if (curTime - startTime >= BitTorrentBroadcast.MaxChatTime &&
                 threadPool.getQueue.size > 0) {
               keepSending = false
             }
@@ -1183,49 +1183,49 @@ extends Broadcast[T] with Logging {
           // If something went wrong, e.g., the worker at the other end died etc.
           // then close everything up
           // Exception can happen if the receiver stops receiving
-          case e: Exception => { 
-            logInfo ("ServeSingleRequest had a " + e)
+          case e: Exception => {
+            logInfo("ServeSingleRequest had a " + e)
           }
         } finally {
-          logInfo ("ServeSingleRequest is closing streams and sockets")
+          logInfo("ServeSingleRequest is closing streams and sockets")
           ois.close
-          // TODO: The following line causes a "java.net.SocketException: Socket closed" 
+          // TODO: The following line causes a "java.net.SocketException: Socket closed"
           oos.close
           clientSocket.close
         }
       }
-      
-      private def sendBlock (blockToSend: Int): Unit = {
+
+      private def sendBlock(blockToSend: Int): Unit = {
         try {
-          oos.writeObject (arrayOfBlocks(blockToSend))
+          oos.writeObject(arrayOfBlocks(blockToSend))
           oos.flush
-        } catch { 
-          case e: Exception => { 
-            logInfo ("sendBlock had a " + e)
+        } catch {
+          case e: Exception => {
+            logInfo("sendBlock had a " + e)
           }
         }
-        logInfo ("Sent block: " + blockToSend + " to " + clientSocket)
+        logInfo("Sent block: " + blockToSend + " to " + clientSocket)
       }
-    } 
-  }  
+    }
+  }
 }
 
-class BitTorrentBroadcastFactory 
+class BitTorrentBroadcastFactory
 extends BroadcastFactory {
-  def initialize (isMaster: Boolean) = {
-    BitTorrentBroadcast.initialize (isMaster)
+  def initialize(isMaster: Boolean) = {
+    BitTorrentBroadcast.initialize(isMaster)
   }
-  
-  def newBroadcast[T] (value_ : T, isLocal: Boolean) = 
-    new BitTorrentBroadcast[T] (value_, isLocal)
+
+  def newBroadcast[T](value_ : T, isLocal: Boolean) =
+    new BitTorrentBroadcast[T](value_, isLocal)
 }
 
 private object BitTorrentBroadcast
 extends Logging {
   val values = Cache.newKeySpace()
 
-  var valueToGuideMap = Map[UUID, SourceInfo] ()
-  
+  var valueToGuideMap = Map[UUID, SourceInfo]()
+
   // Random number generator
   var ranGen = new Random
 
@@ -1236,88 +1236,88 @@ extends Logging {
   private var MasterTrackerPort_ : Int = 11111
   private var BlockSize_ : Int = 4096 * 1024
   private var MaxRetryCount_ : Int = 2
-  
+
   private var TrackerSocketTimeout_ : Int = 50000
   private var ServerSocketTimeout_ : Int = 10000
- 
+
   private var trackMV: TrackMultipleValues = null
 
   // A peer syncs back to Guide after waiting randomly within following limits
   // Also used thoughout the code for small and large waits/timeouts
   private var MinKnockInterval_ = 500
   private var MaxKnockInterval_ = 999
-  
+
   private var MaxPeersInGuideResponse_ = 4
-  
+
   // Maximum number of receiving and sending threads of a peer
   private var MaxRxPeers_ = 4
   private var MaxTxPeers_ = 4
-  
+
   // Peers can char at most this milliseconds or transfer this number of blocks
   private var MaxChatTime_ = 500
   private var MaxChatBlocks_ = 1024
-  
+
   // Fraction of blocks to receive before entering the end game
   private var EndGameFraction_ = 0.95
-  
 
-  def initialize (isMaster__ : Boolean): Unit = {
+
+  def initialize(isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
-        MasterHostAddress_ = 
-          System.getProperty ("spark.broadcast.masterHostAddress", "127.0.0.1")
-        MasterTrackerPort_ = 
-          System.getProperty ("spark.broadcast.masterTrackerPort", "11111").toInt
-        BlockSize_ = 
-          System.getProperty ("spark.broadcast.blockSize", "4096").toInt * 1024
-        MaxRetryCount_ = 
-          System.getProperty ("spark.broadcast.maxRetryCount", "2").toInt          
+        MasterHostAddress_ =
+          System.getProperty("spark.broadcast.masterHostAddress", "127.0.0.1")
+        MasterTrackerPort_ =
+          System.getProperty("spark.broadcast.masterTrackerPort", "11111").toInt
+        BlockSize_ =
+          System.getProperty("spark.broadcast.blockSize", "4096").toInt * 1024
+        MaxRetryCount_ =
+          System.getProperty("spark.broadcast.maxRetryCount", "2").toInt
 
-        TrackerSocketTimeout_ = 
-          System.getProperty ("spark.broadcast.trackerSocketTimeout", "50000").toInt
-        ServerSocketTimeout_ = 
-          System.getProperty ("spark.broadcast.serverSocketTimeout", "10000").toInt
+        TrackerSocketTimeout_ =
+          System.getProperty("spark.broadcast.trackerSocketTimeout", "50000").toInt
+        ServerSocketTimeout_ =
+          System.getProperty("spark.broadcast.serverSocketTimeout", "10000").toInt
 
-        MinKnockInterval_ = 
-          System.getProperty ("spark.broadcast.minKnockInterval", "500").toInt
-        MaxKnockInterval_ = 
-          System.getProperty ("spark.broadcast.maxKnockInterval", "999").toInt
+        MinKnockInterval_ =
+          System.getProperty("spark.broadcast.minKnockInterval", "500").toInt
+        MaxKnockInterval_ =
+          System.getProperty("spark.broadcast.maxKnockInterval", "999").toInt
 
-        MaxPeersInGuideResponse_ = 
-          System.getProperty ("spark.broadcast.maxPeersInGuideResponse", "4").toInt
+        MaxPeersInGuideResponse_ =
+          System.getProperty("spark.broadcast.maxPeersInGuideResponse", "4").toInt
 
-        MaxRxPeers_ = 
-          System.getProperty ("spark.broadcast.maxRxPeers", "4").toInt
-        MaxTxPeers_ = 
-          System.getProperty ("spark.broadcast.maxTxPeers", "4").toInt
+        MaxRxPeers_ =
+          System.getProperty("spark.broadcast.maxRxPeers", "4").toInt
+        MaxTxPeers_ =
+          System.getProperty("spark.broadcast.maxTxPeers", "4").toInt
 
-        MaxChatTime_ = 
-          System.getProperty ("spark.broadcast.maxChatTime", "500").toInt
-        MaxChatBlocks_ = 
-          System.getProperty ("spark.broadcast.maxChatBlocks", "1024").toInt        
+        MaxChatTime_ =
+          System.getProperty("spark.broadcast.maxChatTime", "500").toInt
+        MaxChatBlocks_ =
+          System.getProperty("spark.broadcast.maxChatBlocks", "1024").toInt
 
-        EndGameFraction_ = 
-          System.getProperty ("spark.broadcast.endGameFraction", "0.95").toDouble
+        EndGameFraction_ =
+          System.getProperty("spark.broadcast.endGameFraction", "0.95").toDouble
 
-        isMaster_ = isMaster__        
-                  
+        isMaster_ = isMaster__
+
         if (isMaster) {
           trackMV = new TrackMultipleValues
-          trackMV.setDaemon (true)
+          trackMV.setDaemon(true)
           trackMV.start
-          // TODO: Logging the following line makes the Spark framework ID not 
+          // TODO: Logging the following line makes the Spark framework ID not
           // getting logged, cause it calls logInfo before log4j is initialized
-          // logInfo ("TrackMultipleValues started...")         
+          // logInfo("TrackMultipleValues started...")
         }
-        
+
         // Initialize DfsBroadcast to be used for broadcast variable persistence
         DfsBroadcast.initialize
-        
+
         initialized = true
       }
     }
   }
-   
+
   def MasterHostAddress = MasterHostAddress_
   def MasterTrackerPort = MasterTrackerPort_
   def BlockSize = BlockSize_
@@ -1326,33 +1326,33 @@ extends Logging {
   def TrackerSocketTimeout = TrackerSocketTimeout_
   def ServerSocketTimeout = ServerSocketTimeout_
 
-  def isMaster = isMaster_ 
-  
+  def isMaster = isMaster_
+
   def MinKnockInterval = MinKnockInterval_
   def MaxKnockInterval = MaxKnockInterval_
-  
+
   def MaxPeersInGuideResponse = MaxPeersInGuideResponse_
-  
+
   def MaxRxPeers = MaxRxPeers_
-  def MaxTxPeers = MaxTxPeers_   
-  
+  def MaxTxPeers = MaxTxPeers_
+
   def MaxChatTime = MaxChatTime_
   def MaxChatBlocks = MaxChatBlocks_
-  
+
   def EndGameFraction = EndGameFraction_
-  
-  def registerValue (uuid: UUID, gInfo: SourceInfo): Unit = {
-    valueToGuideMap.synchronized {    
+
+  def registerValue(uuid: UUID, gInfo: SourceInfo): Unit = {
+    valueToGuideMap.synchronized {
       valueToGuideMap += (uuid -> gInfo)
-      logInfo ("New value registered with the Tracker " + valueToGuideMap)             
+      logInfo("New value registered with the Tracker " + valueToGuideMap)
     }
   }
-  
-  def unregisterValue (uuid: UUID): Unit = {
+
+  def unregisterValue(uuid: UUID): Unit = {
     valueToGuideMap.synchronized {
-      valueToGuideMap (uuid) = SourceInfo ("", SourceInfo.TxOverGoToHDFS, 
+      valueToGuideMap(uuid) = SourceInfo("", SourceInfo.TxOverGoToHDFS,
         SourceInfo.UnusedParam, SourceInfo.UnusedParam)
-      logInfo ("Value unregistered from the Tracker " + valueToGuideMap)
+      logInfo("Value unregistered from the Tracker " + valueToGuideMap)
     }
   }
 
@@ -1361,41 +1361,41 @@ extends Logging {
     override def run: Unit = {
       var threadPool = Broadcast.newDaemonCachedThreadPool
       var serverSocket: ServerSocket = null
-      
-      serverSocket = new ServerSocket (BitTorrentBroadcast.MasterTrackerPort)
-      logInfo ("TrackMultipleValues" + serverSocket)
-      
+
+      serverSocket = new ServerSocket(BitTorrentBroadcast.MasterTrackerPort)
+      logInfo("TrackMultipleValues" + serverSocket)
+
       try {
         while (true) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (TrackerSocketTimeout)
+            serverSocket.setSoTimeout(TrackerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => {
-              logInfo ("TrackMultipleValues Timeout. Stopping listening...") 
+              logInfo("TrackMultipleValues Timeout. Stopping listening...")
             }
           }
 
           if (clientSocket != null) {
             try {
-              threadPool.execute (new Thread {
+              threadPool.execute(new Thread {
                 override def run: Unit = {
-                  val oos = new ObjectOutputStream (clientSocket.getOutputStream)
+                  val oos = new ObjectOutputStream(clientSocket.getOutputStream)
                   oos.flush
-                  val ois = new ObjectInputStream (clientSocket.getInputStream)
+                  val ois = new ObjectInputStream(clientSocket.getInputStream)
                   try {
                     val uuid = ois.readObject.asInstanceOf[UUID]
                     var gInfo =
-                      if (valueToGuideMap.contains (uuid)) {
-                        valueToGuideMap (uuid)
-                      } else SourceInfo ("", SourceInfo.TxNotStartedRetry,
+                      if (valueToGuideMap.contains(uuid)) {
+                        valueToGuideMap(uuid)
+                      } else SourceInfo("", SourceInfo.TxNotStartedRetry,
                           SourceInfo.UnusedParam, SourceInfo.UnusedParam)
-                    logInfo ("TrackMultipleValues: Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
-                    oos.writeObject (gInfo)
+                    logInfo("TrackMultipleValues: Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
+                    oos.writeObject(gInfo)
                   } catch {
-                    case e: Exception => { 
-                      logInfo ("TrackMultipleValues had a " + e)
+                    case e: Exception => {
+                      logInfo("TrackMultipleValues had a " + e)
                     }
                   } finally {
                     ois.close
