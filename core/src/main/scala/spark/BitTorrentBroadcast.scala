@@ -70,7 +70,7 @@ extends Broadcast[T] with Logging {
     hasCopyInHDFS = true
 
     // Create a variableInfo object and store it in valueInfos
-    var variableInfo = blockifyObject(value_, BitTorrentBroadcast.BlockSize)
+    var variableInfo = blockifyObject(value_, Broadcast.BlockSize)
 
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
@@ -227,7 +227,7 @@ extends Broadcast[T] with Logging {
     var retByteArray = new Array[Byte](totalBytes)
     for (i <- 0 until totalBlocks) {
       System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
-        i * BitTorrentBroadcast.BlockSize, arrayOfBlocks(i).byteArray.length)
+        i * Broadcast.BlockSize, arrayOfBlocks(i).byteArray.length)
     }
     byteArrayToObject(retByteArray)
   }
@@ -291,8 +291,8 @@ extends Broadcast[T] with Logging {
       while (hasBlocks < totalBlocks) {
         talkOnce
         Thread.sleep(BitTorrentBroadcast.ranGen.nextInt(
-          BitTorrentBroadcast.MaxKnockInterval - BitTorrentBroadcast.MinKnockInterval) +
-          BitTorrentBroadcast.MinKnockInterval)
+          Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
+          Broadcast.MinKnockInterval)
       }
 
       // Talk one more time to let the Guide know of reception completion
@@ -335,12 +335,12 @@ extends Broadcast[T] with Logging {
     var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxOverGoToHDFS,
       SourceInfo.UnusedParam, SourceInfo.UnusedParam)
 
-    var retriesLeft = BitTorrentBroadcast.MaxRetryCount
+    var retriesLeft = Broadcast.MaxRetryCount
     do {
       try {
         // Connect to the tracker to find out GuideInfo
         clientSocketToTracker =
-          new Socket(BitTorrentBroadcast.MasterHostAddress, BitTorrentBroadcast.MasterTrackerPort)
+          new Socket(Broadcast.MasterHostAddress, Broadcast.MasterTrackerPort)
         oosTracker =
           new ObjectOutputStream(clientSocketToTracker.getOutputStream)
         oosTracker.flush()
@@ -368,8 +368,8 @@ extends Broadcast[T] with Logging {
       }
 
       Thread.sleep(BitTorrentBroadcast.ranGen.nextInt(
-        BitTorrentBroadcast.MaxKnockInterval - BitTorrentBroadcast.MinKnockInterval) +
-        BitTorrentBroadcast.MinKnockInterval)
+        Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
+        Broadcast.MinKnockInterval)
 
       retriesLeft -= 1
     } while (retriesLeft > 0 && gInfo.listenPort == SourceInfo.TxNotStartedRetry)
@@ -421,7 +421,7 @@ extends Broadcast[T] with Logging {
     // TODO: Must fix this. This might never break if broadcast fails.
     // We should be able to break and send false. Also need to kill threads
     while (hasBlocks < totalBlocks) {
-      Thread.sleep(BitTorrentBroadcast.MaxKnockInterval)
+      Thread.sleep(Broadcast.MaxKnockInterval)
     }
 
     return true
@@ -465,7 +465,7 @@ extends Broadcast[T] with Logging {
         }
 
         // Sleep for a while before starting some more threads
-        Thread.sleep(BitTorrentBroadcast.MinKnockInterval)
+        Thread.sleep(Broadcast.MinKnockInterval)
       }
       // Shutdown the thread pool
       threadPool.shutdown()
@@ -615,7 +615,7 @@ extends Broadcast[T] with Logging {
         }
 
         var timeOutTimer = new Timer
-        timeOutTimer.schedule(timeOutTask, BitTorrentBroadcast.MaxKnockInterval)
+        timeOutTimer.schedule(timeOutTask, Broadcast.MaxKnockInterval)
 
         logInfo("TalkToPeer started... => " + peerToTalkTo)
 
@@ -826,7 +826,7 @@ extends Broadcast[T] with Logging {
         }
       }
 
-      private def cleanUpConnections: Unit = {
+      private def cleanUpConnections(): Unit = {
         if (oisSource != null) {
           oisSource.close()
         }
@@ -867,7 +867,7 @@ extends Broadcast[T] with Logging {
         while (!stopBroadcast || !hasCopyInHDFS) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout(BitTorrentBroadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout(Broadcast.ServerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
@@ -1066,7 +1066,7 @@ extends Broadcast[T] with Logging {
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout(BitTorrentBroadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout(Broadcast.ServerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
@@ -1207,20 +1207,7 @@ extends Logging {
   private var initialized = false
   private var isMaster_ = false
 
-  private var MasterHostAddress_ = InetAddress.getLocalHost.getHostAddress
-  private var MasterTrackerPort_ : Int = 11111
-  private var BlockSize_ : Int = 4096 * 1024
-  private var MaxRetryCount_ : Int = 2
-
-  private var TrackerSocketTimeout_ : Int = 50000
-  private var ServerSocketTimeout_ : Int = 10000
-
   private var trackMV: TrackMultipleValues = null
-
-  // A peer syncs back to Guide after waiting randomly within following limits
-  // Also used thoughout the code for small and large waits/timeouts
-  private var MinKnockInterval_ = 500
-  private var MaxKnockInterval_ = 999
 
   private var MaxPeersInGuideResponse_ = 4
 
@@ -1238,25 +1225,6 @@ extends Logging {
   def initialize(isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
-        MasterHostAddress_ =
-          System.getProperty("spark.broadcast.masterHostAddress", "127.0.0.1")
-        MasterTrackerPort_ =
-          System.getProperty("spark.broadcast.masterTrackerPort", "11111").toInt
-        BlockSize_ =
-          System.getProperty("spark.broadcast.blockSize", "4096").toInt * 1024
-        MaxRetryCount_ =
-          System.getProperty("spark.broadcast.maxRetryCount", "2").toInt
-
-        TrackerSocketTimeout_ = System.getProperty(
-          "spark.broadcast.trackerSocketTimeout", "50000").toInt
-        ServerSocketTimeout_ = System.getProperty(
-          "spark.broadcast.serverSocketTimeout", "10000").toInt
-
-        MinKnockInterval_ =
-          System.getProperty("spark.broadcast.minKnockInterval", "500").toInt
-        MaxKnockInterval_ =
-          System.getProperty("spark.broadcast.maxKnockInterval", "999").toInt
-
         MaxPeersInGuideResponse_ = System.getProperty(
           "spark.broadcast.maxPeersInGuideResponse", "4").toInt
 
@@ -1281,7 +1249,7 @@ extends Logging {
           trackMV.start()
           // TODO: Logging the following line makes the Spark framework ID not
           // getting logged, cause it calls logInfo before log4j is initialized
-          // logInfo("TrackMultipleValues started...")
+          logInfo("TrackMultipleValues started...")
         }
 
         // Initialize DfsBroadcast to be used for broadcast variable persistence
@@ -1293,18 +1261,7 @@ extends Logging {
     }
   }
 
-  def MasterHostAddress = MasterHostAddress_
-  def MasterTrackerPort = MasterTrackerPort_
-  def BlockSize = BlockSize_
-  def MaxRetryCount = MaxRetryCount_
-
-  def TrackerSocketTimeout = TrackerSocketTimeout_
-  def ServerSocketTimeout = ServerSocketTimeout_
-
   def isMaster = isMaster_
-
-  def MinKnockInterval = MinKnockInterval_
-  def MaxKnockInterval = MaxKnockInterval_
 
   def MaxPeersInGuideResponse = MaxPeersInGuideResponse_
 
@@ -1337,14 +1294,14 @@ extends Logging {
       var threadPool = Broadcast.newDaemonCachedThreadPool
       var serverSocket: ServerSocket = null
 
-      serverSocket = new ServerSocket(BitTorrentBroadcast.MasterTrackerPort)
+      serverSocket = new ServerSocket(Broadcast.MasterTrackerPort)
       logInfo("TrackMultipleValues" + serverSocket)
 
       try {
         while (true) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout(TrackerSocketTimeout)
+            serverSocket.setSoTimeout(Broadcast.TrackerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {

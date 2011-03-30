@@ -5,6 +5,7 @@ import java.net._
 import java.util.{Comparator, Random, UUID}
 
 import scala.collection.mutable.{ListBuffer, Map, Set}
+import scala.math
 
 @serializable
 class TreeBroadcast[T] (@transient var value_ : T, isLocal: Boolean) 
@@ -55,7 +56,7 @@ extends Broadcast[T] with Logging {
     hasCopyInHDFS = true    
 
     // Create a variableInfo object and store it in valueInfos
-    var variableInfo = blockifyObject (value_, TreeBroadcast.BlockSize)   
+    var variableInfo = blockifyObject (value_, Broadcast.BlockSize)   
     
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
@@ -91,7 +92,7 @@ extends Broadcast[T] with Logging {
     // Must always come AFTER listenPort is created
     val masterSource =
       SourceInfo (hostAddress, listenPort, totalBlocks, totalBytes)
-    listOfSources = listOfSources + masterSource
+    listOfSources += masterSource
 
     // Register with the Tracker
     TreeBroadcast.registerValue (uuid, guidePort)  
@@ -169,7 +170,7 @@ extends Broadcast[T] with Logging {
     var blockID = 0
 
     for (i <- 0 until (byteArray.length, blockSize)) {    
-      val thisBlockSize = Math.min (blockSize, byteArray.length - i)
+      val thisBlockSize = math.min (blockSize, byteArray.length - i)
       var tempByteArray = new Array[Byte] (thisBlockSize)
       val hasRead = bais.read (tempByteArray, 0, thisBlockSize)
       
@@ -188,7 +189,7 @@ extends Broadcast[T] with Logging {
     var retByteArray = new Array[Byte] (totalBytes)
     for (i <- 0 until totalBlocks) {
       System.arraycopy (arrayOfBlocks(i).byteArray, 0, retByteArray, 
-        i * TreeBroadcast.BlockSize, arrayOfBlocks(i).byteArray.length)
+        i * Broadcast.BlockSize, arrayOfBlocks(i).byteArray.length)
     }    
     byteArrayToObject (retByteArray)
   }
@@ -207,12 +208,12 @@ extends Broadcast[T] with Logging {
     
     var masterListenPort: Int = SourceInfo.TxOverGoToHDFS
     
-    var retriesLeft = TreeBroadcast.MaxRetryCount
+    var retriesLeft = Broadcast.MaxRetryCount
     do {
       try {  
         // Connect to the tracker to find out the guide 
         clientSocketToTracker = 
-          new Socket(TreeBroadcast.MasterHostAddress, TreeBroadcast.MasterTrackerPort)  
+          new Socket(Broadcast.MasterHostAddress, Broadcast.MasterTrackerPort)  
         oosTracker = 
           new ObjectOutputStream (clientSocketToTracker.getOutputStream)
         oosTracker.flush()
@@ -241,8 +242,8 @@ extends Broadcast[T] with Logging {
       retriesLeft -= 1     
 
       Thread.sleep (TreeBroadcast.ranGen.nextInt (
-        TreeBroadcast.MaxKnockInterval - TreeBroadcast.MinKnockInterval) +
-        TreeBroadcast.MinKnockInterval)
+        Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
+        Broadcast.MinKnockInterval)
 
     } while (retriesLeft > 0 && masterListenPort == SourceInfo.TxNotStartedRetry)
 
@@ -274,11 +275,11 @@ extends Broadcast[T] with Logging {
 
     // Connect and receive broadcast from the specified source, retrying the
     // specified number of times in case of failures
-    var retriesLeft = TreeBroadcast.MaxRetryCount
+    var retriesLeft = Broadcast.MaxRetryCount
     do {      
       // Connect to Master and send this worker's Information
       clientSocketToMaster = 
-        new Socket(TreeBroadcast.MasterHostAddress, masterListenPort)  
+        new Socket(Broadcast.MasterHostAddress, masterListenPort)  
       // TODO: Guiding object connection is reusable
       oosMaster = 
         new ObjectOutputStream (clientSocketToMaster.getOutputStream)
@@ -413,7 +414,7 @@ extends Broadcast[T] with Logging {
         while (!stopBroadcast || !hasCopyInHDFS) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (TreeBroadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout (Broadcast.ServerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
@@ -524,7 +525,7 @@ extends Broadcast[T] with Logging {
             thisWorkerInfo = SourceInfo (sourceInfo.hostAddress, 
               sourceInfo.listenPort, totalBlocks, totalBytes)
             logInfo ("Adding possible new source to listOfSources: " + thisWorkerInfo)    
-            listOfSources = listOfSources + thisWorkerInfo
+            listOfSources += thisWorkerInfo
           }
 
           // Wait till the whole transfer is done. Then receive and update source 
@@ -549,7 +550,7 @@ extends Broadcast[T] with Logging {
               selectedSourceInfo.currentLeechers -= 1
               
               // Put it back 
-              listOfSources = listOfSources + selectedSourceInfo
+              listOfSources += selectedSourceInfo
             }                        
           }      
         } catch {
@@ -565,7 +566,7 @@ extends Broadcast[T] with Logging {
                 listOfSources = listOfSources - selectedSourceInfo
                 // Update leecher count and put it back in
                 selectedSourceInfo.currentLeechers -= 1
-                listOfSources = listOfSources + selectedSourceInfo
+                listOfSources += selectedSourceInfo
               }
               
               // Remove thisWorkerInfo
@@ -628,7 +629,7 @@ extends Broadcast[T] with Logging {
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (TreeBroadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout (Broadcast.ServerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
@@ -743,46 +744,17 @@ extends Logging {
   private var initialized = false
   private var isMaster_ = false
 
-  private var MasterHostAddress_ = InetAddress.getLocalHost.getHostAddress
-  private var MasterTrackerPort_ : Int = 22222
-  private var BlockSize_ : Int = 4096 * 1024
-  private var MaxDegree_ : Int = 2
-  private var MaxRetryCount_ : Int = 2
-
-  private var TrackerSocketTimeout_ : Int = 50000
-  private var ServerSocketTimeout_ : Int = 10000
-
   private var trackMV: TrackMultipleValues = null
 
-  private var MinKnockInterval_ = 500
-  private var MaxKnockInterval_ = 999
+  private var MaxDegree_ : Int = 2
 
   def initialize (isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
-        MasterHostAddress_ = 
-          System.getProperty ("spark.broadcast.masterHostAddress", "127.0.0.1")
-        MasterTrackerPort_ = System.getProperty (
-          "spark.broadcast.masterTrackerPort", "22222").toInt
-        BlockSize_ = System.getProperty (
-          "spark.broadcast.blockSize", "4096").toInt * 1024
-        MaxDegree_ = System.getProperty (
-          "spark.broadcast.maxDegree", "2").toInt
-        MaxRetryCount_ = System.getProperty (
-          "spark.broadcast.maxRetryCount", "2").toInt          
+        MaxDegree_ = System.getProperty ("spark.broadcast.maxDegree", "2").toInt
 
-        TrackerSocketTimeout_ = System.getProperty (
-          "spark.broadcast.trackerSocketTimeout", "50000").toInt          
-        ServerSocketTimeout_ = System.getProperty (
-          "spark.broadcast.serverSocketTimeout", "10000").toInt          
-
-        MinKnockInterval_ = System.getProperty (
-          "spark.broadcast.minKnockInterval", "500").toInt
-        MaxKnockInterval_ = System.getProperty (
-          "spark.broadcast.maxKnockInterval", "999").toInt
-
-        isMaster_ = isMaster__        
-                  
+        isMaster_ = isMaster__
+        
         if (isMaster) {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon (true)
@@ -800,19 +772,9 @@ extends Logging {
     }
   }
    
-  def MasterHostAddress = MasterHostAddress_
-  def MasterTrackerPort = MasterTrackerPort_
-  def BlockSize = BlockSize_
-  def MaxDegree = MaxDegree_
-  def MaxRetryCount = MaxRetryCount_
-
-  def TrackerSocketTimeout = TrackerSocketTimeout_
-  def ServerSocketTimeout = ServerSocketTimeout_
-
   def isMaster = isMaster_ 
   
-  def MinKnockInterval = MinKnockInterval_
-  def MaxKnockInterval = MaxKnockInterval_
+  def MaxDegree = MaxDegree_
 
   def registerValue (uuid: UUID, guidePort: Int): Unit = {
     valueToGuidePortMap.synchronized {    
@@ -834,14 +796,14 @@ extends Logging {
       var threadPool = Broadcast.newDaemonCachedThreadPool
       var serverSocket: ServerSocket = null
       
-      serverSocket = new ServerSocket (TreeBroadcast.MasterTrackerPort)
+      serverSocket = new ServerSocket (Broadcast.MasterTrackerPort)
       logInfo ("TrackMultipleValues" + serverSocket)      
       
       try {
         while (true) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout (TrackerSocketTimeout)
+            serverSocket.setSoTimeout (Broadcast.TrackerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => { 
