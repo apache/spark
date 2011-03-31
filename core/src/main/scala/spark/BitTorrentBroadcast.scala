@@ -25,6 +25,8 @@ extends Broadcast[T] with Logging {
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
   @transient var hasBlocks = 0
+  // CHANGED: BlockSize in the Broadcast object is expected to change over time
+  @transient var blockSize = Broadcast.BlockSize
 
   // Used ONLY by Master to track how many unique blocks have been sent out
   @transient var sentBlocks = new AtomicInteger(0)
@@ -70,7 +72,7 @@ extends Broadcast[T] with Logging {
     hasCopyInHDFS = true
 
     // Create a variableInfo object and store it in valueInfos
-    var variableInfo = blockifyObject(value_, Broadcast.BlockSize)
+    var variableInfo = blockifyObject(value_)
 
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
@@ -112,7 +114,7 @@ extends Broadcast[T] with Logging {
 
     // Must always come AFTER listenPort is created
     val masterSource =
-      SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes)
+      SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes, blockSize)
     hasBlocksBitVector.synchronized {
       masterSource.hasBlocksBitVector = hasBlocksBitVector
     }
@@ -122,7 +124,7 @@ extends Broadcast[T] with Logging {
 
     // Register with the Tracker
     BitTorrentBroadcast.registerValue(uuid,
-      SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes))
+      SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes, blockSize))
   }
 
   private def readObject(in: ObjectInputStream): Unit = {
@@ -173,6 +175,7 @@ extends Broadcast[T] with Logging {
     totalBytes = -1
     totalBlocks = -1
     hasBlocks = 0
+    blockSize = -1
 
     listenPortLock = new Object
     totalBlocksLock = new Object
@@ -191,7 +194,7 @@ extends Broadcast[T] with Logging {
     stopBroadcast = false
   }
 
-  private def blockifyObject(obj: T, blockSize: Int): VariableInfo = {
+  private def blockifyObject(obj: T): VariableInfo = {
     val baos = new ByteArrayOutputStream
     val oos = new ObjectOutputStream(baos)
     oos.writeObject(obj)
@@ -227,7 +230,7 @@ extends Broadcast[T] with Logging {
     var retByteArray = new Array[Byte](totalBytes)
     for (i <- 0 until totalBlocks) {
       System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
-        i * Broadcast.BlockSize, arrayOfBlocks(i).byteArray.length)
+        i * blockSize, arrayOfBlocks(i).byteArray.length)
     }
     byteArrayToObject(retByteArray)
   }
@@ -254,8 +257,8 @@ extends Broadcast[T] with Logging {
       }
     }
 
-    var localSourceInfo = SourceInfo(hostAddress, listenPort, totalBlocks,
-      totalBytes)
+    var localSourceInfo = SourceInfo(
+      hostAddress, listenPort, totalBlocks, totalBytes, blockSize)
 
     localSourceInfo.hasBlocks = hasBlocks
 
@@ -332,8 +335,7 @@ extends Broadcast[T] with Logging {
     var oosTracker: ObjectOutputStream = null
     var oisTracker: ObjectInputStream = null
 
-    var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxOverGoToHDFS,
-      SourceInfo.UnusedParam, SourceInfo.UnusedParam)
+    var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxOverGoToHDFS)
 
     var retriesLeft = Broadcast.MaxRetryCount
     do {
@@ -405,6 +407,7 @@ extends Broadcast[T] with Logging {
       totalBlocksLock.notifyAll
     }
     totalBytes = gInfo.totalBytes
+    blockSize = gInfo.blockSize
 
     // Start ttGuide to periodically talk to the Guide
     var ttGuide = new TalkToGuide(gInfo)
@@ -932,8 +935,7 @@ extends Broadcast[T] with Logging {
             gisSource.readObject.asInstanceOf[SourceInfo]
 
             // Send stopBroadcast signal. listenPort = SourceInfo.StopBroadcast
-            gosSource.writeObject(SourceInfo("", SourceInfo.StopBroadcast,
-                SourceInfo.UnusedParam, SourceInfo.UnusedParam))
+            gosSource.writeObject(SourceInfo("", SourceInfo.StopBroadcast))
             gosSource.flush()
           } catch {
             case e: Exception => {
@@ -1282,8 +1284,7 @@ extends Logging {
 
   def unregisterValue(uuid: UUID): Unit = {
     valueToGuideMap.synchronized {
-      valueToGuideMap(uuid) = SourceInfo("", SourceInfo.TxOverGoToHDFS,
-        SourceInfo.UnusedParam, SourceInfo.UnusedParam)
+      valueToGuideMap(uuid) = SourceInfo("", SourceInfo.TxOverGoToHDFS)
       logInfo("Value unregistered from the Tracker " + valueToGuideMap)
     }
   }
@@ -1321,8 +1322,7 @@ extends Logging {
                     var gInfo =
                       if (valueToGuideMap.contains(uuid)) {
                         valueToGuideMap(uuid)
-                      } else SourceInfo("", SourceInfo.TxNotStartedRetry,
-                          SourceInfo.UnusedParam, SourceInfo.UnusedParam)
+                      } else SourceInfo("", SourceInfo.TxNotStartedRetry)
                     logInfo("TrackMultipleValues: Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
                     oos.writeObject(gInfo)
                   } catch {

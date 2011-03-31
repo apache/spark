@@ -118,13 +118,17 @@ extends Logging {
   }  
 }
 
+// CHANGED: Keep track of the blockSize for THIS broadcast variable. 
+// Broadcast.BlockSize is expected to be updated across different broadcasts
 @serializable
-case class SourceInfo (val hostAddress: String, val listenPort: Int, 
-  val totalBlocks: Int, val totalBytes: Int)  
+case class SourceInfo (val hostAddress: String, 
+                       val listenPort: Int, 
+                       val totalBlocks: Int = SourceInfo.UnusedParam, 
+                       val totalBytes: Int = SourceInfo.UnusedParam, 
+                       val blockSize: Int = Broadcast.BlockSize)
 extends Comparable[SourceInfo] with Logging {
-
   var currentLeechers = 0
-  var receptionFailed = false
+  var receptionFailed = false  
   
   var hasBlocks = 0
   var hasBlocksBitVector: BitSet = new BitSet (totalBlocks)
