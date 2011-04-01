@@ -10,7 +10,7 @@ trait Broadcast[T] {
 
   def value: T
 
-  // We cannot have an abstract readObject here due to some weird issues with 
+  // We cannot have an abstract readObject here due to some weird issues with
   // readObject having to be 'private' in sub-classes. Possibly a Scala bug!
 
   override def toString = "spark.Broadcast(" + uuid + ")"
@@ -23,7 +23,7 @@ trait BroadcastFactory {
 
 private object Broadcast
 extends Logging {
-  private var initialized = false 
+  private var initialized = false
   private var isMaster_ = false
   private var broadcastFactory: BroadcastFactory = null
 
@@ -33,7 +33,7 @@ extends Logging {
       val broadcastFactoryClass = System.getProperty("spark.broadcast.factory",
         "spark.DfsBroadcastFactory")
 
-      broadcastFactory = 
+      broadcastFactory =
         Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
 
       // Setup isMaster before using it
@@ -41,18 +41,18 @@ extends Logging {
 
       // Initialize appropriate BroadcastFactory and BroadcastObject
       broadcastFactory.initialize(isMaster)
-      
+
       initialized = true
     }
   }
-  
+
   def getBroadcastFactory: BroadcastFactory = {
     if (broadcastFactory == null) {
       throw new SparkException ("Broadcast.getBroadcastFactory called before initialize")
     }
     broadcastFactory
   }
-  
+
   // Load common broadcast-related config parameters
   private var MasterHostAddress_ = System.getProperty(
     "spark.broadcast.masterHostAddress", InetAddress.getLocalHost.getHostAddress)
@@ -94,45 +94,45 @@ extends Logging {
         t.setDaemon (true)
         return t
       }
-    }  
+    }
   }
-  
+
   // Wrapper over newCachedThreadPool
   def newDaemonCachedThreadPool: ThreadPoolExecutor = {
-    var threadPool = 
+    var threadPool =
       Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
-  
+
     threadPool.setThreadFactory (newDaemonThreadFactory)
-    
+
     return threadPool
   }
-  
+
   // Wrapper over newFixedThreadPool
   def newDaemonFixedThreadPool (nThreads: Int): ThreadPoolExecutor = {
-    var threadPool = 
+    var threadPool =
       Executors.newFixedThreadPool (nThreads).asInstanceOf[ThreadPoolExecutor]
-  
+
     threadPool.setThreadFactory (newDaemonThreadFactory)
-    
+
     return threadPool
-  }  
+  }
 }
 
-// CHANGED: Keep track of the blockSize for THIS broadcast variable. 
+// CHANGED: Keep track of the blockSize for THIS broadcast variable.
 // Broadcast.BlockSize is expected to be updated across different broadcasts
 @serializable
-case class SourceInfo (val hostAddress: String, 
-                       val listenPort: Int, 
-                       val totalBlocks: Int = SourceInfo.UnusedParam, 
-                       val totalBytes: Int = SourceInfo.UnusedParam, 
+case class SourceInfo (val hostAddress: String,
+                       val listenPort: Int,
+                       val totalBlocks: Int = SourceInfo.UnusedParam,
+                       val totalBytes: Int = SourceInfo.UnusedParam,
                        val blockSize: Int = Broadcast.BlockSize)
 extends Comparable[SourceInfo] with Logging {
   var currentLeechers = 0
-  var receptionFailed = false  
-  
+  var receptionFailed = false
+
   var hasBlocks = 0
   var hasBlocksBitVector: BitSet = new BitSet (totalBlocks)
-  
+
   // Ascending sort based on leecher count
   def compareTo (o: SourceInfo): Int = (currentLeechers - o.currentLeechers)
 }
@@ -150,16 +150,16 @@ object SourceInfo {
 case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) { }
 
 @serializable
-case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock], 
-  val totalBlocks: Int, val totalBytes: Int) {  
+case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
+  val totalBlocks: Int, val totalBytes: Int) {
   @transient var hasBlocks = 0
-} 
+}
 
 @serializable
 class SpeedTracker {
   // Mapping 'source' to '(totalTime, numBlocks)'
   private var sourceToSpeedMap = Map[SourceInfo, (Long, Int)] ()
-  
+
   def addDataPoint (srcInfo: SourceInfo, timeInMillis: Long): Unit = {
     sourceToSpeedMap.synchronized {
       if (!sourceToSpeedMap.contains(srcInfo)) {
@@ -170,13 +170,13 @@ class SpeedTracker {
       }
     }
   }
-  
+
   def getTimePerBlock (srcInfo: SourceInfo): Double = {
     sourceToSpeedMap.synchronized {
       val tTnB = sourceToSpeedMap (srcInfo)
       return tTnB._1 / tTnB._2
-    }    
+    }
   }
-  
+
   override def toString = sourceToSpeedMap.toString
 }

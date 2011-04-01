@@ -664,12 +664,12 @@ extends Broadcast[T] with Logging {
               oosSource.writeObject(blockToAskFor)
               oosSource.flush()
 
-              // CHANGED: Master might send some other block than the one 
-              // requested to ensure fast spreading of all blocks. 
+              // CHANGED: Master might send some other block than the one
+              // requested to ensure fast spreading of all blocks.
               val recvStartTime = System.currentTimeMillis
               val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
               val receptionTime = (System.currentTimeMillis - recvStartTime)
-              
+
               logInfo("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
 
               if (!hasBlocksBitVector.get(bcBlock.blockID)) {
@@ -1230,18 +1230,18 @@ extends Logging {
         MaxPeersInGuideResponse_ = System.getProperty(
           "spark.broadcast.maxPeersInGuideResponse", "4").toInt
 
-        MaxRxPeers_ =
-          System.getProperty("spark.broadcast.maxRxPeers", "4").toInt
-        MaxTxPeers_ =
-          System.getProperty("spark.broadcast.maxTxPeers", "4").toInt
+        MaxRxPeers_ = System.getProperty(
+          "spark.broadcast.maxRxPeers", "4").toInt
+        MaxTxPeers_ = System.getProperty(
+          "spark.broadcast.maxTxPeers", "4").toInt
 
-        MaxChatTime_ =
-          System.getProperty("spark.broadcast.maxChatTime", "500").toInt
-        MaxChatBlocks_ =
-          System.getProperty("spark.broadcast.maxChatBlocks", "1024").toInt
+        MaxChatTime_ = System.getProperty(
+          "spark.broadcast.maxChatTime", "500").toInt
+        MaxChatBlocks_ = System.getProperty(
+          "spark.broadcast.maxChatBlocks", "1024").toInt
 
-        EndGameFraction_ =
-          System.getProperty("spark.broadcast.endGameFraction", "0.95").toDouble
+        EndGameFraction_ = System.getProperty(
+          "spark.broadcast.endGameFraction", "0.95").toDouble
 
         isMaster_ = isMaster__
 
