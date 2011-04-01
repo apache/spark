@@ -747,7 +747,7 @@ extends Logging {
           trackMV.start()
           // TODO: Logging the following line makes the Spark framework ID not
           // getting logged, cause it calls logInfo before log4j is initialized
-          // logInfo("TrackMultipleValues started...")
+          logInfo("TrackMultipleValues started...")
         }
 
         // Initialize DfsBroadcast to be used for broadcast variable persistence
