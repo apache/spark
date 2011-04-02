@@ -599,7 +599,7 @@ extends Broadcast[T] with Logging {
 
         listOfSources.foreach { source =>
           if (source != skipSourceInfo &&
-            source.currentLeechers < TreeBroadcast.MaxDegree &&
+            source.currentLeechers < Broadcast.MaxDegree &&
             source.currentLeechers > maxLeechers) {
               selectedSource = source
               maxLeechers = source.currentLeechers
@@ -754,8 +754,6 @@ extends Logging {
   def initialize(isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
-        MaxDegree_ = System.getProperty("spark.broadcast.maxDegree", "2").toInt
-
         isMaster_ = isMaster__
 
         if (isMaster) {
@@ -776,8 +774,6 @@ extends Logging {
   }
 
   def isMaster = isMaster_
-
-  def MaxDegree = MaxDegree_
 
   def registerValue(uuid: UUID, guidePort: Int): Unit = {
     valueToGuidePortMap.synchronized {

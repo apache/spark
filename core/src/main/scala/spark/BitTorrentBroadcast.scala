@@ -123,7 +123,7 @@ extends Broadcast[T] with Logging {
     listOfSources += masterSource
 
     // Register with the Tracker
-    BitTorrentBroadcast.registerValue(uuid,
+    registerBroadcast(uuid,
       SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes, blockSize))
   }
 
@@ -192,6 +192,58 @@ extends Broadcast[T] with Logging {
     listOfSources = ListBuffer[SourceInfo]()
 
     stopBroadcast = false
+  }
+
+  private def registerBroadcast(uuid: UUID, gInfo: SourceInfo): Unit = {
+    val socket = new Socket(Broadcast.MasterHostAddress,
+      Broadcast.MasterTrackerPort)
+    val oosST = new ObjectOutputStream(socket.getOutputStream)
+    oosST.flush()
+    val oisST = new ObjectInputStream(socket.getInputStream)
+
+    // Send messageType/intention
+    oosST.writeObject(Broadcast.REGISTER_BROADCAST_TRACKER)
+    oosST.flush()
+
+    // Send UUID of this broadcast
+    oosST.writeObject(uuid)
+    oosST.flush()
+
+    // Send this tracker's information
+    oosST.writeObject(gInfo)
+    oosST.flush()
+
+    // Receive ACK and throw it away
+    oisST.readObject.asInstanceOf[Int]
+
+    // Shut stuff down
+    oisST.close()
+    oosST.close()
+    socket.close()
+  }
+
+  private def unregisterBroadcast(uuid: UUID): Unit = {
+    val socket = new Socket(Broadcast.MasterHostAddress,
+      Broadcast.MasterTrackerPort)
+    val oosST = new ObjectOutputStream(socket.getOutputStream)
+    oosST.flush()
+    val oisST = new ObjectInputStream(socket.getInputStream)
+
+    // Send messageType/intention
+    oosST.writeObject(Broadcast.UNREGISTER_BROADCAST_TRACKER)
+    oosST.flush()
+
+    // Send UUID of this broadcast
+    oosST.writeObject(uuid)
+    oosST.flush()
+
+    // Receive ACK and throw it away
+    oisST.readObject.asInstanceOf[Int]
+
+    // Shut stuff down
+    oisST.close()
+    oosST.close()
+    socket.close()
   }
 
   private def blockifyObject(obj: T): VariableInfo = {
@@ -349,6 +401,10 @@ extends Broadcast[T] with Logging {
         oisTracker =
           new ObjectInputStream(clientSocketToTracker.getInputStream)
 
+        // Send messageType/intention
+        oosTracker.writeObject(Broadcast.FIND_BROADCAST_TRACKER)
+        oosTracker.flush()
+
         // Send UUID and receive GuideInfo
         oosTracker.writeObject(uuid)
         oosTracker.flush()
@@ -439,11 +495,11 @@ extends Broadcast[T] with Logging {
 
     override def run: Unit = {
       var threadPool =
-        Broadcast.newDaemonFixedThreadPool(BitTorrentBroadcast.MaxTxPeers)
+        Broadcast.newDaemonFixedThreadPool(Broadcast.MaxTxPeers)
 
       while (hasBlocks < totalBlocks) {
         var numThreadsToCreate =
-          math.min(listOfSources.size, BitTorrentBroadcast.MaxTxPeers) -
+          math.min(listOfSources.size, Broadcast.MaxTxPeers) -
           threadPool.getActiveCount
 
         while (hasBlocks < totalBlocks && numThreadsToCreate > 0) {
@@ -735,7 +791,7 @@ extends Broadcast[T] with Logging {
 
         // Include blocks already in transmission ONLY IF
         // BitTorrentBroadcast.EndGameFraction has NOT been achieved
-        if ((1.0 * hasBlocks / totalBlocks) < BitTorrentBroadcast.EndGameFraction) {
+        if ((1.0 * hasBlocks / totalBlocks) < Broadcast.EndGameFraction) {
           blocksInRequestBitVector.synchronized {
             needBlocksBitVector.or(blocksInRequestBitVector)
           }
@@ -775,7 +831,7 @@ extends Broadcast[T] with Logging {
 
         // Include blocks already in transmission ONLY IF
         // BitTorrentBroadcast.EndGameFraction has NOT been achieved
-        if ((1.0 * hasBlocks / totalBlocks) < BitTorrentBroadcast.EndGameFraction) {
+        if ((1.0 * hasBlocks / totalBlocks) < Broadcast.EndGameFraction) {
           blocksInRequestBitVector.synchronized {
             needBlocksBitVector.or(blocksInRequestBitVector)
           }
@@ -904,7 +960,7 @@ extends Broadcast[T] with Logging {
         logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
 
-        BitTorrentBroadcast.unregisterValue(uuid)
+        unregisterBroadcast(uuid)
       } finally {
         if (serverSocket != null) {
           logInfo("GuideMultipleRequests now stopping...")
@@ -1009,10 +1065,10 @@ extends Broadcast[T] with Logging {
         }
 
         listOfSources.synchronized {
-          if (listOfSources.size <= BitTorrentBroadcast.MaxPeersInGuideResponse) {
+          if (listOfSources.size <= Broadcast.MaxPeersInGuideResponse) {
             selectedSources = listOfSources.clone
           } else {
-            var picksLeft = BitTorrentBroadcast.MaxPeersInGuideResponse
+            var picksLeft = Broadcast.MaxPeersInGuideResponse
             var alreadyPicked = new BitSet(listOfSources.size)
 
             while (picksLeft > 0) {
@@ -1050,9 +1106,9 @@ extends Broadcast[T] with Logging {
 
   class ServeMultipleRequests
   extends Thread with Logging {
-    // Server at most BitTorrentBroadcast.MaxRxPeers peers
+    // Server at most Broadcast.MaxRxPeers peers
     var threadPool =
-      Broadcast.newDaemonFixedThreadPool(BitTorrentBroadcast.MaxRxPeers)
+      Broadcast.newDaemonFixedThreadPool(Broadcast.MaxRxPeers)
 
     override def run: Unit = {
       var serverSocket = new ServerSocket(0)
@@ -1126,7 +1182,7 @@ extends Broadcast[T] with Logging {
           val startTime = System.currentTimeMillis
           var curTime = startTime
           var keepSending = true
-          var numBlocksToSend = BitTorrentBroadcast.MaxChatBlocks
+          var numBlocksToSend = Broadcast.MaxChatBlocks
 
           while (!stopBroadcast && keepSending && numBlocksToSend > 0) {
             // Receive which block to send
@@ -1151,7 +1207,7 @@ extends Broadcast[T] with Logging {
 
             curTime = System.currentTimeMillis
             // Revoke sending only if there is anyone waiting in the queue
-            if (curTime - startTime >= BitTorrentBroadcast.MaxChatTime &&
+            if (curTime - startTime >= Broadcast.MaxChatTime &&
                 threadPool.getQueue.size > 0) {
               keepSending = false
             }
@@ -1227,21 +1283,6 @@ extends Logging {
   def initialize(isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
-        MaxPeersInGuideResponse_ = System.getProperty(
-          "spark.broadcast.maxPeersInGuideResponse", "4").toInt
-
-        MaxRxPeers_ = System.getProperty(
-          "spark.broadcast.maxRxPeers", "4").toInt
-        MaxTxPeers_ = System.getProperty(
-          "spark.broadcast.maxTxPeers", "4").toInt
-
-        MaxChatTime_ = System.getProperty(
-          "spark.broadcast.maxChatTime", "500").toInt
-        MaxChatBlocks_ = System.getProperty(
-          "spark.broadcast.maxChatBlocks", "1024").toInt
-
-        EndGameFraction_ = System.getProperty(
-          "spark.broadcast.endGameFraction", "0.95").toDouble
 
         isMaster_ = isMaster__
 
@@ -1264,30 +1305,6 @@ extends Logging {
   }
 
   def isMaster = isMaster_
-
-  def MaxPeersInGuideResponse = MaxPeersInGuideResponse_
-
-  def MaxRxPeers = MaxRxPeers_
-  def MaxTxPeers = MaxTxPeers_
-
-  def MaxChatTime = MaxChatTime_
-  def MaxChatBlocks = MaxChatBlocks_
-
-  def EndGameFraction = EndGameFraction_
-
-  def registerValue(uuid: UUID, gInfo: SourceInfo): Unit = {
-    valueToGuideMap.synchronized {
-      valueToGuideMap += (uuid -> gInfo)
-      logInfo("New value registered with the Tracker " + valueToGuideMap)
-    }
-  }
-
-  def unregisterValue(uuid: UUID): Unit = {
-    valueToGuideMap.synchronized {
-      valueToGuideMap(uuid) = SourceInfo("", SourceInfo.TxOverGoToHDFS)
-      logInfo("Value unregistered from the Tracker " + valueToGuideMap)
-    }
-  }
 
   class TrackMultipleValues
   extends Thread with Logging {
@@ -1317,14 +1334,60 @@ extends Logging {
                   val oos = new ObjectOutputStream(clientSocket.getOutputStream)
                   oos.flush()
                   val ois = new ObjectInputStream(clientSocket.getInputStream)
+
                   try {
-                    val uuid = ois.readObject.asInstanceOf[UUID]
-                    var gInfo =
-                      if (valueToGuideMap.contains(uuid)) {
-                        valueToGuideMap(uuid)
-                      } else SourceInfo("", SourceInfo.TxNotStartedRetry)
-                    logInfo("TrackMultipleValues: Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
-                    oos.writeObject(gInfo)
+                    // First, read message type
+                    val messageType = ois.readObject.asInstanceOf[Int]
+
+                    if (messageType == Broadcast.REGISTER_BROADCAST_TRACKER) {
+                      // Receive UUID
+                      val uuid = ois.readObject.asInstanceOf[UUID]
+                      // Receive hostAddress and listenPort
+                      val gInfo = ois.readObject.asInstanceOf[SourceInfo]
+
+                      // Add to the map
+                      valueToGuideMap.synchronized {
+                        valueToGuideMap += (uuid -> gInfo)
+                      }
+
+                      logInfo ("New broadcast registered with TrackMultipleValues " + uuid + " " + valueToGuideMap)
+
+                      // Send dummy ACK
+                      oos.writeObject(-1)
+                      oos.flush()
+                    } else if (messageType == Broadcast.UNREGISTER_BROADCAST_TRACKER) {
+                      // Receive UUID
+                      val uuid = ois.readObject.asInstanceOf[UUID]
+
+                      // Remove from the map
+                      valueToGuideMap.synchronized {
+                        valueToGuideMap(uuid) = SourceInfo("", SourceInfo.TxOverGoToHDFS)
+                        logInfo("Value unregistered from the Tracker " + valueToGuideMap)
+                      }
+
+                      logInfo ("Broadcast unregistered from TrackMultipleValues " + uuid + " " + valueToGuideMap)
+
+                      // Send dummy ACK
+                      oos.writeObject(-1)
+                      oos.flush()
+                    } else if (messageType == Broadcast.FIND_BROADCAST_TRACKER) {
+                      // Receive UUID
+                      val uuid = ois.readObject.asInstanceOf[UUID]
+
+                      var gInfo =
+                        if (valueToGuideMap.contains(uuid)) valueToGuideMap(uuid)
+                        else SourceInfo("", SourceInfo.TxNotStartedRetry)
+
+                      logInfo("TrackMultipleValues: Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
+
+                      // Send reply back
+                      oos.writeObject(gInfo)
+                      oos.flush()
+                    } else if (messageType == Broadcast.GET_UPDATED_SHARE) {
+                      // TODO: Not implemented
+                    } else {
+                      throw new SparkException("Undefined messageType at TrackMultipleValues")
+                    }
                   } catch {
                     case e: Exception => {
                       logInfo("TrackMultipleValues had a " + e)

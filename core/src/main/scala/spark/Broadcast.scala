@@ -23,6 +23,12 @@ trait BroadcastFactory {
 
 private object Broadcast
 extends Logging {
+  // Messages
+  val REGISTER_BROADCAST_TRACKER = 0
+  val UNREGISTER_BROADCAST_TRACKER = 1
+  val FIND_BROADCAST_TRACKER = 2
+  val GET_UPDATED_SHARE = 3
+
   private var initialized = false
   private var isMaster_ = false
   private var broadcastFactory: BroadcastFactory = null
@@ -73,8 +79,31 @@ extends Logging {
   private var MaxKnockInterval_ = System.getProperty(
     "spark.broadcast.maxKnockInterval", "999").toInt
 
+  // Load ChainedBroadcast config params
+
+  // Load TreeBroadcast config params
+  private var MaxDegree_ = System.getProperty("spark.broadcast.maxDegree", "2").toInt
+
+  // Load BitTorrentBroadcast config params
+  private var MaxPeersInGuideResponse_ = System.getProperty(
+    "spark.broadcast.maxPeersInGuideResponse", "4").toInt
+
+  private var MaxRxPeers_ = System.getProperty(
+    "spark.broadcast.maxRxPeers", "4").toInt
+  private var MaxTxPeers_ = System.getProperty(
+    "spark.broadcast.maxTxPeers", "4").toInt
+
+  private var MaxChatTime_ = System.getProperty(
+    "spark.broadcast.maxChatTime", "500").toInt
+  private var MaxChatBlocks_ = System.getProperty(
+    "spark.broadcast.maxChatBlocks", "1024").toInt
+
+  private var EndGameFraction_ = System.getProperty(
+    "spark.broadcast.endGameFraction", "0.95").toDouble
+
   def isMaster = isMaster_
 
+  // Common config params
   def MasterHostAddress = MasterHostAddress_
   def MasterTrackerPort = MasterTrackerPort_
   def BlockSize = BlockSize_
@@ -85,6 +114,22 @@ extends Logging {
 
   def MinKnockInterval = MinKnockInterval_
   def MaxKnockInterval = MaxKnockInterval_
+
+  // ChainedBroadcast configs
+
+  // TreeBroadcast configs
+  def MaxDegree = MaxDegree_
+
+  // BitTorrentBroadcast configs
+  def MaxPeersInGuideResponse = MaxPeersInGuideResponse_
+
+  def MaxRxPeers = MaxRxPeers_
+  def MaxTxPeers = MaxTxPeers_
+
+  def MaxChatTime = MaxChatTime_
+  def MaxChatBlocks = MaxChatBlocks_
+
+  def EndGameFraction = EndGameFraction_
 
   // Returns a standard ThreadFactory except all threads are daemons
   private def newDaemonThreadFactory: ThreadFactory = {
