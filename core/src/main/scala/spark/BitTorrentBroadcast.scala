@@ -4,7 +4,6 @@ import java.io._
 import java.net._
 import java.util.{BitSet, Comparator, Random, Timer, TimerTask, UUID}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 
 import scala.collection.mutable.{ListBuffer, Map, Set}
 import scala.math
@@ -24,7 +23,7 @@ extends Broadcast[T] with Logging {
   @transient var numCopiesSent: Array[Int] = null
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
-  @transient var hasBlocks = 0
+  @transient var hasBlocks = new AtomicInteger(0)
   // CHANGED: BlockSize in the Broadcast object is expected to change over time
   @transient var blockSize = Broadcast.BlockSize
 
@@ -79,7 +78,7 @@ extends Broadcast[T] with Logging {
     arrayOfBlocks = variableInfo.arrayOfBlocks
     totalBytes = variableInfo.totalBytes
     totalBlocks = variableInfo.totalBlocks
-    hasBlocks = variableInfo.totalBlocks
+    hasBlocks.set(variableInfo.totalBlocks)
 
     // Guide has all the blocks
     hasBlocksBitVector = new BitSet(totalBlocks)
@@ -174,7 +173,7 @@ extends Broadcast[T] with Logging {
     numCopiesSent = null
     totalBytes = -1
     totalBlocks = -1
-    hasBlocks = 0
+    hasBlocks = new AtomicInteger(0)
     blockSize = -1
 
     listenPortLock = new Object
@@ -312,7 +311,7 @@ extends Broadcast[T] with Logging {
     var localSourceInfo = SourceInfo(
       hostAddress, listenPort, totalBlocks, totalBytes, blockSize)
 
-    localSourceInfo.hasBlocks = hasBlocks
+    localSourceInfo.hasBlocks = hasBlocks.get
 
     hasBlocksBitVector.synchronized {
       localSourceInfo.hasBlocksBitVector = hasBlocksBitVector
@@ -343,7 +342,7 @@ extends Broadcast[T] with Logging {
     override def run: Unit = {
 
       // Keep exchaning information until all blocks have been received
-      while (hasBlocks < totalBlocks) {
+      while (hasBlocks.get < totalBlocks) {
         talkOnce
         Thread.sleep(BitTorrentBroadcast.ranGen.nextInt(
           Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
@@ -479,7 +478,7 @@ extends Broadcast[T] with Logging {
 
     // TODO: Must fix this. This might never break if broadcast fails.
     // We should be able to break and send false. Also need to kill threads
-    while (hasBlocks < totalBlocks) {
+    while (hasBlocks.get < totalBlocks) {
       Thread.sleep(Broadcast.MaxKnockInterval)
     }
 
@@ -497,12 +496,12 @@ extends Broadcast[T] with Logging {
       var threadPool =
         Broadcast.newDaemonFixedThreadPool(Broadcast.MaxTxPeers)
 
-      while (hasBlocks < totalBlocks) {
+      while (hasBlocks.get < totalBlocks) {
         var numThreadsToCreate =
           math.min(listOfSources.size, Broadcast.MaxTxPeers) -
           threadPool.getActiveCount
 
-        while (hasBlocks < totalBlocks && numThreadsToCreate > 0) {
+        while (hasBlocks.get < totalBlocks && numThreadsToCreate > 0) {
           var peerToTalkTo = pickPeerToTalkToRandom
 
           if (peerToTalkTo != null)
@@ -702,7 +701,7 @@ extends Broadcast[T] with Logging {
 
           var keepReceiving = true
 
-          while (hasBlocks < totalBlocks && keepReceiving) {
+          while (hasBlocks.get < totalBlocks && keepReceiving) {
             blockToAskFor =
               pickBlockRandom(newPeerToTalkTo.hasBlocksBitVector)
 
@@ -734,7 +733,7 @@ extends Broadcast[T] with Logging {
                 // Update the hasBlocksBitVector first
                 hasBlocksBitVector.synchronized {
                   hasBlocksBitVector.set(bcBlock.blockID)
-                  hasBlocks += 1
+                  hasBlocks.getAndIncrement
                 }
 
                 rxSpeeds.addDataPoint(peerToTalkTo, receptionTime)
@@ -791,7 +790,7 @@ extends Broadcast[T] with Logging {
 
         // Include blocks already in transmission ONLY IF
         // BitTorrentBroadcast.EndGameFraction has NOT been achieved
-        if ((1.0 * hasBlocks / totalBlocks) < Broadcast.EndGameFraction) {
+        if ((1.0 * hasBlocks.get / totalBlocks) < Broadcast.EndGameFraction) {
           blocksInRequestBitVector.synchronized {
             needBlocksBitVector.or(blocksInRequestBitVector)
           }
@@ -831,7 +830,7 @@ extends Broadcast[T] with Logging {
 
         // Include blocks already in transmission ONLY IF
         // BitTorrentBroadcast.EndGameFraction has NOT been achieved
-        if ((1.0 * hasBlocks / totalBlocks) < Broadcast.EndGameFraction) {
+        if ((1.0 * hasBlocks.get / totalBlocks) < Broadcast.EndGameFraction) {
           blocksInRequestBitVector.synchronized {
             needBlocksBitVector.or(blocksInRequestBitVector)
           }

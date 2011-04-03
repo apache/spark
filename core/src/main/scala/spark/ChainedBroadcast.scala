@@ -21,13 +21,13 @@ extends Broadcast[T] with Logging {
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
   @transient var hasBlocks = 0
+  // CHANGED: BlockSize in the Broadcast object is expected to change over time
+  @transient var blockSize = Broadcast.BlockSize
 
   @transient var listenPortLock = new Object
   @transient var guidePortLock = new Object
   @transient var totalBlocksLock = new Object
   @transient var hasBlocksLock = new Object
-  // CHANGED: BlockSize in the Broadcast object is expected to change over time
-  @transient var blockSize = Broadcast.BlockSize
 
   @transient var pqOfSources = new PriorityQueue[SourceInfo]
 
