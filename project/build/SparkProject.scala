@@ -14,6 +14,8 @@ extends ParentProject(info) with IdeaProject
   lazy val examples =
     project("examples", "Spark Examples", new ExamplesProject(_), core)
 
+  lazy val bagel = project("bagel", "Bagel", core)
+
   class CoreProject(info: ProjectInfo)
   extends DefaultProject(info) with Eclipsify with IdeaProject with DepJar with XmlTestReport
   {}
