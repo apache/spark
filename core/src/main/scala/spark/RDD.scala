@@ -251,10 +251,14 @@ extends RDD[Array[T]](prev.context) {
 
   def collectAsMap(): Map[K, V] = HashMap(self.collect(): _*)
   
-  def mapValues[U](f: V => U): RDD[(K, U)] =
-  {
+  def mapValues[U](f: V => U): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new MappedValuesRDD(self, cleanF)
+  }
+  
+  def flatMapValues[U](f: V => Traversable[U]): RDD[(K, U)] = {
+    val cleanF = self.context.clean(f)
+    new FlatMappedValuesRDD(self, cleanF)
   }
   
   def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
@@ -291,6 +295,21 @@ extends RDD[(K, U)](prev.context) {
   override def splits = prev.splits
   override def preferredLocations(split: Split) = prev.preferredLocations(split)
   override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = prev.iterator(split).map{case (k, v) => (k, f(v))}
   override val partitioner = prev.partitioner
+  override def compute(split: Split) =
+    prev.iterator(split).map{case (k, v) => (k, f(v))}
+}
+
+class FlatMappedValuesRDD[K, V, U](
+  prev: RDD[(K, V)], f: V => Traversable[U])
+extends RDD[(K, U)](prev.context) {
+  override def splits = prev.splits
+  override def preferredLocations(split: Split) = prev.preferredLocations(split)
+  override val dependencies = List(new OneToOneDependency(prev))
+  override val partitioner = prev.partitioner
+  override def compute(split: Split) = {
+    prev.iterator(split).toStream.flatMap { 
+      case (k, v) => f(v).map(x => (k, x))
+    }.iterator
+  }
 }
