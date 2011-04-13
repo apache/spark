@@ -88,10 +88,10 @@ extends Logging {
   private var MaxPeersInGuideResponse_ = System.getProperty(
     "spark.broadcast.maxPeersInGuideResponse", "4").toInt
 
-  private var MaxRxPeers_ = System.getProperty(
-    "spark.broadcast.maxRxPeers", "4").toInt
-  private var MaxTxPeers_ = System.getProperty(
-    "spark.broadcast.maxTxPeers", "4").toInt
+  private var MaxRxSlots_ = System.getProperty(
+    "spark.broadcast.maxRxSlots", "4").toInt
+  private var MaxTxSlots_ = System.getProperty(
+    "spark.broadcast.maxTxSlots", "4").toInt
 
   private var MaxChatTime_ = System.getProperty(
     "spark.broadcast.maxChatTime", "500").toInt
@@ -123,8 +123,8 @@ extends Logging {
   // BitTorrentBroadcast configs
   def MaxPeersInGuideResponse = MaxPeersInGuideResponse_
 
-  def MaxRxPeers = MaxRxPeers_
-  def MaxTxPeers = MaxTxPeers_
+  def MaxRxSlots = MaxRxSlots_
+  def MaxTxSlots = MaxTxSlots_
 
   def MaxChatTime = MaxChatTime_
   def MaxChatBlocks = MaxChatBlocks_
