@@ -49,12 +49,17 @@ object ShortestPath {
                        messages.count()+" messages.")
 
     // Do the computation
-    def messageCombiner(minSoFar: Int, message: SPMessage): Int =
-      min(minSoFar, message.value)
+    def createCombiner(message: SPMessage): Int = message.value
+    def mergeMsg(combiner: Int, message: SPMessage): Int =
+      min(combiner, message.value)
+    def mergeCombiners(a: Int, b: Int): Int = min(a, b)
 
-    val result = Pregel.run(sc, vertices, messages, numSplits, messageCombiner, () => Int.MaxValue, min _) {
-      (self: SPVertex, messageMinValue: Int, superstep: Int) =>
-        val newValue = min(self.value, messageMinValue)
+    val result = Pregel.run(sc, vertices, messages, createCombiner, mergeMsg, mergeCombiners, numSplits) {
+      (self: SPVertex, messageMinValue: Option[Int], superstep: Int) =>
+        val newValue = messageMinValue match {
+          case Some(minVal) => min(self.value, minVal)
+          case None => self.value
+        }
 
         val outbox =
           if (newValue != self.value)

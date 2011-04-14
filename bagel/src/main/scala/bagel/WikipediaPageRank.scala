@@ -4,7 +4,6 @@ import spark._
 import spark.SparkContext._
 
 import scala.collection.mutable.ArrayBuffer
-
 import scala.xml.{XML,NodeSeq}
 
 import java.io.{Externalizable,ObjectInput,ObjectOutput,DataOutputStream,DataInputStream}
@@ -14,7 +13,7 @@ import com.esotericsoftware.kryo._
 object WikipediaPageRank {
   def main(args: Array[String]) {
     if (args.length < 4) {
-      System.err.println("Usage: PageRank <inputFile> <threshold> <numSplits> <host> [<noCombiner>]")
+      System.err.println("Usage: WikipediaPageRank <inputFile> <threshold> <numSplits> <host> [<noCombiner>]")
       System.exit(-1)
     }
 
@@ -52,22 +51,18 @@ object WikipediaPageRank {
           }
       val outEdges = ArrayBuffer(links.map(link => new PREdge(new String(link.text))): _*)
       val id = new String(title)
-      (id, (new PRVertex(id, 1.0 / numVertices, outEdges, true)))
-    })
-    val graph = vertices.groupByKey(numSplits).mapValues(_.head).cache
-
+      (id, new PRVertex(id, 1.0 / numVertices, outEdges, true))
+    }).cache
     println("Done parsing input file.")
-    println("Input file had "+graph.count+" vertices.")
 
     // Do the computation
     val epsilon = 0.01 / numVertices
+    val messages = sc.parallelize(List[(String, PRMessage)]())
     val result =
       if (noCombiner) {
-        val messages = sc.parallelize(List[(String, PRMessage)]())
-        Pregel.run[PRVertex, PRMessage, ArrayBuffer[PRMessage]](sc, graph, messages, numSplits, NoCombiner.messageCombiner, NoCombiner.defaultCombined, NoCombiner.mergeCombined)(NoCombiner.compute(numVertices, epsilon)) 
+        Pregel.run[PRVertex, PRMessage, ArrayBuffer[PRMessage]](sc, vertices, messages, NoCombiner.createCombiner, NoCombiner.mergeMsg, NoCombiner.mergeCombiners, numSplits)(NoCombiner.compute(numVertices, epsilon)) 
       } else {
-        val messages = sc.parallelize(List[(String, PRMessage)]())
-        Pregel.run[PRVertex, PRMessage, Double](sc, graph, messages, numSplits, Combiner.messageCombiner, Combiner.defaultCombined, Combiner.mergeCombined)(Combiner.compute(numVertices, epsilon))
+        Pregel.run[PRVertex, PRMessage, Double](sc, vertices, messages, Combiner.createCombiner, Combiner.mergeMsg, Combiner.mergeCombiners, numSplits)(Combiner.compute(numVertices, epsilon))
       }
 
     // Print the result
@@ -78,19 +73,19 @@ object WikipediaPageRank {
   }
 
   object Combiner {
-    def messageCombiner(minSoFar: Double, message: PRMessage): Double =
-      minSoFar + message.value
+    def createCombiner(message: PRMessage): Double = message.value
 
-    def mergeCombined(a: Double, b: Double) = a + b
+    def mergeMsg(combiner: Double, message: PRMessage): Double =
+      combiner + message.value
 
-    def defaultCombined(): Double = 0.0
+    def mergeCombiners(a: Double, b: Double) = a + b
 
-    def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messageSum: Double, superstep: Int): (PRVertex, Iterable[PRMessage]) = {
-      val newValue =
-        if (messageSum != 0)
-          0.15 / numVertices + 0.85 * messageSum
-        else
-          self.value
+    def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messageSum: Option[Double], superstep: Int): (PRVertex, Iterable[PRMessage]) = {
+      val newValue = messageSum match {
+        case Some(msgSum) if msgSum != 0 =>
+          0.15 / numVertices + 0.85 * msgSum
+        case _ => self.value
+      }
 
       val terminate = (superstep >= 10 && (newValue - self.value).abs < epsilon) || superstep >= 30
 
@@ -106,20 +101,24 @@ object WikipediaPageRank {
   }
 
   object NoCombiner {
-    def messageCombiner(messagesSoFar: ArrayBuffer[PRMessage], message: PRMessage): ArrayBuffer[PRMessage] =
-      messagesSoFar += message
+    def createCombiner(message: PRMessage): ArrayBuffer[PRMessage] =
+      ArrayBuffer(message)
 
-    def mergeCombined(a: ArrayBuffer[PRMessage], b: ArrayBuffer[PRMessage]): ArrayBuffer[PRMessage] =
+    def mergeMsg(combiner: ArrayBuffer[PRMessage], message: PRMessage): ArrayBuffer[PRMessage] =
+      combiner += message
+
+    def mergeCombiners(a: ArrayBuffer[PRMessage], b: ArrayBuffer[PRMessage]): ArrayBuffer[PRMessage] =
       a ++= b
 
-    def defaultCombined(): ArrayBuffer[PRMessage] = ArrayBuffer[PRMessage]()
-
-    def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messages: Seq[PRMessage], superstep: Int): (PRVertex, Iterable[PRMessage]) =
-      Combiner.compute(numVertices, epsilon)(self, messages.map(_.value).sum, superstep)
+    def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messages: Option[ArrayBuffer[PRMessage]], superstep: Int): (PRVertex, Iterable[PRMessage]) =
+      Combiner.compute(numVertices, epsilon)(self, messages match {
+        case Some(msgs) => Some(msgs.map(_.value).sum)
+        case None => None
+      }, superstep)
   }
 }
 
-@serializable class PRVertex() extends Vertex with Externalizable {
+@serializable class PRVertex() extends Vertex {
   var id: String = _
   var value: Double = _
   var outEdges: ArrayBuffer[PREdge] = _
@@ -132,29 +131,9 @@ object WikipediaPageRank {
     this.outEdges = outEdges
     this.active = active
   }
-
-  def writeExternal(out: ObjectOutput) {
-    out.writeUTF(id)
-    out.writeDouble(value)
-    out.writeInt(outEdges.length)
-    for (e <- outEdges)
-      out.writeUTF(e.targetId)
-    out.writeBoolean(active)
-  }
-
-  def readExternal(in: ObjectInput) {
-    id = in.readUTF()
-    value = in.readDouble()
-    val numEdges = in.readInt()
-    outEdges = new ArrayBuffer[PREdge](numEdges)
-    for (i <- 0 until numEdges) {
-      outEdges += new PREdge(in.readUTF())
-    }
-    active = in.readBoolean()
-  }
 }
 
-@serializable class PRMessage() extends Message with Externalizable {
+@serializable class PRMessage() extends Message {
   var targetId: String = _
   var value: Double = _
 
@@ -163,33 +142,15 @@ object WikipediaPageRank {
     this.targetId = targetId
     this.value = value
   }
-
-  def writeExternal(out: ObjectOutput) {
-    out.writeUTF(targetId)
-    out.writeDouble(value)
-  }
-
-  def readExternal(in: ObjectInput) {
-    targetId = in.readUTF()
-    value = in.readDouble()
-  }
 }
 
-@serializable class PREdge() extends Edge with Externalizable {
+@serializable class PREdge() extends Edge {
   var targetId: String = _
 
   def this(targetId: String) {
     this()
     this.targetId = targetId
    }
-
-  def writeExternal(out: ObjectOutput) {
-    out.writeUTF(targetId)
-  }
-
-  def readExternal(in: ObjectInput) {
-    targetId = in.readUTF()
-  }
 }
 
 class PRKryoRegistrator extends KryoRegistrator {
