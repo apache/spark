@@ -2,7 +2,7 @@ package bagel
 
 import spark._
 import spark.SparkContext._
-import scala.collection.mutable.HashMap
+
 import scala.collection.mutable.ArrayBuffer
 
 object Pregel extends Logging {
@@ -24,9 +24,7 @@ object Pregel extends Logging {
     sc: SparkContext,
     verts: RDD[(String, V)],
     msgs: RDD[(String, M)],
-    createCombiner: M => C,
-    mergeMsg: (C, M) => C,
-    mergeCombiners: (C, C) => C,
+    combiner: Combiner[M, C],
     numSplits: Int,
     superstep: Int = 0
   )(compute: (V, Option[C], Int) => (V, Iterable[M])): RDD[V] = {
@@ -35,7 +33,7 @@ object Pregel extends Logging {
     val startTime = System.currentTimeMillis
 
     // Bring together vertices and messages
-    val combinedMsgs = msgs.combineByKey(createCombiner, mergeMsg, mergeCombiners, numSplits)
+    val combinedMsgs = msgs.combineByKey(combiner.createCombiner, combiner.mergeMsg, combiner.mergeCombiners, numSplits)
     val grouped = verts.groupWith(combinedMsgs)
 
     // Run compute on each vertex
@@ -72,17 +70,24 @@ object Pregel extends Logging {
       val newMsgs = processed.flatMap {
         case (id, (vert, msgs)) => msgs.map(m => (m.targetId, m))
       }
-      run(sc, newVerts, newMsgs, createCombiner, mergeMsg, mergeCombiners, numSplits, superstep + 1)(compute)
+      run(sc, newVerts, newMsgs, combiner, numSplits, superstep + 1)(compute)
     }
   }
+}
 
-  def defaultCreateCombiner[M <: Message](msg: M): ArrayBuffer[M] = ArrayBuffer(msg)
-  def defaultMergeMsg[M <: Message](combiner: ArrayBuffer[M], msg: M): ArrayBuffer[M] =
+trait Combiner[M, C] {
+  def createCombiner(msg: M): C
+  def mergeMsg(combiner: C, msg: M): C
+  def mergeCombiners(a: C, b: C): C
+}
+
+@serializable class DefaultCombiner[M] extends Combiner[M, ArrayBuffer[M]] {
+  def createCombiner(msg: M): ArrayBuffer[M] =
+    ArrayBuffer(msg)
+  def mergeMsg(combiner: ArrayBuffer[M], msg: M): ArrayBuffer[M] =
     combiner += msg
-  def defaultMergeCombiners[M <: Message](a: ArrayBuffer[M], b: ArrayBuffer[M]): ArrayBuffer[M] =
+  def mergeCombiners(a: ArrayBuffer[M], b: ArrayBuffer[M]): ArrayBuffer[M] =
     a ++= b
-  def defaultCompute[V <: Vertex, M <: Message](self: V, msgs: Option[ArrayBuffer[M]], superstep: Int): (V, Iterable[M]) =
-    (self, List())
 }
 
 /**

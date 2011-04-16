@@ -60,9 +60,9 @@ object WikipediaPageRank {
     val messages = sc.parallelize(List[(String, PRMessage)]())
     val result =
       if (noCombiner) {
-        Pregel.run[PRVertex, PRMessage, ArrayBuffer[PRMessage]](sc, vertices, messages, NoCombiner.createCombiner, NoCombiner.mergeMsg, NoCombiner.mergeCombiners, numSplits)(NoCombiner.compute(numVertices, epsilon)) 
+        Pregel.run(sc, vertices, messages, PRNoCombiner, numSplits)(PRNoCombiner.compute(numVertices, epsilon)) 
       } else {
-        Pregel.run[PRVertex, PRMessage, Double](sc, vertices, messages, Combiner.createCombiner, Combiner.mergeMsg, Combiner.mergeCombiners, numSplits)(Combiner.compute(numVertices, epsilon))
+        Pregel.run(sc, vertices, messages, PRCombiner, numSplits)(PRCombiner.compute(numVertices, epsilon))
       }
 
     // Print the result
@@ -71,51 +71,42 @@ object WikipediaPageRank {
       "%s\t%s\n".format(vertex.id, vertex.value)).collect.mkString
     println(top)
   }
+}
 
-  object Combiner {
-    def createCombiner(message: PRMessage): Double = message.value
+object PRCombiner extends Combiner[PRMessage, Double] {
+  def createCombiner(msg: PRMessage): Double =
+    msg.value
+  def mergeMsg(combiner: Double, msg: PRMessage): Double =
+    combiner + msg.value
+  def mergeCombiners(a: Double, b: Double): Double =
+    a + b
 
-    def mergeMsg(combiner: Double, message: PRMessage): Double =
-      combiner + message.value
-
-    def mergeCombiners(a: Double, b: Double) = a + b
-
-    def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messageSum: Option[Double], superstep: Int): (PRVertex, Iterable[PRMessage]) = {
-      val newValue = messageSum match {
-        case Some(msgSum) if msgSum != 0 =>
-          0.15 / numVertices + 0.85 * msgSum
-        case _ => self.value
-      }
-
-      val terminate = (superstep >= 10 && (newValue - self.value).abs < epsilon) || superstep >= 30
-
-      val outbox =
-        if (!terminate)
-          self.outEdges.map(edge =>
-            new PRMessage(edge.targetId, newValue / self.outEdges.size))
-        else
-          ArrayBuffer[PRMessage]()
-
-      (new PRVertex(self.id, newValue, self.outEdges, !terminate), outbox)
+  def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messageSum: Option[Double], superstep: Int): (PRVertex, Iterable[PRMessage]) = {
+    val newValue = messageSum match {
+      case Some(msgSum) if msgSum != 0 =>
+        0.15 / numVertices + 0.85 * msgSum
+      case _ => self.value
     }
+
+    val terminate = (superstep >= 10 && (newValue - self.value).abs < epsilon) || superstep >= 30
+
+    val outbox =
+      if (!terminate)
+        self.outEdges.map(edge =>
+          new PRMessage(edge.targetId, newValue / self.outEdges.size))
+      else
+        ArrayBuffer[PRMessage]()
+
+    (new PRVertex(self.id, newValue, self.outEdges, !terminate), outbox)
   }
+}
 
-  object NoCombiner {
-    def createCombiner(message: PRMessage): ArrayBuffer[PRMessage] =
-      ArrayBuffer(message)
-
-    def mergeMsg(combiner: ArrayBuffer[PRMessage], message: PRMessage): ArrayBuffer[PRMessage] =
-      combiner += message
-
-    def mergeCombiners(a: ArrayBuffer[PRMessage], b: ArrayBuffer[PRMessage]): ArrayBuffer[PRMessage] =
-      a ++= b
-
-    def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messages: Option[ArrayBuffer[PRMessage]], superstep: Int): (PRVertex, Iterable[PRMessage]) =
-      Combiner.compute(numVertices, epsilon)(self, messages match {
-        case Some(msgs) => Some(msgs.map(_.value).sum)
-        case None => None
-      }, superstep)
-  }
+object PRNoCombiner extends DefaultCombiner[PRMessage] {
+  def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messages: Option[ArrayBuffer[PRMessage]], superstep: Int): (PRVertex, Iterable[PRMessage]) =
+    PRCombiner.compute(numVertices, epsilon)(self, messages match {
+      case Some(msgs) => Some(msgs.map(_.value).sum)
+      case None => None
+    }, superstep)
 }
 
 @serializable class PRVertex() extends Vertex {
