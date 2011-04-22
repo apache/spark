@@ -1079,6 +1079,9 @@ extends Logging {
   def initialize (isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
+        // Fix for issue #42
+        MasterHostAddress_ =
+          System.getProperty ("spark.broadcast.masterHostAddress", "")
         MasterTrackerPort_ = 
           System.getProperty ("spark.broadcast.masterTrackerPort", "11111").toInt
         BlockSize_ = 
