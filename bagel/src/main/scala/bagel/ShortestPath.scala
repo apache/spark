@@ -5,6 +5,8 @@ import spark.SparkContext._
 
 import scala.math.min
 
+import bagel.Pregel._
+
 object ShortestPath {
   def main(args: Array[String]) {
     if (args.length < 4) {
@@ -49,7 +51,7 @@ object ShortestPath {
                        messages.count()+" messages.")
 
     // Do the computation
-    val result = Pregel.run(sc, vertices, messages, MinCombiner, numSplits) {
+    val compute = addAggregatorArg {
       (self: SPVertex, messageMinValue: Option[Int], superstep: Int) =>
         val newValue = messageMinValue match {
           case Some(minVal) => min(self.value, minVal)
@@ -65,6 +67,7 @@ object ShortestPath {
 
         (new SPVertex(self.id, newValue, self.outEdges, false), outbox)
     }
+    val result = Pregel.run(sc, vertices, messages)(combiner = MinCombiner, numSplits = numSplits)(compute)
 
     // Print the result
     System.err.println("Shortest path from "+startVertex+" to all vertices:")
