@@ -43,7 +43,7 @@ CLASSPATH+=:$CORE_DIR/lib/mesos.jar
 CLASSPATH+=:$CORE_DIR/lib/asm-3.2/lib/all/asm-all-3.2.jar
 CLASSPATH+=:$CORE_DIR/lib/colt.jar
 CLASSPATH+=:$CORE_DIR/lib/guava-r07/guava-r07.jar
-CLASSPATH+=:$CORE_DIR/lib/hadoop-0.20.0/hadoop-0.20.0-core.jar
+CLASSPATH+=:$CORE_DIR/lib/hadoop-0.20.2/hadoop-0.20.2-core.jar
 CLASSPATH+=:$CORE_DIR/lib/scalatest-1.2/scalatest-1.2.jar
 CLASSPATH+=:$CORE_DIR/lib/scalacheck_2.8.0-1.7.jar
 CLASSPATH+=:$CORE_DIR/lib/jetty-7.1.6.v20100715/jetty-server-7.1.6.v20100715.jar
@@ -53,7 +53,7 @@ CLASSPATH+=:$CORE_DIR/lib/slf4j-1.6.1/slf4j-api-1.6.1.jar
 CLASSPATH+=:$CORE_DIR/lib/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
 CLASSPATH+=:$CORE_DIR/lib/compress-lzf-0.6.0/compress-lzf-0.6.0.jar
 CLASSPATH+=:$EXAMPLES_DIR/target/scala_2.8.1/classes
-for jar in $CORE_DIR/lib/hadoop-0.20.0/lib/*.jar; do
+for jar in $CORE_DIR/lib/hadoop-0.20.2/lib/*.jar; do
   CLASSPATH+=:$jar
 done
 export CLASSPATH # Needed for spark-shell

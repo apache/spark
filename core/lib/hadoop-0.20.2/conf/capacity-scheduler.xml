@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+
+<!-- This is the configuration file for the resource manager in Hadoop. -->
+<!-- You can configure various scheduling parameters related to queues. -->
+<!-- The properties for a queue follow a naming convention,such as, -->
+<!-- mapred.capacity-scheduler.queue.<queue-name>.property-name. -->
+
+<configuration>
+
+  <property>
+    <name>mapred.capacity-scheduler.queue.default.capacity</name>
+    <value>100</value>
+    <description>Percentage of the number of slots in the cluster that are
+      to be available for jobs in this queue.
+    </description>    
+  </property>
+  
+  <property>
+    <name>mapred.capacity-scheduler.queue.default.supports-priority</name>
+    <value>false</value>
+    <description>If true, priorities of jobs will be taken into 
+      account in scheduling decisions.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.capacity-scheduler.queue.default.minimum-user-limit-percent</name>
+    <value>100</value>
+    <description> Each queue enforces a limit on the percentage of resources 
+    allocated to a user at any given time, if there is competition for them. 
+    This user limit can vary between a minimum and maximum value. The former
+    depends on the number of users who have submitted jobs, and the latter is
+    set to this property value. For example, suppose the value of this 
+    property is 25. If two users have submitted jobs to a queue, no single 
+    user can use more than 50% of the queue resources. If a third user submits
+    a job, no single user can use more than 33% of the queue resources. With 4 
+    or more users, no user can use more than 25% of the queue's resources. A 
+    value of 100 implies no user limits are imposed. 
+    </description>
+  </property>
+  <property>
+    <name>mapred.capacity-scheduler.queue.default.maximum-initialized-jobs-per-user</name>
+    <value>2</value>
+    <description>The maximum number of jobs to be pre-initialized for a user
+    of the job queue.
+    </description>
+  </property>
+  
+  <!-- The default configuration settings for the capacity task scheduler -->
+  <!-- The default values would be applied to all the queues which don't have -->
+  <!-- the appropriate property for the particular queue -->
+  <property>
+    <name>mapred.capacity-scheduler.default-supports-priority</name>
+    <value>false</value>
+    <description>If true, priorities of jobs will be taken into 
+      account in scheduling decisions by default in a job queue.
+    </description>
+  </property>
+  
+  <property>
+    <name>mapred.capacity-scheduler.default-minimum-user-limit-percent</name>
+    <value>100</value>
+    <description>The percentage of the resources limited to a particular user
+      for the job queue at any given point of time by default.
+    </description>
+  </property>
+
+  <property>
+    <name>mapred.capacity-scheduler.default-maximum-initialized-jobs-per-user</name>
+    <value>2</value>
+    <description>The maximum number of jobs to be pre-initialized for a user
+    of the job queue.
+    </description>
+  </property>
+
+
+  <!-- Capacity scheduler Job Initialization configuration parameters -->
+  <property>
+    <name>mapred.capacity-scheduler.init-poll-interval</name>
+    <value>5000</value>
+    <description>The amount of time in miliseconds which is used to poll 
+    the job queues for jobs to initialize.
+    </description>
+  </property>
+  <property>
+    <name>mapred.capacity-scheduler.init-worker-threads</name>
+    <value>5</value>
+    <description>Number of worker threads which would be used by
+    Initialization poller to initialize jobs in a set of queue.
+    If number mentioned in property is equal to number of job queues
+    then a single thread would initialize jobs in a queue. If lesser
+    then a thread would get a set of queues assigned. If the number
+    is greater then number of threads would be equal to number of 
+    job queues.
+    </description>
+  </property>
+
+</configuration>

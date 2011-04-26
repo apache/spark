@@ -34,7 +34,7 @@ class HadoopFile[K, V](
   keyClass: Class[K],
   valueClass: Class[V])
 extends RDD[(K, V)](sc) {
-  @transient val splits_ : Array[Split] = ConfigureLock.synchronized {
+  @transient val splits_ : Array[Split] = {
     val conf = new JobConf()
     FileInputFormat.setInputPaths(conf, path)
     val inputFormat = createInputFormat(conf)
@@ -53,13 +53,11 @@ extends RDD[(K, V)](sc) {
     val split = theSplit.asInstanceOf[HadoopSplit]
     var reader: RecordReader[K, V] = null
 
-    ConfigureLock.synchronized {
-      val conf = new JobConf()
-      val bufferSize = System.getProperty("spark.buffer.size", "65536")
-      conf.set("io.file.buffer.size", bufferSize)
-      val fmt = createInputFormat(conf)
-      reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
-    }
+    val conf = new JobConf()
+    val bufferSize = System.getProperty("spark.buffer.size", "65536")
+    conf.set("io.file.buffer.size", bufferSize)
+    val fmt = createInputFormat(conf)
+    reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 
     val key: K = keyClass.newInstance()
     val value: V = valueClass.newInstance()
@@ -75,6 +73,9 @@ extends RDD[(K, V)](sc) {
             finished = true
         }
         gotNext = true
+      }
+      if (finished) {
+        reader.close()
       }
       !finished
     }
@@ -109,10 +110,3 @@ extends MappedRDD[String, (LongWritable, Text)](
                  classOf[LongWritable], classOf[Text]),
   { pair: (LongWritable, Text) => pair._2.toString }
 )
-
-
-/**
- * Object used to ensure that only one thread at a time is configuring Hadoop
- * InputFormat classes. Apparently configuring them is not thread safe!
- */
-object ConfigureLock {}

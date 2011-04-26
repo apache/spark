@@ -1,0 +1,265 @@
+<?xml version="1.0" ?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<ivy-module version="1.0">
+  <info organisation="org.apache.hadoop" module="${ant.project.name}">
+    <license name="Apache 2.0"/>
+    <ivyauthor name="Apache Hadoop Team" url="http://hadoop.apache.org"/>
+    <description>
+        Hadoop Core
+    </description>
+  </info>
+  <configurations defaultconfmapping="default">
+    <!--these match the Maven configurations-->
+    <conf name="default" extends="master,runtime"/>
+    <conf name="master" description="contains the artifact but no dependencies"/>
+    <conf name="runtime" description="runtime but not the artifact"
+      extends="client,server,s3-server,kfs"/>
+
+    <conf name="mandatory" description="contains the critical  dependencies"
+      extends="commons-logging,log4j"/>
+
+    <!--
+    These public configurations contain the core dependencies for running hadoop client or server.
+    The server is effectively a superset of the client.
+    -->
+    <conf name="client" description="client-side dependencies"
+      extends="mandatory,httpclient"/>
+    <conf name="server" description="server-side dependencies"
+      extends="client"/>
+    <conf name="s3-client" description="dependencies for working with S3/EC2 infrastructure"
+      extends="client"/>
+    <conf name="s3-server" description="dependencies for running on S3/EC2 infrastructure"
+      extends="s3-client,server"/>
+    <conf name="kfs" description="dependencies for KFS file system support"/>
+    <conf name="ftp" description="dependencies for workign with FTP filesytems"
+              extends="mandatory"/>
+   <conf name="jetty" description="Jetty provides the in-VM HTTP daemon" extends="commons-logging"/>
+
+    <!--Private configurations. -->
+
+    <conf name="common" visibility="private" extends="runtime,mandatory,httpclient,ftp,jetty"
+		      description="common artifacts"/>
+    <conf name="javadoc" visibility="private" description="artiracts required while performing doc generation"
+      extends="common,mandatory,jetty,lucene"/>
+    <!--Testing pulls in everything-->
+    <conf name="test" extends="common,default,s3-server,kfs" visibility="private"
+      description="the classpath needed to run tests"/>
+    <conf name="releaseaudit" visibility="private"
+	description="Artifacts required for releaseaudit target"/>
+     
+    <conf name="commons-logging" visibility="private"/>
+    <conf name="httpclient" visibility="private" extends="commons-logging"/>
+    <conf name="log4j" visibility="private"/>
+    <conf name="lucene" visibility="private"/>
+    <conf name="jdiff" visibility="private" extends="log4j,s3-client,jetty,server"/>
+    <conf name="checkstyle" visibility="private"/>
+
+  </configurations>
+
+  <publications>
+    <!--get the artifact from our module name-->
+    <artifact conf="master"/>
+  </publications>
+  <dependencies>
+
+ <!--used client side-->
+    <dependency org="commons-cli"
+      name="commons-cli"
+      rev="${commons-cli.version}"
+      conf="client->default"/>
+
+    <dependency org="checkstyle"
+      name="checkstyle"
+      rev="${checkstyle.version}"
+      conf="checkstyle->default"/>
+    <dependency org="jdiff"
+      name="jdiff"
+      rev="${jdiff.version}"
+      conf="jdiff->default"/>
+    <dependency org="xerces"
+      name="xerces"
+      rev="${xerces.version}"
+      conf="jdiff->default">
+    </dependency>
+
+    <dependency org="xmlenc"
+      name="xmlenc"
+      rev="${xmlenc.version}"
+      conf="server->default"/>
+
+    <!--Configuration: httpclient-->
+
+    <!--
+    commons-httpclient asks for too many files.
+    All it needs is commons-codec and commons-logging JARs
+    -->
+    <dependency org="commons-httpclient"
+      name="commons-httpclient"
+      rev="${commons-httpclient.version}"
+      conf="httpclient->master">
+    </dependency>
+
+    <dependency org="commons-codec"
+      name="commons-codec"
+      rev="${commons-codec.version}"
+      conf="httpclient->default"/>
+
+    <dependency org="commons-net"
+      name="commons-net"
+      rev="${commons-net.version}"
+      conf="ftp->default"/>
+
+    <!--Configuration: Jetty -->
+
+<!-- <dependency org="javax.servlet"
+      name="servlet-api"
+      rev="${servlet-api.version}"
+      conf="jetty->master"/>   -->
+    <dependency org="org.mortbay.jetty"
+      name="jetty"
+      rev="${jetty.version}"
+      conf="jetty->master"/>
+    <dependency org="org.mortbay.jetty"
+      name="jetty-util"
+      rev="${jetty-util.version}"
+      conf="jetty->master"/>
+
+    <dependency org="tomcat"
+      name="jasper-runtime"
+      rev="${jasper.version}"
+      conf="jetty->master"/>
+    <dependency org="tomcat"
+      name="jasper-compiler"
+      rev="${jasper.version}"
+      conf="jetty->master"/>
+<!-- this is resolved locally from the lib folder 
+   <dependency org="tomcat"
+      name="jsp-api"
+      rev="${jsp-api.version}"
+      conf="jetty->master"/> -->
+    <dependency org="commons-el"
+      name="commons-el"
+      rev="${commons-el.version}"
+      conf="jetty->master"/>
+
+
+    <!--Configuration: commons-logging -->
+
+    <!--it is essential that only the master JAR of commons logging
+    is pulled in, as its dependencies are usually a mess, including things
+    like out of date servlet APIs, bits of Avalon, etc.
+    -->
+    <dependency org="commons-logging"
+      name="commons-logging"
+      rev="${commons-logging.version}"
+      conf="commons-logging->master"/>
+
+
+    <!--Configuration: commons-logging -->
+
+    <!--log4J is not optional until commons-logging.properties is stripped out of the JAR -->
+    <dependency org="log4j"
+      name="log4j"
+      rev="${log4j.version}"
+      conf="log4j->master"/>
+
+    <!--Configuration: s3-client -->
+    <!--there are two jets3t projects in the repository; this one goes up to 0.6 and
+    is assumed to be the live one-->
+    <dependency org="net.java.dev.jets3t"
+      name="jets3t"
+      rev="${jets3t.version}"
+      conf="s3-client->master"/>
+    <dependency org="commons-net"
+      name="commons-net"
+      rev="${commons-net.version}"
+      conf="s3-client->master"/> 
+    <dependency org="org.mortbay.jetty"
+      name="servlet-api-2.5"
+      rev="${servlet-api-2.5.version}"
+      conf="s3-client->master"/>
+
+    <!--Configuration: kfs -->
+
+    <!-- This is not in the repository
+  <dependency org="org.kosmix"
+    name="kfs"
+    rev="${kfs.version}"
+    conf="kfs->default"/>-->
+
+    <!--Configuration: test -->
+
+    <!--artifacts needed for testing -->
+    <dependency org="junit"
+      name="junit"
+      rev="${junit.version}"
+      conf="common->default"/>
+    <dependency org="com.google.code.p.arat"
+      name="rat-lib"
+      rev="${rats-lib.version}"
+      conf="releaseaudit->default"/>
+    <dependency org="commons-lang"
+      name="commons-lang"
+      rev="${commons-lang.version}"
+      conf="releaseaudit->default"/>
+    <dependency org="commons-collections"
+      name="commons-collections"
+      rev="${commons-collections.version}"
+      conf="releaseaudit->default"/>
+<!--<dependency org="hsqldb"
+      name="hsqldb"
+      rev="${hsqldb.version}"
+      conf="common->default"/>
+    <dependency org="lucene"
+      name="lucene"
+      rev="${lucene.version}"
+      conf="javadoc->default"/> --> 
+    <dependency org="org.apache.lucene"
+      name="lucene-core"
+      rev="${lucene-core.version}"
+      conf="javadoc->default"/> 
+    <dependency org="commons-logging"
+      name="commons-logging-api"
+      rev="${commons-logging-api.version}"
+      conf="common->default"/>
+    <dependency org="org.slf4j"
+      name="slf4j-api"
+      rev="${slf4j-api.version}"
+      conf="common->master"/>
+    <dependency org="org.eclipse.jdt"
+      name="core"
+      rev="${core.version}"
+      conf="common->master"/>
+    <dependency org="oro"
+      name="oro"
+      rev="${oro.version}"
+      conf="common->default"/>
+    <dependency org="org.slf4j"
+      name="slf4j-log4j12"
+      rev="${slf4j-log4j12.version}"
+      conf="common->master">
+    </dependency>
+    <dependency org="org.mockito"
+      name="mockito-all"
+      rev="${mockito-all.version}"
+      conf="common->master"/>
+</dependencies>
+  
+</ivy-module>
