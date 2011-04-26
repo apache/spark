@@ -1,5 +1,6 @@
 package spark
 
+import java.io._
 import java.net._
 import java.util.{BitSet, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
@@ -161,6 +162,59 @@ extends Logging {
 
     return threadPool
   }
+  
+  // Helper functions to convert an object to Array[BroadcastBlock]
+  def blockifyObject[IN](obj: IN): VariableInfo = {
+    val baos = new ByteArrayOutputStream
+    val oos = new ObjectOutputStream(baos)
+    oos.writeObject(obj)
+    oos.close()
+    baos.close()
+    val byteArray = baos.toByteArray
+    val bais = new ByteArrayInputStream(byteArray)
+
+    var blockNum = (byteArray.length / Broadcast.BlockSize)
+    if (byteArray.length % Broadcast.BlockSize != 0)
+      blockNum += 1
+
+    var retVal = new Array[BroadcastBlock](blockNum)
+    var blockID = 0
+
+    for (i <- 0 until (byteArray.length, Broadcast.BlockSize)) {
+      val thisBlockSize = math.min(Broadcast.BlockSize, byteArray.length - i)
+      var tempByteArray = new Array[Byte](thisBlockSize)
+      val hasRead = bais.read(tempByteArray, 0, thisBlockSize)
+
+      retVal(blockID) = new BroadcastBlock(blockID, tempByteArray)
+      blockID += 1
+    }
+    bais.close()
+
+    var variableInfo = VariableInfo(retVal, blockNum, byteArray.length)
+    variableInfo.hasBlocks = blockNum
+
+    return variableInfo
+  }
+
+  // Helper function to convert Array[BroadcastBlock] to object
+  def unBlockifyObject[OUT](arrayOfBlocks: Array[BroadcastBlock], 
+                            totalBytes: Int, 
+                            totalBlocks: Int): OUT = {
+
+    var retByteArray = new Array[Byte](totalBytes)
+    for (i <- 0 until totalBlocks) {
+      System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
+        i * Broadcast.BlockSize, arrayOfBlocks(i).byteArray.length)
+    }
+    byteArrayToObject(retByteArray)
+  }
+
+  private def byteArrayToObject[OUT](bytes: Array[Byte]): OUT = {
+    val in = new ObjectInputStream(new ByteArrayInputStream(bytes))
+    val retVal = in.readObject.asInstanceOf[OUT]
+    in.close()
+    return retVal
+  }  
 }
 
 // CHANGED: Keep track of the blockSize for THIS broadcast variable.

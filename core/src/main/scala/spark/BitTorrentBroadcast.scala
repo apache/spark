@@ -71,7 +71,7 @@ extends Broadcast[T] with Logging {
     hasCopyInHDFS = true
 
     // Create a variableInfo object and store it in valueInfos
-    var variableInfo = blockifyObject(value_)
+    var variableInfo = Broadcast.blockifyObject(value_)
 
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
@@ -150,7 +150,7 @@ extends Broadcast[T] with Logging {
         val receptionSucceeded = receiveBroadcast(uuid)
         // If does not succeed, then get from HDFS copy
         if (receptionSucceeded) {
-          value_ = unBlockifyObject[T]
+          value_ = Broadcast.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
           BitTorrentBroadcast.values.put(uuid, value_)
         }  else {
           // TODO: This part won't work, cause HDFS writing is turned OFF
@@ -243,54 +243,6 @@ extends Broadcast[T] with Logging {
     oisST.close()
     oosST.close()
     socket.close()
-  }
-
-  private def blockifyObject(obj: T): VariableInfo = {
-    val baos = new ByteArrayOutputStream
-    val oos = new ObjectOutputStream(baos)
-    oos.writeObject(obj)
-    oos.close()
-    baos.close()
-    val byteArray = baos.toByteArray
-    val bais = new ByteArrayInputStream(byteArray)
-
-    var blockNum = (byteArray.length / blockSize)
-    if (byteArray.length % blockSize != 0)
-      blockNum += 1
-
-    var retVal = new Array[BroadcastBlock](blockNum)
-    var blockID = 0
-
-    for (i <- 0 until (byteArray.length, blockSize)) {
-      val thisBlockSize = math.min(blockSize, byteArray.length - i)
-      var tempByteArray = new Array[Byte](thisBlockSize)
-      val hasRead = bais.read(tempByteArray, 0, thisBlockSize)
-
-      retVal(blockID) = new BroadcastBlock(blockID, tempByteArray)
-      blockID += 1
-    }
-    bais.close()
-
-    var variableInfo = VariableInfo(retVal, blockNum, byteArray.length)
-    variableInfo.hasBlocks = blockNum
-
-    return variableInfo
-  }
-
-  private def unBlockifyObject[A]: A = {
-    var retByteArray = new Array[Byte](totalBytes)
-    for (i <- 0 until totalBlocks) {
-      System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
-        i * blockSize, arrayOfBlocks(i).byteArray.length)
-    }
-    byteArrayToObject(retByteArray)
-  }
-
-  private def byteArrayToObject[A](bytes: Array[Byte]): A = {
-    val in = new ObjectInputStream(new ByteArrayInputStream(bytes))
-    val retVal = in.readObject.asInstanceOf[A]
-    in.close()
-    return retVal
   }
 
   private def getLocalSourceInfo: SourceInfo = {
