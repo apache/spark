@@ -1,4 +1,6 @@
-package spark
+package spark.broadcast
+
+import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 import java.io._
 import java.net._
@@ -7,7 +9,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
 
-import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+import spark._
 
 @serializable 
 class DfsBroadcast[T](@transient var value_ : T, isLocal: Boolean) 

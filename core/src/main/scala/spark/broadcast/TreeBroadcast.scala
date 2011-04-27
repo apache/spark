@@ -1,20 +1,22 @@
-package spark
+package spark.broadcast
 
 import java.io._
 import java.net._
-import java.util.{Comparator, PriorityQueue, Random, UUID}
+import java.util.{Comparator, Random, UUID}
 
-import scala.collection.mutable.{Map, Set}
+import scala.collection.mutable.{ListBuffer, Map, Set}
 import scala.math
 
+import spark._
+
 @serializable
-class ChainedBroadcast[T](@transient var value_ : T, isLocal: Boolean)
+class TreeBroadcast[T](@transient var value_ : T, isLocal: Boolean)
 extends Broadcast[T] with Logging {
 
   def value = value_
 
-  ChainedBroadcast.synchronized {
-    ChainedBroadcast.values.put(uuid, value_)
+  TreeBroadcast.synchronized {
+    TreeBroadcast.values.put(uuid, value_)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -29,7 +31,7 @@ extends Broadcast[T] with Logging {
   @transient var totalBlocksLock = new Object
   @transient var hasBlocksLock = new Object
 
-  @transient var pqOfSources = new PriorityQueue[SourceInfo]
+  @transient var listOfSources = ListBuffer[SourceInfo]()
 
   @transient var serveMR: ServeMultipleRequests = null
   @transient var guideMR: GuideMultipleRequests = null
@@ -60,16 +62,6 @@ extends Broadcast[T] with Logging {
     // Create a variableInfo object and store it in valueInfos
     var variableInfo = Broadcast.blockifyObject(value_)
 
-    guideMR = new GuideMultipleRequests
-    guideMR.setDaemon(true)
-    guideMR.start()
-    logInfo("GuideMultipleRequests started...")
-
-    serveMR = new ServeMultipleRequests
-    serveMR.setDaemon(true)
-    serveMR.start()
-    logInfo("ServeMultipleRequests started...")
-
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
     arrayOfBlocks = variableInfo.arrayOfBlocks
@@ -77,30 +69,43 @@ extends Broadcast[T] with Logging {
     totalBlocks = variableInfo.totalBlocks
     hasBlocks = variableInfo.totalBlocks
 
+    guideMR = new GuideMultipleRequests
+    guideMR.setDaemon(true)
+    guideMR.start
+    logInfo("GuideMultipleRequests started...")
+
+    // Must always come AFTER guideMR is created
+    while (guidePort == -1) {
+      guidePortLock.synchronized {
+        guidePortLock.wait
+      }
+    }
+
+    serveMR = new ServeMultipleRequests
+    serveMR.setDaemon(true)
+    serveMR.start
+    logInfo("ServeMultipleRequests started...")
+
+    // Must always come AFTER serveMR is created
     while (listenPort == -1) {
       listenPortLock.synchronized {
         listenPortLock.wait
       }
     }
 
-    pqOfSources = new PriorityQueue[SourceInfo]
+    // Must always come AFTER listenPort is created
     val masterSource =
       SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes, blockSize)
-    pqOfSources.add(masterSource)
+    listOfSources += masterSource
 
     // Register with the Tracker
-    while (guidePort == -1) {
-      guidePortLock.synchronized {
-        guidePortLock.wait
-      }
-    }
-    ChainedBroadcast.registerValue(uuid, guidePort)
+    TreeBroadcast.registerValue(uuid, guidePort)
   }
 
   private def readObject(in: ObjectInputStream): Unit = {
     in.defaultReadObject
-    ChainedBroadcast.synchronized {
-      val cachedVal = ChainedBroadcast.values.get(uuid)
+    TreeBroadcast.synchronized {
+      val cachedVal = TreeBroadcast.values.get(uuid)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
@@ -111,7 +116,7 @@ extends Broadcast[T] with Logging {
 
         serveMR = new ServeMultipleRequests
         serveMR.setDaemon(true)
-        serveMR.start()
+        serveMR.start
         logInfo("ServeMultipleRequests started...")
 
         val start = System.nanoTime
@@ -120,15 +125,15 @@ extends Broadcast[T] with Logging {
         // If does not succeed, then get from HDFS copy
         if (receptionSucceeded) {
           value_ = Broadcast.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
-          ChainedBroadcast.values.put(uuid, value_)
+          TreeBroadcast.values.put(uuid, value_)
         }  else {
           val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
           value_ = fileIn.readObject.asInstanceOf[T]
-          ChainedBroadcast.values.put(uuid, value_)
+          TreeBroadcast.values.put(uuid, value_)
           fileIn.close()
         }
 
-        val time =(System.nanoTime - start) / 1e9
+        val time = (System.nanoTime - start) / 1e9
         logInfo("Reading Broadcasted variable " + uuid + " took " + time + " s")
       }
     }
@@ -193,7 +198,7 @@ extends Broadcast[T] with Logging {
       }
       retriesLeft -= 1
 
-      Thread.sleep(ChainedBroadcast.ranGen.nextInt(
+      Thread.sleep(TreeBroadcast.ranGen.nextInt(
         Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
         Broadcast.MinKnockInterval)
 
@@ -253,12 +258,13 @@ extends Broadcast[T] with Logging {
         totalBlocksLock.notifyAll
       }
       totalBytes = sourceInfo.totalBytes
+      blockSize = sourceInfo.blockSize
 
       logInfo("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)
 
       val start = System.nanoTime
       val receptionSucceeded = receiveSingleTransmission(sourceInfo)
-      val time =(System.nanoTime - start) / 1e9
+      val time = (System.nanoTime - start) / 1e9
 
       // Updating some statistics in sourceInfo. Master will be using them later
       if (!receptionSucceeded) {
@@ -281,7 +287,7 @@ extends Broadcast[T] with Logging {
       retriesLeft -= 1
     } while (retriesLeft > 0 && hasBlocks < totalBlocks)
 
-    return(hasBlocks == totalBlocks)
+    return (hasBlocks == totalBlocks)
   }
 
   // Tries to receive broadcast from the source and returns Boolean status.
@@ -312,7 +318,7 @@ extends Broadcast[T] with Logging {
       for (i <- hasBlocks until totalBlocks) {
         val recvStartTime = System.currentTimeMillis
         val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
-        val receptionTime =(System.currentTimeMillis - recvStartTime)
+        val receptionTime = (System.currentTimeMillis - recvStartTime)
 
         logInfo("Received block: " + bcBlock.blockID + " from " + sourceInfo + " in " + receptionTime + " millis.")
 
@@ -373,9 +379,9 @@ extends Broadcast[T] with Logging {
 
               // Stop broadcast if at least one worker has connected and
               // everyone connected so far are done. Comparing with
-              // pqOfSources.size - 1, because it includes the Guide itself
-              if (pqOfSources.size > 1 &&
-                setOfCompletedSources.size == pqOfSources.size - 1) {
+              // listOfSources.size - 1, because it includes the Guide itself
+              if (listOfSources.size > 1 &&
+                setOfCompletedSources.size == listOfSources.size - 1) {
                 stopBroadcast = true
               }
             }
@@ -385,7 +391,7 @@ extends Broadcast[T] with Logging {
             try {
               threadPool.execute(new GuideSingleRequest(clientSocket))
             } catch {
-              // In failure, close the socket here; else, the thread will close it
+              // In failure, close() the socket here; else, the thread will close() it
               case ioe: IOException => clientSocket.close()
             }
           }
@@ -394,7 +400,7 @@ extends Broadcast[T] with Logging {
         logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
 
-        ChainedBroadcast.unregisterValue(uuid)
+        TreeBroadcast.unregisterValue(uuid)
       } finally {
         if (serverSocket != null) {
           logInfo("GuideMultipleRequests now stopping...")
@@ -403,14 +409,14 @@ extends Broadcast[T] with Logging {
       }
 
       // Shutdown the thread pool
-      threadPool.shutdown()
+      threadPool.shutdown
     }
 
     private def sendStopBroadcastNotifications: Unit = {
-      pqOfSources.synchronized {
-        var pqIter = pqOfSources.iterator
-        while (pqIter.hasNext) {
-          var sourceInfo = pqIter.next
+      listOfSources.synchronized {
+        var listIter = listOfSources.iterator
+        while (listIter.hasNext) {
+          var sourceInfo = listIter.next
 
           var guideSocketToSource: Socket = null
           var gosSource: ObjectOutputStream = null
@@ -462,33 +468,33 @@ extends Broadcast[T] with Logging {
         try {
           logInfo("new GuideSingleRequest is running")
           // Connecting worker is sending in its hostAddress and listenPort it will
-          // be listening to. Other fields are invalid(SourceInfo.UnusedParam)
+          // be listening to. Other fields are invalid (SourceInfo.UnusedParam)
           var sourceInfo = ois.readObject.asInstanceOf[SourceInfo]
 
-          pqOfSources.synchronized {
+          listOfSources.synchronized {
             // Select a suitable source and send it back to the worker
             selectedSourceInfo = selectSuitableSource(sourceInfo)
             logInfo("Sending selectedSourceInfo: " + selectedSourceInfo)
             oos.writeObject(selectedSourceInfo)
             oos.flush()
 
-            // Add this new(if it can finish) source to the PQ of sources
+            // Add this new (if it can finish) source to the list of sources
             thisWorkerInfo = SourceInfo(sourceInfo.hostAddress,
               sourceInfo.listenPort, totalBlocks, totalBytes, blockSize)
-            logInfo("Adding possible new source to pqOfSources: " + thisWorkerInfo)
-            pqOfSources.add(thisWorkerInfo)
+            logInfo("Adding possible new source to listOfSources: " + thisWorkerInfo)
+            listOfSources += thisWorkerInfo
           }
 
           // Wait till the whole transfer is done. Then receive and update source
-          // statistics in pqOfSources
+          // statistics in listOfSources
           sourceInfo = ois.readObject.asInstanceOf[SourceInfo]
 
-          pqOfSources.synchronized {
+          listOfSources.synchronized {
             // This should work since SourceInfo is a case class
-            assert(pqOfSources.contains(selectedSourceInfo))
+            assert(listOfSources.contains(selectedSourceInfo))
 
             // Remove first
-            pqOfSources.remove(selectedSourceInfo)
+            listOfSources = listOfSources - selectedSourceInfo
             // TODO: Removing a source based on just one failure notification!
 
             // Update sourceInfo and put it back in, IF reception succeeded
@@ -501,28 +507,28 @@ extends Broadcast[T] with Logging {
               selectedSourceInfo.currentLeechers -= 1
 
               // Put it back
-              pqOfSources.add(selectedSourceInfo)
+              listOfSources += selectedSourceInfo
             }
           }
         } catch {
           // If something went wrong, e.g., the worker at the other end died etc.
-          // then close everything up
+          // then close() everything up
           case e: Exception => {
             // Assuming that exception caused due to receiver worker failure.
-            // Remove failed worker from pqOfSources and update leecherCount of
+            // Remove failed worker from listOfSources and update leecherCount of
             // corresponding source worker
-            pqOfSources.synchronized {
+            listOfSources.synchronized {
               if (selectedSourceInfo != null) {
                 // Remove first
-                pqOfSources.remove(selectedSourceInfo)
+                listOfSources = listOfSources - selectedSourceInfo
                 // Update leecher count and put it back in
                 selectedSourceInfo.currentLeechers -= 1
-                pqOfSources.add(selectedSourceInfo)
+                listOfSources += selectedSourceInfo
               }
 
               // Remove thisWorkerInfo
-              if (pqOfSources != null) {
-                pqOfSources.remove(thisWorkerInfo)
+              if (listOfSources != null) {
+                listOfSources = listOfSources - thisWorkerInfo
               }
             }
           }
@@ -533,21 +539,30 @@ extends Broadcast[T] with Logging {
         }
       }
 
-      // TODO: Caller must have a synchronized block on pqOfSources
-      // TODO: If a worker fails to get the broadcasted variable from a source and
-      // comes back to Master, this function might choose the worker itself as a
-      // source tp create a dependency cycle(this worker was put into pqOfSources
-      // as a streming source when it first arrived). The length of this cycle can
-      // be arbitrarily long.
+      // FIXME: Caller must have a synchronized block on listOfSources
+      // FIXME: If a worker fails to get the broadcasted variable from a source
+      // and comes back to the Master, this function might choose the worker
+      // itself as a source to create a dependency cycle (this worker was put
+      // into listOfSources as a streming source when it first arrived). The
+      // length of this cycle can be arbitrarily long.
       private def selectSuitableSource(skipSourceInfo: SourceInfo): SourceInfo = {
-        // Select one based on the ordering strategy(e.g., least leechers etc.)
-        // take is a blocking call removing the element from PQ
-        var selectedSource = pqOfSources.poll
-        assert(selectedSource != null)
+        // Select one with the most leechers. This will level-wise fill the tree
+
+        var maxLeechers = -1
+        var selectedSource: SourceInfo = null
+
+        listOfSources.foreach { source =>
+          if (source != skipSourceInfo &&
+            source.currentLeechers < Broadcast.MaxDegree &&
+            source.currentLeechers > maxLeechers) {
+              selectedSource = source
+              maxLeechers = source.currentLeechers
+            }
+        }
+
         // Update leecher count
         selectedSource.currentLeechers += 1
-        // Add it back and then return
-        pqOfSources.add(selectedSource)
+
         return selectedSource
       }
     }
@@ -583,7 +598,7 @@ extends Broadcast[T] with Logging {
             try {
               threadPool.execute(new ServeSingleRequest(clientSocket))
             } catch {
-              // In failure, close socket here; else, the thread will close it
+              // In failure, close() socket here; else, the thread will close() it
               case ioe: IOException => clientSocket.close()
             }
           }
@@ -596,7 +611,7 @@ extends Broadcast[T] with Logging {
       }
 
       // Shutdown the thread pool
-      threadPool.shutdown()
+      threadPool.shutdown
     }
 
     class ServeSingleRequest(val clientSocket: Socket)
@@ -626,7 +641,7 @@ extends Broadcast[T] with Logging {
           }
         } catch {
           // If something went wrong, e.g., the worker at the other end died etc.
-          // then close everything up
+          // then close() everything up
           case e: Exception => {
             logInfo("ServeSingleRequest had a " + e)
           }
@@ -667,14 +682,14 @@ extends Broadcast[T] with Logging {
   }
 }
 
-class ChainedBroadcastFactory
+class TreeBroadcastFactory
 extends BroadcastFactory {
-  def initialize(isMaster: Boolean) = ChainedBroadcast.initialize(isMaster)
+  def initialize(isMaster: Boolean) = TreeBroadcast.initialize(isMaster)
   def newBroadcast[T](value_ : T, isLocal: Boolean) =
-    new ChainedBroadcast[T](value_, isLocal)
+    new TreeBroadcast[T](value_, isLocal)
 }
 
-private object ChainedBroadcast
+private object TreeBroadcast
 extends Logging {
   val values = Cache.newKeySpace()
 
@@ -688,6 +703,8 @@ extends Logging {
 
   private var trackMV: TrackMultipleValues = null
 
+  private var MaxDegree_ : Int = 2
+
   def initialize(isMaster__ : Boolean): Unit = {
     synchronized {
       if (!initialized) {
@@ -696,7 +713,7 @@ extends Logging {
         if (isMaster) {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon(true)
-          trackMV.start()
+          trackMV.start
           // TODO: Logging the following line makes the Spark framework ID not
           // getting logged, cause it calls logInfo before log4j is initialized
           logInfo("TrackMultipleValues started...")
@@ -714,7 +731,7 @@ extends Logging {
 
   def registerValue(uuid: UUID, guidePort: Int): Unit = {
     valueToGuidePortMap.synchronized {
-      valueToGuidePortMap +=(uuid -> guidePort)
+      valueToGuidePortMap += (uuid -> guidePort)
       logInfo("New value registered with the Tracker " + valueToGuidePortMap)
     }
   }
@@ -774,7 +791,7 @@ extends Logging {
                 }
               })
             } catch {
-              // In failure, close socket here; else, client thread will close
+              // In failure, close() socket here; else, client thread will close()
               case ioe: IOException => clientSocket.close()
             }
           }
@@ -784,7 +801,7 @@ extends Logging {
       }
 
       // Shutdown the thread pool
-      threadPool.shutdown()
+      threadPool.shutdown
     }
   }
 }

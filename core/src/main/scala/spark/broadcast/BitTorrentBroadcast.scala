@@ -1,4 +1,4 @@
-package spark
+package spark.broadcast
 
 import java.io._
 import java.net._
@@ -7,6 +7,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ListBuffer, Map, Set}
 import scala.math
+
+import spark._
 
 @serializable
 class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean)
@@ -710,7 +712,7 @@ extends Broadcast[T] with Logging {
           case eofe: java.io.EOFException => { }
           case e: Exception => {
             logInfo("TalktoPeer had a " + e)
-            // TODO: Remove 'newPeerToTalkTo' from listOfSources
+            // FIXME: Remove 'newPeerToTalkTo' from listOfSources
             // We probably should have the following in some form, but not
             // really here. This exception can happen if the sender just breaks connection
             // listOfSources.synchronized {

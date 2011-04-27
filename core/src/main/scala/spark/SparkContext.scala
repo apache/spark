@@ -4,9 +4,10 @@ import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
+import spark.broadcast._
+
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.SequenceFileInputFormat
-
 
 class SparkContext(
   master: String,

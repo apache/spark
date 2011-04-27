@@ -6,6 +6,8 @@ import java.util.concurrent.{Executors, ExecutorService}
 
 import scala.collection.mutable.ArrayBuffer
 
+import spark.broadcast._
+
 import mesos.{ExecutorArgs, ExecutorDriver, MesosExecutorDriver}
 import mesos.{TaskDescription, TaskState, TaskStatus}
 

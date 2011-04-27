@@ -1,9 +1,11 @@
-package spark
+package spark.broadcast
 
 import java.io._
 import java.net._
 import java.util.{BitSet, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
+
+import spark._
 
 @serializable
 trait Broadcast[T] {
@@ -22,7 +24,7 @@ trait BroadcastFactory {
   def newBroadcast[T] (value_ : T, isLocal: Boolean): Broadcast[T]
 }
 
-private object Broadcast
+object Broadcast
 extends Logging {
   // Messages
   val REGISTER_BROADCAST_TRACKER = 0
