@@ -25,7 +25,7 @@ fi
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$SPARK_JAVA_OPTS"
-JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH:$FWDIR/third_party:$FWDIR/src/native:$MESOS_LIBRARY_PATH"
+JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH:$FWDIR/lib:$FWDIR/src/main/native:$MESOS_LIBRARY_PATH"
 JAVA_OPTS+=" -Xms$SPARK_MEM -Xmx$SPARK_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e $FWDIR/conf/java-opts ] ; then
@@ -33,22 +33,27 @@ if [ -e $FWDIR/conf/java-opts ] ; then
 fi
 export JAVA_OPTS
 
+CORE_DIR=$FWDIR/core
+EXAMPLES_DIR=$FWDIR/examples
+
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$FWDIR/build/classes:$MESOS_CLASSPATH"
+CLASSPATH="$SPARK_CLASSPATH:$CORE_DIR/target/scala_2.8.1/classes:$MESOS_CLASSPATH"
 CLASSPATH+=:$FWDIR/conf
-CLASSPATH+=:$FWDIR/third_party/mesos.jar
-CLASSPATH+=:$FWDIR/third_party/asm-3.2/lib/all/asm-all-3.2.jar
-CLASSPATH+=:$FWDIR/third_party/colt.jar
-CLASSPATH+=:$FWDIR/third_party/guava-r07/guava-r07.jar
-CLASSPATH+=:$FWDIR/third_party/hadoop-0.20.0/hadoop-0.20.0-core.jar
-CLASSPATH+=:$FWDIR/third_party/scalatest-1.2/scalatest-1.2.jar
-CLASSPATH+=:$FWDIR/third_party/scalacheck_2.8.0-1.7.jar
-CLASSPATH+=:$FWDIR/third_party/jetty-7.1.6.v20100715/jetty-server-7.1.6.v20100715.jar
-CLASSPATH+=:$FWDIR/third_party/jetty-7.1.6.v20100715/servlet-api-2.5.jar
-CLASSPATH+=:$FWDIR/third_party/apache-log4j-1.2.16/log4j-1.2.16.jar
-CLASSPATH+=:$FWDIR/third_party/slf4j-1.6.1/slf4j-api-1.6.1.jar
-CLASSPATH+=:$FWDIR/third_party/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
-for jar in $FWDIR/third_party/hadoop-0.20.0/lib/*.jar; do
+CLASSPATH+=:$CORE_DIR/lib/mesos.jar
+CLASSPATH+=:$CORE_DIR/lib/asm-3.2/lib/all/asm-all-3.2.jar
+CLASSPATH+=:$CORE_DIR/lib/colt.jar
+CLASSPATH+=:$CORE_DIR/lib/guava-r07/guava-r07.jar
+CLASSPATH+=:$CORE_DIR/lib/hadoop-0.20.2/hadoop-0.20.2-core.jar
+CLASSPATH+=:$CORE_DIR/lib/scalatest-1.2/scalatest-1.2.jar
+CLASSPATH+=:$CORE_DIR/lib/scalacheck_2.8.0-1.7.jar
+CLASSPATH+=:$CORE_DIR/lib/jetty-7.1.6.v20100715/jetty-server-7.1.6.v20100715.jar
+CLASSPATH+=:$CORE_DIR/lib/jetty-7.1.6.v20100715/servlet-api-2.5.jar
+CLASSPATH+=:$CORE_DIR/lib/apache-log4j-1.2.16/log4j-1.2.16.jar
+CLASSPATH+=:$CORE_DIR/lib/slf4j-1.6.1/slf4j-api-1.6.1.jar
+CLASSPATH+=:$CORE_DIR/lib/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
+CLASSPATH+=:$CORE_DIR/lib/compress-lzf-0.6.0/compress-lzf-0.6.0.jar
+CLASSPATH+=:$EXAMPLES_DIR/target/scala_2.8.1/classes
+for jar in $CORE_DIR/lib/hadoop-0.20.2/lib/*.jar; do
   CLASSPATH+=:$jar
 done
 export CLASSPATH # Needed for spark-shell

@@ -1,4 +1,4 @@
--Dspark.shuffle.class=spark.TrackedCustomBlockedInMemoryShuffle
+-Dspark.shuffle.class=spark.CustomBlockedInMemoryShuffle
 -Dspark.shuffle.masterHostAddress=127.0.0.1
 -Dspark.shuffle.masterTrackerPort=22222 
 -Dspark.shuffle.trackerStrategy=spark.BalanceRemainingShuffleTrackerStrategy 
