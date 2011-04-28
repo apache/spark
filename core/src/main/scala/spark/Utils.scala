@@ -3,6 +3,7 @@ package spark
 import java.io._
 import java.net.InetAddress
 import java.util.UUID
+import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -117,11 +118,43 @@ object Utils {
   /**
    * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4)
    */
-  def localIpAddress(): String = {
-    // Get local IP as an array of four bytes
-    val bytes = InetAddress.getLocalHost().getAddress()
-    // Convert the bytes to ints (keeping in mind that they may be negative)
-    // and join them into a string
-    return bytes.map(b => (b.toInt + 256) % 256).mkString(".")
+  def localIpAddress(): String = InetAddress.getLocalHost.getHostAddress
+  
+  /**
+   * Returns a standard ThreadFactory except all threads are daemons
+   */
+  private def newDaemonThreadFactory: ThreadFactory = {
+    new ThreadFactory {
+      def newThread(r: Runnable): Thread = {
+        var t = Executors.defaultThreadFactory.newThread (r)
+        t.setDaemon (true)
+        return t
+      }
+    }
   }
+
+  /**
+   * Wrapper over newCachedThreadPool
+   */
+  def newDaemonCachedThreadPool(): ThreadPoolExecutor = {
+    var threadPool =
+      Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
+
+    threadPool.setThreadFactory (newDaemonThreadFactory)
+
+    return threadPool
+  }
+
+  /**
+   * Wrapper over newFixedThreadPool
+   */
+  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
+    var threadPool =
+      Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
+
+    threadPool.setThreadFactory(newDaemonThreadFactory)
+
+    return threadPool
+  }
+  
 }

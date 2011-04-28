@@ -351,7 +351,7 @@ extends Broadcast[T] with Logging {
     private var setOfCompletedSources = Set[SourceInfo]()
 
     override def run: Unit = {
-      var threadPool = Broadcast.newDaemonCachedThreadPool
+      var threadPool = Utils.newDaemonCachedThreadPool()
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(0)
@@ -558,7 +558,7 @@ extends Broadcast[T] with Logging {
   class ServeMultipleRequests
   extends Thread with Logging {
     override def run: Unit = {
-      var threadPool = Broadcast.newDaemonCachedThreadPool
+      var threadPool = Utils.newDaemonCachedThreadPool()
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(0)
@@ -731,7 +731,7 @@ extends Logging {
   class TrackMultipleValues
   extends Thread with Logging {
     override def run: Unit = {
-      var threadPool = Broadcast.newDaemonCachedThreadPool
+      var threadPool = Utils.newDaemonCachedThreadPool()
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(Broadcast.MasterTrackerPort)

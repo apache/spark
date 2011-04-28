@@ -447,7 +447,7 @@ extends Broadcast[T] with Logging {
     private var blocksInRequestBitVector = new BitSet(totalBlocks)
 
     override def run: Unit = {
-      var threadPool = Broadcast.newDaemonFixedThreadPool(Broadcast.MaxRxSlots)
+      var threadPool = Utils.newDaemonFixedThreadPool(Broadcast.MaxRxSlots)
 
       while (hasBlocks.get < totalBlocks) {
         var numThreadsToCreate =
@@ -862,7 +862,7 @@ extends Broadcast[T] with Logging {
     private var setOfCompletedSources = Set[SourceInfo]()
 
     override def run: Unit = {
-      var threadPool = Broadcast.newDaemonCachedThreadPool
+      var threadPool = Utils.newDaemonCachedThreadPool()
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(0)
@@ -1059,7 +1059,7 @@ extends Broadcast[T] with Logging {
   class ServeMultipleRequests
   extends Thread with Logging {
     // Server at most Broadcast.MaxTxSlots peers
-    var threadPool = Broadcast.newDaemonFixedThreadPool(Broadcast.MaxTxSlots)
+    var threadPool = Utils.newDaemonFixedThreadPool(Broadcast.MaxTxSlots)
 
     override def run: Unit = {
       var serverSocket = new ServerSocket(0)
@@ -1247,7 +1247,7 @@ extends Logging {
   class TrackMultipleValues
   extends Thread with Logging {
     override def run: Unit = {
-      var threadPool = Broadcast.newDaemonCachedThreadPool
+      var threadPool = Utils.newDaemonCachedThreadPool()
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(Broadcast.MasterTrackerPort)

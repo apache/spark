@@ -99,8 +99,7 @@ extends Shuffle[K, V, C] with Logging {
       receivedData = new LinkedBlockingQueue[(Int, Array[Byte])]
       combiners = new HashMap[K, C]
       
-      var threadPool = Shuffle.newDaemonFixedThreadPool(
-        Shuffle.MaxRxConnections)
+      var threadPool = Utils.newDaemonFixedThreadPool(Shuffle.MaxRxConnections)
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate = math.min(totalSplits, 
@@ -398,7 +397,7 @@ object CustomParallelLocalFileShuffle extends Logging {
   
   class ShuffleServer
   extends Thread with Logging {
-    var threadPool = Shuffle.newDaemonFixedThreadPool(Shuffle.MaxTxConnections)
+    var threadPool = Utils.newDaemonFixedThreadPool(Shuffle.MaxTxConnections)
 
     var serverSocket: ServerSocket = null
 
