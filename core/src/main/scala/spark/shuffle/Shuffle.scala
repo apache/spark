@@ -1,8 +1,10 @@
-package spark
+package spark.shuffle
 
 import java.net._
 import java.util.{BitSet}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
+
+import spark._
 
 /**
  * A trait for shuffle system. Given an input RDD and combiner functions
@@ -21,7 +23,7 @@ trait Shuffle[K, V, C] {
 /**
  * An object containing common shuffle config parameters
  */
-private object Shuffle 
+object Shuffle 
 extends Logging {
   // Tracker communication constants
   val ReducerEntering = 0

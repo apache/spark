@@ -35,7 +35,7 @@ extends Logging {
   def initialize (isMaster__ : Boolean): Unit = synchronized {
     if (!initialized) {
       val broadcastFactoryClass = System.getProperty("spark.broadcast.factory",
-        "spark.DfsBroadcastFactory")
+        "spark.broadcast.DfsBroadcastFactory")
 
       broadcastFactory =
         Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]

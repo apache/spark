@@ -5,6 +5,7 @@ import java.io._
 import scala.collection.mutable.ArrayBuffer
 
 import spark.broadcast._
+import spark.shuffle._
 
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.SequenceFileInputFormat

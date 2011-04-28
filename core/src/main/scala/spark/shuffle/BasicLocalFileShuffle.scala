@@ -1,4 +1,4 @@
-package spark
+package spark.shuffle
 
 import java.io._
 import java.net.URL
@@ -6,6 +6,8 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+
+import spark._
 
 /**
  * A basic implementation of shuffle using local files served through HTTP.

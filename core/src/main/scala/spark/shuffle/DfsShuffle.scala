@@ -1,4 +1,4 @@
-package spark
+package spark.shuffle
 
 import java.io.{EOFException, ObjectInputStream, ObjectOutputStream}
 import java.net.URI
@@ -8,6 +8,8 @@ import scala.collection.mutable.HashMap
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
+
+import spark._
 
 /**
  * A simple implementation of shuffle using a distributed file system.

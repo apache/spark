@@ -1,4 +1,4 @@
-package spark
+package spark.shuffle
 
 import java.io._
 import java.net._
@@ -7,6 +7,9 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{LinkedBlockingQueue, Executors, ThreadPoolExecutor, ThreadFactory}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.math
+
+import spark._
 
 /**
  * An implementation of shuffle using local files served through HTTP where 
@@ -98,7 +101,7 @@ extends Shuffle[K, V, C] with Logging {
         
       while (hasSplits < totalSplits) {
         var numThreadsToCreate =
-          Math.min(totalSplits, Shuffle.MaxRxConnections) -
+          math.min(totalSplits, Shuffle.MaxRxConnections) -
           threadPool.getActiveCount
       
         while (hasSplits < totalSplits && numThreadsToCreate > 0) {
