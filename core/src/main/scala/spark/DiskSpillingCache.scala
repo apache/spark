@@ -27,6 +27,7 @@ class DiskSpillingCache extends BoundedMemoryCache {
             val timeTaken = System.currentTimeMillis - startTime
             logInfo("Reading key %s of size %d bytes from disk took %d ms".format(
               key, file.length, timeTaken))
+            super.put(key, bytes)
             ser.deserialize(bytes.asInstanceOf[Array[Byte]])
 
           case _ => // not found
@@ -42,9 +43,8 @@ class DiskSpillingCache extends BoundedMemoryCache {
   }
 
   /**
-   * Spill least recently used entries to disk until at least space
-   * bytes are free. Assumes that a lock is held on the DiskSpillingCache.
-   * Assumes that entry.value is a byte array.
+   * Spill the given entry to disk. Assumes that a lock is held on the
+   * DiskSpillingCache.  Assumes that entry.value is a byte array.
    */
   override protected def dropEntry(key: Any, entry: Entry) {
     logInfo("Spilling key %s of size %d to make space".format(
