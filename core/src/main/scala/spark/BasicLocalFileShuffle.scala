@@ -7,14 +7,13 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-
 /**
- * A simple implementation of shuffle using local files served through HTTP.
+ * A basic implementation of shuffle using local files served through HTTP.
  *
  * TODO: Add support for compression when spark.compress is set to true.
  */
 @serializable
-class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
+class BasicLocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   override def compute(input: RDD[(K, V)],
                        numOutputSplits: Int,
                        createCombiner: V => C,
@@ -23,7 +22,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   : RDD[(K, C)] =
   {
     val sc = input.sparkContext
-    val shuffleId = LocalFileShuffle.newShuffleId()
+    val shuffleId = BasicLocalFileShuffle.newShuffleId()
     logInfo("Shuffle ID: " + shuffleId)
 
     val splitRdd = new NumberedSplitRDD(input)
@@ -46,13 +45,20 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
           case None => createCombiner(v)
         }
       }
+      
       for (i <- 0 until numOutputSplits) {
-        val file = LocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
+        val file = BasicLocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
+        val writeStartTime = System.currentTimeMillis
+        logInfo("BEGIN WRITE: " + file)
         val out = new ObjectOutputStream(new FileOutputStream(file))
         buckets(i).foreach(pair => out.writeObject(pair))
         out.close()
+        logInfo("END WRITE: " + file)
+        val writeTime = (System.currentTimeMillis - writeStartTime)
+        logInfo("Writing " + file + " of size " + file.length + " bytes took " + writeTime + " millis.")
       }
-      (myIndex, LocalFileShuffle.serverUri)
+      
+      (myIndex, BasicLocalFileShuffle.serverUri)
     }).collect()
 
     // Build a hashmap from server URI to list of splits (to facillitate
@@ -71,6 +77,8 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
       for ((serverUri, inputIds) <- Utils.shuffle(splitsByUri)) {
         for (i <- inputIds) {
           val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, myId)
+          val readStartTime = System.currentTimeMillis
+          logInfo("BEGIN READ: " + url)
           val inputStream = new ObjectInputStream(new URL(url).openStream())
           try {
             while (true) {
@@ -84,6 +92,9 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
             case e: EOFException => {}
           }
           inputStream.close()
+          logInfo("END READ: " + url)
+          val readTime = System.currentTimeMillis - readStartTime
+          logInfo("Reading " + url + " took " + readTime + " millis.")
         }
       }
       combiners
@@ -91,8 +102,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
   }
 }
 
-
-object LocalFileShuffle extends Logging {
+object BasicLocalFileShuffle extends Logging {
   private var initialized = false
   private var nextShuffleId = new AtomicLong(0)
 
@@ -113,9 +123,9 @@ object LocalFileShuffle extends Logging {
       while (!foundLocalDir && tries < 10) {
         tries += 1
         try {
-          localDirUuid = UUID.randomUUID()
+          localDirUuid = UUID.randomUUID
           localDir = new File(localDirRoot, "spark-local-" + localDirUuid)
-          if (!localDir.exists()) {
+          if (!localDir.exists) {
             localDir.mkdirs()
             foundLocalDir = true
           }
@@ -131,6 +141,7 @@ object LocalFileShuffle extends Logging {
       shuffleDir = new File(localDir, "shuffle")
       shuffleDir.mkdirs()
       logInfo("Shuffle dir: " + shuffleDir)
+      
       val extServerPort = System.getProperty(
         "spark.localFileShuffle.external.server.port", "-1").toInt
       if (extServerPort != -1) {
@@ -149,6 +160,7 @@ object LocalFileShuffle extends Logging {
         serverUri = server.uri
       }
       initialized = true
+      logInfo("Local URI: " + serverUri)
     }
   }
 

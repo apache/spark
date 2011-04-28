@@ -9,7 +9,6 @@ import scala.collection.mutable.HashMap
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
 
-
 /**
  * A simple implementation of shuffle using a distributed file system.
  *
@@ -81,7 +80,6 @@ class DfsShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
     })
   }
 }
-
 
 /**
  * Companion object of DfsShuffle; responsible for initializing a Hadoop
