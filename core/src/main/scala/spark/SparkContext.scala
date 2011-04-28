@@ -35,10 +35,11 @@ extends Logging {
 
   private val isLocal = scheduler.isInstanceOf[LocalScheduler]
 
-  // Start the scheduler, the cache and the broadcast system
-  scheduler.start()
+  // Start all other subsystems before the scheduler
+  // Initialize Cache before Broadcast because Broadcast depends on it
   Cache.initialize()
   Broadcast.initialize(true)
+  scheduler.start()
 
   // Methods for creating RDDs
 

@@ -49,7 +49,7 @@ extends Broadcast[T] with Logging {
   @transient var rxSpeeds = new SpeedTracker
   @transient var txSpeeds = new SpeedTracker
 
-  @transient var hostAddress = InetAddress.getLocalHost.getHostAddress
+  @transient var hostAddress = Utils.localIpAddress
   @transient var listenPort = -1
   @transient var guidePort = -1
 
@@ -187,7 +187,7 @@ extends Broadcast[T] with Logging {
     rxSpeeds = new SpeedTracker
     txSpeeds = new SpeedTracker
 
-    hostAddress = InetAddress.getLocalHost.getHostAddress
+    hostAddress = Utils.localIpAddress
     listenPort = -1
 
     listOfSources = ListBuffer[SourceInfo]()

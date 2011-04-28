@@ -36,7 +36,7 @@ extends Broadcast[T] with Logging {
   @transient var serveMR: ServeMultipleRequests = null
   @transient var guideMR: GuideMultipleRequests = null
 
-  @transient var hostAddress = InetAddress.getLocalHost.getHostAddress
+  @transient var hostAddress = Utils.localIpAddress
   @transient var listenPort = -1
   @transient var guidePort = -1
 
@@ -152,7 +152,7 @@ extends Broadcast[T] with Logging {
 
     serveMR =  null
 
-    hostAddress = InetAddress.getLocalHost.getHostAddress
+    hostAddress = Utils.localIpAddress
     listenPort = -1
 
     stopBroadcast = false

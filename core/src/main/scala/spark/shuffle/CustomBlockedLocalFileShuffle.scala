@@ -399,7 +399,7 @@ object CustomBlockedLocalFileShuffle extends Logging {
   private var shuffleDir: File = null
 
   private var shuffleServer: ShuffleServer = null
-  private var serverAddress = InetAddress.getLocalHost.getHostAddress
+  private var serverAddress = Utils.localIpAddress
   private var serverPort: Int = -1
   
   // Random number generator

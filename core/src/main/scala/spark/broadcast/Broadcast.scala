@@ -34,14 +34,19 @@ extends Logging {
   // Called by SparkContext or Executor before using Broadcast
   def initialize (isMaster__ : Boolean): Unit = synchronized {
     if (!initialized) {
-      val broadcastFactoryClass = System.getProperty("spark.broadcast.factory",
-        "spark.broadcast.DfsBroadcastFactory")
+      val broadcastFactoryClass = System.getProperty(
+        "spark.broadcast.factory", "spark.broadcast.DfsBroadcastFactory")
 
       broadcastFactory =
         Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
 
       // Setup isMaster before using it
       isMaster_ = isMaster__
+      
+      // Set masterHostAddress to the master's IP address for the slaves to read
+      if (isMaster) {
+        System.setProperty("spark.broadcast.masterHostAddress", Utils.localIpAddress)
+      }
 
       // Initialize appropriate BroadcastFactory and BroadcastObject
       broadcastFactory.initialize(isMaster)
@@ -59,7 +64,7 @@ extends Logging {
 
   // Load common broadcast-related config parameters
   private var MasterHostAddress_ = System.getProperty(
-    "spark.broadcast.masterHostAddress", InetAddress.getLocalHost.getHostAddress)
+    "spark.broadcast.masterHostAddress", "")
   private var MasterTrackerPort_ = System.getProperty(
     "spark.broadcast.masterTrackerPort", "11111").toInt
   private var BlockSize_ = System.getProperty(
