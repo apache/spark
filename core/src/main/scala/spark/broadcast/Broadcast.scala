@@ -222,7 +222,8 @@ case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) { }
 
 @serializable
 case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
-  val totalBlocks: Int, val totalBytes: Int) {
+                                    val totalBlocks: Int, 
+                                    val totalBytes: Int) {
   @transient var hasBlocks = 0
 }
 

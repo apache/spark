@@ -469,31 +469,9 @@ object CustomBlockedLocalFileShuffle extends Logging {
     nextShuffleId.getAndIncrement()
   }
   
-  // Returns a standard ThreadFactory except all threads are daemons
-  private def newDaemonThreadFactory: ThreadFactory = {
-    new ThreadFactory {
-      def newThread(r: Runnable): Thread = {
-        var t = Executors.defaultThreadFactory.newThread(r)
-        t.setDaemon(true)
-        return t
-      }
-    }
-  }
-
-  // Wrapper over newFixedThreadPool
-  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
-    var threadPool =
-      Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory(newDaemonThreadFactory)
-    
-    return threadPool
-  }
-  
   class ShuffleServer
   extends Thread with Logging {
-    var threadPool = 
-      newDaemonFixedThreadPool(Shuffle.MaxTxConnections)
+    var threadPool = Shuffle.newDaemonFixedThreadPool(Shuffle.MaxTxConnections)
 
     var serverSocket: ServerSocket = null
 
