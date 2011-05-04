@@ -1,10 +1,11 @@
-package bagel
+package bagel.examples
 
 import spark._
 import spark.SparkContext._
 
 import scala.math.min
 
+import bagel._
 import bagel.Pregel._
 
 object ShortestPath {
@@ -80,6 +81,7 @@ object ShortestPath {
   }
 }
 
+@serializable
 object MinCombiner extends Combiner[SPMessage, Int] {
   def createCombiner(msg: SPMessage): Int =
     msg.value

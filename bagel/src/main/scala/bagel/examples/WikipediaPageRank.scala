@@ -1,8 +1,9 @@
-package bagel
+package bagel.examples
 
 import spark._
 import spark.SparkContext._
 
+import bagel._
 import bagel.Pregel._
 
 import scala.collection.mutable.ArrayBuffer
@@ -75,6 +76,7 @@ object WikipediaPageRank {
   }
 }
 
+@serializable
 object PRCombiner extends Combiner[PRMessage, Double] {
   def createCombiner(msg: PRMessage): Double =
     msg.value
@@ -103,6 +105,7 @@ object PRCombiner extends Combiner[PRMessage, Double] {
   }
 }
 
+@serializable
 object PRNoCombiner extends DefaultCombiner[PRMessage] {
   def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messages: Option[ArrayBuffer[PRMessage]], superstep: Int): (PRVertex, Iterable[PRMessage]) =
     PRCombiner.compute(numVertices, epsilon)(self, messages match {
