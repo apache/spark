@@ -1,11 +1,11 @@
-package bagel
+package spark.bagel
 
 import spark._
 import spark.SparkContext._
 
 import scala.collection.mutable.ArrayBuffer
 
-object Pregel extends Logging {
+object Bagel extends Logging {
   def run[V <: Vertex : Manifest, M <: Message : Manifest, C : Manifest, A : Manifest](
     sc: SparkContext,
     verts: RDD[(String, V)],
@@ -88,7 +88,7 @@ object Pregel extends Logging {
 
   /**
    * Converts a compute function that doesn't take an aggregator to
-   * one that does, so it can be passed to Pregel.run.
+   * one that does, so it can be passed to Bagel.run.
    */
   implicit def addAggregatorArg[
     V <: Vertex : Manifest, M <: Message : Manifest, C
@@ -128,7 +128,7 @@ class NullAggregator[V] extends Aggregator[V, Option[Nothing]] {
 }
 
 /**
- * Represents a Pregel vertex.
+ * Represents a Bagel vertex.
  *
  * Subclasses may store state along with each vertex and must be
  * annotated with @serializable.
@@ -139,7 +139,7 @@ trait Vertex {
 }
 
 /**
- * Represents a Pregel message to a target vertex.
+ * Represents a Bagel message to a target vertex.
  *
  * Subclasses may contain a payload to deliver to the target vertex
  * and must be annotated with @serializable.

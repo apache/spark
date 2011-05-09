@@ -1,12 +1,12 @@
-package bagel.examples
+package spark.bagel.examples
 
 import spark._
 import spark.SparkContext._
 
 import scala.math.min
 
-import bagel._
-import bagel.Pregel._
+import spark.bagel._
+import spark.bagel.Bagel._
 
 object ShortestPath {
   def main(args: Array[String]) {
@@ -68,7 +68,7 @@ object ShortestPath {
 
         (new SPVertex(self.id, newValue, self.outEdges, false), outbox)
     }
-    val result = Pregel.run(sc, vertices, messages)(combiner = MinCombiner, numSplits = numSplits)(compute)
+    val result = Bagel.run(sc, vertices, messages)(combiner = MinCombiner, numSplits = numSplits)(compute)
 
     // Print the result
     System.err.println("Shortest path from "+startVertex+" to all vertices:")

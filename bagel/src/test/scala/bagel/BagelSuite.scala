@@ -1,4 +1,4 @@
-package bagel
+package spark.bagel
 
 import org.scalatest.{FunSuite, Assertions}
 import org.scalatest.prop.Checkers
@@ -10,7 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import spark._
 
-import bagel.Pregel._
+import spark.bagel.Bagel._
 
 @serializable class TestVertex(val id: String, val active: Boolean, val age: Int) extends Vertex
 @serializable class TestMessage(val targetId: String) extends Message
@@ -22,7 +22,7 @@ class BagelSuite extends FunSuite with Assertions {
     val msgs = sc.parallelize(Array[(String, TestMessage)]())
     val numSupersteps = 5
     val result =
-      Pregel.run(sc, verts, msgs)()(addAggregatorArg {
+      Bagel.run(sc, verts, msgs)()(addAggregatorArg {
       (self: TestVertex, msgs: Option[ArrayBuffer[TestMessage]], superstep: Int) =>
         (new TestVertex(self.id, superstep < numSupersteps - 1, self.age + 1), Array[TestMessage]())
     })
@@ -36,7 +36,7 @@ class BagelSuite extends FunSuite with Assertions {
     val msgs = sc.parallelize(Array("a" -> new TestMessage("a")))
     val numSupersteps = 5
     val result =
-      Pregel.run(sc, verts, msgs)()(addAggregatorArg {
+      Bagel.run(sc, verts, msgs)()(addAggregatorArg {
       (self: TestVertex, msgs: Option[ArrayBuffer[TestMessage]], superstep: Int) =>
         val msgsOut =
           msgs match {

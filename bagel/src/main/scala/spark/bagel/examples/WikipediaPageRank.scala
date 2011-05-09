@@ -1,10 +1,10 @@
-package bagel.examples
+package spark.bagel.examples
 
 import spark._
 import spark.SparkContext._
 
-import bagel._
-import bagel.Pregel._
+import spark.bagel._
+import spark.bagel.Bagel._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.xml.{XML,NodeSeq}
@@ -63,9 +63,9 @@ object WikipediaPageRank {
     val messages = sc.parallelize(List[(String, PRMessage)]())
     val result =
       if (noCombiner) {
-        Pregel.run(sc, vertices, messages)(numSplits = numSplits)(PRNoCombiner.compute(numVertices, epsilon))
+        Bagel.run(sc, vertices, messages)(numSplits = numSplits)(PRNoCombiner.compute(numVertices, epsilon))
       } else {
-        Pregel.run(sc, vertices, messages)(combiner = PRCombiner, numSplits = numSplits)(PRCombiner.compute(numVertices, epsilon))
+        Bagel.run(sc, vertices, messages)(combiner = PRCombiner, numSplits = numSplits)(PRCombiner.compute(numVertices, epsilon))
       }
 
     // Print the result
