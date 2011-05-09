@@ -60,10 +60,14 @@ class BoundedMemoryCache extends Cache with Logging {
     val iter = map.entrySet.iterator
     while (maxBytes - currentBytes < space && iter.hasNext) {
       val mapEntry = iter.next()
-      logInfo("Dropping key %s of size %d to make space".format(
-        mapEntry.getKey, mapEntry.getValue.size))
+      dropEntry(mapEntry.getKey, mapEntry.getValue)
       currentBytes -= mapEntry.getValue.size
       iter.remove()
     }
+  }
+
+  protected def dropEntry(key: Any, entry: Entry) {
+    logInfo("Dropping key %s of size %d to make space".format(
+      key, entry.size))
   }
 }
