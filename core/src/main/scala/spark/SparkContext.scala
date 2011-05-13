@@ -121,6 +121,9 @@ extends Logging {
   def stop() {
      scheduler.stop()
      scheduler = null
+     // TODO: Broadcast.stop(), Cache.stop()?
+     MapOutputTracker.stop()
+     RDDCache.stop()
   }
 
   // Wait for the scheduler to be registered

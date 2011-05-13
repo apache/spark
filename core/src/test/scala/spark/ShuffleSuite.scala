@@ -18,6 +18,7 @@ class ShuffleSuite extends FunSuite {
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
+    sc.stop()
   }
 
   test("groupByKey with duplicates") {
@@ -29,6 +30,7 @@ class ShuffleSuite extends FunSuite {
     assert(valuesFor1.toList.sorted === List(1, 1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
+    sc.stop()
   }
 
   test("groupByKey with negative key hash codes") {
@@ -40,6 +42,7 @@ class ShuffleSuite extends FunSuite {
     assert(valuesForMinus1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
+    sc.stop()
   }
 
   test("groupByKey with many output partitions") {
@@ -51,6 +54,7 @@ class ShuffleSuite extends FunSuite {
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
+    sc.stop()
   }
 
   test("reduceByKey") {
@@ -58,6 +62,7 @@ class ShuffleSuite extends FunSuite {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
     val sums = pairs.reduceByKey(_+_).collect()
     assert(sums.toSet === Set((1, 7), (2, 1)))
+    sc.stop()
   }
 
   test("reduceByKey with collectAsMap") {
@@ -67,6 +72,7 @@ class ShuffleSuite extends FunSuite {
     assert(sums.size === 2)
     assert(sums(1) === 7)
     assert(sums(2) === 1)
+    sc.stop()
   }
 
   test("reduceByKey with many output partitons") {
@@ -74,6 +80,7 @@ class ShuffleSuite extends FunSuite {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
     val sums = pairs.reduceByKey(_+_, 10).collect()
     assert(sums.toSet === Set((1, 7), (2, 1)))
+    sc.stop()
   }
 
   test("join") {
@@ -88,6 +95,7 @@ class ShuffleSuite extends FunSuite {
       (2, (1, 'y')),
       (2, (1, 'z'))
     ))
+    sc.stop()
   }
 
   test("join all-to-all") {
@@ -104,6 +112,7 @@ class ShuffleSuite extends FunSuite {
       (1, (3, 'x')),
       (1, (3, 'y'))
     ))
+    sc.stop()
   }
 
   test("join with no matches") {
@@ -112,6 +121,7 @@ class ShuffleSuite extends FunSuite {
     val rdd2 = sc.parallelize(Array((4, 'x'), (5, 'y'), (5, 'z'), (6, 'w')))
     val joined = rdd1.join(rdd2).collect()
     assert(joined.size === 0)
+    sc.stop()
   }
 
   test("join with many output partitions") {
@@ -126,5 +136,6 @@ class ShuffleSuite extends FunSuite {
       (2, (1, 'y')),
       (2, (1, 'z'))
     ))
+    sc.stop()
   }
 }

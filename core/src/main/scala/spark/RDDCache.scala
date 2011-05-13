@@ -12,6 +12,7 @@ case class DroppedFromCache(rddId: Int, partition: Int, host: String) extends Ca
 case class MemoryCacheLost(host: String) extends CacheMessage
 case class RegisterRDD(rddId: Int, numPartitions: Int) extends CacheMessage
 case object GetCacheLocations extends CacheMessage
+case object StopCacheTracker extends CacheMessage
 
 class RDDCacheTracker extends DaemonActor with Logging {
   val locs = new HashMap[Int, Array[List[String]]]
@@ -50,6 +51,10 @@ class RDDCacheTracker extends DaemonActor with Logging {
             locsCopy(rddId) = array.clone()
           }
           reply(locsCopy)
+
+        case StopCacheTracker =>
+          reply('OK)
+          exit()
       }
     }
   }
@@ -57,15 +62,15 @@ class RDDCacheTracker extends DaemonActor with Logging {
 
 private object RDDCache extends Logging {
   // Stores map results for various splits locally
-  val cache = Cache.newKeySpace()
+  var cache: KeySpace = null
 
-  // Remembers which splits are currently being loaded
+  // Remembers which splits are currently being loaded (on worker nodes)
   val loading = new HashSet[(Int, Int)]
   
   // Tracker actor on the master, or remote reference to it on workers
   var trackerActor: AbstractActor = null
   
-  val registeredRddIds = new HashSet[Int]
+  var registeredRddIds: HashSet[Int] = null
   
   def initialize(isMaster: Boolean) {
     if (isMaster) {
@@ -77,6 +82,8 @@ private object RDDCache extends Logging {
       val port = System.getProperty("spark.master.port").toInt
       trackerActor = RemoteActor.select(Node(host, port), 'RDDCacheTracker)
     }
+    registeredRddIds = new HashSet[Int]
+    cache = Cache.newKeySpace()
   }
   
   // Registers an RDD (on master only)
@@ -137,5 +144,11 @@ private object RDDCache extends Logging {
       future.apply() // Wait for the reply from the cache tracker
       return Iterator.fromArray(array)
     }
+  }
+
+  def stop() {
+    trackerActor !? StopCacheTracker
+    registeredRddIds.clear()
+    trackerActor = null
   }
 }

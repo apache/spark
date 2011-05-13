@@ -27,6 +27,8 @@ class ReplSuite extends FunSuite {
     val separator = System.getProperty("path.separator")
     interp.main(Array("-classpath", paths.mkString(separator)))
     spark.repl.Main.interp = null
+    if (interp.sparkContext != null)
+      interp.sparkContext.stop()
     return out.toString
   }
   

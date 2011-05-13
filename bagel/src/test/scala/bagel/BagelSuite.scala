@@ -28,6 +28,7 @@ class BagelSuite extends FunSuite with Assertions {
     })
     for (vert <- result.collect)
       assert(vert.age === numSupersteps)
+    sc.stop()
   }
 
   test("halting by message silence") {
@@ -49,5 +50,6 @@ class BagelSuite extends FunSuite with Assertions {
     })
     for (vert <- result.collect)
       assert(vert.age === numSupersteps)
+    sc.stop()
   }
 }

@@ -260,6 +260,8 @@ extends InterpreterControl {
     plushln("Type :help for more information.")
   }
 
+  var sparkContext: SparkContext = null
+
   def createSparkContext(): SparkContext = {
     val master = this.master match {
       case Some(m) => m
@@ -268,7 +270,8 @@ extends InterpreterControl {
         if (prop != null) prop else "local"
       }
     }
-    new SparkContext(master, "Spark shell")
+    sparkContext = new SparkContext(master, "Spark shell")
+    sparkContext
   }
 
   /** The main read-eval-print loop for the interpreter.  It calls

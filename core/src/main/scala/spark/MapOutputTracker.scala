@@ -9,6 +9,7 @@ import scala.collection.mutable.HashSet
 
 sealed trait MapOutputTrackerMessage
 case class GetMapOutputLocations(shuffleId: Int) extends MapOutputTrackerMessage 
+case object StopMapOutputTracker extends MapOutputTrackerMessage
 
 class MapOutputTracker(serverUris: ConcurrentHashMap[Int, Array[String]])
 extends DaemonActor with Logging {
@@ -23,6 +24,9 @@ extends DaemonActor with Logging {
         case GetMapOutputLocations(shuffleId: Int) =>
           logInfo("Asked to get map output locations for shuffle " + shuffleId)
           reply(serverUris.get(shuffleId))
+        case StopMapOutputTracker =>
+          reply('OK)
+          exit()
       }
     }
   }
@@ -94,5 +98,11 @@ object MapOutputTracker extends Logging {
   
   def getMapOutputUri(serverUri: String, shuffleId: Int, mapId: Int, reduceId: Int): String = {
     "%s/shuffle/%s/%s/%s".format(serverUri, shuffleId, mapId, reduceId)
+  }
+
+  def stop() {
+    trackerActor !? StopMapOutputTracker
+    serverUris.clear()
+    trackerActor = null
   }
 }
