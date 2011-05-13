@@ -35,6 +35,7 @@ export JAVA_OPTS
 
 CORE_DIR=$FWDIR/core
 EXAMPLES_DIR=$FWDIR/examples
+BAGEL_DIR=$FWDIR/bagel
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$CORE_DIR/target/scala_2.8.1/classes:$MESOS_CLASSPATH"
@@ -60,6 +61,7 @@ CLASSPATH+=:$EXAMPLES_DIR/target/scala_2.8.1/classes
 for jar in $CORE_DIR/lib/hadoop-0.20.2/lib/*.jar; do
   CLASSPATH+=:$jar
 done
+CLASSPATH+=:$BAGEL_DIR/target/scala_2.8.1/classes
 export CLASSPATH # Needed for spark-shell
 
 if [ -n "$SCALA_HOME" ]; then
