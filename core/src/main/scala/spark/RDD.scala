@@ -107,7 +107,14 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
   
   def count(): Long = {
-    sc.runJob(this, (iter: Iterator[T]) => iter.size.toLong).sum
+    sc.runJob(this, (iter: Iterator[T]) => {
+      var result = 0L
+      while (iter.hasNext) {
+        result += 1L
+        iter.next
+      }
+      result
+    }).sum
   }
 
   def toArray(): Array[T] = collect()
