@@ -35,12 +35,15 @@ private trait DAGScheduler extends Scheduler with Logging {
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
+  val cacheTracker = SparkEnv.get.cacheTracker
+  val mapOutputTracker = SparkEnv.get.mapOutputTracker
+
   def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
     cacheLocs(rdd.id)
   }
   
   def updateCacheLocs() {
-    cacheLocs = RDDCache.getLocationsSnapshot()
+    cacheLocs = cacheTracker.getLocationsSnapshot()
   }
 
   def getShuffleMapStage(shuf: ShuffleDependency[_,_,_]): Stage = {
@@ -56,7 +59,7 @@ private trait DAGScheduler extends Scheduler with Logging {
   def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_,_]]): Stage = {
     // Kind of ugly: need to register RDDs with the cache here since
     // we can't do it in its constructor because # of splits is unknown
-    RDDCache.registerRDD(rdd.id, rdd.splits.size)
+    cacheTracker.registerRDD(rdd.id, rdd.splits.size)
     val id = newStageId()
     val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd))
     idToStage(id) = stage
@@ -71,7 +74,7 @@ private trait DAGScheduler extends Scheduler with Logging {
         visited += r
         // Kind of ugly: need to register RDDs with the cache here since
         // we can't do it in its constructor because # of splits is unknown
-        RDDCache.registerRDD(r.id, r.splits.size)
+        cacheTracker.registerRDD(r.id, r.splits.size)
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_,_,_] =>
@@ -187,7 +190,7 @@ private trait DAGScheduler extends Scheduler with Logging {
               logInfo(stage + " finished; looking for newly runnable stages")
               running -= stage
               if (stage.shuffleDep != None) {
-                MapOutputTracker.registerMapOutputs(
+                mapOutputTracker.registerMapOutputs(
                   stage.shuffleDep.get.shuffleId,
                   stage.outputLocs.map(_.first).toArray)
               }

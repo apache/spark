@@ -2,39 +2,38 @@ package spark
 
 import java.io.{InputStream, OutputStream}
 
-trait SerializationStream {
-  def writeObject[T](t: T): Unit
-  def flush(): Unit
-  def close(): Unit
-}
-
-trait DeserializationStream {
-  def readObject[T](): T
-  def close(): Unit
-}
-
+/**
+ * A serializer. Because some serialization libraries are not thread safe,
+ * this class is used to create SerializerInstances that do the actual
+ * serialization.
+ */
 trait Serializer {
+  def newInstance(): SerializerInstance
+}
+
+/**
+ * An instance of the serializer, for use by one thread at a time.
+ */
+trait SerializerInstance {
   def serialize[T](t: T): Array[Byte]
   def deserialize[T](bytes: Array[Byte]): T
   def outputStream(s: OutputStream): SerializationStream
   def inputStream(s: InputStream): DeserializationStream
 }
 
-trait SerializationStrategy {
-  def newSerializer(): Serializer
+/**
+ * A stream for writing serialized objects.
+ */
+trait SerializationStream {
+  def writeObject[T](t: T): Unit
+  def flush(): Unit
+  def close(): Unit
 }
 
-object Serializer {
-  var strat: SerializationStrategy = null
-
-  def initialize() {
-    val cls = System.getProperty("spark.serialization",
-      "spark.JavaSerialization")
-    strat = Class.forName(cls).newInstance().asInstanceOf[SerializationStrategy]
-  }
-
-  // Return a serializer ** for use by a single thread **
-  def newInstance(): Serializer = {
-    strat.newSerializer()
-  }
+/**
+ * A stream for reading serialized objects.
+ */
+trait DeserializationStream {
+  def readObject[T](): T
+  def close(): Unit
 }

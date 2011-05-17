@@ -20,7 +20,13 @@ extends Logging {
     System.setProperty("spark.master.host", Utils.localHostName)
   if (System.getProperty("spark.master.port") == null)
     System.setProperty("spark.master.port", "50501")
+  
+  // Create the Spark execution environment (cache, map output tracker, etc)
+  val env = SparkEnv.createFromSystemProperties(true)
+  SparkEnv.set(env)
+  Broadcast.initialize(true)
     
+  // Create and start the scheduler
   private var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
@@ -34,16 +40,9 @@ extends Logging {
         new MesosScheduler(this, master, frameworkName)
     }
   }
+  scheduler.start()
 
   private val isLocal = scheduler.isInstanceOf[LocalScheduler]
-  
-  // Start the scheduler, the cache and the broadcast system
-  scheduler.start()
-  Cache.initialize()
-  Serializer.initialize()
-  Broadcast.initialize(true)
-  MapOutputTracker.initialize(true)
-  RDDCache.initialize(true)
 
   // Methods for creating RDDs
 
@@ -122,8 +121,9 @@ extends Logging {
      scheduler.stop()
      scheduler = null
      // TODO: Broadcast.stop(), Cache.stop()?
-     MapOutputTracker.stop()
-     RDDCache.stop()
+     env.mapOutputTracker.stop()
+     env.cacheTracker.stop()
+     SparkEnv.set(null)
   }
 
   // Wait for the scheduler to be registered

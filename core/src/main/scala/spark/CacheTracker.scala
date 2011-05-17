@@ -6,22 +6,22 @@ import scala.actors.remote._
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-sealed trait CacheMessage
-case class AddedToCache(rddId: Int, partition: Int, host: String) extends CacheMessage
-case class DroppedFromCache(rddId: Int, partition: Int, host: String) extends CacheMessage
-case class MemoryCacheLost(host: String) extends CacheMessage
-case class RegisterRDD(rddId: Int, numPartitions: Int) extends CacheMessage
-case object GetCacheLocations extends CacheMessage
-case object StopCacheTracker extends CacheMessage
+sealed trait CacheTrackerMessage
+case class AddedToCache(rddId: Int, partition: Int, host: String) extends CacheTrackerMessage
+case class DroppedFromCache(rddId: Int, partition: Int, host: String) extends CacheTrackerMessage
+case class MemoryCacheLost(host: String) extends CacheTrackerMessage
+case class RegisterRDD(rddId: Int, numPartitions: Int) extends CacheTrackerMessage
+case object GetCacheLocations extends CacheTrackerMessage
+case object StopCacheTracker extends CacheTrackerMessage
 
-class RDDCacheTracker extends DaemonActor with Logging {
+class CacheTrackerActor extends DaemonActor with Logging {
   val locs = new HashMap[Int, Array[List[String]]]
   // TODO: Should probably store (String, CacheType) tuples
   
   def act() {
-    val port = System.getProperty("spark.master.port", "50501").toInt
+    val port = System.getProperty("spark.master.port").toInt
     RemoteActor.alive(port)
-    RemoteActor.register('RDDCacheTracker, self)
+    RemoteActor.register('CacheTracker, self)
     logInfo("Registered actor on port " + port)
     
     loop {
@@ -60,31 +60,27 @@ class RDDCacheTracker extends DaemonActor with Logging {
   }
 }
 
-private object RDDCache extends Logging {
-  // Stores map results for various splits locally
-  var cache: KeySpace = null
-
-  // Remembers which splits are currently being loaded (on worker nodes)
-  val loading = new HashSet[(Int, Int)]
-  
+class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Tracker actor on the master, or remote reference to it on workers
   var trackerActor: AbstractActor = null
   
-  var registeredRddIds: HashSet[Int] = null
-  
-  def initialize(isMaster: Boolean) {
-    if (isMaster) {
-      val tracker = new RDDCacheTracker
-      tracker.start
-      trackerActor = tracker
-    } else {
-      val host = System.getProperty("spark.master.host")
-      val port = System.getProperty("spark.master.port").toInt
-      trackerActor = RemoteActor.select(Node(host, port), 'RDDCacheTracker)
-    }
-    registeredRddIds = new HashSet[Int]
-    cache = Cache.newKeySpace()
+  if (isMaster) {
+    val tracker = new CacheTrackerActor
+    tracker.start
+    trackerActor = tracker
+  } else {
+    val host = System.getProperty("spark.master.host")
+    val port = System.getProperty("spark.master.port").toInt
+    trackerActor = RemoteActor.select(Node(host, port), 'CacheTracker)
   }
+
+  val registeredRddIds = new HashSet[Int]
+
+  // Stores map results for various splits locally
+  val cache = theCache.newKeySpace()
+
+  // Remembers which splits are currently being loaded (on worker nodes)
+  val loading = new HashSet[(Int, Int)]
   
   // Registers an RDD (on master only)
   def registerRDD(rddId: Int, numPartitions: Int) {
@@ -102,7 +98,7 @@ private object RDDCache extends Logging {
     (trackerActor !? GetCacheLocations) match {
       case h: HashMap[Int, Array[List[String]]] => h
       case _ => throw new SparkException(
-          "Internal error: RDDCache did not reply with a HashMap")
+          "Internal error: CacheTrackerActor did not reply with a HashMap")
     }
   }
   

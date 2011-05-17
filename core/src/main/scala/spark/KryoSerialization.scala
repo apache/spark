@@ -82,8 +82,8 @@ extends DeserializationStream {
   def close() { in.close() }
 }
 
-class KryoSerializer(strat: KryoSerialization) extends Serializer {
-  val buf = strat.threadBuf.get()
+class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
+  val buf = ks.threadBuf.get()
 
   def serialize[T](t: T): Array[Byte] = {
     buf.writeClassAndObject(t)
@@ -94,7 +94,7 @@ class KryoSerializer(strat: KryoSerialization) extends Serializer {
   }
 
   def outputStream(s: OutputStream): SerializationStream = {
-    new KryoSerializationStream(strat.kryo, strat.threadByteBuf.get(), s)
+    new KryoSerializationStream(ks.kryo, ks.threadByteBuf.get(), s)
   }
 
   def inputStream(s: InputStream): DeserializationStream = {
@@ -107,7 +107,7 @@ trait KryoRegistrator {
   def registerClasses(kryo: Kryo): Unit
 }
 
-class KryoSerialization extends SerializationStrategy with Logging {
+class KryoSerializer extends Serializer with Logging {
   val kryo = createKryo()
 
   val threadBuf = new ThreadLocal[ObjectBuffer] {
@@ -162,5 +162,5 @@ class KryoSerialization extends SerializationStrategy with Logging {
     kryo
   }
 
-  def newSerializer(): Serializer = new KryoSerializer(this)
+  def newInstance(): SerializerInstance = new KryoSerializerInstance(this)
 }

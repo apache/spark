@@ -43,7 +43,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   // Read this RDD; will read from cache if applicable, or otherwise compute
   final def iterator(split: Split): Iterator[T] = {
     if (shouldCache) {
-      RDDCache.getOrCompute[T](this, split)
+      SparkEnv.get.cacheTracker.getOrCompute[T](this, split)
     } else {
       compute(split)
     }

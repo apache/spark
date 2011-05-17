@@ -719,7 +719,7 @@ extends BroadcastFactory {
 
 private object ChainedBroadcast
 extends Logging {
-  val values = Cache.newKeySpace()
+  val values = SparkEnv.get.cache.newKeySpace()
 
   var valueToGuidePortMap = Map[UUID, Int] ()
   

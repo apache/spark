@@ -19,7 +19,7 @@ class JavaDeserializationStream(in: InputStream) extends DeserializationStream {
   def close() { objIn.close() }
 }
 
-class JavaSerializer extends Serializer {
+class JavaSerializerInstance extends SerializerInstance {
   def serialize[T](t: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val out = outputStream(bos)
@@ -43,6 +43,6 @@ class JavaSerializer extends Serializer {
   }
 }
 
-class JavaSerialization extends SerializationStrategy {
-  def newSerializer(): Serializer = new JavaSerializer
+class JavaSerializer extends Serializer {
+  def newInstance(): SerializerInstance = new JavaSerializerInstance
 }

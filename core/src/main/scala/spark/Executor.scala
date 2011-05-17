@@ -15,6 +15,7 @@ import mesos.{TaskDescription, TaskState, TaskStatus}
 class Executor extends mesos.Executor with Logging {
   var classLoader: ClassLoader = null
   var threadPool: ExecutorService = null
+  var env: SparkEnv = null
 
   override def init(d: ExecutorDriver, args: ExecutorArgs) {
     // Read spark.* system properties from executor arg
@@ -22,19 +23,19 @@ class Executor extends mesos.Executor with Logging {
     for ((key, value) <- props)
       System.setProperty(key, value)
 
-    // Initialize cache and broadcast system (uses some properties read above)
-    Cache.initialize()
-    Serializer.initialize()
+    // Initialize Spark environment (using system properties read above)
+    env = SparkEnv.createFromSystemProperties(false)
+    SparkEnv.set(env)
+    // Old stuff that isn't yet using env
     Broadcast.initialize(false)
-    MapOutputTracker.initialize(false)
-    RDDCache.initialize(false)
     
     // Create our ClassLoader (using spark properties) and set it on this thread
     classLoader = createClassLoader()
     Thread.currentThread.setContextClassLoader(classLoader)
     
     // Start worker thread pool (they will inherit our context ClassLoader)
-    threadPool = new ThreadPoolExecutor(1, 128, 600, TimeUnit.SECONDS, new LinkedBlockingQueue[Runnable])
+    threadPool = new ThreadPoolExecutor(
+      1, 128, 600, TimeUnit.SECONDS, new LinkedBlockingQueue[Runnable])
   }
   
   override def launchTask(d: ExecutorDriver, desc: TaskDescription) {
@@ -46,6 +47,7 @@ class Executor extends mesos.Executor with Logging {
       def run() = {
         logInfo("Running task ID " + taskId)
         try {
+          SparkEnv.set(env)
           Accumulators.clear
           val task = Utils.deserialize[Task[Any]](arg, classLoader)
           val value = task.run

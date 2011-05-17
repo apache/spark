@@ -47,7 +47,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
           case None => createCombiner(v)
         }
       }
-      val ser = Serializer.newInstance()
+      val ser = SparkEnv.get.serializer.newInstance()
       for (i <- 0 until numOutputSplits) {
         val file = LocalFileShuffle.getOutputFile(shuffleId, myIndex, i)
         val out = ser.outputStream(new FileOutputStream(file))
@@ -70,7 +70,7 @@ class LocalFileShuffle[K, V, C] extends Shuffle[K, V, C] with Logging {
     val indexes = sc.parallelize(0 until numOutputSplits, numOutputSplits)
     return indexes.flatMap((myId: Int) => {
       val combiners = new HashMap[K, C]
-      val ser = Serializer.newInstance()
+      val ser = SparkEnv.get.serializer.newInstance()
       for ((serverUri, inputIds) <- Utils.shuffle(splitsByUri)) {
         for (i <- inputIds) {
           val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, myId)

@@ -14,7 +14,7 @@ class DiskSpillingCache extends BoundedMemoryCache {
 
   override def get(key: Any): Any = {
     synchronized {
-      val ser = Serializer.newInstance()
+      val ser = SparkEnv.get.serializer.newInstance()
       super.get(key) match {
         case bytes: Any => // found in memory
           ser.deserialize(bytes.asInstanceOf[Array[Byte]])
@@ -46,7 +46,7 @@ class DiskSpillingCache extends BoundedMemoryCache {
   }
 
   override def put(key: Any, value: Any) {
-    var ser = Serializer.newInstance()
+    var ser = SparkEnv.get.serializer.newInstance()
     super.put(key, ser.serialize(value))
   }
 

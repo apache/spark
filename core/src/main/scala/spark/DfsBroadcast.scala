@@ -61,7 +61,7 @@ extends BroadcastFactory {
 
 private object DfsBroadcast
 extends Logging {
-  val values = Cache.newKeySpace()
+  val values = SparkEnv.get.cache.newKeySpace()
 
   private var initialized = false
 

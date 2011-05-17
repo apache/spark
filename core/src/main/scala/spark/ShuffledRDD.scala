@@ -33,7 +33,7 @@ extends RDD[(K, C)](parent.context) {
     val shuffleId = dep.shuffleId
     val splitId = split.index
     val splitsByUri = new HashMap[String, ArrayBuffer[Int]]
-    val serverUris = MapOutputTracker.getServerUris(shuffleId)
+    val serverUris = SparkEnv.get.mapOutputTracker.getServerUris(shuffleId)
     for ((serverUri, index) <- serverUris.zipWithIndex) {
       splitsByUri.getOrElseUpdate(serverUri, ArrayBuffer()) += index
     }

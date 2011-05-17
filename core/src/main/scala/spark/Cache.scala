@@ -37,27 +37,3 @@ class KeySpace(cache: Cache, id: Long) {
   def get(key: Any): Any = cache.get((id, key))
   def put(key: Any, value: Any): Unit = cache.put((id, key), value)
 }
-
-
-/**
- * The Cache object maintains a global Cache instance, of the type specified
- * by the spark.cache.class property.
- */
-object Cache {
-  private var instance: Cache = null
-
-  def initialize() {
-    val cacheClass = System.getProperty("spark.cache.class",
-      "spark.SoftReferenceCache")
-    instance = Class.forName(cacheClass).newInstance().asInstanceOf[Cache]
-  }
-
-  def getInstance(): Cache = {
-    if (instance == null) {
-      throw new SparkException("Cache.getInstance called before initialize")
-    }
-    instance
-  }
-
-  def newKeySpace(): KeySpace = getInstance().newKeySpace()
-}

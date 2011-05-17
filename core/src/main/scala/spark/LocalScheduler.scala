@@ -8,6 +8,8 @@ import java.util.concurrent._
 private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
   var threadPool: ExecutorService =
     Executors.newFixedThreadPool(threads, DaemonThreadFactory)
+
+  val env = SparkEnv.get
   
   override def start() {}
   
@@ -18,6 +20,8 @@ private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
       threadPool.submit(new Runnable {
         def run() {
           logInfo("Running task " + i)
+          // Set the Spark execution environment for the worker thread
+          SparkEnv.set(env)
           try {
             // Serialize and deserialize the task so that accumulators are
             // changed to thread-local ones; this adds a bit of unnecessary

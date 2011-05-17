@@ -1037,7 +1037,7 @@ extends BroadcastFactory {
 
 private object BitTorrentBroadcast
 extends Logging {
-  val values = Cache.newKeySpace()
+  val values = SparkEnv.get.cache.newKeySpace()
 
   var valueToGuideMap = Map[UUID, SourceInfo] ()
   

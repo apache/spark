@@ -11,10 +11,10 @@ sealed trait MapOutputTrackerMessage
 case class GetMapOutputLocations(shuffleId: Int) extends MapOutputTrackerMessage 
 case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-class MapOutputTracker(serverUris: ConcurrentHashMap[Int, Array[String]])
+class MapOutputTrackerActor(serverUris: ConcurrentHashMap[Int, Array[String]])
 extends DaemonActor with Logging {
   def act() {
-    val port = System.getProperty("spark.master.port", "50501").toInt
+    val port = System.getProperty("spark.master.port").toInt
     RemoteActor.alive(port)
     RemoteActor.register('MapOutputTracker, self)
     logInfo("Registered actor on port " + port)
@@ -32,22 +32,20 @@ extends DaemonActor with Logging {
   }
 }
 
-object MapOutputTracker extends Logging {
+class MapOutputTracker(isMaster: Boolean) extends Logging {
   var trackerActor: AbstractActor = null
   
-  private val serverUris = new ConcurrentHashMap[Int, Array[String]]
-  
-  def initialize(isMaster: Boolean) {
-    if (isMaster) {
-      val tracker = new MapOutputTracker(serverUris)
-      tracker.start
-      trackerActor = tracker
-    } else {
-      val host = System.getProperty("spark.master.host")
-      val port = System.getProperty("spark.master.port").toInt
-      trackerActor = RemoteActor.select(Node(host, port), 'MapOutputTracker)
-    }
+  if (isMaster) {
+    val tracker = new MapOutputTrackerActor(serverUris)
+    tracker.start
+    trackerActor = tracker
+  } else {
+    val host = System.getProperty("spark.master.host")
+    val port = System.getProperty("spark.master.port").toInt
+    trackerActor = RemoteActor.select(Node(host, port), 'MapOutputTracker)
   }
+
+  private val serverUris = new ConcurrentHashMap[Int, Array[String]]
   
   def registerMapOutput(shuffleId: Int, numMaps: Int, mapId: Int, serverUri: String) {
     var array = serverUris.get(shuffleId)
@@ -61,7 +59,6 @@ object MapOutputTracker extends Logging {
   def registerMapOutputs(shuffleId: Int, locs: Array[String]) {
     serverUris.put(shuffleId, Array[String]() ++ locs)
   }
-  
   
   // Remembers which map output locations are currently being fetched
   val fetching = new HashSet[Int]

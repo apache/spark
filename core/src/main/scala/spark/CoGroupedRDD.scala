@@ -83,7 +83,7 @@ extends RDD[(K, Seq[Seq[_]])](rdds.first.context) with Logging {
         // Read map outputs of shuffle
         logInfo("Grabbing map outputs for shuffle ID " + shuffleId)
         val splitsByUri = new HashMap[String, ArrayBuffer[Int]]
-        val serverUris = MapOutputTracker.getServerUris(shuffleId)
+        val serverUris = SparkEnv.get.mapOutputTracker.getServerUris(shuffleId)
         for ((serverUri, index) <- serverUris.zipWithIndex) {
           splitsByUri.getOrElseUpdate(serverUri, ArrayBuffer()) += index
         }
