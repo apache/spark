@@ -145,26 +145,20 @@ extends Logging {
       None
   }
 
-  // Run an array of spark.Task objects
-  private[spark] def runTaskObjects[T: ClassManifest](tasks: Seq[Task[T]])
-      : Array[T] = {
-    return null;
-    /*
-    logInfo("Running " + tasks.length + " tasks in parallel")
-    val start = System.nanoTime
-    val result = scheduler.runTasks(tasks.toArray)
-    logInfo("Tasks finished in " + (System.nanoTime - start) / 1e9 + " s")
-    return result
-    */
-  }
-
-  private[spark] def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)(implicit m: ClassManifest[U])
+  private[spark] def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
+                                 (implicit m: ClassManifest[U])
       : Array[U] = {
     logInfo("Starting job...")
     val start = System.nanoTime
-    val result = scheduler.runJob(rdd, func)
+    val result = scheduler.runJob(rdd, func, partitions)
     logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
     result
+  }
+
+  private[spark] def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)
+                                 (implicit m: ClassManifest[U])
+      : Array[U] = {
+    runJob(rdd, func, 0 until rdd.splits.size)
   }
 
   // Clean a closure to make it ready to serialized and send to tasks

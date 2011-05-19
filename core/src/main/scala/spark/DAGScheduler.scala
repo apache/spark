@@ -116,9 +116,11 @@ private trait DAGScheduler extends Scheduler with Logging {
     missing.toList
   }
 
-  override def runJob[T, U](finalRdd: RDD[T], func: Iterator[T] => U)(implicit m: ClassManifest[U])
+  override def runJob[T, U](finalRdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
+                           (implicit m: ClassManifest[U])
       : Array[U] = {
-    val numOutputParts: Int = finalRdd.splits.size
+    val outputParts = partitions.toArray
+    val numOutputParts: Int = partitions.size
     val finalStage = newStage(finalRdd, None)
     val results = new Array[U](numOutputParts)
     val finished = new Array[Boolean](numOutputParts)
@@ -133,6 +135,13 @@ private trait DAGScheduler extends Scheduler with Logging {
     logInfo("Final stage: " + finalStage)
     logInfo("Parents of final stage: " + finalStage.parents)
     logInfo("Missing parents: " + getMissingParentStages(finalStage))
+
+    // Optimization for first() and take() if the RDD has no shuffle dependencies
+    if (finalStage.parents.size == 0 && numOutputParts == 1) {
+      logInfo("Computing the requested partition locally")
+      val split = finalRdd.splits(outputParts(0))
+      return Array(func(finalRdd.iterator(split)))
+    }
 
     def submitStage(stage: Stage) {
       if (!waiting(stage) && !running(stage)) {
@@ -154,9 +163,10 @@ private trait DAGScheduler extends Scheduler with Logging {
       val myPending = pendingTasks.getOrElseUpdate(stage, new HashSet)
       var tasks = ArrayBuffer[Task[_]]()
       if (stage == finalStage) {
-        for (p <- 0 until numOutputParts if (!finished(p))) {
-          val locs = getPreferredLocs(finalRdd, p)
-          tasks += new ResultTask(finalStage.id, finalRdd, func, p, locs)
+        for (id <- 0 until numOutputParts if (!finished(id))) {
+          val part = outputParts(id)
+          val locs = getPreferredLocs(finalRdd, part)
+          tasks += new ResultTask(finalStage.id, finalRdd, func, part, locs, id)
         }
       } else {
         for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
@@ -177,8 +187,8 @@ private trait DAGScheduler extends Scheduler with Logging {
         Accumulators.add(currentThread, evt.accumUpdates)
         evt.task match {
           case rt: ResultTask[_, _] =>
-            results(rt.partition) = evt.result.asInstanceOf[U]
-            finished(rt.partition) = true
+            results(rt.outputId) = evt.result.asInstanceOf[U]
+            finished(rt.outputId) = true
             numFinished += 1
             pendingTasks(finalStage) -= rt
           case smt: ShuffleMapTask =>
