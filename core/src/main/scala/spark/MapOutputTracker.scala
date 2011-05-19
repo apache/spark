@@ -34,18 +34,18 @@ extends DaemonActor with Logging {
 
 class MapOutputTracker(isMaster: Boolean) extends Logging {
   var trackerActor: AbstractActor = null
+
+  private val serverUris = new ConcurrentHashMap[Int, Array[String]]
   
   if (isMaster) {
     val tracker = new MapOutputTrackerActor(serverUris)
-    tracker.start
+    tracker.start()
     trackerActor = tracker
   } else {
     val host = System.getProperty("spark.master.host")
     val port = System.getProperty("spark.master.port").toInt
     trackerActor = RemoteActor.select(Node(host, port), 'MapOutputTracker)
   }
-
-  private val serverUris = new ConcurrentHashMap[Int, Array[String]]
   
   def registerMapOutput(shuffleId: Int, numMaps: Int, mapId: Int, serverUri: String) {
     var array = serverUris.get(shuffleId)
@@ -82,6 +82,7 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
       // We won the race to fetch the output locs; do so
       logInfo("Doing the fetch; tracker actor = " + trackerActor)
       val fetched = (trackerActor !? GetMapOutputLocations(shuffleId)).asInstanceOf[Array[String]]
+      println("Got locations: " + fetched.mkString(", "))
       serverUris.put(shuffleId, fetched)
       fetching.synchronized {
         fetching -= shuffleId

@@ -1,2 +1,7 @@
 #!/bin/bash
-java -Xmx700M -jar `dirname $0`/sbt-launch-*.jar "$@"
+EXTRA_ARGS=""
+if [ "$MESOS_HOME" != "" ]; then
+  EXTRA_ARGS="-Djava.library.path=$MESOS_HOME/lib/java"
+fi
+export SPARK_HOME=$(cd "$(dirname $0)/.."; pwd)
+java -Xmx700M $EXTRA_ARGS -jar $SPARK_HOME/sbt/sbt-launch-*.jar "$@"

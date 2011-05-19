@@ -66,7 +66,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   
   if (isMaster) {
     val tracker = new CacheTrackerActor
-    tracker.start
+    tracker.start()
     trackerActor = tracker
   } else {
     val host = System.getProperty("spark.master.host")
