@@ -1,9 +1,10 @@
 package spark
 
-// Scheduler trait, implemented by both NexusScheduler and LocalScheduler.
+// Scheduler trait, implemented by both MesosScheduler and LocalScheduler.
 private trait Scheduler {
   def start()
 
+  // Wait for registration with Mesos.
   def waitForRegister()
 
   // Run a function on some partitions of an RDD, returning an array of results.
@@ -12,5 +13,6 @@ private trait Scheduler {
 
   def stop()
 
+  // Get the number of cores in the cluster, as a hint for sizing jobs.
   def numCores(): Int
 }

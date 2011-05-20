@@ -34,7 +34,7 @@ private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
             val result: Any = deserializedTask.run
             val accumUpdates = Accumulators.values
             logInfo("Finished task " + i)
-            taskEnded(tasks(i), true, result, accumUpdates)
+            taskEnded(tasks(i), Success, result, accumUpdates)
           } catch {
             case e: Exception => {
               // TODO: Do something nicer here

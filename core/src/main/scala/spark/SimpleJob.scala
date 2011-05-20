@@ -33,9 +33,6 @@ extends Job(jobId) with Logging
   val numFailures = new Array[Int](numTasks)
   val tidToIndex = HashMap[Int, Int]()
 
-  var allFinished = false
-  val joinLock = new Object() // Used to wait for all tasks to finish
-
   var tasksLaunched = 0
   var tasksFinished = 0
 
@@ -79,15 +76,6 @@ extends Job(jobId) with Logging
       }
     }
     allPendingTasks += index
-  }
-
-  // Mark the job as finished and wake up any threads waiting on it
-  def setAllFinished() {
-    joinLock.synchronized {
-      allFinished = true
-      joinLock.notifyAll()
-    }
-    sched.jobFinished(this)
   }
 
   // Return the pending tasks list for a given host, or an empty list if
@@ -159,7 +147,6 @@ extends Job(jobId) with Logging
           logInfo(message)
           // Do various bookkeeping
           tidToIndex(taskId) = index
-          task.markStarted(offer)
           launched(index) = true
           tasksLaunched += 1
           if (preferred)
@@ -203,11 +190,11 @@ extends Job(jobId) with Logging
         tid, tasksFinished, numTasks))
       // Deserialize task result
       val result = Utils.deserialize[TaskResult[_]](status.getData)
-      sched.taskEnded(tasks(index), true, result.value, result.accumUpdates)
+      sched.taskEnded(tasks(index), Success, result.value, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
       if (tasksFinished == numTasks)
-        setAllFinished()
+        sched.jobFinished(this)
     } else {
       logInfo("Ignoring task-finished event for TID " + tid +
         " because task " + index + " is already finished")
@@ -221,9 +208,25 @@ extends Job(jobId) with Logging
       logInfo("Lost TID %d (task %d:%d)".format(tid, jobId, index))
       launched(index) = false
       tasksLaunched -= 1
-      // Re-enqueue the task as pending
+      // Check if the problem is a map output fetch failure. In that case, this
+      // task will never succeed on any node, so tell the scheduler about it.
+      if (status.getData != null && status.getData.length > 0) {
+        val reason = Utils.deserialize[TaskEndReason](status.getData)
+        reason match {
+          case fetchFailed: FetchFailed =>
+            logInfo("Loss was due to fetch failure from " + fetchFailed.serverUri)
+            sched.taskEnded(tasks(index), fetchFailed, null, null)
+            finished(index) = true
+            tasksFinished += 1
+            if (tasksFinished == numTasks)
+              sched.jobFinished(this)
+            return
+          case _ => {}
+        }
+      }
+      // On other failures, re-enqueue the task as pending for a max number of retries
       addPendingTask(index)
-      // Mark it as failed
+      // Count attempts only on FAILED and LOST state (not on KILLED)
       if (status.getState == TaskState.TASK_FAILED ||
           status.getState == TaskState.TASK_LOST) {
         numFailures(index) += 1
@@ -246,12 +249,9 @@ extends Job(jobId) with Logging
   }
 
   def abort(message: String) {
-    joinLock.synchronized {
-      failed = true
-      causeOfFailure = message
-      // TODO: Kill running tasks if we were not terminated due to a Mesos error
-      // Indicate to any joining thread that we're done
-      setAllFinished()
-    }
+    failed = true
+    causeOfFailure = message
+    // TODO: Kill running tasks if we were not terminated due to a Mesos error
+    sched.jobFinished(this)
   }
 }

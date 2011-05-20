@@ -124,34 +124,6 @@ extends MScheduler with DAGScheduler with Logging
       jobTasks.remove(job.getId)
     }
   }
-  
-  /*
-  /**
-   * The primary means to submit a job to the scheduler. Given a list of tasks,
-   * runs them and returns an array of the results.
-   */
-  def runTasks[T: ClassManifest](tasks: Array[Task[T]]): Array[T] = {
-    waitForRegister()
-    val jobId = newJobId()
-    val myJob = new SimpleJob(this, tasks, jobId)
-    try {
-      this.synchronized {
-        activeJobs(jobId) = myJob
-        activeJobsQueue += myJob
-        jobTasks(jobId) = new HashSet()
-      }
-      driver.reviveOffers();
-      return myJob.join();
-    } finally {
-      this.synchronized {
-        activeJobs -= jobId
-        activeJobsQueue.dequeueAll(x => (x == myJob))
-        taskIdToJobId --= jobTasks(jobId)
-        jobTasks.remove(jobId)
-      }
-    }
-  }
-  */
 
   override def registered(d: SchedulerDriver, frameworkId: String) {
     logInfo("Registered as framework ID " + frameworkId)
@@ -229,7 +201,8 @@ extends MScheduler with DAGScheduler with Logging
                 jobTasks(jobId) -= status.getTaskId
             }
           case None =>
-            logInfo("TID " + status.getTaskId + " already finished")
+            logInfo("Ignoring update from TID " + status.getTaskId +
+              " because its job is gone")
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)

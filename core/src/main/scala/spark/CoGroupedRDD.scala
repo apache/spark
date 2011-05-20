@@ -81,30 +81,12 @@ extends RDD[(K, Seq[Seq[_]])](rdds.first.context) with Logging {
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
-        logInfo("Grabbing map outputs for shuffle ID " + shuffleId)
-        val splitsByUri = new HashMap[String, ArrayBuffer[Int]]
-        val serverUris = SparkEnv.get.mapOutputTracker.getServerUris(shuffleId)
-        for ((serverUri, index) <- serverUris.zipWithIndex) {
-          splitsByUri.getOrElseUpdate(serverUri, ArrayBuffer()) += index
+        def mergePair(k: K, vs: Seq[Any]) {
+          val mySeq = getSeq(k)
+          for (v <- vs)
+            mySeq(depNum) += v
         }
-        for ((serverUri, inputIds) <- Utils.shuffle(splitsByUri)) {
-          for (i <- inputIds) {
-            val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, split.index)
-            val inputStream = new ObjectInputStream(new URL(url).openStream())
-            logInfo("Opened stream to " + url)
-            try {
-              while (true) {
-                val (k, vs) = inputStream.readObject().asInstanceOf[(K, Seq[Any])]
-                val mySeq = getSeq(k)
-                for (v <- vs)
-                  mySeq(depNum) += v
-              }
-            } catch {
-              case e: EOFException => {}
-            }
-            inputStream.close()
-          }
-        }
+        new SimpleShuffleFetcher().fetch[K, Seq[Any]](shuffleId, split.index, mergePair)
       }
     }
     map.iterator

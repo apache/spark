@@ -5,8 +5,8 @@ import java.io.ObjectOutputStream
 import scala.collection.mutable.HashMap
 
 
-class ShuffleMapTask(val stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_], val partition: Int, locs: Seq[String])
-extends Task[String] {
+class ShuffleMapTask(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_], val partition: Int, locs: Seq[String])
+extends DAGTask[String](stageId) {
   val split = rdd.splits(partition)
 
   override def run: String = {
@@ -25,6 +25,8 @@ extends Task[String] {
     }
     for (i <- 0 until numOutputSplits) {
       val file = LocalFileShuffle.getOutputFile(dep.shuffleId, partition, i)
+      // TODO: use Serializer instead of ObjectInputStream
+      // TODO: have some kind of EOF marker
       val out = new ObjectOutputStream(new FileOutputStream(file))
       buckets(i).foreach(pair => out.writeObject(pair))
       out.close()

@@ -1,10 +1,7 @@
 package spark
 
-import java.net.URL
-import java.io.EOFException
-import java.io.ObjectInputStream
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
+
 
 class ShuffledRDDSplit(val idx: Int) extends Split {
   override val index = idx
@@ -30,32 +27,14 @@ extends RDD[(K, C)](parent.context) {
   override val dependencies = List(dep)
 
   override def compute(split: Split): Iterator[(K, C)] = {
-    val shuffleId = dep.shuffleId
-    val splitId = split.index
-    val splitsByUri = new HashMap[String, ArrayBuffer[Int]]
-    val serverUris = SparkEnv.get.mapOutputTracker.getServerUris(shuffleId)
-    for ((serverUri, index) <- serverUris.zipWithIndex) {
-      splitsByUri.getOrElseUpdate(serverUri, ArrayBuffer()) += index
-    }
     val combiners = new HashMap[K, C]
-    for ((serverUri, inputIds) <- Utils.shuffle(splitsByUri)) {
-      for (i <- inputIds) {
-        val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, splitId)
-        val inputStream = new ObjectInputStream(new URL(url).openStream())
-        try {
-          while (true) {
-            val (k, c) = inputStream.readObject().asInstanceOf[(K, C)]
-            combiners(k) = combiners.get(k) match {
-              case Some(oldC) => aggregator.mergeCombiners(oldC, c)
-              case None => c
-            }
-          }
-        } catch {
-          case e: EOFException => {}
-        }
-        inputStream.close()
+    def mergePair(k: K, c: C) {
+      combiners(k) = combiners.get(k) match {
+        case Some(oldC) => aggregator.mergeCombiners(oldC, c)
+        case None => c
       }
     }
+    new SimpleShuffleFetcher().fetch[K, C](dep.shuffleId, split.index, mergePair)
     combiners.iterator
   }
 }

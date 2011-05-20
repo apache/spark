@@ -43,28 +43,38 @@ class Executor extends mesos.Executor with Logging {
     // valid pointer after this method call (TODO: fix this in C++/SWIG)
     val taskId = desc.getTaskId
     val arg = desc.getArg
-    threadPool.execute(new Runnable() {
-      def run() = {
-        logInfo("Running task ID " + taskId)
-        try {
-          SparkEnv.set(env)
-          Accumulators.clear
-          val task = Utils.deserialize[Task[Any]](arg, classLoader)
-          val value = task.run
-          val accumUpdates = Accumulators.values
-          val result = new TaskResult(value, accumUpdates)
+    threadPool.execute(new TaskRunner(taskId, arg, d))
+  }
+
+  class TaskRunner(taskId: Int, arg: Array[Byte], d: ExecutorDriver)
+  extends Runnable {
+    override def run() = {
+      logInfo("Running task ID " + taskId)
+      try {
+        SparkEnv.set(env)
+        Accumulators.clear
+        val task = Utils.deserialize[Task[Any]](arg, classLoader)
+        for (gen <- task.generation) // Update generation if any is set
+          env.mapOutputTracker.updateGeneration(gen)
+        val value = task.run
+        val accumUpdates = Accumulators.values
+        val result = new TaskResult(value, accumUpdates)
+        d.sendStatusUpdate(new TaskStatus(
+          taskId, TaskState.TASK_FINISHED, Utils.serialize(result)))
+        logInfo("Finished task ID " + taskId)
+      } catch {
+        case ffe: FetchFailedException => {
+          val reason = ffe.toTaskEndReason
           d.sendStatusUpdate(new TaskStatus(
-            taskId, TaskState.TASK_FINISHED, Utils.serialize(result)))
-          logInfo("Finished task ID " + taskId)
-        } catch {
-          case e: Exception => {
-            // TODO: Handle errors in tasks less dramatically
-            logError("Exception in task ID " + taskId, e)
-            System.exit(1)
-          }
+            taskId, TaskState.TASK_FAILED, Utils.serialize(reason)))
+        }
+        case e: Exception => {
+          // TODO: Handle errors in tasks less dramatically
+          logError("Exception in task ID " + taskId, e)
+          System.exit(1)
         }
       }
-    })
+    }
   }
 
   // Create a ClassLoader for use in tasks, adding any JARs specified by the

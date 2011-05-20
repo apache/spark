@@ -35,7 +35,12 @@ extends DaemonActor with Logging {
 class MapOutputTracker(isMaster: Boolean) extends Logging {
   var trackerActor: AbstractActor = null
 
-  private val serverUris = new ConcurrentHashMap[Int, Array[String]]
+  private var serverUris = new ConcurrentHashMap[Int, Array[String]]
+
+  // Incremented every time a fetch fails so that client nodes know to clear
+  // their cache of map output locations if this happens.
+  private var generation: Long = 0
+  private var generationLock = new java.lang.Object
   
   if (isMaster) {
     val tracker = new MapOutputTrackerActor(serverUris)
@@ -53,18 +58,33 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
       array = Array.fill[String](numMaps)(null)
       serverUris.put(shuffleId, array)
     }
-    array(mapId) = serverUri
+    array.synchronized {
+      array(mapId) = serverUri
+    }
   }
   
   def registerMapOutputs(shuffleId: Int, locs: Array[String]) {
     serverUris.put(shuffleId, Array[String]() ++ locs)
   }
+
+  def unregisterMapOutput(shuffleId: Int, mapId: Int, serverUri: String) {
+    var array = serverUris.get(shuffleId)
+    if (array != null) {
+      array.synchronized {
+        if (array(mapId) == serverUri)
+          array(mapId) = null
+      }
+      incrementGeneration()
+    } else {
+      throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
+    }
+  }
   
-  // Remembers which map output locations are currently being fetched
+  // Remembers which map output locations are currently being fetched on a worker
   val fetching = new HashSet[Int]
   
+  // Called on possibly remote nodes to get the server URIs for a given shuffle
   def getServerUris(shuffleId: Int): Array[String] = {
-    // TODO: On remote node, fetch locations from master
     val locs = serverUris.get(shuffleId)
     if (locs == null) {
       logInfo("Don't have map outputs for " + shuffleId + ", fetching them")
@@ -102,5 +122,32 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
     trackerActor !? StopMapOutputTracker
     serverUris.clear()
     trackerActor = null
+  }
+
+  // Called on master to increment the generation number
+  def incrementGeneration() {
+    generationLock.synchronized {
+      generation += 1
+    }
+  }
+
+  // Called on master or workers to get current generation number
+  def getGeneration: Long = {
+    generationLock.synchronized {
+      return generation
+    }
+  }
+
+  // Called on workers to update the generation number, potentially clearing old outputs
+  // because of a fetch failure. (Each Mesos task calls this with the latest generation
+  // number on the master at the time it was created.)
+  def updateGeneration(newGen: Long) {
+    generationLock.synchronized {
+      if (newGen > generation) {
+        logInfo("Updating generation to " + newGen + " and clearing cache")
+        serverUris = new ConcurrentHashMap[Int, Array[String]]
+        generation = newGen
+      }
+    }
   }
 }

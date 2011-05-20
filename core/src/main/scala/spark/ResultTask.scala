@@ -1,8 +1,8 @@
 package spark
 
-class ResultTask[T, U](val stageId: Int, rdd: RDD[T], func: Iterator[T] => U,
+class ResultTask[T, U](stageId: Int, rdd: RDD[T], func: Iterator[T] => U,
                        val partition: Int, locs: Seq[String], val outputId: Int)
-extends Task[U] {
+extends DAGTask[U](stageId) {
   val split = rdd.splits(partition)
 
   override def run: U = {
