@@ -26,10 +26,9 @@ extends DAGTask[String](stageId) with Logging {
     val ser = SparkEnv.get.serializer.newInstance()
     for (i <- 0 until numOutputSplits) {
       val file = LocalFileShuffle.getOutputFile(dep.shuffleId, partition, i)
-      // TODO: use Serializer instead of ObjectInputStream
-      // TODO: have some kind of EOF marker
       val out = ser.outputStream(new FileOutputStream(file))
       buckets(i).foreach(pair => out.writeObject(pair))
+      // TODO: have some kind of EOF marker
       out.close()
     }
     return LocalFileShuffle.getServerUri
