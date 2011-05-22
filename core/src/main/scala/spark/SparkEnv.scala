@@ -19,12 +19,10 @@ object SparkEnv {
   }
 
   def createFromSystemProperties(isMaster: Boolean): SparkEnv = {
-    val cacheClass = System.getProperty("spark.cache.class",
-      "spark.SoftReferenceCache")
+    val cacheClass = System.getProperty("spark.cache.class", "spark.SoftReferenceCache")
     val cache = Class.forName(cacheClass).newInstance().asInstanceOf[Cache]
     
-    val serClass = System.getProperty("spark.serializer",
-      "spark.JavaSerializer")
+    val serClass = System.getProperty("spark.serializer", "spark.JavaSerializer")
     val ser = Class.forName(serClass).newInstance().asInstanceOf[Serializer]
 
     val cacheTracker = new CacheTracker(isMaster, cache)

@@ -10,6 +10,10 @@ import scala.collection.mutable
 import com.esotericsoftware.kryo._
 import com.esotericsoftware.kryo.{Serializer => KSerializer}
 
+/**
+ * Zig-zag encoder used to write object sizes to serialization streams.
+ * Based on Kryo's integer encoder.
+ */
 object ZigZag {
   def writeInt(n: Int, out: OutputStream) {
     var value = n
@@ -110,12 +114,15 @@ trait KryoRegistrator {
 class KryoSerializer extends Serializer with Logging {
   val kryo = createKryo()
 
+  val bufferSize = 
+    System.getProperty("spark.kryoserializer.buffer.mb", "2").toInt * 1024 * 1024 
+
   val threadBuf = new ThreadLocal[ObjectBuffer] {
-    override def initialValue = new ObjectBuffer(kryo, 257*1024*1024)
+    override def initialValue = new ObjectBuffer(kryo, bufferSize)
   }
 
   val threadByteBuf = new ThreadLocal[ByteBuffer] {
-    override def initialValue = ByteBuffer.allocate(257*1024*1024)
+    override def initialValue = ByteBuffer.allocate(bufferSize)
   }
 
   def createKryo(): Kryo = {

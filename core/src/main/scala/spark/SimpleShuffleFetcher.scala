@@ -11,6 +11,7 @@ import scala.collection.mutable.HashMap
 class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
   def fetch[K, V](shuffleId: Int, reduceId: Int, func: (K, V) => Unit) {
     logInfo("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
+    val ser = SparkEnv.get.serializer.newInstance()
     val splitsByUri = new HashMap[String, ArrayBuffer[Int]]
     val serverUris = SparkEnv.get.mapOutputTracker.getServerUris(shuffleId)
     for ((serverUri, index) <- serverUris.zipWithIndex) {
@@ -20,10 +21,9 @@ class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
       for (i <- inputIds) {
         try {
           val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, reduceId)
-          // TODO: use Serializer instead of ObjectInputStream
           // TODO: multithreaded fetch
           // TODO: would be nice to retry multiple times
-          val inputStream = new ObjectInputStream(new URL(url).openStream())
+          val inputStream = ser.inputStream(new URL(url).openStream())
           try {
             while (true) {
               val pair = inputStream.readObject().asInstanceOf[(K, V)]

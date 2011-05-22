@@ -6,7 +6,7 @@ import scala.collection.mutable.HashMap
 
 
 class ShuffleMapTask(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_], val partition: Int, locs: Seq[String])
-extends DAGTask[String](stageId) {
+extends DAGTask[String](stageId) with Logging {
   val split = rdd.splits(partition)
 
   override def run: String = {
@@ -23,11 +23,12 @@ extends DAGTask[String](stageId) {
         case None => aggregator.createCombiner(v)
       }
     }
+    val ser = SparkEnv.get.serializer.newInstance()
     for (i <- 0 until numOutputSplits) {
       val file = LocalFileShuffle.getOutputFile(dep.shuffleId, partition, i)
       // TODO: use Serializer instead of ObjectInputStream
       // TODO: have some kind of EOF marker
-      val out = new ObjectOutputStream(new FileOutputStream(file))
+      val out = ser.outputStream(new FileOutputStream(file))
       buckets(i).foreach(pair => out.writeObject(pair))
       out.close()
     }
