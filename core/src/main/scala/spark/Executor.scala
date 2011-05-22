@@ -33,7 +33,7 @@ class Executor extends mesos.Executor with Logging {
     classLoader = createClassLoader()
     Thread.currentThread.setContextClassLoader(classLoader)
     
-    // Start worker thread pool (they will inherit our context ClassLoader)
+    // Start worker thread pool
     threadPool = new ThreadPoolExecutor(
       1, 128, 600, TimeUnit.SECONDS, new LinkedBlockingQueue[Runnable])
   }
@@ -52,6 +52,7 @@ class Executor extends mesos.Executor with Logging {
       logInfo("Running task ID " + taskId)
       try {
         SparkEnv.set(env)
+        Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear
         val task = Utils.deserialize[Task[Any]](arg, classLoader)
         for (gen <- task.generation) // Update generation if any is set
