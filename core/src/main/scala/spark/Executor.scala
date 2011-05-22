@@ -35,7 +35,7 @@ class Executor extends mesos.Executor with Logging {
     
     // Start worker thread pool
     threadPool = new ThreadPoolExecutor(
-      1, 128, 600, TimeUnit.SECONDS, new LinkedBlockingQueue[Runnable])
+      1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
   }
   
   override def launchTask(d: ExecutorDriver, desc: TaskDescription) {
