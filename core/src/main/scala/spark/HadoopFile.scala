@@ -1,7 +1,5 @@
 package spark
 
-import mesos.SlaveOffer
-
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.FileInputFormat

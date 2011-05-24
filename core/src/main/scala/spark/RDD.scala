@@ -13,7 +13,6 @@ import scala.collection.mutable.HashMap
 
 import SparkContext._
 
-import mesos._
 
 @serializable
 abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {

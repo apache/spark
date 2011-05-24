@@ -1,7 +1,5 @@
 package spark
 
-import mesos._
-
 @serializable
 abstract class Task[T] {
   def run: T
