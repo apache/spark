@@ -38,7 +38,7 @@ class CacheTrackerActor extends DaemonActor with Logging {
           
         case DroppedFromCache(rddId, partition, host) =>
           logInfo("Cache entry removed: (%s, %s) on %s".format(rddId, partition, host))
-          locs(rddId)(partition) -= host
+          locs(rddId)(partition) = locs(rddId)(partition).filterNot(_ == host)
         
         case MemoryCacheLost(host) =>
           logInfo("Memory cache lost on " + host)
