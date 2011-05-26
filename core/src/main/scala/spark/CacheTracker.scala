@@ -111,7 +111,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
     if (cachedVal != null) {
       // Split is in cache, so just return its values
       logInfo("Found partition in cache!")
-      return Iterator.fromArray(cachedVal.asInstanceOf[Array[T]])
+      return cachedVal.asInstanceOf[Array[T]].iterator
     } else {
       // Mark the split as loading (unless someone else marks it first)
       loading.synchronized {
@@ -119,7 +119,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
           while (loading.contains(key)) {
             try {loading.wait()} catch {case _ =>}
           }
-          return Iterator.fromArray(cache.get(key).asInstanceOf[Array[T]])
+          return cache.get(key).asInstanceOf[Array[T]].iterator
         } else {
           loading.add(key)
         }
@@ -138,7 +138,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
         loading.notifyAll()
       }
       future.apply() // Wait for the reply from the cache tracker
-      return Iterator.fromArray(array)
+      return array.iterator
     }
   }
 
