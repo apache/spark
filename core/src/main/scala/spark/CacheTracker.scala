@@ -96,7 +96,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Get a snapshot of the currently known locations
   def getLocationsSnapshot(): HashMap[Int, Array[List[String]]] = {
     (trackerActor !? GetCacheLocations) match {
-      case h: HashMap[Int, Array[List[String]]] => h
+      case h: HashMap[_, _] => h.asInstanceOf[HashMap[Int, Array[List[String]]]]
       case _ => throw new SparkException(
           "Internal error: CacheTrackerActor did not reply with a HashMap")
     }
