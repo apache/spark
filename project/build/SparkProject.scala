@@ -14,15 +14,33 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
 
   lazy val bagel = project("bagel", "Bagel", new BagelProject(_), core)
 
+  lazy val jettyWebapp = "org.eclipse.jetty" % "jetty-webapp" % "7.4.1.v20110513" % "provided"
+
   trait BaseProject extends BasicScalaProject with ScalaPaths with Eclipsify with IdeaProject {
     override def compileOptions = super.compileOptions ++ Seq(Unchecked)
   }
 
-  class CoreProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport
+  class CoreProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport {
+    val guava = "com.google.guava" % "guava" % "r09"
+    val log4j = "log4j" % "log4j" % "1.2.16"
+    val slf4jVersion = "1.6.1"
+    val slf4jApi = "org.slf4j" % "slf4j-api" % slf4jVersion
+    val slf4jLog4j = "org.slf4j" % "slf4j-log4j12" % slf4jVersion
+    val compressLzf = "com.ning" % "compress-lzf" % "0.7.0"
+    val hadoop = "org.apache.hadoop" % "hadoop-core" % "0.20.2"
+    val asm = "asm" % "asm-all" % "3.3.1"
+    val scalaTest = "org.scalatest" % "scalatest" % "1.3" % "test"
+    val scalaCheck = "org.scala-tools.testing" %% "scalacheck" % "1.7" % "test"
+    val jetty = jettyWebapp
+  }
 
-  class ExamplesProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject
+  class ExamplesProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject {
+    val colt = "colt" % "colt" % "1.2.0"
+  }
 
-  class BagelProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport
+  class BagelProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport {
+    val jetty = jettyWebapp
+  }
 	
 }
 
