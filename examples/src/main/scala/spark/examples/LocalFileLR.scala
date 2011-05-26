@@ -27,7 +27,7 @@ object LocalFileLR {
       println("On iteration " + i)
       var gradient = Vector.zeros(D)
       for (p <- points) {
-        val scale = (1 / (1 + Math.exp(-p.y * (w dot p.x))) - 1) * p.y
+        val scale = (1 / (1 + math.exp(-p.y * (w dot p.x))) - 1) * p.y
         gradient +=  scale * p.x
       }
       w -= gradient

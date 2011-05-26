@@ -203,7 +203,7 @@ extends Broadcast[T] with Logging {
     var blockID = 0
 
     for (i <- 0 until (byteArray.length, blockSize)) {
-      val thisBlockSize = Math.min (blockSize, byteArray.length - i)
+      val thisBlockSize = math.min (blockSize, byteArray.length - i)
       var tempByteArray = new Array[Byte] (thisBlockSize)
       val hasRead = bais.read (tempByteArray, 0, thisBlockSize)
       
@@ -435,7 +435,7 @@ extends Broadcast[T] with Logging {
       
       while (hasBlocks < totalBlocks) {
         var numThreadsToCreate = 
-          Math.min (listOfSources.size, BitTorrentBroadcast.MaxTxPeers) - 
+          math.min (listOfSources.size, BitTorrentBroadcast.MaxTxPeers) -
           threadPool.getActiveCount
 
         while (hasBlocks < totalBlocks && numThreadsToCreate > 0) {

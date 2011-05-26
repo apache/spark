@@ -166,7 +166,7 @@ extends Broadcast[T] with Logging {
     var blockID = 0
 
     for (i <- 0 until (byteArray.length, blockSize)) {    
-      val thisBlockSize = Math.min (blockSize, byteArray.length - i)
+      val thisBlockSize = math.min (blockSize, byteArray.length - i)
       var tempByteArray = new Array[Byte] (thisBlockSize)
       val hasRead = bais.read (tempByteArray, 0, thisBlockSize)
       
