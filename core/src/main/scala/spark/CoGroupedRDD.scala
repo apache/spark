@@ -26,7 +26,7 @@ class CoGroupAggregator extends Aggregator[Any, Any, ArrayBuffer[Any]] (
 )
 
 class CoGroupedRDD[K](rdds: Seq[RDD[(_, _)]], part: Partitioner)
-extends RDD[(K, Seq[Seq[_]])](rdds.first.context) with Logging {
+extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {
   val aggr = new CoGroupAggregator
   
   override val dependencies = {
@@ -45,7 +45,7 @@ extends RDD[(K, Seq[Seq[_]])](rdds.first.context) with Logging {
   }
   
   @transient val splits_ : Array[Split] = {
-    val firstRdd = rdds.first
+    val firstRdd = rdds.head
     val array = new Array[Split](part.numPartitions)
     for (i <- 0 until array.size) {
       array(i) = new CoGroupSplit(i, rdds.zipWithIndex.map { case (r, j) =>
