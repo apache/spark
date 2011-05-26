@@ -113,7 +113,7 @@ extends Broadcast[T] with Logging {
     }
     
     // In the beginning, this is the only known source to Guide
-    listOfSources = listOfSources + masterSource
+    listOfSources += masterSource
 
     // Register with the Tracker
     BitTorrentBroadcast.registerValue (uuid, 
@@ -268,7 +268,7 @@ extends Broadcast[T] with Logging {
       if (listOfSources.contains(newSourceInfo)) { 
         listOfSources = listOfSources - newSourceInfo 
       }
-      listOfSources = listOfSources + newSourceInfo
+      listOfSources += newSourceInfo
     }         
   }  
   
@@ -446,7 +446,7 @@ extends Broadcast[T] with Logging {
             // Add to peersNowTalking. Remove in the thread. We have to do this 
             // ASAP, otherwise pickPeerToTalkTo picks the same peer more than once
             peersNowTalking.synchronized { 
-              peersNowTalking = peersNowTalking + peerToTalkTo
+              peersNowTalking += peerToTalkTo
             }
           }
           
@@ -878,7 +878,7 @@ extends Broadcast[T] with Logging {
                 i = i - 1
               }
               
-              selectedSources = selectedSources + curPeer
+              selectedSources += curPeer
               alreadyPicked.set (i)
               
               picksLeft = picksLeft - 1
