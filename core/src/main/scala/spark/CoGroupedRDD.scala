@@ -75,8 +75,8 @@ extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, itsSplit) => {
         // Read them from the parent
-        for ((k: K, v) <- rdd.iterator(itsSplit)) {
-          getSeq(k)(depNum) += v
+        for ((k, v) <- rdd.iterator(itsSplit)) {
+          getSeq(k.asInstanceOf[K])(depNum) += v
         }
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {

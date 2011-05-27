@@ -6,27 +6,24 @@ import assembly._
 import de.element34.sbteclipsify._
 
 
-class SparkProject(info: ProjectInfo)
-extends ParentProject(info) with IdeaProject
-{
+class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProject {
+
   lazy val core = project("core", "Spark Core", new CoreProject(_))
 
-  lazy val examples =
-    project("examples", "Spark Examples", new ExamplesProject(_), core)
+  lazy val examples = project("examples", "Spark Examples", new ExamplesProject(_), core)
 
   lazy val bagel = project("bagel", "Bagel", new BagelProject(_), core)
 
-  class CoreProject(info: ProjectInfo)
-  extends DefaultProject(info) with Eclipsify with IdeaProject with DepJar with XmlTestReport
-  {}
+  trait BaseProject extends BasicScalaProject with ScalaPaths with Eclipsify with IdeaProject {
+    override def compileOptions = super.compileOptions ++ Seq(Unchecked)
+  }
 
-  class ExamplesProject(info: ProjectInfo)
-  extends DefaultProject(info) with Eclipsify with IdeaProject
-  {}
+  class CoreProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport
 
-  class BagelProject(info: ProjectInfo)
-  extends DefaultProject(info) with DepJar with XmlTestReport
-  {}
+  class ExamplesProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject
+
+  class BagelProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport
+	
 }
 
 
