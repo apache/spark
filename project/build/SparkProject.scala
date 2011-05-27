@@ -10,6 +10,8 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
 
   lazy val core = project("core", "Spark Core", new CoreProject(_))
 
+  lazy val repl = project("repl", "Spark REPL", new ReplProject(_), core)
+
   lazy val examples = project("examples", "Spark Examples", new ExamplesProject(_), core)
 
   lazy val bagel = project("bagel", "Bagel", new BagelProject(_), core)
@@ -31,6 +33,10 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
     val asm = "asm" % "asm-all" % "3.3.1"
     val scalaTest = "org.scalatest" % "scalatest" % "1.3" % "test"
     val scalaCheck = "org.scala-tools.testing" %% "scalacheck" % "1.7" % "test"
+    val jetty = jettyWebapp
+  }
+
+  class ReplProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport {
     val jetty = jettyWebapp
   }
 
