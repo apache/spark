@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SCALA_VERSION=2.8.1
+
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 
@@ -34,34 +36,28 @@ fi
 export JAVA_OPTS
 
 CORE_DIR=$FWDIR/core
+REPL_DIR=$FWDIR/repl
 EXAMPLES_DIR=$FWDIR/examples
 BAGEL_DIR=$FWDIR/bagel
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$CORE_DIR/target/scala_2.8.1/classes:$MESOS_CLASSPATH"
+CLASSPATH="$SPARK_CLASSPATH:$CORE_DIR/target/scala_$SCALA_VERSION/classes:$MESOS_CLASSPATH"
 CLASSPATH+=:$FWDIR/conf
-CLASSPATH+=:$CORE_DIR/lib/mesos.jar
-CLASSPATH+=:$CORE_DIR/lib/asm-all-3.3.1.jar
-CLASSPATH+=:$CORE_DIR/lib/colt.jar
-CLASSPATH+=:$CORE_DIR/lib/guava-r07/guava-r07.jar
-CLASSPATH+=:$CORE_DIR/lib/hadoop-0.20.2/hadoop-0.20.2-core.jar
-CLASSPATH+=:$CORE_DIR/lib/scalatest-1.2/scalatest-1.2.jar
-CLASSPATH+=:$CORE_DIR/lib/scalacheck_2.8.0-1.7.jar
-CLASSPATH+=:$CORE_DIR/lib/jetty-7.1.6.v20100715/jetty-server-7.1.6.v20100715.jar
-CLASSPATH+=:$CORE_DIR/lib/jetty-7.1.6.v20100715/servlet-api-2.5.jar
-CLASSPATH+=:$CORE_DIR/lib/kryo-1.04-mod/kryo-1.04-mod.jar
-CLASSPATH+=:$CORE_DIR/lib/kryo-1.04-mod/minlog-1.2.jar
-CLASSPATH+=:$CORE_DIR/lib/kryo-1.04-mod/objenesis-1.2.jar
-CLASSPATH+=:$CORE_DIR/lib/kryo-1.04-mod/reflectasm-1.01.jar
-CLASSPATH+=:$CORE_DIR/lib/apache-log4j-1.2.16/log4j-1.2.16.jar
-CLASSPATH+=:$CORE_DIR/lib/slf4j-1.6.1/slf4j-api-1.6.1.jar
-CLASSPATH+=:$CORE_DIR/lib/slf4j-1.6.1/slf4j-log4j12-1.6.1.jar
-CLASSPATH+=:$CORE_DIR/lib/compress-lzf-0.6.0/compress-lzf-0.6.0.jar
-CLASSPATH+=:$EXAMPLES_DIR/target/scala_2.8.1/classes
-for jar in $CORE_DIR/lib/hadoop-0.20.2/lib/*.jar; do
+CLASSPATH+=:$REPL_DIR/target/scala_$SCALA_VERSION/classes
+CLASSPATH+=:$EXAMPLES_DIR/target/scala_$SCALA_VERSION/classes
+for jar in `find $CORE_DIR/lib -name '*jar'`; do
   CLASSPATH+=:$jar
 done
-CLASSPATH+=:$BAGEL_DIR/target/scala_2.8.1/classes
+for jar in $CORE_DIR/lib_managed/scala_$SCALA_VERSION/compile/*.jar; do
+  CLASSPATH+=:$jar
+done
+for jar in `find $REPL_DIR/lib -name '*jar'`; do
+  CLASSPATH+=:$jar
+done
+for jar in $REPL_DIR/lib_managed/scala_$SCALA_VERSION/compile/*.jar; do
+  CLASSPATH+=:$jar
+done
+CLASSPATH+=:$BAGEL_DIR/target/scala_$SCALA_VERSION/classes
 export CLASSPATH # Needed for spark-shell
 
 if [ -n "$SCALA_HOME" ]; then
