@@ -18,8 +18,13 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
 
   lazy val jettyWebapp = "org.eclipse.jetty" % "jetty-webapp" % "7.4.1.v20110513" % "provided"
 
-  trait BaseProject extends BasicScalaProject with ScalaPaths with Eclipsify with IdeaProject {
+  trait BaseProject extends BasicScalaProject with ScalaPaths with BasicPackagePaths with Eclipsify with IdeaProject {
     override def compileOptions = super.compileOptions ++ Seq(Unchecked)
+    override def packageDocsJar = defaultJarPath("-javadoc.jar")
+    override def packageSrcJar= defaultJarPath("-sources.jar")
+    lazy val sourceArtifact = Artifact.sources(artifactID)
+    lazy val docsArtifact = Artifact.javadoc(artifactID)
+    override def packageToPublishActions = super.packageToPublishActions ++ Seq(packageDocs, packageSrc)
   }
 
   class CoreProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport {
