@@ -237,7 +237,7 @@ private trait DAGScheduler extends Scheduler with Logging {
                 if (stage.shuffleDep != None) {
                   mapOutputTracker.registerMapOutputs(
                     stage.shuffleDep.get.shuffleId,
-                    stage.outputLocs.map(_.first).toArray)
+                    stage.outputLocs.map(_.head).toArray)
                 }
                 updateCacheLocs()
                 val newlyRunnable = new ArrayBuffer[Stage]

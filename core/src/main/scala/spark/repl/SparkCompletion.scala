@@ -107,7 +107,7 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
   class TypeMemberCompletion(val tp: Type) extends CompletionAware with CompilerCompletion {
     def excludeEndsWith: List[String] = Nil
     def excludeStartsWith: List[String] = List("<") // <byname>, <repeated>, etc.
-    def excludeNames: List[String] = anyref.methodNames -- anyRefMethodsToShow ++ List("_root_")
+    def excludeNames: List[String] = anyref.methodNames.filterNot(anyRefMethodsToShow.contains) ++ List("_root_")
     
     def methodSignatureString(sym: Symbol) = {
       def asString = new MethodSymbolOutput(sym).methodString()

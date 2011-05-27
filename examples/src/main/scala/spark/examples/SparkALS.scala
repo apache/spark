@@ -117,8 +117,8 @@ object SparkALS {
     val R = generateR()
 
     // Initialize m and u randomly
-    var ms = Array.fromFunction(_ => factory1D.random(F))(M)
-    var us = Array.fromFunction(_ => factory1D.random(F))(U)
+    var ms = Array.fill(M)(factory1D.random(F))
+    var us = Array.fill(U)(factory1D.random(F))
 
     // Iteratively update movies then users
     val Rc  = spark.broadcast(R)
