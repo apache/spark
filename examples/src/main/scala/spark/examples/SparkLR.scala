@@ -20,7 +20,7 @@ object SparkLR {
       val x = Vector(D, _ => rand.nextGaussian + y * R)
       DataPoint(x, y)
     }
-    Array.fromFunction(generatePoint _)(N)
+    Array.tabulate(N)(generatePoint)
   }
 
   def main(args: Array[String]) {

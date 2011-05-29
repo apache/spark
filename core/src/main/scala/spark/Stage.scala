@@ -22,7 +22,7 @@ class Stage(val id: Int, val rdd: RDD[_], val shuffleDep: Option[ShuffleDependen
 
   def removeOutputLoc(partition: Int, host: String) {
     val prevList = outputLocs(partition)
-    val newList = prevList - host
+    val newList = prevList.filterNot(_ == host)
     outputLocs(partition) = newList
     if (prevList != Nil && newList == Nil)
       numAvailableOutputs -= 1

@@ -38,7 +38,7 @@ class CacheTrackerActor extends DaemonActor with Logging {
           
         case DroppedFromCache(rddId, partition, host) =>
           logInfo("Cache entry removed: (%s, %s) on %s".format(rddId, partition, host))
-          locs(rddId)(partition) -= host
+          locs(rddId)(partition) = locs(rddId)(partition).filterNot(_ == host)
         
         case MemoryCacheLost(host) =>
           logInfo("Memory cache lost on " + host)
@@ -96,7 +96,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Get a snapshot of the currently known locations
   def getLocationsSnapshot(): HashMap[Int, Array[List[String]]] = {
     (trackerActor !? GetCacheLocations) match {
-      case h: HashMap[Int, Array[List[String]]] => h
+      case h: HashMap[_, _] => h.asInstanceOf[HashMap[Int, Array[List[String]]]]
       case _ => throw new SparkException(
           "Internal error: CacheTrackerActor did not reply with a HashMap")
     }
@@ -111,7 +111,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
     if (cachedVal != null) {
       // Split is in cache, so just return its values
       logInfo("Found partition in cache!")
-      return Iterator.fromArray(cachedVal.asInstanceOf[Array[T]])
+      return cachedVal.asInstanceOf[Array[T]].iterator
     } else {
       // Mark the split as loading (unless someone else marks it first)
       loading.synchronized {
@@ -119,7 +119,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
           while (loading.contains(key)) {
             try {loading.wait()} catch {case _ =>}
           }
-          return Iterator.fromArray(cache.get(key).asInstanceOf[Array[T]])
+          return cache.get(key).asInstanceOf[Array[T]].iterator
         } else {
           loading.add(key)
         }
@@ -138,7 +138,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
         loading.notifyAll()
       }
       future.apply() // Wait for the reply from the cache tracker
-      return Iterator.fromArray(array)
+      return array.iterator
     }
   }
 

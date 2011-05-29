@@ -177,7 +177,7 @@ class SplitRDD[T: ClassManifest](prev: RDD[T])
 extends RDD[Array[T]](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = Iterator.fromArray(Array(prev.iterator(split).toArray))
+  override def compute(split: Split) = Array(prev.iterator(split).toArray).iterator
 }
 
 

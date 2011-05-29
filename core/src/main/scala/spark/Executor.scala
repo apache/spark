@@ -113,7 +113,15 @@ class Executor extends org.apache.mesos.Executor with Logging {
     val classUri = System.getProperty("spark.repl.class.uri")
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
-      loader = new repl.ExecutorClassLoader(classUri, loader)
+      loader = {
+        try {
+          val klass = Class.forName("spark.repl.ExecutorClassLoader").asInstanceOf[Class[_ <: ClassLoader]]
+          val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader])
+          constructor.newInstance(classUri, loader)
+        } catch {
+          case _: ClassNotFoundException => loader
+        }
+      }
     }
 
     return loader

@@ -1,7 +1,0 @@
-The C♯ implementation of the LZF en-/decoder functions in this
-directory was written (and is maintained) by
-
-    Oren J. Maurice <oymaurice@hazorea.org.il>.
-
-If you have any questions or improvements, you should contact the
-original author (and maybe CC me, Marc Lehmann <liblzf@schmorp.de>).
