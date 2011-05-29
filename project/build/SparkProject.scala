@@ -20,6 +20,9 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
 
   trait BaseProject extends BasicScalaProject with ScalaPaths with BasicPackagePaths with Eclipsify with IdeaProject {
     override def compileOptions = super.compileOptions ++ Seq(Unchecked)
+
+    lazy val jettyServer = "org.eclipse.jetty" % "jetty-server" % "7.4.2.v20110526"
+    
     override def packageDocsJar = defaultJarPath("-javadoc.jar")
     override def packageSrcJar= defaultJarPath("-sources.jar")
     lazy val sourceArtifact = Artifact.sources(artifactID)
@@ -38,21 +41,16 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
     val asm = "asm" % "asm-all" % "3.3.1"
     val scalaTest = "org.scalatest" % "scalatest" % "1.3" % "test"
     val scalaCheck = "org.scala-tools.testing" %% "scalacheck" % "1.7" % "test"
-    val jetty = jettyWebapp
   }
 
-  class ReplProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport {
-    val jetty = jettyWebapp
-  }
+  class ReplProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport
 
   class ExamplesProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject {
     val colt = "colt" % "colt" % "1.2.0"
   }
 
-  class BagelProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport {
-    val jetty = jettyWebapp
-  }
-	
+  class BagelProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport
+
 }
 
 
