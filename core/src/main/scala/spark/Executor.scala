@@ -108,7 +108,7 @@ class Executor extends mesos.Executor with Logging {
       loader = {
         try {
           val klass = Class.forName("spark.repl.ExecutorClassLoader").asInstanceOf[Class[_ <: ClassLoader]]
-          val constructor = klass.getConstructor(classUri.getClass, loader.getClass)
+          val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader])
           constructor.newInstance(classUri, loader)
         } catch {
           case _: ClassNotFoundException => loader
