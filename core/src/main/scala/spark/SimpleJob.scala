@@ -204,7 +204,7 @@ extends Job(jobId) with Logging
     val index = tidToIndex(tid.getValue)
     if (!finished(index)) {
       tasksFinished += 1
-      logInfo("Finished TID %d (progress: %d/%d)".format(
+      logInfo("Finished TID %s (progress: %d/%d)".format(
         tid, tasksFinished, numTasks))
       // Deserialize task result
       val result = Utils.deserialize[TaskResult[_]](status.getData.toByteArray)
@@ -223,7 +223,7 @@ extends Job(jobId) with Logging
     val tid = status.getTaskId
     val index = tidToIndex(tid.getValue)
     if (!finished(index)) {
-      logInfo("Lost TID %d (task %d:%d)".format(tid, jobId, index))
+      logInfo("Lost TID %s (task %d:%d)".format(tid, jobId, index))
       launched(index) = false
       tasksLaunched -= 1
       // Check if the problem is a map output fetch failure. In that case, this

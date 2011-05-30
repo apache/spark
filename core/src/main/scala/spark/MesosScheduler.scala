@@ -79,7 +79,13 @@ extends MScheduler with DAGScheduler with Logging
       override def run {
         val sched = MesosScheduler.this
         sched.driver = new MesosSchedulerDriver(sched, master)
-        sched.driver.run()
+        try {
+          val ret = sched.driver.run()
+          logInfo("driver.run() returned with code " + ret)
+        } catch {
+          case e: Exception =>
+            logError("driver.run() failed", e)
+        }
       }
     }.start
   }
