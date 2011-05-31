@@ -38,7 +38,7 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
     val hadoop = "org.apache.hadoop" % "hadoop-core" % "0.20.2"
     val asm = "asm" % "asm-all" % "3.3.1"
     val scalaTest = "org.scalatest" % "scalatest_2.9.0" % "1.4.1" % "test"
-    val scalaCheck = "org.scala-tools.testing" % "scalacheck_2.9.0" % "1.8" % "test"
+    val scalaCheck = "org.scala-tools.testing" % "scalacheck_2.9.0" % "1.9" % "test"
   }
 
   class ReplProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport
