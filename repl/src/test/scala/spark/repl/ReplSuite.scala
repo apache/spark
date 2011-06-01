@@ -22,7 +22,7 @@ class ReplSuite extends FunSuite {
         }
       }
     }
-    val interp = new SparkInterpreterLoop(in, new PrintWriter(out), master)
+    val interp = new SparkILoop(in, new PrintWriter(out), master)
     spark.repl.Main.interp = interp
     val separator = System.getProperty("path.separator")
     interp.main(Array("-classpath", paths.mkString(separator)))

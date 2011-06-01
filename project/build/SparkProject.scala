@@ -10,7 +10,7 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
 
   lazy val core = project("core", "Spark Core", new CoreProject(_))
 
-//  lazy val repl = project("repl", "Spark REPL", new ReplProject(_), core)
+  lazy val repl = project("repl", "Spark REPL", new ReplProject(_), core)
 
   lazy val examples = project("examples", "Spark Examples", new ExamplesProject(_), core)
 

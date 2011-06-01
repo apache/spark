@@ -1,62 +1,31 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2010 LAMP/EPFL
+ * Copyright 2005-2011 LAMP/EPFL
  * @author Paul Phillips
  */
 
-
 package spark.repl
 
-import scala.tools.nsc
 import scala.tools.nsc._
-import scala.tools.nsc.interpreter
 import scala.tools.nsc.interpreter._
 
-import jline._
-import java.util.{ List => JList }
-import util.returning
-
-object SparkCompletion {  
-  def looksLikeInvocation(code: String) = (
-        (code != null)
-    &&  (code startsWith ".")
-    && !(code == ".")
-    && !(code startsWith "./")
-    && !(code startsWith "..")
-  )
-  
-  object Forwarder {
-    def apply(forwardTo: () => Option[CompletionAware]): CompletionAware = new CompletionAware {
-      def completions(verbosity: Int) = forwardTo() map (_ completions verbosity) getOrElse Nil
-      override def follow(s: String) = forwardTo() flatMap (_ follow s)
-    }
-  }
-}
-import SparkCompletion._
+import scala.tools.jline._
+import scala.tools.jline.console.completer._
+import Completion._
+import collection.mutable.ListBuffer
 
 // REPL completor - queries supplied interpreter for valid
 // completions based on current contents of buffer.
-class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput {
+class JLineCompletion(val intp: SparkIMain) extends Completion with CompletionOutput {
+  val global: intp.global.type = intp.global
+  import global._
+  import definitions.{ PredefModule, RootClass, AnyClass, AnyRefClass, ScalaPackage, JavaLangPackage }
+  type ExecResult = Any
+  import intp.{ DBG, debugging, afterTyper }
+  
   // verbosity goes up with consecutive tabs
   private var verbosity: Int = 0
   def resetVerbosity() = verbosity = 0
-  
-  def isCompletionDebug = repl.isCompletionDebug
-  def DBG(msg: => Any) = if (isCompletionDebug) println(msg.toString)
-  def debugging[T](msg: String): T => T = (res: T) => returning[T](res)(x => DBG(msg + x))
-  
-  lazy val global: repl.compiler.type = repl.compiler
-  import global._
-  import definitions.{ PredefModule, RootClass, AnyClass, AnyRefClass, ScalaPackage, JavaLangPackage }
-
-  // XXX not yet used.
-  lazy val dottedPaths = {
-    def walk(tp: Type): scala.List[Symbol] = {
-      val pkgs = tp.nonPrivateMembers filter (_.isPackage)
-      pkgs ++ (pkgs map (_.tpe) flatMap walk)
-    }
-    walk(RootClass.tpe)
-  }
-  
+    
   def getType(name: String, isModule: Boolean) = {
     val f = if (isModule) definitions.getModule(_: Name) else definitions.getClass(_: Name)
     try Some(f(name).tpe)
@@ -69,53 +38,74 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
   trait CompilerCompletion {
     def tp: Type
     def effectiveTp = tp match {
-      case MethodType(Nil, resType) => resType
-      case PolyType(Nil, resType)   => resType
-      case _                        => tp
+      case MethodType(Nil, resType)   => resType
+      case NullaryMethodType(resType) => resType
+      case _                          => tp
     }
 
     // for some reason any's members don't show up in subclasses, which
     // we need so 5.<tab> offers asInstanceOf etc.
     private def anyMembers = AnyClass.tpe.nonPrivateMembers
-    def anyRefMethodsToShow = List("isInstanceOf", "asInstanceOf", "toString")
+    def anyRefMethodsToShow = Set("isInstanceOf", "asInstanceOf", "toString")
 
     def tos(sym: Symbol) = sym.name.decode.toString
     def memberNamed(s: String) = members find (x => tos(x) == s)
     def hasMethod(s: String) = methods exists (x => tos(x) == s)
-    
+
     // XXX we'd like to say "filterNot (_.isDeprecated)" but this causes the
     // compiler to crash for reasons not yet known.
-    def members     = (effectiveTp.nonPrivateMembers ++ anyMembers) filter (_.isPublic)
+    def members     = afterTyper((effectiveTp.nonPrivateMembers ++ anyMembers) filter (_.isPublic))
     def methods     = members filter (_.isMethod)
     def packages    = members filter (_.isPackage)
     def aliases     = members filter (_.isAliasType)
-    
+
     def memberNames   = members map tos
     def methodNames   = methods map tos
     def packageNames  = packages map tos
     def aliasNames    = aliases map tos
   }
-  
+
   object TypeMemberCompletion {
+    def apply(tp: Type, runtimeType: Type, param: NamedParam): TypeMemberCompletion = {
+      new TypeMemberCompletion(tp) {
+        var upgraded = false
+        lazy val upgrade = {
+          intp rebind param          
+          intp.reporter.printMessage("\nRebinding stable value %s from %s to %s".format(param.name, tp, param.tpe))
+          upgraded = true
+          new TypeMemberCompletion(runtimeType)
+        }
+        override def completions(verbosity: Int) = {
+          super.completions(verbosity) ++ (
+            if (verbosity == 0) Nil
+            else upgrade.completions(verbosity)
+          )
+        }
+        override def follow(s: String) = super.follow(s) orElse {
+          if (upgraded) upgrade.follow(s)
+          else None
+        }
+        override def alternativesFor(id: String) = super.alternativesFor(id) ++ (
+          if (upgraded) upgrade.alternativesFor(id)
+          else Nil
+        ) distinct
+      }
+    }
     def apply(tp: Type): TypeMemberCompletion = {
       if (tp.typeSymbol.isPackageClass) new PackageCompletion(tp)
       else new TypeMemberCompletion(tp)
     }
     def imported(tp: Type) = new ImportCompletion(tp)
   }
-  
-  class TypeMemberCompletion(val tp: Type) extends CompletionAware with CompilerCompletion {
+
+  class TypeMemberCompletion(val tp: Type) extends CompletionAware
+                                              with CompilerCompletion {
     def excludeEndsWith: List[String] = Nil
     def excludeStartsWith: List[String] = List("<") // <byname>, <repeated>, etc.
-    def excludeNames: List[String] = anyref.methodNames.filterNot(anyRefMethodsToShow.contains) ++ List("_root_")
+    def excludeNames: List[String] = (anyref.methodNames filterNot anyRefMethodsToShow) :+ "_root_"
     
     def methodSignatureString(sym: Symbol) = {
-      def asString = new MethodSymbolOutput(sym).methodString()
-      
-      if (isCompletionDebug)
-        repl.power.showAtAllPhases(asString)
-
-      atPhase(currentRun.typerPhase)(asString)
+      SparkIMain stripString afterTyper(new MethodSymbolOutput(sym).methodString())
     }
 
     def exclude(name: String): Boolean = (
@@ -139,7 +129,7 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
         if (alts.nonEmpty) "" :: alts else Nil
       }
 
-    override def toString = "TypeMemberCompletion(%s)".format(tp)
+    override def toString = "%s (%d members)".format(tp, members.size)
   }
   
   class PackageCompletion(tp: Type) extends TypeMemberCompletion(tp) {
@@ -165,32 +155,36 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
   
   // the unqualified vals/defs/etc visible in the repl
   object ids extends CompletionAware {
-    override def completions(verbosity: Int) = repl.unqualifiedIds ::: List("classOf")
-    // we try to use the compiler and fall back on reflection if necessary
-    // (which at present is for anything defined in the repl session.)
-    override def follow(id: String) =
+    override def completions(verbosity: Int) = intp.unqualifiedIds ++ List("classOf") //, "_root_")
+    // now we use the compiler for everything.
+    override def follow(id: String) = {
       if (completions(0) contains id) {
-        for (clazz <- repl clazzForIdent id) yield {
-          // XXX The isMemberClass check is a workaround for the crasher described
-          // in the comments of #3431.  The issue as described by iulian is:
-          //
-          // Inner classes exist as symbols
-          // inside their enclosing class, but also inside their package, with a mangled
-          // name (A$B). The mangled names should never be loaded, and exist only for the
-          // optimizer, which sometimes cannot get the right symbol, but it doesn't care
-          // and loads the bytecode anyway.
-          //
-          // So this solution is incorrect, but in the short term the simple fix is
-          // to skip the compiler any time completion is requested on a nested class.
-          if (clazz.isMemberClass) new InstanceCompletion(clazz)
-          else (typeOf(clazz.getName) map TypeMemberCompletion.apply) getOrElse new InstanceCompletion(clazz)
+        intp typeOfExpression id map { tpe =>
+          def default = TypeMemberCompletion(tpe)
+
+          // only rebinding vals in power mode for now.
+          if (!isReplPower) default
+          else intp runtimeClassAndTypeOfTerm id match {
+            case Some((clazz, runtimeType)) =>
+              val sym = intp.symbolOfTerm(id)
+              if (sym.isStable) {
+                val param = new NamedParam.Untyped(id, intp valueOfTerm id getOrElse null)
+                TypeMemberCompletion(tpe, runtimeType, param)
+              }
+              else default
+            case _        =>
+              default
+          }
         }
       }
-      else None
+      else
+        None
+    }
+    override def toString = "<repl ids> (%s)".format(completions(0).size)
   }
 
-  // wildcard imports in the repl like "import global._" or "import String._"
-  private def imported = repl.wildcardImportedTypes map TypeMemberCompletion.imported
+  // user-issued wildcard imports like "import global._" or "import String._"
+  private def imported = intp.sessionWildcards map TypeMemberCompletion.imported
 
   // literal Ints, Strings, etc.
   object literals extends CompletionAware {    
@@ -211,7 +205,13 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
   }
 
   // top level packages
-  object rootClass extends TypeMemberCompletion(RootClass.tpe) { }
+  object rootClass extends TypeMemberCompletion(RootClass.tpe) {
+    override def completions(verbosity: Int) = super.completions(verbosity) :+ "_root_"
+    override def follow(id: String) = id match {
+      case "_root_" => Some(this)
+      case _        => super.follow(id)
+    }    
+  }
   // members of Predef
   object predef extends TypeMemberCompletion(PredefModule.tpe) {
     override def excludeEndsWith    = super.excludeEndsWith ++ List("Wrapper", "ArrayOps")
@@ -252,14 +252,25 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
   }
 
   // the list of completion aware objects which should be consulted
+  // for top level unqualified, it's too noisy to let much in.
   lazy val topLevelBase: List[CompletionAware] = List(ids, rootClass, predef, scalalang, javalang, literals)
   def topLevel = topLevelBase ++ imported
+  def topLevelThreshold = 50
   
   // the first tier of top level objects (doesn't include file completion)
-  def topLevelFor(parsed: Parsed) = topLevel flatMap (_ completionsFor parsed)
+  def topLevelFor(parsed: Parsed): List[String] = {
+    val buf = new ListBuffer[String]
+    topLevel foreach { ca =>
+      buf ++= (ca completionsFor parsed)
+
+      if (buf.size > topLevelThreshold)
+        return buf.toList.sorted
+    }
+    buf.toList
+  }
 
   // the most recent result
-  def lastResult = Forwarder(() => ids follow repl.mostRecentVar)
+  def lastResult = Forwarder(() => ids follow intp.mostRecentVar)
 
   def lastResultFor(parsed: Parsed) = {
     /** The logic is a little tortured right now because normally '.' is
@@ -268,9 +279,9 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
     val xs = lastResult completionsFor parsed
     if (parsed.isEmpty) xs map ("." + _) else xs
   }
-  
+
   // chasing down results which won't parse
-  def execute(line: String): Option[Any] = {
+  def execute(line: String): Option[ExecResult] = {
     val parsed = Parsed(line)
     def noDotOrSlash = line forall (ch => ch != '.' && ch != '/')
     
@@ -286,9 +297,7 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
   def completions(buf: String): List[String] =
     topLevelFor(Parsed.dotted(buf + ".", buf.length + 1))
 
-  // jline's entry point
-  lazy val jline: ArgumentCompletor =
-    returning(new ArgumentCompletor(new JLineCompletion, new JLineDelimiter))(_ setStrict false)
+  def completer(): ScalaCompleter = new JLineTabCompletion
 
   /** This gets a little bit hairy.  It's no small feat delegating everything
    *  and also keeping track of exactly where the cursor is and where it's supposed
@@ -296,44 +305,47 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
    *  string in the list of completions, that means we are expanding a unique
    *  completion, so don't update the "last" buffer because it'll be wrong.
    */
-  class JLineCompletion extends Completor {
+  class JLineTabCompletion extends ScalaCompleter {
     // For recording the buffer on the last tab hit
     private var lastBuf: String = ""
     private var lastCursor: Int = -1
 
     // Does this represent two consecutive tabs?
-    def isConsecutiveTabs(buf: String, cursor: Int) = cursor == lastCursor && buf == lastBuf
-    
+    def isConsecutiveTabs(buf: String, cursor: Int) =
+      cursor == lastCursor && buf == lastBuf
+
     // Longest common prefix
-    def commonPrefix(xs: List[String]) =
-      if (xs.isEmpty) ""
-      else xs.reduceLeft(_ zip _ takeWhile (x => x._1 == x._2) map (_._1) mkString)
+    def commonPrefix(xs: List[String]): String = {
+      if (xs.isEmpty || xs.contains("")) ""
+      else xs.head.head match {
+        case ch =>
+          if (xs.tail forall (_.head == ch)) "" + ch + commonPrefix(xs map (_.tail))
+          else ""
+      }
+    }
 
     // This is jline's entry point for completion.
-    override def complete(_buf: String, cursor: Int, candidates: java.util.List[java.lang.String]): Int = {
-      val buf = onull(_buf)
+    override def complete(buf: String, cursor: Int): Candidates = {
       verbosity = if (isConsecutiveTabs(buf, cursor)) verbosity + 1 else 0
-      DBG("complete(%s, %d) last = (%s, %d), verbosity: %s".format(buf, cursor, lastBuf, lastCursor, verbosity))
+      DBG("\ncomplete(%s, %d) last = (%s, %d), verbosity: %s".format(buf, cursor, lastBuf, lastCursor, verbosity))
 
       // we don't try lower priority completions unless higher ones return no results.
-      def tryCompletion(p: Parsed, completionFunction: Parsed => List[String]): Option[Int] = {
-        completionFunction(p) match {
-          case Nil  => None
-          case xs   =>
-            // modify in place and return the position
-            xs.foreach(x => candidates.add(x))
-
-            // update the last buffer unless this is an alternatives list
-            if (xs contains "") Some(p.cursor)
-            else {
-              val advance = commonPrefix(xs)            
-              lastCursor = p.position + advance.length
-              lastBuf = (buf take p.position) + advance
-  
-              DBG("tryCompletion(%s, _) lastBuf = %s, lastCursor = %s, p.position = %s".format(p, lastBuf, lastCursor, p.position))
-              Some(p.position) 
-            }
-        }
+      def tryCompletion(p: Parsed, completionFunction: Parsed => List[String]): Option[Candidates] = {
+        val winners = completionFunction(p) 
+        if (winners.isEmpty)
+          return None
+        val newCursor =
+          if (winners contains "") p.cursor
+          else {
+            val advance = commonPrefix(winners)
+            lastCursor = p.position + advance.length
+            lastBuf = (buf take p.position) + advance
+            DBG("tryCompletion(%s, _) lastBuf = %s, lastCursor = %s, p.position = %s".format(
+              p, lastBuf, lastCursor, p.position))
+            p.position
+          }
+        
+        Some(Candidates(newCursor, winners))
       }
       
       def mkDotted      = Parsed.dotted(buf, cursor) withVerbosity verbosity
@@ -345,9 +357,23 @@ class SparkCompletion(val repl: SparkInterpreter) extends SparkCompletionOutput 
         else tryCompletion(Parsed.dotted(buf drop 1, cursor), lastResultFor)
 
       def regularCompletion = tryCompletion(mkDotted, topLevelFor)
-      def fileCompletion    = tryCompletion(mkUndelimited, FileCompletion completionsFor _.buffer)
+      def fileCompletion    = 
+        if (!looksLikePath(buf)) None
+        else tryCompletion(mkUndelimited, FileCompletion completionsFor _.buffer)
       
-      (lastResultCompletion orElse regularCompletion orElse fileCompletion) getOrElse cursor
+      /** This is the kickoff point for all manner of theoretically possible compiler
+       *  unhappiness - fault may be here or elsewhere, but we don't want to crash the
+       *  repl regardless.  Hopefully catching Exception is enough, but because the
+       *  compiler still throws some Errors it may not be.
+       */
+      try {
+        (lastResultCompletion orElse regularCompletion orElse fileCompletion) getOrElse Candidates(cursor, Nil)
+      }
+      catch {
+        case ex: Exception =>
+          DBG("Error: complete(%s, %s) provoked %s".format(buf, cursor, ex))
+          Candidates(cursor, List(" ", "<completion error: " + ex.getMessage +  ">"))
+      }
     }
   }
 }
