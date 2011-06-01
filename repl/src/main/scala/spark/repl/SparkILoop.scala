@@ -22,6 +22,7 @@ import util.{ ClassPath, Exceptional, stringFromWriter, stringFromStream }
 import interpreter._
 import io.{ File, Sources }
 
+import spark.Logging
 import spark.SparkContext
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
@@ -39,6 +40,7 @@ import spark.SparkContext
 class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: Option[String])
                 extends AnyRef
                    with LoopCommands
+                   with Logging
 {
   def this(in0: BufferedReader, out: PrintWriter, master: String) = this(Some(in0), out, Some(master))
   def this(in0: BufferedReader, out: PrintWriter) = this(Some(in0), out, None)
@@ -842,6 +844,10 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
   }
 
   def process(settings: Settings): Boolean = {
+    // Ensure logging is initialized before any Spark threads try to use logs
+    // (because SLF4J initialization is not thread safe)
+    initLogging()
+
     printWelcome()
     echo("Initializing interpreter...")
 
