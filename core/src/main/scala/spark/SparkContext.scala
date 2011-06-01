@@ -15,6 +15,9 @@ class SparkContext(
   val sparkHome: String = null,
   val jars: Seq[String] = Nil)
 extends Logging {
+  // Ensure logging is initialized before we spawn any threads
+  initLogging()
+
   // Set Spark master host and port system properties
   if (System.getProperty("spark.master.host") == null)
     System.setProperty("spark.master.host", Utils.localHostName)

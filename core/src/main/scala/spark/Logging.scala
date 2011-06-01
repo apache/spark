@@ -46,4 +46,8 @@ trait Logging {
 
   def logError(msg: => String, throwable: Throwable) =
     if (log.isErrorEnabled) log.error(msg, throwable)
+
+  // Method for ensuring that logging is initialized, to avoid having multiple
+  // threads do it concurrently (as SLF4J initialization is not thread safe).
+  def initLogging() { log }
 }
