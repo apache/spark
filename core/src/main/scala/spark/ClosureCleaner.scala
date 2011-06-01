@@ -64,6 +64,7 @@ object ClosureCleaner extends Logging {
       accessedFields(cls) = Set[String]()
     for (cls <- func.getClass :: innerClasses)
       getClassReader(cls).accept(new FieldAccessFinder(accessedFields), 0)
+    //logInfo("accessedFields: " + accessedFields)
 
     val isInterpNull = {
       try {
@@ -134,6 +135,8 @@ class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends EmptyVisitor
       
       override def visitMethodInsn(op: Int, owner: String, name: String,
           desc: String) {
+        // Check for calls a getter method for a variable in an interpreter wrapper object.
+        // This means that the corresponding field will be accessed, so we should save it.
         if (op == INVOKEVIRTUAL && owner.endsWith("$iwC") && !name.endsWith("$outer"))
           for (cl <- output.keys if cl.getName == owner.replace('/', '.'))
             output(cl) += name
