@@ -177,7 +177,12 @@ trait SparkImports {
           for (imv <- x.definedNames) {
             if (currentImps contains imv) addWrapper()
         
-            code append ("import %s\n" format (req fullPath imv))
+            val objName = req.lineRep.readPath
+            val valName = "$VAL" + newValId();
+            code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
+            code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
+
+            //code append ("import %s\n" format (req fullPath imv))
             currentImps += imv
           }
       }
@@ -193,4 +198,11 @@ trait SparkImports {
 
   private def membersAtPickler(sym: Symbol): List[Symbol] =
     atPickler(sym.info.nonPrivateMembers)
+
+  private var curValId = 0
+
+  private def newValId(): Int = {
+    curValId += 1
+    curValId
+  }
 }

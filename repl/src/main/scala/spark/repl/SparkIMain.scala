@@ -593,6 +593,7 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
    */
   def close() {
     reporter.flush()
+    classServer.stop()
   }
   
   /** Here is where we:
@@ -646,7 +647,9 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
       * following accessPath into the outer one.
       */
     def resolvePathToSymbol(accessPath: String): Symbol = {
-      val readRoot  = definitions.getModule(readPath)   // the outermost wrapper
+      //val readRoot  = definitions.getModule(readPath)   // the outermost wrapper
+      // MATEI: changed this to getClass because the root object is no longer a module (Scala singleton object)
+      val readRoot  = definitions.getClass(readPath)   // the outermost wrapper
       (accessPath split '.').foldLeft(readRoot) { (sym, name) =>
         if (name == "") sym else
         lineAfterTyper(sym.info member newTermName(name))
@@ -704,7 +707,8 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
 
     /** Code to access a variable with the specified name */
     def fullPath(vname: String) = (
-      lineRep.readPath + accessPath + ".`%s`".format(vname)
+      //lineRep.readPath + accessPath + ".`%s`".format(vname)
+      lineRep.readPath + ".INSTANCE" + accessPath + ".`%s`".format(vname)
     )
     /** Same as fullpath, but after it has been flattened, so:
      *  $line5.$iw.$iw.$iw.Bippy      // fullPath
@@ -722,11 +726,22 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
     /** generate the source code for the object that computes this request */
     private object ObjectSourceCode extends CodeAssembler[MemberHandler] {
       val preamble = """
+        |class %s extends Serializable {
+        |  %s%s
+      """.stripMargin.format(lineRep.readName, importsPreamble, indentCode(toCompute))
+      val postamble = importsTrailer + "\n}" + "\n" +
+        "object " + lineRep.readName + " {\n" +
+        "  val INSTANCE = new " + lineRep.readName + "();\n" +
+        "}\n"
+      val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
+      /*
+      val preamble = """
         |object %s {
         |  %s%s
       """.stripMargin.format(lineRep.readName, importsPreamble, indentCode(toCompute))
       val postamble = importsTrailer + "\n}"
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
+      */
     }
     
     private object ResultObjectSourceCode extends CodeAssembler[MemberHandler] {
@@ -753,7 +768,7 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
       |    %s
       |    (""
       """.stripMargin.format(
-        lineRep.evalName, evalResult, executionWrapper, lineRep.readName + accessPath
+        lineRep.evalName, evalResult, executionWrapper, lineRep.readName + ".INSTANCE" + accessPath
       )
       
       val postamble = """
@@ -794,8 +809,12 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
     def applyToResultMember[T](name: Name, f: Symbol => T) = lineAfterTyper(f(resultSymbol.info.nonPrivateDecl(name)))
 
     /* typeOf lookup with encoding */
-    def lookupTypeOf(name: Name) = typeOf.getOrElse(name, typeOf(global.encode(name.toString)))
-    def simpleNameOfType(name: TypeName) = (compilerTypeOf get name) map (_.typeSymbol.simpleName)
+    def lookupTypeOf(name: Name) = {
+      typeOf.getOrElse(name, typeOf(global.encode(name.toString)))
+    }
+    def simpleNameOfType(name: TypeName) = {
+      (compilerTypeOf get name) map (_.typeSymbol.simpleName)
+    }
     
     private def typeMap[T](f: Type => T): Map[Name, T] = {
       def toType(name: Name): T = {
@@ -1036,7 +1055,7 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
     /** Secret bookcase entrance for repl debuggers: end the line
      *  with "// show" and see what's going on.
      */
-    if (code.lines exists (_.trim endsWith "// show")) {
+    if (SPARK_DEBUG_REPL || code.lines.exists(_.trim endsWith "// show")) {
       echo(code)
       parse(code) foreach (ts => ts foreach (t => withoutUnwrapping(DBG(asCompactString(t)))))
     }
@@ -1060,7 +1079,8 @@ object SparkIMain {
   //   $line3.$read$$iw$$iw$Bippy@4a6a00ca
   private def removeLineWrapper(s: String) = s.replaceAll("""\$line\d+[./]\$(read|eval|print)[$.]""", "")
   private def removeIWPackages(s: String)  = s.replaceAll("""\$(iw|read|eval|print)[$.]""", "")
-  def stripString(s: String)               = removeIWPackages(removeLineWrapper(s))
+  private def removeSparkVals(s: String)   = s.replaceAll("""\$VAL[0-9]+[$.]""", "")
+  def stripString(s: String)               = removeSparkVals(removeIWPackages(removeLineWrapper(s)))
   
   trait CodeAssembler[T] {
     def preamble: String
