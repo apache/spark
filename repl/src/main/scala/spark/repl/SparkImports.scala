@@ -175,7 +175,13 @@ trait SparkImports {
         // handle quoting keywords separately. 
         case x =>
           for (imv <- x.definedNames) {
-            if (currentImps contains imv) addWrapper()
+            // MATEI: Changed this check because it was messing up for case classes
+            // (trying to import them twice within the same wrapper), but that is more likely
+            // due to a miscomputation of names that makes the code think they're unique.
+            // Need to evaluate whether having so many wrappers is a bad thing.
+            /*if (currentImps contains imv)*/
+            val imvName = imv.toString
+            if (currentImps exists (_.toString == imvName)) addWrapper()
         
             val objName = req.lineRep.readPath
             val valName = "$VAL" + newValId();

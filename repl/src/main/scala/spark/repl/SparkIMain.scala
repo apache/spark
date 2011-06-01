@@ -1087,7 +1087,7 @@ object SparkIMain {
   // $line3.$read.$iw.$iw.Bippy = 
   //   $line3.$read$$iw$$iw$Bippy@4a6a00ca
   private def removeLineWrapper(s: String) = s.replaceAll("""\$line\d+[./]\$(read|eval|print)[$.]""", "")
-  private def removeIWPackages(s: String)  = s.replaceAll("""\$(iw|read|eval|print)[$.]""", "")
+  private def removeIWPackages(s: String)  = s.replaceAll("""\$(iw|iwC|read|eval|print)[$.]""", "")
   private def removeSparkVals(s: String)   = s.replaceAll("""\$VAL[0-9]+[$.]""", "")
   def stripString(s: String)               = removeSparkVals(removeIWPackages(removeLineWrapper(s)))
   
