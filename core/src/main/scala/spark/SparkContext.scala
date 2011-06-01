@@ -148,7 +148,11 @@ extends Logging {
       None
   }
 
-  private[spark] def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
+  /**
+   * Run a function on a given set of partitions in an RDD and return the results.
+   * This is the main entry point to the scheduler, by which all actions get launched.
+   */
+  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
                                  (implicit m: ClassManifest[U])
       : Array[U] = {
     logInfo("Starting job...")
@@ -158,7 +162,10 @@ extends Logging {
     result
   }
 
-  private[spark] def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)
+  /**
+   * Run a job on all partitions in an RDD and return the results in an array.
+   */
+  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)
                                  (implicit m: ClassManifest[U])
       : Array[U] = {
     runJob(rdd, func, 0 until rdd.splits.size)
