@@ -36,9 +36,9 @@ private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
             logInfo("Finished task " + i)
             taskEnded(tasks(i), Success, result, accumUpdates)
           } catch {
-            case e: Exception => {
+            case t: Throwable => {
               // TODO: Do something nicer here
-              logError("Exception in task " + i, e)
+              logError("Exception in task " + i, t)
               System.exit(1)
               null
             }

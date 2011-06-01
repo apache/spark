@@ -69,9 +69,9 @@ class Executor extends mesos.Executor with Logging {
           d.sendStatusUpdate(new TaskStatus(
             taskId, TaskState.TASK_FAILED, Utils.serialize(reason)))
         }
-        case e: Exception => {
+        case t: Throwable => {
           // TODO: Handle errors in tasks less dramatically
-          logError("Exception in task ID " + taskId, e)
+          logError("Exception in task ID " + taskId, t)
           System.exit(1)
         }
       }
