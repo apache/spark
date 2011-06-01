@@ -29,6 +29,7 @@ import SparkIMain._
 
 import spark.HttpServer
 import spark.Utils
+import spark.SparkEnv
 
 /** An interpreter for Scala code.
  *  
@@ -879,7 +880,15 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
       }
       
       try {
-        val execution = lineManager.set(originalLine)(lineRep call "$export")
+        val execution = lineManager.set(originalLine) {
+          // MATEI: set the right SparkEnv for our SparkContext, because
+          // this execution will happen in a separate thread
+          val sc = spark.repl.Main.interp.sparkContext
+          if (sc != null && sc.env != null)
+            SparkEnv.set(sc.env)
+          // Execute the line
+          lineRep call "$export"
+        }
         execution.await()
         
         execution.state match {

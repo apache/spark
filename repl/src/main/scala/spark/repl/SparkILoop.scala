@@ -842,6 +842,9 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
   }
 
   def process(settings: Settings): Boolean = {
+    printWelcome()
+    echo("Initializing interpreter...")
+
     this.settings = settings
     createInterpreter()
     
@@ -856,7 +859,6 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     if (intp.reporter.hasErrors)
       return false
     
-    printWelcome()
     try {      
       // this is about the illusion of snappiness.  We call initialize()
       // which spins off a separate thread, then print the prompt and try 

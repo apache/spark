@@ -144,8 +144,8 @@ trait SparkImports {
     // add code for a new object to hold some imports
     def addWrapper() {
       val impname = nme.INTERPRETER_IMPORT_WRAPPER
-      code append "object %s {\n".format(impname)
-      trailingBraces append "}\n"
+      code append "class %sC extends Serializable {\n".format(impname)
+      trailingBraces append "}\nval " + impname + " = new " + impname + "C;\n"
       accessPath append ("." + impname)
       
       currentImps.clear
