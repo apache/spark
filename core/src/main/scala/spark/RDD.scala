@@ -6,10 +6,17 @@ import java.io.ObjectInputStream
 import java.util.concurrent.atomic.AtomicLong
 import java.util.HashSet
 import java.util.Random
+import java.util.Date
+import java.text.SimpleDateFormat
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
+
+import org.apache.hadoop.mapred.JobID
+import org.apache.hadoop.mapred.TextOutputFormat
+import org.apache.hadoop.io.NullWritable
+import org.apache.hadoop.io.Text
 
 import SparkContext._
 
@@ -117,6 +124,28 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
       }
       result
     }).sum
+  }
+
+  def saveAsText(path: String): Unit = {
+		val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+		val jobID = new JobID(formatter.format(new Date()), 0)
+		for (splitID <- 0 until splits.size) { 
+				sc.runJob(this, (iter: Iterator[T] ) => {
+					val writer = new HadoopFileWriter[NullWritable, Text](path, jobID, splitID)
+					var count = 0
+					writer.open()
+					while(iter.hasNext) {
+						val record = iter.next.toString
+						count += 1
+						writer.write(null, new Text(record))
+						println (count.toString + ": " +  record)
+					}
+					writer.close()
+					if (!(writer.verify() && writer.commit())) {
+						writer.abort()
+					}
+				}, List (splitID ))
+			}
   }
 
   def toArray(): Array[T] = collect()
