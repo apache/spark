@@ -1,14 +1,5 @@
-package spark
+package org.apache.hadoop.mapred
 
-import org.apache.hadoop.mapred.FileOutputCommitter
-import org.apache.hadoop.mapred.OutputFormat
-import org.apache.hadoop.mapred.FileOutputFormat
-import org.apache.hadoop.mapred.TextOutputFormat
-import org.apache.hadoop.mapred.TaskID
-import org.apache.hadoop.mapred.TaskAttemptID
-import org.apache.hadoop.mapred.RecordWriter
-import org.apache.hadoop.mapred.JobID
-import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.ReflectionUtils
@@ -19,12 +10,14 @@ import java.net.URI
 
 @serializable class HadoopFileWriter[K,V] (path: String, jobID: JobID, splitID: Int) {
   val conf = new JobConf()
-  var taID: TaskAttemptID = null  
   var fs: FileSystem = null
   var outputName: String = null
   var outputPath: Path = null
   var tempOutputPath: Path = null
   var tempTaskOutputPath: Path = null
+  var taID: TaskAttemptID = null
+  var taCtxt: TaskAttemptContext = null
+  var cmtr: OutputCommitter = null
   var writer: RecordWriter[K,V] = null
   
   def open() {
@@ -44,16 +37,21 @@ import java.net.URI
     
     outputName = "part-"  + numfmt.format(splitID)
     outputPath = outputPath.makeQualified(fs)
-    tempOutputPath = new Path(outputPath, FileOutputCommitter.TEMP_DIR_NAME)
-    tempTaskOutputPath = new Path(tempOutputPath, "_" + taID.toString)
-    
-    createDir(tempOutputPath)
+  
+    taID = new TaskAttemptID(new TaskID(jobID, true, splitID), 0)
 
     FileOutputFormat.setOutputPath(conf, outputPath)
     conf.set("mapred.task.id", taID.toString) 
 
-    val fmt = ReflectionUtils.newInstance(classOf[TextOutputFormat[K,V]].asInstanceOf[Class[_]], conf).asInstanceOf[OutputFormat[K, V]]
-    writer = fmt.getRecordWriter(fs, conf, outputName, null)
+    val jCtxt = new JobContext(conf, jobID) 
+    taCtxt = new TaskAttemptContext(conf, taID)
+  
+    val fmt = ReflectionUtils.newInstance(classOf[TextOutputFormat[K,V]].asInstanceOf[Class[_]], conf).asInstanceOf[OutputFormat[K, V]]    
+    cmtr = conf.getOutputCommitter()
+    cmtr.setupJob(jCtxt) 		// creates the required directories
+    cmtr.setupTask(taCtxt) 		// does nothing actually!
+
+    writer = fmt.getRecordWriter(fs, conf, outputName, Reporter.NULL)
   }
 
 
@@ -65,72 +63,37 @@ import java.net.URI
   }
 
   def close() {
-    writer.close(null)
-  }
-
-  def verify(): Boolean = {
-    return true
+    writer.close(Reporter.NULL)
   }
 
   def commit(): Boolean = {
-    if (moveFile(tempTaskOutputPath))
-      return true
-    else 
-      return false
-  }
-
-  def abort():Boolean = {
-    fs.delete (tempTaskOutputPath)
-  }
-
-  def createDir(dir: Path) {
-    if (!fs.exists(dir)) 
-      fs.mkdirs(dir)
-  }
-
-  def deleteFile(dir: Path) {
-    if (fs.exists(dir)) 
-      fs.delete(dir, true)
-  }
-
-  def moveFile(pathToMove: Path): Boolean = {
-    var result = false
-    if (fs.isFile(pathToMove)) {
-      
-      val finalPath = getFinalPath(pathToMove)
-      if (!fs.rename(pathToMove, finalPath)) {
-        if (!fs.delete(finalPath)) {
-          throw new IOException("Failed to delete earlier output of task: " + taID)
-        }
-        if (!fs.rename(pathToMove, finalPath)) {
-          throw new IOException("Failed to save output of task: "+ taID)
+    if (taCtxt == null) 
+      throw new Exception("Task context is null")
+    if (cmtr.needsTaskCommit(taCtxt)) {
+      try {
+        cmtr.commitTask(taCtxt)
+        return true
+      } catch {
+        case e:IOException => { 
+          println ("Error committing the output of task: " + taID) 
+          e.printStackTrace()
+          cmtr.abortTask(taCtxt)
         }
       }
-      println ("Moved '"+ pathToMove +"' to '"+ finalPath+"'")
-      result = true
-    } else if (fs.getFileStatus(pathToMove).isDir) {
-      val paths = fs.listStatus(pathToMove)
-      val finalPath = getFinalPath(pathToMove)
-      createDir(finalPath)
-      result = true
-      if (paths != null)
-        paths.foreach(path => if (!moveFile(path.getPath())) result = false)
     }
-    return result
+    return false
   }
 
-  def getFinalPath (pathToMove: Path): Path = {
-    val pathToMoveUri = pathToMove.toUri
-    val relPathToMoveUri = tempTaskOutputPath.toUri.relativize(pathToMoveUri)
-    if (relPathToMoveUri ==  pathToMoveUri) {
-      throw new IOException("Could not get relative path of '"+pathToMove+"' from '"+tempTaskOutputPath+"'")
-    }
-    val relPathToMove = relPathToMoveUri.getPath
-    if (relPathToMove.length > 0) {
-      return new Path (outputPath, relPathToMove) 
-    } else {
-      return outputPath
-    }
+  def commit(taIDStr: String): Boolean = {
+    taID = TaskAttemptID.forName(taIDStr)
+    conf.set("mapred.task.id", taID.toString) 
+    taCtxt = new TaskAttemptContext(conf, taID)
+    return commit()
   }
 
+  def getTaskIDAsStr(): String = {
+    if (taID == null) 
+      throw new Exception("Task ID is null")
+    return taID.toString
+  }
 }

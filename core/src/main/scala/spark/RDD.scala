@@ -15,6 +15,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.TextOutputFormat
+import org.apache.hadoop.mapred.HadoopFileWriter
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
 
@@ -141,9 +142,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
 						println (count.toString + ": " +  record)
 					}
 					writer.close()
-					if (!(writer.verify() && writer.commit())) {
-						writer.abort()
-					}
+					if (!writer.commit()) {
+					  println ("Output not committed")
+          }
 				}, List (splitID ))
 			}
   }
