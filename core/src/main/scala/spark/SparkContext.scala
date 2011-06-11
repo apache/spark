@@ -152,7 +152,7 @@ extends Logging {
    * Run a function on a given set of partitions in an RDD and return the results.
    * This is the main entry point to the scheduler, by which all actions get launched.
    */
-  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
+  def runJob[T, U](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U, partitions: Seq[Int])
                                  (implicit m: ClassManifest[U])
       : Array[U] = {
     logInfo("Starting job...")
@@ -162,6 +162,12 @@ extends Logging {
     result
   }
 
+  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
+                                 (implicit m: ClassManifest[U])
+      : Array[U] = {
+    runJob(rdd, (context: TaskContext, iter: Iterator[T]) => func(iter), partitions)
+  }
+  
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */

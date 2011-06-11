@@ -129,9 +129,15 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
 
   def saveAsText(path: String): Unit = {
 		val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-		val jobID = new JobID(formatter.format(new Date()), 0)
-		for (splitID <- 0 until splits.size) { 
-				sc.runJob(this, (iter: Iterator[T] ) => {
+    val jobtrackerID = formatter.format(new Date())
+		//val jobID = new JobID(formatter.format(new Date()), 0)
+    for (splitID <- 0 until splits.size) { 
+				sc.runJob(this, (context: TaskContext, iter: Iterator[T] ) => {
+          if (context == null) 
+            println("Context is null")
+          if (formatter == null) 
+            throw new Exception("Formatter is null")
+          val jobID = if (context == null) new JobID(jobtrackerID, 0) else new JobID(jobtrackerID, context.jobID)
 					val writer = new HadoopFileWriter[NullWritable, Text](path, jobID, splitID)
 					var count = 0
 					writer.open()
