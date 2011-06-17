@@ -5,7 +5,8 @@ class ResultTask[T, U](stageId: Int, rdd: RDD[T], func: (TaskContext, Iterator[T
 extends DAGTask[U](stageId) {
   val split = rdd.splits(partition)
 
-  override def run: U = {
+  override def run(attemptId: Int): U = {
+    val context = new TaskContext(stageId, partition, attemptId)
     func(context, rdd.iterator(split))
   }
 

@@ -9,7 +9,7 @@ class ShuffleMapTask(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_], v
 extends DAGTask[String](stageId) with Logging {
   val split = rdd.splits(partition)
 
-  override def run: String = {
+  override def run (attemptId: Int): String = {
     val numOutputSplits = dep.partitioner.numPartitions
     val aggregator = dep.aggregator.asInstanceOf[Aggregator[Any, Any, Any]]
     val partitioner = dep.partitioner.asInstanceOf[Partitioner]

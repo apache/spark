@@ -171,12 +171,17 @@ extends Logging {
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
-  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)
+  def runJob[T, U](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U)
                                  (implicit m: ClassManifest[U])
       : Array[U] = {
     runJob(rdd, func, 0 until rdd.splits.size)
   }
 
+  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)
+                                 (implicit m: ClassManifest[U])
+      : Array[U] = {
+    runJob(rdd, func, 0 until rdd.splits.size)
+  }
   // Clean a closure to make it ready to serialized and send to tasks
   // (removes unreferenced variables in $outer's, updates REPL variables)
   private[spark] def clean[F <: AnyRef](f: F): F = {

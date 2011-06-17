@@ -7,17 +7,13 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.HashSet
 import java.util.Random
 import java.util.Date
-import java.text.SimpleDateFormat
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 
-import org.apache.hadoop.mapred.JobID
-import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.hadoop.mapred.HadoopFileWriter
-import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.io.Text
+import org.apache.hadoop.mapred.HadoopTextFileWriter
 
 import SparkContext._
 
@@ -128,31 +124,31 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
 
   def saveAsText(path: String): Unit = {
-		val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-    val jobtrackerID = formatter.format(new Date())
-		//val jobID = new JobID(formatter.format(new Date()), 0)
-    for (splitID <- 0 until splits.size) { 
-				sc.runJob(this, (context: TaskContext, iter: Iterator[T] ) => {
-          if (context == null) 
-            println("Context is null")
-          if (formatter == null) 
-            throw new Exception("Formatter is null")
-          val jobID = if (context == null) new JobID(jobtrackerID, 0) else new JobID(jobtrackerID, context.jobID)
-					val writer = new HadoopFileWriter[NullWritable, Text](path, jobID, splitID)
-					var count = 0
-					writer.open()
-					while(iter.hasNext) {
-						val record = iter.next.toString
-						count += 1
-						writer.write(null, new Text(record))
-						println (count.toString + ": " +  record)
-					}
-					writer.close()
-					if (!writer.commit()) {
-					  println ("Output not committed")
-          }
-				}, List (splitID ))
-			}
+	  val now = new Date()
+    val writer = new HadoopTextFileWriter(path)
+    writer.preSetup()
+
+    def writeToFile (context: TaskContext, iter: Iterator[T]): HadoopTextFileWriter = {
+      if (context == null) 
+        throw new Exception("Context is null")
+      
+      writer.setup(context.stageId, context.splitId, context.attemptId)
+      writer.open()
+      
+      var count = 0
+      while(iter.hasNext) {
+        val record = iter.next.toString
+        count += 1
+        writer.write(record)
+        println (count.toString + ": " +  record)
+      }
+    
+      writer.close()
+      return writer
+    }
+
+    sc.runJob(this, writeToFile _ ).foreach(_.commit())
+    writer.cleanup()
   }
 
   def toArray(): Array[T] = collect()
