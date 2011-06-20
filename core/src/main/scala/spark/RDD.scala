@@ -301,6 +301,23 @@ extends RDD[Array[T]](prev.context) {
         (k, (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]]))
     }
   }
+
+  def lookup(key: K): Seq[V] = {
+    self.partitioner match {
+      case Some(p) =>
+        val index = p.getPartition(key)
+        def process(it: Iterator[(K, V)]): Seq[V] = {
+          val buf = new ArrayBuffer[V]
+          for ((k, v) <- it if k == key)
+            buf += v
+          buf
+        }
+        val res = self.context.runJob(self, process, Array(index))
+        res(0)
+      case None =>
+        throw new UnsupportedOperationException("lookup() called on an RDD without a partitioner")
+    }
+  }
 }
 
 class MappedValuesRDD[K, V, U](
