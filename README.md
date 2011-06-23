@@ -20,7 +20,7 @@ To build Spark and its example programs, run:
 
     sbt/sbt update compile
 
-To run Spark, you will need to have Scala's bin in your $PATH, or you
+To run Spark, you will need to have Scala's bin in your `PATH`, or you
 will need to set the `SCALA_HOME` environment variable to point to where
 you've installed Scala. Scala must be accessible through one of these
 methods on Mesos slave nodes as well as on the master.
@@ -48,11 +48,15 @@ In `java-opts`, you can add flags to be passed to the JVM when running Spark.
 In `spark-env.sh`, you can set any environment variables you wish to be available
 when running Spark programs, such as `PATH`, `SCALA_HOME`, etc. There are also
 several Spark-specific variables you can set:
+
 - `SPARK_CLASSPATH`: Extra entries to be added to the classpath, separated by ":".
+
 - `SPARK_MEM`: Memory for Spark to use, in the format used by java's `-Xmx`
   option (for example, `-Xmx200m` meams 200 MB, `-Xmx1g` means 1 GB, etc).
+
 - `SPARK_LIBRARY_PATH`: Extra entries to add to `java.library.path` for locating
   shared libraries.
+
 - `SPARK_JAVA_OPTS`: Extra options to pass to JVM.
 
 Note that `spark-env.sh` must be a shell script (it must be executable and start
