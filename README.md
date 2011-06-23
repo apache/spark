@@ -52,7 +52,7 @@ several Spark-specific variables you can set:
 - `SPARK_CLASSPATH`: Extra entries to be added to the classpath, separated by ":".
 
 - `SPARK_MEM`: Memory for Spark to use, in the format used by java's `-Xmx`
-  option (for example, `-Xmx200m` meams 200 MB, `-Xmx1g` means 1 GB, etc).
+  option (for example, `-Xmx200m` means 200 MB, `-Xmx1g` means 1 GB, etc).
 
 - `SPARK_LIBRARY_PATH`: Extra entries to add to `java.library.path` for locating
   shared libraries.
