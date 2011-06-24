@@ -242,6 +242,44 @@ extends RDD[Array[T]](prev.context) {
     }
   }
 
+  def leftOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, Option[W]))] = {
+    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
+    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
+    (vs ++ ws).groupByKey(numSplits).flatMap {
+      case (k, seq) => {
+        val vbuf = new ArrayBuffer[V]
+        val wbuf = new ArrayBuffer[Option[W]]
+        seq.foreach(_ match {
+          case Left(v) => vbuf += v
+          case Right(w) => wbuf += Some(w)
+        })
+        if (wbuf.isEmpty) {
+          wbuf += None
+        }
+        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
+      }
+    }
+  }
+
+  def rightOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (Option[V], W))] = {
+    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
+    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
+    (vs ++ ws).groupByKey(numSplits).flatMap {
+      case (k, seq) => {
+        val vbuf = new ArrayBuffer[Option[V]]
+        val wbuf = new ArrayBuffer[W]
+        seq.foreach(_ match {
+          case Left(v) => vbuf += Some(v)
+          case Right(w) => wbuf += w
+        })
+        if (vbuf.isEmpty) {
+          vbuf += None
+        }
+        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
+      }
+    }
+  }
+
   def combineByKey[C](createCombiner: V => C,
                       mergeValue: (C, V) => C,
                       mergeCombiners: (C, C) => C)
@@ -259,6 +297,14 @@ extends RDD[Array[T]](prev.context) {
 
   def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
     join(other, numCores)
+  }
+
+  def leftOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
+    leftOuterJoin(other, numCores)
+  }
+
+  def rightOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
+    rightOuterJoin(other, numCores)
   }
 
   def numCores = self.context.numCores
