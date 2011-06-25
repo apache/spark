@@ -5,11 +5,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
-/*import org.apache.hadoop.mapred.OutputFormat
-import org.apache.hadoop.mapred.TextOutputFormat
-import org.apache.hadoop.mapred.OutputCommitter
-import org.apache.hadoop.mapred.FileOutputCommitter
-*/
 
 import java.text.SimpleDateFormat
 import java.text.NumberFormat
@@ -18,22 +13,17 @@ import java.net.URI
 import java.util.Date
 
 import spark.SerializableWritable
-
-@serializable
-class HadoopTextFileWriter (path: String)
-extends HadoopFileWriter [NullWritable, Text, TextOutputFormat[NullWritable, Text], FileOutputCommitter] (path) {
-  def write (str: String) {
-    write(null.asInstanceOf[NullWritable], new Text(str))
-  }
-}
-
+import spark.Logging
 
 @serializable 
-class HadoopFileWriter [K, V, F <: OutputFormat[K,V], C <: OutputCommitter] 
-  (path: String, @transient jobConf: JobConf) 
-  (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F], cm: ClassManifest[C]) {  
+class HadoopFileWriter (path: String,
+                        keyClass: Class[_],
+                        valueClass: Class[_],
+                        outputFormatClass: Class[_ <: OutputFormat[AnyRef,AnyRef]],
+                        outputCommitterClass: Class[_ <: OutputCommitter],
+                        @transient jobConf: JobConf = null) extends Logging {  
   
-  private val now = new Date() 
+  private val now = new Date()
   private val conf = new SerializableWritable[JobConf](if (jobConf == null) new JobConf() else  jobConf)
   private val confProvided = (jobConf != null)
   
@@ -43,13 +33,32 @@ class HadoopFileWriter [K, V, F <: OutputFormat[K,V], C <: OutputCommitter]
   private var jID: SerializableWritable[JobID] = null
   private var taID: SerializableWritable[TaskAttemptID] = null
 
-  @transient private var writer: RecordWriter[K,V] = null
-  @transient private var format: OutputFormat[K,V] = null.asInstanceOf
+  @transient private var writer: RecordWriter[AnyRef,AnyRef] = null
+  @transient private var format: OutputFormat[AnyRef,AnyRef] = null
   @transient private var committer: OutputCommitter = null
   @transient private var jobContext: JobContext = null
   @transient private var taskContext: TaskAttemptContext = null
-
-  def this (path: String)(implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F], cm: ClassManifest[C]) = this(path, null)
+  
+  def this (path: String, @transient jobConf: JobConf) 
+            = this (path, 
+                    jobConf.getOutputKeyClass, 
+                    jobConf.getOutputValueClass, 
+                    jobConf.getOutputFormat().getClass.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]], 
+                    jobConf.getOutputCommitter().getClass.asInstanceOf[Class[OutputCommitter]], 
+                    jobConf)
+  
+  def this (path: String, 
+            keyClass: Class[_],
+            valueClass: Class[_],
+            outputFormatClass: Class[_ <: OutputFormat[AnyRef,AnyRef]],
+            outputCommitterClass: Class[_ <: OutputCommitter])
+            
+            = this (path, 
+                    keyClass, 
+                    valueClass, 
+                    outputFormatClass, 
+                    outputCommitterClass,
+                    null)
 
   def preSetup() {
     setIDs(0, 0, 0)
@@ -71,18 +80,16 @@ class HadoopFileWriter [K, V, F <: OutputFormat[K,V], C <: OutputCommitter]
     numfmt.setGroupingUsed(false)
     
     val outputName = "part-"  + numfmt.format(splitID)
-    val fs = HadoopFileWriter.createPathFromString(path, conf.value).getFileSystem(conf.value)
+    val fs = HadoopFileWriter.createPathFromString(path, conf.value)
+                             .getFileSystem(conf.value)
 
     getOutputCommitter().setupTask(getTaskContext()) 
     writer = getOutputFormat().getRecordWriter(fs, conf.value, outputName, Reporter.NULL)
   }
 
-  def write(key: K, value: V) {
+  def write(key: AnyRef, value: AnyRef) {
     if (writer!=null) {
-      val key1 = key.asInstanceOf[Any]
-      val value1 = value.asInstanceOf[Any]
-      //println ("Writing ("+key.toString+": " + key.getClass.toString + ", " + value.toString + ": " + value.getClass.toString + ")")
-      println ("Writing ("+key.toString+ ", " + value.toString + ")")
+      //println (">>> Writing ("+key.toString+": " + key.getClass.toString + ", " + value.toString + ": " + value.getClass.toString + ")")
       writer.write(key, value)
     } else 
       throw new IOException("Writer is null, open() has not been called")
@@ -97,24 +104,20 @@ class HadoopFileWriter [K, V, F <: OutputFormat[K,V], C <: OutputCommitter]
     val taCtxt = getTaskContext()
     val cmtr = getOutputCommitter() 
     if (cmtr.needsTaskCommit(taCtxt)) {
-      println (taID + ": Commit required")
       try {
         cmtr.commitTask(taCtxt)
-        println (taID + ": Committed")
+        logInfo (taID + ": Committed")
         result = true
       } catch {
         case e:IOException => { 
-          println ("Error committing the output of task: " + taID.value) 
+          logError ("Error committing the output of task: " + taID.value) 
           e.printStackTrace()
           cmtr.abortTask(taCtxt)
         }
-      } finally {
-        println ("Cleaning up")
-      }
-      println ("Returning result = " + result)
+      }   
       return result
     } 
-    println ("No need to commit output of task: " + taID.value)
+    logWarning ("No need to commit output of task: " + taID.value)
     return true
   }
 
@@ -124,24 +127,27 @@ class HadoopFileWriter [K, V, F <: OutputFormat[K,V], C <: OutputCommitter]
 
   // ********* Private Functions *********
 
-  private def getOutputFormat(): OutputFormat[K, V] = {
-    if (format == null) format = conf.value.getOutputFormat().asInstanceOf[OutputFormat[K,V]]
-    //format = ReflectionUtils.newInstance(fm.erasure.asInstanceOf[Class[_]], conf.value).asInstanceOf[OutputFormat[K,V]]    
+  private def getOutputFormat(): OutputFormat[AnyRef,AnyRef] = {
+    if (format == null) 
+      format = conf.value.getOutputFormat().asInstanceOf[OutputFormat[AnyRef,AnyRef]]
     return format 
   }
 
   private def getOutputCommitter(): OutputCommitter = {
-    if (committer == null) committer = conf.value.getOutputCommitter().asInstanceOf[OutputCommitter]
+    if (committer == null) 
+      committer = conf.value.getOutputCommitter().asInstanceOf[OutputCommitter]
     return committer
   }
 
   private def getJobContext(): JobContext = {
-    if (jobContext == null) jobContext = new JobContext(conf.value, jID.value)   
+    if (jobContext == null) 
+      jobContext = new JobContext(conf.value, jID.value)   
     return jobContext
   }
 
   private def getTaskContext(): TaskAttemptContext = {
-    if (taskContext == null) taskContext =  new TaskAttemptContext(conf.value, taID.value)
+    if (taskContext == null) 
+      taskContext =  new TaskAttemptContext(conf.value, taID.value)
     return taskContext
   }
 
@@ -156,10 +162,12 @@ class HadoopFileWriter [K, V, F <: OutputFormat[K,V], C <: OutputCommitter]
 
   private def setConfParams() {
     if (!confProvided) {
-      conf.value.setOutputFormat(fm.erasure.asInstanceOf[Class[F]])  
-      conf.value.setOutputCommitter(cm.erasure.asInstanceOf[Class[C]])
-      conf.value.setOutputKeyClass(km.erasure)
-      conf.value.setOutputValueClass(vm.erasure)
+      conf.value.setOutputFormat(outputFormatClass)  
+      conf.value.setOutputCommitter(outputCommitterClass)
+      conf.value.setOutputKeyClass(keyClass)
+      conf.value.setOutputValueClass(valueClass)
+    } else {
+      
     }
      
     FileOutputFormat.setOutputPath(conf.value, HadoopFileWriter.createPathFromString(path, conf.value))
@@ -188,5 +196,10 @@ object HadoopFileWriter {
       throw new IllegalArgumentException("Incorrectly formatted output path")
     outputPath = outputPath.makeQualified(fs)
     return outputPath
+  }
+
+  def getInstance[K, V, F <: OutputFormat[K,V], C <: OutputCommitter](path: String)
+    (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F], cm: ClassManifest[C]): HadoopFileWriter = {
+    new HadoopFileWriter(path, km.erasure, vm.erasure, fm.erasure.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]], cm.erasure.asInstanceOf[Class[OutputCommitter]])
   }
 }

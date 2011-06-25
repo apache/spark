@@ -7,7 +7,16 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.SequenceFileInputFormat
-
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.io.IntWritable
+import org.apache.hadoop.io.LongWritable
+import org.apache.hadoop.io.FloatWritable
+import org.apache.hadoop.io.DoubleWritable
+import org.apache.hadoop.io.BooleanWritable
+import org.apache.hadoop.io.BytesWritable
+import org.apache.hadoop.io.ArrayWritable
+import org.apache.hadoop.io.NullWritable
+import org.apache.hadoop.io.Text
 
 class SparkContext(
   master: String,
@@ -105,6 +114,11 @@ extends Logging {
                  km.erasure.asInstanceOf[Class[K]],
                  vm.erasure.asInstanceOf[Class[V]])
   }
+
+  def objectFile[T: ClassManifest](path: String): RDD[T] = {
+    sequenceFile[NullWritable,BytesWritable](path).map(x => Utils.deserialize[Array[T]](x._2.getBytes)).flatMap(x => x.toTraversable)
+  }
+    
 
   /** Build the union of a list of RDDs. */
   //def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] =
@@ -224,6 +238,39 @@ object SparkContext {
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
-  implicit def rddToPairRDDExtras[K, V](rdd: RDD[(K, V)]) =
+  implicit def rddToPairRDDExtras[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
     new PairRDDExtras(rdd)
+  
+  implicit def rddToSequencePairRDDExtras[K <% Writable: ClassManifest, V <% Writable: ClassManifest](rdd: RDD[(K, V)]) =
+    new SequencePairRDDExtras(rdd)
+
+  implicit def intToIntWritable(i: Int) = new IntWritable(i)
+
+  implicit def longToLongWritable(l: Long) = new LongWritable(l)
+
+  implicit def floatToFloatWritable(f: Float) = new FloatWritable(f)
+  
+  implicit def doubleToDoubleWritable(d: Double) = new DoubleWritable(d)
+
+  implicit def boolToBoolWritable (b: Boolean) = new BooleanWritable(b)
+
+  implicit def bytesToBytesWritable (aob: Array[Byte]) = new BytesWritable(aob)
+
+  implicit def stringToText(s: String) = new Text(s)
+
+  private implicit def arrayToArrayWritable[T <% Writable: ClassManifest] (arr: Traversable[T]): ArrayWritable = {
+    def getWritableClass[T <% Writable: ClassManifest](): Class[_ <: Writable] = {
+      val c = {
+       if (classOf[Writable].isAssignableFrom(classManifest[T].erasure)) 
+         classManifest[T].erasure
+       else
+         implicitly[T => Writable].getClass.getMethods()(0).getReturnType
+      }
+      c.asInstanceOf[Class[ _ <: Writable]]
+    }
+
+    def anyToWritable[U <% Writable](u: U): Writable = u
+    
+    new ArrayWritable(classManifest[T].erasure.asInstanceOf[Class[Writable]], arr.map(x => anyToWritable(x)).toArray)
+  }
 }

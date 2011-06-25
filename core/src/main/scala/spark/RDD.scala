@@ -12,8 +12,17 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.HadoopFileWriter
-import org.apache.hadoop.mapred.HadoopTextFileWriter
+import org.apache.hadoop.mapred.OutputFormat
+import org.apache.hadoop.mapred.TextOutputFormat
+import org.apache.hadoop.mapred.SequenceFileOutputFormat
+import org.apache.hadoop.mapred.OutputCommitter
+import org.apache.hadoop.mapred.FileOutputCommitter
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.io.NullWritable
+import org.apache.hadoop.io.BytesWritable
+import org.apache.hadoop.io.Text
 
 import SparkContext._
 
@@ -76,10 +85,10 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   def cartesian[U: ClassManifest](other: RDD[U]): RDD[(T, U)] =
     new CartesianRDD(sc, this, other)
 
-  def groupBy[K](func: T => K, numSplits: Int): RDD[(K, Seq[T])] =
+  def groupBy[K: ClassManifest](func: T => K, numSplits: Int): RDD[(K, Seq[T])] =
     this.map(t => (func(t), t)).groupByKey(numSplits)
 
-  def groupBy[K](func: T => K): RDD[(K, Seq[T])] =
+  def groupBy[K: ClassManifest](func: T => K): RDD[(K, Seq[T])] =
     groupBy[K](func, sc.numCores)
 
   // Parallel operations
@@ -123,34 +132,6 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
     }).sum
   }
 
-  def saveAsText(path: String): Unit = {
-	  val now = new Date()
-    val writer = new HadoopTextFileWriter(path)
-    writer.preSetup()
-
-    def writeToFile (context: TaskContext, iter: Iterator[T]): HadoopTextFileWriter = {
-      if (context == null) 
-        throw new Exception("Context is null")
-      
-      writer.setup(context.stageId, context.splitId, context.attemptId)
-      writer.open()
-      
-      var count = 0
-      while(iter.hasNext) {
-        val record = iter.next.toString
-        count += 1
-        writer.write(record)
-        println (count.toString + ": " +  record)
-      }
-    
-      writer.close()
-      return writer
-    }
-
-    sc.runJob(this, writeToFile _ ).foreach(_.commit())
-    writer.cleanup()
-  }
-
   def toArray(): Array[T] = collect()
   
   override def toString(): String = {
@@ -179,6 +160,14 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   def first: T = take(1) match {
     case Array(t) => t
     case _ => throw new UnsupportedOperationException("empty collection")
+  }
+
+  def saveAsTextFile(path: String) {
+    this.map( x => (NullWritable.get(), new Text(x.toString))).saveAsHadoopFile[TextOutputFormat[NullWritable, Text], FileOutputCommitter](path)
+  }
+
+  def saveAsObjectFile(path: String) {
+    this.glom.map( x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))) ).saveAsSequenceFile(path)
   }
 }
 
@@ -214,7 +203,7 @@ extends RDD[Array[T]](prev.context) {
 }
 
 
-@serializable class PairRDDExtras[K, V](self: RDD[(K, V)]) {
+@serializable class PairRDDExtras[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) extends Logging {
   def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = {
     def mergeMaps(m1: HashMap[K, V], m2: HashMap[K, V]): HashMap[K, V] = {
       for ((k, v) <- m2) {
@@ -326,6 +315,90 @@ extends RDD[Array[T]](prev.context) {
       case (k, Seq(vs, w1s, w2s)) =>
         (k, (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]]))
     }
+  }
+  
+  def saveAsHadoopFile (path: String, jobConf: JobConf) {
+    saveAsHadoopFile(path, jobConf.getOutputKeyClass, jobConf.getOutputValueClass, jobConf.getOutputFormat().getClass.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]], jobConf.getOutputCommitter().getClass.asInstanceOf[Class[OutputCommitter]], jobConf)
+  }
+
+  def saveAsHadoopFile [F <: OutputFormat[K,V], C <: OutputCommitter] (path: String) (implicit fm: ClassManifest[F], cm: ClassManifest[C]) {
+    saveAsHadoopFile(path, fm.erasure.asInstanceOf[Class[F]], cm.erasure.asInstanceOf[Class[C]])
+  }
+  
+  def saveAsHadoopFile(path: String, outputFormatClass: Class[_ <: OutputFormat[K,V]], outputCommitterClass: Class[_ <: OutputCommitter]) {
+    saveAsHadoopFile(path,  implicitly[ClassManifest[K]].erasure, implicitly[ClassManifest[V]].erasure, outputFormatClass, outputCommitterClass)
+  }
+
+  def saveAsHadoopFile(path: String, keyClass: Class[_], valueClass: Class[_], outputFormatClass: Class[_ <: OutputFormat[_,_]], outputCommitterClass: Class[_ <: OutputCommitter]) {
+    saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, outputCommitterClass, null)
+  }
+  
+  private def saveAsHadoopFile(path: String, keyClass: Class[_], valueClass: Class[_], outputFormatClass: Class[_ <: OutputFormat[_,_]], outputCommitterClass: Class[_ <: OutputCommitter], jobConf: JobConf) {
+    logInfo ("Saving as hadoop file of type (" + keyClass.getSimpleName+ "," +valueClass.getSimpleName+ ")" ) 
+    val writer = new HadoopFileWriter(path, 
+                                      keyClass, 
+                                      valueClass, 
+                                      outputFormatClass.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]],
+                                      outputCommitterClass.asInstanceOf[Class[OutputCommitter]],
+                                      null)
+    writer.preSetup()
+
+    def writeToFile (context: TaskContext, iter: Iterator[(K,V)]): HadoopFileWriter = {
+      writer.setup(context.stageId, context.splitId, context.attemptId)
+      writer.open()
+      
+      var count = 0
+      while(iter.hasNext) {
+        val record = iter.next
+        count += 1
+        writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
+      }
+    
+      writer.close()
+      return writer
+    }
+
+    self.context.runJob(self, writeToFile _ ).foreach(_.commit())
+    writer.cleanup()
+  }
+
+  def getKeyClass() = implicitly[ClassManifest[K]].erasure
+
+  def getValueClass() = implicitly[ClassManifest[V]].erasure
+}
+
+@serializable
+class SequencePairRDDExtras[K <% Writable: ClassManifest, V <% Writable : ClassManifest](self: RDD[(K,V)]) extends Logging { 
+  
+  def getWritableClass[T <% Writable: ClassManifest](): Class[_ <: Writable] = {
+    val c = {
+      if (classOf[Writable].isAssignableFrom(classManifest[T].erasure)) 
+        classManifest[T].erasure
+      else
+        implicitly[T => Writable].getClass.getMethods()(0).getReturnType
+    }
+    c.asInstanceOf[Class[ _ <: Writable]]
+  }
+
+  def saveAsSequenceFile(path: String) {
+    
+    def anyToWritable[U <% Writable](u: U): Writable = u
+
+    val keyClass = getWritableClass[K]
+    val valueClass = getWritableClass[V]
+    val convertKey = !classOf[Writable].isAssignableFrom(self.getKeyClass)
+    val convertValue = !classOf[Writable].isAssignableFrom(self.getValueClass)
+  
+    logInfo("Saving as sequence file of type (" + keyClass.getSimpleName + "," + valueClass.getSimpleName + ")" ) 
+    if (!convertKey && !convertValue) {
+      self.saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
+    } else if (!convertKey && convertValue) {
+      self.map(x => (x._1,anyToWritable(x._2))).saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
+    } else if (convertKey && !convertValue) {
+      self.map(x => (anyToWritable(x._1),x._2)).saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
+    } else if (convertKey && convertValue) {
+      self.map(x => (anyToWritable(x._1),anyToWritable(x._2))).saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
+    } 
   }
 }
 
