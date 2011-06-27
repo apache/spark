@@ -145,7 +145,7 @@ private trait DAGScheduler extends Scheduler with Logging {
     missing.toList
   }
 
-  override def runJob[T, U](finalRdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
+  override def runJob[T, U](finalRdd: RDD[T], func: (TaskContext, Iterator[T]) => U, partitions: Seq[Int])
                            (implicit m: ClassManifest[U])
       : Array[U] = {
     val outputParts = partitions.toArray
@@ -171,7 +171,7 @@ private trait DAGScheduler extends Scheduler with Logging {
     if (finalStage.parents.size == 0 && numOutputParts == 1) {
       logInfo("Computing the requested partition locally")
       val split = finalRdd.splits(outputParts(0))
-      return Array(func(finalRdd.iterator(split)))
+      return Array(func(null, finalRdd.iterator(split)))
     }
 
     def submitStage(stage: Stage) {

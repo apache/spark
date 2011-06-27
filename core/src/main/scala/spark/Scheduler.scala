@@ -9,6 +9,11 @@ private trait Scheduler {
 
   // Run a function on some partitions of an RDD, returning an array of results.
   def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
+                  (implicit m: ClassManifest[U]): Array[U] = 
+                  runJob(rdd, (context: TaskContext, iter: Iterator[T]) => func(iter), partitions)
+
+  // Run a function on some partitions of an RDD, returning an array of results.
+  def runJob[T, U](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U, partitions: Seq[Int])
                   (implicit m: ClassManifest[U]): Array[U]
 
   def stop()
