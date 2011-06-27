@@ -91,6 +91,12 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   def groupBy[K: ClassManifest](func: T => K): RDD[(K, Seq[T])] =
     groupBy[K](func, sc.numCores)
 
+  def pipe(command: String): RDD[String] =
+    new PipedRDD(this, command)
+
+  def pipe(command: Seq[String]): RDD[String] =
+    new PipedRDD(this, command)
+
   // Parallel operations
   
   def foreach(f: T => Unit) {
@@ -399,6 +405,23 @@ class SequencePairRDDExtras[K <% Writable: ClassManifest, V <% Writable : ClassM
     } else if (convertKey && convertValue) {
       self.map(x => (anyToWritable(x._1),anyToWritable(x._2))).saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
     } 
+  }
+
+  def lookup(key: K): Seq[V] = {
+    self.partitioner match {
+      case Some(p) =>
+        val index = p.getPartition(key)
+        def process(it: Iterator[(K, V)]): Seq[V] = {
+          val buf = new ArrayBuffer[V]
+          for ((k, v) <- it if k == key)
+            buf += v
+          buf
+        }
+        val res = self.context.runJob(self, process, Array(index))
+        res(0)
+      case None =>
+        throw new UnsupportedOperationException("lookup() called on an RDD without a partitioner")
+    }
   }
 }
 
