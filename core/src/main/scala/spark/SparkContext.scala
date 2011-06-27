@@ -18,6 +18,8 @@ import org.apache.hadoop.io.ArrayWritable
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
 
+import spark.broadcast._
+
 class SparkContext(
   master: String,
   frameworkName: String,
