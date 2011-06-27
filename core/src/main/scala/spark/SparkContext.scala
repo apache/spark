@@ -8,6 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.SequenceFileInputFormat
 
+import spark.broadcast._
 
 class SparkContext(
   master: String,
