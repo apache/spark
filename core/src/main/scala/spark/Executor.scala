@@ -9,6 +9,8 @@ import scala.collection.mutable.ArrayBuffer
 import mesos.{ExecutorArgs, ExecutorDriver, MesosExecutorDriver}
 import mesos.{TaskDescription, TaskState, TaskStatus}
 
+import spark.broadcast._
+
 /**
  * The Mesos executor for Spark.
  */

@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
+import spark._
 
 object LocalFileShuffle extends Logging {
   private var initialized = false
@@ -29,9 +30,9 @@ object LocalFileShuffle extends Logging {
       while (!foundLocalDir && tries < 10) {
         tries += 1
         try {
-          localDirUuid = UUID.randomUUID()
+          localDirUuid = UUID.randomUUID
           localDir = new File(localDirRoot, "spark-local-" + localDirUuid)
-          if (!localDir.exists()) {
+          if (!localDir.exists) {
             localDir.mkdirs()
             foundLocalDir = true
           }
@@ -47,6 +48,7 @@ object LocalFileShuffle extends Logging {
       shuffleDir = new File(localDir, "shuffle")
       shuffleDir.mkdirs()
       logInfo("Shuffle dir: " + shuffleDir)
+      
       val extServerPort = System.getProperty(
         "spark.localFileShuffle.external.server.port", "-1").toInt
       if (extServerPort != -1) {
@@ -65,6 +67,7 @@ object LocalFileShuffle extends Logging {
         serverUri = server.uri
       }
       initialized = true
+      logInfo("Local URI: " + serverUri)
     }
   }
 
