@@ -6,6 +6,7 @@ import java.util.concurrent._
  * A simple Scheduler implementation that runs tasks locally in a thread pool.
  */
 private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
+  var attemptId = 0
   var threadPool: ExecutorService =
     Executors.newFixedThreadPool(threads, DaemonThreadFactory)
 
@@ -16,7 +17,9 @@ private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
   override def waitForRegister() {}
 
   override def submitTasks(tasks: Seq[Task[_]]) {
-    tasks.zipWithIndex.foreach { case (task, i) =>
+    tasks.zipWithIndex.foreach { case (task, i) =>      
+      val myAttemptId = attemptId
+      attemptId = attemptId + 1
       threadPool.submit(new Runnable {
         def run() {
           logInfo("Running task " + i)
@@ -31,7 +34,7 @@ private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
             logInfo("Size of task " + i + " is " + bytes.size + " bytes")
             val deserializedTask = Utils.deserialize[Task[_]](
               bytes, currentThread.getContextClassLoader)
-            val result: Any = deserializedTask.run
+            val result: Any = deserializedTask.run(myAttemptId)
             val accumUpdates = Accumulators.values
             logInfo("Finished task " + i)
             taskEnded(tasks(i), Success, result, accumUpdates)

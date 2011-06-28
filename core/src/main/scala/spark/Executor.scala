@@ -59,7 +59,7 @@ class Executor extends mesos.Executor with Logging {
         val task = Utils.deserialize[Task[Any]](arg, classLoader)
         for (gen <- task.generation) // Update generation if any is set
           env.mapOutputTracker.updateGeneration(gen)
-        val value = task.run
+        val value = task.run(taskId)
         val accumUpdates = Accumulators.values
         val result = new TaskResult(value, accumUpdates)
         d.sendStatusUpdate(new TaskStatus(
