@@ -162,7 +162,8 @@ class HadoopFileWriter (path: String,
 
   private def setConfParams() {
     if (!confProvided) {
-      conf.value.setOutputFormat(outputFormatClass)  
+      // conf.value.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
+      conf.value.set("mapred.output.format.class", outputFormatClass.getName)
       conf.value.setOutputCommitter(outputCommitterClass)
       conf.value.setOutputKeyClass(keyClass)
       conf.value.setOutputValueClass(valueClass)
