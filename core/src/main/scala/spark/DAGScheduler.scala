@@ -171,7 +171,8 @@ private trait DAGScheduler extends Scheduler with Logging {
     if (finalStage.parents.size == 0 && numOutputParts == 1) {
       logInfo("Computing the requested partition locally")
       val split = finalRdd.splits(outputParts(0))
-      return Array(func(null, finalRdd.iterator(split)))
+      val taskContext = new TaskContext(finalStage.id, outputParts(0), 0)
+      return Array(func(taskContext, finalRdd.iterator(split)))
     }
 
     def submitStage(stage: Stage) {
