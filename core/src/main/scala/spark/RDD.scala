@@ -463,7 +463,7 @@ class SequencePairRDDExtras[K <% Writable: ClassManifest, V <% Writable : ClassM
             buf += v
           buf
         }
-        val res = self.context.runJob(self, process, Array(index))
+        val res = self.context.runJob(self, process _, Array(index))
         res(0)
       case None =>
         throw new UnsupportedOperationException("lookup() called on an RDD without a partitioner")
