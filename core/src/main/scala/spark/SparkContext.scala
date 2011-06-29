@@ -107,17 +107,19 @@ extends Logging {
   }
 
   /**
-   * Smarter version of sequenceFile() that obtains the key and value classes
-   * from ClassManifests instead of requiring the user to pass them directly.
+   * Version of sequenceFile() for types implicitly convertible to Writables
    */
-  def sequenceFile[K, V](path: String)
-      (implicit km: ClassManifest[K], vm: ClassManifest[V]): RDD[(K, V)] = {
-    sequenceFile(path,
-                 km.erasure.asInstanceOf[Class[K]],
-                 vm.erasure.asInstanceOf[Class[V]])
+   def sequenceFile[K, V](path: String)
+      (implicit km: ClassManifest[K], vm: ClassManifest[V], kcf: () => WritableConv[K], vcf: () => WritableConv[V])
+      : RDD[(K, V)] = {
+    val kc = kcf()
+    val vc = vcf()
+    val fmt = classOf[SequenceFileInputFormat[Writable, Writable]]
+    hadoopFile(path, fmt, kc.writableClass(km).asInstanceOf[Class[Writable]], vc.writableClass(vm).asInstanceOf[Class[Writable]]).map{case (k,v) => (kc.convert(k), vc.convert(v))}
   }
 
   def objectFile[T: ClassManifest](path: String): RDD[T] = {
+    import SparkContext.writableWritableConv
     sequenceFile[NullWritable,BytesWritable](path).map(x => Utils.deserialize[Array[T]](x._2.getBytes)).flatMap(x => x.toTraversable)
   }
     
@@ -260,6 +262,30 @@ object SparkContext {
 
   implicit def stringToText(s: String) = new Text(s)
 
+  implicit def intWritableConv() =
+    new WritableConv[Int](_ => classOf[IntWritable], _.asInstanceOf[IntWritable].get)
+
+  implicit def longWritableConv() =
+    new WritableConv[Long](_ => classOf[LongWritable], _.asInstanceOf[LongWritable].get)
+
+  implicit def doubleWritableConv() =
+    new WritableConv[Double](_ => classOf[DoubleWritable], _.asInstanceOf[DoubleWritable].get)
+
+  implicit def floatWritableConv() =
+    new WritableConv[Float](_ => classOf[FloatWritable], _.asInstanceOf[FloatWritable].get)
+
+  implicit def booleanWritableConv() =
+    new WritableConv[Boolean](_ => classOf[BooleanWritable], _.asInstanceOf[BooleanWritable].get)
+
+  implicit def bytesWritableConv() =
+    new WritableConv[Array[Byte]](_ => classOf[BytesWritable], _.asInstanceOf[BytesWritable].getBytes)
+
+  implicit def stringWritableConv() =
+    new WritableConv[String](_ => classOf[Text], _.asInstanceOf[Text].toString)
+
+  implicit def writableWritableConv[T <: Writable]() =
+    new WritableConv[T](_.erasure, _.asInstanceOf[T])
+
   private implicit def arrayToArrayWritable[T <% Writable: ClassManifest] (arr: Traversable[T]): ArrayWritable = {
     def getWritableClass[T <% Writable: ClassManifest](): Class[_ <: Writable] = {
       val c = {
@@ -276,3 +302,7 @@ object SparkContext {
     new ArrayWritable(classManifest[T].erasure.asInstanceOf[Class[Writable]], arr.map(x => anyToWritable(x)).toArray)
   }
 }
+
+
+@serializable
+class WritableConv[T](val writableClass: ClassManifest[T] => Class[_], val convert: Writable => T) {}
