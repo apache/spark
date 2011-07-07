@@ -17,6 +17,9 @@ import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.ArrayWritable
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.mapred.FileInputFormat
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.TextInputFormat
 
 import spark.broadcast._
 
@@ -72,8 +75,23 @@ extends Logging {
   def makeRDD[T: ClassManifest](seq: Seq[T]): RDD[T] =
     parallelize(seq, numCores)
 
-  def textFile(path: String): RDD[String] =
-    new HadoopTextFile(this, path)
+  def textFile(path: String): RDD[String] = {
+    hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
+      .map(pair => pair._2.toString)
+  }
+
+  /**
+   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving
+   * its InputFormat and any other necessary info (e.g. file name for a
+   * filesystem-based dataset, table name for HyperTable, etc).
+   */
+  def hadoopRDD[K, V](conf: JobConf,
+                      inputFormatClass: Class[_ <: InputFormat[K, V]],
+                      keyClass: Class[K],
+                      valueClass: Class[V])
+      : RDD[(K, V)] = {
+    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass)
+  }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
   def hadoopFile[K, V](path: String,
@@ -81,7 +99,11 @@ extends Logging {
                        keyClass: Class[K],
                        valueClass: Class[V])
       : RDD[(K, V)] = {
-    new HadoopFile(this, path, inputFormatClass, keyClass, valueClass)
+    val conf = new JobConf()
+    FileInputFormat.setInputPaths(conf, path)
+    val bufferSize = System.getProperty("spark.buffer.size", "65536")
+    conf.set("io.file.buffer.size", bufferSize)
+    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass)
   }
 
   /**
