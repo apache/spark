@@ -1,8 +1,7 @@
 package spark
 
-import java.net.URL
 import java.io.EOFException
-import java.io.ObjectInputStream
+import java.net.URL
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap

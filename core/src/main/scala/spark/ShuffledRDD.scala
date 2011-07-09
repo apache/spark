@@ -34,7 +34,8 @@ extends RDD[(K, C)](parent.context) {
         case None => c
       }
     }
-    new SimpleShuffleFetcher().fetch[K, C](dep.shuffleId, split.index, mergePair)
+    val fetcher = SparkEnv.get.shuffleFetcher
+    fetcher.fetch[K, C](dep.shuffleId, split.index, mergePair)
     combiners.iterator
   }
 }

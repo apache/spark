@@ -164,6 +164,7 @@ extends Logging {
      // TODO: Broadcast.stop(), Cache.stop()?
      env.mapOutputTracker.stop()
      env.cacheTracker.stop()
+     env.shuffleFetcher.stop()
      SparkEnv.set(null)
   }
 
