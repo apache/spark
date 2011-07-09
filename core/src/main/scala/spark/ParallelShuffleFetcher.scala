@@ -59,42 +59,44 @@ class ParallelShuffleFetcher extends ShuffleFetcher with Logging {
     for (i <- 0 until parallelFetches) {
       new Thread("Fetch thread " + i + " for reduce " + reduceId) {
         override def run() {
-          val pair = serverQueue.poll()
-          if (pair == null)
-            return
-          val (serverUri, inputIds) = pair
-          //logInfo("Pulled out server URI " + serverUri)
-          for (i <- inputIds) {
-            if (failure.get != null)
+          while (true) {
+            val pair = serverQueue.poll()
+            if (pair == null)
               return
-            val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, reduceId)
-            logInfo("Starting HTTP request for " + url)
-            var exception: Throwable = null
-            val exchange = new ContentExchange(true) {
-              override def onException(e: Throwable) { exception = e }
+            val (serverUri, inputIds) = pair
+            //logInfo("Pulled out server URI " + serverUri)
+            for (i <- inputIds) {
+              if (failure.get != null)
+                return
+              val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, reduceId)
+              logInfo("Starting HTTP request for " + url)
+              var exception: Throwable = null
+              val exchange = new ContentExchange(true) {
+                override def onException(e: Throwable) { exception = e }
+              }
+              exchange.setURL(url)
+              httpClient.send(exchange)
+              val status = exchange.waitForDone()
+              logInfo("Finished HTTP request for " + url + ", status = " + status)
+              status match {
+                case HttpExchange.STATUS_COMPLETED =>
+                  resultQueue.put(exchange.getResponseContentBytes())
+                case HttpExchange.STATUS_EXCEPTED =>
+                  logError("Fetch failed from " + url + " with exception", exception)
+                  failure.set(new FetchFailedException(serverUri, shuffleId, i, reduceId, exception))
+                  return
+                case HttpExchange.STATUS_EXPIRED =>
+                  logError("Fetch failed from " + url + " with expired status (timeout)")
+                  failure.set(new FetchFailedException(serverUri, shuffleId, i, reduceId, null))
+                  return
+                case other =>
+                  logError("Fetch failed from " + url + " with unknown Jetty status " + other)
+                  failure.set(new FetchFailedException(serverUri, shuffleId, i, reduceId, null))
+                  return
+              }
             }
-            exchange.setURL(url)
-            httpClient.send(exchange)
-            val status = exchange.waitForDone()
-            logInfo("Finished HTTP request for " + url + ", status = " + status)
-            status match {
-              case HttpExchange.STATUS_COMPLETED =>
-                resultQueue.put(exchange.getResponseContentBytes())
-              case HttpExchange.STATUS_EXCEPTED =>
-                logError("Fetch failed from " + url + " with exception", exception)
-                failure.set(new FetchFailedException(serverUri, shuffleId, i, reduceId, exception))
-                return
-              case HttpExchange.STATUS_EXPIRED =>
-                logError("Fetch failed from " + url + " with expired status (timeout)")
-                failure.set(new FetchFailedException(serverUri, shuffleId, i, reduceId, null))
-                return
-              case other =>
-                logError("Fetch failed from " + url + " with unknown Jetty status " + other)
-                failure.set(new FetchFailedException(serverUri, shuffleId, i, reduceId, null))
-                return
-            }
+            //logInfo("Done with server URI " + serverUri)
           }
-          //logInfo("Done with server URI " + serverUri)
         }
       }.start()
     }
