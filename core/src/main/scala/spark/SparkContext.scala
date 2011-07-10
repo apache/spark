@@ -263,11 +263,11 @@ object SparkContext {
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
-  implicit def rddToPairRDDExtras[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
-    new PairRDDExtras(rdd)
+  implicit def rddToPairRDDFunctions[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
+    new PairRDDFunctions(rdd)
   
-  implicit def rddToSequencePairRDDExtras[K <% Writable: ClassManifest, V <% Writable: ClassManifest](rdd: RDD[(K, V)]) =
-    new SequencePairRDDExtras(rdd)
+  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable: ClassManifest](rdd: RDD[(K, V)]) =
+    new SequenceFileRDDFunctions(rdd)
 
   implicit def intToIntWritable(i: Int) = new IntWritable(i)
 
