@@ -20,7 +20,6 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
     override def compileOptions = super.compileOptions ++ Seq(Unchecked)
 
     lazy val jettyServer = "org.eclipse.jetty" % "jetty-server" % "7.4.2.v20110526"
-    lazy val jettyClient = "org.eclipse.jetty" % "jetty-client" % "7.4.2.v20110526"
     
     override def packageDocsJar = defaultJarPath("-javadoc.jar")
     override def packageSrcJar= defaultJarPath("-sources.jar")
