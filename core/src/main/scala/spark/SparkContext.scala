@@ -257,7 +257,7 @@ extends Logging {
   def defaultParallelism: Int = scheduler.defaultParallelism
 
   // Default min number of splits for Hadoop RDDs when not given by user
-  def defaultMinSplits: Int = Math.min(defaultParallelism, 4)
+  def defaultMinSplits: Int = Math.min(defaultParallelism, 2)
 
   private var nextShuffleId = new AtomicInteger(0)
 
