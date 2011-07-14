@@ -14,7 +14,7 @@ object Bagel extends Logging {
     combiner: Combiner[M, C] = new DefaultCombiner[M],
     aggregator: Aggregator[V, A] = new NullAggregator[V],
     superstep: Int = 0,
-    numSplits: Int = sc.numCores
+    numSplits: Int = sc.defaultParallelism
   )(
     compute: (V, Option[C], A, Int) => (V, Iterable[M])
   ): RDD[V] = {

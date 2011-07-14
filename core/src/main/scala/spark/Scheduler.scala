@@ -7,17 +7,14 @@ private trait Scheduler {
   // Wait for registration with Mesos.
   def waitForRegister()
 
-  // Run a function on some partitions of an RDD, returning an array of results.
-  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
-                  (implicit m: ClassManifest[U]): Array[U] = 
-                  runJob(rdd, (context: TaskContext, iter: Iterator[T]) => func(iter), partitions)
-
-  // Run a function on some partitions of an RDD, returning an array of results.
-  def runJob[T, U](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U, partitions: Seq[Int])
-                  (implicit m: ClassManifest[U]): Array[U]
+  // Run a function on some partitions of an RDD, returning an array of results. The allowLocal flag specifies
+  // whether the scheduler is allowed to run the job on the master machine rather than shipping it to the cluster,
+  // for actions that create short jobs such as first() and take().
+  def runJob[T, U: ClassManifest](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U,
+                                  partitions: Seq[Int], allowLocal: Boolean): Array[U]
 
   def stop()
 
-  // Get the number of cores in the cluster, as a hint for sizing jobs.
-  def numCores(): Int
+  // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
+  def defaultParallelism(): Int
 }

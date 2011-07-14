@@ -12,17 +12,17 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapred.HadoopFileWriter
-import org.apache.hadoop.mapred.OutputFormat
-import org.apache.hadoop.mapred.TextOutputFormat
-import org.apache.hadoop.mapred.SequenceFileOutputFormat
-import org.apache.hadoop.mapred.OutputCommitter
-import org.apache.hadoop.mapred.FileOutputCommitter
-import org.apache.hadoop.io.Writable
-import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.BytesWritable
+import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.mapred.FileOutputCommitter
+import org.apache.hadoop.mapred.HadoopWriter
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.OutputCommitter
+import org.apache.hadoop.mapred.OutputFormat
+import org.apache.hadoop.mapred.SequenceFileOutputFormat
+import org.apache.hadoop.mapred.TextOutputFormat
 
 import SparkContext._
 
@@ -107,7 +107,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
 
   def groupBy[K: ClassManifest](f: T => K): RDD[(K, Seq[T])] =
-    groupBy[K](f, sc.numCores)
+    groupBy[K](f, sc.defaultParallelism)
 
   def pipe(command: String): RDD[String] =
     new PipedRDD(this, command)
@@ -175,7 +175,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
     var p = 0
     while (buf.size < num && p < splits.size) {
       val left = num - buf.size
-      val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, Array(p))
+      val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, Array(p), true)
       buf ++= res(0)
       if (buf.size == num)
         return buf.toArray
@@ -184,7 +184,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
     return buf.toArray
   }
 
-  def first: T = take(1) match {
+  def first(): T = take(1) match {
     case Array(t) => t
     case _ => throw new UnsupportedOperationException("empty collection")
   }

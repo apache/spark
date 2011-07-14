@@ -13,7 +13,6 @@ import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapred.HadoopFileWriter
 import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
@@ -65,22 +64,5 @@ class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : Cla
     } else if (convertKey && convertValue) {
       self.map(x => (anyToWritable(x._1),anyToWritable(x._2))).saveAsHadoopFile(path, keyClass, valueClass, format) 
     } 
-  }
-
-  def lookup(key: K): Seq[V] = {
-    self.partitioner match {
-      case Some(p) =>
-        val index = p.getPartition(key)
-        def process(it: Iterator[(K, V)]): Seq[V] = {
-          val buf = new ArrayBuffer[V]
-          for ((k, v) <- it if k == key)
-            buf += v
-          buf
-        }
-        val res = self.context.runJob(self, process _, Array(index))
-        res(0)
-      case None =>
-        throw new UnsupportedOperationException("lookup() called on an RDD without a partitioner")
-    }
   }
 }

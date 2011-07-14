@@ -53,5 +53,5 @@ private class LocalScheduler(threads: Int) extends DAGScheduler with Logging {
   
   override def stop() {}
 
-  override def numCores() = threads
+  override def defaultParallelism() = threads
 }
