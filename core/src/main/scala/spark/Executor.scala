@@ -4,6 +4,7 @@ import java.io.{File, FileOutputStream}
 import java.net.{URI, URL, URLClassLoader}
 import java.util.concurrent._
 
+import scala.actors.remote.RemoteActor
 import scala.collection.mutable.ArrayBuffer
 
 import mesos.{ExecutorArgs, ExecutorDriver, MesosExecutorDriver}
@@ -24,6 +25,9 @@ class Executor extends mesos.Executor with Logging {
     val props = Utils.deserialize[Array[(String, String)]](args.getData)
     for ((key, value) <- props)
       System.setProperty(key, value)
+
+    // Make sure an appropriate class loader is set for remote actors
+    RemoteActor.classLoader = getClass.getClassLoader
 
     // Initialize Spark environment (using system properties read above)
     env = SparkEnv.createFromSystemProperties(false)
