@@ -129,18 +129,30 @@ extends Logging {
   }
 
   /**
-   * Smarter version of sequenceFile() that obtains the key and value classes
-   * from ClassManifests instead of requiring the user to pass them directly.
+   * Version of sequenceFile() for types implicitly convertible to Writables through a WritableConverter.
+   *
+   * WritableConverters are provided in a somewhat strange way (by an implicit function) to support both
+   * subclasses of Writable and types for which we define a converter (e.g. Int to IntWritable). The most
+   * natural thing would've been to have implicit objects for the converters, but then we couldn't have
+   * an object for every subclass of Writable (you can't have a parameterized singleton object). We use
+   * functions instead to create a new converter for the appropriate type. In addition, we pass the converter
+   * a ClassManifest of its type to allow it to figure out the Writable class to use in the subclass case.
    */
-  def sequenceFile[K, V](path: String)
-      (implicit km: ClassManifest[K], vm: ClassManifest[V]): RDD[(K, V)] = {
-    sequenceFile(path,
-                 km.erasure.asInstanceOf[Class[K]],
-                 vm.erasure.asInstanceOf[Class[V]])
+   def sequenceFile[K, V](path: String)
+      (implicit km: ClassManifest[K], vm: ClassManifest[V], kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
+      : RDD[(K, V)] = {
+    val kc = kcf()
+    val vc = vcf()
+    val format = classOf[SequenceFileInputFormat[Writable, Writable]]
+    val writables = hadoopFile(path, format, kc.writableClass(km).asInstanceOf[Class[Writable]],
+                               vc.writableClass(vm).asInstanceOf[Class[Writable]])
+    writables.map{case (k,v) => (kc.convert(k), vc.convert(v))}
   }
 
   def objectFile[T: ClassManifest](path: String): RDD[T] = {
-    sequenceFile[NullWritable,BytesWritable](path).map(x => Utils.deserialize[Array[T]](x._2.getBytes)).flatMap(x => x.toTraversable)
+    import SparkContext.writableWritableConverter // To get converters for NullWritable and BytesWritable
+    sequenceFile[NullWritable,BytesWritable](path).map(x => Utils.deserialize[Array[T]](x._2.getBytes))
+                                                  .flatMap(_.toTraversable)
   }
     
 
@@ -269,6 +281,8 @@ object SparkContext {
   implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable: ClassManifest](rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
 
+  // Implicit conversions to common Writable types, for saveAsSequenceFile
+
   implicit def intToIntWritable(i: Int) = new IntWritable(i)
 
   implicit def longToLongWritable(l: Long) = new LongWritable(l)
@@ -290,6 +304,7 @@ object SparkContext {
          classManifest[T].erasure
        else
          implicitly[T => Writable].getClass.getMethods()(0).getReturnType
+       // TODO: use something like WritableConverter to avoid reflection
       }
       c.asInstanceOf[Class[ _ <: Writable]]
     }
@@ -298,4 +313,39 @@ object SparkContext {
     
     new ArrayWritable(classManifest[T].erasure.asInstanceOf[Class[Writable]], arr.map(x => anyToWritable(x)).toArray)
   }
+
+  // Helper objects for converting common types to Writable
+
+  private def simpleWritableConverter[T, W <: Writable: ClassManifest](convert: W => T) = {
+    val wClass = classManifest[W].erasure.asInstanceOf[Class[W]]
+    new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
+  }
+
+  implicit def intWritableConverter() = simpleWritableConverter[Int, IntWritable](_.get)
+
+  implicit def longWritableConverter() = simpleWritableConverter[Long, LongWritable](_.get)
+
+  implicit def doubleWritableConverter() = simpleWritableConverter[Double, DoubleWritable](_.get)
+
+  implicit def floatWritableConverter() = simpleWritableConverter[Float, FloatWritable](_.get)
+
+  implicit def booleanWritableConverter() = simpleWritableConverter[Boolean, BooleanWritable](_.get)
+
+  implicit def bytesWritableConverter() = simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
+
+  implicit def stringWritableConverter() = simpleWritableConverter[String, Text](_.toString)
+
+  implicit def writableWritableConverter[T <: Writable]() =
+    new WritableConverter[T](_.erasure.asInstanceOf[Class[T]], _.asInstanceOf[T])
 }
+
+
+/**
+ * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
+ * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
+ * The getter for the writable class takes a ClassManifest[T] in case this is a generic object
+ * that doesn't know the type of T when it is created. This sounds strange but is necessary to
+ * support converting subclasses of Writable to themselves (writableWritableConverter).
+ */
+@serializable
+class WritableConverter[T](val writableClass: ClassManifest[T] => Class[_ <: Writable], val convert: Writable => T) {}
