@@ -74,6 +74,24 @@ class FileSuite extends FunSuite {
     sc.stop()
   }
 
+  test("implicit conversions in reading SequenceFiles") {
+    val sc = new SparkContext("local", "test")
+    val tempDir = Files.createTempDir()
+    val outputDir = new File(tempDir, "output").getAbsolutePath
+    val nums = sc.makeRDD(1 to 3).map(x => (x, "a" * x)) // (1,a), (2,aa), (3,aaa)
+    nums.saveAsSequenceFile(outputDir)
+    // Similar to the tests above, we read a SequenceFile, but this time we pass type params
+    // that are convertable to Writable instead of calling sequenceFile[IntWritable, Text]
+    val output1 = sc.sequenceFile[Int, String](outputDir)
+    assert(output1.collect().toList === List((1, "a"), (2, "aa"), (3, "aaa")))
+    // Also try having one type be a subclass of Writable and one not
+    val output2 = sc.sequenceFile[Int, Text](outputDir)
+    assert(output2.map(_.toString).collect().toList === List("(1,a)", "(2,aa)", "(3,aaa)"))
+    val output3 = sc.sequenceFile[IntWritable, String](outputDir)
+    assert(output3.map(_.toString).collect().toList === List("(1,a)", "(2,aa)", "(3,aaa)"))
+    sc.stop()
+  }
+
   test("object files of ints") {
     val sc = new SparkContext("local", "test")
     val tempDir = Files.createTempDir()

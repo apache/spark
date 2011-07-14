@@ -40,6 +40,7 @@ class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : Cla
         classManifest[T].erasure
       else
         implicitly[T => Writable].getClass.getMethods()(0).getReturnType
+       // TODO: use something like WritableConverter to avoid reflection
     }
     c.asInstanceOf[Class[ _ <: Writable]]
   }
