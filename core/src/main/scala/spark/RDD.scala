@@ -161,10 +161,6 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
 
   def toArray(): Array[T] = collect()
   
-  override def toString(): String = {
-    "%s(%d)".format(getClass.getSimpleName, id)
-  }
-
   // Take the first num elements of the RDD. This currently scans the partitions
   // *one by one*, so it will be slow if a lot of partitions are required. In that
   // case, use collect() to get the whole RDD instead.

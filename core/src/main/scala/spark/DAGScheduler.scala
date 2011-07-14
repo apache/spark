@@ -225,7 +225,7 @@ private trait DAGScheduler extends Scheduler with Logging {
         if (evt.reason == Success) {
           // A task ended
           logInfo("Completed " + evt.task)
-          Accumulators.add(currentThread, evt.accumUpdates)
+          Accumulators.add(evt.accumUpdates)
           evt.task match {
             case rt: ResultTask[_, _] =>
               results(rt.outputId) = evt.result.asInstanceOf[U]

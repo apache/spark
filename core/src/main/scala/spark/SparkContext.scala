@@ -64,7 +64,7 @@ extends Logging {
   // Methods for creating RDDs
 
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] =
-    new ParallelArray[T](this, seq, numSlices)
+    new ParallelCollection[T](this, seq, numSlices)
     
   def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] =
     parallelize(seq, numSlices)
