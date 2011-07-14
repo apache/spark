@@ -15,17 +15,15 @@ import java.util.Date
 import spark.SerializableWritable
 import spark.Logging
 
-@serializable 
-class HadoopFileWriter (path: String,
-                        keyClass: Class[_],
-                        valueClass: Class[_],
-                        outputFormatClass: Class[_ <: OutputFormat[AnyRef,AnyRef]],
-                        outputCommitterClass: Class[_ <: OutputCommitter],
-                        @transient jobConf: JobConf = null) extends Logging {  
-  
+/**
+ * Saves an RDD using a Hadoop OutputFormat as specified by a JobConf. The JobConf should
+ * also contain an output key class, an output value class, a filename to write to, etc
+ * exactly like in a Hadoop job.
+ */
+@serializable
+class HadoopFileWriter (@transient jobConf: JobConf) extends Logging {  
   private val now = new Date()
-  private val conf = new SerializableWritable[JobConf](if (jobConf == null) new JobConf() else  jobConf)
-  private val confProvided = (jobConf != null)
+  private val conf = new SerializableWritable(jobConf)
   
   private var jobID = 0
   private var splitID = 0
@@ -38,27 +36,6 @@ class HadoopFileWriter (path: String,
   @transient private var committer: OutputCommitter = null
   @transient private var jobContext: JobContext = null
   @transient private var taskContext: TaskAttemptContext = null
-  
-  def this (path: String, @transient jobConf: JobConf) 
-            = this (path, 
-                    jobConf.getOutputKeyClass, 
-                    jobConf.getOutputValueClass, 
-                    jobConf.getOutputFormat().getClass.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]], 
-                    jobConf.getOutputCommitter().getClass.asInstanceOf[Class[OutputCommitter]], 
-                    jobConf)
-  
-  def this (path: String, 
-            keyClass: Class[_],
-            valueClass: Class[_],
-            outputFormatClass: Class[_ <: OutputFormat[AnyRef,AnyRef]],
-            outputCommitterClass: Class[_ <: OutputCommitter])
-            
-            = this (path, 
-                    keyClass, 
-                    valueClass, 
-                    outputFormatClass, 
-                    outputCommitterClass,
-                    null)
 
   def preSetup() {
     setIDs(0, 0, 0)
@@ -80,8 +57,13 @@ class HadoopFileWriter (path: String,
     numfmt.setGroupingUsed(false)
     
     val outputName = "part-"  + numfmt.format(splitID)
-    val fs = HadoopFileWriter.createPathFromString(path, conf.value)
-                             .getFileSystem(conf.value)
+    val path = FileOutputFormat.getOutputPath(conf.value)
+    val fs: FileSystem = {
+      if (path != null)
+        path.getFileSystem(conf.value)
+      else
+        FileSystem.get(conf.value)
+    }
 
     getOutputCommitter().setupTask(getTaskContext()) 
     writer = getOutputFormat().getRecordWriter(fs, conf.value, outputName, Reporter.NULL)
@@ -161,18 +143,6 @@ class HadoopFileWriter (path: String,
   }
 
   private def setConfParams() {
-    if (!confProvided) {
-      // conf.value.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
-      conf.value.set("mapred.output.format.class", outputFormatClass.getName)
-      conf.value.setOutputCommitter(outputCommitterClass)
-      conf.value.setOutputKeyClass(keyClass)
-      conf.value.setOutputValueClass(valueClass)
-    } else {
-      
-    }
-     
-    FileOutputFormat.setOutputPath(conf.value, HadoopFileWriter.createPathFromString(path, conf.value))
-     
     conf.value.set("mapred.job.id", jID.value.toString);
     conf.value.set("mapred.tip.id", taID.value.getTaskID.toString); 
     conf.value.set("mapred.task.id", taID.value.toString);
@@ -197,10 +167,5 @@ object HadoopFileWriter {
       throw new IllegalArgumentException("Incorrectly formatted output path")
     outputPath = outputPath.makeQualified(fs)
     return outputPath
-  }
-
-  def getInstance[K, V, F <: OutputFormat[K,V], C <: OutputCommitter](path: String)
-    (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F], cm: ClassManifest[C]): HadoopFileWriter = {
-    new HadoopFileWriter(path, km.erasure, vm.erasure, fm.erasure.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]], cm.erasure.asInstanceOf[Class[OutputCommitter]])
   }
 }

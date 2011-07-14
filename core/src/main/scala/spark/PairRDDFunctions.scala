@@ -12,17 +12,18 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapred.HadoopFileWriter
-import org.apache.hadoop.mapred.OutputFormat
-import org.apache.hadoop.mapred.TextOutputFormat
-import org.apache.hadoop.mapred.SequenceFileOutputFormat
-import org.apache.hadoop.mapred.OutputCommitter
-import org.apache.hadoop.mapred.FileOutputCommitter
-import org.apache.hadoop.io.Writable
-import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.BytesWritable
+import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.mapred.FileOutputCommitter
+import org.apache.hadoop.mapred.FileOutputFormat
+import org.apache.hadoop.mapred.HadoopFileWriter
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.OutputCommitter
+import org.apache.hadoop.mapred.OutputFormat
+import org.apache.hadoop.mapred.SequenceFileOutputFormat
+import org.apache.hadoop.mapred.TextOutputFormat
 
 import SparkContext._
 
@@ -189,34 +190,42 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
         (k, (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]]))
     }
   }
-  
-  def saveAsHadoopFile (path: String, jobConf: JobConf) {
-    saveAsHadoopFile(path, jobConf.getOutputKeyClass, jobConf.getOutputValueClass, jobConf.getOutputFormat().getClass.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]], jobConf.getOutputCommitter().getClass.asInstanceOf[Class[OutputCommitter]], jobConf)
+
+  def saveAsHadoopFile [F <: OutputFormat[K, V]] (path: String) (implicit fm: ClassManifest[F]) {
+    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
   }
 
-  def saveAsHadoopFile [F <: OutputFormat[K,V], C <: OutputCommitter] (path: String) (implicit fm: ClassManifest[F], cm: ClassManifest[C]) {
-    saveAsHadoopFile(path, fm.erasure.asInstanceOf[Class[F]], cm.erasure.asInstanceOf[Class[C]])
+  def saveAsHadoopFile(path: String,
+                       keyClass: Class[_],
+                       valueClass: Class[_],
+                       outputFormatClass: Class[_ <: OutputFormat[_, _]],
+                       conf: JobConf = new JobConf) {
+    conf.setOutputKeyClass(keyClass)
+    conf.setOutputValueClass(valueClass)
+    // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
+    conf.set("mapred.output.format.class", outputFormatClass.getName)
+    conf.setOutputCommitter(classOf[FileOutputCommitter])
+    FileOutputFormat.setOutputPath(conf, HadoopFileWriter.createPathFromString(path, conf))
+    saveAsHadoopDataset(conf)
   }
   
-  def saveAsHadoopFile(path: String, outputFormatClass: Class[_ <: OutputFormat[K,V]], outputCommitterClass: Class[_ <: OutputCommitter]) {
-    saveAsHadoopFile(path,  implicitly[ClassManifest[K]].erasure, implicitly[ClassManifest[V]].erasure, outputFormatClass, outputCommitterClass)
-  }
+  def saveAsHadoopDataset(conf: JobConf) {
+    val outputFormatClass = conf.getOutputFormat
+    val keyClass = conf.getOutputKeyClass
+    val valueClass = conf.getOutputValueClass
+    if (outputFormatClass == null)
+      throw new SparkException("Output format class not set")
+    if (keyClass == null)
+      throw new SparkException("Output key class not set")
+    if (valueClass == null)
+      throw new SparkException("Output value class not set")
+    
+    logInfo("Saving as hadoop file of type (" + keyClass.getSimpleName+ ", " + valueClass.getSimpleName+ ")")
 
-  def saveAsHadoopFile(path: String, keyClass: Class[_], valueClass: Class[_], outputFormatClass: Class[_ <: OutputFormat[_,_]], outputCommitterClass: Class[_ <: OutputCommitter]) {
-    saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, outputCommitterClass, null)
-  }
-  
-  private def saveAsHadoopFile(path: String, keyClass: Class[_], valueClass: Class[_], outputFormatClass: Class[_ <: OutputFormat[_,_]], outputCommitterClass: Class[_ <: OutputCommitter], jobConf: JobConf) {
-    logInfo ("Saving as hadoop file of type (" + keyClass.getSimpleName+ "," +valueClass.getSimpleName+ ")" ) 
-    val writer = new HadoopFileWriter(path, 
-                                      keyClass, 
-                                      valueClass, 
-                                      outputFormatClass.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]],
-                                      outputCommitterClass.asInstanceOf[Class[OutputCommitter]],
-                                      null)
+    val writer = new HadoopFileWriter(conf)
     writer.preSetup()
 
-    def writeToFile (context: TaskContext, iter: Iterator[(K,V)]): HadoopFileWriter = {
+    def writeToFile(context: TaskContext, iter: Iterator[(K,V)]): HadoopFileWriter = {
       writer.setup(context.stageId, context.splitId, context.attemptId)
       writer.open()
       
