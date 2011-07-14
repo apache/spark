@@ -4,23 +4,23 @@ import mesos.SlaveOffer
 
 import java.util.concurrent.atomic.AtomicLong
 
-@serializable class ParallelArraySplit[T: ClassManifest](
-    val arrayId: Long, val slice: Int, values: Seq[T])
+@serializable class ParallelCollectionSplit[T: ClassManifest](
+    val rddId: Long, val slice: Int, values: Seq[T])
 extends Split {
   def iterator(): Iterator[T] = values.iterator
 
-  override def hashCode(): Int = (41 * (41 + arrayId) + slice).toInt
+  override def hashCode(): Int = (41 * (41 + rddId) + slice).toInt
 
   override def equals(other: Any): Boolean = other match {
-    case that: ParallelArraySplit[_] =>
-      (this.arrayId == that.arrayId && this.slice == that.slice)
+    case that: ParallelCollectionSplit[_] =>
+      (this.rddId == that.rddId && this.slice == that.slice)
     case _ => false
   }
 
   override val index = slice
 }
 
-class ParallelArray[T: ClassManifest](
+class ParallelCollection[T: ClassManifest](
   sc: SparkContext, @transient data: Seq[T], numSlices: Int)
 extends RDD[T](sc) {
   // TODO: Right now, each split sends along its full data, even if later down
@@ -28,23 +28,20 @@ extends RDD[T](sc) {
   // a file in the DFS and read it in the split instead.
 
   @transient val splits_ = {
-    val slices = ParallelArray.slice(data, numSlices).toArray
-    slices.indices.map(i => new ParallelArraySplit(id, i, slices(i))).toArray
+    val slices = ParallelCollection.slice(data, numSlices).toArray
+    slices.indices.map(i => new ParallelCollectionSplit(id, i, slices(i))).toArray
   }
 
   override def splits = splits_.asInstanceOf[Array[Split]]
 
-  override def compute(s: Split) = s.asInstanceOf[ParallelArraySplit[T]].iterator
+  override def compute(s: Split) = s.asInstanceOf[ParallelCollectionSplit[T]].iterator
   
   override def preferredLocations(s: Split): Seq[String] = Nil
   
   override val dependencies: List[Dependency[_]] = Nil
 }
 
-private object ParallelArray {
-  val nextId = new AtomicLong(0) // Creates IDs for ParallelArrays (on master)
-  def newId() = nextId.getAndIncrement()
-
+private object ParallelCollection {
   def slice[T: ClassManifest](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
     if (numSlices < 1)
       throw new IllegalArgumentException("Positive number of slices required")
