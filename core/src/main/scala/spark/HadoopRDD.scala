@@ -34,13 +34,14 @@ class HadoopRDD[K, V](
   @transient conf: JobConf,
   inputFormatClass: Class[_ <: InputFormat[K, V]],
   keyClass: Class[K],
-  valueClass: Class[V])
+  valueClass: Class[V],
+  minSplits: Int)
 extends RDD[(K, V)](sc) {
   val serializableConf = new SerializableWritable(conf)
   
   @transient val splits_ : Array[Split] = {
     val inputFormat = createInputFormat(conf)
-    val inputSplits = inputFormat.getSplits(conf, sc.numCores)
+    val inputSplits = inputFormat.getSplits(conf, minSplits)
     val array = new Array[Split] (inputSplits.size)
     for (i <- 0 until inputSplits.size)
       array(i) = new HadoopSplit(id, i, inputSplits(i))

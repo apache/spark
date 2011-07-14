@@ -18,7 +18,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.FileOutputCommitter
 import org.apache.hadoop.mapred.FileOutputFormat
-import org.apache.hadoop.mapred.HadoopFileWriter
+import org.apache.hadoop.mapred.HadoopWriter
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputCommitter
 import org.apache.hadoop.mapred.OutputFormat
@@ -127,30 +127,30 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
                       mergeValue: (C, V) => C,
                       mergeCombiners: (C, C) => C)
   : RDD[(K, C)] = {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, numCores)
+    combineByKey(createCombiner, mergeValue, mergeCombiners, defaultParallelism)
   }
 
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
-    reduceByKey(func, numCores)
+    reduceByKey(func, defaultParallelism)
   }
 
   def groupByKey(): RDD[(K, Seq[V])] = {
-    groupByKey(numCores)
+    groupByKey(defaultParallelism)
   }
 
   def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
-    join(other, numCores)
+    join(other, defaultParallelism)
   }
 
   def leftOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
-    leftOuterJoin(other, numCores)
+    leftOuterJoin(other, defaultParallelism)
   }
 
   def rightOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
-    rightOuterJoin(other, numCores)
+    rightOuterJoin(other, defaultParallelism)
   }
 
-  def numCores = self.context.numCores
+  def defaultParallelism = self.context.defaultParallelism
 
   def collectAsMap(): Map[K, V] = HashMap(self.collect(): _*)
   
@@ -167,7 +167,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
   def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
     val part = self.partitioner match {
       case Some(p) => p
-      case None => new HashPartitioner(numCores)
+      case None => new HashPartitioner(defaultParallelism)
     }
     new CoGroupedRDD[K](Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]), part).map {
       case (k, Seq(vs, ws)) =>
@@ -179,7 +179,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
     val part = self.partitioner match {
       case Some(p) => p
-      case None => new HashPartitioner(numCores)
+      case None => new HashPartitioner(defaultParallelism)
     }
     new CoGroupedRDD[K](
         Seq(self.asInstanceOf[RDD[(_, _)]], 
@@ -188,6 +188,23 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
         part).map {
       case (k, Seq(vs, w1s, w2s)) =>
         (k, (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]]))
+    }
+  }
+
+  def lookup(key: K): Seq[V] = {
+    self.partitioner match {
+      case Some(p) =>
+        val index = p.getPartition(key)
+        def process(it: Iterator[(K, V)]): Seq[V] = {
+          val buf = new ArrayBuffer[V]
+          for ((k, v) <- it if k == key)
+            buf += v
+          buf
+        }
+        val res = self.context.runJob(self, process _, Array(index), false)
+        res(0)
+      case None =>
+        throw new UnsupportedOperationException("lookup() called on an RDD without a partitioner")
     }
   }
 
@@ -204,7 +221,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
     conf.setOutputValueClass(valueClass)
     conf.setOutputFormat(outputFormatClass)
     conf.setOutputCommitter(classOf[FileOutputCommitter])
-    FileOutputFormat.setOutputPath(conf, HadoopFileWriter.createPathFromString(path, conf))
+    FileOutputFormat.setOutputPath(conf, HadoopWriter.createPathFromString(path, conf))
     saveAsHadoopDataset(conf)
   }
   
@@ -221,10 +238,10 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
     
     logInfo("Saving as hadoop file of type (" + keyClass.getSimpleName+ ", " + valueClass.getSimpleName+ ")")
 
-    val writer = new HadoopFileWriter(conf)
+    val writer = new HadoopWriter(conf)
     writer.preSetup()
 
-    def writeToFile(context: TaskContext, iter: Iterator[(K,V)]): HadoopFileWriter = {
+    def writeToFile(context: TaskContext, iter: Iterator[(K,V)]): HadoopWriter = {
       writer.setup(context.stageId, context.splitId, context.attemptId)
       writer.open()
       

@@ -241,8 +241,8 @@ extends MScheduler with DAGScheduler with Logging
   }
 
   // TODO: query Mesos for number of cores
-  override def numCores() =
-    System.getProperty("spark.default.parallelism", "2").toInt
+  override def defaultParallelism() =
+    System.getProperty("spark.default.parallelism", "8").toInt
 
   // Create a server for all the JARs added by the user to SparkContext.
   // We first copy the JARs to a temp directory for easier server setup.

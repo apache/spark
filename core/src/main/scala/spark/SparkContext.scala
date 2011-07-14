@@ -63,20 +63,14 @@ extends Logging {
 
   // Methods for creating RDDs
 
-  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int): RDD[T] =
+  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] =
     new ParallelArray[T](this, seq, numSlices)
-
-  def parallelize[T: ClassManifest](seq: Seq[T]): RDD[T] =
-    parallelize(seq, numCores)
     
-  def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int): RDD[T] =
+  def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] =
     parallelize(seq, numSlices)
 
-  def makeRDD[T: ClassManifest](seq: Seq[T]): RDD[T] =
-    parallelize(seq, numCores)
-
-  def textFile(path: String): RDD[String] = {
-    hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
+  def textFile(path: String, minSplits: Int = defaultMinSplits): RDD[String] = {
+    hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text], minSplits)
       .map(pair => pair._2.toString)
   }
 
@@ -88,22 +82,24 @@ extends Logging {
   def hadoopRDD[K, V](conf: JobConf,
                       inputFormatClass: Class[_ <: InputFormat[K, V]],
                       keyClass: Class[K],
-                      valueClass: Class[V])
+                      valueClass: Class[V],
+                      minSplits: Int = defaultMinSplits)
       : RDD[(K, V)] = {
-    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass)
+    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
   def hadoopFile[K, V](path: String,
                        inputFormatClass: Class[_ <: InputFormat[K, V]],
                        keyClass: Class[K],
-                       valueClass: Class[V])
+                       valueClass: Class[V],
+                       minSplits: Int = defaultMinSplits)
       : RDD[(K, V)] = {
     val conf = new JobConf()
     FileInputFormat.setInputPaths(conf, path)
     val bufferSize = System.getProperty("spark.buffer.size", "65536")
     conf.set("io.file.buffer.size", bufferSize)
-    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass)
+    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
   }
 
   /**
@@ -111,22 +107,28 @@ extends Logging {
    * the classes of keys, values and the InputFormat so that users don't need
    * to pass them directly.
    */
-  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
+  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String, minSplits: Int)
       (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F])
       : RDD[(K, V)] = {
-    hadoopFile(path,
-               fm.erasure.asInstanceOf[Class[F]],
-               km.erasure.asInstanceOf[Class[K]],
-               vm.erasure.asInstanceOf[Class[V]])
+    hadoopFile(path, fm.erasure.asInstanceOf[Class[F]], km.erasure.asInstanceOf[Class[K]],
+               vm.erasure.asInstanceOf[Class[V]], minSplits)
   }
+
+  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
+      (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F]): RDD[(K, V)] =
+    hadoopFile[K, V, F](path, defaultMinSplits)
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types */
   def sequenceFile[K, V](path: String,
                          keyClass: Class[K],
-                         valueClass: Class[V]): RDD[(K, V)] = {
+                         valueClass: Class[V],
+                         minSplits: Int): RDD[(K, V)] = {
     val inputFormatClass = classOf[SequenceFileInputFormat[K, V]]
-    hadoopFile(path, inputFormatClass, keyClass, valueClass)
+    hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits)
   }
+
+  def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]): RDD[(K, V)] =
+    sequenceFile(path, keyClass, valueClass, defaultMinSplits)
 
   /**
    * Version of sequenceFile() for types implicitly convertible to Writables through a WritableConverter.
@@ -138,27 +140,32 @@ extends Logging {
    * functions instead to create a new converter for the appropriate type. In addition, we pass the converter
    * a ClassManifest of its type to allow it to figure out the Writable class to use in the subclass case.
    */
-   def sequenceFile[K, V](path: String)
+   def sequenceFile[K, V](path: String, minSplits: Int = defaultMinSplits)
       (implicit km: ClassManifest[K], vm: ClassManifest[V], kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
       : RDD[(K, V)] = {
     val kc = kcf()
     val vc = vcf()
     val format = classOf[SequenceFileInputFormat[Writable, Writable]]
     val writables = hadoopFile(path, format, kc.writableClass(km).asInstanceOf[Class[Writable]],
-                               vc.writableClass(vm).asInstanceOf[Class[Writable]])
+                               vc.writableClass(vm).asInstanceOf[Class[Writable]], minSplits)
     writables.map{case (k,v) => (kc.convert(k), vc.convert(v))}
   }
 
-  def objectFile[T: ClassManifest](path: String): RDD[T] = {
-    import SparkContext.writableWritableConverter // To get converters for NullWritable and BytesWritable
-    sequenceFile[NullWritable,BytesWritable](path).map(x => Utils.deserialize[Array[T]](x._2.getBytes))
-                                                  .flatMap(_.toTraversable)
+  /**
+   * Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys
+   * and BytesWritable values that contain a serialized partition. This is still an experimental
+   * storage format and may not be supported exactly as is in future Spark releases. It will also
+   * be pretty slow if you use the default serializer (Java serialization), though the nice thing
+   * about it is that there's very little effort required to save arbitrary objects.
+   */
+  def objectFile[T: ClassManifest](path: String, minSplits: Int = defaultMinSplits): RDD[T] = {
+    sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minSplits)
+      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
-    
 
   /** Build the union of a list of RDDs. */
-  //def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] =
-  //  new UnionRDD(this, rdds)
+  def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] =
+    new UnionRDD(this, rdds)
 
   // Methods for creating shared variables
 
@@ -202,37 +209,38 @@ extends Logging {
   /**
    * Run a function on a given set of partitions in an RDD and return the results.
    * This is the main entry point to the scheduler, by which all actions get launched.
+   * The allowLocal flag specifies whether the scheduler can run the computation on the
+   * master rather than shipping it out to the cluster, for short actions like first().
    */
-  def runJob[T, U](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U, partitions: Seq[Int])
-                                 (implicit m: ClassManifest[U])
+  def runJob[T, U: ClassManifest](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U,
+                                  partitions: Seq[Int], allowLocal: Boolean)
       : Array[U] = {
     logInfo("Starting job...")
     val start = System.nanoTime
-    val result = scheduler.runJob(rdd, func, partitions)
+    val result = scheduler.runJob(rdd, func, partitions, allowLocal)
     logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
 
-  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int])
-                                 (implicit m: ClassManifest[U])
+  def runJob[T, U: ClassManifest](rdd: RDD[T], func: Iterator[T] => U, partitions: Seq[Int],
+                                  allowLocal: Boolean)
       : Array[U] = {
-    runJob(rdd, (context: TaskContext, iter: Iterator[T]) => func(iter), partitions)
+    runJob(rdd, (context: TaskContext, iter: Iterator[T]) => func(iter), partitions, allowLocal)
   }
   
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
-  def runJob[T, U](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U)
-                                 (implicit m: ClassManifest[U])
+  def runJob[T, U: ClassManifest](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U)
       : Array[U] = {
-    runJob(rdd, func, 0 until rdd.splits.size)
+    runJob(rdd, func, 0 until rdd.splits.size, false)
   }
 
-  def runJob[T, U](rdd: RDD[T], func: Iterator[T] => U)
-                                 (implicit m: ClassManifest[U])
+  def runJob[T, U: ClassManifest](rdd: RDD[T], func: Iterator[T] => U)
       : Array[U] = {
-    runJob(rdd, func, 0 until rdd.splits.size)
+    runJob(rdd, func, 0 until rdd.splits.size, false)
   }
+
   // Clean a closure to make it ready to serialized and send to tasks
   // (removes unreferenced variables in $outer's, updates REPL variables)
   private[spark] def clean[F <: AnyRef](f: F): F = {
@@ -240,8 +248,11 @@ extends Logging {
     return f
   }
 
-  // Get the number of cores available to run tasks (as reported by Scheduler)
-  def numCores = scheduler.numCores
+  // Default level of parallelism to use when not given by user (e.g. for reduce tasks)
+  def defaultParallelism: Int = scheduler.defaultParallelism
+
+  // Default min number of splits for Hadoop RDDs when not given by user
+  def defaultMinSplits: Int = Math.min(defaultParallelism, 4)
 
   private var nextShuffleId = new AtomicInteger(0)
 
