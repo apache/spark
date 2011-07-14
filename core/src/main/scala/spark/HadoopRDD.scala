@@ -26,19 +26,19 @@ extends Split {
 
 
 /**
- * An RDD that reads a Hadoop file (from HDFS, S3, the local filesystem, etc)
- * and represents it as a set of key-value pairs using a given InputFormat.
+ * An RDD that reads a Hadoop dataset as specified by a JobConf (e.g. files in
+ * HDFS, the local file system, or S3, tables in HBase, etc).
  */
-class HadoopFile[K, V](
+class HadoopRDD[K, V](
   sc: SparkContext,
-  path: String,
+  @transient conf: JobConf,
   inputFormatClass: Class[_ <: InputFormat[K, V]],
   keyClass: Class[K],
   valueClass: Class[V])
 extends RDD[(K, V)](sc) {
+  val serializableConf = new SerializableWritable(conf)
+  
   @transient val splits_ : Array[Split] = {
-    val conf = new JobConf()
-    FileInputFormat.setInputPaths(conf, path)
     val inputFormat = createInputFormat(conf)
     val inputSplits = inputFormat.getSplits(conf, sc.numCores)
     val array = new Array[Split] (inputSplits.size)
@@ -67,9 +67,7 @@ extends RDD[(K, V)](sc) {
     val split = theSplit.asInstanceOf[HadoopSplit]
     var reader: RecordReader[K, V] = null
 
-    val conf = new JobConf()
-    val bufferSize = System.getProperty("spark.buffer.size", "65536")
-    conf.set("io.file.buffer.size", bufferSize)
+    val conf = serializableConf.value
     val fmt = createInputFormat(conf)
     reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 
@@ -114,15 +112,3 @@ extends RDD[(K, V)](sc) {
   
   override val dependencies: List[Dependency[_]] = Nil
 }
-
-
-/**
- * Convenience class for Hadoop files read using TextInputFormat that
- * represents the file as an RDD of Strings.
- */
-class HadoopTextFile(sc: SparkContext, path: String)
-extends MappedRDD[String, (LongWritable, Text)](
-  new HadoopFile(sc, path, classOf[TextInputFormat],
-                 classOf[LongWritable], classOf[Text]),
-  { pair: (LongWritable, Text) => pair._2.toString }
-)

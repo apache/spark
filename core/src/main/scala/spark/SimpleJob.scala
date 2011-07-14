@@ -16,7 +16,7 @@ class SimpleJob(
 extends Job(jobId) with Logging
 {
   // Maximum time to wait to run a task in a preferred location (in ms)
-  val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
+  val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "5000").toLong
 
   // CPUs and memory to request per task
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toInt

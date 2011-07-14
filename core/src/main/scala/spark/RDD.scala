@@ -26,8 +26,24 @@ import org.apache.hadoop.io.Text
 
 import SparkContext._
 
-import mesos._
-
+/**
+ * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents
+ * an immutable, partitioned collection of elements that can be operated on in parallel.
+ *
+ * Each RDD is characterized by five main properties:
+ * - A list of splits (partitions)
+ * - A function for computing each split
+ * - A list of dependencies on other RDDs
+ * - Optionally, a Partitioner for key-value RDDs (e.g. to say that the RDD is hash-partitioned)
+ * - Optionally, a list of preferred locations to compute each split on (e.g. block locations for HDFS)
+ *
+ * All the scheduling and execution in Spark is done based on these methods, allowing each
+ * RDD to implement its own way of computing itself.
+ *
+ * This class also contains transformation methods available on all RDDs (e.g. map and filter).
+ * In addition, PairRDDFunctions contains extra methods available on RDDs of key-value pairs,
+ * and SequenceFileRDDFunctions contains extra methods for saving RDDs to Hadoop SequenceFiles.
+ */
 @serializable
 abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   // Methods that must be implemented by subclasses
@@ -64,7 +80,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
     }
   }
   
-  // Transformations
+  // Transformations (return a new RDD)
   
   def map[U: ClassManifest](f: T => U): RDD[U] = new MappedRDD(this, sc.clean(f))
   
@@ -73,23 +89,25 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
-  def sample(withReplacement: Boolean, frac: Double, seed: Int): RDD[T] =
-    new SampledRDD(this, withReplacement, frac, seed)
+  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
+    new SampledRDD(this, withReplacement, fraction, seed)
 
   def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
 
   def ++(other: RDD[T]): RDD[T] = this.union(other)
 
-  def glom(): RDD[Array[T]] = new SplitRDD(this)
+  def glom(): RDD[Array[T]] = new GlommedRDD(this)
 
   def cartesian[U: ClassManifest](other: RDD[U]): RDD[(T, U)] =
     new CartesianRDD(sc, this, other)
 
-  def groupBy[K: ClassManifest](func: T => K, numSplits: Int): RDD[(K, Seq[T])] =
-    this.map(t => (func(t), t)).groupByKey(numSplits)
+  def groupBy[K: ClassManifest](f: T => K, numSplits: Int): RDD[(K, Seq[T])] = {
+    val cleanF = sc.clean(f)
+    this.map(t => (cleanF(t), t)).groupByKey(numSplits)
+  }
 
-  def groupBy[K: ClassManifest](func: T => K): RDD[(K, Seq[T])] =
-    groupBy[K](func, sc.numCores)
+  def groupBy[K: ClassManifest](f: T => K): RDD[(K, Seq[T])] =
+    groupBy[K](f, sc.numCores)
 
   def pipe(command: String): RDD[String] =
     new PipedRDD(this, command)
@@ -97,7 +115,10 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   def pipe(command: Seq[String]): RDD[String] =
     new PipedRDD(this, command)
 
-  // Parallel operations
+  def mapPartitions[U: ClassManifest](f: Iterator[T] => Iterator[U]): RDD[U] =
+    new MapPartitionsRDD(this, sc.clean(f))
+
+  // Actions (launch a job to return a value to the user program)
   
   def foreach(f: T => Unit) {
     val cleanF = sc.clean(f)
@@ -169,11 +190,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
 
   def saveAsTextFile(path: String) {
-    this.map( x => (NullWritable.get(), new Text(x.toString))).saveAsHadoopFile[TextOutputFormat[NullWritable, Text], FileOutputCommitter](path)
+    this.map(x => (NullWritable.get(), new Text(x.toString))).saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
   }
 
   def saveAsObjectFile(path: String) {
-    this.glom.map( x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))) ).saveAsSequenceFile(path)
+    this.glom.map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x)))).saveAsSequenceFile(path)
   }
 }
 
@@ -201,295 +222,17 @@ extends RDD[T](prev.context) {
   override def compute(split: Split) = prev.iterator(split).filter(f)
 }
 
-class SplitRDD[T: ClassManifest](prev: RDD[T])
+class GlommedRDD[T: ClassManifest](prev: RDD[T])
 extends RDD[Array[T]](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = Array(prev.iterator(split).toArray).iterator
 }
 
-
-@serializable class PairRDDExtras[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) extends Logging {
-  def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = {
-    def mergeMaps(m1: HashMap[K, V], m2: HashMap[K, V]): HashMap[K, V] = {
-      for ((k, v) <- m2) {
-        m1.get(k) match {
-          case None => m1(k) = v
-          case Some(w) => m1(k) = func(w, v)
-        }
-      }
-      return m1
-    }
-    self.map(pair => HashMap(pair)).reduce(mergeMaps)
-  }
-
-  def combineByKey[C](createCombiner: V => C,
-                      mergeValue: (C, V) => C,
-                      mergeCombiners: (C, C) => C,
-                      numSplits: Int)
-  : RDD[(K, C)] =
-  {
-    val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    val partitioner = new HashPartitioner(numSplits)
-    new ShuffledRDD(self, aggregator, partitioner)
-  }
-
-  def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {
-    combineByKey[V]((v: V) => v, func, func, numSplits)
-  }
-
-  def groupByKey(numSplits: Int): RDD[(K, Seq[V])] = {
-    def createCombiner(v: V) = ArrayBuffer(v)
-    def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
-    def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
-    val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, mergeCombiners _, numSplits)
-    bufs.asInstanceOf[RDD[(K, Seq[V])]]
-  }
-
-  def join[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, W))] = {
-    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
-    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
-    (vs ++ ws).groupByKey(numSplits).flatMap {
-      case (k, seq) => {
-        val vbuf = new ArrayBuffer[V]
-        val wbuf = new ArrayBuffer[W]
-        seq.foreach(_ match {
-          case Left(v) => vbuf += v
-          case Right(w) => wbuf += w
-        })
-        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
-      }
-    }
-  }
-
-  def leftOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, Option[W]))] = {
-    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
-    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
-    (vs ++ ws).groupByKey(numSplits).flatMap {
-      case (k, seq) => {
-        val vbuf = new ArrayBuffer[V]
-        val wbuf = new ArrayBuffer[Option[W]]
-        seq.foreach(_ match {
-          case Left(v) => vbuf += v
-          case Right(w) => wbuf += Some(w)
-        })
-        if (wbuf.isEmpty) {
-          wbuf += None
-        }
-        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
-      }
-    }
-  }
-
-  def rightOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (Option[V], W))] = {
-    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
-    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
-    (vs ++ ws).groupByKey(numSplits).flatMap {
-      case (k, seq) => {
-        val vbuf = new ArrayBuffer[Option[V]]
-        val wbuf = new ArrayBuffer[W]
-        seq.foreach(_ match {
-          case Left(v) => vbuf += Some(v)
-          case Right(w) => wbuf += w
-        })
-        if (vbuf.isEmpty) {
-          vbuf += None
-        }
-        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
-      }
-    }
-  }
-
-  def combineByKey[C](createCombiner: V => C,
-                      mergeValue: (C, V) => C,
-                      mergeCombiners: (C, C) => C)
-  : RDD[(K, C)] = {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, numCores)
-  }
-
-  def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
-    reduceByKey(func, numCores)
-  }
-
-  def groupByKey(): RDD[(K, Seq[V])] = {
-    groupByKey(numCores)
-  }
-
-  def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
-    join(other, numCores)
-  }
-
-  def leftOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
-    leftOuterJoin(other, numCores)
-  }
-
-  def rightOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
-    rightOuterJoin(other, numCores)
-  }
-
-  def numCores = self.context.numCores
-
-  def collectAsMap(): Map[K, V] = HashMap(self.collect(): _*)
-  
-  def mapValues[U](f: V => U): RDD[(K, U)] = {
-    val cleanF = self.context.clean(f)
-    new MappedValuesRDD(self, cleanF)
-  }
-  
-  def flatMapValues[U](f: V => Traversable[U]): RDD[(K, U)] = {
-    val cleanF = self.context.clean(f)
-    new FlatMappedValuesRDD(self, cleanF)
-  }
-  
-  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
-    val part = self.partitioner match {
-      case Some(p) => p
-      case None => new HashPartitioner(numCores)
-    }
-    new CoGroupedRDD[K](Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]), part).map {
-      case (k, Seq(vs, ws)) =>
-        (k, (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]]))
-    }
-  }
-  
-  def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
-      : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
-    val part = self.partitioner match {
-      case Some(p) => p
-      case None => new HashPartitioner(numCores)
-    }
-    new CoGroupedRDD[K](
-        Seq(self.asInstanceOf[RDD[(_, _)]], 
-            other1.asInstanceOf[RDD[(_, _)]], 
-            other2.asInstanceOf[RDD[(_, _)]]),
-        part).map {
-      case (k, Seq(vs, w1s, w2s)) =>
-        (k, (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]]))
-    }
-  }
-  
-  def saveAsHadoopFile (path: String, jobConf: JobConf) {
-    saveAsHadoopFile(path, jobConf.getOutputKeyClass, jobConf.getOutputValueClass, jobConf.getOutputFormat().getClass.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]], jobConf.getOutputCommitter().getClass.asInstanceOf[Class[OutputCommitter]], jobConf)
-  }
-
-  def saveAsHadoopFile [F <: OutputFormat[K,V], C <: OutputCommitter] (path: String) (implicit fm: ClassManifest[F], cm: ClassManifest[C]) {
-    saveAsHadoopFile(path, fm.erasure.asInstanceOf[Class[F]], cm.erasure.asInstanceOf[Class[C]])
-  }
-  
-  def saveAsHadoopFile(path: String, outputFormatClass: Class[_ <: OutputFormat[K,V]], outputCommitterClass: Class[_ <: OutputCommitter]) {
-    saveAsHadoopFile(path,  implicitly[ClassManifest[K]].erasure, implicitly[ClassManifest[V]].erasure, outputFormatClass, outputCommitterClass)
-  }
-
-  def saveAsHadoopFile(path: String, keyClass: Class[_], valueClass: Class[_], outputFormatClass: Class[_ <: OutputFormat[_,_]], outputCommitterClass: Class[_ <: OutputCommitter]) {
-    saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, outputCommitterClass, null)
-  }
-  
-  private def saveAsHadoopFile(path: String, keyClass: Class[_], valueClass: Class[_], outputFormatClass: Class[_ <: OutputFormat[_,_]], outputCommitterClass: Class[_ <: OutputCommitter], jobConf: JobConf) {
-    logInfo ("Saving as hadoop file of type (" + keyClass.getSimpleName+ "," +valueClass.getSimpleName+ ")" ) 
-    val writer = new HadoopFileWriter(path, 
-                                      keyClass, 
-                                      valueClass, 
-                                      outputFormatClass.asInstanceOf[Class[OutputFormat[AnyRef,AnyRef]]],
-                                      outputCommitterClass.asInstanceOf[Class[OutputCommitter]],
-                                      null)
-    writer.preSetup()
-
-    def writeToFile (context: TaskContext, iter: Iterator[(K,V)]): HadoopFileWriter = {
-      writer.setup(context.stageId, context.splitId, context.attemptId)
-      writer.open()
-      
-      var count = 0
-      while(iter.hasNext) {
-        val record = iter.next
-        count += 1
-        writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
-      }
-    
-      writer.close()
-      return writer
-    }
-
-    self.context.runJob(self, writeToFile _ ).foreach(_.commit())
-    writer.cleanup()
-  }
-
-  def getKeyClass() = implicitly[ClassManifest[K]].erasure
-
-  def getValueClass() = implicitly[ClassManifest[V]].erasure
-}
-
-@serializable
-class SequencePairRDDExtras[K <% Writable: ClassManifest, V <% Writable : ClassManifest](self: RDD[(K,V)]) extends Logging { 
-  
-  def getWritableClass[T <% Writable: ClassManifest](): Class[_ <: Writable] = {
-    val c = {
-      if (classOf[Writable].isAssignableFrom(classManifest[T].erasure)) 
-        classManifest[T].erasure
-      else
-        implicitly[T => Writable].getClass.getMethods()(0).getReturnType
-    }
-    c.asInstanceOf[Class[ _ <: Writable]]
-  }
-
-  def saveAsSequenceFile(path: String) {
-    
-    def anyToWritable[U <% Writable](u: U): Writable = u
-
-    val keyClass = getWritableClass[K]
-    val valueClass = getWritableClass[V]
-    val convertKey = !classOf[Writable].isAssignableFrom(self.getKeyClass)
-    val convertValue = !classOf[Writable].isAssignableFrom(self.getValueClass)
-  
-    logInfo("Saving as sequence file of type (" + keyClass.getSimpleName + "," + valueClass.getSimpleName + ")" ) 
-    if (!convertKey && !convertValue) {
-      self.saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
-    } else if (!convertKey && convertValue) {
-      self.map(x => (x._1,anyToWritable(x._2))).saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
-    } else if (convertKey && !convertValue) {
-      self.map(x => (anyToWritable(x._1),x._2)).saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
-    } else if (convertKey && convertValue) {
-      self.map(x => (anyToWritable(x._1),anyToWritable(x._2))).saveAsHadoopFile(path, keyClass, valueClass, classOf[SequenceFileOutputFormat[Writable,Writable]], classOf[FileOutputCommitter]) 
-    } 
-  }
-
-  def lookup(key: K): Seq[V] = {
-    self.partitioner match {
-      case Some(p) =>
-        val index = p.getPartition(key)
-        def process(it: Iterator[(K, V)]): Seq[V] = {
-          val buf = new ArrayBuffer[V]
-          for ((k, v) <- it if k == key)
-            buf += v
-          buf
-        }
-        val res = self.context.runJob(self, process _, Array(index))
-        res(0)
-      case None =>
-        throw new UnsupportedOperationException("lookup() called on an RDD without a partitioner")
-    }
-  }
-}
-
-class MappedValuesRDD[K, V, U](
-  prev: RDD[(K, V)], f: V => U)
-extends RDD[(K, U)](prev.context) {
+class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
+  prev: RDD[T], f: Iterator[T] => Iterator[U])
+extends RDD[U](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
-  override val partitioner = prev.partitioner
-  override def compute(split: Split) =
-    prev.iterator(split).map{case (k, v) => (k, f(v))}
-}
-
-class FlatMappedValuesRDD[K, V, U](
-  prev: RDD[(K, V)], f: V => Traversable[U])
-extends RDD[(K, U)](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override val partitioner = prev.partitioner
-  override def compute(split: Split) = {
-    prev.iterator(split).toStream.flatMap { 
-      case (k, v) => f(v).map(x => (k, x))
-    }.iterator
-  }
+  override def compute(split: Split) = f(prev.iterator(split))
 }

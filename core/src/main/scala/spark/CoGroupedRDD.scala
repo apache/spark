@@ -86,7 +86,8 @@ extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {
           for (v <- vs)
             mySeq(depNum) += v
         }
-        new SimpleShuffleFetcher().fetch[K, Seq[Any]](shuffleId, split.index, mergePair)
+        val fetcher = SparkEnv.get.shuffleFetcher
+        fetcher.fetch[K, Seq[Any]](shuffleId, split.index, mergePair)
       }
     }
     map.iterator

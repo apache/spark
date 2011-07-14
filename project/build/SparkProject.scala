@@ -16,8 +16,6 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
 
   lazy val bagel = project("bagel", "Bagel", new BagelProject(_), core)
 
-  lazy val jettyWebapp = "org.eclipse.jetty" % "jetty-webapp" % "7.4.1.v20110513" % "provided"
-
   trait BaseProject extends BasicScalaProject with ScalaPaths with BasicPackagePaths with Eclipsify with IdeaProject {
     override def compileOptions = super.compileOptions ++ Seq(Unchecked)
 
