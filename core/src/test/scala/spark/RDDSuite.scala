@@ -1,17 +1,12 @@
 package spark
 
 import org.scalatest.FunSuite
-import org.scalatest.prop.Checkers
-import org.scalacheck.Arbitrary._
-import org.scalacheck.Gen
-import org.scalacheck.Prop._
 import SparkContext._
-import scala.collection.mutable.ArrayBuffer
 
 class RDDSuite extends FunSuite {
   test("basic operations") {
     val sc = new SparkContext("local", "test")
-    val nums = sc.parallelize(Array(1, 2, 3, 4), 2)
+    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
     assert(nums.reduce(_ + _) === 10)
     assert(nums.map(_.toString).collect().toList === List("1", "2", "3", "4"))

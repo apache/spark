@@ -190,11 +190,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
   }
 
   def saveAsTextFile(path: String) {
-    this.map( x => (NullWritable.get(), new Text(x.toString))).saveAsHadoopFile[TextOutputFormat[NullWritable, Text], FileOutputCommitter](path)
+    this.map(x => (NullWritable.get(), new Text(x.toString))).saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
   }
 
   def saveAsObjectFile(path: String) {
-    this.glom.map( x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))) ).saveAsSequenceFile(path)
+    this.glom.map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x)))).saveAsSequenceFile(path)
   }
 }
 
