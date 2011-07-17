@@ -15,7 +15,7 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
-    version := "version=0.4-SNAPSHOT",
+    version := "0.4-SNAPSHOT",
     scalaVersion := "2.9.0-1",
     scalacOptions := Seq(/*"-deprecation",*/ "-unchecked"), // TODO Enable -deprecation and fix all warnings
     unmanagedJars in Compile <<= baseDirectory map { base => (base ** "*.jar").classpath },
