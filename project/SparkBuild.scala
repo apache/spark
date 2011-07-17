@@ -23,8 +23,8 @@ object SparkBuild extends Build {
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.4.2.v20110526",
-      "org.scalatest" % "scalatest_2.9.0" % "1.4.1" % "test",
-      "org.scala-tools.testing" % "scalacheck_2.9.0" % "1.9" % "test"
+      "org.scalatest" % "scalatest_2.9.0" % "1.6.1" % "test",
+      "org.scala-tools.testing" % "scalacheck_2.9.0-1" % "1.9" % "test"
     )
   )
 
