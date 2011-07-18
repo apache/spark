@@ -30,7 +30,7 @@ object SparkBuild extends Build {
 
   val slf4jVersion = "1.6.1"
 
-  //FIXME DepJar and XmlTestReport
+  //FIXME XmlTestReport
   def coreSettings = sharedSettings ++ Seq(libraryDependencies ++= Seq(
     "com.google.guava" % "guava" % "r09",
     "log4j" % "log4j" % "1.2.16",
@@ -39,15 +39,17 @@ object SparkBuild extends Build {
     "com.ning" % "compress-lzf" % "0.7.0",
     "org.apache.hadoop" % "hadoop-core" % "0.20.2",
     "asm" % "asm-all" % "3.3.1"
-  ))
+  )) ++ DepJarPlugin.depJarSettings
 
-  //FIXME DepJar and XmlTestReport
-  def replSettings = sharedSettings ++ Seq(libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _))
+  //FIXME XmlTestReport
+  def replSettings = sharedSettings ++
+      Seq(libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)) ++
+      DepJarPlugin.depJarSettings
 
   def examplesSettings = sharedSettings ++ Seq(libraryDependencies += "colt" % "colt" % "1.2.0")
 
-  //FIXME DepJar and XmlTestReport
-  def bagelSettings = sharedSettings
+  //FIXME XmlTestReport
+  def bagelSettings = sharedSettings ++ DepJarPlugin.depJarSettings
 }
 
 // Project mixin for an XML-based ScalaTest report. Unfortunately
@@ -70,32 +72,4 @@ object SparkBuild extends Build {
 //
 //    None
 //  }.dependsOn(compile, testCompile).describedAs("Generate XML test report.")
-//}
-
-// Project mixin for creating a JAR with  a project's dependencies. This is based
-// on the AssemblyBuilder plugin, but because this plugin attempts to package Scala
-// and our project too, we leave that out using our own exclude filter (depJarExclude).
-//trait DepJar extends AssemblyBuilder {
-//  def depJarExclude(base: PathFinder) = {
-//    (base / "scala" ** "*") +++ // exclude scala library
-//    (base / "spark" ** "*") +++ // exclude Spark classes
-//    ((base / "META-INF" ** "*") --- // generally ignore the hell out of META-INF
-//     (base / "META-INF" / "services" ** "*") --- // include all service providers
-//     (base / "META-INF" / "maven" ** "*")) // include all Maven POMs and such
-//  }
-//
-//  def depJarTempDir = outputPath / "dep-classes"
-//
-//  def depJarOutputPath =
-//    outputPath / (name.toLowerCase.replace(" ", "-") + "-dep-" + version.toString + ".jar")
-//
-//  lazy val depJar = {
-//    packageTask(
-//      Path.lazyPathFinder(assemblyPaths(depJarTempDir,
-//                                        assemblyClasspath,
-//                                        assemblyExtraJars,
-//                                        depJarExclude)),
-//      depJarOutputPath,
-//      packageOptions)
-//  }.dependsOn(compile).describedAs("Bundle project's dependencies into a JAR.")
 //}
