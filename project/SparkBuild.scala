@@ -21,6 +21,7 @@ object SparkBuild extends Build {
     unmanagedJars in Compile <<= baseDirectory map { base => (base ** "*.jar").classpath },
     retrieveManaged := true,
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
+    testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.4.2.v20110526",
       "org.scalatest" % "scalatest_2.9.0" % "1.6.1" % "test",
@@ -30,7 +31,6 @@ object SparkBuild extends Build {
 
   val slf4jVersion = "1.6.1"
 
-  //FIXME XmlTestReport
   def coreSettings = sharedSettings ++ Seq(libraryDependencies ++= Seq(
     "com.google.guava" % "guava" % "r09",
     "log4j" % "log4j" % "1.2.16",
@@ -41,35 +41,11 @@ object SparkBuild extends Build {
     "asm" % "asm-all" % "3.3.1"
   )) ++ DepJarPlugin.depJarSettings
 
-  //FIXME XmlTestReport
   def replSettings = sharedSettings ++
       Seq(libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)) ++
       DepJarPlugin.depJarSettings
 
   def examplesSettings = sharedSettings ++ Seq(libraryDependencies += "colt" % "colt" % "1.2.0")
 
-  //FIXME XmlTestReport
   def bagelSettings = sharedSettings ++ DepJarPlugin.depJarSettings
 }
-
-// Project mixin for an XML-based ScalaTest report. Unfortunately
-// there is currently no way to call this directly from SBT without
-// executing a subprocess.
-//trait XmlTestReport extends BasicScalaProject {
-//  def testReportDir = outputPath / "test-report"
-//
-//  lazy val testReport = task {
-//    log.info("Creating " + testReportDir + "...")
-//    if (!testReportDir.exists) {
-//      testReportDir.asFile.mkdirs()
-//    }
-//    log.info("Executing org.scalatest.tools.Runner...")
-//    val command = ("scala -classpath " + testClasspath.absString +
-//                   " org.scalatest.tools.Runner -o " +
-//                   " -u " + testReportDir.absolutePath +
-//                   " -p " + (outputPath / "test-classes").absolutePath)
-//    Process(command, path("."), "JAVA_OPTS" -> "-Xmx500m") !
-//
-//    None
-//  }.dependsOn(compile, testCompile).describedAs("Generate XML test report.")
-//}
