@@ -1,7 +1,5 @@
 package spark
 
-import mesos._
-
 @serializable
 class TaskContext(val stageId: Int, val splitId: Int, val attemptId: Int) {
 }

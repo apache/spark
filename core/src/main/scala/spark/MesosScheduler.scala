@@ -12,8 +12,11 @@ import scala.collection.mutable.Map
 import scala.collection.mutable.Queue
 import scala.collection.JavaConversions._
 
-import mesos.{Scheduler => MScheduler}
-import mesos._
+import com.google.protobuf.ByteString
+
+import org.apache.mesos.{Scheduler => MScheduler}
+import org.apache.mesos._
+import org.apache.mesos.Protos._
 
 /**
  * The main Scheduler implementation, which runs jobs on Mesos. Clients should
@@ -37,8 +40,8 @@ extends MScheduler with DAGScheduler with Logging
   private var activeJobs = new HashMap[Int, Job]
   private var activeJobsQueue = new Queue[Job]
 
-  private var taskIdToJobId = new HashMap[Int, Int]
-  private var jobTasks = new HashMap[Int, HashSet[Int]]
+  private var taskIdToJobId = new HashMap[String, Int]
+  private var jobTasks = new HashMap[Int, HashSet[String]]
 
   // Incrementing job and task IDs
   private var nextJobId = 0
@@ -59,10 +62,10 @@ extends MScheduler with DAGScheduler with Logging
     return id
   }
 
-  def newTaskId(): Int = {
-    val id = nextTaskId;
+  def newTaskId(): TaskID = {
+    val id = "" + nextTaskId;
     nextTaskId += 1;
-    return id
+    return TaskID.newBuilder().setValue(id).build()
   }
   
   override def start() {
@@ -76,7 +79,13 @@ extends MScheduler with DAGScheduler with Logging
       override def run {
         val sched = MesosScheduler.this
         sched.driver = new MesosSchedulerDriver(sched, master)
-        sched.driver.run()
+        try {
+          val ret = sched.driver.run()
+          logInfo("driver.run() returned with code " + ret)
+        } catch {
+          case e: Exception =>
+            logError("driver.run() failed", e)
+        }
       }
     }.start
   }
@@ -92,13 +101,21 @@ extends MScheduler with DAGScheduler with Logging
           "or the SparkContext constructor")
     }
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
-    val params = new JHashMap[String, String]
+    val params = Params.newBuilder()
     for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
       if (System.getenv(key) != null) {
-        params("env." + key) = System.getenv(key)
+        params.addParam(Param.newBuilder()
+                          .setKey("env." + key)
+                          .setValue(System.getenv(key))
+                          .build())
       }
     }
-    new ExecutorInfo(execScript, createExecArg(), params)
+    ExecutorInfo.newBuilder()
+      .setExecutorId(ExecutorID.newBuilder().setValue("default").build())
+      .setUri(execScript)
+      .setData(ByteString.copyFrom(createExecArg()))
+      .setParams(params.build())
+      .build()
   }
 
   
@@ -125,7 +142,7 @@ extends MScheduler with DAGScheduler with Logging
     }
   }
 
-  override def registered(d: SchedulerDriver, frameworkId: String) {
+  override def registered(d: SchedulerDriver, frameworkId: FrameworkID) {
     logInfo("Registered as framework ID " + frameworkId)
     registeredLock.synchronized {
       isRegistered = true
@@ -146,11 +163,11 @@ extends MScheduler with DAGScheduler with Logging
    * a round-robin manner so that tasks are balanced across the cluster.
    */
   override def resourceOffer(
-      d: SchedulerDriver, oid: String, offers: JList[SlaveOffer]) {
+      d: SchedulerDriver, oid: OfferID, offers: JList[SlaveOffer]) {
     synchronized {
       val tasks = new JArrayList[TaskDescription]
-      val availableCpus = offers.map(_.getParams.get("cpus").toInt)
-      val availableMem = offers.map(_.getParams.get("mem").toInt)
+      val availableCpus = offers.map(o => getResource(o.getResourcesList(), "cpus"))
+      val availableMem = offers.map(o => getResource(o.getResourcesList(), "mem"))
       var launchedTask = false
       for (job <- activeJobsQueue) {
         do {
@@ -160,10 +177,10 @@ extends MScheduler with DAGScheduler with Logging
               job.slaveOffer(offers(i), availableCpus(i), availableMem(i)) match {
                 case Some(task) =>
                   tasks.add(task)
-                  taskIdToJobId(task.getTaskId) = job.getId
-                  jobTasks(job.getId) += task.getTaskId
-                  availableCpus(i) -= task.getParams.get("cpus").toInt
-                  availableMem(i) -= task.getParams.get("mem").toInt
+                  taskIdToJobId(task.getTaskId.getValue) = job.getId
+                  jobTasks(job.getId) += task.getTaskId.getValue
+                  availableCpus(i) -= getResource(task.getResourcesList(), "cpus")
+                  availableMem(i) -= getResource(task.getResourcesList(), "mem")
                   launchedTask = true
                 case None => {}
               }
@@ -179,6 +196,13 @@ extends MScheduler with DAGScheduler with Logging
     }
   }
 
+  // Helper function to pull out a resource from a Mesos Resources protobuf
+  def getResource(res: JList[Resource], name: String): Double = {
+    for (r <- res if r.getName == name)
+      return r.getScalar.getValue
+    throw new IllegalArgumentException("No resource called " + name + " in " + res)
+  }
+
   // Check whether a Mesos task state represents a finished task
   def isFinished(state: TaskState) = {
     state == TaskState.TASK_FINISHED ||
@@ -190,18 +214,18 @@ extends MScheduler with DAGScheduler with Logging
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
     synchronized {
       try {
-        taskIdToJobId.get(status.getTaskId) match {
+        taskIdToJobId.get(status.getTaskId.getValue) match {
           case Some(jobId) =>
             if (activeJobs.contains(jobId)) {
               activeJobs(jobId).statusUpdate(status)
             }
             if (isFinished(status.getState)) {
-              taskIdToJobId.remove(status.getTaskId)
+              taskIdToJobId.remove(status.getTaskId.getValue)
               if (jobTasks.contains(jobId))
-                jobTasks(jobId) -= status.getTaskId
+                jobTasks(jobId) -= status.getTaskId.getValue
             }
           case None =>
-            logInfo("Ignoring update from TID " + status.getTaskId +
+            logInfo("Ignoring update from TID " + status.getTaskId.getValue +
               " because its job is gone")
         }
       } catch {
@@ -293,4 +317,10 @@ extends MScheduler with DAGScheduler with Logging
     // Serialize the map as an array of (String, String) pairs
     return Utils.serialize(props.toArray)
   }
+
+  override def frameworkMessage(d: SchedulerDriver, s: SlaveID, e: ExecutorID, b: Array[Byte]) {}
+
+  override def slaveLost(d: SchedulerDriver, s: SlaveID) {}
+
+  override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
 }

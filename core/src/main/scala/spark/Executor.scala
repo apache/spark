@@ -7,22 +7,24 @@ import java.util.concurrent._
 import scala.actors.remote.RemoteActor
 import scala.collection.mutable.ArrayBuffer
 
-import mesos.{ExecutorArgs, ExecutorDriver, MesosExecutorDriver}
-import mesos.{TaskDescription, TaskState, TaskStatus}
+import com.google.protobuf.ByteString
+
+import org.apache.mesos._
+import org.apache.mesos.Protos._
 
 import spark.broadcast._
 
 /**
  * The Mesos executor for Spark.
  */
-class Executor extends mesos.Executor with Logging {
+class Executor extends org.apache.mesos.Executor with Logging {
   var classLoader: ClassLoader = null
   var threadPool: ExecutorService = null
   var env: SparkEnv = null
 
   override def init(d: ExecutorDriver, args: ExecutorArgs) {
     // Read spark.* system properties from executor arg
-    val props = Utils.deserialize[Array[(String, String)]](args.getData)
+    val props = Utils.deserialize[Array[(String, String)]](args.getData.toByteArray)
     for ((key, value) <- props)
       System.setProperty(key, value)
 
@@ -44,40 +46,46 @@ class Executor extends mesos.Executor with Logging {
       1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
   }
   
-  override def launchTask(d: ExecutorDriver, desc: TaskDescription) {
-    // Pull taskId and arg out of TaskDescription because it won't be a
-    // valid pointer after this method call (TODO: fix this in C++/SWIG)
-    val taskId = desc.getTaskId
-    val arg = desc.getArg
-    threadPool.execute(new TaskRunner(taskId, arg, d))
+  override def launchTask(d: ExecutorDriver, task: TaskDescription) {
+    threadPool.execute(new TaskRunner(task, d))
   }
 
-  class TaskRunner(taskId: Int, arg: Array[Byte], d: ExecutorDriver)
+  class TaskRunner(desc: TaskDescription, d: ExecutorDriver)
   extends Runnable {
     override def run() = {
-      logInfo("Running task ID " + taskId)
+      logInfo("Running task ID " + desc.getTaskId)
+      d.sendStatusUpdate(TaskStatus.newBuilder()
+                         .setTaskId(desc.getTaskId)
+                         .setState(TaskState.TASK_RUNNING)
+                         .build())
       try {
         SparkEnv.set(env)
         Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear
-        val task = Utils.deserialize[Task[Any]](arg, classLoader)
+        val task = Utils.deserialize[Task[Any]](desc.getData.toByteArray, classLoader)
         for (gen <- task.generation) // Update generation if any is set
           env.mapOutputTracker.updateGeneration(gen)
-        val value = task.run(taskId)
+        val value = task.run(desc.getTaskId.getValue.toInt)
         val accumUpdates = Accumulators.values
         val result = new TaskResult(value, accumUpdates)
-        d.sendStatusUpdate(new TaskStatus(
-          taskId, TaskState.TASK_FINISHED, Utils.serialize(result)))
-        logInfo("Finished task ID " + taskId)
+        d.sendStatusUpdate(TaskStatus.newBuilder()
+                           .setTaskId(desc.getTaskId)
+                           .setState(TaskState.TASK_FINISHED)
+                           .setData(ByteString.copyFrom(Utils.serialize(result)))
+                           .build())
+        logInfo("Finished task ID " + desc.getTaskId)
       } catch {
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason
-          d.sendStatusUpdate(new TaskStatus(
-            taskId, TaskState.TASK_FAILED, Utils.serialize(reason)))
+          d.sendStatusUpdate(TaskStatus.newBuilder()
+                             .setTaskId(desc.getTaskId)
+                             .setState(TaskState.TASK_FAILED)
+                             .setData(ByteString.copyFrom(Utils.serialize(reason)))
+                             .build())
         }
         case t: Throwable => {
           // TODO: Handle errors in tasks less dramatically
-          logError("Exception in task ID " + taskId, t)
+          logError("Exception in task ID " + desc.getTaskId, t)
           System.exit(1)
         }
       }
@@ -131,6 +139,18 @@ class Executor extends mesos.Executor with Logging {
     val out = new FileOutputStream(localPath)
     Utils.copyStream(in, out, true)
   }
+
+  override def error(d: ExecutorDriver, code: Int, message: String) {
+    logError("Error from Mesos: %s (code %d)".format(message, code))
+  }
+
+  override def killTask(d: ExecutorDriver, tid: TaskID) {
+    logWarning("Mesos asked us to kill task " + tid + "; ignoring (not yet implemented)")
+  }
+
+  override def shutdown(d: ExecutorDriver) {}
+
+  override def frameworkMessage(d: ExecutorDriver, data: Array[Byte]) {}
 }
 
 /**

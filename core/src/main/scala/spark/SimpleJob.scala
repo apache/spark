@@ -5,7 +5,10 @@ import java.util.{HashMap => JHashMap}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import mesos._
+import com.google.protobuf.ByteString
+
+import org.apache.mesos._
+import org.apache.mesos.Protos._
 
 
 /**
@@ -19,8 +22,8 @@ extends Job(jobId) with Logging
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "5000").toLong
 
   // CPUs and memory to request per task
-  val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toInt
-  val MEM_PER_TASK = System.getProperty("spark.task.mem", "512").toInt
+  val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toDouble
+  val MEM_PER_TASK = System.getProperty("spark.task.mem", "512").toDouble
 
   // Maximum times a task is allowed to fail before failing the job
   val MAX_TASK_FAILURES = 4
@@ -31,7 +34,7 @@ extends Job(jobId) with Logging
   val launched = new Array[Boolean](numTasks)
   val finished = new Array[Boolean](numTasks)
   val numFailures = new Array[Int](numTasks)
-  val tidToIndex = HashMap[Int, Int]()
+  val tidToIndex = HashMap[String, Int]()
 
   var tasksLaunched = 0
   var tasksFinished = 0
@@ -126,13 +129,13 @@ extends Job(jobId) with Logging
   }
 
   // Respond to an offer of a single slave from the scheduler by finding a task
-  def slaveOffer(offer: SlaveOffer, availableCpus: Int, availableMem: Int)
+  def slaveOffer(offer: SlaveOffer, availableCpus: Double, availableMem: Double)
       : Option[TaskDescription] = {
     if (tasksLaunched < numTasks && availableCpus >= CPUS_PER_TASK &&
         availableMem >= MEM_PER_TASK) {
       val time = System.currentTimeMillis
       val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
-      val host = offer.getHost
+      val host = offer.getHostname
       findTask(host, localOnly) match {
         case Some(index) => {
           // Found a task; do some bookkeeping and return a Mesos task for it
@@ -146,20 +149,35 @@ extends Job(jobId) with Logging
               jobId, index, taskId, offer.getSlaveId, host, prefStr)
           logInfo(message)
           // Do various bookkeeping
-          tidToIndex(taskId) = index
+          tidToIndex(taskId.getValue) = index
           launched(index) = true
           tasksLaunched += 1
           if (preferred)
             lastPreferredLaunchTime = time
           // Create and return the Mesos task object
-          val params = new JHashMap[String, String]
-          params.put("cpus", CPUS_PER_TASK.toString)
-          params.put("mem", MEM_PER_TASK.toString)
+          val cpuRes = Resource.newBuilder()
+                         .setName("cpus")
+                         .setType(Resource.Type.SCALAR)
+                         .setScalar(Resource.Scalar.newBuilder()
+                                      .setValue(CPUS_PER_TASK).build())
+                         .build()
+          val memRes = Resource.newBuilder()
+                         .setName("mem")
+                         .setType(Resource.Type.SCALAR)
+                         .setScalar(Resource.Scalar.newBuilder()
+                                      .setValue(MEM_PER_TASK).build())
+                         .build()
           val serializedTask = Utils.serialize(task)
           logDebug("Serialized size: " + serializedTask.size)
           val taskName = "task %d:%d".format(jobId, index)
-          return Some(new TaskDescription(
-            taskId, offer.getSlaveId, taskName, params, serializedTask))
+          return Some(TaskDescription.newBuilder()
+                        .setTaskId(taskId)
+                        .setSlaveId(offer.getSlaveId)
+                        .setName(taskName)
+                        .addResources(cpuRes)
+                        .addResources(memRes)
+                        .setData(ByteString.copyFrom(serializedTask))
+                        .build())
         }
         case _ =>
       }
@@ -183,13 +201,13 @@ extends Job(jobId) with Logging
 
   def taskFinished(status: TaskStatus) {
     val tid = status.getTaskId
-    val index = tidToIndex(tid)
+    val index = tidToIndex(tid.getValue)
     if (!finished(index)) {
       tasksFinished += 1
-      logInfo("Finished TID %d (progress: %d/%d)".format(
+      logInfo("Finished TID %s (progress: %d/%d)".format(
         tid, tasksFinished, numTasks))
       // Deserialize task result
-      val result = Utils.deserialize[TaskResult[_]](status.getData)
+      val result = Utils.deserialize[TaskResult[_]](status.getData.toByteArray)
       sched.taskEnded(tasks(index), Success, result.value, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
@@ -203,15 +221,15 @@ extends Job(jobId) with Logging
 
   def taskLost(status: TaskStatus) {
     val tid = status.getTaskId
-    val index = tidToIndex(tid)
+    val index = tidToIndex(tid.getValue)
     if (!finished(index)) {
-      logInfo("Lost TID %d (task %d:%d)".format(tid, jobId, index))
+      logInfo("Lost TID %s (task %d:%d)".format(tid, jobId, index))
       launched(index) = false
       tasksLaunched -= 1
       // Check if the problem is a map output fetch failure. In that case, this
       // task will never succeed on any node, so tell the scheduler about it.
-      if (status.getData != null && status.getData.length > 0) {
-        val reason = Utils.deserialize[TaskEndReason](status.getData)
+      if (status.getData != null && status.getData.size > 0) {
+        val reason = Utils.deserialize[TaskEndReason](status.getData.toByteArray)
         reason match {
           case fetchFailed: FetchFailed =>
             logInfo("Loss was due to fetch failure from " + fetchFailed.serverUri)

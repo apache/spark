@@ -1,7 +1,5 @@
 package spark
 
-import mesos.SlaveOffer
-
 import java.util.concurrent.atomic.AtomicLong
 
 @serializable class ParallelCollectionSplit[T: ClassManifest](
