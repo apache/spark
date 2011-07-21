@@ -102,7 +102,6 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
       // We won the race to fetch the output locs; do so
       logInfo("Doing the fetch; tracker actor = " + trackerActor)
       val fetched = (trackerActor !? GetMapOutputLocations(shuffleId)).asInstanceOf[Array[String]]
-      println("Got locations: " + fetched.mkString(", "))
       serverUris.put(shuffleId, fetched)
       fetching.synchronized {
         fetching -= shuffleId
