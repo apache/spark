@@ -9,6 +9,7 @@ import scala.collection.mutable
 
 import com.esotericsoftware.kryo._
 import com.esotericsoftware.kryo.{Serializer => KSerializer}
+import de.javakaffee.kryoserializers.KryoReflectionFactorySupport
 
 /**
  * Zig-zag encoder used to write object sizes to serialization streams.
@@ -126,19 +127,18 @@ class KryoSerializer extends Serializer with Logging {
   }
 
   def createKryo(): Kryo = {
-    val kryo = new Kryo()
+    val kryo = new KryoReflectionFactorySupport()
 
     // Register some commonly used classes
     val toRegister: Seq[AnyRef] = Seq(
       // Arrays
       Array(1), Array(1.0), Array(1.0f), Array(1L), Array(""), Array(("", "")),
-      Array(new java.lang.Object), Array(1.toByte),
+      Array(new java.lang.Object), Array(1.toByte), Array(true), Array('c'),
       // Specialized Tuple2s
       ("", ""), (1, 1), (1.0, 1.0), (1L, 1L),
       (1, 1.0), (1.0, 1), (1L, 1.0), (1.0, 1L), (1, 1L), (1L, 1),
       // Scala collections
-      List(1), immutable.Map(1 -> 1), immutable.HashMap(1 -> 1),
-      mutable.Map(1 -> 1), mutable.HashMap(1 -> 1), mutable.ArrayBuffer(1),
+      List(1), mutable.ArrayBuffer(1),
       // Options and Either
       Some(1), Left(1), Right(1),
       // Higher-dimensional tuples
@@ -151,15 +151,37 @@ class KryoSerializer extends Serializer with Logging {
     // Register some commonly used Scala singleton objects. Because these
     // are singletons, we must return the exact same local object when we
     // deserialize rather than returning a clone as FieldSerializer would.
-    kryo.register(None.getClass, new KSerializer {
+    class SingletonSerializer(obj: AnyRef) extends KSerializer {
       override def writeObjectData(buf: ByteBuffer, obj: AnyRef) {}
-      override def readObjectData[T](buf: ByteBuffer, cls: Class[T]): T = None.asInstanceOf[T]
-    })
-    kryo.register(Nil.getClass, new KSerializer {
-      override def writeObjectData(buf: ByteBuffer, obj: AnyRef) {}
-      override def readObjectData[T](buf: ByteBuffer, cls: Class[T]): T = Nil.asInstanceOf[T]
-    })
+      override def readObjectData[T](buf: ByteBuffer, cls: Class[T]): T = obj.asInstanceOf[T]
+    }
+    kryo.register(None.getClass, new SingletonSerializer(None))
+    kryo.register(Nil.getClass, new SingletonSerializer(Nil))
 
+    // Register maps with a special serializer since they have complex internal structure
+    class ScalaMapSerializer(buildMap: Array[(Any, Any)] => scala.collection.Map[Any, Any])
+    extends KSerializer {
+      override def writeObjectData(buf: ByteBuffer, obj: AnyRef) {
+        val map = obj.asInstanceOf[scala.collection.Map[Any, Any]]
+        kryo.writeObject(buf, map.size.asInstanceOf[java.lang.Integer])
+        for ((k, v) <- map) {
+          kryo.writeClassAndObject(buf, k)
+          kryo.writeClassAndObject(buf, v)
+        }
+      }
+      override def readObjectData[T](buf: ByteBuffer, cls: Class[T]): T = {
+        val size = kryo.readObject(buf, classOf[java.lang.Integer]).intValue
+        val elems = new Array[(Any, Any)](size)
+        for (i <- 0 until size)
+          elems(i) = (kryo.readClassAndObject(buf), kryo.readClassAndObject(buf))
+        buildMap(elems).asInstanceOf[T]
+      }
+    }
+    kryo.register(mutable.HashMap().getClass, new ScalaMapSerializer(mutable.HashMap() ++ _))
+    // TODO: add support for immutable maps too; this is more annoying because there are many
+    // subclasses of immutable.Map for small maps (with <= 4 entries)
+
+    // Allow the user to register their own classes by setting spark.kryo.registrator
     val regCls = System.getProperty("spark.kryo.registrator")
     if (regCls != null) {
       logInfo("Running user registrator: " + regCls)

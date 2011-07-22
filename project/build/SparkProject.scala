@@ -40,6 +40,7 @@ class SparkProject(info: ProjectInfo) extends ParentProject(info) with IdeaProje
     val scalaTest = "org.scalatest" % "scalatest" % "1.3" % "test"
     val scalaCheck = "org.scala-tools.testing" %% "scalacheck" % "1.7" % "test"
     val protobuf = "com.google.protobuf" % "protobuf-java" % "2.3.0"
+    val kryoSerializers = "de.javakaffee" % "kryo-serializers" % "0.9"
   }
 
   class ReplProject(info: ProjectInfo) extends DefaultProject(info) with BaseProject with DepJar with XmlTestReport
