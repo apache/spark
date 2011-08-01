@@ -53,7 +53,8 @@ class Executor extends org.apache.mesos.Executor with Logging {
   class TaskRunner(desc: TaskDescription, d: ExecutorDriver)
   extends Runnable {
     override def run() = {
-      logInfo("Running task ID " + desc.getTaskId)
+      val tid = desc.getTaskId.getValue
+      logInfo("Running task ID " + tid)
       d.sendStatusUpdate(TaskStatus.newBuilder()
                          .setTaskId(desc.getTaskId)
                          .setState(TaskState.TASK_RUNNING)
@@ -65,7 +66,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
         val task = Utils.deserialize[Task[Any]](desc.getData.toByteArray, classLoader)
         for (gen <- task.generation) // Update generation if any is set
           env.mapOutputTracker.updateGeneration(gen)
-        val value = task.run(desc.getTaskId.getValue.toInt)
+        val value = task.run(tid.toInt)
         val accumUpdates = Accumulators.values
         val result = new TaskResult(value, accumUpdates)
         d.sendStatusUpdate(TaskStatus.newBuilder()
@@ -73,7 +74,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
                            .setState(TaskState.TASK_FINISHED)
                            .setData(ByteString.copyFrom(Utils.serialize(result)))
                            .build())
-        logInfo("Finished task ID " + desc.getTaskId)
+        logInfo("Finished task ID " + tid)
       } catch {
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason
@@ -85,7 +86,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
         }
         case t: Throwable => {
           // TODO: Handle errors in tasks less dramatically
-          logError("Exception in task ID " + desc.getTaskId, t)
+          logError("Exception in task ID " + tid, t)
           System.exit(1)
         }
       }
@@ -144,8 +145,8 @@ class Executor extends org.apache.mesos.Executor with Logging {
     logError("Error from Mesos: %s (code %d)".format(message, code))
   }
 
-  override def killTask(d: ExecutorDriver, tid: TaskID) {
-    logWarning("Mesos asked us to kill task " + tid + "; ignoring (not yet implemented)")
+  override def killTask(d: ExecutorDriver, t: TaskID) {
+    logWarning("Mesos asked us to kill task " + t.getValue + "; ignoring (not yet implemented)")
   }
 
   override def shutdown(d: ExecutorDriver) {}

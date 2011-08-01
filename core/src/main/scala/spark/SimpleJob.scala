@@ -21,9 +21,8 @@ extends Job(jobId) with Logging
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "5000").toLong
 
-  // CPUs and memory to request per task
+  // CPUs to request per task
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toDouble
-  val MEM_PER_TASK = System.getProperty("spark.task.mem", "512").toDouble
 
   // Maximum times a task is allowed to fail before failing the job
   val MAX_TASK_FAILURES = 4
@@ -129,10 +128,8 @@ extends Job(jobId) with Logging
   }
 
   // Respond to an offer of a single slave from the scheduler by finding a task
-  def slaveOffer(offer: SlaveOffer, availableCpus: Double, availableMem: Double)
-      : Option[TaskDescription] = {
-    if (tasksLaunched < numTasks && availableCpus >= CPUS_PER_TASK &&
-        availableMem >= MEM_PER_TASK) {
+  def slaveOffer(offer: SlaveOffer, availableCpus: Double): Option[TaskDescription] = {
+    if (tasksLaunched < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
       val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
       val host = offer.getHostname
@@ -146,7 +143,7 @@ extends Job(jobId) with Logging
           val prefStr = if(preferred) "preferred" else "non-preferred"
           val message =
             "Starting task %d:%d as TID %s on slave %s: %s (%s)".format(
-              jobId, index, taskId, offer.getSlaveId, host, prefStr)
+              jobId, index, taskId.getValue, offer.getSlaveId.getValue, host, prefStr)
           logInfo(message)
           // Do various bookkeeping
           tidToIndex(taskId.getValue) = index
@@ -161,12 +158,6 @@ extends Job(jobId) with Logging
                          .setScalar(Resource.Scalar.newBuilder()
                                       .setValue(CPUS_PER_TASK).build())
                          .build()
-          val memRes = Resource.newBuilder()
-                         .setName("mem")
-                         .setType(Resource.Type.SCALAR)
-                         .setScalar(Resource.Scalar.newBuilder()
-                                      .setValue(MEM_PER_TASK).build())
-                         .build()
           val serializedTask = Utils.serialize(task)
           logDebug("Serialized size: " + serializedTask.size)
           val taskName = "task %d:%d".format(jobId, index)
@@ -175,7 +166,6 @@ extends Job(jobId) with Logging
                         .setSlaveId(offer.getSlaveId)
                         .setName(taskName)
                         .addResources(cpuRes)
-                        .addResources(memRes)
                         .setData(ByteString.copyFrom(serializedTask))
                         .build())
         }
@@ -200,8 +190,8 @@ extends Job(jobId) with Logging
   }
 
   def taskFinished(status: TaskStatus) {
-    val tid = status.getTaskId
-    val index = tidToIndex(tid.getValue)
+    val tid = status.getTaskId.getValue
+    val index = tidToIndex(tid)
     if (!finished(index)) {
       tasksFinished += 1
       logInfo("Finished TID %s (progress: %d/%d)".format(
@@ -220,8 +210,8 @@ extends Job(jobId) with Logging
   }
 
   def taskLost(status: TaskStatus) {
-    val tid = status.getTaskId
-    val index = tidToIndex(tid.getValue)
+    val tid = status.getTaskId.getValue
+    val index = tidToIndex(tid)
     if (!finished(index)) {
       logInfo("Lost TID %s (task %d:%d)".format(tid, jobId, index))
       launched(index) = false

@@ -22,8 +22,9 @@ if [ "x$MESOS_HOME" != "x" ] ; then
 fi
 
 if [ "x$SPARK_MEM" == "x" ] ; then
-  SPARK_MEM="300m"
+  SPARK_MEM="512m"
 fi
+export SPARK_MEM  # So that the process sees it and can report it to Mesos
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$SPARK_JAVA_OPTS"

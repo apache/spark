@@ -33,15 +33,25 @@ extends MScheduler with DAGScheduler with Logging
     "SPARK_LIBRARY_PATH"
   )
 
+  // Memory used by each executor (in megabytes)
+  val EXECUTOR_MEMORY = {
+    if (System.getenv("SPARK_MEM") != null)
+      memoryStringToMb(System.getenv("SPARK_MEM"))
+      // TODO: Might need to add some extra memory for the non-heap parts of the JVM
+    else
+      512
+  }
+
   // Lock used to wait for  scheduler to be registered
   private var isRegistered = false
   private val registeredLock = new Object()
 
-  private var activeJobs = new HashMap[Int, Job]
-  private var activeJobsQueue = new Queue[Job]
+  private val activeJobs = new HashMap[Int, Job]
+  private val activeJobsQueue = new Queue[Job]
 
-  private var taskIdToJobId = new HashMap[String, Int]
-  private var jobTasks = new HashMap[Int, HashSet[String]]
+  private val taskIdToJobId = new HashMap[String, Int]
+  private val taskIdToSlaveId = new HashMap[String, String]
+  private val jobTasks = new HashMap[Int, HashSet[String]]
 
   // Incrementing job and task IDs
   private var nextJobId = 0
@@ -49,6 +59,9 @@ extends MScheduler with DAGScheduler with Logging
 
   // Driver for talking to Mesos
   var driver: SchedulerDriver = null
+
+  // Which nodes we have executors on
+  private val slavesWithExecutors = new HashSet[String]
 
   // JAR server, if any JARs were added by the user to the SparkContext
   var jarServer: HttpServer = null
@@ -110,11 +123,18 @@ extends MScheduler with DAGScheduler with Logging
                           .build())
       }
     }
+    val memory = Resource.newBuilder()
+                   .setName("mem")
+                   .setType(Resource.Type.SCALAR)
+                   .setScalar(Resource.Scalar.newBuilder()
+                                .setValue(EXECUTOR_MEMORY).build())
+                   .build()
     ExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue("default").build())
       .setUri(execScript)
       .setData(ByteString.copyFrom(createExecArg()))
       .setParams(params.build())
+      .addResources(memory)
       .build()
   }
 
@@ -138,6 +158,7 @@ extends MScheduler with DAGScheduler with Logging
       activeJobs -= job.getId
       activeJobsQueue.dequeueAll(x => (x == job))
       taskIdToJobId --= jobTasks(job.getId)
+      taskIdToSlaveId --= jobTasks(job.getId)
       jobTasks.remove(job.getId)
     }
   }
@@ -162,30 +183,32 @@ extends MScheduler with DAGScheduler with Logging
    * our active jobs for tasks in FIFO order. We fill each node with tasks in
    * a round-robin manner so that tasks are balanced across the cluster.
    */
-  override def resourceOffer(
-      d: SchedulerDriver, oid: OfferID, offers: JList[SlaveOffer]) {
+  override def resourceOffer(d: SchedulerDriver, oid: OfferID, offers: JList[SlaveOffer]) {
     synchronized {
       val tasks = new JArrayList[TaskDescription]
       val availableCpus = offers.map(o => getResource(o.getResourcesList(), "cpus"))
-      val availableMem = offers.map(o => getResource(o.getResourcesList(), "mem"))
+      val enoughMem = offers.map(o => {
+        val mem = getResource(o.getResourcesList(), "mem")
+        val slaveId = o.getSlaveId.getValue
+        mem > EXECUTOR_MEMORY || slavesWithExecutors.contains(slaveId)
+      })
       var launchedTask = false
       for (job <- activeJobsQueue) {
         do {
           launchedTask = false
-          for (i <- 0 until offers.size.toInt) {
-            try {
-              job.slaveOffer(offers(i), availableCpus(i), availableMem(i)) match {
-                case Some(task) =>
-                  tasks.add(task)
-                  taskIdToJobId(task.getTaskId.getValue) = job.getId
-                  jobTasks(job.getId) += task.getTaskId.getValue
-                  availableCpus(i) -= getResource(task.getResourcesList(), "cpus")
-                  availableMem(i) -= getResource(task.getResourcesList(), "mem")
-                  launchedTask = true
-                case None => {}
-              }
-            } catch {
-              case e: Exception => logError("Exception in resourceOffer", e)
+          for (i <- 0 until offers.size if enoughMem(i)) {
+            job.slaveOffer(offers(i), availableCpus(i)) match {
+              case Some(task) =>
+                tasks.add(task)
+                val tid = task.getTaskId.getValue
+                val sid = offers(i).getSlaveId.getValue
+                taskIdToJobId(tid) = job.getId
+                jobTasks(job.getId) += tid
+                taskIdToSlaveId(tid) = sid
+                slavesWithExecutors += sid
+                availableCpus(i) -= getResource(task.getResourcesList(), "cpus")
+                launchedTask = true
+              case None => {}
             }
           }
         } while (launchedTask)
@@ -214,19 +237,24 @@ extends MScheduler with DAGScheduler with Logging
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
     synchronized {
       try {
-        taskIdToJobId.get(status.getTaskId.getValue) match {
+        val tid = status.getTaskId.getValue
+        if (status.getState == TaskState.TASK_LOST && taskIdToSlaveId.contains(tid)) {
+          // We lost the executor on this slave, so remember that it's gone
+          slavesWithExecutors -= taskIdToSlaveId(tid)
+        }
+        taskIdToJobId.get(tid) match {
           case Some(jobId) =>
             if (activeJobs.contains(jobId)) {
               activeJobs(jobId).statusUpdate(status)
             }
             if (isFinished(status.getState)) {
-              taskIdToJobId.remove(status.getTaskId.getValue)
+              taskIdToJobId.remove(tid)
               if (jobTasks.contains(jobId))
-                jobTasks(jobId) -= status.getTaskId.getValue
+                jobTasks(jobId) -= tid
+              taskIdToSlaveId.remove(tid)
             }
           case None =>
-            logInfo("Ignoring update from TID " + status.getTaskId.getValue +
-              " because its job is gone")
+            logInfo("Ignoring update from TID " + tid + " because its job is gone")
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
@@ -320,7 +348,28 @@ extends MScheduler with DAGScheduler with Logging
 
   override def frameworkMessage(d: SchedulerDriver, s: SlaveID, e: ExecutorID, b: Array[Byte]) {}
 
-  override def slaveLost(d: SchedulerDriver, s: SlaveID) {}
+  override def slaveLost(d: SchedulerDriver, s: SlaveID) {
+    slavesWithExecutors.remove(s.getValue)
+  }
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
+
+  /**
+   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a
+   * number of megabytes. This is used to figure out how much memory to claim
+   * from Mesos based on the SPARK_MEM environment variable.
+   */
+  def memoryStringToMb(str: String): Int = {
+    val lower = str.toLowerCase
+    if (lower.endsWith("k"))
+      (lower.substring(0, lower.length-1).toLong / 1024).toInt
+    else if (lower.endsWith("m"))
+      lower.substring(0, lower.length-1).toInt
+    else if (lower.endsWith("g"))
+      lower.substring(0, lower.length-1).toInt * 1024
+    else if (lower.endsWith("t"))
+      lower.substring(0, lower.length-1).toInt * 1024 * 1024
+    else // no suffix, so it's just a number in bytes
+      (lower.toLong / 1024 / 1024).toInt 
+  }
 }
