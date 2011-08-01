@@ -90,7 +90,7 @@ object DepJarPlugin extends Plugin {
     descendants x relativeTo(base)
   }
 
-  lazy val depJarSettings = inConfig(DepJar)(Seq(
+  lazy val depJarSettings: Seq[Setting[_]] = inConfig(DepJar)(Seq(
     depJar <<= packageBin.identity,
     packageBin <<= assemblyTask,
     jarName <<= (name, version) { (name, version) => name + "-dep-" + version + ".jar" },

@@ -22,6 +22,7 @@ object SparkBuild extends Build {
     retrieveManaged := true,
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
+    publishTo <<= baseDirectory { base => Some(Resolver.file("Local", base / "target" / "maven" asFile)(Patterns(true, Resolver.mavenStyleBasePattern))) },
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.4.2.v20110526",
       "org.scalatest" % "scalatest_2.9.0" % "1.6.1" % "test",
