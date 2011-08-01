@@ -3,14 +3,14 @@ package spark.repl
 import scala.collection.mutable.Set
 
 object Main {
-  private var _interp: SparkInterpreterLoop = null
+  private var _interp: SparkILoop = null
   
   def interp = _interp
   
-  private[repl] def interp_=(i: SparkInterpreterLoop) { _interp = i }
+  private[repl] def interp_=(i: SparkILoop) { _interp = i }
   
   def main(args: Array[String]) {
-    _interp = new SparkInterpreterLoop
-    _interp.main(args)
+    _interp = new SparkILoop
+    _interp.process(args)
   }
 }

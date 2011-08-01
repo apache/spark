@@ -219,7 +219,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
                        conf: JobConf = new JobConf) {
     conf.setOutputKeyClass(keyClass)
     conf.setOutputValueClass(valueClass)
-    conf.setOutputFormat(outputFormatClass)
+    // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
+    conf.set("mapred.output.format.class", outputFormatClass.getName)
     conf.setOutputCommitter(classOf[FileOutputCommitter])
     FileOutputFormat.setOutputPath(conf, HadoopWriter.createPathFromString(path, conf))
     saveAsHadoopDataset(conf)

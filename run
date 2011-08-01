@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCALA_VERSION=2.8.1
+SCALA_VERSION=2.9.0.1
 
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
@@ -42,23 +42,23 @@ EXAMPLES_DIR=$FWDIR/examples
 BAGEL_DIR=$FWDIR/bagel
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$CORE_DIR/target/scala_$SCALA_VERSION/classes:$MESOS_CLASSPATH"
+CLASSPATH="$SPARK_CLASSPATH:$CORE_DIR/target/scala-$SCALA_VERSION/classes:$MESOS_CLASSPATH"
 CLASSPATH+=:$FWDIR/conf
-CLASSPATH+=:$REPL_DIR/target/scala_$SCALA_VERSION/classes
-CLASSPATH+=:$EXAMPLES_DIR/target/scala_$SCALA_VERSION/classes
+CLASSPATH+=:$REPL_DIR/target/scala-$SCALA_VERSION/classes
+CLASSPATH+=:$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes
 for jar in `find $CORE_DIR/lib -name '*jar'`; do
   CLASSPATH+=:$jar
 done
-for jar in $CORE_DIR/lib_managed/scala_$SCALA_VERSION/compile/*.jar; do
+for jar in `find $FWDIR/lib_managed/jars -name '*jar'`; do
+  CLASSPATH+=:$jar
+done
+for jar in `find $FWDIR/lib_managed/bundles -name '*jar'`; do
   CLASSPATH+=:$jar
 done
 for jar in `find $REPL_DIR/lib -name '*jar'`; do
   CLASSPATH+=:$jar
 done
-for jar in $REPL_DIR/lib_managed/scala_$SCALA_VERSION/compile/*.jar; do
-  CLASSPATH+=:$jar
-done
-CLASSPATH+=:$BAGEL_DIR/target/scala_$SCALA_VERSION/classes
+CLASSPATH+=:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes
 export CLASSPATH # Needed for spark-shell
 
 if [ -n "$SCALA_HOME" ]; then
@@ -67,4 +67,5 @@ else
   SCALA=scala
 fi
 
+echo $CLASSPATH >> tmp
 exec $SCALA -cp $CLASSPATH "$@"

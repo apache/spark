@@ -18,7 +18,7 @@ Experimental support for Scala 2.9 is available in the `scala-2.9` branch.
 The project is built using Simple Build Tool (SBT), which is packaged with it.
 To build Spark and its example programs, run:
 
-    sbt/sbt update compile
+    sbt/sbt compile
 
 To run Spark, you will need to have Scala's bin in your `PATH`, or you
 will need to set the `SCALA_HOME` environment variable to point to where

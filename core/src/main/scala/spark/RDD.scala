@@ -207,7 +207,7 @@ class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
 extends RDD[U](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = prev.iterator(split).toStream.flatMap(f).iterator
+  override def compute(split: Split) = prev.iterator(split).flatMap(f)
 }
 
 class FilteredRDD[T: ClassManifest](
