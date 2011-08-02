@@ -30,8 +30,7 @@ import SparkContext._
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  */
-@serializable
-class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) extends Logging {
+class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) extends Logging with Serializable {
   def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = {
     def mergeMaps(m1: HashMap[K, V], m2: HashMap[K, V]): HashMap[K, V] = {
       for ((k, v) <- m2) {

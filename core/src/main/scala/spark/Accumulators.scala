@@ -4,8 +4,8 @@ import java.io._
 
 import scala.collection.mutable.Map
 
-@serializable class Accumulator[T](
-  @transient initialValue: T, param: AccumulatorParam[T])
+class Accumulator[T] (
+  @transient initialValue: T, param: AccumulatorParam[T]) extends Serializable
 {
   val id = Accumulators.newId
   @transient var value_ = initialValue // Current value on master
@@ -32,7 +32,7 @@ import scala.collection.mutable.Map
   override def toString = value_.toString
 }
 
-@serializable trait AccumulatorParam[T] {
+trait AccumulatorParam[T] extends Serializable {
   def addInPlace(t1: T, t2: T): T
   def zero(initialValue: T): T
 }
@@ -52,20 +52,20 @@ private object Accumulators
     if (original) {
       originals(a.id) = a
     } else {
-      val accums = localAccums.getOrElseUpdate(currentThread, Map())
+      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
       accums(a.id) = a
     }
   }
 
   // Clear the local (non-original) accumulators for the current thread
   def clear: Unit = synchronized { 
-    localAccums.remove(currentThread)
+    localAccums.remove(Thread.currentThread)
   }
 
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.getOrElse(currentThread, Map()))
+    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map()))
       ret(id) = accum.value
     return ret
   }

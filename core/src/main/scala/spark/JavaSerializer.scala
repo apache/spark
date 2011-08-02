@@ -12,7 +12,7 @@ class JavaSerializationStream(out: OutputStream) extends SerializationStream {
 class JavaDeserializationStream(in: InputStream) extends DeserializationStream {
   val objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass) =
-      Class.forName(desc.getName, false, currentThread.getContextClassLoader)
+      Class.forName(desc.getName, false, Thread.currentThread.getContextClassLoader)
   }
 
   def readObject[T](): T = objIn.readObject().asInstanceOf[T]

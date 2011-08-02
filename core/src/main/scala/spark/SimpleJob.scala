@@ -27,7 +27,7 @@ extends Job(jobId) with Logging
   // Maximum times a task is allowed to fail before failing the job
   val MAX_TASK_FAILURES = 4
 
-  val callingThread = currentThread
+  val callingThread = Thread.currentThread
   val tasks = tasksSeq.toArray
   val numTasks = tasks.length
   val launched = new Array[Boolean](numTasks)

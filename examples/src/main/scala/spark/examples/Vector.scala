@@ -1,6 +1,6 @@
 package spark.examples
 
-@serializable class Vector(val elements: Array[Double]) {
+class Vector(val elements: Array[Double]) extends Serializable {
   def length = elements.length
   
   def apply(index: Int) = elements(index)

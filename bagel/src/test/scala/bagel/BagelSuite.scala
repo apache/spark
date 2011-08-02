@@ -12,8 +12,8 @@ import spark._
 
 import spark.bagel.Bagel._
 
-@serializable class TestVertex(val id: String, val active: Boolean, val age: Int) extends Vertex
-@serializable class TestMessage(val targetId: String) extends Message
+class TestVertex(val id: String, val active: Boolean, val age: Int) extends Vertex with Serializable
+class TestMessage(val targetId: String) extends Message with Serializable
 
 class BagelSuite extends FunSuite with Assertions {
   test("halting by voting") {

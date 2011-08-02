@@ -10,7 +10,6 @@ import spark._
  * CHANGED: Keep track of the blockSize for THIS broadcast variable.
  * Broadcast.BlockSize is expected to be updated across different broadcasts
  */
-@serializable
 case class SourceInfo (val hostAddress: String,
                        val listenPort: Int,
                        val totalBlocks: Int = SourceInfo.UnusedParam,

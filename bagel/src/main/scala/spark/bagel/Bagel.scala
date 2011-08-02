@@ -111,8 +111,7 @@ trait Aggregator[V, A] {
   def mergeAggregators(a: A, b: A): A
 }
 
-@serializable
-class DefaultCombiner[M] extends Combiner[M, ArrayBuffer[M]] {
+class DefaultCombiner[M] extends Combiner[M, ArrayBuffer[M]] with Serializable {
   def createCombiner(msg: M): ArrayBuffer[M] =
     ArrayBuffer(msg)
   def mergeMsg(combiner: ArrayBuffer[M], msg: M): ArrayBuffer[M] =
@@ -121,8 +120,7 @@ class DefaultCombiner[M] extends Combiner[M, ArrayBuffer[M]] {
     a ++= b
 }
 
-@serializable
-class NullAggregator[V] extends Aggregator[V, Option[Nothing]] {
+class NullAggregator[V] extends Aggregator[V, Option[Nothing]] with Serializable {
   def createAggregator(vert: V): Option[Nothing] = None
   def mergeAggregators(a: Option[Nothing], b: Option[Nothing]): Option[Nothing] = None
 }
@@ -130,8 +128,8 @@ class NullAggregator[V] extends Aggregator[V, Option[Nothing]] {
 /**
  * Represents a Bagel vertex.
  *
- * Subclasses may store state along with each vertex and must be
- * annotated with @serializable.
+ * Subclasses may store state along with each vertex and must
+ * inherit from java.io.Serializable or scala.Serializable.
  */
 trait Vertex {
   def id: String
@@ -142,7 +140,7 @@ trait Vertex {
  * Represents a Bagel message to a target vertex.
  *
  * Subclasses may contain a payload to deliver to the target vertex
- * and must be annotated with @serializable.
+ * and must inherit from java.io.Serializable or scala.Serializable.
  */
 trait Message {
   def targetId: String
@@ -151,8 +149,8 @@ trait Message {
 /**
  * Represents a directed edge between two vertices.
  *
- * Subclasses may store state along each edge and must be annotated
- * with @serializable.
+ * Subclasses may store state along each edge and must inherit from
+ * java.io.Serializable or scala.Serializable.
  */
 trait Edge {
   def targetId: String

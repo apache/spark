@@ -1,7 +1,6 @@
 package spark
 
-@serializable
-abstract class Dependency[T](val rdd: RDD[T], val isShuffle: Boolean)
+abstract class Dependency[T](val rdd: RDD[T], val isShuffle: Boolean) extends Serializable
 
 abstract class NarrowDependency[T](rdd: RDD[T])
 extends Dependency(rdd, false) {

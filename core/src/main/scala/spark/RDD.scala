@@ -44,8 +44,7 @@ import SparkContext._
  * In addition, PairRDDFunctions contains extra methods available on RDDs of key-value pairs,
  * and SequenceFileRDDFunctions contains extra methods for saving RDDs to Hadoop SequenceFiles.
  */
-@serializable
-abstract class RDD[T: ClassManifest](@transient sc: SparkContext) {
+abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serializable {
   // Methods that must be implemented by subclasses
   def splits: Array[Split]
   def compute(split: Split): Iterator[T]
