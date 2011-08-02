@@ -17,7 +17,7 @@ object SparkBuild extends Build {
     organization := "org.spark-project",
     version := "0.4-SNAPSHOT",
     scalaVersion := "2.9.0-1",
-    scalacOptions := Seq(/*"-deprecation",*/ "-unchecked"), // -deprecation is too noisy due to usage of old Hadoop API, enable it once that's no longer an issue
+    scalacOptions := Seq(/*"-deprecation",*/ "-unchecked", "-optimize"), // -deprecation is too noisy due to usage of old Hadoop API, enable it once that's no longer an issue
     unmanagedJars in Compile <<= baseDirectory map { base => (base ** "*.jar").classpath },
     retrieveManaged := true,
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
