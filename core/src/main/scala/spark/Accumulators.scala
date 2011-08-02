@@ -52,20 +52,20 @@ private object Accumulators
     if (original) {
       originals(a.id) = a
     } else {
-      val accums = localAccums.getOrElseUpdate(currentThread, Map())
+      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
       accums(a.id) = a
     }
   }
 
   // Clear the local (non-original) accumulators for the current thread
   def clear: Unit = synchronized { 
-    localAccums.remove(currentThread)
+    localAccums.remove(Thread.currentThread)
   }
 
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.getOrElse(currentThread, Map()))
+    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map()))
       ret(id) = accum.value
     return ret
   }
