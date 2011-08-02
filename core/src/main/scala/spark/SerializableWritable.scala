@@ -6,8 +6,7 @@ import org.apache.hadoop.io.ObjectWritable
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.JobConf
 
-@serializable
-class SerializableWritable[T <: Writable](@transient var t: T) {
+class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
   def value = t
   override def toString = t.toString
 

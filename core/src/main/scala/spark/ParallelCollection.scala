@@ -2,9 +2,9 @@ package spark
 
 import java.util.concurrent.atomic.AtomicLong
 
-@serializable class ParallelCollectionSplit[T: ClassManifest](
+class ParallelCollectionSplit[T: ClassManifest](
     val rddId: Long, val slice: Int, values: Seq[T])
-extends Split {
+extends Split with Serializable {
   def iterator(): Iterator[T] = values.iterator
 
   override def hashCode(): Int = (41 * (41 + rddId) + slice).toInt

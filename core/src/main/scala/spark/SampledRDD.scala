@@ -2,7 +2,7 @@ package spark
 
 import java.util.Random
 
-@serializable class SampledRDDSplit(val prev: Split, val seed: Int) extends Split {
+class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Serializable {
   override val index = prev.index
 }
 

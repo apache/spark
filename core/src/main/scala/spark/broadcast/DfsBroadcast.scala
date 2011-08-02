@@ -11,9 +11,8 @@ import org.apache.hadoop.fs.{FileSystem, Path, RawLocalFileSystem}
 
 import spark._
 
-@serializable 
-class DfsBroadcast[T](@transient var value_ : T, isLocal: Boolean) 
-extends Broadcast[T] with Logging {
+class DfsBroadcast[T](@transient var value_ : T, isLocal: Boolean)
+extends Broadcast[T] with Logging with Serializable {
   
   def value = value_
 

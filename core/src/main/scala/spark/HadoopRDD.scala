@@ -13,8 +13,8 @@ import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
 /** A Spark split class that wraps around a Hadoop InputSplit */
-@serializable class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
-extends Split {
+class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
+extends Split with Serializable {
   val inputSplit = new SerializableWritable[InputSplit](s)
 
   override def hashCode(): Int = (41 * (41 + rddId) + idx).toInt

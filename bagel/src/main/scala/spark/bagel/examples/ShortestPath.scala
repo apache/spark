@@ -81,8 +81,7 @@ object ShortestPath {
   }
 }
 
-@serializable
-object MinCombiner extends Combiner[SPMessage, Int] {
+object MinCombiner extends Combiner[SPMessage, Int] with Serializable {
   def createCombiner(msg: SPMessage): Int =
     msg.value
   def mergeMsg(combiner: Int, msg: SPMessage): Int =
@@ -91,6 +90,6 @@ object MinCombiner extends Combiner[SPMessage, Int] {
     min(a, b)
 }
 
-@serializable class SPVertex(val id: String, val value: Int, val outEdges: Seq[SPEdge], val active: Boolean) extends Vertex
-@serializable class SPEdge(val targetId: String, val value: Int) extends Edge
-@serializable class SPMessage(val targetId: String, val value: Int) extends Message
+class SPVertex(val id: String, val value: Int, val outEdges: Seq[SPEdge], val active: Boolean) extends Vertex with Serializable
+class SPEdge(val targetId: String, val value: Int) extends Edge with Serializable
+class SPMessage(val targetId: String, val value: Int) extends Message with Serializable

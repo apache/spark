@@ -10,9 +10,8 @@ import scala.math
 
 import spark._
 
-@serializable
 class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean)
-extends Broadcast[T] with Logging {
+extends Broadcast[T] with Logging with Serializable {
 
   def value = value_
 

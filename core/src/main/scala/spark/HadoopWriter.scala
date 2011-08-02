@@ -20,7 +20,7 @@ import spark.Logging
  * also contain an output key class, an output value class, a filename to write to, etc
  * exactly like in a Hadoop job.
  */
-@serializable class HadoopWriter(@transient jobConf: JobConf) extends Logging {  
+class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializable {
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
   

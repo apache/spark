@@ -363,5 +363,4 @@ object SparkContext {
  * that doesn't know the type of T when it is created. This sounds strange but is necessary to
  * support converting subclasses of Writable to themselves (writableWritableConverter).
  */
-@serializable
-class WritableConverter[T](val writableClass: ClassManifest[T] => Class[_ <: Writable], val convert: Writable => T) {}
+class WritableConverter[T](val writableClass: ClassManifest[T] => Class[_ <: Writable], val convert: Writable => T) extends Serializable

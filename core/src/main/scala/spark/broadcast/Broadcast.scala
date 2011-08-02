@@ -7,8 +7,7 @@ import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 
 import spark._
 
-@serializable
-trait Broadcast[T] {
+trait Broadcast[T] extends Serializable {
   val uuid = UUID.randomUUID
 
   def value: T
@@ -20,7 +19,7 @@ trait Broadcast[T] {
 }
 
 object Broadcast
-extends Logging {
+extends Logging with Serializable {
   // Messages
   val REGISTER_BROADCAST_TRACKER = 0
   val UNREGISTER_BROADCAST_TRACKER = 1
@@ -191,18 +190,15 @@ extends Logging {
   }  
 }
 
-@serializable
-case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) { }
+case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) extends Serializable
 
-@serializable
 case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
                                     val totalBlocks: Int, 
-                                    val totalBytes: Int) {
+                                    val totalBytes: Int) extends Serializable {
   @transient var hasBlocks = 0
 }
 
-@serializable
-class SpeedTracker {
+class SpeedTracker extends Serializable {
   // Mapping 'source' to '(totalTime, numBlocks)'
   private var sourceToSpeedMap = Map[SourceInfo, (Long, Int)] ()
 

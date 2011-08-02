@@ -4,8 +4,8 @@ import java.io._
 
 import scala.collection.mutable.Map
 
-@serializable class Accumulator[T](
-  @transient initialValue: T, param: AccumulatorParam[T])
+class Accumulator[T] (
+  @transient initialValue: T, param: AccumulatorParam[T]) extends Serializable
 {
   val id = Accumulators.newId
   @transient var value_ = initialValue // Current value on master
@@ -32,7 +32,7 @@ import scala.collection.mutable.Map
   override def toString = value_.toString
 }
 
-@serializable trait AccumulatorParam[T] {
+trait AccumulatorParam[T] extends Serializable {
   def addInPlace(t1: T, t2: T): T
   def zero(initialValue: T): T
 }

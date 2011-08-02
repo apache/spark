@@ -76,8 +76,7 @@ object WikipediaPageRank {
   }
 }
 
-@serializable
-object PRCombiner extends Combiner[PRMessage, Double] {
+object PRCombiner extends Combiner[PRMessage, Double] with Serializable {
   def createCombiner(msg: PRMessage): Double =
     msg.value
   def mergeMsg(combiner: Double, msg: PRMessage): Double =
@@ -105,8 +104,7 @@ object PRCombiner extends Combiner[PRMessage, Double] {
   }
 }
 
-@serializable
-object PRNoCombiner extends DefaultCombiner[PRMessage] {
+object PRNoCombiner extends DefaultCombiner[PRMessage] with Serializable {
   def compute(numVertices: Long, epsilon: Double)(self: PRVertex, messages: Option[ArrayBuffer[PRMessage]], superstep: Int): (PRVertex, Iterable[PRMessage]) =
     PRCombiner.compute(numVertices, epsilon)(self, messages match {
       case Some(msgs) => Some(msgs.map(_.value).sum)
@@ -114,7 +112,7 @@ object PRNoCombiner extends DefaultCombiner[PRMessage] {
     }, superstep)
 }
 
-@serializable class PRVertex() extends Vertex {
+class PRVertex() extends Vertex with Serializable {
   var id: String = _
   var value: Double = _
   var outEdges: ArrayBuffer[PREdge] = _
@@ -129,7 +127,7 @@ object PRNoCombiner extends DefaultCombiner[PRMessage] {
   }
 }
 
-@serializable class PRMessage() extends Message {
+class PRMessage() extends Message with Serializable {
   var targetId: String = _
   var value: Double = _
 
@@ -140,7 +138,7 @@ object PRNoCombiner extends DefaultCombiner[PRMessage] {
   }
 }
 
-@serializable class PREdge() extends Edge {
+class PREdge() extends Edge with Serializable {
   var targetId: String = _
 
   def this(targetId: String) {

@@ -2,17 +2,15 @@ package spark
 
 import scala.collection.mutable.ArrayBuffer
 
-@serializable
 class UnionSplit[T: ClassManifest](idx: Int, rdd: RDD[T], split: Split)
-extends Split {
+extends Split with Serializable {
   def iterator() = rdd.iterator(split)
   def preferredLocations() = rdd.preferredLocations(split)
   override val index = idx
 }
 
-@serializable
 class UnionRDD[T: ClassManifest](sc: SparkContext, rdds: Seq[RDD[T]])
-extends RDD[T](sc) {
+extends RDD[T](sc) with Serializable {
   @transient val splits_ : Array[Split] = {
     val array = new Array[Split](rdds.map(_.splits.size).sum)
     var pos = 0

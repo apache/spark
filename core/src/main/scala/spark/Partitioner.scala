@@ -1,7 +1,6 @@
 package spark
 
-@serializable
-abstract class Partitioner {
+abstract class Partitioner extends Serializable {
   def numPartitions: Int
   def getPartition(key: Any): Int
 }
