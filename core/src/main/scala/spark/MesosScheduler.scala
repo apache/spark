@@ -190,7 +190,7 @@ extends MScheduler with DAGScheduler with Logging
       val enoughMem = offers.map(o => {
         val mem = getResource(o.getResourcesList(), "mem")
         val slaveId = o.getSlaveId.getValue
-        mem > EXECUTOR_MEMORY || slavesWithExecutors.contains(slaveId)
+        mem >= EXECUTOR_MEMORY || slavesWithExecutors.contains(slaveId)
       })
       var launchedTask = false
       for (job <- activeJobsQueue) {
