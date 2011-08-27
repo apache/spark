@@ -164,7 +164,7 @@ extends MScheduler with DAGScheduler with Logging
   }
 
   override def registered(d: SchedulerDriver, frameworkId: FrameworkID) {
-    logInfo("Registered as framework ID " + frameworkId)
+    logInfo("Registered as framework ID " + frameworkId.getValue)
     registeredLock.synchronized {
       isRegistered = true
       registeredLock.notifyAll()
