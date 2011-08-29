@@ -1,5 +1,6 @@
 import sbt._
 import Keys._
+import sbtassembly.Plugin.{assemblySettings, Assembly}
 
 object SparkBuild extends Build {
 
@@ -42,13 +43,12 @@ object SparkBuild extends Build {
     "asm" % "asm-all" % "3.3.1",
     "com.google.protobuf" % "protobuf-java" % "2.3.0",
     "de.javakaffee" % "kryo-serializers" % "0.9"
-  )) ++ DepJarPlugin.depJarSettings
+  )) ++ assemblySettings ++ Seq(test in Assembly := {})
 
   def replSettings = sharedSettings ++
-      Seq(libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)) ++
-      DepJarPlugin.depJarSettings
+      Seq(libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _))
 
   def examplesSettings = sharedSettings ++ Seq(libraryDependencies += "colt" % "colt" % "1.2.0")
 
-  def bagelSettings = sharedSettings ++ DepJarPlugin.depJarSettings
+  def bagelSettings = sharedSettings
 }
