@@ -353,6 +353,24 @@ object SparkContext {
 
   implicit def writableWritableConverter[T <: Writable]() =
     new WritableConverter[T](_.erasure.asInstanceOf[Class[T]], _.asInstanceOf[T])
+
+  // Find the JAR from which a given class was loaded, to make it easy for users to pass
+  // their JARs to SparkContext
+  def jarOfClass[T: ClassManifest]: Option[String] = {
+    val cls = classManifest[T].erasure
+    val uri = cls.getResource("/" + cls.getName.replace('.', '/') + ".class")
+    if (uri != null) {
+      val uriStr = uri.toString
+      if (uriStr.startsWith("jar:file:")) {
+        // URI will be of the form "jar:file:/path/foo.jar!/package/cls.class", so pull out the /path/foo.jar
+        Some(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
+      } else {
+        None
+      }
+    } else {
+      None
+    }
+  }
 }
 
 
