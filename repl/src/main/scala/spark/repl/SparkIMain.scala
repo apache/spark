@@ -356,7 +356,7 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
   private def mostRecentlyHandledTree: Option[Tree] = {
     prevRequests.reverse foreach { req =>
       req.handlers.reverse foreach {
-        case x: MemberDefHandler if x.definesValue && !isInternalVarName(x.name)  => return Some(x.member)
+        case x: MemberDefHandler if x.definesValue && !isInternalVarName(x.name.toString)  => return Some(x.member)
         case _ => ()
       }
     }
@@ -1023,7 +1023,7 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
   protected def onlyTerms(xs: List[Name]) = xs collect { case x: TermName => x }
   protected def onlyTypes(xs: List[Name]) = xs collect { case x: TypeName => x }
     
-  def definedTerms   = onlyTerms(allDefinedNames) filterNot isInternalVarName
+  def definedTerms   = onlyTerms(allDefinedNames) filterNot (x => isInternalVarName(x.toString))
   def definedTypes   = onlyTypes(allDefinedNames)
   def definedSymbols = prevRequests.toSet flatMap ((x: Request) => x.definedSymbols.values)
   
