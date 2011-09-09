@@ -1,5 +1,6 @@
 package spark
 
+import java.io.BufferedOutputStream
 import java.io.FileOutputStream
 import java.io.ObjectOutputStream
 import scala.collection.mutable.HashMap
@@ -26,7 +27,7 @@ extends DAGTask[String](stageId) with Logging {
     val ser = SparkEnv.get.serializer.newInstance()
     for (i <- 0 until numOutputSplits) {
       val file = LocalFileShuffle.getOutputFile(dep.shuffleId, partition, i)
-      val out = ser.outputStream(new FileOutputStream(file))
+      val out = ser.outputStream(new BufferedOutputStream(new FileOutputStream(file)))
       buckets(i).foreach(pair => out.writeObject(pair))
       // TODO: have some kind of EOF marker
       out.close()
