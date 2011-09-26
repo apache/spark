@@ -28,7 +28,10 @@ object SparkBuild extends Build {
       "org.eclipse.jetty" % "jetty-server" % "8.0.1.v20110908",
       "org.scalatest" %% "scalatest" % "1.6.1" % "test",
       "org.scala-tools.testing" %% "scalacheck" % "1.9" % "test"
-    )
+    ),
+    /* Workaround for issue #206 (fixed after SBT 0.11.0) */
+    watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
+      const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) }
   )
 
   val slf4jVersion = "1.6.1"
