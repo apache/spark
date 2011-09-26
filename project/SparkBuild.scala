@@ -38,7 +38,7 @@ object SparkBuild extends Build {
     "log4j" % "log4j" % "1.2.16",
     "org.slf4j" % "slf4j-api" % slf4jVersion,
     "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
-    "com.ning" % "compress-lzf" % "0.7.0",
+    "com.ning" % "compress-lzf" % "0.8.4",
     "org.apache.hadoop" % "hadoop-core" % "0.20.2",
     "asm" % "asm-all" % "3.3.1",
     "com.google.protobuf" % "protobuf-java" % "2.3.0",
