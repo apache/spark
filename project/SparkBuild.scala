@@ -26,8 +26,8 @@ object SparkBuild extends Build {
     publishTo <<= baseDirectory { base => Some(Resolver.file("Local", base / "target" / "maven" asFile)(Patterns(true, Resolver.mavenStyleBasePattern))) },
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.4.2.v20110526",
-      "org.scalatest" % "scalatest_2.9.0" % "1.6.1" % "test",
-      "org.scala-tools.testing" % "scalacheck_2.9.0-1" % "1.9" % "test"
+      "org.scalatest" %% "scalatest" % "1.6.1" % "test",
+      "org.scala-tools.testing" %% "scalacheck" % "1.9" % "test"
     )
   )
 
