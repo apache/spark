@@ -33,22 +33,30 @@ object SparkBuild extends Build {
 
   val slf4jVersion = "1.6.1"
 
-  def coreSettings = sharedSettings ++ Seq(libraryDependencies ++= Seq(
-    "com.google.guava" % "guava" % "r09",
-    "log4j" % "log4j" % "1.2.16",
-    "org.slf4j" % "slf4j-api" % slf4jVersion,
-    "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
-    "com.ning" % "compress-lzf" % "0.8.4",
-    "org.apache.hadoop" % "hadoop-core" % "0.20.2",
-    "asm" % "asm-all" % "3.3.1",
-    "com.google.protobuf" % "protobuf-java" % "2.3.0",
-    "de.javakaffee" % "kryo-serializers" % "0.9"
-  )) ++ assemblySettings ++ Seq(test in Assembly := {})
+  def coreSettings = sharedSettings ++ Seq(
+    name := "spark-core",
+    libraryDependencies ++= Seq(
+      "com.google.guava" % "guava" % "r09",
+      "log4j" % "log4j" % "1.2.16",
+      "org.slf4j" % "slf4j-api" % slf4jVersion,
+      "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
+      "com.ning" % "compress-lzf" % "0.8.4",
+      "org.apache.hadoop" % "hadoop-core" % "0.20.2",
+      "asm" % "asm-all" % "3.3.1",
+      "com.google.protobuf" % "protobuf-java" % "2.3.0",
+      "de.javakaffee" % "kryo-serializers" % "0.9"
+    )
+  ) ++ assemblySettings ++ Seq(test in Assembly := {})
 
-  def replSettings = sharedSettings ++
-      Seq(libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _))
+  def replSettings = sharedSettings ++ Seq(
+    name := "spark-repl",
+    libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
+  )
 
-  def examplesSettings = sharedSettings ++ Seq(libraryDependencies += "colt" % "colt" % "1.2.0")
+  def examplesSettings = sharedSettings ++ Seq(
+    name := "spark-examples",
+    libraryDependencies += "colt" % "colt" % "1.2.0"
+  )
 
-  def bagelSettings = sharedSettings
+  def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
 }
