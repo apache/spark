@@ -1,15 +1,10 @@
-resolvers += {
-  val typesafeRepoUrl = new java.net.URL("http://repo.typesafe.com/typesafe/releases")
-  val pattern = Patterns(false, "[organisation]/[module]/[sbtversion]/[revision]/[type]s/[module](-[classifier])-[revision].[ext]")
-  Resolver.url("Typesafe Repository", typesafeRepoUrl)(pattern)
-}
+resolvers ++= Seq(
+  "sbt-idea-repo" at "http://mpeltonen.github.com/maven/",
+  Classpaths.typesafeResolver
+)
 
-resolvers += "sbt-idea-repo" at "http://mpeltonen.github.com/maven/"
+addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "0.11.0-SNAPSHOT")
 
-libraryDependencies += "com.github.mpeltonen" %% "sbt-idea" % "0.10.0"
+addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse" % "1.4.0")
 
-libraryDependencies <<= (libraryDependencies, sbtVersion) { (deps, version) =>
-  deps :+ ("com.typesafe.sbteclipse" %% "sbteclipse" % "1.2" extra("sbtversion" -> version))
-}
-
-libraryDependencies <+= (sbtVersion) { sv => "com.eed3si9n" %% "sbt-assembly" % ("sbt" + sv + "_0.6") }
+addSbtPlugin("com.eed3si9n" %% "sbt-assembly" % "0.6")
