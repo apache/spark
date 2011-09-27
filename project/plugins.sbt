@@ -3,7 +3,7 @@ resolvers ++= Seq(
   Classpaths.typesafeResolver
 )
 
-addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "0.11.0-SNAPSHOT")
+addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "0.11.0")
 
 addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse" % "1.4.0")
 
