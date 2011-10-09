@@ -47,12 +47,21 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
   def combineByKey[C](createCombiner: V => C,
                       mergeValue: (C, V) => C,
                       mergeCombiners: (C, C) => C,
-                      numSplits: Int)
+                      numSplits: Int,
+                      partitioner: Partitioner)
   : RDD[(K, C)] =
   {
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    val partitioner = new HashPartitioner(numSplits)
     new ShuffledRDD(self, aggregator, partitioner)
+  }
+
+  def combineByKey[C](createCombiner: V => C,
+                      mergeValue: (C, V) => C,
+                      mergeCombiners: (C, C) => C,
+                      numSplits: Int)
+  : RDD[(K, C)] = {
+    combineByKey(createCombiner, mergeValue, mergeCombiners, numSplits,
+                 new HashPartitioner(numSplits))
   }
 
   def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {
