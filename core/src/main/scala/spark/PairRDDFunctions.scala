@@ -177,9 +177,11 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
       case Some(p) => p
       case None => new HashPartitioner(defaultParallelism)
     }
-    new CoGroupedRDD[K](Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]), part).map {
-      case (k, Seq(vs, ws)) =>
-        (k, (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]]))
+    val cg = new CoGroupedRDD[K](Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]), part)
+    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
+    prfs.mapValues {
+      case Seq(vs, ws) =>
+        (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
     }
   }
   
@@ -295,4 +297,8 @@ extends RDD[(K, U)](prev.context) {
       case (k, v) => f(v).map(x => (k, x))
     }.iterator
   }
+}
+
+object Manifests {
+  val seqSeqManifest = classManifest[Seq[Seq[_]]]
 }
