@@ -47,12 +47,21 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
   def combineByKey[C](createCombiner: V => C,
                       mergeValue: (C, V) => C,
                       mergeCombiners: (C, C) => C,
-                      numSplits: Int)
+                      numSplits: Int,
+                      partitioner: Partitioner)
   : RDD[(K, C)] =
   {
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    val partitioner = new HashPartitioner(numSplits)
     new ShuffledRDD(self, aggregator, partitioner)
+  }
+
+  def combineByKey[C](createCombiner: V => C,
+                      mergeValue: (C, V) => C,
+                      mergeCombiners: (C, C) => C,
+                      numSplits: Int)
+  : RDD[(K, C)] = {
+    combineByKey(createCombiner, mergeValue, mergeCombiners, numSplits,
+                 new HashPartitioner(numSplits))
   }
 
   def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {
@@ -66,6 +75,15 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
     val bufs = combineByKey[ArrayBuffer[V]](
       createCombiner _, mergeValue _, mergeCombiners _, numSplits)
     bufs.asInstanceOf[RDD[(K, Seq[V])]]
+  }
+
+  def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
+    def createCombiner(v: V) = ArrayBuffer(v)
+    def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
+    def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
+    val bufs = combineByKey[ArrayBuffer[V]](
+      createCombiner _, mergeValue _, mergeCombiners _, defaultParallelism, partitioner)
+    bufs.flatMapValues(buf => buf)
   }
 
   def join[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, W))] = {
@@ -168,9 +186,11 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
       case Some(p) => p
       case None => new HashPartitioner(defaultParallelism)
     }
-    new CoGroupedRDD[K](Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]), part).map {
-      case (k, Seq(vs, ws)) =>
-        (k, (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]]))
+    val cg = new CoGroupedRDD[K](Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]), part)
+    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
+    prfs.mapValues {
+      case Seq(vs, ws) =>
+        (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
     }
   }
   
@@ -286,4 +306,8 @@ extends RDD[(K, U)](prev.context) {
       case (k, v) => f(v).map(x => (k, x))
     }.iterator
   }
+}
+
+object Manifests {
+  val seqSeqManifest = classManifest[Seq[Seq[_]]]
 }
