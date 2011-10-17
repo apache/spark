@@ -25,7 +25,7 @@ object SparkBuild extends Build {
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
     publishTo <<= baseDirectory { base => Some(Resolver.file("Local", base / "target" / "maven" asFile)(Patterns(true, Resolver.mavenStyleBasePattern))) },
     libraryDependencies ++= Seq(
-      "org.eclipse.jetty" % "jetty-server" % "8.0.1.v20110908",
+      "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
       "org.scalatest" %% "scalatest" % "1.6.1" % "test",
       "org.scala-tools.testing" %% "scalacheck" % "1.9" % "test"
     ),
