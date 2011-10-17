@@ -77,12 +77,21 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
     bufs.asInstanceOf[RDD[(K, Seq[V])]]
   }
 
+  def groupByKey(partitioner: Partitioner): RDD[(K, Seq[V])] = {
+    def createCombiner(v: V) = ArrayBuffer(v)
+    def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
+    def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
+    val bufs = combineByKey[ArrayBuffer[V]](
+      createCombiner _, mergeValue _, mergeCombiners _, partitioner.numPartitions, partitioner)
+    bufs.asInstanceOf[RDD[(K, Seq[V])]]
+  }
+
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
     def createCombiner(v: V) = ArrayBuffer(v)
     def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
     def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
     val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, mergeCombiners _, defaultParallelism, partitioner)
+      createCombiner _, mergeValue _, mergeCombiners _, partitioner.numPartitions, partitioner)
     bufs.flatMapValues(buf => buf)
   }
 

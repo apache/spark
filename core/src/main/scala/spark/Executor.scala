@@ -22,6 +22,8 @@ class Executor extends org.apache.mesos.Executor with Logging {
   var threadPool: ExecutorService = null
   var env: SparkEnv = null
 
+  initLogging()
+
   override def init(d: ExecutorDriver, args: ExecutorArgs) {
     // Read spark.* system properties from executor arg
     val props = Utils.deserialize[Array[(String, String)]](args.getData.toByteArray)
