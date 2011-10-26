@@ -87,6 +87,13 @@ class Executor extends org.apache.mesos.Executor with Logging {
                              .build())
         }
         case t: Throwable => {
+          val reason = OtherFailure(t.toString())
+          d.sendStatusUpdate(TaskStatus.newBuilder()
+                             .setTaskId(desc.getTaskId)
+                             .setState(TaskState.TASK_FAILED)
+                             .setData(ByteString.copyFrom(Utils.serialize(reason)))
+                             .build())
+
           // TODO: Handle errors in tasks less dramatically
           logError("Exception in task ID " + tid, t)
           System.exit(1)

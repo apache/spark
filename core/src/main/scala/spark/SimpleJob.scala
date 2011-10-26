@@ -229,6 +229,8 @@ extends Job(jobId) with Logging
             if (tasksFinished == numTasks)
               sched.jobFinished(this)
             return
+          case otherFailure: OtherFailure =>
+            logInfo("Loss was due to %s".format(otherFailure.message))
           case _ => {}
         }
       }
