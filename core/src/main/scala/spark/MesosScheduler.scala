@@ -91,9 +91,9 @@ extends MScheduler with DAGScheduler with Logging
       setDaemon(true)
       override def run {
         val sched = MesosScheduler.this
-        sched.driver = new MesosSchedulerDriver(sched, master)
+        driver = new MesosSchedulerDriver(sched, frameworkName, getExecutorInfo, master)
         try {
-          val ret = sched.driver.run()
+          val ret = driver.run()
           logInfo("driver.run() returned with code " + ret)
         } catch {
           case e: Exception =>
@@ -103,9 +103,7 @@ extends MScheduler with DAGScheduler with Logging
     }.start
   }
 
-  override def getFrameworkName(d: SchedulerDriver): String = frameworkName
-  
-  override def getExecutorInfo(d: SchedulerDriver): ExecutorInfo = {
+  def getExecutorInfo(): ExecutorInfo = {
     val sparkHome = sc.getSparkHome match {
       case Some(path) => path
       case None =>
@@ -183,9 +181,9 @@ extends MScheduler with DAGScheduler with Logging
    * our active jobs for tasks in FIFO order. We fill each node with tasks in
    * a round-robin manner so that tasks are balanced across the cluster.
    */
-  override def resourceOffer(d: SchedulerDriver, oid: OfferID, offers: JList[SlaveOffer]) {
+  override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
-      val tasks = new JArrayList[TaskDescription]
+      val tasks = offers.map(o => new JArrayList[TaskDescription])
       val availableCpus = offers.map(o => getResource(o.getResourcesList(), "cpus"))
       val enoughMem = offers.map(o => {
         val mem = getResource(o.getResourcesList(), "mem")
@@ -199,7 +197,7 @@ extends MScheduler with DAGScheduler with Logging
           for (i <- 0 until offers.size if enoughMem(i)) {
             job.slaveOffer(offers(i), availableCpus(i)) match {
               case Some(task) =>
-                tasks.add(task)
+                tasks(i).add(task)
                 val tid = task.getTaskId.getValue
                 val sid = offers(i).getSlaveId.getValue
                 taskIdToJobId(tid) = job.getId
@@ -213,9 +211,10 @@ extends MScheduler with DAGScheduler with Logging
           }
         } while (launchedTask)
       }
-      val params = new JHashMap[String, String]
-      params.put("timeout", "1")
-      d.replyToOffer(oid, tasks, params) // TODO: use smaller timeout?
+      val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
+      for (i <- 0 until offers.size if tasks(i).size > 0) {
+        d.launchTasks(offers(i).getId(), tasks(i), filters)
+      }
     }
   }
 

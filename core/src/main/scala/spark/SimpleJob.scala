@@ -128,7 +128,7 @@ extends Job(jobId) with Logging
   }
 
   // Respond to an offer of a single slave from the scheduler by finding a task
-  def slaveOffer(offer: SlaveOffer, availableCpus: Double): Option[TaskDescription] = {
+  def slaveOffer(offer: Offer, availableCpus: Double): Option[TaskDescription] = {
     if (tasksLaunched < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
       val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
