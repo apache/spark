@@ -1,5 +1,7 @@
 package spark
 
+import scala.collection.immutable.NumericRange
+
 import org.scalatest.FunSuite
 import org.scalatest.prop.Checkers
 import org.scalacheck.Arbitrary._
@@ -157,5 +159,37 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
         ("equal sizes" |: slices.map(_.size).forall(x => x==d.size/n || x==d.size/n+1))
     }
     check(prop)
+  }
+  
+  test("exclusive ranges of longs") {
+    val data = 1L until 100L
+    val slices = ParallelCollection.slice(data, 3)
+    assert(slices.size === 3)
+    assert(slices.map(_.size).reduceLeft(_+_) === 99)
+    assert(slices.forall(_.isInstanceOf[NumericRange[_]]))
+  }
+  
+  test("inclusive ranges of longs") {
+    val data = 1L to 100L
+    val slices = ParallelCollection.slice(data, 3)
+    assert(slices.size === 3)
+    assert(slices.map(_.size).reduceLeft(_+_) === 100)
+    assert(slices.forall(_.isInstanceOf[NumericRange[_]]))
+  }
+  
+  test("exclusive ranges of doubles") {
+    val data = 1.0 until 100.0 by 1.0
+    val slices = ParallelCollection.slice(data, 3)
+    assert(slices.size === 3)
+    assert(slices.map(_.size).reduceLeft(_+_) === 99)
+    assert(slices.forall(_.isInstanceOf[NumericRange[_]]))
+  }
+  
+  test("inclusive ranges of doubles") {
+    val data = 1.0 to 100.0 by 1.0
+    val slices = ParallelCollection.slice(data, 3)
+    assert(slices.size === 3)
+    assert(slices.map(_.size).reduceLeft(_+_) === 100)
+    assert(slices.forall(_.isInstanceOf[NumericRange[_]]))
   }
 }

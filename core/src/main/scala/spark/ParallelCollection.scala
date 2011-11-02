@@ -1,6 +1,7 @@
 package spark
 
-import java.util.concurrent.atomic.AtomicLong
+import scala.collection.immutable.NumericRange
+import scala.collection.mutable.ArrayBuffer
 
 class ParallelCollectionSplit[T: ClassManifest](
     val rddId: Long, val slice: Int, values: Seq[T])
@@ -40,22 +41,34 @@ extends RDD[T](sc) {
 }
 
 private object ParallelCollection {
+  // Slice a collection into numSlices sub-collections. One extra thing we do here is
+  // to treat Range collections specially, encoding the slices as other Ranges to
+  // minimize memory cost. This makes it efficient to run Spark over RDDs representing
+  // large sets of numbers.
   def slice[T: ClassManifest](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
     if (numSlices < 1)
       throw new IllegalArgumentException("Positive number of slices required")
     seq match {
       case r: Range.Inclusive => {
         val sign = if (r.step < 0) -1 else 1
-        slice(new Range(r.start, r.end + sign, r.step).asInstanceOf[Seq[T]],
-              numSlices)
+        slice(new Range(r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
       }
       case r: Range => {
         (0 until numSlices).map(i => {
           val start = ((i * r.length.toLong) / numSlices).toInt
           val end = (((i+1) * r.length.toLong) / numSlices).toInt
-          new Range(
-            r.start + start * r.step, r.start + end * r.step, r.step)
+          new Range(r.start + start * r.step, r.start + end * r.step, r.step)
         }).asInstanceOf[Seq[Seq[T]]]
+      }
+      case nr: NumericRange[_] => { // For ranges of Long, Double, BigInteger, etc
+        val slices = new ArrayBuffer[Seq[T]](numSlices)
+        val sliceSize = (nr.size + numSlices - 1) / numSlices // Round up to catch everything
+        var r = nr
+        for (i <- 0 until numSlices) {
+          slices += r.take(sliceSize).asInstanceOf[Seq[T]]
+          r = r.drop(sliceSize)
+        }
+        slices
       }
       case _ => {
         val array = seq.toArray  // To prevent O(n^2) operations for List etc
