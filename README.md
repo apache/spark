@@ -12,8 +12,7 @@ file only contains basic setup instructions.
 
 ## Building
 
-Spark requires Scala 2.8. This version has been tested with 2.8.1.final.
-Experimental support for Scala 2.9 is available in the `scala-2.9` branch.
+Spark requires Scala 2.9.1. This version has been tested with 2.9.1.final.
 
 The project is built using Simple Build Tool (SBT), which is packaged with it.
 To build Spark and its example programs, run:
