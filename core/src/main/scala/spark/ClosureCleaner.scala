@@ -1,5 +1,7 @@
 package spark
 
+import java.lang.reflect.Field
+
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
@@ -9,23 +11,44 @@ import org.objectweb.asm.Opcodes._
 
 
 object ClosureCleaner extends Logging {
+  // Get an ASM class reader for a given class from the JAR that loaded it
   private def getClassReader(cls: Class[_]): ClassReader = {
     new ClassReader(cls.getResourceAsStream(
       cls.getName.replaceFirst("^.*\\.", "") + ".class"))
   }
+
+  // Check whether a class represents a Scala closure
+  private def isClosure(cls: Class[_]): Boolean = {
+    cls.getName.contains("$anonfun$")
+  }
   
+  // Get a list of the classes of the outer objects of a given closure object, obj;
+  // the outer objects are defined as any closures that obj is nested within, plus
+  // possibly the class that the outermost closure is in, if any. We stop searching
+  // for outer objects beyond that because cloning the user's object is probably
+  // not a good idea (whereas we can clone closure objects just fine since we
+  // understand how all their fields are used).
   private def getOuterClasses(obj: AnyRef): List[Class[_]] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
-      return f.getType :: getOuterClasses(f.get(obj))
+      if (isClosure(f.getType)) {
+        return f.getType :: getOuterClasses(f.get(obj))
+      } else {
+        return f.getType :: Nil // Stop at the first $outer that is not a closure
+      }
     }
     return Nil
   }
   
+  // Get a list of the outer objects for a given closure object.
   private def getOuterObjects(obj: AnyRef): List[AnyRef] = {
     for (f <- obj.getClass.getDeclaredFields if f.getName == "$outer") {
       f.setAccessible(true)
-      return f.get(obj) :: getOuterObjects(f.get(obj))
+      if (isClosure(f.getType)) {
+        return f.get(obj) :: getOuterObjects(f.get(obj))
+      } else {
+        return f.get(obj) :: Nil // Stop at the first $outer that is not a closure
+      }
     }
     return Nil
   }
@@ -66,18 +89,27 @@ object ClosureCleaner extends Logging {
       getClassReader(cls).accept(new FieldAccessFinder(accessedFields), 0)
     //logInfo("accessedFields: " + accessedFields)
 
-    val isInterpNull = {
+    val inInterpreter = {
       try {
-        val klass = Class.forName("spark.repl.Main")
-        klass.getMethod("interp").invoke(null) == null
+        val interpClass = Class.forName("spark.repl.Main")
+        interpClass.getMethod("interp").invoke(null) != null
       } catch {
         case _: ClassNotFoundException => true
       }
     }
 
+    var outerPairs: List[(Class[_], AnyRef)] = (outerClasses zip outerObjects).reverse
     var outer: AnyRef = null
-    for ((cls, obj) <- (outerClasses zip outerObjects).reverse) {
-      outer = instantiateClass(cls, outer, isInterpNull);
+    if (outerPairs.size > 0 && !isClosure(outerPairs.head._1)) {
+      // The closure is ultimately nested inside a class; keep the object of that
+      // class without cloning it since we don't want to clone the user's objects.
+      outer = outerPairs.head._2
+      outerPairs = outerPairs.tail
+    }
+    // Clone the closure objects themselves, nulling out any fields that are not
+    // used in the closure we're working on or any of its inner closures.
+    for ((cls, obj) <- outerPairs) {
+      outer = instantiateClass(cls, outer, inInterpreter);
       for (fieldName <- accessedFields(cls)) {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)
@@ -95,8 +127,9 @@ object ClosureCleaner extends Logging {
     }
   }
   
-  private def instantiateClass(cls: Class[_], outer: AnyRef, isInterpNull: Boolean): AnyRef = {
-    if (isInterpNull) {
+  private def instantiateClass(cls: Class[_], outer: AnyRef, inInterpreter: Boolean): AnyRef = {
+    //logInfo("Creating a " + cls + " with outer = " + outer)
+    if (!inInterpreter) {
       // This is a bona fide closure class, whose constructor has no effects
       // other than to set its fields, so use its constructor
       val cons = cls.getConstructors()(0)
