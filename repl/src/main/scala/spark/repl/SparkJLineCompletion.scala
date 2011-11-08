@@ -15,7 +15,7 @@ import collection.mutable.ListBuffer
 
 // REPL completor - queries supplied interpreter for valid
 // completions based on current contents of buffer.
-class JLineCompletion(val intp: SparkIMain) extends Completion with CompletionOutput {
+class SparkJLineCompletion(val intp: SparkIMain) extends Completion with CompletionOutput {
   val global: intp.global.type = intp.global
   import global._
   import definitions.{ PredefModule, RootClass, AnyClass, AnyRefClass, ScalaPackage, JavaLangPackage }

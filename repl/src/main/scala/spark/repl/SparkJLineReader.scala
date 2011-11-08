@@ -73,7 +73,7 @@ class SparkJLineReader(val completion: Completion) extends InteractiveReader {
   def readOneKey(prompt: String)  = consoleReader readOneKey prompt
 }
 
-object JLineReader {
-  def apply(intp: SparkIMain): JLineReader = apply(new JLineCompletion(intp))
-  def apply(comp: Completion): JLineReader = new JLineReader(comp)
+object SparkJLineReader {
+  def apply(intp: SparkIMain): SparkJLineReader = apply(new SparkJLineCompletion(intp))
+  def apply(comp: Completion): SparkJLineReader = new SparkJLineReader(comp)
 }

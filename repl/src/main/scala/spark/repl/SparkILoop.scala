@@ -802,13 +802,13 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
   def chooseReader(settings: Settings): InteractiveReader = {
     if (settings.Xnojline.value || Properties.isEmacsShell)
       SimpleReader()
-    else try JLineReader(
+    else try SparkJLineReader(
       if (settings.noCompletion.value) NoCompletion
-      else new JLineCompletion(intp)
+      else new SparkJLineCompletion(intp)
     )
     catch {
       case ex @ (_: Exception | _: NoClassDefFoundError) =>
-        echo("Failed to created JLineReader: " + ex + "\nFalling back to SimpleReader.")
+        echo("Failed to created SparkJLineReader: " + ex + "\nFalling back to SimpleReader.")
         SimpleReader()
     }
   }
@@ -985,7 +985,7 @@ object SparkILoop {
     repl.settings = new Settings(echo)
     repl.settings.embeddedDefaults[T]
     repl.createInterpreter()
-    repl.in = JLineReader(repl)
+    repl.in = SparkJLineReader(repl)
     
     // rebind exit so people don't accidentally call sys.exit by way of predef
     repl.quietRun("""def exit = println("Type :quit to resume program execution.")""")
