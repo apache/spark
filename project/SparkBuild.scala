@@ -1,6 +1,7 @@
 import sbt._
 import Keys._
-import sbtassembly.Plugin.{assemblySettings, Assembly}
+import sbtassembly.Plugin._
+import AssemblyKeys._
 
 object SparkBuild extends Build {
 
@@ -49,7 +50,7 @@ object SparkBuild extends Build {
       "com.google.protobuf" % "protobuf-java" % "2.3.0",
       "de.javakaffee" % "kryo-serializers" % "0.9"
     )
-  ) ++ assemblySettings ++ Seq(test in Assembly := {})
+  ) ++ assemblySettings ++ Seq(test in assembly := {})
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
