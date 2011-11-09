@@ -212,7 +212,7 @@ extends MScheduler with DAGScheduler with Logging
         } while (launchedTask)
       }
       val filters = Filters.newBuilder().setRefuseSeconds(1).build() // TODO: lower timeout?
-      for (i <- 0 until offers.size if tasks(i).size > 0) {
+      for (i <- 0 until offers.size) {
         d.launchTasks(offers(i).getId(), tasks(i), filters)
       }
     }
