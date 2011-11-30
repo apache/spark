@@ -133,7 +133,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     val cleanF = sc.clean(f)
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext)
-        Some(iter.reduceLeft(f))
+        Some(iter.reduceLeft(cleanF))
       else
         None
     }
@@ -144,7 +144,36 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     if (results.size == 0)
       throw new UnsupportedOperationException("empty collection")
     else
-      return results.reduceLeft(f)
+      return results.reduceLeft(cleanF)
+  }
+
+  /**
+   * Aggregate the elements of each partition, and then the results for all the
+   * partitions, using a given associative function and a neutral "zero value".
+   * The function op(t1, t2) is allowed to modify t1 and return it as its result
+   * value to avoid object allocation; however, it should not modify t2.
+   */
+  def fold(zeroValue: T)(op: (T, T) => T): T = {
+    val cleanOp = sc.clean(op)
+    val results = sc.runJob(this, (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp))
+    return results.fold(zeroValue)(cleanOp)
+  }
+
+  /**
+   * Aggregate the elements of each partition, and then the results for all the
+   * partitions, using given combine functions and a neutral "zero value". This
+   * function can return a different result type, U, than the type of this RDD, T.
+   * Thus, we need one operation for merging a T into an U and one operation for
+   * merging two U's, as in scala.TraversableOnce. Both of these functions are
+   * allowed to modify and return their first argument instead of creating a new U
+   * to avoid memory allocation.
+   */
+  def aggregate[U: ClassManifest](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = {
+    val cleanSeqOp = sc.clean(seqOp)
+    val cleanCombOp = sc.clean(combOp)
+    val results = sc.runJob(this,
+      (iter: Iterator[T]) => iter.aggregate(zeroValue)(cleanSeqOp, cleanCombOp))
+    return results.fold(zeroValue)(cleanCombOp)
   }
   
   def count(): Long = {
