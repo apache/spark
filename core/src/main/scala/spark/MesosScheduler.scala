@@ -30,7 +30,8 @@ extends MScheduler with DAGScheduler with Logging
   val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
     "SPARK_MEM",
     "SPARK_CLASSPATH",
-    "SPARK_LIBRARY_PATH"
+    "SPARK_LIBRARY_PATH",
+    "SPARK_JAVA_OPTS"
   )
 
   // Memory used by each executor (in megabytes)
