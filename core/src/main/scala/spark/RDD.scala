@@ -95,9 +95,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   	var fraction = 0.0
   	var total = 0
   	var multiplier = 3.0
+  	var initialCount = count()
 	
-  	if (num > count()) {
-  		total = Math.min(count().toInt, Integer.MAX_VALUE)
+  	if (num > initialCount) {
+  		total = Math.min(initialCount, Integer.MAX_VALUE)
+  		total = total.toInt
   		fraction = 1.0
   	}
   	else if (num < 0) {
@@ -109,12 +111,12 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   	}
 	
   	var r = new SampledRDD(this, withReplacement, fraction, seed)
+    var samples = r.collect()
 	
-  	while (r.count() < total) {
+  	while (samples.length < total) {
   		r = new SampledRDD(this, withReplacement, fraction, seed)
   	}
 	
-  	var samples = r.collect()
   	var arr = new Array[T](total)
 	
   	for (i <- 0 to total - 1) {
