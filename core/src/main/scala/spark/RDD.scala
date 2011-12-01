@@ -97,7 +97,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   	var multiplier = 3.0
 	
   	if (num > count()) {
-  		total = Math.min(count().toInt)
+  		total = Math.min(count().toInt, Integer.MAX_VALUE)
   		fraction = 1.0
   	}
   	else if (num < 0) {
