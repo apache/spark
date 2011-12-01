@@ -115,4 +115,17 @@ class FileSuite extends FunSuite {
     assert(output.collect().toList === List((1, "a"), (2, "aa"), (3, "aaa")))
     sc.stop()
   }
+
+  test("write SequenceFile using new Hadoop API") {
+    import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
+    val sc = new SparkContext("local", "test")
+    val tempDir = Files.createTempDir()
+    val outputDir = new File(tempDir, "output").getAbsolutePath
+    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), new Text("a" * x)))
+    nums.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, Text]](
+        outputDir)
+    val output = sc.sequenceFile[IntWritable, Text](outputDir)
+    assert(output.map(_.toString).collect().toList === List("(1,a)", "(2,aa)", "(3,aaa)"))
+    sc.stop()
+  }
 }

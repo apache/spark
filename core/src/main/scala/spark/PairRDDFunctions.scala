@@ -7,11 +7,13 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.HashSet
 import java.util.Random
 import java.util.Date
+import java.text.SimpleDateFormat
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
@@ -24,6 +26,13 @@ import org.apache.hadoop.mapred.OutputCommitter
 import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
 import org.apache.hadoop.mapred.TextOutputFormat
+
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
+import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
+import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
+import org.apache.hadoop.mapreduce.TaskAttemptID
+import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import SparkContext._
 
@@ -238,6 +247,52 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)]) ex
 
   def saveAsHadoopFile [F <: OutputFormat[K, V]] (path: String) (implicit fm: ClassManifest[F]) {
     saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+  }
+  
+  def saveAsNewAPIHadoopFile [F <: NewOutputFormat[K, V]] (path: String) (implicit fm: ClassManifest[F]) {
+    saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+  }
+
+  def saveAsNewAPIHadoopFile(path: String,
+                             keyClass: Class[_],
+                             valueClass: Class[_],
+                             outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
+    val job = new NewAPIHadoopJob
+    job.setOutputKeyClass(keyClass)
+    job.setOutputValueClass(valueClass)
+    val wrappedConf = new SerializableWritable(job.getConfiguration)
+    NewFileOutputFormat.setOutputPath(job, new Path(path))
+    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+    val jobtrackerID = formatter.format(new Date())
+    val stageId = self.id
+    def writeShard(context: spark.TaskContext, iter: Iterator[(K,V)]): Int = {
+      /* "reduce task" <split #> <attempt # = spark task #> */
+      val attemptId = new TaskAttemptID(jobtrackerID,
+        stageId, false, context.splitId, context.attemptId)
+      val hadoopContext = new TaskAttemptContext(wrappedConf.value, attemptId)
+      val format = outputFormatClass.newInstance
+      val committer = format.getOutputCommitter(hadoopContext)
+      committer.setupTask(hadoopContext)
+      val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
+      while (iter.hasNext) {
+        val (k, v) = iter.next
+        writer.write(k, v)
+      }
+      writer.close(hadoopContext)
+      committer.commitTask(hadoopContext)
+      return 1
+    }
+    val jobFormat = outputFormatClass.newInstance
+    /* apparently we need a TaskAttemptID to construct an OutputCommitter;
+     * however we're only going to use this local OutputCommitter for
+     * setupJob/commitJob, so we just use a dummy "map" task.
+     */
+    val jobAttemptId = new TaskAttemptID(jobtrackerID, stageId, true, 0, 0)
+    val jobTaskContext = new TaskAttemptContext(wrappedConf.value, jobAttemptId)
+    val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
+    jobCommitter.setupJob(jobTaskContext)
+    val count = self.context.runJob(self, writeShard _).sum
+    jobCommitter.cleanupJob(jobTaskContext)
   }
 
   def saveAsHadoopFile(path: String,
