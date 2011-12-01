@@ -15,7 +15,7 @@ object LocalFileLR {
   }
 
   def main(args: Array[String]) {
-    val lines = scala.io.Source.fromFile(args(0)).getLines()
+    val lines = scala.io.Source.fromFile(args(0)).getLines().toArray
     val points = lines.map(parsePoint _)
     val ITERATIONS = args(1).toInt
 
