@@ -6,6 +6,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.actors.remote.RemoteActor
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.SequenceFileInputFormat
 import org.apache.hadoop.io.Writable
@@ -21,6 +23,10 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.FileInputFormat
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.TextInputFormat
+
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
 
 import spark.broadcast._
 
@@ -122,6 +128,29 @@ extends Logging {
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
       (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F]): RDD[(K, V)] =
     hadoopFile[K, V, F](path, defaultMinSplits)
+
+  /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
+  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](path: String)
+      (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F]): RDD[(K, V)] = {
+      val job = new NewHadoopJob
+      NewFileInputFormat.addInputPath(job, new Path(path))
+      val conf = job.getConfiguration
+      newAPIHadoopFile(path,
+                       fm.erasure.asInstanceOf[Class[F]],
+                       km.erasure.asInstanceOf[Class[K]],
+                       vm.erasure.asInstanceOf[Class[V]],
+                       conf)
+  }
+
+  /** Get an RDD for a given Hadoop file with an arbitrary new API InputFormat and extra
+   * configuration options to pass to the input format.
+   */
+  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](path: String,
+                                                  fClass: Class[F],
+                                                  kClass: Class[K],
+                                                  vClass: Class[V],
+                                                  conf: Configuration): RDD[(K, V)] =
+      new NewHadoopRDD(this, fClass, kClass, vClass, conf)
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types */
   def sequenceFile[K, V](path: String,
