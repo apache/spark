@@ -19,6 +19,7 @@ case class CompletionEvent(task: DAGTask[_], reason: TaskEndReason, result: Any,
 sealed trait TaskEndReason
 case object Success extends TaskEndReason
 case class FetchFailed(serverUri: String, shuffleId: Int, mapId: Int, reduceId: Int) extends TaskEndReason
+case class ExceptionFailure(exception: Throwable) extends TaskEndReason
 case class OtherFailure(message: String) extends TaskEndReason
 
 /**
