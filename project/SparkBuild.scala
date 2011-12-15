@@ -39,6 +39,10 @@ object SparkBuild extends Build {
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
+    resolvers ++= Seq(
+      "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
+      "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/"
+    ),
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "r09",
       "log4j" % "log4j" % "1.2.16",
@@ -48,7 +52,10 @@ object SparkBuild extends Build {
       "org.apache.hadoop" % "hadoop-core" % "0.20.2",
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.3.0",
-      "de.javakaffee" % "kryo-serializers" % "0.9"
+      "de.javakaffee" % "kryo-serializers" % "0.9",
+      "se.scalablesolutions.akka" % "akka-actor" % "1.2",
+      "se.scalablesolutions.akka" % "akka-remote" % "1.2",
+      "org.jboss.netty" % "netty" % "3.2.6.Final"
     )
   ) ++ assemblySettings ++ Seq(test in assembly := {})
 
