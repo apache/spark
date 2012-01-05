@@ -5,8 +5,12 @@ import org.scalatest.prop.Checkers
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
 import org.scalacheck.Prop._
-import SparkContext._
+
+import com.google.common.io.Files
+
 import scala.collection.mutable.ArrayBuffer
+
+import SparkContext._
 
 class ShuffleSuite extends FunSuite {
   test("groupByKey") {
@@ -186,4 +190,14 @@ class ShuffleSuite extends FunSuite {
     sc.stop()
   }
 
+  test("zero-partition RDD") {
+    val sc = new SparkContext("local", "test")
+    val emptyDir = Files.createTempDir()
+    val file = sc.textFile(emptyDir.getAbsolutePath)
+    assert(file.splits.size == 0)
+    assert(file.collect().toList === Nil)
+    // Test that a shuffle on the file works, because this used to be a bug
+    assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
+    sc.stop()
+  }
 }

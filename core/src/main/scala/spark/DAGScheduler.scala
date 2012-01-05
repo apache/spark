@@ -87,9 +87,12 @@ private trait DAGScheduler extends Scheduler with Logging {
   }
 
   def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_,_]]): Stage = {
-    // Kind of ugly: need to register RDDs with the cache here since
-    // we can't do it in its constructor because # of splits is unknown
+    // Kind of ugly: need to register RDDs with the cache and map output tracker here
+    // since we can't do it in the RDD constructor because # of splits is unknown
     cacheTracker.registerRDD(rdd.id, rdd.splits.size)
+    if (shuffleDep != None) {
+      mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.splits.size)
+    }
     val id = newStageId()
     val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd))
     idToStage(id) = stage

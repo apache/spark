@@ -51,13 +51,16 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
     val port = System.getProperty("spark.master.port").toInt
     trackerActor = RemoteActor.select(Node(host, port), 'MapOutputTracker)
   }
-  
-  def registerMapOutput(shuffleId: Int, numMaps: Int, mapId: Int, serverUri: String) {
-    var array = serverUris.get(shuffleId)
-    if (array == null) {
-      array = Array.fill[String](numMaps)(null)
-      serverUris.put(shuffleId, array)
+
+  def registerShuffle(shuffleId: Int, numMaps: Int) {
+    if (serverUris.get(shuffleId) != null) {
+      throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
+    serverUris.put(shuffleId, new Array[String](numMaps))
+  }
+  
+  def registerMapOutput(shuffleId: Int, mapId: Int, serverUri: String) {
+    var array = serverUris.get(shuffleId)
     array.synchronized {
       array(mapId) = serverUri
     }
