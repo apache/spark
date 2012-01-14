@@ -238,7 +238,7 @@ private trait DAGScheduler extends Scheduler with Logging {
             case smt: ShuffleMapTask =>
               val stage = idToStage(smt.stageId)
               stage.addOutputLoc(smt.partition, evt.result.asInstanceOf[String])
-              if (pendingTasks(stage).isEmpty) {
+              if (running.contains(stage) && pendingTasks(stage).isEmpty) {
                 logInfo(stage + " finished; looking for newly runnable stages")
                 running -= stage
                 if (stage.shuffleDep != None) {

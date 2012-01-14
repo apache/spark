@@ -58,11 +58,15 @@ extends Logging {
   private var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
+    // Regular expression for local[N, maxRetries], used in tests with failing tasks
+    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
     master match {
       case "local" =>
-        new LocalScheduler(1)
+        new LocalScheduler(1, 0)
       case LOCAL_N_REGEX(threads) =>
-        new LocalScheduler(threads.toInt)
+        new LocalScheduler(threads.toInt, 0)
+      case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
+        new LocalScheduler(threads.toInt, maxFailures.toInt)
       case _ =>
         System.loadLibrary("mesos")
         new MesosScheduler(this, master, frameworkName)
