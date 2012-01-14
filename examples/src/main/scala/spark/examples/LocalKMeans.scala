@@ -7,13 +7,20 @@ import spark.SparkContext._
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-object SparkKMeans {
+object LocalKMeans {
+	val N = 1000
 	val R = 1000   	// Scaling factor
+	val D = 10
+	val K = 10
+	val convergeDist = 0.001
 	val rand = new Random(42)
   	
-	def parseVector(line: String): Vector = {
-	    return new Vector(line.split(' ').map(_.toDouble))
-	}
+	def generateData = {
+	    def generatePoint(i: Int) = {
+	      Vector(D, _ => rand.nextDouble * R)
+	    }
+	    Array.tabulate(N)(generatePoint)
+	  }
 	
 	def closestPoint(p: Vector, centers: HashMap[Int, Vector]): Int = {
 		var index = 0
@@ -33,30 +40,30 @@ object SparkKMeans {
 	}
 
 	def main(args: Array[String]) {
-		if (args.length < 4) {
-	      System.err.println("Usage: SparkLocalKMeans <master> <file> <k> <convergeDist>")
-	      System.exit(1)
-	    }
-	    val sc = new SparkContext(args(0), "SparkLocalKMeans")
-	    val lines = sc.textFile(args(1))
-	    val data = lines.map(parseVector _).cache()
-	   	val K = args(2).toInt
-	    val convergeDist = args(3).toDouble
-	
-		var points = data.takeSample(false, K, 42)
+	  val data = generateData
+		var points = new HashSet[Vector]
 		var kPoints = new HashMap[Int, Vector]
 		var tempDist = 1.0
 		
-		for (i <- 1 to points.size) {
-			kPoints.put(i, points(i-1))
+		while (points.size < K) {
+			points.add(data(rand.nextInt(N)))
 		}
+		
+		val iter = points.iterator
+		for (i <- 1 to points.size) {
+			kPoints.put(i, iter.next())
+		}
+
+		println("Initial centers: " + kPoints)
 
 		while(tempDist > convergeDist) {
 			var closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 			
-			var pointStats = closest.reduceByKey {case ((x1, y1), (x2, y2)) => (x1 + x2, y1+y2)}
+			var mappings = closest.groupBy[Int] (x => x._1)
 			
-			var newPoints = pointStats.map {mapping => (mapping._1, mapping._2._1/mapping._2._2)}.collect()
+			var pointStats = mappings.map(pair => pair._2.reduceLeft [(Int, (Vector, Int))] {case ((id1, (x1, y1)), (id2, (x2, y2))) => (id1, (x1 + x2, y1+y2))})
+			
+			var newPoints = pointStats.map {mapping => (mapping._1, mapping._2._1/mapping._2._2)}
 			
 			tempDist = 0.0
 			for (mapping <- newPoints) {
