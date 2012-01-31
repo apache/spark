@@ -38,12 +38,10 @@ object SparkLR {
 
     for (i <- 1 to ITERATIONS) {
       println("On iteration " + i)
-      val gradient = sc.accumulator(Vector.zeros(D))
-      for (p <- sc.parallelize(data, numSlices)) {
-        val scale = (1 / (1 + exp(-p.y * (w dot p.x))) - 1) * p.y
-        gradient +=  scale * p.x
-      }
-      w -= gradient.value
+      val gradient = sc.parallelize(data, numSlices).map { p =>
+        (1 / (1 + exp(-p.y * (w dot p.x))) - 1) * p.y * p.x
+      }.reduce(_ + _)
+      w -= gradient
     }
 
     println("Final w: " + w)

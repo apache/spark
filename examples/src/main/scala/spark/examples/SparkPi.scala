@@ -12,12 +12,12 @@ object SparkPi {
     }
     val spark = new SparkContext(args(0), "SparkPi")
     val slices = if (args.length > 1) args(1).toInt else 2
-    var count = spark.accumulator(0)
-    for (i <- spark.parallelize(1 to 100000, slices)) {
+    val n = 100000 * slices
+    val count = spark.parallelize(1 to n, slices).map { i =>
       val x = random * 2 - 1
       val y = random * 2 - 1
-      if (x*x + y*y < 1) count += 1
-    }
-    println("Pi is roughly " + 4 * count.value / 100000.0)
+      if (x*x + y*y < 1) 1 else 0
+    }.reduce(_ + _)
+    println("Pi is roughly " + 4.0 * count / n)
   }
 }
