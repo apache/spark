@@ -180,6 +180,16 @@ class KryoSerializer extends Serializer with Logging {
     kryo.register(mutable.HashMap().getClass, new ScalaMapSerializer(mutable.HashMap() ++ _))
     // TODO: add support for immutable maps too; this is more annoying because there are many
     // subclasses of immutable.Map for small maps (with <= 4 entries)
+    val map1  = Map[Any, Any](1 -> 1)
+    val map2  = Map[Any, Any](1 -> 1, 2 -> 2)
+    val map3  = Map[Any, Any](1 -> 1, 2 -> 2, 3 -> 3)
+    val map4  = Map[Any, Any](1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4)
+    val map5  = Map[Any, Any](1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4, 5 -> 5)
+    kryo.register(map1.getClass, new ScalaMapSerializer(mutable.HashMap() ++ _ toMap))
+    kryo.register(map2.getClass, new ScalaMapSerializer(mutable.HashMap() ++ _ toMap))
+    kryo.register(map3.getClass, new ScalaMapSerializer(mutable.HashMap() ++ _ toMap))
+    kryo.register(map4.getClass, new ScalaMapSerializer(mutable.HashMap() ++ _ toMap))
+    kryo.register(map5.getClass, new ScalaMapSerializer(mutable.HashMap() ++ _ toMap))
 
     // Allow the user to register their own classes by setting spark.kryo.registrator
     val regCls = System.getProperty("spark.kryo.registrator")
