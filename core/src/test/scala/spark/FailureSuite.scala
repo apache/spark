@@ -14,7 +14,7 @@ object FailureSuiteState {
   var tasksRun = 0
   var tasksFailed = 0
 
-  def clear() {
+  def clear(): Unit = synchronized {
     tasksRun = 0
     tasksFailed = 0
   }
@@ -28,13 +28,9 @@ class FailureSuite extends FunSuite {
     val results = sc.makeRDD(1 to 3, 3).map { x =>
       FailureSuiteState.synchronized {
         FailureSuiteState.tasksRun += 1
-      }
-      if (x == 1) {
-        FailureSuiteState.synchronized {
-          if (FailureSuiteState.tasksFailed == 0) {
-            FailureSuiteState.tasksFailed += 1
-            throw new Exception("Intentional task failure")
-          }
+        if (x == 1 && FailureSuiteState.tasksFailed == 0) {
+          FailureSuiteState.tasksFailed += 1
+          throw new Exception("Intentional task failure")
         }
       }
       x * x
@@ -54,13 +50,9 @@ class FailureSuite extends FunSuite {
       case (k, v) => 
         FailureSuiteState.synchronized {
           FailureSuiteState.tasksRun += 1
-        }
-        if (k == 1) {
-          FailureSuiteState.synchronized {
-            if (FailureSuiteState.tasksFailed == 0) {
-              FailureSuiteState.tasksFailed += 1
-              throw new Exception("Intentional task failure")
-            }
+          if (k == 1 && FailureSuiteState.tasksFailed == 0) {
+            FailureSuiteState.tasksFailed += 1
+            throw new Exception("Intentional task failure")
           }
         }
         (k, v(0) * v(0))
