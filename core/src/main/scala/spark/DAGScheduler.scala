@@ -152,7 +152,7 @@ private trait DAGScheduler extends Scheduler with Logging {
   override def runJob[T, U](finalRdd: RDD[T], func: (TaskContext, Iterator[T]) => U,
                             partitions: Seq[Int], allowLocal: Boolean)
                            (implicit m: ClassManifest[U])
-      : Array[U] = {
+      : Array[U] = synchronized {
     val outputParts = partitions.toArray
     val numOutputParts: Int = partitions.size
     val finalStage = newStage(finalRdd, None)
