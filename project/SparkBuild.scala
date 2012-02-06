@@ -44,7 +44,7 @@ object SparkBuild extends Build {
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/"
     ),
     libraryDependencies ++= Seq(
-      "com.google.guava" % "guava" % "r09",
+      "com.google.guava" % "guava" % "11.0.1",
       "log4j" % "log4j" % "1.2.16",
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
@@ -55,7 +55,8 @@ object SparkBuild extends Build {
       "de.javakaffee" % "kryo-serializers" % "0.9",
       "se.scalablesolutions.akka" % "akka-actor" % "1.2",
       "se.scalablesolutions.akka" % "akka-remote" % "1.2",
-      "org.jboss.netty" % "netty" % "3.2.6.Final"
+      "org.jboss.netty" % "netty" % "3.2.6.Final",
+      "it.unimi.dsi" % "fastutil" % "6.4.2"
     )
   ) ++ assemblySettings ++ Seq(test in assembly := {})
 
