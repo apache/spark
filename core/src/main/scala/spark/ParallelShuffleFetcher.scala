@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
+import it.unimi.dsi.fastutil.io.FastBufferedInputStream
+
 
 class ParallelShuffleFetcher extends ShuffleFetcher with Logging {
   val parallelFetches = System.getProperty("spark.parallel.fetches", "3").toInt
@@ -60,7 +62,7 @@ class ParallelShuffleFetcher extends ShuffleFetcher with Logging {
                 if (len == -1)
                   throw new SparkException("Content length was not specified by server")
                 val buf = new Array[Byte](len)
-                val in = conn.getInputStream()
+                val in = new FastBufferedInputStream(conn.getInputStream())
                 var pos = 0
                 while (pos < len) {
                   val n = in.read(buf, pos, len-pos)

@@ -6,6 +6,8 @@ import java.net.URL
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
+import it.unimi.dsi.fastutil.io.FastBufferedInputStream
+
 
 class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
   def fetch[K, V](shuffleId: Int, reduceId: Int, func: (K, V) => Unit) {
@@ -22,7 +24,8 @@ class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
           val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, reduceId)
           // TODO: multithreaded fetch
           // TODO: would be nice to retry multiple times
-          val inputStream = ser.inputStream(new URL(url).openStream())
+          val inputStream = ser.inputStream(
+              new FastBufferedInputStream(new URL(url).openStream()))
           try {
             while (true) {
               val pair = inputStream.readObject().asInstanceOf[(K, V)]

@@ -5,6 +5,8 @@ import java.io.FileOutputStream
 import java.io.ObjectOutputStream
 import java.util.{HashMap => JHashMap}
 
+import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
+
 
 class ShuffleMapTask(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_], val partition: Int, locs: Seq[String])
 extends DAGTask[String](stageId) with Logging {
@@ -29,7 +31,7 @@ extends DAGTask[String](stageId) with Logging {
     val ser = SparkEnv.get.serializer.newInstance()
     for (i <- 0 until numOutputSplits) {
       val file = LocalFileShuffle.getOutputFile(dep.shuffleId, partition, i)
-      val out = ser.outputStream(new BufferedOutputStream(new FileOutputStream(file)))
+      val out = ser.outputStream(new FastBufferedOutputStream(new FileOutputStream(file)))
       val iter = buckets(i).entrySet().iterator()
       while (iter.hasNext()) {
         val entry = iter.next()

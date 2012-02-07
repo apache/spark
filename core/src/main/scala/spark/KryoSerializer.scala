@@ -65,11 +65,13 @@ object ZigZag {
 
 class KryoSerializationStream(kryo: Kryo, buf: ByteBuffer, out: OutputStream)
 extends SerializationStream {
+  val channel = Channels.newChannel(out)
+
   def writeObject[T](t: T) {
     kryo.writeClassAndObject(buf, t)
     ZigZag.writeInt(buf.position(), out)
     buf.flip()
-    Channels.newChannel(out).write(buf)
+    channel.write(buf)
     buf.clear()
   }
 
