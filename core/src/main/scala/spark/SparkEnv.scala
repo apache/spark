@@ -30,8 +30,10 @@ object SparkEnv {
 
     val mapOutputTracker = new MapOutputTracker(isMaster)
 
-    val shuffleFetcherClass = System.getProperty("spark.shuffle.fetcher", "spark.SimpleShuffleFetcher")
-    val shuffleFetcher = Class.forName(shuffleFetcherClass).newInstance().asInstanceOf[ShuffleFetcher]
+    val shuffleFetcherClass = 
+      System.getProperty("spark.shuffle.fetcher", "spark.SimpleShuffleFetcher")
+    val shuffleFetcher = 
+      Class.forName(shuffleFetcherClass).newInstance().asInstanceOf[ShuffleFetcher]
 
     new SparkEnv(cache, serializer, cacheTracker, mapOutputTracker, shuffleFetcher)
   }

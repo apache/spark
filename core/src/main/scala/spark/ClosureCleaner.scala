@@ -9,7 +9,6 @@ import org.objectweb.asm.{ClassReader, MethodVisitor, Type}
 import org.objectweb.asm.commons.EmptyVisitor
 import org.objectweb.asm.Opcodes._
 
-
 object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
   private def getClassReader(cls: Class[_]): ClassReader = {
@@ -153,7 +152,6 @@ object ClosureCleaner extends Logging {
     }
   }
 }
-
 
 class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends EmptyVisitor {
   override def visitMethod(access: Int, name: String, desc: String,

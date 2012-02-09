@@ -7,16 +7,24 @@ class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Seriali
 }
 
 class SampledRDD[T: ClassManifest](
-  prev: RDD[T], withReplacement: Boolean, frac: Double, seed: Int)
-extends RDD[T](prev.context) {
+  prev: RDD[T],
+  withReplacement: Boolean, 
+  frac: Double,
+  seed: Int
+  ) extends RDD[T](prev.context) {
 
-  @transient val splits_ = { val rg = new Random(seed); prev.splits.map(x => new SampledRDDSplit(x, rg.nextInt)) }
+  @transient
+  val splits_ = {
+    val rg = new Random(seed);
+    prev.splits.map(x => new SampledRDDSplit(x, rg.nextInt))
+  }
 
   override def splits = splits_.asInstanceOf[Array[Split]]
 
   override val dependencies = List(new OneToOneDependency(prev))
   
-  override def preferredLocations(split: Split) = prev.preferredLocations(split.asInstanceOf[SampledRDDSplit].prev)
+  override def preferredLocations(split: Split) =
+    prev.preferredLocations(split.asInstanceOf[SampledRDDSplit].prev)
 
   override def compute(splitIn: Split) = {
     val split = splitIn.asInstanceOf[SampledRDDSplit]
@@ -25,11 +33,13 @@ extends RDD[T](prev.context) {
     if (withReplacement) {
       val oldData = prev.iterator(split.prev).toArray
       val sampleSize = (oldData.size * frac).ceil.toInt
-      val sampledData = for (i <- 1 to sampleSize) yield oldData(rg.nextInt(oldData.size)) // all of oldData's indices are candidates, even if sampleSize < oldData.size
+      val sampledData = { 
+        // all of oldData's indices are candidates, even if sampleSize < oldData.size
+        for (i <- 1 to sampleSize)
+          yield oldData(rg.nextInt(oldData.size)) 
+      }
       sampledData.iterator
-    }
-    // Sampling without replacement
-    else {
+    } else { // Sampling without replacement
       prev.iterator(split.prev).filter(x => (rg.nextDouble <= frac))
     }
   }

@@ -27,24 +27,26 @@ import org.apache.hadoop.mapred.TextOutputFormat
 import SparkContext._
 
 /**
- * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents
- * an immutable, partitioned collection of elements that can be operated on in parallel.
+ * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable, 
+ * partitioned collection of elements that can be operated on in parallel.
  *
  * Each RDD is characterized by five main properties:
  * - A list of splits (partitions)
  * - A function for computing each split
  * - A list of dependencies on other RDDs
  * - Optionally, a Partitioner for key-value RDDs (e.g. to say that the RDD is hash-partitioned)
- * - Optionally, a list of preferred locations to compute each split on (e.g. block locations for HDFS)
+ * - Optionally, a list of preferred locations to compute each split on (e.g. block locations for
+ *   HDFS)
  *
- * All the scheduling and execution in Spark is done based on these methods, allowing each
- * RDD to implement its own way of computing itself.
+ * All the scheduling and execution in Spark is done based on these methods, allowing each RDD to 
+ * implement its own way of computing itself.
  *
- * This class also contains transformation methods available on all RDDs (e.g. map and filter).
- * In addition, PairRDDFunctions contains extra methods available on RDDs of key-value pairs,
- * and SequenceFileRDDFunctions contains extra methods for saving RDDs to Hadoop SequenceFiles.
+ * This class also contains transformation methods available on all RDDs (e.g. map and filter). In 
+ * addition, PairRDDFunctions contains extra methods available on RDDs of key-value pairs, and 
+ * SequenceFileRDDFunctions contains extra methods for saving RDDs to Hadoop SequenceFiles.
  */
 abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serializable {
+
   // Methods that must be implemented by subclasses
   def splits: Array[Split]
   def compute(split: Split): Iterator[T]
@@ -100,19 +102,16 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   	
   	if (initialCount > Integer.MAX_VALUE) {
   	  maxSelected = Integer.MAX_VALUE
-  	}
-  	else {
+  	} else {
   	  maxSelected = initialCount.toInt
   	}
   	
   	if (num > initialCount) {
   		total = maxSelected
     	fraction = Math.min(multiplier*(maxSelected+1)/initialCount, 1.0)
-  	}
-  	else if (num < 0) {
+  	} else if (num < 0) {
   		throw(new IllegalArgumentException("Negative number of elements requested"))
-  	}
-  	else {
+  	} else {
   		fraction = Math.min(multiplier*(num+1)/initialCount, 1.0)
   		total = num.toInt
   	}
@@ -134,22 +133,18 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
   def glom(): RDD[Array[T]] = new GlommedRDD(this)
 
-  def cartesian[U: ClassManifest](other: RDD[U]): RDD[(T, U)] =
-    new CartesianRDD(sc, this, other)
+  def cartesian[U: ClassManifest](other: RDD[U]): RDD[(T, U)] = new CartesianRDD(sc, this, other)
 
   def groupBy[K: ClassManifest](f: T => K, numSplits: Int): RDD[(K, Seq[T])] = {
     val cleanF = sc.clean(f)
     this.map(t => (cleanF(t), t)).groupByKey(numSplits)
   }
 
-  def groupBy[K: ClassManifest](f: T => K): RDD[(K, Seq[T])] =
-    groupBy[K](f, sc.defaultParallelism)
+  def groupBy[K: ClassManifest](f: T => K): RDD[(K, Seq[T])] = groupBy[K](f, sc.defaultParallelism)
 
-  def pipe(command: String): RDD[String] =
-    new PipedRDD(this, command)
+  def pipe(command: String): RDD[String] = new PipedRDD(this, command)
 
-  def pipe(command: Seq[String]): RDD[String] =
-    new PipedRDD(this, command)
+  def pipe(command: Seq[String]): RDD[String] = new PipedRDD(this, command)
 
   def mapPartitions[U: ClassManifest](f: Iterator[T] => Iterator[U]): RDD[U] =
     new MapPartitionsRDD(this, sc.clean(f))
@@ -169,26 +164,29 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
     val reducePartition: Iterator[T] => Option[T] = iter => {
-      if (iter.hasNext)
+      if (iter.hasNext) {
         Some(iter.reduceLeft(cleanF))
-      else
+      }else {
         None
+      }
     }
     val options = sc.runJob(this, reducePartition)
     val results = new ArrayBuffer[T]
-    for (opt <- options; elem <- opt)
+    for (opt <- options; elem <- opt) {
       results += elem
-    if (results.size == 0)
+    }
+    if (results.size == 0) {
       throw new UnsupportedOperationException("empty collection")
-    else
+    } else {
       return results.reduceLeft(cleanF)
+    }
   }
 
   /**
-   * Aggregate the elements of each partition, and then the results for all the
-   * partitions, using a given associative function and a neutral "zero value".
-   * The function op(t1, t2) is allowed to modify t1 and return it as its result
-   * value to avoid object allocation; however, it should not modify t2.
+   * Aggregate the elements of each partition, and then the results for all the partitions, using a
+   * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to 
+   * modify t1 and return it as its result value to avoid object allocation; however, it should not
+   * modify t2.
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = {
     val cleanOp = sc.clean(op)
@@ -197,19 +195,20 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   /**
-   * Aggregate the elements of each partition, and then the results for all the
-   * partitions, using given combine functions and a neutral "zero value". This
-   * function can return a different result type, U, than the type of this RDD, T.
-   * Thus, we need one operation for merging a T into an U and one operation for
-   * merging two U's, as in scala.TraversableOnce. Both of these functions are
-   * allowed to modify and return their first argument instead of creating a new U
-   * to avoid memory allocation.
+   * Aggregate the elements of each partition, and then the results for all the partitions, using
+   * given combine functions and a neutral "zero value". This function can return a different result
+   * type, U, than the type of this RDD, T. Thus, we need one operation for merging a T into an U
+   * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
+   * allowed to modify and return their first argument instead of creating a new U to avoid memory
+   * allocation.
    */
-  def aggregate[U: ClassManifest](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = {
+  def aggregate[U: ClassManifest](zeroValue: U)(
+      seqOp: (U, T) => U,
+      combOp: (U, U) => U): U = {
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
     val results = sc.runJob(this,
-      (iter: Iterator[T]) => iter.aggregate(zeroValue)(cleanSeqOp, cleanCombOp))
+        (iter: Iterator[T]) => iter.aggregate(zeroValue)(cleanSeqOp, cleanCombOp))
     return results.fold(zeroValue)(cleanCombOp)
   }
   
@@ -226,12 +225,15 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
   def toArray(): Array[T] = collect()
   
-  // Take the first num elements of the RDD. This currently scans the partitions
-  // *one by one*, so it will be slow if a lot of partitions are required. In that
-  // case, use collect() to get the whole RDD instead.
+  /**
+   * Take the first num elements of the RDD. This currently scans the partitions *one by one*, so
+   * it will be slow if a lot of partitions are required. In that case, use collect() to get the
+   * whole RDD instead.
+   */
   def take(num: Int): Array[T] = {
-    if (num == 0)
+    if (num == 0) {
       return new Array[T](0)
+    }
     val buf = new ArrayBuffer[T]
     var p = 0
     while (buf.size < num && p < splits.size) {
@@ -251,48 +253,57 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   def saveAsTextFile(path: String) {
-    this.map(x => (NullWritable.get(), new Text(x.toString))).saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
+    this.map(x => (NullWritable.get(), new Text(x.toString)))
+      .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
   }
 
   def saveAsObjectFile(path: String) {
-    this.glom.map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x)))).saveAsSequenceFile(path)
+    this.glom
+      .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
+      .saveAsSequenceFile(path)
   }
 }
 
 class MappedRDD[U: ClassManifest, T: ClassManifest](
-  prev: RDD[T], f: T => U)
-extends RDD[U](prev.context) {
+    prev: RDD[T],
+    f: T => U
+    ) extends RDD[U](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = prev.iterator(split).map(f)
 }
 
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
-  prev: RDD[T], f: T => Traversable[U])
-extends RDD[U](prev.context) {
+    prev: RDD[T],
+    f: T => Traversable[U]
+    ) extends RDD[U](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = prev.iterator(split).flatMap(f)
 }
 
 class FilteredRDD[T: ClassManifest](
-  prev: RDD[T], f: T => Boolean)
-extends RDD[T](prev.context) {
+    prev: RDD[T],
+    f: T => Boolean
+    ) extends RDD[T](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = prev.iterator(split).filter(f)
+  override def compute(split: Split) =
+    prev.iterator(split).filter(f)
 }
 
-class GlommedRDD[T: ClassManifest](prev: RDD[T])
-extends RDD[Array[T]](prev.context) {
+class GlommedRDD[T: ClassManifest](
+    prev: RDD[T]
+    ) extends RDD[Array[T]](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = Array(prev.iterator(split).toArray).iterator
 }
 
 class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
-  prev: RDD[T], f: Iterator[T] => Iterator[U])
-extends RDD[U](prev.context) {
+    prev: RDD[T],
+    f: Iterator[T] => Iterator[U]
+    ) extends RDD[U](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = f(prev.iterator(split))

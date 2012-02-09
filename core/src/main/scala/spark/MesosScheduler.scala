@@ -19,13 +19,15 @@ import org.apache.mesos._
 import org.apache.mesos.Protos._
 
 /**
- * The main Scheduler implementation, which runs jobs on Mesos. Clients should
- * first call start(), then submit tasks through the runTasks method.
+ * The main Scheduler implementation, which runs jobs on Mesos. Clients should first call start(),
+ * then submit tasks through the runTasks method.
  */
 private class MesosScheduler(
-  sc: SparkContext, master: String, frameworkName: String)
-extends MScheduler with DAGScheduler with Logging
-{
+    sc: SparkContext,
+    master: String,
+    frameworkName: String
+    )extends MScheduler with DAGScheduler with Logging {
+  
   // Environment variables to pass to our executors
   val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
     "SPARK_MEM",
@@ -36,14 +38,15 @@ extends MScheduler with DAGScheduler with Logging
 
   // Memory used by each executor (in megabytes)
   val EXECUTOR_MEMORY = {
-    if (System.getenv("SPARK_MEM") != null)
+    if (System.getenv("SPARK_MEM") != null) {
       memoryStringToMb(System.getenv("SPARK_MEM"))
       // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    else
+    } else {
       512
+    }
   }
 
-  // Lock used to wait for  scheduler to be registered
+  // Lock used to wait for scheduler to be registered
   private var isRegistered = false
   private val registeredLock = new Object()
 
@@ -92,13 +95,13 @@ extends MScheduler with DAGScheduler with Logging
       setDaemon(true)
       override def run {
         val sched = MesosScheduler.this
-        driver = new MesosSchedulerDriver(sched, frameworkName, getExecutorInfo, master)
+        driver = new MesosSchedulerDriver(
+            sched, frameworkName, getExecutorInfo, master)
         try {
           val ret = driver.run()
           logInfo("driver.run() returned with code " + ret)
         } catch {
-          case e: Exception =>
-            logError("driver.run() failed", e)
+          case e: Exception => logError("driver.run() failed", e)
         }
       }
     }.start
@@ -117,17 +120,16 @@ extends MScheduler with DAGScheduler with Logging
     for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
       if (System.getenv(key) != null) {
         params.addParam(Param.newBuilder()
-                          .setKey("env." + key)
-                          .setValue(System.getenv(key))
-                          .build())
+            .setKey("env." + key)
+            .setValue(System.getenv(key))
+            .build())
       }
     }
     val memory = Resource.newBuilder()
-                   .setName("mem")
-                   .setType(Resource.Type.SCALAR)
-                   .setScalar(Resource.Scalar.newBuilder()
-                                .setValue(EXECUTOR_MEMORY).build())
-                   .build()
+      .setName("mem")
+      .setType(Resource.Type.SCALAR)
+      .setScalar(Resource.Scalar.newBuilder().setValue(EXECUTOR_MEMORY).build())
+      .build()
     ExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue("default").build())
       .setUri(execScript)
@@ -178,9 +180,9 @@ extends MScheduler with DAGScheduler with Logging
   }
 
   /**
-   * Method called by Mesos to offer resources on slaves. We resond by asking
-   * our active jobs for tasks in FIFO order. We fill each node with tasks in
-   * a round-robin manner so that tasks are balanced across the cluster.
+   * Method called by Mesos to offer resources on slaves. We resond by asking our active jobs for 
+   * tasks in FIFO order. We fill each node with tasks in a round-robin manner so that tasks are
+   * balanced across the cluster.
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
@@ -238,7 +240,8 @@ extends MScheduler with DAGScheduler with Logging
     synchronized {
       try {
         val tid = status.getTaskId.getValue
-        if (status.getState == TaskState.TASK_LOST && taskIdToSlaveId.contains(tid)) {
+        if (status.getState == TaskState.TASK_LOST 
+            && taskIdToSlaveId.contains(tid)) {
           // We lost the executor on this slave, so remember that it's gone
           slavesWithExecutors -= taskIdToSlaveId(tid)
         }
@@ -249,8 +252,9 @@ extends MScheduler with DAGScheduler with Logging
             }
             if (isFinished(status.getState)) {
               taskIdToJobId.remove(tid)
-              if (jobTasks.contains(jobId))
+              if (jobTasks.contains(jobId)) {
                 jobTasks(jobId) -= tid
+              }
               taskIdToSlaveId.remove(tid)
             }
           case None =>
@@ -346,7 +350,10 @@ extends MScheduler with DAGScheduler with Logging
     return Utils.serialize(props.toArray)
   }
 
-  override def frameworkMessage(d: SchedulerDriver, s: SlaveID, e: ExecutorID, b: Array[Byte]) {}
+  override def frameworkMessage(d: SchedulerDriver, 
+      s: SlaveID,
+      e: ExecutorID,
+      b: Array[Byte]) {}
 
   override def slaveLost(d: SchedulerDriver, s: SlaveID) {
     slavesWithExecutors.remove(s.getValue)
@@ -361,15 +368,16 @@ extends MScheduler with DAGScheduler with Logging
    */
   def memoryStringToMb(str: String): Int = {
     val lower = str.toLowerCase
-    if (lower.endsWith("k"))
+    if (lower.endsWith("k")) {
       (lower.substring(0, lower.length-1).toLong / 1024).toInt
-    else if (lower.endsWith("m"))
+    } else if (lower.endsWith("m")) {
       lower.substring(0, lower.length-1).toInt
-    else if (lower.endsWith("g"))
+    } else if (lower.endsWith("g")) {
       lower.substring(0, lower.length-1).toInt * 1024
-    else if (lower.endsWith("t"))
+    } else if (lower.endsWith("t")) {
       lower.substring(0, lower.length-1).toInt * 1024 * 1024
-    else // no suffix, so it's just a number in bytes
-      (lower.toLong / 1024 / 1024).toInt 
+    } else {// no suffix, so it's just a number in bytes
+      (lower.toLong / 1024 / 1024).toInt
+    }
   }
 }

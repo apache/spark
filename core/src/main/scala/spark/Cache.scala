@@ -2,7 +2,6 @@ package spark
 
 import java.util.concurrent.atomic.AtomicLong
 
-
 /**
  * An interface for caches in Spark, to allow for multiple implementations.
  * Caches are used to store both partitions of cached RDDs and broadcast
@@ -28,7 +27,6 @@ abstract class Cache {
   def get(key: Any): Any
   def put(key: Any, value: Any): Unit
 }
-
 
 /**
  * A key namespace in a Cache.

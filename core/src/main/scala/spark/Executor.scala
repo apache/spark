@@ -27,8 +27,9 @@ class Executor extends org.apache.mesos.Executor with Logging {
   override def init(d: ExecutorDriver, args: ExecutorArgs) {
     // Read spark.* system properties from executor arg
     val props = Utils.deserialize[Array[(String, String)]](args.getData.toByteArray)
-    for ((key, value) <- props)
+    for ((key, value) <- props) {
       System.setProperty(key, value)
+    }
 
     // Make sure an appropriate class loader is set for remote actors
     RemoteActor.classLoader = getClass.getClassLoader
@@ -45,7 +46,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
     
     // Start worker thread pool
     threadPool = new ThreadPoolExecutor(
-      1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
+        1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
   }
   
   override def launchTask(d: ExecutorDriver, task: TaskDescription) {
@@ -58,9 +59,9 @@ class Executor extends org.apache.mesos.Executor with Logging {
       val tid = desc.getTaskId.getValue
       logInfo("Running task ID " + tid)
       d.sendStatusUpdate(TaskStatus.newBuilder()
-                         .setTaskId(desc.getTaskId)
-                         .setState(TaskState.TASK_RUNNING)
-                         .build())
+          .setTaskId(desc.getTaskId)
+          .setState(TaskState.TASK_RUNNING)
+          .build())
       try {
         SparkEnv.set(env)
         Thread.currentThread.setContextClassLoader(classLoader)
@@ -72,27 +73,27 @@ class Executor extends org.apache.mesos.Executor with Logging {
         val accumUpdates = Accumulators.values
         val result = new TaskResult(value, accumUpdates)
         d.sendStatusUpdate(TaskStatus.newBuilder()
-                           .setTaskId(desc.getTaskId)
-                           .setState(TaskState.TASK_FINISHED)
-                           .setData(ByteString.copyFrom(Utils.serialize(result)))
-                           .build())
+            .setTaskId(desc.getTaskId)
+            .setState(TaskState.TASK_FINISHED)
+            .setData(ByteString.copyFrom(Utils.serialize(result)))
+            .build())
         logInfo("Finished task ID " + tid)
       } catch {
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason
           d.sendStatusUpdate(TaskStatus.newBuilder()
-                             .setTaskId(desc.getTaskId)
-                             .setState(TaskState.TASK_FAILED)
-                             .setData(ByteString.copyFrom(Utils.serialize(reason)))
-                             .build())
+              .setTaskId(desc.getTaskId)
+              .setState(TaskState.TASK_FAILED)
+              .setData(ByteString.copyFrom(Utils.serialize(reason)))
+              .build())
         }
         case t: Throwable => {
           val reason = ExceptionFailure(t)
           d.sendStatusUpdate(TaskStatus.newBuilder()
-                             .setTaskId(desc.getTaskId)
-                             .setState(TaskState.TASK_FAILED)
-                             .setData(ByteString.copyFrom(Utils.serialize(reason)))
-                             .build())
+              .setTaskId(desc.getTaskId)
+              .setState(TaskState.TASK_FAILED)
+              .setData(ByteString.copyFrom(Utils.serialize(reason)))
+              .build())
 
           // TODO: Handle errors in tasks less dramatically
           logError("Exception in task ID " + tid, t)
@@ -102,8 +103,10 @@ class Executor extends org.apache.mesos.Executor with Logging {
     }
   }
 
-  // Create a ClassLoader for use in tasks, adding any JARs specified by the
-  // user or any classes created by the interpreter to the search path
+  /**
+   * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes 
+   * created by the interpreter to the search path
+   */
   private def createClassLoader(): ClassLoader = {
     var loader = this.getClass.getClassLoader
 

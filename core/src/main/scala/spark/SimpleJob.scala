@@ -61,7 +61,8 @@ extends Job(jobId) with Logging
   var causeOfFailure = ""
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
-  val EXCEPTION_PRINT_INTERVAL = System.getProperty("spark.logging.exceptionPrintInterval", "10000").toLong
+  val EXCEPTION_PRINT_INTERVAL =
+    System.getProperty("spark.logging.exceptionPrintInterval", "10000").toLong
   // Map of recent exceptions (identified by string representation and
   // top stack frame) to duplicate count (how many times the same
   // exception has appeared) and time the full exception was
@@ -171,12 +172,12 @@ extends Job(jobId) with Logging
           logDebug("Serialized size: " + serializedTask.size)
           val taskName = "task %d:%d".format(jobId, index)
           return Some(TaskDescription.newBuilder()
-                        .setTaskId(taskId)
-                        .setSlaveId(offer.getSlaveId)
-                        .setName(taskName)
-                        .addResources(cpuRes)
-                        .setData(ByteString.copyFrom(serializedTask))
-                        .build())
+              .setTaskId(taskId)
+              .setSlaveId(offer.getSlaveId)
+              .setName(taskName)
+              .addResources(cpuRes)
+              .setData(ByteString.copyFrom(serializedTask))
+              .build())
         }
         case _ =>
       }

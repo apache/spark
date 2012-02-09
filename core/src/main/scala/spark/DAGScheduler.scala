@@ -4,18 +4,28 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
-// A task created by the DAG scheduler. Knows its stage ID and map ouput tracker generation.
+/**
+ * A task created by the DAG scheduler. Knows its stage ID and map ouput tracker generation.
+ */
 abstract class DAGTask[T](val stageId: Int) extends Task[T] {
   val gen = SparkEnv.get.mapOutputTracker.getGeneration
   override def generation: Option[Long] = Some(gen)
 }
 
-// A completion event passed by the underlying task scheduler to the DAG scheduler
-case class CompletionEvent(task: DAGTask[_], reason: TaskEndReason, result: Any, accumUpdates: Map[Long, Any])
+/**
+ * A completion event passed by the underlying task scheduler to the DAG scheduler
+ */
+case class CompletionEvent(
+    task: DAGTask[_],
+    reason: TaskEndReason,
+    result: Any,
+    accumUpdates: Map[Long, Any])
 
-// Various possible reasons why a DAG task ended. The underlying scheduler is supposed
-// to retry tasks several times for "ephemeral" failures, and only report back failures
-// that require some old stages to be resubmitted, such as shuffle map fetch failures.
+/**
+ * Various possible reasons why a DAG task ended. The underlying scheduler is supposed to retry
+ * tasks several times for "ephemeral" failures, and only report back failures that require some
+ * old stages to be resubmitted, such as shuffle map fetch failures.
+ */
 sealed trait TaskEndReason
 case object Success extends TaskEndReason
 case class FetchFailed(serverUri: String, shuffleId: Int, mapId: Int, reduceId: Int) extends TaskEndReason
@@ -23,11 +33,10 @@ case class ExceptionFailure(exception: Throwable) extends TaskEndReason
 case class OtherFailure(message: String) extends TaskEndReason
 
 /**
- * A Scheduler subclass that implements stage-oriented scheduling. It computes
- * a DAG of stages for each job, keeps track of which RDDs and stage outputs
- * are materialized, and computes a minimal schedule to run the job. Subclasses
- * only need to implement the code to send a task to the cluster and to report
- * fetch failures (the submitTasks method, and code to add CompletionEvents).
+ * A Scheduler subclass that implements stage-oriented scheduling. It computes a DAG of stages for 
+ * each job, keeps track of which RDDs and stage outputs are materialized, and computes a minimal 
+ * schedule to run the job. Subclasses only need to implement the code to send a task to the cluster
+ * and to report fetch failures (the submitTasks method, and code to add CompletionEvents).
  */
 private trait DAGScheduler extends Scheduler with Logging {
   // Must be implemented by subclasses to start running a set of tasks
@@ -39,15 +48,14 @@ private trait DAGScheduler extends Scheduler with Logging {
     completionEvents.put(CompletionEvent(dagTask, reason, result, accumUpdates))
   }
 
-  // The time, in millis, to wait for fetch failure events to stop coming in after
-  // one is detected; this is a simplistic way to avoid resubmitting tasks in the
-  // non-fetchable map stage one by one as more failure events come in
+  // The time, in millis, to wait for fetch failure events to stop coming in after one is detected;
+  // this is a simplistic way to avoid resubmitting tasks in the non-fetchable map stage one by one
+  // as more failure events come in
   val RESUBMIT_TIMEOUT = 2000L
 
-  // The time, in millis, to wake up between polls of the completion queue
-  // in order to potentially resubmit failed stages
+  // The time, in millis, to wake up between polls of the completion queue in order to potentially
+  // resubmit failed stages
   val POLL_TIMEOUT = 500L
-
 
   private val completionEvents = new LinkedBlockingQueue[CompletionEvent]
 
@@ -110,10 +118,8 @@ private trait DAGScheduler extends Scheduler with Logging {
         cacheTracker.registerRDD(r.id, r.splits.size)
         for (dep <- r.dependencies) {
           dep match {
-            case shufDep: ShuffleDependency[_,_,_] =>
-              parents += getShuffleMapStage(shufDep)
-            case _ =>
-              visit(dep.rdd)
+            case shufDep: ShuffleDependency[_,_,_] => parents += getShuffleMapStage(shufDep)
+            case _ => visit(dep.rdd)
           }
         }
       }
@@ -135,10 +141,10 @@ private trait DAGScheduler extends Scheduler with Logging {
               dep match {
                 case shufDep: ShuffleDependency[_,_,_] =>
                   val stage = getShuffleMapStage(shufDep)
-                  if (!stage.isAvailable)
+                  if (!stage.isAvailable) {
                     missing += stage
-                case narrowDep: NarrowDependency[_] =>
-                  visit(narrowDep.rdd)
+                  }
+                case narrowDep: NarrowDependency[_] => visit(narrowDep.rdd)
               }
             }
           }
@@ -149,10 +155,11 @@ private trait DAGScheduler extends Scheduler with Logging {
     missing.toList
   }
 
-  override def runJob[T, U](finalRdd: RDD[T], func: (TaskContext, Iterator[T]) => U,
-                            partitions: Seq[Int], allowLocal: Boolean)
-                           (implicit m: ClassManifest[U])
-      : Array[U] = {
+  override def runJob[T, U](finalRdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      allowLocal: Boolean
+      )(implicit m: ClassManifest[U]) : Array[U] = {
     val outputParts = partitions.toArray
     val numOutputParts: Int = partitions.size
     val finalStage = newStage(finalRdd, None)
@@ -189,8 +196,9 @@ private trait DAGScheduler extends Scheduler with Logging {
           submitMissingTasks(stage)
           running += stage
         } else {
-          for (parent <- missing)
+          for (parent <- missing) {
             submitStage(parent)
+          }
           waiting += stage
         }
       }

@@ -4,15 +4,17 @@ import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
 
 class ParallelCollectionSplit[T: ClassManifest](
-    val rddId: Long, val slice: Int, values: Seq[T])
-extends Split with Serializable {
+    val rddId: Long,
+    val slice: Int,
+    values: Seq[T]
+    ) extends Split with Serializable {
+  
   def iterator(): Iterator[T] = values.iterator
 
   override def hashCode(): Int = (41 * (41 + rddId) + slice).toInt
 
   override def equals(other: Any): Boolean = other match {
-    case that: ParallelCollectionSplit[_] =>
-      (this.rddId == that.rddId && this.slice == that.slice)
+    case that: ParallelCollectionSplit[_] => (this.rddId == that.rddId && this.slice == that.slice)
     case _ => false
   }
 
@@ -20,13 +22,16 @@ extends Split with Serializable {
 }
 
 class ParallelCollection[T: ClassManifest](
-  sc: SparkContext, @transient data: Seq[T], numSlices: Int)
-extends RDD[T](sc) {
-  // TODO: Right now, each split sends along its full data, even if later down
-  // the RDD chain it gets cached. It might be worthwhile to write the data to
-  // a file in the DFS and read it in the split instead.
+    sc: SparkContext, 
+    @transient data: Seq[T],
+    numSlices: Int
+    ) extends RDD[T](sc) {
+  // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
+  // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
+  // instead.
 
-  @transient val splits_ = {
+  @transient
+  val splits_ = {
     val slices = ParallelCollection.slice(data, numSlices).toArray
     slices.indices.map(i => new ParallelCollectionSplit(id, i, slices(i))).toArray
   }
@@ -41,17 +46,24 @@ extends RDD[T](sc) {
 }
 
 private object ParallelCollection {
-  // Slice a collection into numSlices sub-collections. One extra thing we do here is
-  // to treat Range collections specially, encoding the slices as other Ranges to
-  // minimize memory cost. This makes it efficient to run Spark over RDDs representing
-  // large sets of numbers.
+  /**
+   * Slice a collection into numSlices sub-collections. One extra thing we do here is to treat Range
+   * collections specially, encoding the slices as other Ranges to minimize memory cost. This makes 
+   * it efficient to run Spark over RDDs representing large sets of numbers.
+   */
   def slice[T: ClassManifest](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
-    if (numSlices < 1)
+    if (numSlices < 1) {
       throw new IllegalArgumentException("Positive number of slices required")
+    }
     seq match {
       case r: Range.Inclusive => {
-        val sign = if (r.step < 0) -1 else 1
-        slice(new Range(r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
+        val sign = if (r.step < 0) {
+          -1 
+        } else {
+          1
+        }
+        slice(new Range(
+            r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
       }
       case r: Range => {
         (0 until numSlices).map(i => {
