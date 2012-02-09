@@ -36,12 +36,12 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
       SparkEnv.set(env)
       try {
         // Serialize and deserialize the task so that accumulators are changed to thread-local ones;
-        // this adds a bit of unnecessary overhead but matches how the Mesos Executor works
+        // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
         Accumulators.clear
         val bytes = Utils.serialize(task)
         logInfo("Size of task " + idInJob + " is " + bytes.size + " bytes")
         val deserializedTask = Utils.deserialize[Task[_]](
-          bytes, Thread.currentThread.getContextClassLoader)
+            bytes, Thread.currentThread.getContextClassLoader)
         val result: Any = deserializedTask.run(attemptId)
         val accumUpdates = Accumulators.values
         logInfo("Finished task " + idInJob)

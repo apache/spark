@@ -35,7 +35,7 @@ object Utils {
     return ois.readObject.asInstanceOf[T]
   }
 
-  def isAlpha(c: Char) = {
+  def isAlpha(c: Char): Boolean = {
     (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
   }
 

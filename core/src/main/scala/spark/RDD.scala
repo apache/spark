@@ -108,11 +108,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   	
   	if (num > initialCount) {
   		total = maxSelected
-    	fraction = Math.min(multiplier*(maxSelected+1)/initialCount, 1.0)
+    	fraction = Math.min(multiplier * (maxSelected + 1) / initialCount, 1.0)
   	} else if (num < 0) {
   		throw(new IllegalArgumentException("Negative number of elements requested"))
   	} else {
-  		fraction = Math.min(multiplier*(num+1)/initialCount, 1.0)
+  		fraction = Math.min(multiplier * (num + 1) / initialCount, 1.0)
   		total = num.toInt
   	}
 	
@@ -202,9 +202,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
    */
-  def aggregate[U: ClassManifest](zeroValue: U)(
-      seqOp: (U, T) => U,
-      combOp: (U, U) => U): U = {
+  def aggregate[U: ClassManifest](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = {
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
     val results = sc.runJob(this,
@@ -288,8 +286,7 @@ class FilteredRDD[T: ClassManifest](
     ) extends RDD[T](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) =
-    prev.iterator(split).filter(f)
+  override def compute(split: Split) = prev.iterator(split).filter(f)
 }
 
 class GlommedRDD[T: ClassManifest](

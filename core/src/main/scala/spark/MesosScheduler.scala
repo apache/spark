@@ -95,8 +95,7 @@ private class MesosScheduler(
       setDaemon(true)
       override def run {
         val sched = MesosScheduler.this
-        driver = new MesosSchedulerDriver(
-            sched, frameworkName, getExecutorInfo, master)
+        driver = new MesosSchedulerDriver(sched, frameworkName, getExecutorInfo, master)
         try {
           val ret = driver.run()
           logInfo("driver.run() returned with code " + ret)
@@ -111,9 +110,8 @@ private class MesosScheduler(
     val sparkHome = sc.getSparkHome match {
       case Some(path) => path
       case None =>
-        throw new SparkException("Spark home is not set; set it through the " +
-          "spark.home system property, the SPARK_HOME environment variable " +
-          "or the SparkContext constructor")
+        throw new SparkException("Spark home is not set; set it through the spark.home system " +
+        		"property, the SPARK_HOME environment variable or the SparkContext constructor")
     }
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val params = Params.newBuilder()
@@ -362,9 +360,9 @@ private class MesosScheduler(
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
 
   /**
-   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a
-   * number of megabytes. This is used to figure out how much memory to claim
-   * from Mesos based on the SPARK_MEM environment variable.
+   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes. 
+   * This is used to figure out how much memory to claim from Mesos based on the SPARK_MEM 
+   * environment variable.
    */
   def memoryStringToMb(str: String): Int = {
     val lower = str.toLowerCase
