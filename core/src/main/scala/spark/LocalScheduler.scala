@@ -4,9 +4,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * A simple Scheduler implementation that runs tasks locally in a thread pool.
- * Optionally the scheduler also allows each task to fail up to maxFailures times,
- * which is useful for testing fault recovery.
+ * A simple Scheduler implementation that runs tasks locally in a thread pool. Optionally the 
+ * scheduler also allows each task to fail up to maxFailures times, which is useful for testing
+ * fault recovery.
  */
 private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGScheduler with Logging {
   var attemptId = new AtomicInteger(0)
@@ -33,14 +33,13 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
       // Set the Spark execution environment for the worker thread
       SparkEnv.set(env)
       try {
-        // Serialize and deserialize the task so that accumulators are
-        // changed to thread-local ones; this adds a bit of unnecessary
-        // overhead but matches how the Mesos Executor works
+        // Serialize and deserialize the task so that accumulators are changed to thread-local ones;
+        // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
         Accumulators.clear
         val bytes = Utils.serialize(task)
         logInfo("Size of task " + idInJob + " is " + bytes.size + " bytes")
         val deserializedTask = Utils.deserialize[Task[_]](
-          bytes, Thread.currentThread.getContextClassLoader)
+            bytes, Thread.currentThread.getContextClassLoader)
         val result: Any = deserializedTask.run(attemptId)
         val accumUpdates = Accumulators.values
         logInfo("Finished task " + idInJob)

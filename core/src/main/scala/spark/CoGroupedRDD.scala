@@ -10,20 +10,20 @@ sealed trait CoGroupSplitDep extends Serializable
 case class NarrowCoGroupSplitDep(rdd: RDD[_], split: Split) extends CoGroupSplitDep
 case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
 
-class CoGroupSplit(idx: Int, val deps: Seq[CoGroupSplitDep])
-extends Split with Serializable {
+class CoGroupSplit(idx: Int, val deps: Seq[CoGroupSplitDep]) extends Split with Serializable {
   override val index = idx
   override def hashCode(): Int = idx
 }
 
 class CoGroupAggregator extends Aggregator[Any, Any, ArrayBuffer[Any]] (
-  { x => ArrayBuffer(x) },
-  { (b, x) => b += x },
-  { (b1, b2) => b1 ++ b2 }
-) with Serializable
+    { x => ArrayBuffer(x) },
+    { (b, x) => b += x },
+    { (b1, b2) => b1 ++ b2 }
+  ) with Serializable
 
 class CoGroupedRDD[K](rdds: Seq[RDD[(_, _)]], part: Partitioner)
-extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {
+  extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {
+  
   val aggr = new CoGroupAggregator
   
   override val dependencies = {
@@ -41,7 +41,8 @@ extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {
     deps.toList
   }
   
-  @transient val splits_ : Array[Split] = {
+  @transient
+  val splits_ : Array[Split] = {
     val firstRdd = rdds.head
     val array = new Array[Split](part.numPartitions)
     for (i <- 0 until array.size) {

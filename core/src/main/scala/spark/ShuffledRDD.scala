@@ -2,22 +2,21 @@ package spark
 
 import java.util.{HashMap => JHashMap}
 
-
 class ShuffledRDDSplit(val idx: Int) extends Split {
   override val index = idx
   override def hashCode(): Int = idx
 }
 
 class ShuffledRDD[K, V, C](
-  parent: RDD[(K, V)],
-  aggregator: Aggregator[K, V, C],
-  part : Partitioner)
-extends RDD[(K, C)](parent.context) {
+    parent: RDD[(K, V)],
+    aggregator: Aggregator[K, V, C],
+    part : Partitioner) 
+  extends RDD[(K, C)](parent.context) {
   //override val partitioner = Some(part)
   override val partitioner = Some(part)
   
-  @transient val splits_ =
-    Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))
+  @transient
+  val splits_ = Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))
 
   override def splits = splits_
   

@@ -7,9 +7,15 @@ import java.util.{HashMap => JHashMap}
 
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
-
-class ShuffleMapTask(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_], val partition: Int, locs: Seq[String])
-extends DAGTask[String](stageId) with Logging {
+class ShuffleMapTask(
+    stageId: Int,
+    rdd: RDD[_], 
+    dep: ShuffleDependency[_,_,_],
+    val partition: Int, 
+    locs: Seq[String])
+  extends DAGTask[String](stageId)
+  with Logging {
+  
   val split = rdd.splits(partition)
 
   override def run (attemptId: Int): String = {

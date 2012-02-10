@@ -2,16 +2,26 @@ package spark
 
 import scala.collection.mutable.ArrayBuffer
 
-class UnionSplit[T: ClassManifest](idx: Int, rdd: RDD[T], split: Split)
-extends Split with Serializable {
+class UnionSplit[T: ClassManifest](
+    idx: Int, 
+    rdd: RDD[T],
+    split: Split)
+  extends Split
+  with Serializable {
+  
   def iterator() = rdd.iterator(split)
   def preferredLocations() = rdd.preferredLocations(split)
   override val index = idx
 }
 
-class UnionRDD[T: ClassManifest](sc: SparkContext, rdds: Seq[RDD[T]])
-extends RDD[T](sc) with Serializable {
-  @transient val splits_ : Array[Split] = {
+class UnionRDD[T: ClassManifest](
+    sc: SparkContext,
+    rdds: Seq[RDD[T]])
+  extends RDD[T](sc)
+  with Serializable {
+  
+  @transient
+  val splits_ : Array[Split] = {
     val array = new Array[Split](rdds.map(_.splits.size).sum)
     var pos = 0
     for (rdd <- rdds; split <- rdd.splits) {
@@ -33,8 +43,7 @@ extends RDD[T](sc) with Serializable {
     deps.toList
   }
   
-  override def compute(s: Split): Iterator[T] =
-    s.asInstanceOf[UnionSplit[T]].iterator()
+  override def compute(s: Split): Iterator[T] = s.asInstanceOf[UnionSplit[T]].iterator()
 
   override def preferredLocations(s: Split): Seq[String] =
     s.asInstanceOf[UnionSplit[T]].preferredLocations()

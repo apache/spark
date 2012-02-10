@@ -12,9 +12,15 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
-/** A Spark split class that wraps around a Hadoop InputSplit */
-class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
-extends Split with Serializable {
+/** 
+ * A Spark split class that wraps around a Hadoop InputSplit.
+ */
+class HadoopSplit(
+    rddId: Int,
+    idx: Int,
+    @transient s: InputSplit)
+  extends Split with Serializable {
+  
   val inputSplit = new SerializableWritable[InputSplit](s)
 
   override def hashCode(): Int = (41 * (41 + rddId) + idx).toInt
@@ -22,42 +28,47 @@ extends Split with Serializable {
   override val index = idx
 }
 
-
 /**
- * An RDD that reads a Hadoop dataset as specified by a JobConf (e.g. files in
- * HDFS, the local file system, or S3, tables in HBase, etc).
+ * An RDD that reads a Hadoop dataset as specified by a JobConf (e.g. files in HDFS, the local file
+ * system, or S3, tables in HBase, etc).
  */
 class HadoopRDD[K, V](
-  sc: SparkContext,
-  @transient conf: JobConf,
-  inputFormatClass: Class[_ <: InputFormat[K, V]],
-  keyClass: Class[K],
-  valueClass: Class[V],
-  minSplits: Int)
-extends RDD[(K, V)](sc) {
+    sc: SparkContext,
+    @transient conf: JobConf,
+    inputFormatClass: Class[_ <: InputFormat[K, V]],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minSplits: Int)
+  extends RDD[(K, V)](sc) {
+  
   val serializableConf = new SerializableWritable(conf)
   
-  @transient val splits_ : Array[Split] = {
+  @transient
+  val splits_ : Array[Split] = {
     val inputFormat = createInputFormat(conf)
     val inputSplits = inputFormat.getSplits(conf, minSplits)
-    val array = new Array[Split] (inputSplits.size)
-    for (i <- 0 until inputSplits.size)
+    val array = new Array[Split](inputSplits.size)
+    for (i <- 0 until inputSplits.size) {
       array(i) = new HadoopSplit(id, i, inputSplits(i))
+    }
     array
   }
 
   def createInputFormat(conf: JobConf): InputFormat[K, V] = {
     ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
-                   .asInstanceOf[InputFormat[K, V]]
+      .asInstanceOf[InputFormat[K, V]]
   }
 
-  // Helper method for creating a Hadoop Writable, because the commonly used
-  // NullWritable class has no constructor
+  /**
+   * Helper method for creating a Hadoop Writable, because the commonly used NullWritable class has 
+   * no constructor.
+   */
   def createWritable[T](clazz: Class[T]): T = {
-    if (clazz == classOf[NullWritable])
+    if (clazz == classOf[NullWritable]) {
       NullWritable.get().asInstanceOf[T]
-    else
+    } else {
       clazz.newInstance()
+    }
   }
 
   override def splits = splits_
@@ -80,8 +91,7 @@ extends RDD[(K, V)](sc) {
         try {
           finished = !reader.next(key, value)
         } catch {
-          case eofe: java.io.EOFException =>
-            finished = true
+          case eofe: java.io.EOFException => finished = true
         }
         gotNext = true
       }

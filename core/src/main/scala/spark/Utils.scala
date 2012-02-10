@@ -35,7 +35,7 @@ object Utils {
     return ois.readObject.asInstanceOf[T]
   }
 
-  def isAlpha(c: Char) = {
+  def isAlpha(c: Char): Boolean = {
     (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
   }
 
@@ -59,16 +59,15 @@ object Utils {
   }
 
   // Create a temporary directory inside the given parent directory
-  def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File =
-  {
+  def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
     var attempts = 0
     val maxAttempts = 10
     var dir: File = null
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory " +
-                              "after " + maxAttempts + " attempts!")
+        throw new IOException("Failed to create a temp directory after " + maxAttempts + 
+            " attempts!")
       }
       try {
         dir = new File(root, "spark-" + UUID.randomUUID.toString)
@@ -137,8 +136,7 @@ object Utils {
    * Wrapper over newCachedThreadPool.
    */
   def newDaemonCachedThreadPool(): ThreadPoolExecutor = {
-    var threadPool =
-      Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
+    var threadPool = Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
 
     threadPool.setThreadFactory (newDaemonThreadFactory)
 
@@ -149,8 +147,7 @@ object Utils {
    * Wrapper over newFixedThreadPool.
    */
   def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
-    var threadPool =
-      Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
+    var threadPool = Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
 
     threadPool.setThreadFactory(newDaemonThreadFactory)
 

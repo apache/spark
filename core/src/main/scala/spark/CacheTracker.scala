@@ -96,15 +96,16 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Get a snapshot of the currently known locations
   def getLocationsSnapshot(): HashMap[Int, Array[List[String]]] = {
     (trackerActor !? GetCacheLocations) match {
-      case h: HashMap[_, _] => h.asInstanceOf[HashMap[Int, Array[List[String]]]]
-      case _ => throw new SparkException(
-          "Internal error: CacheTrackerActor did not reply with a HashMap")
+      case h: HashMap[_, _] =>
+        h.asInstanceOf[HashMap[Int, Array[List[String]]]]
+        
+      case _ => 
+        throw new SparkException("Internal error: CacheTrackerActor did not reply with a HashMap")
     }
   }
   
   // Gets or computes an RDD split
-  def getOrCompute[T](rdd: RDD[T], split: Split)(implicit m: ClassManifest[T])
-      : Iterator[T] = {
+  def getOrCompute[T](rdd: RDD[T], split: Split)(implicit m: ClassManifest[T]): Iterator[T] = {
     val key = (rdd.id, split.index)
     logInfo("CachedRDD partition key is " + key)
     val cachedVal = cache.get(key)

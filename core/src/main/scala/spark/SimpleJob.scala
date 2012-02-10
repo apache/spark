@@ -10,14 +10,16 @@ import com.google.protobuf.ByteString
 import org.apache.mesos._
 import org.apache.mesos.Protos._
 
-
 /**
  * A Job that runs a set of tasks with no interdependencies.
  */
 class SimpleJob(
-  sched: MesosScheduler, tasksSeq: Seq[Task[_]], val jobId: Int)
-extends Job(jobId) with Logging
-{
+    sched: MesosScheduler, 
+    tasksSeq: Seq[Task[_]], 
+    val jobId: Int) 
+  extends Job(jobId)
+  with Logging {
+  
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "5000").toLong
 
@@ -61,7 +63,8 @@ extends Job(jobId) with Logging
   var causeOfFailure = ""
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
-  val EXCEPTION_PRINT_INTERVAL = System.getProperty("spark.logging.exceptionPrintInterval", "10000").toLong
+  val EXCEPTION_PRINT_INTERVAL =
+    System.getProperty("spark.logging.exceptionPrintInterval", "10000").toLong
   // Map of recent exceptions (identified by string representation and
   // top stack frame) to duplicate count (how many times the same
   // exception has appeared) and time the full exception was
@@ -162,21 +165,20 @@ extends Job(jobId) with Logging
             lastPreferredLaunchTime = time
           // Create and return the Mesos task object
           val cpuRes = Resource.newBuilder()
-                         .setName("cpus")
-                         .setType(Resource.Type.SCALAR)
-                         .setScalar(Resource.Scalar.newBuilder()
-                                      .setValue(CPUS_PER_TASK).build())
-                         .build()
+            .setName("cpus")
+            .setType(Resource.Type.SCALAR)
+            .setScalar(Resource.Scalar.newBuilder().setValue(CPUS_PER_TASK).build())
+            .build()
           val serializedTask = Utils.serialize(task)
           logDebug("Serialized size: " + serializedTask.size)
           val taskName = "task %d:%d".format(jobId, index)
           return Some(TaskDescription.newBuilder()
-                        .setTaskId(taskId)
-                        .setSlaveId(offer.getSlaveId)
-                        .setName(taskName)
-                        .addResources(cpuRes)
-                        .setData(ByteString.copyFrom(serializedTask))
-                        .build())
+              .setTaskId(taskId)
+              .setSlaveId(offer.getSlaveId)
+              .setName(taskName)
+              .addResources(cpuRes)
+              .setData(ByteString.copyFrom(serializedTask))
+              .build())
         }
         case _ =>
       }
@@ -203,8 +205,7 @@ extends Job(jobId) with Logging
     val index = tidToIndex(tid)
     if (!finished(index)) {
       tasksFinished += 1
-      logInfo("Finished TID %s (progress: %d/%d)".format(
-        tid, tasksFinished, numTasks))
+      logInfo("Finished TID %s (progress: %d/%d)".format(tid, tasksFinished, numTasks))
       // Deserialize task result
       val result = Utils.deserialize[TaskResult[_]](status.getData.toByteArray)
       sched.taskEnded(tasks(index), Success, result.value, result.accumUpdates)
@@ -235,8 +236,9 @@ extends Job(jobId) with Logging
             sched.taskEnded(tasks(index), fetchFailed, null, null)
             finished(index) = true
             tasksFinished += 1
-            if (tasksFinished == numTasks)
+            if (tasksFinished == numTasks) {
               sched.jobFinished(this)
+            }
             return
           case ef: ExceptionFailure =>
             val key = ef.exception.toString
@@ -278,8 +280,7 @@ extends Job(jobId) with Logging
         if (numFailures(index) > MAX_TASK_FAILURES) {
           logError("Task %d:%d failed more than %d times; aborting job".format(
             jobId, index, MAX_TASK_FAILURES))
-          abort("Task %d failed more than %d times".format(
-            index, MAX_TASK_FAILURES))
+          abort("Task %d failed more than %d times".format(index, MAX_TASK_FAILURES))
         }
       }
     } else {

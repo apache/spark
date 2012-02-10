@@ -8,7 +8,6 @@ import java.util.UUID
 
 // TODO: cache into a separate directory using Utils.createTempDir
 // TODO: clean up disk cache afterwards
-
 class DiskSpillingCache extends BoundedMemoryCache {
   private val diskMap = new LinkedHashMap[Any, File](32, 0.75f, true)
 

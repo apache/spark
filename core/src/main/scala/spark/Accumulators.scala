@@ -5,10 +5,13 @@ import java.io._
 import scala.collection.mutable.Map
 
 class Accumulator[T] (
-  @transient initialValue: T, param: AccumulatorParam[T]) extends Serializable
-{
+    @transient initialValue: T,
+    param: AccumulatorParam[T])
+  extends Serializable {
+  
   val id = Accumulators.newId
-  @transient var value_ = initialValue // Current value on master
+  @transient
+  var value_ = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   var deserialized = false
 
@@ -39,14 +42,16 @@ trait AccumulatorParam[T] extends Serializable {
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
-private object Accumulators
-{
+private object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
   val originals = Map[Long, Accumulator[_]]()
   val localAccums = Map[Thread, Map[Long, Accumulator[_]]]()
   var lastId: Long = 0
   
-  def newId: Long = synchronized { lastId += 1; return lastId }
+  def newId: Long = synchronized {
+    lastId += 1
+    return lastId
+  }
 
   def register(a: Accumulator[_], original: Boolean): Unit = synchronized {
     if (original) {
@@ -65,8 +70,9 @@ private object Accumulators
   // Get the values of the local accumulators for the current thread (by ID)
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
-    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map()))
+    for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map())) {
       ret(id) = accum.value
+    }
     return ret
   }
 

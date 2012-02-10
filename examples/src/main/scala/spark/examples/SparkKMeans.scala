@@ -54,7 +54,7 @@ object SparkKMeans {
     while(tempDist > convergeDist) {
       var closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
       
-      var pointStats = closest.reduceByKey {case ((x1, y1), (x2, y2)) => (x1 + x2, y1+y2)}
+      var pointStats = closest.reduceByKey {case ((x1, y1), (x2, y2)) => (x1 + x2, y1 + y2)}
       
       var newPoints = pointStats.map {pair => (pair._1, pair._2._1 / pair._2._2)}.collect()
       

@@ -14,18 +14,20 @@ import java.util.Date
 import java.text.SimpleDateFormat
 
 class NewHadoopSplit(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
-extends Split {
+  extends Split {
+  
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
 
   override def hashCode(): Int = (41 * (41 + rddId) + index).toInt
 }
 
 class NewHadoopRDD[K, V](
-  sc: SparkContext,
-  inputFormatClass: Class[_ <: InputFormat[K, V]],
-  keyClass: Class[K], valueClass: Class[V],
-  @transient conf: Configuration)
-extends RDD[(K, V)](sc) {
+    sc: SparkContext,
+    inputFormatClass: Class[_ <: InputFormat[K, V]],
+    keyClass: Class[K], valueClass: Class[V],
+    @transient conf: Configuration)
+  extends RDD[(K, V)](sc) {
+  
   private val serializableConf = new SerializableWritable(conf)
 
   private val jobtrackerId: String = {
@@ -33,15 +35,18 @@ extends RDD[(K, V)](sc) {
     formatter.format(new Date())
   }
 
-  @transient private val jobId = new JobID(jobtrackerId, id)
+  @transient
+  private val jobId = new JobID(jobtrackerId, id)
 
-  @transient private val splits_ : Array[Split] = {
+  @transient
+  private val splits_ : Array[Split] = {
     val inputFormat = inputFormatClass.newInstance
     val jobContext = new JobContext(serializableConf.value, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Split](rawSplits.size)
-    for (i <- 0 until rawSplits.size)
+    for (i <- 0 until rawSplits.size) {
       result(i) = new NewHadoopSplit(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+    }
     result
   }
 

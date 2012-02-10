@@ -8,7 +8,6 @@ import scala.collection.mutable.HashMap
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
-
 class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
   def fetch[K, V](shuffleId: Int, reduceId: Int, func: (K, V) => Unit) {
     logInfo("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))

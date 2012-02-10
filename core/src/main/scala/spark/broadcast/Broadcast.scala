@@ -18,8 +18,7 @@ trait Broadcast[T] extends Serializable {
   override def toString = "spark.Broadcast(" + uuid + ")"
 }
 
-object Broadcast
-extends Logging with Serializable {
+object Broadcast extends Logging with Serializable {
   // Messages
   val REGISTER_BROADCAST_TRACKER = 0
   val UNREGISTER_BROADCAST_TRACKER = 1
@@ -90,18 +89,14 @@ extends Logging with Serializable {
   private var MaxPeersInGuideResponse_ = System.getProperty(
     "spark.broadcast.maxPeersInGuideResponse", "4").toInt
 
-  private var MaxRxSlots_ = System.getProperty(
-    "spark.broadcast.maxRxSlots", "4").toInt
-  private var MaxTxSlots_ = System.getProperty(
-    "spark.broadcast.maxTxSlots", "4").toInt
+  private var MaxRxSlots_ = System.getProperty("spark.broadcast.maxRxSlots", "4").toInt
+  private var MaxTxSlots_ = System.getProperty("spark.broadcast.maxTxSlots", "4").toInt
 
-  private var MaxChatTime_ = System.getProperty(
-    "spark.broadcast.maxChatTime", "500").toInt
-  private var MaxChatBlocks_ = System.getProperty(
-    "spark.broadcast.maxChatBlocks", "1024").toInt
+  private var MaxChatTime_ = System.getProperty("spark.broadcast.maxChatTime", "500").toInt
+  private var MaxChatBlocks_ = System.getProperty("spark.broadcast.maxChatBlocks", "1024").toInt
 
   private var EndGameFraction_ = System.getProperty(
-    "spark.broadcast.endGameFraction", "0.95").toDouble
+      "spark.broadcast.endGameFraction", "0.95").toDouble
 
   def isMaster = isMaster_
 
@@ -167,9 +162,9 @@ extends Logging with Serializable {
   }
 
   // Helper function to convert Array[BroadcastBlock] to object
-  def unBlockifyObject[OUT](arrayOfBlocks: Array[BroadcastBlock], 
-                            totalBytes: Int, 
-                            totalBlocks: Int): OUT = {
+  def unBlockifyObject[OUT](arrayOfBlocks: Array[BroadcastBlock],
+      totalBytes: Int, 
+      totalBlocks: Int): OUT = {
 
     var retByteArray = new Array[Byte](totalBytes)
     for (i <- 0 until totalBlocks) {
@@ -193,9 +188,12 @@ extends Logging with Serializable {
 case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) extends Serializable
 
 case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
-                                    val totalBlocks: Int, 
-                                    val totalBytes: Int) extends Serializable {
-  @transient var hasBlocks = 0
+    val totalBlocks: Int, 
+    val totalBytes: Int)
+  extends Serializable {
+  
+  @transient
+  var hasBlocks = 0
 }
 
 class SpeedTracker extends Serializable {
