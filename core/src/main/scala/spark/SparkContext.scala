@@ -222,6 +222,7 @@ extends Logging {
      env.mapOutputTracker.stop()
      env.cacheTracker.stop()
      env.shuffleFetcher.stop()
+     env.shuffleManager.stop()
      SparkEnv.set(null)
   }
 

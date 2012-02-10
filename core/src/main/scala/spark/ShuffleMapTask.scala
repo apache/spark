@@ -30,7 +30,7 @@ extends DAGTask[String](stageId) with Logging {
     }
     val ser = SparkEnv.get.serializer.newInstance()
     for (i <- 0 until numOutputSplits) {
-      val file = LocalFileShuffle.getOutputFile(dep.shuffleId, partition, i)
+      val file = SparkEnv.get.shuffleManager.getOutputFile(dep.shuffleId, partition, i)
       val out = ser.outputStream(new FastBufferedOutputStream(new FileOutputStream(file)))
       val iter = buckets(i).entrySet().iterator()
       while (iter.hasNext()) {
@@ -40,7 +40,7 @@ extends DAGTask[String](stageId) with Logging {
       // TODO: have some kind of EOF marker
       out.close()
     }
-    return LocalFileShuffle.getServerUri
+    return SparkEnv.get.shuffleManager.getServerUri
   }
 
   override def preferredLocations: Seq[String] = locs

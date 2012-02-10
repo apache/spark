@@ -65,8 +65,9 @@ private trait DAGScheduler extends Scheduler with Logging {
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
-  val cacheTracker = SparkEnv.get.cacheTracker
-  val mapOutputTracker = SparkEnv.get.mapOutputTracker
+  val env = SparkEnv.get
+  val cacheTracker = env.cacheTracker
+  val mapOutputTracker = env.mapOutputTracker
 
   def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
     cacheLocs(rdd.id)
@@ -165,6 +166,8 @@ private trait DAGScheduler extends Scheduler with Logging {
     val failed = new HashSet[Stage]  // stages that must be resubmitted due to fetch failures
     val pendingTasks = new HashMap[Stage, HashSet[Task[_]]] // missing tasks from each stage
     var lastFetchFailureTime: Long = 0  // used to wait a bit to avoid repeated resubmits
+
+    SparkEnv.set(env)
 
     updateCacheLocs()
     

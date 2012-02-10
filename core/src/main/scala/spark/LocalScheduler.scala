@@ -12,8 +12,6 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
   var attemptId = new AtomicInteger(0)
   var threadPool = Executors.newFixedThreadPool(threads, DaemonThreadFactory)
 
-  val env = SparkEnv.get
-  
   override def start() {}
   
   override def waitForRegister() {}
