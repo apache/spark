@@ -15,11 +15,12 @@ class CoGroupSplit(idx: Int, val deps: Seq[CoGroupSplitDep]) extends Split with 
   override def hashCode(): Int = idx
 }
 
-class CoGroupAggregator extends Aggregator[Any, Any, ArrayBuffer[Any]] (
+class CoGroupAggregator
+  extends Aggregator[Any, Any, ArrayBuffer[Any]](
     { x => ArrayBuffer(x) },
     { (b, x) => b += x },
-    { (b1, b2) => b1 ++ b2 }
-  ) with Serializable
+    { (b1, b2) => b1 ++ b2 })
+  with Serializable
 
 class CoGroupedRDD[K](rdds: Seq[RDD[(_, _)]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {

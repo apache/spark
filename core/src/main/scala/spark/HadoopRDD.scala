@@ -1,5 +1,8 @@
 package spark
 
+import java.io.EOFException
+import java.util.NoSuchElementException
+
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
@@ -15,11 +18,9 @@ import org.apache.hadoop.util.ReflectionUtils
 /** 
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
-class HadoopSplit(
-    rddId: Int,
-    idx: Int,
-    @transient s: InputSplit)
-  extends Split with Serializable {
+class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
+  extends Split
+  with Serializable {
   
   val inputSplit = new SerializableWritable[InputSplit](s)
 
@@ -91,7 +92,8 @@ class HadoopRDD[K, V](
         try {
           finished = !reader.next(key, value)
         } catch {
-          case eofe: java.io.EOFException => finished = true
+          case eof: EOFException =>
+            finished = true
         }
         gotNext = true
       }
@@ -106,7 +108,7 @@ class HadoopRDD[K, V](
         finished = !reader.next(key, value)
       }
       if (finished) {
-        throw new java.util.NoSuchElementException("End of stream")
+        throw new NoSuchElementException("End of stream")
       }
       gotNext = false
       (key, value)

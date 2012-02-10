@@ -119,8 +119,10 @@ private trait DAGScheduler extends Scheduler with Logging {
         cacheTracker.registerRDD(r.id, r.splits.size)
         for (dep <- r.dependencies) {
           dep match {
-            case shufDep: ShuffleDependency[_,_,_] => parents += getShuffleMapStage(shufDep)
-            case _ => visit(dep.rdd)
+            case shufDep: ShuffleDependency[_,_,_] =>
+              parents += getShuffleMapStage(shufDep)
+            case _ =>
+              visit(dep.rdd)
           }
         }
       }

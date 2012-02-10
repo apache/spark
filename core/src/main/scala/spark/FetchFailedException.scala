@@ -13,5 +13,6 @@ class FetchFailedException(
 
   override def getCause(): Throwable = cause
 
-  def toTaskEndReason: TaskEndReason = FetchFailed(serverUri, shuffleId, mapId, reduceId)
+  def toTaskEndReason: TaskEndReason =
+    FetchFailed(serverUri, shuffleId, mapId, reduceId)
 }
