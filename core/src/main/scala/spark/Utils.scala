@@ -116,12 +116,12 @@ object Utils {
   }
 
   /**
-   * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4)
+   * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4).
    */
   def localIpAddress(): String = InetAddress.getLocalHost.getHostAddress
   
   /**
-   * Returns a standard ThreadFactory except all threads are daemons
+   * Returns a standard ThreadFactory except all threads are daemons.
    */
   private def newDaemonThreadFactory: ThreadFactory = {
     new ThreadFactory {
@@ -134,7 +134,7 @@ object Utils {
   }
 
   /**
-   * Wrapper over newCachedThreadPool
+   * Wrapper over newCachedThreadPool.
    */
   def newDaemonCachedThreadPool(): ThreadPoolExecutor = {
     var threadPool =
@@ -146,7 +146,7 @@ object Utils {
   }
 
   /**
-   * Wrapper over newFixedThreadPool
+   * Wrapper over newFixedThreadPool.
    */
   def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
     var threadPool =
@@ -158,9 +158,23 @@ object Utils {
   }
 
   /**
-   * Get the local machine's hostname
+   * Get the local machine's hostname.
    */
   def localHostName(): String = {
     return InetAddress.getLocalHost().getHostName
+  }
+
+  /**
+   * Delete a file or directory and its contents recursively.
+   */
+  def deleteRecursively(file: File) {
+    if (file.isDirectory) {
+      for (child <- file.listFiles()) {
+        deleteRecursively(child)
+      }
+    }
+    if (!file.delete()) {
+      throw new IOException("Failed to delete: " + file)
+    }
   }
 }

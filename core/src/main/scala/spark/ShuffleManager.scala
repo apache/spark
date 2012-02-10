@@ -47,6 +47,13 @@ class ShuffleManager extends Logging {
     shuffleDir = new File(localDir, "shuffle")
     shuffleDir.mkdirs()
     logInfo("Shuffle dir: " + shuffleDir)
+
+    // Add a shutdown hook to delete the local dir
+    Runtime.getRuntime.addShutdownHook(new Thread("delete Spark local dir") {
+      override def run() {
+        Utils.deleteRecursively(localDir)
+      }
+    })
     
     val extServerPort = System.getProperty(
       "spark.localFileShuffle.external.server.port", "-1").toInt
