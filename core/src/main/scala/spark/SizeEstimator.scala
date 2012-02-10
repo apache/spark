@@ -9,10 +9,9 @@ import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
 
-
 /**
- * Estimates the sizes of Java objects (number of bytes of memory they occupy),
- * for use in memory-aware caches.
+ * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in 
+ * memory-aware caches.
  *
  * Based on the following JavaWorld article:
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
@@ -36,9 +35,9 @@ object SizeEstimator {
   classInfos.put(classOf[Object], new ClassInfo(OBJECT_SIZE, Nil))
 
   /**
-   * The state of an ongoing size estimation. Contains a stack of objects
-   * to visit as well as an IdentityHashMap of visited objects, and provides
-   * utility methods for enqueueing new objects to visit.
+   * The state of an ongoing size estimation. Contains a stack of objects to visit as well as an
+   * IdentityHashMap of visited objects, and provides utility methods for enqueueing new objects
+   * to visit.
    */
   private class SearchState {
     val visited = new IdentityHashMap[AnyRef, AnyRef]

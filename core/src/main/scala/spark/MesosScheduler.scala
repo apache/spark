@@ -25,8 +25,10 @@ import org.apache.mesos.Protos._
 private class MesosScheduler(
     sc: SparkContext,
     master: String,
-    frameworkName: String
-    )extends MScheduler with DAGScheduler with Logging {
+    frameworkName: String)
+  extends MScheduler
+  with DAGScheduler
+  with Logging {
   
   // Environment variables to pass to our executors
   val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
@@ -172,8 +174,9 @@ private class MesosScheduler(
   
   override def waitForRegister() {
     registeredLock.synchronized {
-      while (!isRegistered)
+      while (!isRegistered) {
         registeredLock.wait()
+      }
     }
   }
 
@@ -197,7 +200,7 @@ private class MesosScheduler(
           launchedTask = false
           for (i <- 0 until offers.size if enoughMem(i)) {
             job.slaveOffer(offers(i), availableCpus(i)) match {
-              case Some(task) =>
+              case Some(task) => 
                 tasks(i).add(task)
                 val tid = task.getTaskId.getValue
                 val sid = offers(i).getSlaveId.getValue
@@ -207,6 +210,7 @@ private class MesosScheduler(
                 slavesWithExecutors += sid
                 availableCpus(i) -= getResource(task.getResourcesList(), "cpus")
                 launchedTask = true
+                
               case None => {}
             }
           }
@@ -221,8 +225,10 @@ private class MesosScheduler(
 
   // Helper function to pull out a resource from a Mesos Resources protobuf
   def getResource(res: JList[Resource], name: String): Double = {
-    for (r <- res if r.getName == name)
+    for (r <- res if r.getName == name) {
       return r.getScalar.getValue
+    }
+    
     throw new IllegalArgumentException("No resource called " + name + " in " + res)
   }
 
@@ -348,7 +354,8 @@ private class MesosScheduler(
     return Utils.serialize(props.toArray)
   }
 
-  override def frameworkMessage(d: SchedulerDriver, 
+  override def frameworkMessage(
+      d: SchedulerDriver, 
       s: SlaveID,
       e: ExecutorID,
       b: Array[Byte]) {}

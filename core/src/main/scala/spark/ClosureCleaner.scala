@@ -69,10 +69,11 @@ object ClosureCleaner extends Logging {
   }
   
   private def createNullValue(cls: Class[_]): AnyRef = {
-    if (cls.isPrimitive)
+    if (cls.isPrimitive) {
       new java.lang.Byte(0: Byte) // Should be convertible to any primitive type
-    else
+    } else {
       null
+    }
   }
   
   def clean(func: AnyRef): Unit = {
@@ -157,25 +158,27 @@ class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends EmptyVisitor
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     return new EmptyVisitor {
-      override def visitFieldInsn(op: Int, owner: String, name: String,
-          desc: String) {
-        if (op == GETFIELD)
-          for (cl <- output.keys if cl.getName == owner.replace('/', '.'))
+      override def visitFieldInsn(op: Int, owner: String, name: String, desc: String) {
+        if (op == GETFIELD) {
+          for (cl <- output.keys if cl.getName == owner.replace('/', '.')) {
             output(cl) += name
+          }
+        }
       }
       
       override def visitMethodInsn(op: Int, owner: String, name: String,
           desc: String) {
         // Check for calls a getter method for a variable in an interpreter wrapper object.
         // This means that the corresponding field will be accessed, so we should save it.
-        if (op == INVOKEVIRTUAL && owner.endsWith("$iwC") && !name.endsWith("$outer"))
-          for (cl <- output.keys if cl.getName == owner.replace('/', '.'))
+        if (op == INVOKEVIRTUAL && owner.endsWith("$iwC") && !name.endsWith("$outer")) {
+          for (cl <- output.keys if cl.getName == owner.replace('/', '.')) {
             output(cl) += name
+          }
+        }
       }
     }
   }
 }
-
 
 class InnerClosureFinder(output: Set[Class[_]]) extends EmptyVisitor {
   var myName: String = null
@@ -194,8 +197,10 @@ class InnerClosureFinder(output: Set[Class[_]]) extends EmptyVisitor {
         if (op == INVOKESPECIAL && name == "<init>" && argTypes.length > 0
             && argTypes(0).toString.startsWith("L") // is it an object?
             && argTypes(0).getInternalName == myName)
-          output += Class.forName(owner.replace('/', '.'), false,
-                                  Thread.currentThread.getContextClassLoader)
+          output += Class.forName(
+              owner.replace('/', '.'),
+              false,
+              Thread.currentThread.getContextClassLoader)
       }
     }
   }

@@ -7,11 +7,11 @@ class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Seriali
 }
 
 class SampledRDD[T: ClassManifest](
-  prev: RDD[T],
-  withReplacement: Boolean, 
-  frac: Double,
-  seed: Int
-  ) extends RDD[T](prev.context) {
+    prev: RDD[T],
+    withReplacement: Boolean, 
+    frac: Double,
+    seed: Int)
+  extends RDD[T](prev.context) {
 
   @transient
   val splits_ = {

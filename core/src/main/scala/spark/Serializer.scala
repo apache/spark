@@ -3,9 +3,8 @@ package spark
 import java.io.{InputStream, OutputStream}
 
 /**
- * A serializer. Because some serialization libraries are not thread safe,
- * this class is used to create SerializerInstances that do the actual
- * serialization.
+ * A serializer. Because some serialization libraries are not thread safe, this class is used to 
+ * create SerializerInstances that do the actual serialization.
  */
 trait Serializer {
   def newInstance(): SerializerInstance

@@ -1,16 +1,20 @@
 package spark
 
-class CartesianSplit(idx: Int, val s1: Split, val s2: Split)
-extends Split with Serializable {
+class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with Serializable {
   override val index = idx
 }
 
 class CartesianRDD[T: ClassManifest, U:ClassManifest](
-  sc: SparkContext, rdd1: RDD[T], rdd2: RDD[U])
-extends RDD[Pair[T, U]](sc) with Serializable {
+    sc: SparkContext,
+    rdd1: RDD[T],
+    rdd2: RDD[U])
+  extends RDD[Pair[T, U]](sc)
+  with Serializable {
+  
   val numSplitsInRdd2 = rdd2.splits.size
   
-  @transient val splits_ = {
+  @transient
+  val splits_ = {
     // create the cross product split
     val array = new Array[Split](rdd1.splits.size * rdd2.splits.size)
     for (s1 <- rdd1.splits; s2 <- rdd2.splits) {

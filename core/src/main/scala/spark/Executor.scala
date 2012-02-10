@@ -67,8 +67,9 @@ class Executor extends org.apache.mesos.Executor with Logging {
         Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear
         val task = Utils.deserialize[Task[Any]](desc.getData.toByteArray, classLoader)
-        for (gen <- task.generation) // Update generation if any is set
+        for (gen <- task.generation) {// Update generation if any is set
           env.mapOutputTracker.updateGeneration(gen)
+        }
         val value = task.run(tid.toInt)
         val accumUpdates = Accumulators.values
         val result = new TaskResult(value, accumUpdates)

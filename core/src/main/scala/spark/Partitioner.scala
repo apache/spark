@@ -10,12 +10,17 @@ class HashPartitioner(partitions: Int) extends Partitioner {
 
   def getPartition(key: Any) = {
     val mod = key.hashCode % partitions
-    if (mod < 0) mod + partitions else mod // Guard against negative hash codes
+    if (mod < 0) {
+      mod + partitions
+    } else {
+      mod // Guard against negative hash codes
+    }
   }
   
   override def equals(other: Any): Boolean = other match {
     case h: HashPartitioner =>
       h.numPartitions == numPartitions
-    case _ => false
+    case _ =>
+      false
   }
 }

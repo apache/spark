@@ -6,8 +6,8 @@ import scala.collection.mutable.Map
 
 class Accumulator[T] (
     @transient initialValue: T,
-    param: AccumulatorParam[T]
-    ) extends Serializable {
+    param: AccumulatorParam[T])
+  extends Serializable {
   
   val id = Accumulators.newId
   @transient

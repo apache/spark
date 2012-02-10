@@ -34,8 +34,9 @@ class SparkContext(
     master: String,
     frameworkName: String,
     val sparkHome: String = null,
-    val jars: Seq[String] = Nil
-    ) extends Logging {
+    val jars: Seq[String] = Nil)
+  extends Logging {
+  
   // Ensure logging is initialized before we spawn any threads
   initLogging()
 
@@ -64,8 +65,10 @@ class SparkContext(
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
     master match {
-      case "local" => new LocalScheduler(1, 0)
-      case LOCAL_N_REGEX(threads) => new LocalScheduler(threads.toInt, 0)
+      case "local" => 
+        new LocalScheduler(1, 0)
+      case LOCAL_N_REGEX(threads) => 
+        new LocalScheduler(threads.toInt, 0)
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         new LocalScheduler(threads.toInt, maxFailures.toInt)
       case _ =>
@@ -79,17 +82,11 @@ class SparkContext(
 
   // Methods for creating RDDs
 
-  def parallelize[T: ClassManifest](
-      seq: Seq[T],
-      numSlices: Int = defaultParallelism
-      ): RDD[T] = {
+  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism ): RDD[T] = {
     new ParallelCollection[T](this, seq, numSlices)
   }
     
-  def makeRDD[T: ClassManifest](
-      seq: Seq[T],
-      numSlices: Int = defaultParallelism
-      ): RDD[T] = {
+  def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism ): RDD[T] = {
     parallelize(seq, numSlices)
   }
 
@@ -152,7 +149,8 @@ class SparkContext(
     val job = new NewHadoopJob
     NewFileInputFormat.addInputPath(job, new Path(path))
     val conf = job.getConfiguration
-    newAPIHadoopFile(path,
+    newAPIHadoopFile(
+        path,
         fm.erasure.asInstanceOf[Class[F]],
         km.erasure.asInstanceOf[Class[K]],
         vm.erasure.asInstanceOf[Class[V]],
@@ -185,18 +183,16 @@ class SparkContext(
     sequenceFile(path, keyClass, valueClass, defaultMinSplits)
 
   /**
-   * Version of sequenceFile() for types implicitly convertible to Writables 
-   * through a WritableConverter.
+   * Version of sequenceFile() for types implicitly convertible to Writables through a 
+   * WritableConverter.
    *
-   * WritableConverters are provided in a somewhat strange way (by an implicit
-   * function) to support both subclasses of Writable and types for which we 
-   * define a converter (e.g. Int to IntWritable). The most natural thing 
-   * would've been to have implicit objects for the converters, but then we
-   * couldn't have an object for every subclass of Writable (you can't have a
-   * parameterized singleton object). We use functions instead to create a new 
-   * converter for the appropriate type. In addition, we pass the converter a
-   * ClassManifest of its type to allow it to figure out the Writable class to
-   * use in the subclass case.
+   * WritableConverters are provided in a somewhat strange way (by an implicit function) to support
+   * both subclasses of Writable and types for which we define a converter (e.g. Int to 
+   * IntWritable). The most natural thing would've been to have implicit objects for the
+   * converters, but then we couldn't have an object for every subclass of Writable (you can't
+   * have a parameterized singleton object). We use functions instead to create a new converter 
+   * for the appropriate type. In addition, we pass the converter a ClassManifest of its type to
+   * allow it to figure out the Writable class to use in the subclass case.
    */
    def sequenceFile[K, V](path: String, minSplits: Int = defaultMinSplits)
       (implicit km: ClassManifest[K], vm: ClassManifest[V],
@@ -443,4 +439,7 @@ object SparkContext {
  * that doesn't know the type of T when it is created. This sounds strange but is necessary to
  * support converting subclasses of Writable to themselves (writableWritableConverter).
  */
-class WritableConverter[T](val writableClass: ClassManifest[T] => Class[_ <: Writable], val convert: Writable => T) extends Serializable
+class WritableConverter[T](
+    val writableClass: ClassManifest[T] => Class[_ <: Writable],
+    val convert: Writable => T)
+  extends Serializable

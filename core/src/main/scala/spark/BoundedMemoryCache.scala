@@ -3,13 +3,11 @@ package spark
 import java.util.LinkedHashMap
 
 /**
- * An implementation of Cache that estimates the sizes of its entries and
- * attempts to limit its total memory usage to a fraction of the JVM heap.
- * Objects' sizes are estimated using SizeEstimator, which has limitations;
- * most notably, we will overestimate total memory used if some cache
- * entries have pointers to a shared object. Nonetheless, this Cache should
- * work well when most of the space is used by arrays of primitives or of
- * simple classes.
+ * An implementation of Cache that estimates the sizes of its entries and attempts to limit its
+ * total memory usage to a fraction of the JVM heap. Objects' sizes are estimated using
+ * SizeEstimator, which has limitations; most notably, we will overestimate total memory used if
+ * some cache entries have pointers to a shared object. Nonetheless, this Cache should work well
+ * when most of the space is used by arrays of primitives or of simple classes.
  */
 class BoundedMemoryCache extends Cache with Logging {
   private val maxBytes: Long = getMaxBytes()
@@ -24,7 +22,11 @@ class BoundedMemoryCache extends Cache with Logging {
   override def get(key: Any): Any = {
     synchronized {
       val entry = map.get(key)
-      if (entry != null) entry.value else null
+      if (entry != null) {
+        entry.value
+      } else {
+        null
+      }
     }
   }
 
@@ -51,8 +53,8 @@ class BoundedMemoryCache extends Cache with Logging {
   }
 
   /**
-   * Remove least recently used entries from the map until at least space
-   * bytes are free. Assumes that a lock is held on the BoundedMemoryCache.
+   * Remove least recently used entries from the map until at least space bytes are free. Assumes
+   * that a lock is held on the BoundedMemoryCache.
    */
   private def ensureFreeSpace(space: Long) {
     logInfo("ensureFreeSpace(%d) called with curBytes=%d, maxBytes=%d".format(
@@ -67,7 +69,6 @@ class BoundedMemoryCache extends Cache with Logging {
   }
 
   protected def dropEntry(key: Any, entry: Entry) {
-    logInfo("Dropping key %s of size %d to make space".format(
-      key, entry.size))
+    logInfo("Dropping key %s of size %d to make space".format(key, entry.size))
   }
 }

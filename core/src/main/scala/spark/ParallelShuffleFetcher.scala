@@ -29,8 +29,9 @@ class ParallelShuffleFetcher extends ShuffleFetcher with Logging {
     
     // Randomize them and put them in a LinkedBlockingQueue
     val serverQueue = new LinkedBlockingQueue[(String, ArrayBuffer[Int])]
-    for (pair <- Utils.randomize(inputsByUri))
+    for (pair <- Utils.randomize(inputsByUri)) {
       serverQueue.put(pair)
+    }
 
     // Create a queue to hold the fetched data
     val resultQueue = new LinkedBlockingQueue[Array[Byte]]
@@ -57,17 +58,19 @@ class ParallelShuffleFetcher extends ShuffleFetcher with Logging {
                 val conn = new URL(url).openConnection()
                 conn.connect()
                 val len = conn.getContentLength()
-                if (len == -1)
+                if (len == -1) {
                   throw new SparkException("Content length was not specified by server")
+                }
                 val buf = new Array[Byte](len)
                 val in = conn.getInputStream()
                 var pos = 0
                 while (pos < len) {
                   val n = in.read(buf, pos, len-pos)
-                  if (n == -1)
+                  if (n == -1) {
                     throw new SparkException("EOF before reading the expected " + len + " bytes")
-                  else
+                  } else {
                     pos += n
+                  }
                 }
                 // Done reading everything
                 resultQueue.put(buf)

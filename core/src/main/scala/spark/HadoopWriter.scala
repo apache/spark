@@ -16,13 +16,11 @@ import spark.SerializableWritable
 import spark.Logging
 
 /**
- * Saves an RDD using a Hadoop OutputFormat as specified by a JobConf. The
- * JobConf should also contain an output key class, an output value class, a
- * filename to write to, etc exactly like in a Hadoop job.
+ * Saves an RDD using a Hadoop OutputFormat as specified by a JobConf. The JobConf should also 
+ * contain an output key class, an output value class, a filename to write to, etc exactly like in 
+ * a Hadoop job.
  */
-class HadoopWriter(
-    @transient jobConf: JobConf
-    ) extends Logging with Serializable {
+class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializable {
   
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
@@ -149,7 +147,8 @@ class HadoopWriter(
     attemptID = attemptid
 
     jID = new SerializableWritable[JobID](HadoopWriter.createJobID(now, jobid))
-    taID = new SerializableWritable[TaskAttemptID] (new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
+    taID = new SerializableWritable[TaskAttemptID](
+        new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
   }
 
   private def setConfParams() {

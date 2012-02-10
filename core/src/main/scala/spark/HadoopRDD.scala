@@ -18,8 +18,8 @@ import org.apache.hadoop.util.ReflectionUtils
 class HadoopSplit(
     rddId: Int,
     idx: Int,
-    @transient s: InputSplit
-    ) extends Split with Serializable {
+    @transient s: InputSplit)
+  extends Split with Serializable {
   
   val inputSplit = new SerializableWritable[InputSplit](s)
 
@@ -33,13 +33,13 @@ class HadoopSplit(
  * system, or S3, tables in HBase, etc).
  */
 class HadoopRDD[K, V](
-  sc: SparkContext,
-  @transient conf: JobConf,
-  inputFormatClass: Class[_ <: InputFormat[K, V]],
-  keyClass: Class[K],
-  valueClass: Class[V],
-  minSplits: Int
-  ) extends RDD[(K, V)](sc) {
+    sc: SparkContext,
+    @transient conf: JobConf,
+    inputFormatClass: Class[_ <: InputFormat[K, V]],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minSplits: Int)
+  extends RDD[(K, V)](sc) {
   
   val serializableConf = new SerializableWritable(conf)
   

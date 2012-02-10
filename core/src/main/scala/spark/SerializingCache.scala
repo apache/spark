@@ -3,8 +3,8 @@ package spark
 import java.io._
 
 /**
- * Wrapper around a BoundedMemoryCache that stores serialized objects as
- * byte arrays in order to reduce storage cost and GC overhead
+ * Wrapper around a BoundedMemoryCache that stores serialized objects as byte arrays in order to 
+ * reduce storage cost and GC overhead
  */
 class SerializingCache extends Cache with Logging {
   val bmc = new BoundedMemoryCache

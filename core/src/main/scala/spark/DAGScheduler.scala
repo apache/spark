@@ -144,7 +144,8 @@ private trait DAGScheduler extends Scheduler with Logging {
                   if (!stage.isAvailable) {
                     missing += stage
                   }
-                case narrowDep: NarrowDependency[_] => visit(narrowDep.rdd)
+                case narrowDep: NarrowDependency[_] =>
+                  visit(narrowDep.rdd)
               }
             }
           }

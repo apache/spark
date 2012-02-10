@@ -264,8 +264,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
 class MappedRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
-    f: T => U
-    ) extends RDD[U](prev.context) {
+    f: T => U)
+  extends RDD[U](prev.context) {
+  
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = prev.iterator(split).map(f)
@@ -273,25 +274,21 @@ class MappedRDD[U: ClassManifest, T: ClassManifest](
 
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
-    f: T => Traversable[U]
-    ) extends RDD[U](prev.context) {
+    f: T => Traversable[U])
+  extends RDD[U](prev.context) {
+  
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = prev.iterator(split).flatMap(f)
 }
 
-class FilteredRDD[T: ClassManifest](
-    prev: RDD[T],
-    f: T => Boolean
-    ) extends RDD[T](prev.context) {
+class FilteredRDD[T: ClassManifest](prev: RDD[T], f: T => Boolean) extends RDD[T](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = prev.iterator(split).filter(f)
 }
 
-class GlommedRDD[T: ClassManifest](
-    prev: RDD[T]
-    ) extends RDD[Array[T]](prev.context) {
+class GlommedRDD[T: ClassManifest](prev: RDD[T]) extends RDD[Array[T]](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = Array(prev.iterator(split).toArray).iterator
@@ -299,8 +296,9 @@ class GlommedRDD[T: ClassManifest](
 
 class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
-    f: Iterator[T] => Iterator[U]
-    ) extends RDD[U](prev.context) {
+    f: Iterator[T] => Iterator[U])
+  extends RDD[U](prev.context) {
+  
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = f(prev.iterator(split))

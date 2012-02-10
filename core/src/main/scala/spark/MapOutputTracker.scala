@@ -24,6 +24,7 @@ extends DaemonActor with Logging {
         case GetMapOutputLocations(shuffleId: Int) =>
           logInfo("Asked to get map output locations for shuffle " + shuffleId)
           reply(serverUris.get(shuffleId))
+          
         case StopMapOutputTracker =>
           reply('OK)
           exit()
@@ -74,8 +75,9 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
     var array = serverUris.get(shuffleId)
     if (array != null) {
       array.synchronized {
-        if (array(mapId) == serverUri)
+        if (array(mapId) == serverUri) {
           array(mapId) = null
+        }
       }
       incrementGeneration()
     } else {
@@ -95,7 +97,11 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
         if (fetching.contains(shuffleId)) {
           // Someone else is fetching it; wait for them to be done
           while (fetching.contains(shuffleId)) {
-            try {fetching.wait()} catch {case _ =>}
+            try {
+              fetching.wait()
+            } catch {
+              case _ =>
+            }
           }
           return serverUris.get(shuffleId)
         } else {

@@ -5,9 +5,15 @@ import java.io.FileOutputStream
 import java.io.ObjectOutputStream
 import scala.collection.mutable.HashMap
 
-
-class ShuffleMapTask(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_], val partition: Int, locs: Seq[String])
-extends DAGTask[String](stageId) with Logging {
+class ShuffleMapTask(
+    stageId: Int,
+    rdd: RDD[_], 
+    dep: ShuffleDependency[_,_,_],
+    val partition: Int, 
+    locs: Seq[String])
+  extends DAGTask[String](stageId)
+  with Logging {
+  
   val split = rdd.splits(partition)
 
   override def run (attemptId: Int): String = {
