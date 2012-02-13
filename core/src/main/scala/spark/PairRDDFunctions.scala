@@ -377,7 +377,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     override val partitioner = prev.partitioner
     override val dependencies = List(new OneToOneDependency(prev))
     override def compute(split: Split) = {
-      prev.iterator(split).toList
+      prev.iterator(split).toArray
         .sortWith((x, y) => if (ascending) x._1 < y._1 else x._1 > y._1).iterator
     }
   } 
