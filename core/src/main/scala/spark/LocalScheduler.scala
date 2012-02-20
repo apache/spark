@@ -12,11 +12,13 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
   var attemptId = new AtomicInteger(0)
   var threadPool = Executors.newFixedThreadPool(threads, DaemonThreadFactory)
 
+  // TODO: Need to take into account stage priority in scheduling
+
   override def start() {}
   
   override def waitForRegister() {}
 
-  override def submitTasks(tasks: Seq[Task[_]]) {
+  override def submitTasks(tasks: Seq[Task[_]], runId: Int) {
     val failCount = new Array[Int](tasks.size)
 
     def submitTask(task: Task[_], idInJob: Int) {

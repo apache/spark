@@ -1,19 +1,19 @@
 package spark
 
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue, Map}
 
 /**
  * A task created by the DAG scheduler. Knows its stage ID and map ouput tracker generation.
  */
-abstract class DAGTask[T](val stageId: Int) extends Task[T] {
+abstract class DAGTask[T](val runId: Int, val stageId: Int) extends Task[T] {
   val gen = SparkEnv.get.mapOutputTracker.getGeneration
   override def generation: Option[Long] = Some(gen)
 }
 
 /**
- * A completion event passed by the underlying task scheduler to the DAG scheduler
+ * A completion event passed by the underlying task scheduler to the DAG scheduler.
  */
 case class CompletionEvent(
     task: DAGTask[_],
@@ -39,13 +39,22 @@ case class OtherFailure(message: String) extends TaskEndReason
  * and to report fetch failures (the submitTasks method, and code to add CompletionEvents).
  */
 private trait DAGScheduler extends Scheduler with Logging {
-  // Must be implemented by subclasses to start running a set of tasks
-  def submitTasks(tasks: Seq[Task[_]]): Unit
+  // Must be implemented by subclasses to start running a set of tasks. The subclass should also
+  // attempt to run different sets of tasks in the order given by runId (lower values first).
+  def submitTasks(tasks: Seq[Task[_]], runId: Int): Unit
 
-  // Must be called by subclasses to report task completions or failures
+  // Must be called by subclasses to report task completions or failures.
   def taskEnded(task: Task[_], reason: TaskEndReason, result: Any, accumUpdates: Map[Long, Any]) {
-    val dagTask = task.asInstanceOf[DAGTask[_]]
-    completionEvents.put(CompletionEvent(dagTask, reason, result, accumUpdates))
+    lock.synchronized {
+      val dagTask = task.asInstanceOf[DAGTask[_]]
+      eventQueues.get(dagTask.runId) match {
+        case Some(queue) =>
+          queue += CompletionEvent(dagTask, reason, result, accumUpdates)
+          lock.notifyAll()
+        case None =>
+          logInfo("Ignoring completion event for DAG job " + dagTask.runId + " because it's gone")
+      }
+    }
   }
 
   // The time, in millis, to wait for fetch failure events to stop coming in after one is detected;
@@ -57,16 +66,13 @@ private trait DAGScheduler extends Scheduler with Logging {
   // resubmit failed stages
   val POLL_TIMEOUT = 500L
 
-  private val completionEvents = new LinkedBlockingQueue[CompletionEvent]
-  private val lock = new Object
+  private val lock = new Object          // Used for access to the entire DAGScheduler
 
-  var nextStageId = 0
+  private val eventQueues = new HashMap[Int, Queue[CompletionEvent]]   // Indexed by run ID
 
-  def newStageId() = {
-    var res = nextStageId
-    nextStageId += 1
-    res
-  }
+  val nextRunId = new AtomicInteger(0)
+
+  val nextStageId = new AtomicInteger(0)
 
   val idToStage = new HashMap[Int, Stage]
 
@@ -103,7 +109,7 @@ private trait DAGScheduler extends Scheduler with Logging {
     if (shuffleDep != None) {
       mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.splits.size)
     }
-    val id = newStageId()
+    val id = nextStageId.getAndIncrement()
     val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd))
     idToStage(id) = stage
     stage
@@ -167,6 +173,8 @@ private trait DAGScheduler extends Scheduler with Logging {
       allowLocal: Boolean)
       (implicit m: ClassManifest[U]): Array[U] = {
     lock.synchronized {
+      val runId = nextRunId.getAndIncrement()
+      
       val outputParts = partitions.toArray
       val numOutputParts: Int = partitions.size
       val finalStage = newStage(finalRdd, None)
@@ -196,6 +204,9 @@ private trait DAGScheduler extends Scheduler with Logging {
         val taskContext = new TaskContext(finalStage.id, outputParts(0), 0)
         return Array(func(taskContext, finalRdd.iterator(split)))
       }
+
+      // Register the job ID so that we can get completion events for it
+      eventQueues(runId) = new Queue[CompletionEvent]
   
       def submitStage(stage: Stage) {
         if (!waiting(stage) && !running(stage)) {
@@ -221,26 +232,27 @@ private trait DAGScheduler extends Scheduler with Logging {
           for (id <- 0 until numOutputParts if (!finished(id))) {
             val part = outputParts(id)
             val locs = getPreferredLocs(finalRdd, part)
-            tasks += new ResultTask(finalStage.id, finalRdd, func, part, locs, id)
+            tasks += new ResultTask(runId, finalStage.id, finalRdd, func, part, locs, id)
           }
         } else {
           for (p <- 0 until stage.numPartitions if stage.outputLocs(p) == Nil) {
             val locs = getPreferredLocs(stage.rdd, p)
-            tasks += new ShuffleMapTask(stage.id, stage.rdd, stage.shuffleDep.get, p, locs)
+            tasks += new ShuffleMapTask(runId, stage.id, stage.rdd, stage.shuffleDep.get, p, locs)
           }
         }
         myPending ++= tasks
-        submitTasks(tasks)
+        submitTasks(tasks, runId)
       }
   
       submitStage(finalStage)
   
       while (numFinished != numOutputParts) {
-        val evt = completionEvents.poll(POLL_TIMEOUT, TimeUnit.MILLISECONDS)
+        val eventOption = waitForEvent(runId, POLL_TIMEOUT)
         val time = System.currentTimeMillis // TODO: use a pluggable clock for testability
   
         // If we got an event off the queue, mark the task done or react to a fetch failure
-        if (evt != null) {
+        if (eventOption != None) {
+          val evt = eventOption.get
           val stage = idToStage(evt.task.stageId)
           pendingTasks(stage) -= evt.task
           if (evt.reason == Success) {
@@ -315,6 +327,7 @@ private trait DAGScheduler extends Scheduler with Logging {
         }
       }
   
+      eventQueues -= runId
       return results
     }
   }
@@ -343,5 +356,19 @@ private trait DAGScheduler extends Scheduler with Logging {
       case _ =>
     })
     return Nil
+  }
+
+  // Assumes that lock is held on entrance, but will release it to wait for the next event.
+  def waitForEvent(runId: Int, timeout: Long): Option[CompletionEvent] = {
+    val endTime = System.currentTimeMillis() + timeout   // TODO: Use pluggable clock for testing
+    while (eventQueues(runId).isEmpty) {
+      val time = System.currentTimeMillis()
+      if (time > endTime) {
+        return None
+      } else {
+        lock.wait(endTime - time)
+      }
+    }
+    return Some(eventQueues(runId).dequeue())
   }
 }

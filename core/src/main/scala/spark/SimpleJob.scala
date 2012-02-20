@@ -16,8 +16,9 @@ import org.apache.mesos.Protos._
 class SimpleJob(
     sched: MesosScheduler, 
     tasksSeq: Seq[Task[_]], 
-    val jobId: Int) 
-  extends Job(jobId)
+    runId: Int,
+    jobId: Int) 
+  extends Job(runId, jobId)
   with Logging {
   
   // Maximum time to wait to run a task in a preferred location (in ms)

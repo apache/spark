@@ -9,8 +9,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.collection.mutable.Map
-import scala.collection.mutable.Queue
+import scala.collection.mutable.PriorityQueue
 import scala.collection.JavaConversions._
+import scala.math.Ordering
 
 import com.google.protobuf.ByteString
 
@@ -53,7 +54,7 @@ private class MesosScheduler(
   private val registeredLock = new Object()
 
   private val activeJobs = new HashMap[Int, Job]
-  private val activeJobsQueue = new Queue[Job]
+  private var activeJobsQueue = new PriorityQueue[Job]()(jobOrdering)
 
   private val taskIdToJobId = new HashMap[String, Int]
   private val taskIdToSlaveId = new HashMap[String, String]
@@ -74,6 +75,13 @@ private class MesosScheduler(
 
   // URIs of JARs to pass to executor
   var jarUris: String = ""
+
+  // Sorts jobs in reverse order of run ID for use in our priority queue (so lower IDs run first)
+  private val jobOrdering = new Ordering[Job] {
+    override def compare(j1: Job, j2: Job): Int = {
+      return j2.runId - j1.runId
+    }
+  }
   
   def newJobId(): Int = this.synchronized {
     val id = nextJobId
@@ -138,14 +146,13 @@ private class MesosScheduler(
       .addResources(memory)
       .build()
   }
-
   
-  def submitTasks(tasks: Seq[Task[_]]) {
+  def submitTasks(tasks: Seq[Task[_]], runId: Int) {
     logInfo("Got a job with " + tasks.size + " tasks")
     waitForRegister()
     this.synchronized {
       val jobId = newJobId()
-      val myJob = new SimpleJob(this, tasks, jobId)
+      val myJob = new SimpleJob(this, tasks, runId, jobId)
       activeJobs(jobId) = myJob
       activeJobsQueue += myJob
       logInfo("Adding job with ID " + jobId)
@@ -156,11 +163,11 @@ private class MesosScheduler(
   
   def jobFinished(job: Job) {
     this.synchronized {
-      activeJobs -= job.getId
-      activeJobsQueue.dequeueAll(x => (x == job))
-      taskIdToJobId --= jobTasks(job.getId)
-      taskIdToSlaveId --= jobTasks(job.getId)
-      jobTasks.remove(job.getId)
+      activeJobs -= job.jobId
+      activeJobsQueue = activeJobsQueue.filterNot(_ == job)
+      taskIdToJobId --= jobTasks(job.jobId)
+      taskIdToSlaveId --= jobTasks(job.jobId)
+      jobTasks.remove(job.jobId)
     }
   }
 
@@ -204,8 +211,8 @@ private class MesosScheduler(
                 tasks(i).add(task)
                 val tid = task.getTaskId.getValue
                 val sid = offers(i).getSlaveId.getValue
-                taskIdToJobId(tid) = job.getId
-                jobTasks(job.getId) += tid
+                taskIdToJobId(tid) = job.jobId
+                jobTasks(job.jobId) += tid
                 taskIdToSlaveId(tid) = sid
                 slavesWithExecutors += sid
                 availableCpus(i) -= getResource(task.getResourcesList(), "cpus")
