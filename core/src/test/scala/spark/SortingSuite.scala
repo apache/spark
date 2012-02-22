@@ -1,6 +1,5 @@
 package spark
 
-import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
 import SparkContext._
 
