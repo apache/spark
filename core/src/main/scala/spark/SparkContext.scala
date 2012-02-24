@@ -349,9 +349,12 @@ object SparkContext {
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
   implicit def rddToPairRDDFunctions[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
     new PairRDDFunctions(rdd)
-  
+
   implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable: ClassManifest](rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
+
+  implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
+    new OrderedRDDFunctions(rdd)
 
   // Implicit conversions to common Writable types, for saveAsSequenceFile
 
