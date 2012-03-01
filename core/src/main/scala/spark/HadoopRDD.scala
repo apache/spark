@@ -60,18 +60,6 @@ class HadoopRDD[K, V](
       .asInstanceOf[InputFormat[K, V]]
   }
 
-  /**
-   * Helper method for creating a Hadoop Writable, because the commonly used NullWritable class has 
-   * no constructor.
-   */
-  def createWritable[T](clazz: Class[T]): T = {
-    if (clazz == classOf[NullWritable]) {
-      NullWritable.get().asInstanceOf[T]
-    } else {
-      clazz.newInstance()
-    }
-  }
-
   override def splits = splits_
 
   override def compute(theSplit: Split) = new Iterator[(K, V)] {
@@ -82,8 +70,8 @@ class HadoopRDD[K, V](
     val fmt = createInputFormat(conf)
     reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 
-    val key: K = createWritable(keyClass)
-    val value: V = createWritable(valueClass)
+    val key: K = reader.createKey()
+    val value: V = reader.createValue()
     var gotNext = false
     var finished = false
 
