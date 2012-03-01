@@ -363,7 +363,7 @@ private trait DAGScheduler extends Scheduler with Logging {
     val endTime = System.currentTimeMillis() + timeout   // TODO: Use pluggable clock for testing
     while (eventQueues(runId).isEmpty) {
       val time = System.currentTimeMillis()
-      if (time > endTime) {
+      if (time >= endTime) {
         return None
       } else {
         lock.wait(endTime - time)
