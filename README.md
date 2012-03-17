@@ -37,6 +37,15 @@ to connect to. This can be a Mesos URL, or "local" to run locally with one
 thread, or "local[N]" to run locally with N threads.
 
 
+## A Note About Hadoop
+
+Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
+storage systems. Because the HDFS API has changed in different versions of
+Hadoop, you must build Spark against the same version that your cluster runs.
+You can change the version by setting the `HADOOP_VERSION` variable at the top
+of `project/SparkBuild.scala`, then rebuilding Spark.
+
+
 ## Configuration
 
 Spark can be configured through two files: `conf/java-opts` and
@@ -57,6 +66,9 @@ several Spark-specific variables you can set:
   shared libraries.
 
 - `SPARK_JAVA_OPTS`: Extra options to pass to JVM.
+
+- `MESOS_NATIVE_LIBRARY`: Your Mesos library, if you want to run on a Mesos
+  cluster. For example, this might be /usr/local/lib/libmesos.so on Linux.
 
 Note that `spark-env.sh` must be a shell script (it must be executable and start
 with a `#!` header to specify the shell to use).
