@@ -13,22 +13,22 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
+# If the user specifies a Mesos JAR, put it before our included one on the classpath
 MESOS_CLASSPATH=""
-MESOS_LIBRARY_PATH=""
-
-if [ "x$MESOS_HOME" != "x" ] ; then
-  MESOS_CLASSPATH="$MESOS_HOME/lib/java/mesos.jar"
-  MESOS_LIBRARY_PATH="$MESOS_HOME/lib/java"
+if [ "x$MESOS_JAR" != "x" ] ; then
+  MESOS_CLASSPATH="$MESOS_JAR"
 fi
 
+# Figure out how much memory to use per executor and set it as an environment
+# variable so that our process sees it and can report it to Mesos
 if [ "x$SPARK_MEM" == "x" ] ; then
   SPARK_MEM="512m"
 fi
-export SPARK_MEM  # So that the process sees it and can report it to Mesos
+export SPARK_MEM
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$SPARK_JAVA_OPTS"
-JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH:$FWDIR/lib:$FWDIR/src/main/native:$MESOS_LIBRARY_PATH"
+JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH"
 JAVA_OPTS+=" -Xms$SPARK_MEM -Xmx$SPARK_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e $FWDIR/conf/java-opts ] ; then
@@ -36,35 +36,37 @@ if [ -e $FWDIR/conf/java-opts ] ; then
 fi
 export JAVA_OPTS
 
-CORE_DIR=$FWDIR/core
-REPL_DIR=$FWDIR/repl
-EXAMPLES_DIR=$FWDIR/examples
-BAGEL_DIR=$FWDIR/bagel
+CORE_DIR="$FWDIR/core"
+REPL_DIR="$FWDIR/repl"
+EXAMPLES_DIR="$FWDIR/examples"
+BAGEL_DIR="$FWDIR/bagel"
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$CORE_DIR/target/scala-$SCALA_VERSION/classes:$MESOS_CLASSPATH"
-CLASSPATH+=:$FWDIR/conf
-CLASSPATH+=:$REPL_DIR/target/scala-$SCALA_VERSION/classes
-CLASSPATH+=:$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes
+CLASSPATH="$SPARK_CLASSPATH"
+CLASSPATH+=":$MESOS_CLASSPATH"
+CLASSPATH+=":$FWDIR/conf"
+CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
 for jar in `find $CORE_DIR/lib -name '*jar'`; do
-  CLASSPATH+=:$jar
+  CLASSPATH+=":$jar"
 done
 for jar in `find $FWDIR/lib_managed/jars -name '*jar'`; do
-  CLASSPATH+=:$jar
+  CLASSPATH+=":$jar"
 done
 for jar in `find $FWDIR/lib_managed/bundles -name '*jar'`; do
-  CLASSPATH+=:$jar
+  CLASSPATH+=":$jar"
 done
 for jar in `find $REPL_DIR/lib -name '*jar'`; do
-  CLASSPATH+=:$jar
+  CLASSPATH+=":$jar"
 done
 CLASSPATH+=:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes
 export CLASSPATH # Needed for spark-shell
 
 if [ -n "$SCALA_HOME" ]; then
-  SCALA=${SCALA_HOME}/bin/scala
+  SCALA="${SCALA_HOME}/bin/scala"
 else
   SCALA=scala
 fi
 
-exec $SCALA -cp $CLASSPATH "$@"
+exec "$SCALA" -cp "$CLASSPATH" "$@"

@@ -119,7 +119,7 @@ class ReplSuite extends FunSuite {
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
   
-  if (System.getenv("MESOS_HOME") != null) {
+  if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
     test ("running on Mesos") {
       val output = runInterpreter("localquiet", """
         var v = 7

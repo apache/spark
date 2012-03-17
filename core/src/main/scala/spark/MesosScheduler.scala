@@ -133,7 +133,6 @@ private class MesosScheduler(
           .build())
       }
     }
-    environment.build()
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)

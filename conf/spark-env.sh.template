@@ -2,7 +2,7 @@
 
 # Set Spark environment variables for your site in this file. Some useful
 # variables to set are:
-# - MESOS_HOME, to point to your Mesos installation
+# - MESOS_NATIVE_LIBRARY, to point to your Mesos native library (libmesos.so)
 # - SCALA_HOME, to point to your Scala installation
 # - SPARK_CLASSPATH, to add elements to Spark's classpath
 # - SPARK_JAVA_OPTS, to add JVM options
