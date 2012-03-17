@@ -68,7 +68,7 @@ several Spark-specific variables you can set:
 - `SPARK_JAVA_OPTS`: Extra options to pass to JVM.
 
 - `MESOS_NATIVE_LIBRARY`: Your Mesos library, if you want to run on a Mesos
-  cluster. For example, this might be /usr/local/lib/libmesos.so on Linux.
+  cluster. For example, this might be `/usr/local/lib/libmesos.so` on Linux.
 
 Note that `spark-env.sh` must be a shell script (it must be executable and start
 with a `#!` header to specify the shell to use).
