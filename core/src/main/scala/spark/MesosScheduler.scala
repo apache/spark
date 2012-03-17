@@ -124,25 +124,29 @@ private class MesosScheduler(
         		"property, the SPARK_HOME environment variable or the SparkContext constructor")
     }
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
-    val params = Params.newBuilder()
+    val environment = Environment.newBuilder()
     for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
       if (System.getenv(key) != null) {
-        params.addParam(Param.newBuilder()
-            .setKey("env." + key)
-            .setValue(System.getenv(key))
-            .build())
+        environment.addVariables(Environment.Variable.newBuilder()
+          .setName(key)
+          .setValue(System.getenv(key))
+          .build())
       }
     }
+    environment.build()
     val memory = Resource.newBuilder()
       .setName("mem")
-      .setType(Resource.Type.SCALAR)
-      .setScalar(Resource.Scalar.newBuilder().setValue(EXECUTOR_MEMORY).build())
+      .setType(Value.Type.SCALAR)
+      .setScalar(Value.Scalar.newBuilder().setValue(EXECUTOR_MEMORY).build())
+      .build()
+    val command = CommandInfo.newBuilder()
+      .setValue(execScript)
+      .setEnvironment(environment)
       .build()
     ExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue("default").build())
-      .setUri(execScript)
+      .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
-      .setParams(params.build())
       .addResources(memory)
       .build()
   }

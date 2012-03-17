@@ -167,8 +167,8 @@ class SimpleJob(
           // Create and return the Mesos task object
           val cpuRes = Resource.newBuilder()
             .setName("cpus")
-            .setType(Resource.Type.SCALAR)
-            .setScalar(Resource.Scalar.newBuilder().setValue(CPUS_PER_TASK).build())
+            .setType(Value.Type.SCALAR)
+            .setScalar(Value.Scalar.newBuilder().setValue(CPUS_PER_TASK).build())
             .build()
           val serializedTask = Utils.serialize(task)
           logDebug("Serialized size: " + serializedTask.size)

@@ -4,6 +4,9 @@ import sbtassembly.Plugin._
 import AssemblyKeys._
 
 object SparkBuild extends Build {
+  // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
+  // "1.0.1" for Apache releases, or "0.20.2-cdh3u3" for Cloudera Hadoop.
+  val HADOOP_VERSION = "0.20.205.0"
 
   lazy val root = Project("root", file("."), settings = sharedSettings) aggregate(core, repl, examples, bagel)
 
@@ -41,7 +44,8 @@ object SparkBuild extends Build {
     name := "spark-core",
     resolvers ++= Seq(
       "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
-      "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/"
+      "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
+      "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "11.0.1",
@@ -49,7 +53,7 @@ object SparkBuild extends Build {
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
       "com.ning" % "compress-lzf" % "0.8.4",
-      "org.apache.hadoop" % "hadoop-core" % "0.20.2",
+      "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION,
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.3.0",
       "de.javakaffee" % "kryo-serializers" % "0.9",

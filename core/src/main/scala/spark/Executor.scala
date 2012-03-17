@@ -24,9 +24,15 @@ class Executor extends org.apache.mesos.Executor with Logging {
 
   initLogging()
 
-  override def init(d: ExecutorDriver, args: ExecutorArgs) {
+  override def registered(
+      driver: ExecutorDriver,
+      executorInfo: ExecutorInfo,
+      frameworkId: FrameworkID,
+      frameworkInfo: FrameworkInfo,
+      slaveId: SlaveID,
+      slaveInfo: SlaveInfo) {
     // Read spark.* system properties from executor arg
-    val props = Utils.deserialize[Array[(String, String)]](args.getData.toByteArray)
+    val props = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
     for ((key, value) <- props) {
       System.setProperty(key, value)
     }
@@ -172,7 +178,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
  */
 object Executor extends Logging {
   def main(args: Array[String]) {
-    System.loadLibrary("mesos")
+    MesosNativeLibrary.load()
     // Create a new Executor and start it running
     val exec = new Executor
     new MesosExecutorDriver(exec).run()

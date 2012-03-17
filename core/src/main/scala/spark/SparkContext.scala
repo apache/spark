@@ -28,6 +28,8 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
 
+import org.apache.mesos.MesosNativeLibrary
+
 import spark.broadcast._
 
 class SparkContext(
@@ -72,7 +74,7 @@ class SparkContext(
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         new LocalScheduler(threads.toInt, maxFailures.toInt)
       case _ =>
-        System.loadLibrary("mesos")
+        MesosNativeLibrary.load()
         new MesosScheduler(this, master, frameworkName)
     }
   }
