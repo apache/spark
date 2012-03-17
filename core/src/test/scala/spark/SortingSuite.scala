@@ -29,11 +29,20 @@ class SortingSuite extends FunSuite {
       sc.stop()
   }
 
-  test("sortHighParallelism") {
+  test("morePartitionsThanElements") {
       val sc = new SparkContext("local", "test")
       val rand = new scala.util.Random()
-      val pairArr = Array.fill(3000) { (rand.nextInt(), rand.nextInt()) }
-      val pairs = sc.parallelize(pairArr, 300)
+      val pairArr = Array.fill(10) { (rand.nextInt(), rand.nextInt()) }
+      val pairs = sc.parallelize(pairArr, 30)
+      assert(pairs.sortByKey().collect() === pairArr.sortBy(_._1))
+      sc.stop()
+  }
+
+  test("emptyRDD") {
+      val sc = new SparkContext("local", "test")
+      val rand = new scala.util.Random()
+      val pairArr = new Array[(Int, Int)](0)
+      val pairs = sc.parallelize(pairArr)
       assert(pairs.sortByKey().collect() === pairArr.sortBy(_._1))
       sc.stop()
   }
