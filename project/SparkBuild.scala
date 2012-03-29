@@ -53,8 +53,6 @@ object SparkBuild extends Build {
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.3.0",
       "de.javakaffee" % "kryo-serializers" % "0.9",
-      "se.scalablesolutions.akka" % "akka-actor" % "1.2",
-      "se.scalablesolutions.akka" % "akka-remote" % "1.2",
       "org.jboss.netty" % "netty" % "3.2.6.Final",
       "it.unimi.dsi" % "fastutil" % "6.4.2"
     )
