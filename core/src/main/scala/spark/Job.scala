@@ -8,9 +8,9 @@ import org.apache.mesos.Protos._
  * callbacks.
  */
 abstract class Job(val runId: Int, val jobId: Int) {
-  def slaveOffer(s: Offer, availableCpus: Double): Option[TaskDescription]
+  def slaveOffer(s: Offer, availableCpus: Double): Option[TaskInfo]
 
   def statusUpdate(t: TaskStatus): Unit
 
-  def error(code: Int, message: String): Unit
+  def error(message: String): Unit
 }

@@ -76,6 +76,9 @@ private class MesosScheduler(
   // URIs of JARs to pass to executor
   var jarUris: String = ""
 
+  // Create an ExecutorInfo for our tasks
+  val executorInfo = createExecutorInfo()
+
   // Sorts jobs in reverse order of run ID for use in our priority queue (so lower IDs run first)
   private val jobOrdering = new Ordering[Job] {
     override def compare(j1: Job, j2: Job): Int = {
@@ -105,7 +108,8 @@ private class MesosScheduler(
       setDaemon(true)
       override def run {
         val sched = MesosScheduler.this
-        driver = new MesosSchedulerDriver(sched, frameworkName, getExecutorInfo, master)
+        val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(frameworkName).build()
+        driver = new MesosSchedulerDriver(sched, fwInfo, master)
         try {
           val ret = driver.run()
           logInfo("driver.run() returned with code " + ret)
@@ -116,7 +120,7 @@ private class MesosScheduler(
     }.start
   }
 
-  def getExecutorInfo(): ExecutorInfo = {
+  def createExecutorInfo(): ExecutorInfo = {
     val sparkHome = sc.getSparkHome match {
       case Some(path) => path
       case None =>
@@ -174,7 +178,7 @@ private class MesosScheduler(
     }
   }
 
-  override def registered(d: SchedulerDriver, frameworkId: FrameworkID) {
+  override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     logInfo("Registered as framework ID " + frameworkId.getValue)
     registeredLock.synchronized {
       isRegistered = true
@@ -190,6 +194,10 @@ private class MesosScheduler(
     }
   }
 
+  override def disconnected(d: SchedulerDriver) {}
+
+  override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
+
   /**
    * Method called by Mesos to offer resources on slaves. We resond by asking our active jobs for 
    * tasks in FIFO order. We fill each node with tasks in a round-robin manner so that tasks are
@@ -197,7 +205,7 @@ private class MesosScheduler(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
-      val tasks = offers.map(o => new JArrayList[TaskDescription])
+      val tasks = offers.map(o => new JArrayList[TaskInfo])
       val availableCpus = offers.map(o => getResource(o.getResourcesList(), "cpus"))
       val enoughMem = offers.map(o => {
         val mem = getResource(o.getResourcesList(), "mem")
@@ -280,14 +288,14 @@ private class MesosScheduler(
     }
   }
 
-  override def error(d: SchedulerDriver, code: Int, message: String) {
-    logError("Mesos error: %s (error code: %d)".format(message, code))
+  override def error(d: SchedulerDriver, message: String) {
+    logError("Mesos error: " + message)
     synchronized {
       if (activeJobs.size > 0) {
         // Have each job throw a SparkException with the error
         for ((jobId, activeJob) <- activeJobs) {
           try {
-            activeJob.error(code, message)
+            activeJob.error(message)
           } catch {
             case e: Exception => logError("Exception in error callback", e)
           }
@@ -366,11 +374,15 @@ private class MesosScheduler(
 
   override def frameworkMessage(
       d: SchedulerDriver, 
-      s: SlaveID,
       e: ExecutorID,
+      s: SlaveID,
       b: Array[Byte]) {}
 
   override def slaveLost(d: SchedulerDriver, s: SlaveID) {
+    slavesWithExecutors.remove(s.getValue)
+  }
+
+  override def executorLost(d: SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int) {
     slavesWithExecutors.remove(s.getValue)
   }
 

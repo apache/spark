@@ -141,7 +141,7 @@ class SimpleJob(
   }
 
   // Respond to an offer of a single slave from the scheduler by finding a task
-  def slaveOffer(offer: Offer, availableCpus: Double): Option[TaskDescription] = {
+  def slaveOffer(offer: Offer, availableCpus: Double): Option[TaskInfo] = {
     if (tasksLaunched < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
       val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
@@ -173,9 +173,10 @@ class SimpleJob(
           val serializedTask = Utils.serialize(task)
           logDebug("Serialized size: " + serializedTask.size)
           val taskName = "task %d:%d".format(jobId, index)
-          return Some(TaskDescription.newBuilder()
+          return Some(TaskInfo.newBuilder()
               .setTaskId(taskId)
               .setSlaveId(offer.getSlaveId)
+              .setExecutor(sched.executorInfo)
               .setName(taskName)
               .addResources(cpuRes)
               .setData(ByteString.copyFrom(serializedTask))
@@ -290,9 +291,9 @@ class SimpleJob(
     }
   }
 
-  def error(code: Int, message: String) {
+  def error(message: String) {
     // Save the error message
-    abort("Mesos error: %s (error code: %d)".format(message, code))
+    abort("Mesos error: " + message)
   }
 
   def abort(message: String) {

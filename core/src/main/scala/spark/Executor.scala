@@ -27,9 +27,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
   override def registered(
       driver: ExecutorDriver,
       executorInfo: ExecutorInfo,
-      frameworkId: FrameworkID,
       frameworkInfo: FrameworkInfo,
-      slaveId: SlaveID,
       slaveInfo: SlaveInfo) {
     // Read spark.* system properties from executor arg
     val props = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
@@ -54,25 +52,29 @@ class Executor extends org.apache.mesos.Executor with Logging {
     threadPool = new ThreadPoolExecutor(
         1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
   }
+
+  override def disconnected(d: ExecutorDriver) {}
+
+  override def reregistered(d: ExecutorDriver, s: SlaveInfo) {}
   
-  override def launchTask(d: ExecutorDriver, task: TaskDescription) {
+  override def launchTask(d: ExecutorDriver, task: TaskInfo) {
     threadPool.execute(new TaskRunner(task, d))
   }
 
-  class TaskRunner(desc: TaskDescription, d: ExecutorDriver)
+  class TaskRunner(info: TaskInfo, d: ExecutorDriver)
   extends Runnable {
     override def run() = {
-      val tid = desc.getTaskId.getValue
+      val tid = info.getTaskId.getValue
       logInfo("Running task ID " + tid)
       d.sendStatusUpdate(TaskStatus.newBuilder()
-          .setTaskId(desc.getTaskId)
+          .setTaskId(info.getTaskId)
           .setState(TaskState.TASK_RUNNING)
           .build())
       try {
         SparkEnv.set(env)
         Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear
-        val task = Utils.deserialize[Task[Any]](desc.getData.toByteArray, classLoader)
+        val task = Utils.deserialize[Task[Any]](info.getData.toByteArray, classLoader)
         for (gen <- task.generation) {// Update generation if any is set
           env.mapOutputTracker.updateGeneration(gen)
         }
@@ -80,7 +82,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
         val accumUpdates = Accumulators.values
         val result = new TaskResult(value, accumUpdates)
         d.sendStatusUpdate(TaskStatus.newBuilder()
-            .setTaskId(desc.getTaskId)
+            .setTaskId(info.getTaskId)
             .setState(TaskState.TASK_FINISHED)
             .setData(ByteString.copyFrom(Utils.serialize(result)))
             .build())
@@ -89,7 +91,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason
           d.sendStatusUpdate(TaskStatus.newBuilder()
-              .setTaskId(desc.getTaskId)
+              .setTaskId(info.getTaskId)
               .setState(TaskState.TASK_FAILED)
               .setData(ByteString.copyFrom(Utils.serialize(reason)))
               .build())
@@ -97,7 +99,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
         case t: Throwable => {
           val reason = ExceptionFailure(t)
           d.sendStatusUpdate(TaskStatus.newBuilder()
-              .setTaskId(desc.getTaskId)
+              .setTaskId(info.getTaskId)
               .setState(TaskState.TASK_FAILED)
               .setData(ByteString.copyFrom(Utils.serialize(reason)))
               .build())
@@ -160,8 +162,8 @@ class Executor extends org.apache.mesos.Executor with Logging {
     Utils.copyStream(in, out, true)
   }
 
-  override def error(d: ExecutorDriver, code: Int, message: String) {
-    logError("Error from Mesos: %s (code %d)".format(message, code))
+  override def error(d: ExecutorDriver, message: String) {
+    logError("Error from Mesos: " + message)
   }
 
   override def killTask(d: ExecutorDriver, t: TaskID) {
