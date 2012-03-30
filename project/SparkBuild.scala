@@ -55,7 +55,7 @@ object SparkBuild extends Build {
       "com.ning" % "compress-lzf" % "0.8.4",
       "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION,
       "asm" % "asm-all" % "3.3.1",
-      "com.google.protobuf" % "protobuf-java" % "2.3.0",
+      "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.9",
       "org.jboss.netty" % "netty" % "3.2.6.Final",
       "it.unimi.dsi" % "fastutil" % "6.4.2"
