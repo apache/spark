@@ -94,37 +94,37 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     new SampledRDD(this, withReplacement, fraction, seed)
 
   def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
-  	var fraction = 0.0
-  	var total = 0
-  	var multiplier = 3.0
-  	var initialCount = count()
-  	var maxSelected = 0
-  	
-  	if (initialCount > Integer.MAX_VALUE) {
-  	  maxSelected = Integer.MAX_VALUE
-  	} else {
-  	  maxSelected = initialCount.toInt
-  	}
-  	
-  	if (num > initialCount) {
-  		total = maxSelected
-    	fraction = Math.min(multiplier * (maxSelected + 1) / initialCount, 1.0)
-  	} else if (num < 0) {
-  		throw(new IllegalArgumentException("Negative number of elements requested"))
-  	} else {
-  		fraction = Math.min(multiplier * (num + 1) / initialCount, 1.0)
-  		total = num.toInt
-  	}
-	
+    var fraction = 0.0
+    var total = 0
+    var multiplier = 3.0
+    var initialCount = count()
+    var maxSelected = 0
+    
+    if (initialCount > Integer.MAX_VALUE) {
+      maxSelected = Integer.MAX_VALUE
+    } else {
+      maxSelected = initialCount.toInt
+    }
+    
+    if (num > initialCount) {
+      total = maxSelected
+      fraction = Math.min(multiplier * (maxSelected + 1) / initialCount, 1.0)
+    } else if (num < 0) {
+      throw(new IllegalArgumentException("Negative number of elements requested"))
+    } else {
+      fraction = Math.min(multiplier * (num + 1) / initialCount, 1.0)
+      total = num.toInt
+    }
+  
     var samples = this.sample(withReplacement, fraction, seed).collect()
-	
-  	while (samples.length < total) {
-  		samples = this.sample(withReplacement, fraction, seed).collect()
-  	}
-	
-  	val arr = samples.take(total)
-	
-  	return arr
+  
+    while (samples.length < total) {
+      samples = this.sample(withReplacement, fraction, seed).collect()
+    }
+  
+    val arr = samples.take(total)
+  
+    return arr
   }
 
   def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
