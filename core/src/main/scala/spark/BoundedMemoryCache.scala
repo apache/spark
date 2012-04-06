@@ -70,5 +70,6 @@ class BoundedMemoryCache extends Cache with Logging {
 
   protected def dropEntry(key: Any, entry: Entry) {
     logInfo("Dropping key %s of size %d to make space".format(key, entry.size))
+    SparkEnv.get.cacheTracker.dropEntry(key)
   }
 }
