@@ -143,6 +143,17 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
     }
   }
 
+  // Reports that an entry has been dropped from the cache
+  def dropEntry(key: Any) {
+    key match {
+      case (keySpaceId: Long, (rddId: Int, partition: Int)) =>
+        val host = System.getProperty("spark.hostname", Utils.localHostName)
+        trackerActor !! DroppedFromCache(rddId, partition, host)
+      case _ =>
+        logWarning("Unknown key format: %s".format(key))
+    }
+  }
+
   def stop() {
     trackerActor !? StopCacheTracker
     registeredRddIds.clear()
