@@ -54,7 +54,7 @@ private class MesosScheduler(
   private val registeredLock = new Object()
 
   private val activeJobs = new HashMap[Int, Job]
-  private var activeJobsQueue = new PriorityQueue[Job]()(jobOrdering)
+  private var activeJobsQueue = new ArrayBuffer[Job]
 
   private val taskIdToJobId = new HashMap[String, Int]
   private val taskIdToSlaveId = new HashMap[String, String]
@@ -164,7 +164,7 @@ private class MesosScheduler(
   def jobFinished(job: Job) {
     this.synchronized {
       activeJobs -= job.jobId
-      activeJobsQueue = activeJobsQueue.filterNot(_ == job)
+      activeJobsQueue -= job
       taskIdToJobId --= jobTasks(job.jobId)
       taskIdToSlaveId --= jobTasks(job.jobId)
       jobTasks.remove(job.jobId)
@@ -202,7 +202,7 @@ private class MesosScheduler(
         mem >= EXECUTOR_MEMORY || slavesWithExecutors.contains(slaveId)
       })
       var launchedTask = false
-      for (job <- activeJobsQueue) {
+      for (job <- activeJobsQueue.sorted(jobOrdering)) {
         do {
           launchedTask = false
           for (i <- 0 until offers.size if enoughMem(i)) {
@@ -248,6 +248,7 @@ private class MesosScheduler(
   }
 
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
+    var jobToUpdate: Option[Job] = None
     synchronized {
       try {
         val tid = status.getTaskId.getValue
@@ -259,7 +260,7 @@ private class MesosScheduler(
         taskIdToJobId.get(tid) match {
           case Some(jobId) =>
             if (activeJobs.contains(jobId)) {
-              activeJobs(jobId).statusUpdate(status)
+              jobToUpdate = Some(activeJobs(jobId))
             }
             if (isFinished(status.getState)) {
               taskIdToJobId.remove(tid)
@@ -274,6 +275,9 @@ private class MesosScheduler(
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
       }
+    }
+    for (j <- jobToUpdate) {
+      j.statusUpdate(status)
     }
   }
 
