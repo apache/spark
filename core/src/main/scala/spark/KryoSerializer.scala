@@ -9,6 +9,7 @@ import scala.collection.mutable
 
 import com.esotericsoftware.kryo._
 import com.esotericsoftware.kryo.{Serializer => KSerializer}
+import com.esotericsoftware.kryo.serialize.ClassSerializer
 import de.javakaffee.kryoserializers.KryoReflectionFactorySupport
 
 /**
@@ -100,6 +101,14 @@ class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
     buf.readClassAndObject(bytes).asInstanceOf[T]
   }
 
+  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
+    val oldClassLoader = ks.kryo.getClassLoader
+    ks.kryo.setClassLoader(loader)
+    val obj = buf.readClassAndObject(bytes).asInstanceOf[T]
+    ks.kryo.setClassLoader(oldClassLoader)
+    obj
+  }
+
   def outputStream(s: OutputStream): SerializationStream = {
     new KryoSerializationStream(ks.kryo, ks.threadByteBuf.get(), s)
   }
@@ -129,6 +138,8 @@ class KryoSerializer extends Serializer with Logging {
   }
 
   def createKryo(): Kryo = {
+    // This is used so we can serialize/deserialize objects without a zero-arg
+    // constructor.
     val kryo = new KryoReflectionFactorySupport()
 
     // Register some commonly used classes
@@ -149,6 +160,10 @@ class KryoSerializer extends Serializer with Logging {
     for (obj <- toRegister) {
       kryo.register(obj.getClass)
     }
+
+    // Register the following classes for passing closures.
+    kryo.register(classOf[Class[_]], new ClassSerializer(kryo))
+    kryo.setRegistrationOptional(true)
 
     // Register some commonly used Scala singleton objects. Because these
     // are singletons, we must return the exact same local object when we

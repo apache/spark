@@ -16,6 +16,7 @@ trait Serializer {
 trait SerializerInstance {
   def serialize[T](t: T): Array[Byte]
   def deserialize[T](bytes: Array[Byte]): T
+  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T
   def outputStream(s: OutputStream): SerializationStream
   def inputStream(s: InputStream): DeserializationStream
 }

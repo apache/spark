@@ -12,6 +12,7 @@ import scala.util.Random
  * Various utility methods used by Spark.
  */
 object Utils {
+
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(bos)

@@ -34,6 +34,15 @@ class JavaSerializerInstance extends SerializerInstance {
     in.readObject().asInstanceOf[T]
   }
 
+  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ois = new ObjectInputStream(bis) {
+      override def resolveClass(desc: ObjectStreamClass) =
+        Class.forName(desc.getName, false, loader)
+    }
+    return ois.readObject.asInstanceOf[T]
+  }
+
   def outputStream(s: OutputStream): SerializationStream = {
     new JavaSerializationStream(s)
   }
