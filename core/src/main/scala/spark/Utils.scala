@@ -12,27 +12,17 @@ import scala.util.Random
  * Various utility methods used by Spark.
  */
 object Utils {
-  def serialize[T](o: T): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
-    oos.writeObject(o)
-    oos.close
-    return bos.toByteArray
-  }
 
-  def deserialize[T](bytes: Array[Byte]): T = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis)
-    return ois.readObject.asInstanceOf[T]
-  }
+  // The serializer in this object is used by Spark to serialize closures.
+  val serializerClass = System.getProperty("spark.closure.serializer", "spark.JavaSerializer")
+  val ser = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
+
+  def serialize[T](o: T): Array[Byte] = ser.newInstance().serialize[T](o)
+  
+  def deserialize[T](bytes: Array[Byte]): T = ser.newInstance().deserialize[T](bytes)
 
   def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis) {
-      override def resolveClass(desc: ObjectStreamClass) =
-        Class.forName(desc.getName, false, loader)
-    }
-    return ois.readObject.asInstanceOf[T]
+    ser.newInstance().deserialize[T](bytes, loader)
   }
 
   def isAlpha(c: Char): Boolean = {
