@@ -218,7 +218,7 @@ class SimpleJob(
       logInfo("Finished TID %s (progress: %d/%d)".format(tid, tasksFinished, numTasks))
       // Deserialize task result
       val result = ser.deserialize[TaskResult[_]](
-        status.getData.toByteArray)
+        status.getData.toByteArray, getClass.getClassLoader)
       sched.taskEnded(tasks(index), Success, result.value, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
@@ -241,7 +241,7 @@ class SimpleJob(
       // task will never succeed on any node, so tell the scheduler about it.
       if (status.getData != null && status.getData.size > 0) {
         val reason = ser.deserialize[TaskEndReason](
-          status.getData.toByteArray)
+          status.getData.toByteArray, getClass.getClassLoader)
         reason match {
           case fetchFailed: FetchFailed =>
             logInfo("Loss was due to fetch failure from " + fetchFailed.serverUri)
