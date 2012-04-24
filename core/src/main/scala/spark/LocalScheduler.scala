@@ -58,7 +58,7 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
               submitTask(task, idInJob)
             } else {
               // TODO: Do something nicer here to return all the way to the user
-              System.exit(1)
+              taskEnded(task, new ExceptionFailure(t), null, null)
             }
           }
         }
