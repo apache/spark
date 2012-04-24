@@ -65,5 +65,21 @@ class FailureSuite extends FunSuite {
     FailureSuiteState.clear()
   }
 
+  test("failure because task results are not serializable") {
+    val sc = new SparkContext("local[1,1]", "test")
+    val results = sc.makeRDD(1 to 3).map(x => new NonSerializable)
+
+    val thrown = intercept[spark.SparkException] {
+      results.collect()
+    }
+    assert(thrown.getClass === classOf[spark.SparkException])
+    assert(thrown.getMessage.contains("NotSerializableException"))
+
+    sc.stop()
+    FailureSuiteState.clear()
+  }
+
   // TODO: Need to add tests with shuffle fetch failures.
 }
+
+
