@@ -99,11 +99,6 @@ private class MesosScheduler(
   }
   
   override def start() {
-    if (sc.jars.size > 0) {
-      // If the user added any JARS to the SparkContext, create an HTTP server
-      // to serve them to our executors
-      createJarServer()
-    }
     new Thread("Spark scheduler") {
       setDaemon(true)
       override def run {
@@ -125,7 +120,11 @@ private class MesosScheduler(
       case Some(path) => path
       case None =>
         throw new SparkException("Spark home is not set; set it through the spark.home system " +
-        		"property, the SPARK_HOME environment variable or the SparkContext constructor")
+            "property, the SPARK_HOME environment variable or the SparkContext constructor")
+    }
+    // If the user added JARs to the SparkContext, create an HTTP server to ship them to executors
+    if (sc.jars.size > 0) {
+      createJarServer()
     }
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val environment = Environment.newBuilder()
