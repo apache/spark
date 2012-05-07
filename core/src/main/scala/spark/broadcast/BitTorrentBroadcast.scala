@@ -16,7 +16,7 @@ extends Broadcast[T] with Logging with Serializable {
   def value = value_
 
   BitTorrentBroadcast.synchronized {
-    BitTorrentBroadcast.values.put(uuid, value_)
+    BitTorrentBroadcast.values.put(uuid, 0, value_)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -130,7 +130,7 @@ extends Broadcast[T] with Logging with Serializable {
   private def readObject(in: ObjectInputStream): Unit = {
     in.defaultReadObject
     BitTorrentBroadcast.synchronized {
-      val cachedVal = BitTorrentBroadcast.values.get(uuid)
+      val cachedVal = BitTorrentBroadcast.values.get(uuid, 0)
 
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
@@ -152,12 +152,12 @@ extends Broadcast[T] with Logging with Serializable {
         // If does not succeed, then get from HDFS copy
         if (receptionSucceeded) {
           value_ = Broadcast.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
-          BitTorrentBroadcast.values.put(uuid, value_)
+          BitTorrentBroadcast.values.put(uuid, 0, value_)
         }  else {
           // TODO: This part won't work, cause HDFS writing is turned OFF
           val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
           value_ = fileIn.readObject.asInstanceOf[T]
-          BitTorrentBroadcast.values.put(uuid, value_)
+          BitTorrentBroadcast.values.put(uuid, 0, value_)
           fileIn.close()
         }
 

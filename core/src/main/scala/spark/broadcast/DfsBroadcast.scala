@@ -17,7 +17,7 @@ extends Broadcast[T] with Logging with Serializable {
   def value = value_
 
   DfsBroadcast.synchronized { 
-    DfsBroadcast.values.put(uuid, value_) 
+    DfsBroadcast.values.put(uuid, 0, value_) 
   }
 
   if (!isLocal) { 
@@ -34,7 +34,7 @@ extends Broadcast[T] with Logging with Serializable {
   private def readObject(in: ObjectInputStream): Unit = {
     in.defaultReadObject
     DfsBroadcast.synchronized {
-      val cachedVal = DfsBroadcast.values.get(uuid)
+      val cachedVal = DfsBroadcast.values.get(uuid, 0)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
@@ -43,7 +43,7 @@ extends Broadcast[T] with Logging with Serializable {
         
         val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
         value_ = fileIn.readObject.asInstanceOf[T]
-        DfsBroadcast.values.put(uuid, value_)
+        DfsBroadcast.values.put(uuid, 0, value_)
         fileIn.close
         
         val time = (System.nanoTime - start) / 1e9
