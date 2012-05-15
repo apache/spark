@@ -44,7 +44,7 @@ class DiskSpillingCache extends BoundedMemoryCache {
     }
   }
 
-  override def put(datasetId: Any, partition: Int, value: Any): Long = {
+  override def put(datasetId: Any, partition: Int, value: Any): CachePutResponse = {
     var ser = SparkEnv.get.serializer.newInstance()
     super.put(datasetId, partition, ser.serialize(value))
   }

@@ -11,8 +11,8 @@ class SoftReferenceCache extends Cache {
   override def get(datasetId: Any, partition: Int): Any =
     map.get((datasetId, partition))
 
-  override def put(datasetId: Any, partition: Int, value: Any): Long = {
+  override def put(datasetId: Any, partition: Int, value: Any): CachePutResponse = {
     map.put((datasetId, partition), value)
-    return 0
+    return CachePutSuccess(0)
   }
 }

@@ -20,15 +20,19 @@ case object StopCacheTracker extends CacheTrackerMessage
 
 
 class CacheTrackerActor extends DaemonActor with Logging {
-  val locs = new HashMap[Int, Array[List[String]]]
+  private val locs = new HashMap[Int, Array[List[String]]]
 
   /**
    * A map from the slave's host name to its cache size.
    */
-  val slaveCapacity = new HashMap[String, Long]
-  val slaveUsage = new HashMap[String, Long]
+  private val slaveCapacity = new HashMap[String, Long]
+  private val slaveUsage = new HashMap[String, Long]
 
   // TODO: Should probably store (String, CacheType) tuples
+
+  private def getCacheUsage(host: String): Long = slaveUsage.getOrElse(host, 0L)
+  private def getCacheCapacity(host: String): Long = slaveCapacity.getOrElse(host, 0L)
+  private def getCacheAvailable(host: String): Long = getCacheCapacity(host) - getCacheUsage(host)
   
   def act() {
     val port = System.getProperty("spark.master.port").toInt
@@ -39,7 +43,8 @@ class CacheTrackerActor extends DaemonActor with Logging {
     loop {
       react {
         case SlaveCacheStarted(host: String, size: Long) =>
-          logInfo("Started slave cache (size %s) on %s".format(Utils.sizeWithSuffix(size), host))
+          logInfo("Started slave cache (size %s) on %s".format(
+            Utils.memoryBytesToString(size), host))
           slaveCapacity.put(host, size)
           slaveUsage.put(host, 0)
           reply('OK)
@@ -51,9 +56,10 @@ class CacheTrackerActor extends DaemonActor with Logging {
         
         case AddedToCache(rddId, partition, host, size) =>
           if (size > 0) {
-            logInfo("Cache entry added: (%s, %s) on %s, size: %s".format(
-              rddId, partition, host, Utils.sizeWithSuffix(size)))
             slaveUsage.put(host, slaveUsage.getOrElse(host, 0L) + size)
+            logInfo("Cache entry added: (%s, %s) on %s (size added: %s, available: %s)".format(
+              rddId, partition, host, Utils.memoryBytesToString(size),
+              Utils.memoryBytesToString(getCacheAvailable(host))))
           } else {
             logInfo("Cache entry added: (%s, %s) on %s".format(rddId, partition, host))
           }
@@ -62,8 +68,9 @@ class CacheTrackerActor extends DaemonActor with Logging {
           
         case DroppedFromCache(rddId, partition, host, size) =>
           if (size > 0) {
-            logInfo("Cache entry removed: (%s, %s) on %s, size: %s".format(
-              rddId, partition, host, Utils.sizeWithSuffix(size)))
+            logInfo("Cache entry removed: (%s, %s) on %s (size dropped: %s, available: %s)".format(
+              rddId, partition, host, Utils.memoryBytesToString(size),
+              Utils.memoryBytesToString(getCacheAvailable(host))))
             slaveUsage.put(host, slaveUsage.getOrElse(host, 0L) - size)
 
             // Do a sanity check to make sure usage is greater than 0.
@@ -199,10 +206,10 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
       // TODO: fetch any remote copy of the split that may be available
       logInfo("Computing partition " + split)
       var array: Array[T] = null
-      var putRetval: Long = -1L
+      var putResponse: CachePutResponse = null
       try {
         array = rdd.compute(split).toArray(m)
-        putRetval = cache.put(rdd.id, split.index, array)
+        putResponse = cache.put(rdd.id, split.index, array)
       } finally {
         // Tell other threads that we've finished our attempt to load the key (whether or not
         // we've actually succeeded to put it in the map)
@@ -211,10 +218,14 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
           loading.notifyAll()
         }
       }
-      if (putRetval >= 0) {
-        // Tell the master that we added the entry. Don't return until it replies so it can
-        // properly schedule future tasks that use this RDD.
-        trackerActor !? AddedToCache(rdd.id, split.index, host, putRetval)
+
+      putResponse match {
+        case CachePutSuccess(size) => {
+          // Tell the master that we added the entry. Don't return until it
+          // replies so it can properly schedule future tasks that use this RDD.
+          trackerActor !? AddedToCache(rdd.id, split.index, host, size)
+        }
+        case _ => null
       }
       return array.iterator
     }

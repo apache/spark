@@ -180,7 +180,7 @@ object Utils {
    * Petabyte) in order to reduce the number of digits to four or less. For
    * example, 4,000,000 is returned as 4MB.
    */
-  def sizeWithSuffix(size: Long): String = {
+  def memoryBytesToString(size: Long): String = {
     val GB = 1L << 30
     val MB = 1L << 20
     val KB = 1L << 10

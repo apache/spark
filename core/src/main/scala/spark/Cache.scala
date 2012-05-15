@@ -2,6 +2,10 @@ package spark
 
 import java.util.concurrent.atomic.AtomicInteger
 
+sealed trait CachePutResponse
+case class CachePutSuccess(size: Long) extends CachePutResponse
+case class CachePutFailure extends CachePutResponse
+
 /**
  * An interface for caches in Spark, to allow for multiple implementations. Caches are used to store
  * both partitions of cached RDDs and broadcast variables on Spark executors. Caches are also aware
@@ -31,12 +35,12 @@ abstract class Cache {
   def get(datasetId: Any, partition: Int): Any
 
   /**
-   * Attempt to put a value in the cache; returns a negative number if this was
-   * not successful (e.g. because the cache replacement policy forbids it). If
-   * size estimation is available, the cache implementation should return the
-   * estimated size of the partition if the partition is successfully cached.
+   * Attempt to put a value in the cache; returns CachePutFailure if this was
+   * not successful (e.g. because the cache replacement policy forbids it), and
+   * CachePutSuccess if successful. If size estimation is available, the cache
+   * implementation should set the size field in CachePutSuccess.
    */
-  def put(datasetId: Any, partition: Int, value: Any): Long
+  def put(datasetId: Any, partition: Int, value: Any): CachePutResponse
 
   /**
    * Report the capacity of the cache partition. By default this just reports
@@ -52,7 +56,7 @@ class KeySpace(cache: Cache, val keySpaceId: Int) {
   def get(datasetId: Any, partition: Int): Any =
     cache.get((keySpaceId, datasetId), partition)
 
-  def put(datasetId: Any, partition: Int, value: Any): Long =
+  def put(datasetId: Any, partition: Int, value: Any): CachePutResponse =
     cache.put((keySpaceId, datasetId), partition, value)
 
   def getCapacity: Long = cache.getCapacity

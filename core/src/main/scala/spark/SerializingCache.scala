@@ -9,7 +9,7 @@ import java.io._
 class SerializingCache extends Cache with Logging {
   val bmc = new BoundedMemoryCache
 
-  override def put(datasetId: Any, partition: Int, value: Any): Long = {
+  override def put(datasetId: Any, partition: Int, value: Any): CachePutResponse = {
     val ser = SparkEnv.get.serializer.newInstance()
     bmc.put(datasetId, partition, ser.serialize(value))
   }
