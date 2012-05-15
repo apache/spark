@@ -24,12 +24,25 @@ abstract class Cache {
 
   def newKeySpace() = new KeySpace(this, newKeySpaceId())
 
-  // Get the value for a given (datasetId, partition), or null if it is not found.
+  /**
+   * Get the value for a given (datasetId, partition), or null if it is not
+   * found.
+   */
   def get(datasetId: Any, partition: Int): Any
 
-  // Attempt to put a value in the cache; returns false if this was not successful (e.g. because
-  // the cache replacement policy forbids it).
-  def put(datasetId: Any, partition: Int, value: Any): Boolean
+  /**
+   * Attempt to put a value in the cache; returns a negative number if this was
+   * not successful (e.g. because the cache replacement policy forbids it). If
+   * size estimation is available, the cache implementation should return the
+   * estimated size of the partition if the partition is successfully cached.
+   */
+  def put(datasetId: Any, partition: Int, value: Any): Long
+
+  /**
+   * Report the capacity of the cache partition. By default this just reports
+   * zero. Specific implementations can choose to provide the capacity number.
+   */
+  def getCapacity: Long = 0L
 }
 
 /**
@@ -39,6 +52,8 @@ class KeySpace(cache: Cache, val keySpaceId: Int) {
   def get(datasetId: Any, partition: Int): Any =
     cache.get((keySpaceId, datasetId), partition)
 
-  def put(datasetId: Any, partition: Int, value: Any): Boolean =
+  def put(datasetId: Any, partition: Int, value: Any): Long =
     cache.put((keySpaceId, datasetId), partition, value)
+
+  def getCapacity: Long = cache.getCapacity
 }
