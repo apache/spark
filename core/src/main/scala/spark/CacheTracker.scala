@@ -7,16 +7,32 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
 sealed trait CacheTrackerMessage
-case class AddedToCache(rddId: Int, partition: Int, host: String) extends CacheTrackerMessage
-case class DroppedFromCache(rddId: Int, partition: Int, host: String) extends CacheTrackerMessage
+case class AddedToCache(rddId: Int, partition: Int, host: String, size: Long = 0L)
+  extends CacheTrackerMessage
+case class DroppedFromCache(rddId: Int, partition: Int, host: String, size: Long = 0L)
+  extends CacheTrackerMessage
 case class MemoryCacheLost(host: String) extends CacheTrackerMessage
 case class RegisterRDD(rddId: Int, numPartitions: Int) extends CacheTrackerMessage
+case class SlaveCacheStarted(host: String, size: Long) extends CacheTrackerMessage
+case object GetCacheStatus extends CacheTrackerMessage
 case object GetCacheLocations extends CacheTrackerMessage
 case object StopCacheTracker extends CacheTrackerMessage
 
+
 class CacheTrackerActor extends DaemonActor with Logging {
-  val locs = new HashMap[Int, Array[List[String]]]
+  private val locs = new HashMap[Int, Array[List[String]]]
+
+  /**
+   * A map from the slave's host name to its cache size.
+   */
+  private val slaveCapacity = new HashMap[String, Long]
+  private val slaveUsage = new HashMap[String, Long]
+
   // TODO: Should probably store (String, CacheType) tuples
+
+  private def getCacheUsage(host: String): Long = slaveUsage.getOrElse(host, 0L)
+  private def getCacheCapacity(host: String): Long = slaveCapacity.getOrElse(host, 0L)
+  private def getCacheAvailable(host: String): Long = getCacheCapacity(host) - getCacheUsage(host)
   
   def act() {
     val port = System.getProperty("spark.master.port").toInt
@@ -26,18 +42,45 @@ class CacheTrackerActor extends DaemonActor with Logging {
     
     loop {
       react {
+        case SlaveCacheStarted(host: String, size: Long) =>
+          logInfo("Started slave cache (size %s) on %s".format(
+            Utils.memoryBytesToString(size), host))
+          slaveCapacity.put(host, size)
+          slaveUsage.put(host, 0)
+          reply('OK)
+
         case RegisterRDD(rddId: Int, numPartitions: Int) =>
           logInfo("Registering RDD " + rddId + " with " + numPartitions + " partitions")
           locs(rddId) = Array.fill[List[String]](numPartitions)(Nil)
           reply('OK)
         
-        case AddedToCache(rddId, partition, host) =>
-          logInfo("Cache entry added: (%s, %s) on %s".format(rddId, partition, host))
+        case AddedToCache(rddId, partition, host, size) =>
+          if (size > 0) {
+            slaveUsage.put(host, slaveUsage.getOrElse(host, 0L) + size)
+            logInfo("Cache entry added: (%s, %s) on %s (size added: %s, available: %s)".format(
+              rddId, partition, host, Utils.memoryBytesToString(size),
+              Utils.memoryBytesToString(getCacheAvailable(host))))
+          } else {
+            logInfo("Cache entry added: (%s, %s) on %s".format(rddId, partition, host))
+          }
           locs(rddId)(partition) = host :: locs(rddId)(partition)
           reply('OK)
           
-        case DroppedFromCache(rddId, partition, host) =>
-          logInfo("Cache entry removed: (%s, %s) on %s".format(rddId, partition, host))
+        case DroppedFromCache(rddId, partition, host, size) =>
+          if (size > 0) {
+            logInfo("Cache entry removed: (%s, %s) on %s (size dropped: %s, available: %s)".format(
+              rddId, partition, host, Utils.memoryBytesToString(size),
+              Utils.memoryBytesToString(getCacheAvailable(host))))
+            slaveUsage.put(host, slaveUsage.getOrElse(host, 0L) - size)
+
+            // Do a sanity check to make sure usage is greater than 0.
+            val usage = slaveUsage.getOrElse(host, 0L)
+            if (usage < 0) {
+              logError("Cache usage on %s is negative (%d)".format(host, usage))
+            }
+          } else {
+            logInfo("Cache entry removed: (%s, %s) on %s".format(rddId, partition, host))
+          }
           locs(rddId)(partition) = locs(rddId)(partition).filterNot(_ == host)
         
         case MemoryCacheLost(host) =>
@@ -52,6 +95,12 @@ class CacheTrackerActor extends DaemonActor with Logging {
           }
           reply(locsCopy)
 
+        case GetCacheStatus =>
+          val status: Seq[Tuple3[String, Long, Long]] = slaveCapacity.keys.map { key =>
+            (key, slaveCapacity.getOrElse(key, 0L), slaveUsage.getOrElse(key, 0L))
+          }.toSeq
+          reply(status)
+
         case StopCacheTracker =>
           reply('OK)
           exit()
@@ -60,10 +109,16 @@ class CacheTrackerActor extends DaemonActor with Logging {
   }
 }
 
+
 class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Tracker actor on the master, or remote reference to it on workers
   var trackerActor: AbstractActor = null
-  
+
+  val registeredRddIds = new HashSet[Int]
+
+  // Stores map results for various splits locally
+  val cache = theCache.newKeySpace()
+
   if (isMaster) {
     val tracker = new CacheTrackerActor
     tracker.start()
@@ -74,10 +129,10 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
     trackerActor = RemoteActor.select(Node(host, port), 'CacheTracker)
   }
 
-  val registeredRddIds = new HashSet[Int]
-
-  // Stores map results for various splits locally
-  val cache = theCache.newKeySpace()
+  // Report the cache being started.
+  trackerActor !? SlaveCacheStarted(
+    System.getProperty("spark.hostname", Utils.localHostName),
+    cache.getCapacity)
 
   // Remembers which splits are currently being loaded (on worker nodes)
   val loading = new HashSet[(Int, Int)]
@@ -92,15 +147,28 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
       }
     }
   }
-  
+
   // Get a snapshot of the currently known locations
   def getLocationsSnapshot(): HashMap[Int, Array[List[String]]] = {
     (trackerActor !? GetCacheLocations) match {
       case h: HashMap[_, _] =>
         h.asInstanceOf[HashMap[Int, Array[List[String]]]]
-        
-      case _ => 
+
+      case _ =>
         throw new SparkException("Internal error: CacheTrackerActor did not reply with a HashMap")
+    }
+  }
+
+  // Get the usage status of slave caches. Each tuple in the returned sequence
+  // is in the form of (host name, capacity, usage).
+  def getCacheStatus(): Seq[Tuple3[String, Long, Long]] = {
+    (trackerActor !? GetCacheStatus) match {
+      case h: Seq[Tuple3[String, Long, Long]] =>
+        h.asInstanceOf[Seq[Tuple3[String, Long, Long]]]
+
+      case _ =>
+        throw new SparkException(
+          "Internal error: CacheTrackerActor did not reply with a Seq[Tuple3[String, Long, Long]")
     }
   }
   
@@ -138,10 +206,10 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
       // TODO: fetch any remote copy of the split that may be available
       logInfo("Computing partition " + split)
       var array: Array[T] = null
-      var putSuccessful: Boolean = false
+      var putResponse: CachePutResponse = null
       try {
         array = rdd.compute(split).toArray(m)
-        putSuccessful = cache.put(rdd.id, split.index, array)
+        putResponse = cache.put(rdd.id, split.index, array)
       } finally {
         // Tell other threads that we've finished our attempt to load the key (whether or not
         // we've actually succeeded to put it in the map)
@@ -150,10 +218,14 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
           loading.notifyAll()
         }
       }
-      if (putSuccessful) {
-        // Tell the master that we added the entry. Don't return until it replies so it can
-        // properly schedule future tasks that use this RDD.
-        trackerActor !? AddedToCache(rdd.id, split.index, host)
+
+      putResponse match {
+        case CachePutSuccess(size) => {
+          // Tell the master that we added the entry. Don't return until it
+          // replies so it can properly schedule future tasks that use this RDD.
+          trackerActor !? AddedToCache(rdd.id, split.index, host, size)
+        }
+        case _ => null
       }
       return array.iterator
     }

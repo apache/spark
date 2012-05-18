@@ -30,7 +30,7 @@ class BoundedMemoryCache extends Cache with Logging {
     }
   }
 
-  override def put(datasetId: Any, partition: Int, value: Any): Boolean = {
+  override def put(datasetId: Any, partition: Int, value: Any): CachePutResponse = {
     val key = (datasetId, partition)
     logInfo("Asked to add key " + key)
     val startTime = System.currentTimeMillis
@@ -44,13 +44,15 @@ class BoundedMemoryCache extends Cache with Logging {
         map.put(key, new Entry(value, size))
         currentBytes += size
         logInfo("Number of entries is now " + map.size)
-        return true
+        return CachePutSuccess(size)
       } else {
         logInfo("Didn't add key " + key + " because we would have evicted part of same dataset")
-        return false
+        return CachePutFailure()
       }
     }
   }
+
+  override def getCapacity: Long = maxBytes
 
   private def getMaxBytes(): Long = {
     val memoryFractionToUse = System.getProperty(

@@ -48,7 +48,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   // Methods that must be implemented by subclasses
   def splits: Array[Split]
   def compute(split: Split): Iterator[T]
-  val dependencies: List[Dependency[_]]
+  @transient val dependencies: List[Dependency[_]]
   
   // Optionally overridden by subclasses to specify how they are partitioned
   val partitioner: Option[Partitioner] = None

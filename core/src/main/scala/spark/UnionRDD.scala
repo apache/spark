@@ -16,7 +16,7 @@ class UnionSplit[T: ClassManifest](
 
 class UnionRDD[T: ClassManifest](
     sc: SparkContext,
-    rdds: Seq[RDD[T]])
+    @transient rdds: Seq[RDD[T]])
   extends RDD[T](sc)
   with Serializable {
   
@@ -33,7 +33,7 @@ class UnionRDD[T: ClassManifest](
 
   override def splits = splits_
 
-  override val dependencies = {
+  @transient override val dependencies = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for ((rdd, index) <- rdds.zipWithIndex) {

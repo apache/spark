@@ -174,4 +174,28 @@ object Utils {
       throw new IOException("Failed to delete: " + file)
     }
   }
+
+  /**
+   * Use unit suffixes (Byte, Kilobyte, Megabyte, Gigabyte, Terabyte and
+   * Petabyte) in order to reduce the number of digits to four or less. For
+   * example, 4,000,000 is returned as 4MB.
+   */
+  def memoryBytesToString(size: Long): String = {
+    val GB = 1L << 30
+    val MB = 1L << 20
+    val KB = 1L << 10
+    val B = 1L
+    val (value, unit) = {
+      if (size >= 2*GB) {
+        (size.asInstanceOf[Double] / GB, "GB")
+      } else if (size >= 2*MB) {
+        (size.asInstanceOf[Double] / MB, "MB")
+      } else if (size >= 2*KB) {
+        (size.asInstanceOf[Double] / KB, "KB")
+      } else {
+        (size.asInstanceOf[Double], "B")
+      }
+    }
+    "%.1f%s".format(value, unit)
+  }
 }
