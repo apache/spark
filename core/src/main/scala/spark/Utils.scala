@@ -2,11 +2,11 @@ package spark
 
 import java.io._
 import java.net.InetAddress
-import java.util.UUID
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
+import java.util.{Locale, UUID}
 
 /**
  * Various utility methods used by Spark.
@@ -184,7 +184,7 @@ object Utils {
     val GB = 1L << 30
     val MB = 1L << 20
     val KB = 1L << 10
-    val B = 1L
+
     val (value, unit) = {
       if (size >= 2*GB) {
         (size.asInstanceOf[Double] / GB, "GB")
@@ -196,6 +196,6 @@ object Utils {
         (size.asInstanceOf[Double], "B")
       }
     }
-    "%.1f%s".format(value, unit)
+    "%.1f%s".formatLocal(Locale.US, value, unit)
   }
 }
