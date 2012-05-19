@@ -1,7 +1,8 @@
 package spark
 
 import org.scalatest.FunSuite
-
+import java.io.{ByteArrayOutputStream, ByteArrayInputStream}
+import util.Random
 
 class UtilsSuite extends FunSuite {
 
@@ -14,5 +15,15 @@ class UtilsSuite extends FunSuite {
     assert(Utils.memoryBytesToString(5368709120L) === "5.0GB")
   }
 
+  test("copyStream") {
+    //input array initialization
+    val bytes = Array.ofDim[Byte](9000)
+    Random.nextBytes(bytes)
+
+    val os = new ByteArrayOutputStream()
+    Utils.copyStream(new ByteArrayInputStream(bytes), os)
+
+    assert(os.toByteArray.toList.equals(bytes.toList))
+  }
 }
 
