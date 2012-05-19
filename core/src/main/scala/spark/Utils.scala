@@ -157,9 +157,7 @@ object Utils {
   /**
    * Get the local machine's hostname.
    */
-  def localHostName(): String = {
-    return InetAddress.getLocalHost().getHostName
-  }
+  def localHostName(): String = InetAddress.getLocalHost.getHostName
 
   /**
    * Delete a file or directory and its contents recursively.
