@@ -160,6 +160,11 @@ object Utils {
   def localHostName(): String = InetAddress.getLocalHost.getHostName
 
   /**
+   * Get current host
+   */
+  def getHost = System.getProperty("spark.hostname", localHostName())
+
+  /**
    * Delete a file or directory and its contents recursively.
    */
   def deleteRecursively(file: File) {
