@@ -82,7 +82,8 @@ class CacheTrackerActor extends DaemonActor with Logging {
             logInfo("Cache entry removed: (%s, %s) on %s".format(rddId, partition, host))
           }
           locs(rddId)(partition) = locs(rddId)(partition).filterNot(_ == host)
-        
+          reply('OK)
+
         case MemoryCacheLost(host) =>
           logInfo("Memory cache lost on " + host)
           // TODO: Drop host from the memory locations list of all RDDs
@@ -225,6 +226,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Called by the Cache to report that an entry has been dropped from it
   def dropEntry(datasetId: Any, partition: Int) {
     datasetId match {
+      //TODO - do we really want to use '!!' when nobody checks returned future? '!' seems to enough here.
       case (cache.keySpaceId, rddId: Int) => trackerActor !! DroppedFromCache(rddId, partition, Utils.getHost)
     }
   }
