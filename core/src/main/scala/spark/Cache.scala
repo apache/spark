@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 sealed trait CachePutResponse
 case class CachePutSuccess(size: Long) extends CachePutResponse
-case class CachePutFailure extends CachePutResponse
+case class CachePutFailure() extends CachePutResponse
 
 /**
  * An interface for caches in Spark, to allow for multiple implementations. Caches are used to store

@@ -56,7 +56,7 @@ class CacheTrackerActor extends DaemonActor with Logging {
         
         case AddedToCache(rddId, partition, host, size) =>
           if (size > 0) {
-            slaveUsage.put(host, slaveUsage.getOrElse(host, 0L) + size)
+            slaveUsage.put(host, getCacheUsage(host) + size)
             logInfo("Cache entry added: (%s, %s) on %s (size added: %s, available: %s)".format(
               rddId, partition, host, Utils.memoryBytesToString(size),
               Utils.memoryBytesToString(getCacheAvailable(host))))
@@ -71,10 +71,10 @@ class CacheTrackerActor extends DaemonActor with Logging {
             logInfo("Cache entry removed: (%s, %s) on %s (size dropped: %s, available: %s)".format(
               rddId, partition, host, Utils.memoryBytesToString(size),
               Utils.memoryBytesToString(getCacheAvailable(host))))
-            slaveUsage.put(host, slaveUsage.getOrElse(host, 0L) - size)
+            slaveUsage.put(host, getCacheUsage(host) - size)
 
             // Do a sanity check to make sure usage is greater than 0.
-            val usage = slaveUsage.getOrElse(host, 0L)
+            val usage = getCacheUsage(host)
             if (usage < 0) {
               logError("Cache usage on %s is negative (%d)".format(host, usage))
             }
@@ -82,22 +82,19 @@ class CacheTrackerActor extends DaemonActor with Logging {
             logInfo("Cache entry removed: (%s, %s) on %s".format(rddId, partition, host))
           }
           locs(rddId)(partition) = locs(rddId)(partition).filterNot(_ == host)
-        
+          reply('OK)
+
         case MemoryCacheLost(host) =>
           logInfo("Memory cache lost on " + host)
           // TODO: Drop host from the memory locations list of all RDDs
         
         case GetCacheLocations =>
           logInfo("Asked for current cache locations")
-          val locsCopy = new HashMap[Int, Array[List[String]]]
-          for ((rddId, array) <- locs) {
-            locsCopy(rddId) = array.clone()
-          }
-          reply(locsCopy)
+          reply(locs.map{case (rrdId, array) => (rrdId -> array.clone())})
 
         case GetCacheStatus =>
-          val status: Seq[Tuple3[String, Long, Long]] = slaveCapacity.keys.map { key =>
-            (key, slaveCapacity.getOrElse(key, 0L), slaveUsage.getOrElse(key, 0L))
+          val status = slaveCapacity.map { case (host,capacity) =>
+            (host, capacity, getCacheUsage(host))
           }.toSeq
           reply(status)
 
@@ -130,9 +127,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   }
 
   // Report the cache being started.
-  trackerActor !? SlaveCacheStarted(
-    System.getProperty("spark.hostname", Utils.localHostName),
-    cache.getCapacity)
+  trackerActor !? SlaveCacheStarted(Utils.getHost, cache.getCapacity)
 
   // Remembers which splits are currently being loaded (on worker nodes)
   val loading = new HashSet[(Int, Int)]
@@ -151,20 +146,17 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Get a snapshot of the currently known locations
   def getLocationsSnapshot(): HashMap[Int, Array[List[String]]] = {
     (trackerActor !? GetCacheLocations) match {
-      case h: HashMap[_, _] =>
-        h.asInstanceOf[HashMap[Int, Array[List[String]]]]
+      case h: HashMap[_, _] => h.asInstanceOf[HashMap[Int, Array[List[String]]]]
 
-      case _ =>
-        throw new SparkException("Internal error: CacheTrackerActor did not reply with a HashMap")
+      case _ => throw new SparkException("Internal error: CacheTrackerActor did not reply with a HashMap")
     }
   }
 
   // Get the usage status of slave caches. Each tuple in the returned sequence
   // is in the form of (host name, capacity, usage).
-  def getCacheStatus(): Seq[Tuple3[String, Long, Long]] = {
+  def getCacheStatus(): Seq[(String, Long, Long)] = {
     (trackerActor !? GetCacheStatus) match {
-      case h: Seq[Tuple3[String, Long, Long]] =>
-        h.asInstanceOf[Seq[Tuple3[String, Long, Long]]]
+      case h: Seq[(String, Long, Long)] => h.asInstanceOf[Seq[(String, Long, Long)]]
 
       case _ =>
         throw new SparkException(
@@ -202,7 +194,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
       }
       // If we got here, we have to load the split
       // Tell the master that we're doing so
-      val host = System.getProperty("spark.hostname", Utils.localHostName)
+
       // TODO: fetch any remote copy of the split that may be available
       logInfo("Computing partition " + split)
       var array: Array[T] = null
@@ -223,7 +215,7 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
         case CachePutSuccess(size) => {
           // Tell the master that we added the entry. Don't return until it
           // replies so it can properly schedule future tasks that use this RDD.
-          trackerActor !? AddedToCache(rdd.id, split.index, host, size)
+          trackerActor !? AddedToCache(rdd.id, split.index, Utils.getHost, size)
         }
         case _ => null
       }
@@ -234,9 +226,8 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
   // Called by the Cache to report that an entry has been dropped from it
   def dropEntry(datasetId: Any, partition: Int) {
     datasetId match {
-      case (cache.keySpaceId, rddId: Int) =>
-        val host = System.getProperty("spark.hostname", Utils.localHostName)
-        trackerActor !! DroppedFromCache(rddId, partition, host)
+      //TODO - do we really want to use '!!' when nobody checks returned future? '!' seems to enough here.
+      case (cache.keySpaceId, rddId: Int) => trackerActor !! DroppedFromCache(rddId, partition, Utils.getHost)
     }
   }
 
