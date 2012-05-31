@@ -9,15 +9,15 @@ import java.util.LinkedHashMap
  * some cache entries have pointers to a shared object. Nonetheless, this Cache should work well
  * when most of the space is used by arrays of primitives or of simple classes.
  */
-class BoundedMemoryCache extends Cache with Logging {
-  private val maxBytes: Long = getMaxBytes()
+class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
   logInfo("BoundedMemoryCache.maxBytes = " + maxBytes)
+
+  def this() {
+    this(BoundedMemoryCache.getMaxBytes)
+  }
 
   private var currentBytes = 0L
   private val map = new LinkedHashMap[(Any, Int), Entry](32, 0.75f, true)
-
-  // An entry in our map; stores a cached object and its size in bytes
-  class Entry(val value: Any, val size: Long) {}
 
   override def get(datasetId: Any, partition: Int): Any = {
     synchronized {
@@ -33,13 +33,11 @@ class BoundedMemoryCache extends Cache with Logging {
   override def put(datasetId: Any, partition: Int, value: Any): CachePutResponse = {
     val key = (datasetId, partition)
     logInfo("Asked to add key " + key)
-    val startTime = System.currentTimeMillis
-    val size = SizeEstimator.estimate(value.asInstanceOf[AnyRef])
-    val timeTaken = System.currentTimeMillis - startTime
-    logInfo("Estimated size for key %s is %d".format(key, size))
-    logInfo("Size estimation for key %s took %d ms".format(key, timeTaken))
+    val size = estimateValueSize(key, value)
     synchronized {
-      if (ensureFreeSpace(datasetId, size)) {
+      if (size > getCapacity) {
+        return CachePutFailure()
+      } else if (ensureFreeSpace(datasetId, size)) {
         logInfo("Adding key " + key)
         map.put(key, new Entry(value, size))
         currentBytes += size
@@ -54,10 +52,16 @@ class BoundedMemoryCache extends Cache with Logging {
 
   override def getCapacity: Long = maxBytes
 
-  private def getMaxBytes(): Long = {
-    val memoryFractionToUse = System.getProperty(
-      "spark.boundedMemoryCache.memoryFraction", "0.66").toDouble
-    (Runtime.getRuntime.maxMemory * memoryFractionToUse).toLong
+  /**
+   * Estimate sizeOf 'value'
+   */
+  private def estimateValueSize(key: (Any, Int), value: Any) = {
+    val startTime = System.currentTimeMillis
+    val size = SizeEstimator.estimate(value.asInstanceOf[AnyRef])
+    val timeTaken = System.currentTimeMillis - startTime
+    logInfo("Estimated size for key %s is %d".format(key, size))
+    logInfo("Size estimation for key %s took %d ms".format(key, timeTaken))
+    size
   }
 
   /**
@@ -85,8 +89,21 @@ class BoundedMemoryCache extends Cache with Logging {
   }
 
   protected def reportEntryDropped(datasetId: Any, partition: Int, entry: Entry) {
-    logInfo("Dropping key (%s, %d) of size %d to make space".format(
-      datasetId, partition, entry.size))
+    logInfo("Dropping key (%s, %d) of size %d to make space".format(datasetId, partition, entry.size))
     SparkEnv.get.cacheTracker.dropEntry(datasetId, partition)
   }
 }
+
+// An entry in our map; stores a cached object and its size in bytes
+case class Entry(value: Any, size: Long)
+
+object BoundedMemoryCache {
+  /**
+   * Get maximum cache capacity from system configuration
+   */
+   def getMaxBytes: Long = {
+    val memoryFractionToUse = System.getProperty("spark.boundedMemoryCache.memoryFraction", "0.66").toDouble
+    (Runtime.getRuntime.maxMemory * memoryFractionToUse).toLong
+  }
+}
+
