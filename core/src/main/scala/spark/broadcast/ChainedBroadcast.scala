@@ -15,7 +15,7 @@ extends Broadcast[T] with Logging with Serializable {
   def value = value_
 
   ChainedBroadcast.synchronized {
-    ChainedBroadcast.values.put(uuid, value_)
+    ChainedBroadcast.values.put(uuid, 0, value_)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -101,7 +101,7 @@ extends Broadcast[T] with Logging with Serializable {
   private def readObject(in: ObjectInputStream): Unit = {
     in.defaultReadObject
     ChainedBroadcast.synchronized {
-      val cachedVal = ChainedBroadcast.values.get(uuid)
+      val cachedVal = ChainedBroadcast.values.get(uuid, 0)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
@@ -121,11 +121,11 @@ extends Broadcast[T] with Logging with Serializable {
         // If does not succeed, then get from HDFS copy
         if (receptionSucceeded) {
           value_ = Broadcast.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
-          ChainedBroadcast.values.put(uuid, value_)
+          ChainedBroadcast.values.put(uuid, 0, value_)
         }  else {
           val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
           value_ = fileIn.readObject.asInstanceOf[T]
-          ChainedBroadcast.values.put(uuid, value_)
+          ChainedBroadcast.values.put(uuid, 0, value_)
           fileIn.close()
         }
 

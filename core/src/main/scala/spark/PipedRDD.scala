@@ -3,6 +3,7 @@ package spark
 import java.io.PrintWriter
 import java.util.StringTokenizer
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
@@ -10,8 +11,12 @@ import scala.io.Source
  * An RDD that pipes the contents of each parent partition through an external command
  * (printing them one per line) and returns the output as a collection of strings.
  */
-class PipedRDD[T: ClassManifest](parent: RDD[T], command: Seq[String])
+class PipedRDD[T: ClassManifest](
+  parent: RDD[T], command: Seq[String], envVars: Map[String, String])
   extends RDD[String](parent.context) {
+
+  def this(parent: RDD[T], command: Seq[String]) = this(parent, command, Map())
+
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
   def this(parent: RDD[T], command: String) = this(parent, PipedRDD.tokenize(command))
@@ -21,7 +26,12 @@ class PipedRDD[T: ClassManifest](parent: RDD[T], command: Seq[String])
   override val dependencies = List(new OneToOneDependency(parent))
 
   override def compute(split: Split): Iterator[String] = {
-    val proc = Runtime.getRuntime.exec(command.toArray)
+    val pb = new ProcessBuilder(command)
+    // Add the environmental variables to the process.
+    val currentEnvVars = pb.environment()
+    envVars.foreach { case(variable, value) => currentEnvVars.put(variable, value) }
+    
+    val proc = pb.start()
     val env = SparkEnv.get
 
     // Start a thread to print the process's stderr to ours

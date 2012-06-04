@@ -65,16 +65,17 @@ class Executor extends org.apache.mesos.Executor with Logging {
   extends Runnable {
     override def run() = {
       val tid = info.getTaskId.getValue
+      SparkEnv.set(env)
+      Thread.currentThread.setContextClassLoader(classLoader)
+      val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo("Running task ID " + tid)
       d.sendStatusUpdate(TaskStatus.newBuilder()
           .setTaskId(info.getTaskId)
           .setState(TaskState.TASK_RUNNING)
           .build())
       try {
-        SparkEnv.set(env)
-        Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear
-        val task = Utils.deserialize[Task[Any]](info.getData.toByteArray, classLoader)
+        val task = ser.deserialize[Task[Any]](info.getData.toByteArray, classLoader)
         for (gen <- task.generation) {// Update generation if any is set
           env.mapOutputTracker.updateGeneration(gen)
         }
@@ -84,7 +85,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
         d.sendStatusUpdate(TaskStatus.newBuilder()
             .setTaskId(info.getTaskId)
             .setState(TaskState.TASK_FINISHED)
-            .setData(ByteString.copyFrom(Utils.serialize(result)))
+            .setData(ByteString.copyFrom(ser.serialize(result)))
             .build())
         logInfo("Finished task ID " + tid)
       } catch {
@@ -93,7 +94,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
           d.sendStatusUpdate(TaskStatus.newBuilder()
               .setTaskId(info.getTaskId)
               .setState(TaskState.TASK_FAILED)
-              .setData(ByteString.copyFrom(Utils.serialize(reason)))
+              .setData(ByteString.copyFrom(ser.serialize(reason)))
               .build())
         }
         case t: Throwable => {
@@ -101,7 +102,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
           d.sendStatusUpdate(TaskStatus.newBuilder()
               .setTaskId(info.getTaskId)
               .setState(TaskState.TASK_FAILED)
-              .setData(ByteString.copyFrom(Utils.serialize(reason)))
+              .setData(ByteString.copyFrom(ser.serialize(reason)))
               .build())
 
           // TODO: Handle errors in tasks less dramatically

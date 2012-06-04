@@ -38,14 +38,23 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
         // Serialize and deserialize the task so that accumulators are changed to thread-local ones;
         // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
         Accumulators.clear
-        val bytes = Utils.serialize(task)
-        logInfo("Size of task " + idInJob + " is " + bytes.size + " bytes")
-        val deserializedTask = Utils.deserialize[Task[_]](
-            bytes, Thread.currentThread.getContextClassLoader)
+        val ser = SparkEnv.get.closureSerializer.newInstance()
+        val startTime = System.currentTimeMillis
+        val bytes = ser.serialize(task)
+        val timeTaken = System.currentTimeMillis - startTime
+        logInfo("Size of task %d is %d bytes and took %d ms to serialize".format(
+            idInJob, bytes.size, timeTaken))
+        val deserializedTask = ser.deserialize[Task[_]](bytes, currentThread.getContextClassLoader)
         val result: Any = deserializedTask.run(attemptId)
+
+        // Serialize and deserialize the result to emulate what the mesos
+        // executor does. This is useful to catch serialization errors early
+        // on in development (so when users move their local Spark programs
+        // to the cluster, they don't get surprised by serialization errors).
+        val resultToReturn = ser.deserialize[Any](ser.serialize(result))
         val accumUpdates = Accumulators.values
         logInfo("Finished task " + idInJob)
-        taskEnded(task, Success, result, accumUpdates)
+        taskEnded(task, Success, resultToReturn, accumUpdates)
       } catch {
         case t: Throwable => {
           logError("Exception in task " + idInJob, t)
@@ -55,7 +64,7 @@ private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGSchedule
               submitTask(task, idInJob)
             } else {
               // TODO: Do something nicer here to return all the way to the user
-              System.exit(1)
+              taskEnded(task, new ExceptionFailure(t), null, null)
             }
           }
         }

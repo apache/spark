@@ -30,6 +30,9 @@ class SimpleJob(
   // Maximum times a task is allowed to fail before failing the job
   val MAX_TASK_FAILURES = 4
 
+  // Serializer for closures and tasks.
+  val ser = SparkEnv.get.closureSerializer.newInstance()
+
   val callingThread = Thread.currentThread
   val tasks = tasksSeq.toArray
   val numTasks = tasks.length
@@ -170,8 +173,14 @@ class SimpleJob(
             .setType(Value.Type.SCALAR)
             .setScalar(Value.Scalar.newBuilder().setValue(CPUS_PER_TASK).build())
             .build()
-          val serializedTask = Utils.serialize(task)
-          logDebug("Serialized size: " + serializedTask.size)
+
+          val startTime = System.currentTimeMillis
+          val serializedTask = ser.serialize(task)
+          val timeTaken = System.currentTimeMillis - startTime
+
+          logInfo("Size of task %d:%d is %d bytes and took %d ms to serialize by %s"
+            .format(jobId, index, serializedTask.size, timeTaken, ser.getClass.getName))
+
           val taskName = "task %d:%d".format(jobId, index)
           return Some(TaskInfo.newBuilder()
               .setTaskId(taskId)
@@ -209,7 +218,8 @@ class SimpleJob(
       tasksFinished += 1
       logInfo("Finished TID %s (progress: %d/%d)".format(tid, tasksFinished, numTasks))
       // Deserialize task result
-      val result = Utils.deserialize[TaskResult[_]](status.getData.toByteArray)
+      val result = ser.deserialize[TaskResult[_]](
+        status.getData.toByteArray, getClass.getClassLoader)
       sched.taskEnded(tasks(index), Success, result.value, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
@@ -231,7 +241,8 @@ class SimpleJob(
       // Check if the problem is a map output fetch failure. In that case, this
       // task will never succeed on any node, so tell the scheduler about it.
       if (status.getData != null && status.getData.size > 0) {
-        val reason = Utils.deserialize[TaskEndReason](status.getData.toByteArray)
+        val reason = ser.deserialize[TaskEndReason](
+          status.getData.toByteArray, getClass.getClassLoader)
         reason match {
           case fetchFailed: FetchFailed =>
             logInfo("Loss was due to fetch failure from " + fetchFailed.serverUri)

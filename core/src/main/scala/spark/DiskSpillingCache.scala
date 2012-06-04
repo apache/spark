@@ -9,31 +9,31 @@ import java.util.UUID
 // TODO: cache into a separate directory using Utils.createTempDir
 // TODO: clean up disk cache afterwards
 class DiskSpillingCache extends BoundedMemoryCache {
-  private val diskMap = new LinkedHashMap[Any, File](32, 0.75f, true)
+  private val diskMap = new LinkedHashMap[(Any, Int), File](32, 0.75f, true)
 
-  override def get(key: Any): Any = {
+  override def get(datasetId: Any, partition: Int): Any = {
     synchronized {
       val ser = SparkEnv.get.serializer.newInstance()
-      super.get(key) match {
+      super.get(datasetId, partition) match {
         case bytes: Any => // found in memory
           ser.deserialize(bytes.asInstanceOf[Array[Byte]])
 
-        case _ => diskMap.get(key) match {
+        case _ => diskMap.get((datasetId, partition)) match {
           case file: Any => // found on disk
             try {
               val startTime = System.currentTimeMillis
               val bytes = new Array[Byte](file.length.toInt)
               new FileInputStream(file).read(bytes)
               val timeTaken = System.currentTimeMillis - startTime
-              logInfo("Reading key %s of size %d bytes from disk took %d ms".format(
-                key, file.length, timeTaken))
-              super.put(key, bytes)
+              logInfo("Reading key (%s, %d) of size %d bytes from disk took %d ms".format(
+                datasetId, partition, file.length, timeTaken))
+              super.put(datasetId, partition, bytes)
               ser.deserialize(bytes.asInstanceOf[Array[Byte]])
             } catch {
               case e: IOException =>
-                logWarning("Failed to read key %s from disk at %s: %s".format(
-                  key, file.getPath(), e.getMessage()))
-                diskMap.remove(key) // remove dead entry
+                logWarning("Failed to read key (%s, %d) from disk at %s: %s".format(
+                  datasetId, partition, file.getPath(), e.getMessage()))
+                diskMap.remove((datasetId, partition)) // remove dead entry
                 null
             }
 
@@ -44,18 +44,18 @@ class DiskSpillingCache extends BoundedMemoryCache {
     }
   }
 
-  override def put(key: Any, value: Any) {
+  override def put(datasetId: Any, partition: Int, value: Any): CachePutResponse = {
     var ser = SparkEnv.get.serializer.newInstance()
-    super.put(key, ser.serialize(value))
+    super.put(datasetId, partition, ser.serialize(value))
   }
 
   /**
    * Spill the given entry to disk. Assumes that a lock is held on the
    * DiskSpillingCache.  Assumes that entry.value is a byte array.
    */
-  override protected def dropEntry(key: Any, entry: Entry) {
-    logInfo("Spilling key %s of size %d to make space".format(
-      key, entry.size))
+  override protected def reportEntryDropped(datasetId: Any, partition: Int, entry: Entry) {
+    logInfo("Spilling key (%s, %d) of size %d to make space".format(
+      datasetId, partition, entry.size))
     val cacheDir = System.getProperty(
       "spark.diskSpillingCache.cacheDir",
       System.getProperty("java.io.tmpdir"))
@@ -64,11 +64,11 @@ class DiskSpillingCache extends BoundedMemoryCache {
       val stream = new FileOutputStream(file)
       stream.write(entry.value.asInstanceOf[Array[Byte]])
       stream.close()
-      diskMap.put(key, file)
+      diskMap.put((datasetId, partition), file)
     } catch {
       case e: IOException =>
-        logWarning("Failed to spill key %s to disk at %s: %s".format(
-          key, file.getPath(), e.getMessage()))
+        logWarning("Failed to spill key (%s, %d) to disk at %s: %s".format(
+          datasetId, partition, file.getPath(), e.getMessage()))
         // Do nothing and let the entry be discarded
     }
   }
