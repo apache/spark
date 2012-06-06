@@ -335,7 +335,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     val writer = new HadoopWriter(conf)
     writer.preSetup()
 
-    def writeToFile(context: TaskContext, iter: Iterator[(K,V)]): HadoopWriter = {
+    def writeToFile(context: TaskContext, iter: Iterator[(K,V)]) {
       writer.setup(context.stageId, context.splitId, context.attemptId)
       writer.open()
       
@@ -347,10 +347,10 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       }
     
       writer.close()
-      return writer
+      writer.commit()
     }
 
-    self.context.runJob(self, writeToFile _ ).foreach(_.commit())
+    self.context.runJob(self, writeToFile _)
     writer.cleanup()
   }
 

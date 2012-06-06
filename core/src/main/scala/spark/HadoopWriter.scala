@@ -12,8 +12,8 @@ import java.io.IOException
 import java.net.URI
 import java.util.Date
 
-import spark.SerializableWritable
 import spark.Logging
+import spark.SerializableWritable
 
 /**
  * Saves an RDD using a Hadoop OutputFormat as specified by a JobConf. The JobConf should also 
@@ -84,26 +84,23 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializabl
     writer.close(Reporter.NULL)
   }
 
-  def commit(): Boolean = {
-    var result = false
+  def commit() {
     val taCtxt = getTaskContext()
     val cmtr = getOutputCommitter() 
     if (cmtr.needsTaskCommit(taCtxt)) {
       try {
         cmtr.commitTask(taCtxt)
         logInfo (taID + ": Committed")
-        result = true
       } catch {
-        case e:IOException => { 
-          logError ("Error committing the output of task: " + taID.value) 
-          e.printStackTrace()
+        case e: IOException => { 
+          logError("Error committing the output of task: " + taID.value, e)
           cmtr.abortTask(taCtxt)
+          throw e
         }
       }   
-      return result
-    } 
-    logWarning ("No need to commit output of task: " + taID.value)
-    return true
+    } else {
+      logWarning ("No need to commit output of task: " + taID.value)
+    }
   }
 
   def cleanup() {
