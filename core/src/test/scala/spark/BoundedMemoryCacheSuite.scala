@@ -2,7 +2,7 @@ package spark
 
 import org.scalatest.FunSuite
 
-class BoundedMemoryCacheTest extends FunSuite {
+class BoundedMemoryCacheSuite extends FunSuite {
   test("constructor test") {
     val cache = new BoundedMemoryCache(40)
     expect(40)(cache.getCapacity)
