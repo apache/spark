@@ -9,6 +9,8 @@ import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
 
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet
+
 /**
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in 
  * memory-aware caches.
@@ -39,8 +41,7 @@ object SizeEstimator {
    * IdentityHashMap of visited objects, and provides utility methods for enqueueing new objects
    * to visit.
    */
-  private class SearchState {
-    val visited = new IdentityHashMap[AnyRef, AnyRef]
+  private class SearchState(val visited: IdentityHashMap[AnyRef, AnyRef]) {
     val stack = new ArrayBuffer[AnyRef]
     var size = 0L
 
@@ -61,16 +62,18 @@ object SizeEstimator {
   }
 
   /**
-   * Cached information about each class. We remember two things: the
-   * "shell size" of the class (size of all non-static fields plus the
-   * java.lang.Object size), and any fields that are pointers to objects.
+   * Cached information about each class. We remember two things: the "shell size" of the class
+   * (size of all non-static fields plus the java.lang.Object size), and any fields that are
+   * pointers to objects.
    */
   private class ClassInfo(
     val shellSize: Long,
     val pointerFields: List[Field]) {}
 
-  def estimate(obj: AnyRef): Long = {
-    val state = new SearchState
+  def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
+
+  private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
+    val state = new SearchState(visited)
     state.enqueue(obj)
     while (!state.isFinished) {
       visitSingleObject(state.dequeue(), state)
@@ -91,6 +94,10 @@ object SizeEstimator {
     }
   }
 
+  // Estimat the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
+  private val ARRAY_SIZE_FOR_SAMPLING = 200
+  private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
+
   private def visitArray(array: AnyRef, cls: Class[_], state: SearchState) {
     val length = JArray.getLength(array)
     val elementClass = cls.getComponentType
@@ -98,18 +105,23 @@ object SizeEstimator {
       state.size += length * primitiveSize(elementClass)
     } else {
       state.size += length * POINTER_SIZE
-      if (length <= 100) {
+      if (length <= ARRAY_SIZE_FOR_SAMPLING) {
         for (i <- 0 until length) {
           state.enqueue(JArray.get(array, i))
         }
       } else {
-        // Estimate the size of a large array by sampling elements.
-        // TODO: Add a config setting for turning this off?
+        // Estimate the size of a large array by sampling elements without replacement.
         var size = 0.0
         val rand = new Random(42)
-        for (i <- 0 until 100) {
-          val elem = JArray.get(array, rand.nextInt(length))
-          size += SizeEstimator.estimate(elem)
+        val drawn = new IntOpenHashSet(ARRAY_SAMPLE_SIZE)
+        for (i <- 0 until ARRAY_SAMPLE_SIZE) {
+          var index = 0
+          do {
+            index = rand.nextInt(length)
+          } while (drawn.contains(index))
+          drawn.add(index)
+          val elem = JArray.get(array, index)
+          size += SizeEstimator.estimate(elem, state.visited)
         }
         state.size += ((length / 100.0) * size).toLong
       }
