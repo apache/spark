@@ -32,6 +32,8 @@ object GroupByTest {
     pairs1.count
     
     println(pairs1.groupByKey(numReducers).count)
+
+    System.exit(0)
   }
 }
 

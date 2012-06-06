@@ -46,6 +46,8 @@ object SimpleSkewedGroupByTest {
     //println("RESULT: " + pairs1.groupByKey(numReducers)
     //                           .map{case (k,v) => (k, v.size)}
     //                           .collectAsMap)
+
+    System.exit(0)
   }
 }
 
