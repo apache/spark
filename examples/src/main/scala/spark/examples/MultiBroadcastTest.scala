@@ -26,5 +26,7 @@ object MultiBroadcastTest {
     spark.parallelize(1 to 10, slices).foreach {
       i => println(barr1.value.size + barr2.value.size)
     }
+    
+    System.exit(0)
   }
 }

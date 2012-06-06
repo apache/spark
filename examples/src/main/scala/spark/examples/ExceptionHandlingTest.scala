@@ -14,5 +14,7 @@ object ExceptionHandlingTest {
       if (Math.random > 0.75)
         throw new Exception("Testing exception handling")
     }
+
+    System.exit(0)
   }
 }

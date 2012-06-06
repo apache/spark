@@ -21,5 +21,7 @@ object BroadcastTest {
     spark.parallelize(1 to 10, slices).foreach {
       i => println(barr1.value.size)
     }
+
+    System.exit(0)
   }
 }

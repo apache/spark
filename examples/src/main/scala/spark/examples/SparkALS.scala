@@ -137,5 +137,7 @@ object SparkALS {
       println("RMSE = " + rmse(R, ms, us))
       println()
     }
+
+    System.exit(0)
   }
 }

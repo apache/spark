@@ -47,5 +47,6 @@ object SparkHdfsLR {
     }
 
     println("Final w: " + w)
+    System.exit(0)
   }
 }
