@@ -3,6 +3,7 @@ package spark
 import java.io.PrintWriter
 import java.util.StringTokenizer
 
+import scala.collection.Map
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source

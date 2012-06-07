@@ -12,6 +12,8 @@ import com.esotericsoftware.kryo.{Serializer => KSerializer}
 import com.esotericsoftware.kryo.serialize.ClassSerializer
 import de.javakaffee.kryoserializers.KryoReflectionFactorySupport
 
+import spark.storage._
+
 /**
  * Zig-zag encoder used to write object sizes to serialization streams.
  * Based on Kryo's integer encoder.
@@ -64,57 +66,90 @@ object ZigZag {
   }
 }
 
-class KryoSerializationStream(kryo: Kryo, buf: ByteBuffer, out: OutputStream)
+class KryoSerializationStream(kryo: Kryo, threadBuffer: ByteBuffer, out: OutputStream)
 extends SerializationStream {
   val channel = Channels.newChannel(out)
 
   def writeObject[T](t: T) {
-    kryo.writeClassAndObject(buf, t)
-    ZigZag.writeInt(buf.position(), out)
-    buf.flip()
-    channel.write(buf)
-    buf.clear()
+    kryo.writeClassAndObject(threadBuffer, t)
+    ZigZag.writeInt(threadBuffer.position(), out)
+    threadBuffer.flip()
+    channel.write(threadBuffer)
+    threadBuffer.clear()
   }
 
   def flush() { out.flush() }
   def close() { out.close() }
 }
 
-class KryoDeserializationStream(buf: ObjectBuffer, in: InputStream)
+class KryoDeserializationStream(objectBuffer: ObjectBuffer, in: InputStream)
 extends DeserializationStream {
   def readObject[T](): T = {
     val len = ZigZag.readInt(in)
-    buf.readClassAndObject(in, len).asInstanceOf[T]
+    objectBuffer.readClassAndObject(in, len).asInstanceOf[T]
   }
 
   def close() { in.close() }
 }
 
 class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
-  val buf = ks.threadBuf.get()
+  val kryo = ks.kryo
+  val threadBuffer = ks.threadBuffer.get()
+  val objectBuffer = ks.objectBuffer.get()
 
-  def serialize[T](t: T): Array[Byte] = {
-    buf.writeClassAndObject(t)
+  def serialize[T](t: T): ByteBuffer = {
+    // Write it to our thread-local scratch buffer first to figure out the size, then return a new
+    // ByteBuffer of the appropriate size
+    threadBuffer.clear()
+    kryo.writeClassAndObject(threadBuffer, t)
+    val newBuf = ByteBuffer.allocate(threadBuffer.position)
+    threadBuffer.flip()
+    newBuf.put(threadBuffer)
+    newBuf.flip()
+    newBuf
   }
 
-  def deserialize[T](bytes: Array[Byte]): T = {
-    buf.readClassAndObject(bytes).asInstanceOf[T]
+  def deserialize[T](bytes: ByteBuffer): T = {
+    kryo.readClassAndObject(bytes).asInstanceOf[T]
   }
 
-  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
-    val oldClassLoader = ks.kryo.getClassLoader
-    ks.kryo.setClassLoader(loader)
-    val obj = buf.readClassAndObject(bytes).asInstanceOf[T]
-    ks.kryo.setClassLoader(oldClassLoader)
+  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
+    val oldClassLoader = kryo.getClassLoader
+    kryo.setClassLoader(loader)
+    val obj = kryo.readClassAndObject(bytes).asInstanceOf[T]
+    kryo.setClassLoader(oldClassLoader)
     obj
   }
 
-  def outputStream(s: OutputStream): SerializationStream = {
-    new KryoSerializationStream(ks.kryo, ks.threadByteBuf.get(), s)
+  def serializeStream(s: OutputStream): SerializationStream = {
+    threadBuffer.clear()
+    new KryoSerializationStream(kryo, threadBuffer, s)
   }
 
-  def inputStream(s: InputStream): DeserializationStream = {
-    new KryoDeserializationStream(buf, s)
+  def deserializeStream(s: InputStream): DeserializationStream = {
+    new KryoDeserializationStream(objectBuffer, s)
+  }
+
+  override def serializeMany[T](iterator: Iterator[T]): ByteBuffer = {
+    threadBuffer.clear()
+    while (iterator.hasNext) {
+      val element = iterator.next()
+      // TODO: Do we also want to write the object's size? Doesn't seem necessary.
+      kryo.writeClassAndObject(threadBuffer, element)
+    }
+    val newBuf = ByteBuffer.allocate(threadBuffer.position)
+    threadBuffer.flip()
+    newBuf.put(threadBuffer)
+    newBuf.flip()
+    newBuf
+  }
+
+  override def deserializeMany(buffer: ByteBuffer): Iterator[Any] = {
+    buffer.rewind()
+    new Iterator[Any] {
+      override def hasNext: Boolean = buffer.remaining > 0
+      override def next(): Any = kryo.readClassAndObject(buffer)
+    }
   }
 }
 
@@ -126,20 +161,17 @@ trait KryoRegistrator {
 class KryoSerializer extends Serializer with Logging {
   val kryo = createKryo()
 
-  val bufferSize = 
-    System.getProperty("spark.kryoserializer.buffer.mb", "2").toInt * 1024 * 1024 
+  val bufferSize = System.getProperty("spark.kryoserializer.buffer.mb", "32").toInt * 1024 * 1024 
 
-  val threadBuf = new ThreadLocal[ObjectBuffer] {
+  val objectBuffer = new ThreadLocal[ObjectBuffer] {
     override def initialValue = new ObjectBuffer(kryo, bufferSize)
   }
 
-  val threadByteBuf = new ThreadLocal[ByteBuffer] {
+  val threadBuffer = new ThreadLocal[ByteBuffer] {
     override def initialValue = ByteBuffer.allocate(bufferSize)
   }
 
   def createKryo(): Kryo = {
-    // This is used so we can serialize/deserialize objects without a zero-arg
-    // constructor.
     val kryo = new KryoReflectionFactorySupport()
 
     // Register some commonly used classes
@@ -148,14 +180,20 @@ class KryoSerializer extends Serializer with Logging {
       Array(1), Array(1.0), Array(1.0f), Array(1L), Array(""), Array(("", "")),
       Array(new java.lang.Object), Array(1.toByte), Array(true), Array('c'),
       // Specialized Tuple2s
-      ("", ""), (1, 1), (1.0, 1.0), (1L, 1L),
+      ("", ""), ("", 1), (1, 1), (1.0, 1.0), (1L, 1L),
       (1, 1.0), (1.0, 1), (1L, 1.0), (1.0, 1L), (1, 1L), (1L, 1),
       // Scala collections
       List(1), mutable.ArrayBuffer(1),
       // Options and Either
       Some(1), Left(1), Right(1),
       // Higher-dimensional tuples
-      (1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1, 1)
+      (1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1, 1),
+      None,
+      ByteBuffer.allocate(1),
+      StorageLevel.MEMORY_ONLY_DESER,
+      PutBlock("1", ByteBuffer.allocate(1), StorageLevel.MEMORY_ONLY_DESER),
+      GotBlock("1", ByteBuffer.allocate(1)),
+      GetBlock("1")
     )
     for (obj <- toRegister) {
       kryo.register(obj.getClass)

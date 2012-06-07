@@ -22,11 +22,12 @@ class CoGroupAggregator
     { (b1, b2) => b1 ++ b2 })
   with Serializable
 
-class CoGroupedRDD[K](rdds: Seq[RDD[(_, _)]], part: Partitioner)
+class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {
   
   val aggr = new CoGroupAggregator
   
+  @transient
   override val dependencies = {
     val deps = new ArrayBuffer[Dependency[_]]
     for ((rdd, index) <- rdds.zipWithIndex) {
@@ -67,9 +68,10 @@ class CoGroupedRDD[K](rdds: Seq[RDD[(_, _)]], part: Partitioner)
   
   override def compute(s: Split): Iterator[(K, Seq[Seq[_]])] = {
     val split = s.asInstanceOf[CoGroupSplit]
+    val numRdds = split.deps.size
     val map = new HashMap[K, Seq[ArrayBuffer[Any]]]
     def getSeq(k: K): Seq[ArrayBuffer[Any]] = {
-      map.getOrElseUpdate(k, Array.fill(rdds.size)(new ArrayBuffer[Any]))
+      map.getOrElseUpdate(k, Array.fill(numRdds)(new ArrayBuffer[Any]))
     }
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, itsSplit) => {

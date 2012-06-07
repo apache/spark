@@ -2,6 +2,8 @@ package spark
 
 import org.scalatest.FunSuite
 
+import spark.scheduler.mesos.MesosScheduler
+
 class MesosSchedulerSuite extends FunSuite {
   test("memoryStringToMb"){
 

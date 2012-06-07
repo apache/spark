@@ -11,6 +11,7 @@ import scala.xml.{XML,NodeSeq}
 import scala.collection.mutable.ArrayBuffer
 
 import java.io.{InputStream, OutputStream, DataInputStream, DataOutputStream}
+import java.nio.ByteBuffer
 
 object WikipediaPageRankStandalone {
   def main(args: Array[String]) {
@@ -118,23 +119,23 @@ class WPRSerializer extends spark.Serializer {
 }
 
 class WPRSerializerInstance extends SerializerInstance {
-  def serialize[T](t: T): Array[Byte] = {
+  def serialize[T](t: T): ByteBuffer = {
     throw new UnsupportedOperationException()
   }
 
-  def deserialize[T](bytes: Array[Byte]): T = {
+  def deserialize[T](bytes: ByteBuffer): T = {
     throw new UnsupportedOperationException()
   }
 
-  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
+  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
     throw new UnsupportedOperationException()
   }
 
-  def outputStream(s: OutputStream): SerializationStream = {
+  def serializeStream(s: OutputStream): SerializationStream = {
     new WPRSerializationStream(s)
   }
 
-  def inputStream(s: InputStream): DeserializationStream = {
+  def deserializeStream(s: InputStream): DeserializationStream = {
     new WPRDeserializationStream(s)
   }
 }

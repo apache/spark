@@ -4,14 +4,14 @@ import java.io.EOFException
 import java.net.URL
 import java.io.ObjectInputStream
 import java.util.concurrent.atomic.AtomicLong
-import java.util.HashSet
-import java.util.Random
+import java.util.{HashMap => JHashMap}
 import java.util.Date
 import java.text.SimpleDateFormat
 
+import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
+import scala.collection.JavaConversions._
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.BytesWritable
@@ -34,7 +34,9 @@ import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
 import org.apache.hadoop.mapreduce.TaskAttemptID
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import SparkContext._
+import spark.SparkContext._
+import spark.partial.BoundedDouble
+import spark.partial.PartialResult
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -43,19 +45,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     self: RDD[(K, V)])
   extends Logging
   with Serializable {
-  
-  def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = {
-    def mergeMaps(m1: HashMap[K, V], m2: HashMap[K, V]): HashMap[K, V] = {
-      for ((k, v) <- m2) {
-        m1.get(k) match {
-          case None => m1(k) = v
-          case Some(w) => m1(k) = func(w, v)
-        }
-      }
-      return m1
-    }
-    self.map(pair => HashMap(pair)).reduce(mergeMaps)
-  }
 
   def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -76,6 +65,39 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
   def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {
     combineByKey[V]((v: V) => v, func, func, numSplits)
+  }
+  
+  def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = {
+    def reducePartition(iter: Iterator[(K, V)]): Iterator[JHashMap[K, V]] = {
+      val map = new JHashMap[K, V]
+      for ((k, v) <- iter) {
+        val old = map.get(k)
+        map.put(k, if (old == null) v else func(old, v))
+      }
+      Iterator(map)
+    }
+
+    def mergeMaps(m1: JHashMap[K, V], m2: JHashMap[K, V]): JHashMap[K, V] = {
+      for ((k, v) <- m2) {
+        val old = m1.get(k)
+        m1.put(k, if (old == null) v else func(old, v))
+      }
+      return m1
+    }
+
+    self.mapPartitions(reducePartition).reduce(mergeMaps)
+  }
+
+  // Alias for backwards compatibility
+  def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = reduceByKeyLocally(func)
+
+  // TODO: This should probably be a distributed version
+  def countByKey(): Map[K, Long] = self.map(_._1).countByValue()
+
+  // TODO: This should probably be a distributed version
+  def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
+      : PartialResult[Map[K, BoundedDouble]] = {
+    self.map(_._1).countByValueApprox(timeout, confidence)
   }
 
   def groupByKey(numSplits: Int): RDD[(K, Seq[V])] = {
