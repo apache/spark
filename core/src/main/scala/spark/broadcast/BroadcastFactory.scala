@@ -7,6 +7,6 @@ package spark.broadcast
  * entire Spark job.
  */
 trait BroadcastFactory {
-  def initialize (isMaster: Boolean): Unit
-  def newBroadcast[T] (value_ : T, isLocal: Boolean): Broadcast[T]
+  def initialize(isMaster: Boolean): Unit
+  def newBroadcast[T](value_ : T, isLocal: Boolean): Broadcast[T]
 }
