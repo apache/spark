@@ -60,7 +60,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
-      numSplits: Int,
       partitioner: Partitioner): RDD[(K, C)] = {
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     new ShuffledRDD(self, aggregator, partitioner)
@@ -70,21 +69,15 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       numSplits: Int): RDD[(K, C)] = {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, numSplits,
-        new HashPartitioner(numSplits))
+    combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numSplits))
+  }
+
+  def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = {
+    combineByKey[V]((v: V) => v, func, func, partitioner)
   }
 
   def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {
-    combineByKey[V]((v: V) => v, func, func, numSplits)
-  }
-
-  def groupByKey(numSplits: Int): RDD[(K, Seq[V])] = {
-    def createCombiner(v: V) = ArrayBuffer(v)
-    def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
-    def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
-    val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, mergeCombiners _, numSplits)
-    bufs.asInstanceOf[RDD[(K, Seq[V])]]
+    reduceByKey(new HashPartitioner(numSplits), func)
   }
 
   def groupByKey(partitioner: Partitioner): RDD[(K, Seq[V])] = {
@@ -92,8 +85,12 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
     def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
     val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, mergeCombiners _, partitioner.numPartitions, partitioner)
+      createCombiner _, mergeValue _, mergeCombiners _, partitioner)
     bufs.asInstanceOf[RDD[(K, Seq[V])]]
+  }
+
+  def groupByKey(numSplits: Int): RDD[(K, Seq[V])] = {
+    groupByKey(new HashPartitioner(numSplits))
   }
 
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
@@ -101,91 +98,77 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
     def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
     val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, mergeCombiners _, partitioner.numPartitions, partitioner)
+      createCombiner _, mergeValue _, mergeCombiners _, partitioner)
     bufs.flatMapValues(buf => buf)
   }
 
-  def join[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, W))] = {
-    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
-    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
-    (vs ++ ws).groupByKey(numSplits).flatMap {
-      case (k, seq) => {
-        val vbuf = new ArrayBuffer[V]
-        val wbuf = new ArrayBuffer[W]
-        seq.foreach(_ match {
-          case Left(v) => vbuf += v
-          case Right(w) => wbuf += w
-        })
-        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
-      }
+  def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
+    this.cogroup(other, partitioner).flatMapValues {
+      case (vs, ws) =>
+        for (v <- vs.iterator; w <- ws.iterator) yield (v, w)
     }
   }
 
-  def leftOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, Option[W]))] = {
-    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
-    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
-    (vs ++ ws).groupByKey(numSplits).flatMap {
-      case (k, seq) => {
-        val vbuf = new ArrayBuffer[V]
-        val wbuf = new ArrayBuffer[Option[W]]
-        seq.foreach(_ match {
-          case Left(v) => vbuf += v
-          case Right(w) => wbuf += Some(w)
-        })
-        if (wbuf.isEmpty) {
-          wbuf += None
+  def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
+    this.cogroup(other, partitioner).flatMapValues {
+      case (vs, ws) =>
+        if (ws.isEmpty) {
+          vs.iterator.map(v => (v, None))
+        } else {
+          for (v <- vs.iterator; w <- ws.iterator) yield (v, Some(w))
         }
-        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
-      }
     }
   }
 
-  def rightOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (Option[V], W))] = {
-    val vs: RDD[(K, Either[V, W])] = self.map { case (k, v) => (k, Left(v)) }
-    val ws: RDD[(K, Either[V, W])] = other.map { case (k, w) => (k, Right(w)) }
-    (vs ++ ws).groupByKey(numSplits).flatMap {
-      case (k, seq) => {
-        val vbuf = new ArrayBuffer[Option[V]]
-        val wbuf = new ArrayBuffer[W]
-        seq.foreach(_ match {
-          case Left(v) => vbuf += Some(v)
-          case Right(w) => wbuf += w
-        })
-        if (vbuf.isEmpty) {
-          vbuf += None
+  def rightOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
+      : RDD[(K, (Option[V], W))] = {
+    this.cogroup(other, partitioner).flatMapValues {
+      case (vs, ws) =>
+        if (vs.isEmpty) {
+          ws.iterator.map(w => (None, w))
+        } else {
+          for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), w)
         }
-        for (v <- vbuf; w <- wbuf) yield (k, (v, w))
-      }
     }
   }
 
   def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C) : RDD[(K, C)] = {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, defaultParallelism)
+    combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
   }
 
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
-    reduceByKey(func, defaultParallelism)
+    reduceByKey(defaultPartitioner(self), func)
   }
 
   def groupByKey(): RDD[(K, Seq[V])] = {
-    groupByKey(defaultParallelism)
+    groupByKey(defaultPartitioner(self))
   }
 
   def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
-    join(other, defaultParallelism)
+    join(other, defaultPartitioner(self, other))
+  }
+
+  def join[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, W))] = {
+    join(other, new HashPartitioner(numSplits))
   }
 
   def leftOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
-    leftOuterJoin(other, defaultParallelism)
+    leftOuterJoin(other, defaultPartitioner(self, other))
+  }
+
+  def leftOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, Option[W]))] = {
+    leftOuterJoin(other, new HashPartitioner(numSplits))
   }
 
   def rightOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
-    rightOuterJoin(other, defaultParallelism)
+    rightOuterJoin(other, defaultPartitioner(self, other))
   }
 
-  def defaultParallelism = self.context.defaultParallelism
+  def rightOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (Option[V], W))] = {
+    rightOuterJoin(other, new HashPartitioner(numSplits))
+  }
 
   def collectAsMap(): Map[K, V] = HashMap(self.collect(): _*)
   
@@ -194,42 +177,72 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     new MappedValuesRDD(self, cleanF)
   }
   
-  def flatMapValues[U](f: V => Traversable[U]): RDD[(K, U)] = {
+  def flatMapValues[U](f: V => TraversableOnce[U]): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new FlatMappedValuesRDD(self, cleanF)
   }
   
-  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
-    val part = self.partitioner match {
-      case Some(p) => p
-      case None => new HashPartitioner(defaultParallelism)
-    }
+  def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (Seq[V], Seq[W]))] = {
     val cg = new CoGroupedRDD[K](
         Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]),
-        part)
-    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(
-        classManifest[K],
-        Manifests.seqSeqManifest)
+        partitioner)
+    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
     prfs.mapValues {
       case Seq(vs, ws) =>
         (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
     }
   }
   
-  def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
+  def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
-    val part = self.partitioner match {
-      case Some(p) => p
-      case None => new HashPartitioner(defaultParallelism)
-    }
-    new CoGroupedRDD[K](
+    val cg = new CoGroupedRDD[K](
         Seq(self.asInstanceOf[RDD[(_, _)]],
             other1.asInstanceOf[RDD[(_, _)]], 
             other2.asInstanceOf[RDD[(_, _)]]),
-        part).map {
-      case (k, Seq(vs, w1s, w2s)) =>
-        (k, (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]]))
+        partitioner)
+    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
+    prfs.mapValues {
+      case Seq(vs, w1s, w2s) =>
+        (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]])
     }
+  }
+
+  def cogroup[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
+    cogroup(other, defaultPartitioner(self, other))
+  }
+
+  def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
+      : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
+    cogroup(other1, other2, defaultPartitioner(self, other1, other2))
+  }
+
+  def cogroup[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (Seq[V], Seq[W]))] = {
+    cogroup(other, new HashPartitioner(numSplits))
+  }
+
+  def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], numSplits: Int)
+      : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
+    cogroup(other1, other2, new HashPartitioner(numSplits))
+  }
+
+  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
+    cogroup(other, defaultPartitioner(self, other))
+  }
+
+  def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
+      : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
+    cogroup(other1, other2, defaultPartitioner(self, other1, other2))
+  }
+
+  /**
+   * Choose a partitioner to use for a cogroup-like operation between a number of RDDs. If any of
+   * the RDDs already has a partitioner, choose that one, otherwise use a default HashPartitioner.
+   */
+  def defaultPartitioner(rdds: RDD[_]*): Partitioner = {
+    for (r <- rdds if r.partitioner != None) {
+      return r.partitioner.get
+    }
+    return new HashPartitioner(self.context.defaultParallelism)
   }
 
   def lookup(key: K): Seq[V] = {
@@ -376,6 +389,7 @@ class SortedRDD[K <% Ordered[K], V](prev: RDD[(K, V)], ascending: Boolean)
   override def splits = prev.splits
   override val partitioner = prev.partitioner
   override val dependencies = List(new OneToOneDependency(prev))
+
   override def compute(split: Split) = {
     prev.iterator(split).toArray
       .sortWith((x, y) => if (ascending) x._1 < y._1 else x._1 > y._1).iterator
@@ -389,16 +403,15 @@ class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)]
   override def compute(split: Split) = prev.iterator(split).map{case (k, v) => (k, f(v))}
 }
 
-class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => Traversable[U])
+class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U])
   extends RDD[(K, U)](prev.context) {
   
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override val partitioner = prev.partitioner
+
   override def compute(split: Split) = {
-    prev.iterator(split).toStream.flatMap { 
-      case (k, v) => f(v).map(x => (k, x))
-    }.iterator
+    prev.iterator(split).flatMap { case (k, v) => f(v).map(x => (k, x)) }
   }
 }
 

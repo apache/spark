@@ -76,6 +76,12 @@ object Utils {
         }
       } catch { case e: IOException => ; }
     }
+    // Add a shutdown hook to delete the temp dir when the JVM exits
+    Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dir " + dir) {
+      override def run() {
+        Utils.deleteRecursively(dir)
+      }
+    })
     return dir
   }
 
