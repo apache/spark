@@ -30,8 +30,7 @@ object Bagel extends Logging {
 
       val aggregated = agg(verts, aggregator)
       val combinedMsgs = msgs.combineByKey(
-        combiner.createCombiner, combiner.mergeMsg, combiner.mergeCombiners,
-        splits, partitioner)
+        combiner.createCombiner _, combiner.mergeMsg _, combiner.mergeCombiners _, partitioner)
       val grouped = combinedMsgs.groupWith(verts)
       val (processed, numMsgs, numActiveVerts) =
         comp[K, V, M, C](sc, grouped, compute(_, _, aggregated, superstep))

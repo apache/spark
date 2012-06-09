@@ -105,7 +105,6 @@ object WikipediaPageRankStandalone {
       ranks = (contribs.combineByKey((x: Double) => x,
                                      (x: Double, y: Double) => x + y,
                                      (x: Double, y: Double) => x + y,
-                                     numSplits,
                                      partitioner)
                .mapValues(sum => a/n + (1-a)*sum))
     }

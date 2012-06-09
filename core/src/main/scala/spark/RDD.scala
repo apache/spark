@@ -83,7 +83,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   
   def map[U: ClassManifest](f: T => U): RDD[U] = new MappedRDD(this, sc.clean(f))
   
-  def flatMap[U: ClassManifest](f: T => Traversable[U]): RDD[U] =
+  def flatMap[U: ClassManifest](f: T => TraversableOnce[U]): RDD[U] =
     new FlatMappedRDD(this, sc.clean(f))
   
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
@@ -275,7 +275,7 @@ class MappedRDD[U: ClassManifest, T: ClassManifest](
 
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
-    f: T => Traversable[U])
+    f: T => TraversableOnce[U])
   extends RDD[U](prev.context) {
   
   override def splits = prev.splits
