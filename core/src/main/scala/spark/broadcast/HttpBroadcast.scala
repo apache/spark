@@ -106,5 +106,6 @@ private object HttpBroadcast extends Logging {
     val serIn = ser.inputStream(in)
     val obj = serIn.readObject()
     serIn.close()
+    obj
   }
 }
