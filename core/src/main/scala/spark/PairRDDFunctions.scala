@@ -33,6 +33,8 @@ import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
 import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
 import org.apache.hadoop.mapreduce.TaskAttemptID
 import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.hadoop.mapreduce.TaskType
 
 import spark.SparkContext._
 import spark.partial.BoundedDouble
@@ -296,8 +298,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     def writeShard(context: spark.TaskContext, iter: Iterator[(K,V)]): Int = {
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = new TaskAttemptID(jobtrackerID,
-        stageId, false, context.splitId, context.attemptId)
-      val hadoopContext = new TaskAttemptContext(wrappedConf.value, attemptId)
+        stageId, TaskType.REDUCE, context.splitId, context.attemptId)
+      val hadoopContext = new TaskAttemptContextImpl(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
@@ -315,8 +317,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
      * however we're only going to use this local OutputCommitter for
      * setupJob/commitJob, so we just use a dummy "map" task.
      */
-    val jobAttemptId = new TaskAttemptID(jobtrackerID, stageId, true, 0, 0)
-    val jobTaskContext = new TaskAttemptContext(wrappedConf.value, jobAttemptId)
+    val jobAttemptId = new TaskAttemptID(jobtrackerID, stageId, TaskType.MAP, 0, 0)
+    val jobTaskContext = new TaskAttemptContextImpl(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
     val count = self.context.runJob(self, writeShard _).sum

@@ -4,11 +4,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce.InputFormat
 import org.apache.hadoop.mapreduce.InputSplit
-import org.apache.hadoop.mapreduce.JobContext
+import org.apache.hadoop.mapreduce.task.JobContextImpl
 import org.apache.hadoop.mapreduce.JobID
 import org.apache.hadoop.mapreduce.RecordReader
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.hadoop.mapreduce.TaskAttemptID
+import org.apache.hadoop.mapreduce.TaskType
 
 import java.util.Date
 import java.text.SimpleDateFormat
@@ -41,7 +42,7 @@ class NewHadoopRDD[K, V](
   @transient
   private val splits_ : Array[Split] = {
     val inputFormat = inputFormatClass.newInstance
-    val jobContext = new JobContext(serializableConf.value, jobId)
+    val jobContext = new JobContextImpl(serializableConf.value, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Split](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
@@ -55,8 +56,8 @@ class NewHadoopRDD[K, V](
   override def compute(theSplit: Split) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[NewHadoopSplit]
     val conf = serializableConf.value
-    val attemptId = new TaskAttemptID(jobtrackerId, id, true, split.index, 0)
-    val context = new TaskAttemptContext(serializableConf.value, attemptId)
+    val attemptId = new TaskAttemptID(jobtrackerId, id, TaskType.MAP, split.index, 0)
+    val context = new TaskAttemptContextImpl(serializableConf.value, attemptId)
     val format = inputFormatClass.newInstance
     val reader = format.createRecordReader(split.serializableHadoopSplit.value, context)
     reader.initialize(split.serializableHadoopSplit.value, context)
