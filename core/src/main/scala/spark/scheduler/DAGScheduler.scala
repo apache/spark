@@ -190,6 +190,9 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       allowLocal: Boolean)
       (implicit m: ClassManifest[U]): Array[U] =
   {
+    if (partitions.size == 0) {
+      return new Array[U](0)
+    }
     val waiter = new JobWaiter(partitions.size)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     eventQueue.put(JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, waiter))

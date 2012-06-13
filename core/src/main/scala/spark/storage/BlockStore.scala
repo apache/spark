@@ -31,6 +31,8 @@ abstract class BlockStore(blockManager: BlockManager) extends Logging {
   def dataSerialize(values: Iterator[Any]): ByteBuffer = blockManager.dataSerialize(values)
 
   def dataDeserialize(bytes: ByteBuffer): Iterator[Any] = blockManager.dataDeserialize(bytes)
+
+  def clear() { }
 }
 
 /**
@@ -118,6 +120,13 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
+  override def clear() {
+    memoryStore.synchronized {
+      memoryStore.clear()
+    }
+    blockDropper.shutdown()
+  }
+
   private def drop(blockId: String) {
     blockDropper.submit(new Runnable() {
       def run() {
@@ -147,8 +156,7 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     for (blockId <- droppedBlockIds) {
       drop(blockId)
     }
-
-    droppedBlockIds.clear
+    droppedBlockIds.clear()
   }
 }
 

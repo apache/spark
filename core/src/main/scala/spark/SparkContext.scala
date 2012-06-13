@@ -38,11 +38,13 @@ import spark.broadcast._
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 
+import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.MesosScheduler
 import spark.scheduler.mesos.CoarseMesosScheduler
+import spark.storage.BlockManagerMaster
 
 class SparkContext(
     master: String,
@@ -266,8 +268,11 @@ class SparkContext(
     env.cacheTracker.stop()
     env.shuffleFetcher.stop()
     env.shuffleManager.stop()
+    env.blockManager.stop()
+    BlockManagerMaster.stopBlockManagerMaster()
     env.connectionManager.stop()
     SparkEnv.set(null)
+    ShuffleMapTask.clearCache()
   }
 
   // Wait for the scheduler to be registered with the cluster manager

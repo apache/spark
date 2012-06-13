@@ -36,7 +36,6 @@ class ConnectionManager(port: Int) extends Logging {
   }
   
   val selector = SelectorProvider.provider.openSelector()
-  /*val handleMessageExecutor = new ThreadPoolExecutor(4, 4, 600, TimeUnit.SECONDS, new LinkedBlockingQueue()) */
   val handleMessageExecutor = Executors.newFixedThreadPool(4) 
   val serverChannel = ServerSocketChannel.open()
   val connectionsByKey = new HashMap[SelectionKey, Connection] with SynchronizedMap[SelectionKey, Connection] 
@@ -59,7 +58,7 @@ class ConnectionManager(port: Int) extends Logging {
   logInfo("Bound socket to port " + serverChannel.socket.getLocalPort() + " with id = " + id)
   
   val thisInstance = this
-  var selectorThread = new Thread("connection-manager-thread") {
+  val selectorThread = new Thread("connection-manager-thread") {
     override def run() {
       thisInstance.run()
     }
@@ -331,9 +330,11 @@ class ConnectionManager(port: Int) extends Logging {
   }
 
   def stop() {
-    selectorThread.interrupt()
-    selectorThread.join()
-    selector.close()
+    if (!selectorThread.isAlive) {
+      selectorThread.interrupt()
+      selectorThread.join()
+      selector.close()
+    }
     val connections = connectionsByKey.values
     connections.foreach(_.close())
     if (connectionsByKey.size != 0) {

@@ -79,7 +79,7 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   private def getBlock(id: String): ByteBuffer = {
     val startTimeMs = System.currentTimeMillis()
     logDebug("Getblock " + id + " started from " + startTimeMs)
-    val block = blockManager.get(id)
+    val block = blockManager.getLocal(id)
     val buffer = block match {
       case Some(tValues) => {
         val values = tValues.asInstanceOf[Iterator[Any]]
