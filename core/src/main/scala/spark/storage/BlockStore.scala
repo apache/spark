@@ -125,6 +125,7 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       memoryStore.clear()
     }
     blockDropper.shutdown()
+    logInfo("MemoryStore cleared")
   }
 
   private def drop(blockId: String) {

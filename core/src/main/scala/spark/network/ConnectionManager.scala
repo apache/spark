@@ -334,14 +334,14 @@ class ConnectionManager(port: Int) extends Logging {
       selectorThread.interrupt()
       selectorThread.join()
       selector.close()
+      val connections = connectionsByKey.values
+      connections.foreach(_.close())
+      if (connectionsByKey.size != 0) {
+        logWarning("All connections not cleaned up")
+      }
+      handleMessageExecutor.shutdown()
+      logInfo("ConnectionManager stopped")
     }
-    val connections = connectionsByKey.values
-    connections.foreach(_.close())
-    if (connectionsByKey.size != 0) {
-      logWarning("All connections not cleaned up")
-    }
-    handleMessageExecutor.shutdown()
-    logInfo("ConnectionManager stopped")
   }
 }
 

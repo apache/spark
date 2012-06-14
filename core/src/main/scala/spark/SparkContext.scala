@@ -260,6 +260,7 @@ class SparkContext(
 
   // Stop the SparkContext
   def stop() {
+    remote.shutdownServerModule()
     dagScheduler.stop()
     dagScheduler = null
     taskScheduler = null

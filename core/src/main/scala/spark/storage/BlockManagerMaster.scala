@@ -352,7 +352,11 @@ object BlockManagerMaster extends Logging {
   }
   
   def stopBlockManagerMaster() {
-    if (masterActor != null) masterActor.stop()
+    if (masterActor != null) {
+      masterActor.stop()
+      masterActor = null
+      logInfo("BlockManagerMaster stopped")
+    }
   }
   
   def notifyADeadHost(host: String) {

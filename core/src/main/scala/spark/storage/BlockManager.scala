@@ -573,6 +573,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
+    logInfo("BlockManager stopped")
   }
 }
 
