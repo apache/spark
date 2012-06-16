@@ -56,6 +56,13 @@ object ShuffleMapTask {
       }
     }
   }
+
+  def clearCache() {
+    synchronized {
+      serializedInfoCache.clear()
+      deserializedInfoCache.clear()
+    }
+  }
 }
 
 class ShuffleMapTask(
