@@ -48,7 +48,7 @@ class ShuffleSuite extends FunSuite {
     assert(valuesFor2.toList.sorted === List(1))
     sc.stop()
   }
-
+  
   test("groupByKey with many output partitions") {
     val sc = new SparkContext("local", "test")
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)))
@@ -189,7 +189,7 @@ class ShuffleSuite extends FunSuite {
     ))
     sc.stop()
   }
-
+  
   test("zero-partition RDD") {
     val sc = new SparkContext("local", "test")
     val emptyDir = Files.createTempDir()
@@ -199,5 +199,5 @@ class ShuffleSuite extends FunSuite {
     // Test that a shuffle on the file works, because this used to be a bug
     assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
     sc.stop()
-  }
+  } 
 }

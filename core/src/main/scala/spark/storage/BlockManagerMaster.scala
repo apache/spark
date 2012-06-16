@@ -1,6 +1,7 @@
 package spark.storage
 
 import java.io._
+import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -86,7 +87,9 @@ case class RemoveHost(
     host: String)
   extends ToBlockManagerMaster
 
+
 class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
+  
   class BlockManagerInfo(
       timeMs: Long,
       maxMem: Long,
@@ -94,7 +97,7 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     private var lastSeenMs = timeMs
     private var remainedMem = maxMem
     private var remainedDisk = maxDisk
-    private val blocks = new HashMap[String, StorageLevel]
+    private val blocks = new JHashMap[String, StorageLevel]
     
     def updateLastSeenMs() {
       lastSeenMs = System.currentTimeMillis() / 1000
@@ -104,8 +107,8 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
         synchronized {
       updateLastSeenMs()
       
-      if (blocks.contains(blockId)) {
-        val oriLevel: StorageLevel = blocks(blockId)
+      if (blocks.containsKey(blockId)) {
+        val oriLevel: StorageLevel = blocks.get(blockId)
         
         if (oriLevel.deserialized) {
           remainedMem += deserializedSize
@@ -117,20 +120,19 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
           remainedDisk += size
         }
       }
-
-      blocks += (blockId -> storageLevel)
-
-      if (storageLevel.deserialized) {
-        remainedMem -= deserializedSize
-      }
-      if (storageLevel.useMemory) {
-        remainedMem -= size
-      }
-      if (storageLevel.useDisk) {
-        remainedDisk -= size
-      }
       
-      if (!(storageLevel.deserialized || storageLevel.useMemory || storageLevel.useDisk)) {
+      if (storageLevel.isValid) { 
+        blocks.put(blockId, storageLevel)
+        if (storageLevel.deserialized) {
+          remainedMem -= deserializedSize
+        }
+        if (storageLevel.useMemory) {
+          remainedMem -= size
+        }
+        if (storageLevel.useDisk) {
+          remainedDisk -= size
+        }
+      } else {
         blocks.remove(blockId)
       }
     }
@@ -150,10 +152,14 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     override def toString(): String = {
       return "BlockManagerInfo " + timeMs + " " + remainedMem + " " + remainedDisk  
     }
+
+    def clear() {
+      blocks.clear()
+    }
   }
 
   private val blockManagerInfo = new HashMap[BlockManagerId, BlockManagerInfo]
-  private val blockIdMap = new HashMap[String, Pair[Int, HashSet[BlockManagerId]]]
+  private val blockInfo = new JHashMap[String, Pair[Int, HashSet[BlockManagerId]]]
 
   initLogging()
   
@@ -215,7 +221,6 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " " + blockId + " "
-    logDebug("Got in heartBeat 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
     
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
@@ -224,29 +229,24 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     }
     
     blockManagerInfo(blockManagerId).addBlock(blockId, storageLevel, deserializedSize, size)
-    logDebug("Got in heartBeat 2" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
     
     var locations: HashSet[BlockManagerId] = null
-    if (blockIdMap.contains(blockId)) {
-      locations = blockIdMap(blockId)._2
+    if (blockInfo.containsKey(blockId)) {
+      locations = blockInfo.get(blockId)._2
     } else {
       locations = new HashSet[BlockManagerId]
-      blockIdMap += (blockId -> (storageLevel.replication, locations))
+      blockInfo.put(blockId, (storageLevel.replication, locations))
     }
-    logDebug("Got in heartBeat 3" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
     
-    if (storageLevel.deserialized || storageLevel.useDisk || storageLevel.useMemory) {
+    if (storageLevel.isValid) {
       locations += blockManagerId
     } else {
       locations.remove(blockManagerId)
     }
-    logDebug("Got in heartBeat 4" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
     
     if (locations.size == 0) {
-      blockIdMap.remove(blockId)
+      blockInfo.remove(blockId)
     }
-    
-    logDebug("Got in heartBeat 5" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
     self.reply(true)
   }
   
@@ -254,9 +254,9 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockId + " "
     logDebug("Got in getLocations 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
-    if (blockIdMap.contains(blockId)) {
+    if (blockInfo.containsKey(blockId)) {
       var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-      res.appendAll(blockIdMap(blockId)._2)
+      res.appendAll(blockInfo.get(blockId)._2)
       logDebug("Got in getLocations 1" + tmp + " as "+ res.toSeq + " at " 
           + Utils.getUsedTimeMs(startTimeMs))
       self.reply(res.toSeq)
@@ -271,9 +271,9 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     def getLocations(blockId: String): Seq[BlockManagerId] = {
       val tmp = blockId
       logDebug("Got in getLocationsMultipleBlockIds Sub 0 " + tmp)
-      if (blockIdMap.contains(blockId)) {
+      if (blockInfo.containsKey(blockId)) {
         var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-        res.appendAll(blockIdMap(blockId)._2)
+        res.appendAll(blockInfo.get(blockId)._2)
         logDebug("Got in getLocationsMultipleBlockIds Sub 1 " + tmp + " " + res.toSeq)
         return res.toSeq
       } else {
@@ -293,24 +293,18 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
   }
 
   private def getPeers(blockManagerId: BlockManagerId, size: Int) {
-    val startTimeMs = System.currentTimeMillis()
-    val tmp = " " + blockManagerId + " "
-    logDebug("Got in getPeers 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
     var peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
     var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
     res.appendAll(peers)
     res -= blockManagerId
     val rand = new Random(System.currentTimeMillis())
-    logDebug("Got in getPeers 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
     while (res.length > size) {
       res.remove(rand.nextInt(res.length))
     }
-    logDebug("Got in getPeers 2" + tmp + Utils.getUsedTimeMs(startTimeMs))
     self.reply(res.toSeq)
   }
   
   private def getPeers_Deterministic(blockManagerId: BlockManagerId, size: Int) {
-    val startTimeMs = System.currentTimeMillis()
     var peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
     var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
 
@@ -329,7 +323,6 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
       res += peers(index % peers.size)
     }
     val resStr = res.map(_.toString).reduceLeft(_ + ", " + _)
-    logDebug("Got peers for " + blockManagerId + " as [" + resStr + "]")
     self.reply(res.toSeq)
   }
 }
@@ -355,6 +348,14 @@ object BlockManagerMaster extends Logging {
       masterActor.start()
     } else {
       masterActor = remote.actorFor(AKKA_ACTOR_NAME, DEFAULT_MASTER_IP, DEFAULT_MASTER_PORT)
+    }
+  }
+  
+  def stopBlockManagerMaster() {
+    if (masterActor != null) {
+      masterActor.stop()
+      masterActor = null
+      logInfo("BlockManagerMaster stopped")
     }
   }
   

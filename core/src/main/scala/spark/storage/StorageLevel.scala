@@ -32,7 +32,9 @@ class StorageLevel(
     case _ =>
       false
   }
-  
+ 
+  def isValid() = ((useMemory || useDisk) && (replication > 0))
+
   def toInt(): Int = {
     var ret = 0
     if (useDisk) {
