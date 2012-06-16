@@ -90,7 +90,7 @@ private object HttpBroadcast extends Logging {
       new FastBufferedOutputStream(new FileOutputStream(file), bufferSize)
     }
     val ser = SparkEnv.get.serializer.newInstance()
-    val serOut = ser.outputStream(out)
+    val serOut = ser.serializeStream(out)
     serOut.writeObject(value)
     serOut.close()
   }
@@ -103,7 +103,7 @@ private object HttpBroadcast extends Logging {
       new FastBufferedInputStream(new URL(url).openStream(), bufferSize)
     }
     val ser = SparkEnv.get.serializer.newInstance()
-    val serIn = ser.inputStream(in)
+    val serIn = ser.deserializeStream(in)
     val obj = serIn.readObject[T]()
     serIn.close()
     obj
