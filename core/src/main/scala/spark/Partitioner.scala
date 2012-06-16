@@ -26,8 +26,9 @@ class HashPartitioner(partitions: Int) extends Partitioner {
 }
 
 class RangePartitioner[K <% Ordered[K]: ClassManifest, V](
-    partitions: Int, rdd: RDD[(K,V)],
-    ascending: Boolean = true) 
+    partitions: Int,
+    @transient rdd: RDD[(K,V)],
+    private val ascending: Boolean = true) 
   extends Partitioner {
 
   private val rangeBounds: Array[K] = {
@@ -65,7 +66,7 @@ class RangePartitioner[K <% Ordered[K]: ClassManifest, V](
 
   override def equals(other: Any): Boolean = other match {
     case r: RangePartitioner[_,_] =>
-      r.rangeBounds.sameElements(rangeBounds)
+      r.rangeBounds.sameElements(rangeBounds) && r.ascending == ascending
     case _ =>
       false
   }
