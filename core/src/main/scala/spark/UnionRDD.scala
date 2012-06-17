@@ -33,8 +33,7 @@ class UnionRDD[T: ClassManifest](
 
   override def splits = splits_
 
-  @transient
-  override val dependencies = {
+  @transient override val dependencies = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for ((rdd, index) <- rdds.zipWithIndex) {

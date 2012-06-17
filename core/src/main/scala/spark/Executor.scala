@@ -10,10 +10,9 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.protobuf.ByteString
 
 import org.apache.mesos._
-import org.apache.mesos.Protos.{TaskInfo => MTaskInfo, _}
+import org.apache.mesos.Protos._
 
 import spark.broadcast._
-import spark.scheduler._
 
 /**
  * The Mesos executor for Spark.
@@ -30,9 +29,6 @@ class Executor extends org.apache.mesos.Executor with Logging {
       executorInfo: ExecutorInfo,
       frameworkInfo: FrameworkInfo,
       slaveInfo: SlaveInfo) {
-    // Make sure the local hostname we report matches Mesos's name for this host
-    Utils.setCustomHostname(slaveInfo.getHostname())
-
     // Read spark.* system properties from executor arg
     val props = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
     for ((key, value) <- props) {
@@ -43,7 +39,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
     RemoteActor.classLoader = getClass.getClassLoader
 
     // Initialize Spark environment (using system properties read above)
-    env = SparkEnv.createFromSystemProperties(false, false)
+    env = SparkEnv.createFromSystemProperties(false)
     SparkEnv.set(env)
     // Old stuff that isn't yet using env
     Broadcast.initialize(false)
@@ -61,11 +57,11 @@ class Executor extends org.apache.mesos.Executor with Logging {
 
   override def reregistered(d: ExecutorDriver, s: SlaveInfo) {}
   
-  override def launchTask(d: ExecutorDriver, task: MTaskInfo) {
+  override def launchTask(d: ExecutorDriver, task: TaskInfo) {
     threadPool.execute(new TaskRunner(task, d))
   }
 
-  class TaskRunner(info: MTaskInfo, d: ExecutorDriver)
+  class TaskRunner(info: TaskInfo, d: ExecutorDriver)
   extends Runnable {
     override def run() = {
       val tid = info.getTaskId.getValue
@@ -78,11 +74,11 @@ class Executor extends org.apache.mesos.Executor with Logging {
           .setState(TaskState.TASK_RUNNING)
           .build())
       try {
-        SparkEnv.set(env)
-        Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear
-        val task = ser.deserialize[Task[Any]](info.getData.asReadOnlyByteBuffer, classLoader)
-        env.mapOutputTracker.updateGeneration(task.generation)
+        val task = ser.deserialize[Task[Any]](info.getData.toByteArray, classLoader)
+        for (gen <- task.generation) {// Update generation if any is set
+          env.mapOutputTracker.updateGeneration(gen)
+        }
         val value = task.run(tid.toInt)
         val accumUpdates = Accumulators.values
         val result = new TaskResult(value, accumUpdates)
@@ -109,11 +105,9 @@ class Executor extends org.apache.mesos.Executor with Logging {
               .setData(ByteString.copyFrom(ser.serialize(reason)))
               .build())
 
-          // TODO: Should we exit the whole executor here? On the one hand, the failed task may
-          // have left some weird state around depending on when the exception was thrown, but on
-          // the other hand, maybe we could detect that when future tasks fail and exit then.
+          // TODO: Handle errors in tasks less dramatically
           logError("Exception in task ID " + tid, t)
-          //System.exit(1)
+          System.exit(1)
         }
       }
     }

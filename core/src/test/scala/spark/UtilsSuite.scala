@@ -2,7 +2,7 @@ package spark
 
 import org.scalatest.FunSuite
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream}
-import scala.util.Random
+import util.Random
 
 class UtilsSuite extends FunSuite {
 

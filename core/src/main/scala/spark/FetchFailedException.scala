@@ -1,9 +1,7 @@
 package spark
 
-import spark.storage.BlockManagerId
-
 class FetchFailedException(
-    val bmAddress: BlockManagerId,
+    val serverUri: String,
     val shuffleId: Int,
     val mapId: Int,
     val reduceId: Int,
@@ -11,10 +9,10 @@ class FetchFailedException(
   extends Exception {
   
   override def getMessage(): String = 
-    "Fetch failed: %s %d %d %d".format(bmAddress, shuffleId, mapId, reduceId)
+    "Fetch failed: %s %d %d %d".format(serverUri, shuffleId, mapId, reduceId)
 
   override def getCause(): Throwable = cause
 
   def toTaskEndReason: TaskEndReason =
-    FetchFailed(bmAddress, shuffleId, mapId, reduceId)
+    FetchFailed(serverUri, shuffleId, mapId, reduceId)
 }

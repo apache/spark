@@ -1,15 +1,14 @@
-package spark.scheduler
-
-import spark._
+package spark
 
 class ResultTask[T, U](
-    stageId: Int,
-    rdd: RDD[T],
+    runId: Int,
+    stageId: Int, 
+    rdd: RDD[T], 
     func: (TaskContext, Iterator[T]) => U,
-    val partition: Int,
-    @transient locs: Seq[String],
+    val partition: Int, 
+    locs: Seq[String],
     val outputId: Int)
-  extends Task[U](stageId) {
+  extends DAGTask[U](runId, stageId) {
   
   val split = rdd.splits(partition)
 

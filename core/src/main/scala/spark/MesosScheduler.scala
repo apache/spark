@@ -1,4 +1,4 @@
-package spark.scheduler.mesos
+package spark
 
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.util.{ArrayList => JArrayList}
@@ -17,23 +17,20 @@ import com.google.protobuf.ByteString
 
 import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
-import org.apache.mesos.Protos.{TaskInfo => MTaskInfo, _}
-
-import spark._
-import spark.scheduler._
+import org.apache.mesos.Protos._
 
 /**
- * The main TaskScheduler implementation, which runs tasks on Mesos. Clients should first call
- * start(), then submit task sets through the runTasks method.
+ * The main Scheduler implementation, which runs jobs on Mesos. Clients should first call start(),
+ * then submit tasks through the runTasks method.
  */
-class MesosScheduler(
+private class MesosScheduler(
     sc: SparkContext,
     master: String,
     frameworkName: String)
-  extends TaskScheduler
-  with MScheduler
+  extends MScheduler
+  with DAGScheduler
   with Logging {
-
+  
   // Environment variables to pass to our executors
   val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
     "SPARK_MEM",
@@ -52,60 +49,55 @@ class MesosScheduler(
     }
   }
 
-  // How often to check for speculative tasks
-  val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong
-
   // Lock used to wait for scheduler to be registered
-  var isRegistered = false
-  val registeredLock = new Object()
+  private var isRegistered = false
+  private val registeredLock = new Object()
 
-  val activeTaskSets = new HashMap[String, TaskSetManager]
-  var activeTaskSetsQueue = new ArrayBuffer[TaskSetManager]
+  private val activeJobs = new HashMap[Int, Job]
+  private var activeJobsQueue = new ArrayBuffer[Job]
 
-  val taskIdToTaskSetId = new HashMap[String, String]
-  val taskIdToSlaveId = new HashMap[String, String]
-  val taskSetTaskIds = new HashMap[String, HashSet[String]]
+  private val taskIdToJobId = new HashMap[String, Int]
+  private val taskIdToSlaveId = new HashMap[String, String]
+  private val jobTasks = new HashMap[Int, HashSet[String]]
 
-  // Incrementing Mesos task IDs
-  var nextTaskId = 0
+  // Incrementing job and task IDs
+  private var nextJobId = 0
+  private var nextTaskId = 0
 
   // Driver for talking to Mesos
   var driver: SchedulerDriver = null
 
-  // Which hosts in the cluster are alive (contains hostnames)
-  val hostsAlive = new HashSet[String]
-
-  // Which slave IDs we have executors on
-  val slaveIdsWithExecutors = new HashSet[String]
-
-  val slaveIdToHost = new HashMap[String, String]
+  // Which nodes we have executors on
+  private val slavesWithExecutors = new HashSet[String]
 
   // JAR server, if any JARs were added by the user to the SparkContext
   var jarServer: HttpServer = null
 
   // URIs of JARs to pass to executor
   var jarUris: String = ""
-  
+
   // Create an ExecutorInfo for our tasks
   val executorInfo = createExecutorInfo()
 
-  // Listener object to pass upcalls into
-  var listener: TaskSchedulerListener = null
-
-  val mapOutputTracker = SparkEnv.get.mapOutputTracker
-
-  override def setListener(listener: TaskSchedulerListener) { 
-    this.listener = listener
+  // Sorts jobs in reverse order of run ID for use in our priority queue (so lower IDs run first)
+  private val jobOrdering = new Ordering[Job] {
+    override def compare(j1: Job, j2: Job): Int =  j2.runId - j1.runId
+  }
+  
+  def newJobId(): Int = this.synchronized {
+    val id = nextJobId
+    nextJobId += 1
+    return id
   }
 
   def newTaskId(): TaskID = {
-    val id = TaskID.newBuilder().setValue("" + nextTaskId).build()
-    nextTaskId += 1
-    return id
+    val id = "" + nextTaskId;
+    nextTaskId += 1;
+    return TaskID.newBuilder().setValue(id).build()
   }
   
   override def start() {
-    new Thread("MesosScheduler driver") {
+    new Thread("Spark scheduler") {
       setDaemon(true)
       override def run {
         val sched = MesosScheduler.this
@@ -118,27 +110,12 @@ class MesosScheduler(
           case e: Exception => logError("driver.run() failed", e)
         }
       }
-    }.start()
-    if (System.getProperty("spark.speculation", "false") == "true") {
-      new Thread("MesosScheduler speculation check") {
-        setDaemon(true)
-        override def run {
-          waitForRegister()
-          while (true) {
-            try {
-              Thread.sleep(SPECULATION_INTERVAL)
-            } catch { case e: InterruptedException => {} }
-            checkSpeculatableTasks()
-          }
-        }
-      }.start()
-    }
+    }.start
   }
 
   def createExecutorInfo(): ExecutorInfo = {
     val sparkHome = sc.getSparkHome match {
-      case Some(path) =>
-        path
+      case Some(path) => path
       case None =>
         throw new SparkException("Spark home is not set; set it through the spark.home system " +
             "property, the SPARK_HOME environment variable or the SparkContext constructor")
@@ -174,26 +151,27 @@ class MesosScheduler(
       .build()
   }
   
-  def submitTasks(taskSet: TaskSet) {
-    val tasks = taskSet.tasks
-    logInfo("Adding task set " + taskSet.id + " with " + tasks.size + " tasks")
+  def submitTasks(tasks: Seq[Task[_]], runId: Int) {
+    logInfo("Got a job with " + tasks.size + " tasks")
     waitForRegister()
     this.synchronized {
-      val manager = new TaskSetManager(this, taskSet)
-      activeTaskSets(taskSet.id) = manager
-      activeTaskSetsQueue += manager
-      taskSetTaskIds(taskSet.id) = new HashSet()
+      val jobId = newJobId()
+      val myJob = new SimpleJob(this, tasks, runId, jobId)
+      activeJobs(jobId) = myJob
+      activeJobsQueue += myJob
+      logInfo("Adding job with ID " + jobId)
+      jobTasks(jobId) = HashSet.empty[String]
     }
-    reviveOffers();
+    driver.reviveOffers();
   }
   
-  def taskSetFinished(manager: TaskSetManager) {
+  def jobFinished(job: Job) {
     this.synchronized {
-      activeTaskSets -= manager.taskSet.id
-      activeTaskSetsQueue -= manager
-      taskIdToTaskSetId --= taskSetTaskIds(manager.taskSet.id)
-      taskIdToSlaveId --= taskSetTaskIds(manager.taskSet.id)
-      taskSetTaskIds.remove(manager.taskSet.id)
+      activeJobs -= job.jobId
+      activeJobsQueue -= job
+      taskIdToJobId --= jobTasks(job.jobId)
+      taskIdToSlaveId --= jobTasks(job.jobId)
+      jobTasks.remove(job.jobId)
     }
   }
 
@@ -218,40 +196,33 @@ class MesosScheduler(
   override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
 
   /**
-   * Method called by Mesos to offer resources on slaves. We resond by asking our active task sets 
-   * for tasks in order of priority. We fill each node with tasks in a round-robin manner so that
-   * tasks are balanced across the cluster.
+   * Method called by Mesos to offer resources on slaves. We resond by asking our active jobs for 
+   * tasks in FIFO order. We fill each node with tasks in a round-robin manner so that tasks are
+   * balanced across the cluster.
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     synchronized {
-      // Mark each slave as alive and remember its hostname
-      for (o <- offers) {
-        slaveIdToHost(o.getSlaveId.getValue) = o.getHostname
-        hostsAlive += o.getHostname
-      }
-      // Build a list of tasks to assign to each slave
-      val tasks = offers.map(o => new JArrayList[MTaskInfo])
+      val tasks = offers.map(o => new JArrayList[TaskInfo])
       val availableCpus = offers.map(o => getResource(o.getResourcesList(), "cpus"))
       val enoughMem = offers.map(o => {
         val mem = getResource(o.getResourcesList(), "mem")
         val slaveId = o.getSlaveId.getValue
-        mem >= EXECUTOR_MEMORY || slaveIdsWithExecutors.contains(slaveId)
+        mem >= EXECUTOR_MEMORY || slavesWithExecutors.contains(slaveId)
       })
       var launchedTask = false
-      for (manager <- activeTaskSetsQueue.sortBy(m => (m.taskSet.priority, m.taskSet.stageId))) {
+      for (job <- activeJobsQueue.sorted(jobOrdering)) {
         do {
           launchedTask = false
           for (i <- 0 until offers.size if enoughMem(i)) {
-            val sid = offers(i).getSlaveId.getValue
-            val host = offers(i).getHostname
-            manager.slaveOffer(sid, host, availableCpus(i)) match {
+            job.slaveOffer(offers(i), availableCpus(i)) match {
               case Some(task) => 
                 tasks(i).add(task)
                 val tid = task.getTaskId.getValue
-                taskIdToTaskSetId(tid) = manager.taskSet.id
-                taskSetTaskIds(manager.taskSet.id) += tid
+                val sid = offers(i).getSlaveId.getValue
+                taskIdToJobId(tid) = job.jobId
+                jobTasks(job.jobId) += tid
                 taskIdToSlaveId(tid) = sid
-                slaveIdsWithExecutors += sid
+                slavesWithExecutors += sid
                 availableCpus(i) -= getResource(task.getResourcesList(), "cpus")
                 launchedTask = true
                 
@@ -285,74 +256,53 @@ class MesosScheduler(
   }
 
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
-    val tid = status.getTaskId.getValue
-    var taskSetToUpdate: Option[TaskSetManager] = None
-    var failedHost: Option[String] = None
-    var taskFailed = false
+    var jobToUpdate: Option[Job] = None
     synchronized {
       try {
-        if (status.getState == TaskState.TASK_LOST && taskIdToSlaveId.contains(tid)) {
+        val tid = status.getTaskId.getValue
+        if (status.getState == TaskState.TASK_LOST 
+            && taskIdToSlaveId.contains(tid)) {
           // We lost the executor on this slave, so remember that it's gone
-          val slaveId = taskIdToSlaveId(tid)
-          val host = slaveIdToHost(slaveId)
-          if (hostsAlive.contains(host)) {
-            slaveIdsWithExecutors -= slaveId
-            hostsAlive -= host
-            activeTaskSetsQueue.foreach(_.hostLost(host))
-            failedHost = Some(host)
-          }
+          slavesWithExecutors -= taskIdToSlaveId(tid)
         }
-        taskIdToTaskSetId.get(tid) match {
-          case Some(taskSetId) =>
-            if (activeTaskSets.contains(taskSetId)) {
-              //activeTaskSets(taskSetId).statusUpdate(status)
-              taskSetToUpdate = Some(activeTaskSets(taskSetId))
+        taskIdToJobId.get(tid) match {
+          case Some(jobId) =>
+            if (activeJobs.contains(jobId)) {
+              jobToUpdate = Some(activeJobs(jobId))
             }
             if (isFinished(status.getState)) {
-              taskIdToTaskSetId.remove(tid)
-              if (taskSetTaskIds.contains(taskSetId)) {
-                taskSetTaskIds(taskSetId) -= tid
+              taskIdToJobId.remove(tid)
+              if (jobTasks.contains(jobId)) {
+                jobTasks(jobId) -= tid
               }
               taskIdToSlaveId.remove(tid)
             }
-            if (status.getState == TaskState.TASK_FAILED) {
-              taskFailed = true
-            }
           case None =>
-            logInfo("Ignoring update from TID " + tid + " because its task set is gone")
+            logInfo("Ignoring update from TID " + tid + " because its job is gone")
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
       }
     }
-    // Update the task set and DAGScheduler without holding a lock on this, because that can deadlock
-    if (taskSetToUpdate != None) {
-      taskSetToUpdate.get.statusUpdate(status)
-    }
-    if (failedHost != None) {
-      listener.hostLost(failedHost.get)
-      reviveOffers();
-    }
-    if (taskFailed) {
-      // Also revive offers if a task had failed for some reason other than host lost
-      reviveOffers()
+    for (j <- jobToUpdate) {
+      j.statusUpdate(status)
     }
   }
 
   override def error(d: SchedulerDriver, message: String) {
     logError("Mesos error: " + message)
     synchronized {
-      if (activeTaskSets.size > 0) {
-        // Have each task set throw a SparkException with the error
-        for ((taskSetId, manager) <- activeTaskSets) {
+      if (activeJobs.size > 0) {
+        // Have each job throw a SparkException with the error
+        for ((jobId, activeJob) <- activeJobs) {
           try {
-            manager.error(message)
+            activeJob.error(message)
           } catch {
             case e: Exception => logError("Exception in error callback", e)
           }
         }
       } else {
-        // No task sets are active but we still got an error. Just exit since this
+        // No jobs are active but we still got an error. Just exit since this
         // must mean the error is during registration.
         // It might be good to do something smarter here in the future.
         System.exit(1)
@@ -423,68 +373,41 @@ class MesosScheduler(
     return Utils.serialize(props.toArray)
   }
 
-  override def frameworkMessage(d: SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
+  override def frameworkMessage(
+      d: SchedulerDriver, 
+      e: ExecutorID,
+      s: SlaveID,
+      b: Array[Byte]) {}
 
   override def slaveLost(d: SchedulerDriver, s: SlaveID) {
-    var failedHost: Option[String] = None
-    synchronized {
-      val slaveId = s.getValue
-      val host = slaveIdToHost(slaveId)
-      if (hostsAlive.contains(host)) {
-        slaveIdsWithExecutors -= slaveId
-        hostsAlive -= host
-        activeTaskSetsQueue.foreach(_.hostLost(host))
-        failedHost = Some(host)
-      }
-    }
-    if (failedHost != None) {
-      listener.hostLost(failedHost.get)
-      reviveOffers();
-    }
+    slavesWithExecutors.remove(s.getValue)
   }
 
   override def executorLost(d: SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int) {
-    logInfo("Executor lost: %s, marking slave %s as lost".format(e.getValue, s.getValue))
-    slaveLost(d, s)
+    slavesWithExecutors.remove(s.getValue)
   }
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
-
-  // Check for speculatable tasks in all our active jobs.
-  def checkSpeculatableTasks() {
-    var shouldRevive = false
-    synchronized {
-      for (ts <- activeTaskSetsQueue) {
-        shouldRevive |= ts.checkSpeculatableTasks()
-      }
-    }
-    if (shouldRevive) {
-      reviveOffers()
-    }
-  }
-
-  def reviveOffers() {
-    driver.reviveOffers()
-  }
 }
 
 object MesosScheduler {
   /**
-   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes. 
-   * This is used to figure out how much memory to claim from Mesos based on the SPARK_MEM 
+   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
+   * This is used to figure out how much memory to claim from Mesos based on the SPARK_MEM
    * environment variable.
    */
   def memoryStringToMb(str: String): Int = {
     val lower = str.toLowerCase
     if (lower.endsWith("k")) {
-      (lower.substring(0, lower.length-1).toLong / 1024).toInt
+      (lower.substring(0, lower.length - 1).toLong / 1024).toInt
     } else if (lower.endsWith("m")) {
-      lower.substring(0, lower.length-1).toInt
+      lower.substring(0, lower.length - 1).toInt
     } else if (lower.endsWith("g")) {
-      lower.substring(0, lower.length-1).toInt * 1024
+      lower.substring(0, lower.length - 1).toInt * 1024
     } else if (lower.endsWith("t")) {
-      lower.substring(0, lower.length-1).toInt * 1024 * 1024
-    } else {// no suffix, so it's just a number in bytes
+      lower.substring(0, lower.length - 1).toInt * 1024 * 1024
+    } else {
+      // no suffix, so it's just a number in bytes
       (lower.toLong / 1024 / 1024).toInt
     }
   }

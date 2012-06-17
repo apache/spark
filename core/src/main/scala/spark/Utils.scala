@@ -124,23 +124,6 @@ object Utils {
    * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4).
    */
   def localIpAddress(): String = InetAddress.getLocalHost.getHostAddress
-
-  private var customHostname: Option[String] = None
-
-  /**
-   * Allow setting a custom host name because when we run on Mesos we need to use the same
-   * hostname it reports to the master.
-   */
-  def setCustomHostname(hostname: String) {
-    customHostname = Some(hostname)
-  }
-
-  /**
-   * Get the local machine's hostname
-   */
-  def localHostName(): String = {
-    customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
-  }
   
   /**
    * Returns a standard ThreadFactory except all threads are daemons.
@@ -165,14 +148,6 @@ object Utils {
 
     return threadPool
   }
-  
-  /**
-   * Return the string to tell how long has passed in seconds. The passing parameter should be in 
-   * millisecond. 
-   */
-  def getUsedTimeMs(startTimeMs: Long): String = {
-    return " " + (System.currentTimeMillis - startTimeMs) + " ms "
-  }
 
   /**
    * Wrapper over newFixedThreadPool.
@@ -184,6 +159,16 @@ object Utils {
 
     return threadPool
   }
+
+  /**
+   * Get the local machine's hostname.
+   */
+  def localHostName(): String = InetAddress.getLocalHost.getHostName
+
+  /**
+   * Get current host
+   */
+  def getHost = System.getProperty("spark.hostname", localHostName())
 
   /**
    * Delete a file or directory and its contents recursively.

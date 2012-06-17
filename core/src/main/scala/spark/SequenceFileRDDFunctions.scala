@@ -44,7 +44,7 @@ class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : Cla
       }
        // TODO: use something like WritableConverter to avoid reflection
     }
-    c.asInstanceOf[Class[_ <: Writable]]
+    c.asInstanceOf[Class[ _ <: Writable]]
   }
 
   def saveAsSequenceFile(path: String) {

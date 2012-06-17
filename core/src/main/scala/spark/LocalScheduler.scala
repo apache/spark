@@ -1,21 +1,16 @@
-package spark.scheduler.local
+package spark
 
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
-import spark._
-import spark.scheduler._
-
 /**
- * A simple TaskScheduler implementation that runs tasks locally in a thread pool. Optionally
- * the scheduler also allows each task to fail up to maxFailures times, which is useful for
- * testing fault recovery.
+ * A simple Scheduler implementation that runs tasks locally in a thread pool. Optionally the 
+ * scheduler also allows each task to fail up to maxFailures times, which is useful for testing
+ * fault recovery.
  */
-class LocalScheduler(threads: Int, maxFailures: Int) extends TaskScheduler with Logging {
+private class LocalScheduler(threads: Int, maxFailures: Int) extends DAGScheduler with Logging {
   var attemptId = new AtomicInteger(0)
   var threadPool = Executors.newFixedThreadPool(threads, DaemonThreadFactory)
-  val env = SparkEnv.get
-  var listener: TaskSchedulerListener = null
 
   // TODO: Need to take into account stage priority in scheduling
 
@@ -23,12 +18,7 @@ class LocalScheduler(threads: Int, maxFailures: Int) extends TaskScheduler with 
   
   override def waitForRegister() {}
 
-  override def setListener(listener: TaskSchedulerListener) { 
-    this.listener = listener
-  }
-
-  override def submitTasks(taskSet: TaskSet) {
-    val tasks = taskSet.tasks
+  override def submitTasks(tasks: Seq[Task[_]], runId: Int) {
     val failCount = new Array[Int](tasks.size)
 
     def submitTask(task: Task[_], idInJob: Int) {
@@ -48,14 +38,23 @@ class LocalScheduler(threads: Int, maxFailures: Int) extends TaskScheduler with 
         // Serialize and deserialize the task so that accumulators are changed to thread-local ones;
         // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
         Accumulators.clear
-        val bytes = Utils.serialize(task)
-        logInfo("Size of task " + idInJob + " is " + bytes.size + " bytes")
-        val deserializedTask = Utils.deserialize[Task[_]](
-            bytes, Thread.currentThread.getContextClassLoader)
+        val ser = SparkEnv.get.closureSerializer.newInstance()
+        val startTime = System.currentTimeMillis
+        val bytes = ser.serialize(task)
+        val timeTaken = System.currentTimeMillis - startTime
+        logInfo("Size of task %d is %d bytes and took %d ms to serialize".format(
+            idInJob, bytes.size, timeTaken))
+        val deserializedTask = ser.deserialize[Task[_]](bytes, currentThread.getContextClassLoader)
         val result: Any = deserializedTask.run(attemptId)
+
+        // Serialize and deserialize the result to emulate what the mesos
+        // executor does. This is useful to catch serialization errors early
+        // on in development (so when users move their local Spark programs
+        // to the cluster, they don't get surprised by serialization errors).
+        val resultToReturn = ser.deserialize[Any](ser.serialize(result))
         val accumUpdates = Accumulators.values
         logInfo("Finished task " + idInJob)
-        listener.taskEnded(task, Success, result, accumUpdates)
+        taskEnded(task, Success, resultToReturn, accumUpdates)
       } catch {
         case t: Throwable => {
           logError("Exception in task " + idInJob, t)
@@ -65,7 +64,7 @@ class LocalScheduler(threads: Int, maxFailures: Int) extends TaskScheduler with 
               submitTask(task, idInJob)
             } else {
               // TODO: Do something nicer here to return all the way to the user
-              listener.taskEnded(task, new ExceptionFailure(t), null, null)
+              taskEnded(task, new ExceptionFailure(t), null, null)
             }
           }
         }

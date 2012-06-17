@@ -8,7 +8,7 @@ class ShuffledRDDSplit(val idx: Int) extends Split {
 }
 
 class ShuffledRDD[K, V, C](
-    @transient parent: RDD[(K, V)],
+    parent: RDD[(K, V)],
     aggregator: Aggregator[K, V, C],
     part : Partitioner) 
   extends RDD[(K, C)](parent.context) {

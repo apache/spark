@@ -8,7 +8,7 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd, false) {
 
 class ShuffleDependency[K, V, C](
     val shuffleId: Int,
-    @transient rdd: RDD[(K, V)],
+    rdd: RDD[(K, V)],
     val aggregator: Aggregator[K, V, C],
     val partitioner: Partitioner)
   extends Dependency(rdd, true)

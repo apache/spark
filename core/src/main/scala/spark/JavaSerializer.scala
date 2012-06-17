@@ -1,7 +1,6 @@
 package spark
 
 import java.io._
-import java.nio.ByteBuffer
 
 class JavaSerializationStream(out: OutputStream) extends SerializationStream {
   val objOut = new ObjectOutputStream(out)
@@ -10,11 +9,10 @@ class JavaSerializationStream(out: OutputStream) extends SerializationStream {
   def close() { objOut.close() }
 }
 
-class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
-extends DeserializationStream {
+class JavaDeserializationStream(in: InputStream) extends DeserializationStream {
   val objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass) =
-      Class.forName(desc.getName, false, loader)
+      Class.forName(desc.getName, false, Thread.currentThread.getContextClassLoader)
   }
 
   def readObject[T](): T = objIn.readObject().asInstanceOf[T]
@@ -22,36 +20,35 @@ extends DeserializationStream {
 }
 
 class JavaSerializerInstance extends SerializerInstance {
-  def serialize[T](t: T): ByteBuffer = {
+  def serialize[T](t: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
-    val out = serializeStream(bos)
+    val out = outputStream(bos)
     out.writeObject(t)
     out.close()
-    ByteBuffer.wrap(bos.toByteArray)
+    bos.toByteArray
   }
 
-  def deserialize[T](bytes: ByteBuffer): T = {
-    val bis = new ByteArrayInputStream(bytes.array())
-    val in = deserializeStream(bis)
+  def deserialize[T](bytes: Array[Byte]): T = {
+    val bis = new ByteArrayInputStream(bytes)
+    val in = inputStream(bis)
     in.readObject().asInstanceOf[T]
   }
 
-  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes.array())
-    val in = deserializeStream(bis, loader)
-    in.readObject().asInstanceOf[T]
+  def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ois = new ObjectInputStream(bis) {
+      override def resolveClass(desc: ObjectStreamClass) =
+        Class.forName(desc.getName, false, loader)
+    }
+    return ois.readObject.asInstanceOf[T]
   }
 
-  def serializeStream(s: OutputStream): SerializationStream = {
+  def outputStream(s: OutputStream): SerializationStream = {
     new JavaSerializationStream(s)
   }
 
-  def deserializeStream(s: InputStream): DeserializationStream = {
-    new JavaDeserializationStream(s, currentThread.getContextClassLoader)
-  }
-
-  def deserializeStream(s: InputStream, loader: ClassLoader): DeserializationStream = {
-    new JavaDeserializationStream(s, loader)
+  def inputStream(s: InputStream): DeserializationStream = {
+    new JavaDeserializationStream(s)
   }
 }
 

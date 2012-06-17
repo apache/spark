@@ -3,9 +3,6 @@ package spark
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.Actor
-import akka.actor.Actor._
-
 import scala.actors.remote.RemoteActor
 import scala.collection.mutable.ArrayBuffer
 
@@ -35,17 +32,6 @@ import org.apache.mesos.MesosNativeLibrary
 
 import spark.broadcast._
 
-import spark.partial.ApproximateEvaluator
-import spark.partial.PartialResult
-
-import spark.scheduler.ShuffleMapTask
-import spark.scheduler.DAGScheduler
-import spark.scheduler.TaskScheduler
-import spark.scheduler.local.LocalScheduler
-import spark.scheduler.mesos.MesosScheduler
-import spark.scheduler.mesos.CoarseMesosScheduler
-import spark.storage.BlockManagerMaster
-
 class SparkContext(
     master: String,
     frameworkName: String,
@@ -68,19 +54,14 @@ class SparkContext(
   if (RemoteActor.classLoader == null) {
     RemoteActor.classLoader = getClass.getClassLoader
   }
-
-  remote.start(System.getProperty("spark.master.host"), 
-               System.getProperty("spark.master.port").toInt)
   
-  private val isLocal = master.startsWith("local") // TODO: better check for local
-
   // Create the Spark execution environment (cache, map output tracker, etc)
-  val env = SparkEnv.createFromSystemProperties(true, isLocal) 
+  val env = SparkEnv.createFromSystemProperties(true)
   SparkEnv.set(env)
   Broadcast.initialize(true)
 
   // Create and start the scheduler
-  private var taskScheduler: TaskScheduler = {
+  private var scheduler: Scheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
@@ -93,17 +74,13 @@ class SparkContext(
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         new LocalScheduler(threads.toInt, maxFailures.toInt)
       case _ =>
-        System.loadLibrary("mesos")
-        if (System.getProperty("spark.mesos.coarse", "false") == "true") {
-          new CoarseMesosScheduler(this, master, frameworkName)
-        } else {
-          new MesosScheduler(this, master, frameworkName)
-        }
+        MesosNativeLibrary.load()
+        new MesosScheduler(this, master, frameworkName)
     }
   }
-  taskScheduler.start()
+  scheduler.start()
 
-  private var dagScheduler = new DAGScheduler(taskScheduler)
+  private val isLocal = scheduler.isInstanceOf[LocalScheduler]
 
   // Methods for creating RDDs
 
@@ -260,25 +237,19 @@ class SparkContext(
 
   // Stop the SparkContext
   def stop() {
-    remote.shutdownServerModule()
-    dagScheduler.stop()
-    dagScheduler = null
-    taskScheduler = null
+    scheduler.stop()
+    scheduler = null
     // TODO: Broadcast.stop(), Cache.stop()?
     env.mapOutputTracker.stop()
     env.cacheTracker.stop()
     env.shuffleFetcher.stop()
     env.shuffleManager.stop()
-    env.blockManager.stop()
-    BlockManagerMaster.stopBlockManagerMaster()
-    env.connectionManager.stop()
     SparkEnv.set(null)
-    ShuffleMapTask.clearCache()
   }
 
-  // Wait for the scheduler to be registered with the cluster manager
+  // Wait for the scheduler to be registered
   def waitForRegister() {
-    taskScheduler.waitForRegister()
+    scheduler.waitForRegister()
   }
 
   // Get Spark's home location from either a value set through the constructor,
@@ -310,7 +281,7 @@ class SparkContext(
       ): Array[U] = {
     logInfo("Starting job...")
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, allowLocal)
+    val result = scheduler.runJob(rdd, func, partitions, allowLocal)
     logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
@@ -335,22 +306,6 @@ class SparkContext(
     runJob(rdd, func, 0 until rdd.splits.size, false)
   }
 
-  /**
-   * Run a job that can return approximate results.
-   */
-  def runApproximateJob[T, U, R](
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      evaluator: ApproximateEvaluator[U, R],
-      timeout: Long
-      ): PartialResult[R] = {
-    logInfo("Starting job...")
-    val start = System.nanoTime
-    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, timeout)
-    logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
-    result
-  }
-
   // Clean a closure to make it ready to serialized and send to tasks
   // (removes unreferenced variables in $outer's, updates REPL variables)
   private[spark] def clean[F <: AnyRef](f: F): F = {
@@ -359,7 +314,7 @@ class SparkContext(
   }
 
   // Default level of parallelism to use when not given by user (e.g. for reduce tasks)
-  def defaultParallelism: Int = taskScheduler.defaultParallelism
+  def defaultParallelism: Int = scheduler.defaultParallelism
 
   // Default min number of splits for Hadoop RDDs when not given by user
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
@@ -394,22 +349,14 @@ object SparkContext {
   }
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
-
   implicit def rddToPairRDDFunctions[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
     new PairRDDFunctions(rdd)
-  
-  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable: ClassManifest](
-      rdd: RDD[(K, V)]) =
+
+  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable: ClassManifest](rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
 
-  implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
-      rdd: RDD[(K, V)]) =
+  implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
     new OrderedRDDFunctions(rdd)
-
-  implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
-
-  implicit def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
-    new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
 
   // Implicit conversions to common Writable types, for saveAsSequenceFile
 

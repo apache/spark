@@ -28,11 +28,9 @@ trait Logging {
   }
 
   // Log methods that take only a String
-  def logInfo(msg: => String) = if (log.isInfoEnabled /*&& msg.contains("job finished in")*/) log.info(msg)
+  def logInfo(msg: => String) = if (log.isInfoEnabled) log.info(msg)
 
   def logDebug(msg: => String) = if (log.isDebugEnabled) log.debug(msg)
-  
-  def logTrace(msg: => String) = if (log.isTraceEnabled) log.trace(msg)
 
   def logWarning(msg: => String) = if (log.isWarnEnabled) log.warn(msg)
 
@@ -44,9 +42,6 @@ trait Logging {
 
   def logDebug(msg: => String, throwable: Throwable) =
     if (log.isDebugEnabled) log.debug(msg)
-
-  def logTrace(msg: => String, throwable: Throwable) =
-    if (log.isTraceEnabled) log.trace(msg)
 
   def logWarning(msg: => String, throwable: Throwable) =
     if (log.isWarnEnabled) log.warn(msg, throwable)

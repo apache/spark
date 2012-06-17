@@ -4,14 +4,11 @@ import java.io.EOFException
 import java.net.URL
 import java.io.ObjectInputStream
 import java.util.concurrent.atomic.AtomicLong
+import java.util.HashSet
 import java.util.Random
 import java.util.Date
-import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.Map
-import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions.mapAsScalaMap
 
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.NullWritable
@@ -24,14 +21,6 @@ import org.apache.hadoop.mapred.OutputCommitter
 import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
 import org.apache.hadoop.mapred.TextOutputFormat
-
-import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
-
-import spark.partial.BoundedDouble
-import spark.partial.CountEvaluator
-import spark.partial.GroupedCountEvaluator
-import spark.partial.PartialResult
-import spark.storage.StorageLevel
 
 import SparkContext._
 
@@ -72,32 +61,19 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   // Get a unique ID for this RDD
   val id = sc.newRddId()
   
-  // Variables relating to persistence
-  private var storageLevel: StorageLevel = StorageLevel.NONE
+  // Variables relating to caching
+  private var shouldCache = false
   
-  // Change this RDD's storage level
-  def persist(newLevel: StorageLevel): RDD[T] = {
-    // TODO: Handle changes of StorageLevel
-    if (storageLevel != StorageLevel.NONE && newLevel != storageLevel) {
-      throw new UnsupportedOperationException(
-        "Cannot change storage level of an RDD after it was already assigned a level")
-    }
-    storageLevel = newLevel
+  // Change this RDD's caching
+  def cache(): RDD[T] = {
+    shouldCache = true
     this
   }
-
-  // Turn on the default caching level for this RDD
-  def persist(): RDD[T] = persist(StorageLevel.MEMORY_ONLY_DESER)
-  
-  // Turn on the default caching level for this RDD
-  def cache(): RDD[T] = persist()
-
-  def getStorageLevel = storageLevel
   
   // Read this RDD; will read from cache if applicable, or otherwise compute
   final def iterator(split: Split): Iterator[T] = {
-    if (storageLevel != StorageLevel.NONE) {
-      SparkEnv.get.cacheTracker.getOrCompute[T](this, split, storageLevel)
+    if (shouldCache) {
+      SparkEnv.get.cacheTracker.getOrCompute[T](this, split)
     } else {
       compute(split)
     }
@@ -186,8 +162,6 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     Array.concat(results: _*)
   }
 
-  def toArray(): Array[T] = collect()
-
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
     val reducePartition: Iterator[T] => Option[T] = iter => {
@@ -248,67 +222,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     }).sum
   }
 
-  /**
-   * Approximate version of count() that returns a potentially incomplete result after a timeout.
-   */
-  def countApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
-    val countElements: (TaskContext, Iterator[T]) => Long = { (ctx, iter) =>
-      var result = 0L
-      while (iter.hasNext) {
-        result += 1L
-        iter.next
-      }
-      result
-    }
-    val evaluator = new CountEvaluator(splits.size, confidence)
-    sc.runApproximateJob(this, countElements, evaluator, timeout)
-  }
-
-  /**
-   * Count elements equal to each value, returning a map of (value, count) pairs. The final combine
-   * step happens locally on the master, equivalent to running a single reduce task.
-   *
-   * TODO: This should perhaps be distributed by default.
-   */
-  def countByValue(): Map[T, Long] = {
-    def countPartition(iter: Iterator[T]): Iterator[OLMap[T]] = {
-      val map = new OLMap[T]
-      while (iter.hasNext) {
-        val v = iter.next()
-        map.put(v, map.getLong(v) + 1L)
-      }
-      Iterator(map)
-    }
-    def mergeMaps(m1: OLMap[T], m2: OLMap[T]): OLMap[T] = {
-      val iter = m2.object2LongEntrySet.fastIterator()
-      while (iter.hasNext) {
-        val entry = iter.next()
-        m1.put(entry.getKey, m1.getLong(entry.getKey) + entry.getLongValue)
-      }
-      return m1
-    }
-    val myResult = mapPartitions(countPartition).reduce(mergeMaps)
-    myResult.asInstanceOf[java.util.Map[T, Long]]   // Will be wrapped as a Scala mutable Map
-  }
-
-  /**
-   * Approximate version of countByValue().
-   */
-  def countByValueApprox(
-      timeout: Long,
-      confidence: Double = 0.95
-      ): PartialResult[Map[T, BoundedDouble]] = {
-    val countPartition: (TaskContext, Iterator[T]) => OLMap[T] = { (ctx, iter) =>
-      val map = new OLMap[T]
-      while (iter.hasNext) {
-        val v = iter.next()
-        map.put(v, map.getLong(v) + 1L)
-      }
-      map
-    }
-    val evaluator = new GroupedCountEvaluator[T](splits.size, confidence)
-    sc.runApproximateJob(this, countPartition, evaluator, timeout)
-  }
+  def toArray(): Array[T] = collect()
   
   /**
    * Take the first num elements of the RDD. This currently scans the partitions *one by one*, so
