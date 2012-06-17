@@ -1,10 +1,7 @@
-resolvers ++= Seq(
-  "sbt-idea-repo" at "http://mpeltonen.github.com/maven/",
-  Classpaths.typesafeResolver
-)
+resolvers += Classpaths.typesafeResolver
 
-addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "0.11.0")
+resolvers += Resolver.url("artifactory", url("http://scalasbt.artifactoryonline.com/scalasbt/sbt-plugin-releases"))(Resolver.ivyStylePatterns)
 
-addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse" % "1.4.0")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.8.3")
 
-addSbtPlugin("com.eed3si9n" %% "sbt-assembly" % "0.7.2")
+addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.1.0-RC1")
