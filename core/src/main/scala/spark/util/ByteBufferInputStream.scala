@@ -8,7 +8,7 @@ class ByteBufferInputStream(buffer: ByteBuffer) extends InputStream {
     if (buffer.remaining() == 0) {
       -1
     } else {
-      buffer.get() & 0xFF
+      buffer.get()
     }
   }
 
@@ -17,13 +17,9 @@ class ByteBufferInputStream(buffer: ByteBuffer) extends InputStream {
   }
 
   override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
-    if (buffer.remaining() == 0) {
-      -1
-    } else {
-      val amountToGet = math.min(buffer.remaining(), length)
-      buffer.get(dest, offset, amountToGet)
-      amountToGet
-    }
+    val amountToGet = math.min(buffer.remaining(), length)
+    buffer.get(dest, offset, amountToGet)
+    return amountToGet
   }
 
   override def skip(bytes: Long): Long = {
