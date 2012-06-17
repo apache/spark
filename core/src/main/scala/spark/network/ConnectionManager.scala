@@ -68,8 +68,7 @@ class ConnectionManager(port: Int) extends Logging {
 
   def run() {
     try {
-      var interrupted = false 
-      while(!interrupted) {
+      while(!selectorThread.isInterrupted) {
         while(!connectionRequests.isEmpty) {
           val sendingConnection = connectionRequests.dequeue
           sendingConnection.connect() 
@@ -103,10 +102,14 @@ class ConnectionManager(port: Int) extends Logging {
         }
 
         val selectedKeysCount = selector.select()
-        if (selectedKeysCount == 0) logInfo("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
+        if (selectedKeysCount == 0) {
+          logInfo("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
+        }
+        if (selectorThread.isInterrupted) {
+          logInfo("Selector thread was interrupted!")
+          return
+        }
         
-        interrupted = selectorThread.isInterrupted
-
         val selectedKeys = selector.selectedKeys().iterator()
         while (selectedKeys.hasNext()) {
           val key = selectedKeys.next.asInstanceOf[SelectionKey]
@@ -330,18 +333,16 @@ class ConnectionManager(port: Int) extends Logging {
   }
 
   def stop() {
-    if (!selectorThread.isAlive) {
-      selectorThread.interrupt()
-      selectorThread.join()
-      selector.close()
-      val connections = connectionsByKey.values
-      connections.foreach(_.close())
-      if (connectionsByKey.size != 0) {
-        logWarning("All connections not cleaned up")
-      }
-      handleMessageExecutor.shutdown()
-      logInfo("ConnectionManager stopped")
+    selectorThread.interrupt()
+    selectorThread.join()
+    selector.close()
+    val connections = connectionsByKey.values
+    connections.foreach(_.close())
+    if (connectionsByKey.size != 0) {
+      logWarning("All connections not cleaned up")
     }
+    handleMessageExecutor.shutdown()
+    logInfo("ConnectionManager stopped")
   }
 }
 

@@ -28,3 +28,5 @@ case class CompletionEvent(
   extends DAGSchedulerEvent
 
 case class HostLost(host: String) extends DAGSchedulerEvent
+
+case object StopDAGScheduler extends DAGSchedulerEvent

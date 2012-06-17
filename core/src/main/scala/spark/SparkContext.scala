@@ -271,7 +271,6 @@ class SparkContext(
     env.shuffleManager.stop()
     env.blockManager.stop()
     BlockManagerMaster.stopBlockManagerMaster()
-    env.connectionManager.stop()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
   }
