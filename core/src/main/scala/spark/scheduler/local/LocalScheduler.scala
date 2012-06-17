@@ -48,20 +48,14 @@ class LocalScheduler(threads: Int, maxFailures: Int) extends TaskScheduler with 
         // Serialize and deserialize the task so that accumulators are changed to thread-local ones;
         // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
         Accumulators.clear
-        val ser = SparkEnv.get.closureSerializer.newInstance()
-        val bytes = ser.serialize(task)
-        logInfo("Size of task " + idInJob + " is " + bytes.limit + " bytes")
-        val deserializedTask = ser.deserialize[Task[_]](
+        val bytes = Utils.serialize(task)
+        logInfo("Size of task " + idInJob + " is " + bytes.size + " bytes")
+        val deserializedTask = Utils.deserialize[Task[_]](
             bytes, Thread.currentThread.getContextClassLoader)
         val result: Any = deserializedTask.run(attemptId)
-        // Serialize and deserialize the result to emulate what the Mesos
-        // executor does. This is useful to catch serialization errors early
-        // on in development (so when users move their local Spark programs
-        // to the cluster, they don't get surprised by serialization errors).
-        val resultToReturn = ser.deserialize[Any](ser.serialize(result))
         val accumUpdates = Accumulators.values
         logInfo("Finished task " + idInJob)
-        listener.taskEnded(task, Success, resultToReturn, accumUpdates)
+        listener.taskEnded(task, Success, result, accumUpdates)
       } catch {
         case t: Throwable => {
           logError("Exception in task " + idInJob, t)
@@ -83,9 +77,7 @@ class LocalScheduler(threads: Int, maxFailures: Int) extends TaskScheduler with 
     }
   }
   
-  override def stop() {
-    threadPool.shutdownNow()
-  }
+  override def stop() {}
 
   override def defaultParallelism() = threads
 }

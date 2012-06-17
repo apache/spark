@@ -223,7 +223,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * events and responds by launching tasks. This runs in a dedicated thread and receives events
    * via the eventQueue.
    */
-  def run() {
+  def run() = {
     SparkEnv.set(env)
 
     while (true) {
@@ -257,14 +257,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
         case completion: CompletionEvent =>
           handleTaskCompletion(completion)
-
-        case StopDAGScheduler =>
-          // Cancel any active jobs
-          for (job <- activeJobs) {
-            val error = new SparkException("Job cancelled because SparkContext was shut down")
-            job.listener.jobFailed(error)
-          }
-          return
 
         case null =>
           // queue.poll() timed out, ignore it
@@ -537,7 +529,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   }
 
   def stop() {
-    eventQueue.put(StopDAGScheduler)
+    // TODO: Put a stop event on our queue and break the event loop
     taskSched.stop()
   }
 }
