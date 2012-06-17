@@ -1,15 +1,18 @@
 package spark.storage
 
 import spark.KryoSerializer
+import spark.util.ByteBufferInputStream
 
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
+
+import java.nio.ByteBuffer
 
 class BlockManagerSuite extends FunSuite with BeforeAndAfter{
   before {
      BlockManagerMaster.startBlockManagerMaster(true, true)
   }
-  
+
   test("manager-master interaction") {
     val store = new BlockManager(2000, new KryoSerializer)
     val a1 = new Array[Byte](400)
@@ -208,5 +211,17 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
     assert(store.get("list3").get.size === 2)
     assert(store.get("list4") != None, "list4 was not in store")
     assert(store.get("list4").get.size === 2)
-  } 
+  }
+
+  test("ByteBufferInputStream bugs") {
+    val buffer = ByteBuffer.wrap(Array[Int](254, 255, 0, 1, 2).map(_.toByte).toArray)
+    val stream = new ByteBufferInputStream(buffer)
+    val temp = new Array[Byte](10)
+    assert(stream.read() === 254, "unexpected byte read")
+    assert(stream.read() === 255, "unexpected byte read")
+    assert(stream.read() === 0, "unexpected byte read")
+    assert(stream.read(temp, 0, temp.length) === 2, "unexpected number of bytes read")
+    assert(stream.read() === -1, "end of stream not signalled")
+    assert(stream.read(temp, 0, temp.length) === -1, "end of stream not signalled")
+  }
 }
