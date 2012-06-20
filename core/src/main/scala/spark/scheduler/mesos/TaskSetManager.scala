@@ -267,7 +267,8 @@ class TaskSetManager(
       logInfo("Finished TID %s in %d ms (progress: %d/%d)".format(
           tid, info.duration, tasksFinished, numTasks))
       // Deserialize task result and pass it to the scheduler
-      val result = ser.deserialize[TaskResult[_]](status.getData.asReadOnlyByteBuffer)
+      val result = ser.deserialize[TaskResult[_]](
+        status.getData.asReadOnlyByteBuffer, getClass.getClassLoader)
       sched.listener.taskEnded(tasks(index), Success, result.value, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
@@ -291,7 +292,8 @@ class TaskSetManager(
       // Check if the problem is a map output fetch failure. In that case, this
       // task will never succeed on any node, so tell the scheduler about it.
       if (status.getData != null && status.getData.size > 0) {
-        val reason = ser.deserialize[TaskEndReason](status.getData.asReadOnlyByteBuffer)
+        val reason = ser.deserialize[TaskEndReason](
+          status.getData.asReadOnlyByteBuffer, getClass.getClassLoader)
         reason match {
           case fetchFailed: FetchFailed =>
             logInfo("Loss was due to fetch failure from " + fetchFailed.bmAddress)

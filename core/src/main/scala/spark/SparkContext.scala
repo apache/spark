@@ -93,7 +93,7 @@ class SparkContext(
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         new LocalScheduler(threads.toInt, maxFailures.toInt)
       case _ =>
-        System.loadLibrary("mesos")
+        MesosNativeLibrary.load()
         if (System.getProperty("spark.mesos.coarse", "false") == "true") {
           new CoarseMesosScheduler(this, master, frameworkName)
         } else {
