@@ -65,16 +65,24 @@ object SparkBuild extends Build {
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0"
     )
-  ) ++ assemblySettings ++ Seq(test in assembly := {})
+  ) ++ assemblySettings ++ extraAssemblySettings 
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  ) ++ assemblySettings ++ Seq(test in assembly := {})
+  ) ++ assemblySettings ++ extraAssemblySettings 
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples"
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
+
+  def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
+    mergeStrategy in assembly := { 
+      case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard 
+      case _ => MergeStrategy.first
+    }
+  ) 
+
 }
