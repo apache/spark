@@ -9,11 +9,15 @@ import scala.collection.mutable.HashSet
 import scala.util.Random
 
 import akka.actor._
-import akka.actor.Actor
-import akka.actor.Actor._
+import akka.dispatch._
+import akka.pattern.ask
+import akka.remote._
+import akka.util.Duration
+import akka.util.Timeout
 import akka.util.duration._
 
 import spark.Logging
+import spark.SparkException
 import spark.Utils
 
 sealed trait ToBlockManagerMaster
@@ -70,22 +74,15 @@ object HeartBeat {
   }
 }
   
-case class GetLocations(
-    blockId: String)
-  extends ToBlockManagerMaster
+case class GetLocations(blockId: String) extends ToBlockManagerMaster
 
-case class GetLocationsMultipleBlockIds(
-    blockIds: Array[String])
-  extends ToBlockManagerMaster
+case class GetLocationsMultipleBlockIds(blockIds: Array[String]) extends ToBlockManagerMaster
   
-case class GetPeers(
-    blockManagerId: BlockManagerId,
-    size: Int)
-  extends ToBlockManagerMaster
+case class GetPeers(blockManagerId: BlockManagerId, size: Int) extends ToBlockManagerMaster
   
-case class RemoveHost(
-    host: String)
-  extends ToBlockManagerMaster
+case class RemoveHost(host: String) extends ToBlockManagerMaster
+
+case object StopBlockManagerMaster extends ToBlockManagerMaster
 
 
 class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
@@ -170,7 +167,7 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     val port = host.split(":")(1)
     blockManagerInfo.remove(new BlockManagerId(ip, port.toInt))
     logInfo("Current hosts: " + blockManagerInfo.keySet.toSeq)
-    self.reply(true)
+    sender ! true
   }
 
   def receive = {
@@ -187,14 +184,20 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
       getLocationsMultipleBlockIds(blockIds)
 
     case GetPeers(blockManagerId, size) =>
-      getPeers_Deterministic(blockManagerId, size)
+      getPeersDeterministic(blockManagerId, size)
       /*getPeers(blockManagerId, size)*/
       
     case RemoveHost(host) =>
       removeHost(host)
+      sender ! true
 
-    case msg => 
-      logInfo("Got unknown msg: " + msg)
+    case StopBlockManagerMaster =>
+      logInfo("Stopping BlockManagerMaster")
+      sender ! true
+      context.stop(self)
+
+    case other => 
+      logInfo("Got unknown message: " + other)
   }
   
   private def register(blockManagerId: BlockManagerId, maxMemSize: Long, maxDiskSize: Long) {
@@ -209,7 +212,7 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
         System.currentTimeMillis() / 1000, maxMemSize, maxDiskSize))
     }
     logDebug("Got in register 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
-    self.reply(true)
+    sender ! true
   }
   
   private def heartBeat(
@@ -225,7 +228,7 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       logDebug("Got in heartBeat 1" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
-      self.reply(true)
+      sender ! true
     }
     
     blockManagerInfo(blockManagerId).addBlock(blockId, storageLevel, deserializedSize, size)
@@ -247,7 +250,7 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     if (locations.size == 0) {
       blockInfo.remove(blockId)
     }
-    self.reply(true)
+    sender ! true
   }
   
   private def getLocations(blockId: String) {
@@ -259,11 +262,11 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
       res.appendAll(blockInfo.get(blockId)._2)
       logDebug("Got in getLocations 1" + tmp + " as "+ res.toSeq + " at " 
           + Utils.getUsedTimeMs(startTimeMs))
-      self.reply(res.toSeq)
+      sender ! res.toSeq
     } else {
       logDebug("Got in getLocations 2" + tmp + Utils.getUsedTimeMs(startTimeMs))
       var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-      self.reply(res)
+      sender ! res
     }
   }
   
@@ -289,7 +292,7 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
       res.append(getLocations(blockId))
     }
     logDebug("Got in getLocationsMultipleBlockIds " + blockIds.toSeq + " : " + res.toSeq)
-    self.reply(res.toSeq)
+    sender ! res.toSeq
   }
 
   private def getPeers(blockManagerId: BlockManagerId, size: Int) {
@@ -301,10 +304,10 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
     while (res.length > size) {
       res.remove(rand.nextInt(res.length))
     }
-    self.reply(res.toSeq)
+    sender ! res.toSeq
   }
   
-  private def getPeers_Deterministic(blockManagerId: BlockManagerId, size: Int) {
+  private def getPeersDeterministic(blockManagerId: BlockManagerId, size: Int) {
     var peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
     var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
 
@@ -322,8 +325,7 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
       }
       res += peers(index % peers.size)
     }
-    val resStr = res.map(_.toString).reduceLeft(_ + ", " + _)
-    self.reply(res.toSeq)
+    sender ! res.toSeq
   }
 }
 
@@ -337,37 +339,51 @@ object BlockManagerMaster extends Logging {
   val DEFAULT_MANAGER_IP: String = Utils.localHostName()
   val DEFAULT_MANAGER_PORT: String = "10902"
 
-  implicit val TIME_OUT_SEC = Actor.Timeout(3000 millis)
+  val timeout = 10.seconds
   var masterActor: ActorRef = null
 
-  def startBlockManagerMaster(isMaster: Boolean, isLocal: Boolean) {
+  def startBlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean) {
     if (isMaster) {
-      masterActor = actorOf(new BlockManagerMaster(isLocal))
-      remote.register(AKKA_ACTOR_NAME, masterActor)
-      logInfo("Registered BlockManagerMaster Actor: " + DEFAULT_MASTER_IP + ":" + DEFAULT_MASTER_PORT)
-      masterActor.start()
+      masterActor = actorSystem.actorOf(
+        Props(new BlockManagerMaster(isLocal)), name = AKKA_ACTOR_NAME)
+      logInfo("Registered BlockManagerMaster Actor")
     } else {
-      masterActor = remote.actorFor(AKKA_ACTOR_NAME, DEFAULT_MASTER_IP, DEFAULT_MASTER_PORT)
+      val url = "akka://spark@%s:%s/%s".format(
+        DEFAULT_MASTER_IP, DEFAULT_MASTER_PORT, AKKA_ACTOR_NAME)
+      masterActor = actorSystem.actorFor(url)
     }
   }
   
   def stopBlockManagerMaster() {
     if (masterActor != null) {
-      masterActor.stop()
+      communicate(StopBlockManagerMaster)
       masterActor = null
       logInfo("BlockManagerMaster stopped")
     }
   }
+
+  // Send a message to the master actor and get its result within a default timeout, or
+  // throw a SparkException if this fails.
+  def askMaster(message: Any): Any = {
+    try {
+      val future = masterActor.ask(message)(timeout)
+      return Await.result(future, timeout)
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error communicating with BlockManagerMaster", e)
+    }
+  }
+
+  // Send a one-way message to the master actor, to which we expect it to reply with true.
+  def communicate(message: Any) {
+    if (askMaster(message) != true) {
+      throw new SparkException("Error reply received from BlockManagerMaster")
+    }
+  }
   
   def notifyADeadHost(host: String) {
-    (masterActor ? RemoveHost(host + ":" + DEFAULT_MANAGER_PORT)).as[Any] match {
-      case Some(true) =>
-        logInfo("Removed " + host + " successfully. @ notifyADeadHost")
-      case Some(oops) =>
-        logError("Failed @ notifyADeadHost: " + oops)
-      case None =>
-        logError("None @ notifyADeadHost.")
-    }
+    communicate(RemoveHost(host + ":" + DEFAULT_MANAGER_PORT))
+    logInfo("Removed " + host + " successfully in notifyADeadHost")
   }
 
   def mustRegisterBlockManager(msg: RegisterBlockManager) {
@@ -383,16 +399,14 @@ object BlockManagerMaster extends Logging {
     val tmp = " msg " + msg + " "
     logDebug("Got in syncRegisterBlockManager 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
     
-    (masterActor ? msg).as[Any] match {
-      case Some(true) => 
-        logInfo("BlockManager registered successfully @ syncRegisterBlockManager.")
-        logDebug("Got in syncRegisterBlockManager 1 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-        return true
-      case Some(oops) =>
-        logError("Failed @ syncRegisterBlockManager: " + oops)
-        return false
-      case None =>
-        logError("None @ syncRegisterBlockManager.")
+    try {
+      communicate(msg)
+      logInfo("BlockManager registered successfully @ syncRegisterBlockManager")
+      logDebug("Got in syncRegisterBlockManager 1 " + tmp + Utils.getUsedTimeMs(startTimeMs))
+      return true
+    } catch {
+      case e: Exception =>
+        logError("Failed in syncRegisterBlockManager", e)
         return false
     }
   }
@@ -409,22 +423,20 @@ object BlockManagerMaster extends Logging {
     val tmp = " msg " + msg + " "
     logDebug("Got in syncHeartBeat " + tmp + " 0 " + Utils.getUsedTimeMs(startTimeMs))
     
-    (masterActor ? msg).as[Any] match {
-      case Some(true) =>
-        logInfo("Heartbeat sent successfully.")
-        logDebug("Got in syncHeartBeat " + tmp + " 1 " + Utils.getUsedTimeMs(startTimeMs))
-        return true
-      case Some(oops) =>
-        logError("Failed: " + oops)
-        return false
-      case None => 
-        logError("None.")
+    try {
+      communicate(msg)
+      logInfo("Heartbeat sent successfully")
+      logDebug("Got in syncHeartBeat 1 " + tmp + " 1 " + Utils.getUsedTimeMs(startTimeMs))
+      return true
+    } catch {
+      case e: Exception =>
+        logError("Failed in syncHeartBeat", e)
         return false
     }
   }
   
-  def mustGetLocations(msg: GetLocations): Array[BlockManagerId] = {
-    var res: Array[BlockManagerId] = syncGetLocations(msg)
+  def mustGetLocations(msg: GetLocations): Seq[BlockManagerId] = {
+    var res = syncGetLocations(msg)
     while (res == null) {
       logInfo("Failed to get locations " + msg)
       Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
@@ -433,23 +445,24 @@ object BlockManagerMaster extends Logging {
     return res
   }
   
-  def syncGetLocations(msg: GetLocations): Array[BlockManagerId] = {
+  def syncGetLocations(msg: GetLocations): Seq[BlockManagerId] = {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " msg " + msg + " "
     logDebug("Got in syncGetLocations 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-    
-    (masterActor ? msg).as[Seq[BlockManagerId]] match {
-      case Some(arr) =>
-        logDebug("GetLocations successfully.")
+
+    try {
+      val answer = askMaster(msg).asInstanceOf[ArrayBuffer[BlockManagerId]]
+      if (answer != null) {
+        logDebug("GetLocations successful")
         logDebug("Got in syncGetLocations 1 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-        val res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-        for (ele <- arr) {
-          res += ele
-        }
-        logDebug("Got in syncGetLocations 2 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-        return res.toArray
-      case None => 
-        logError("GetLocations call returned None.")
+        return answer
+      } else {
+        logError("Master replied null in response to GetLocations")
+        return null
+      }
+    } catch {
+      case e: Exception =>
+        logError("GetLocations failed", e)
         return null
     }
   }
@@ -471,22 +484,26 @@ object BlockManagerMaster extends Logging {
     val tmp = " msg " + msg + " "
     logDebug("Got in syncGetLocationsMultipleBlockIds 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
     
-    (masterActor ? msg).as[Any] match {
-      case Some(arr: Seq[Seq[BlockManagerId]]) =>
-        logDebug("GetLocationsMultipleBlockIds successfully: " + arr)
-        logDebug("Got in syncGetLocationsMultipleBlockIds 1 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-        return arr
-      case Some(oops) =>
-        logError("Failed: " + oops)
+    try {
+      val answer = askMaster(msg).asInstanceOf[Seq[Seq[BlockManagerId]]]
+      if (answer != null) {
+        logDebug("GetLocationsMultipleBlockIds successful")
+        logDebug("Got in syncGetLocationsMultipleBlockIds 1 " + tmp +
+          Utils.getUsedTimeMs(startTimeMs))
+        return answer
+      } else {
+        logError("Master replied null in response to GetLocationsMultipleBlockIds")
         return null
-      case None => 
-        logInfo("None.")
+      }
+    } catch {
+      case e: Exception =>
+        logError("GetLocationsMultipleBlockIds failed", e)
         return null
     }
   }
   
-  def mustGetPeers(msg: GetPeers): Array[BlockManagerId] = {
-    var res: Array[BlockManagerId] = syncGetPeers(msg)
+  def mustGetPeers(msg: GetPeers): Seq[BlockManagerId] = {
+    var res = syncGetPeers(msg)
     while ((res == null) || (res.length != msg.size)) {
       logInfo("Failed to get peers " + msg)
       Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
@@ -496,21 +513,24 @@ object BlockManagerMaster extends Logging {
     return res
   }
   
-  def syncGetPeers(msg: GetPeers): Array[BlockManagerId] = {
+  def syncGetPeers(msg: GetPeers): Seq[BlockManagerId] = {
     val startTimeMs = System.currentTimeMillis
     val tmp = " msg " + msg + " "
     logDebug("Got in syncGetPeers 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-    
-    (masterActor ? msg).as[Seq[BlockManagerId]] match {
-      case Some(arr) =>
+
+    try {
+      val answer = askMaster(msg).asInstanceOf[Seq[BlockManagerId]]
+      if (answer != null) {
+        logDebug("GetPeers successful")
         logDebug("Got in syncGetPeers 1 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-        val res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-        logInfo("GetPeers successfully: " + arr.length)
-        res.appendAll(arr)
-        logDebug("Got in syncGetPeers 2 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-        return res.toArray
-      case None => 
-        logError("GetPeers call returned None.")
+        return answer
+      } else {
+        logError("Master replied null in response to GetPeers")
+        return null
+      }
+    } catch {
+      case e: Exception =>
+        logError("GetPeers failed", e)
         return null
     }
   }

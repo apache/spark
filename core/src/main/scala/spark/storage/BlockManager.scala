@@ -154,8 +154,8 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
    */
   def getLocations(blockId: String): Seq[String] = {
     val startTimeMs = System.currentTimeMillis
-    var managers: Array[BlockManagerId] = BlockManagerMaster.mustGetLocations(GetLocations(blockId))
-    val locations = managers.map((manager: BlockManagerId) => { manager.ip }).toSeq
+    var managers = BlockManagerMaster.mustGetLocations(GetLocations(blockId))
+    val locations = managers.map(_.ip)
     logDebug("Get block locations in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
@@ -490,8 +490,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
-    var peers: Array[BlockManagerId] = BlockManagerMaster.mustGetPeers(
-      GetPeers(blockManagerId, level.replication - 1))
+    var peers = BlockManagerMaster.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
     for (peer: BlockManagerId <- peers) {
       val start = System.nanoTime
       logDebug("Try to replicate BlockId " + blockId + " once; The size of the data is "

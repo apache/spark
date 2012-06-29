@@ -1,16 +1,27 @@
 package spark.storage
 
+import java.nio.ByteBuffer
+
+import akka.actor._
+
+import org.scalatest.FunSuite
+import org.scalatest.BeforeAndAfterEach
+
 import spark.KryoSerializer
 import spark.util.ByteBufferInputStream
 
-import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
+class BlockManagerSuite extends FunSuite with BeforeAndAfterEach {
+  var actorSystem: ActorSystem = null
 
-import java.nio.ByteBuffer
+  override def beforeEach() {
+    actorSystem = ActorSystem("test")
+    BlockManagerMaster.startBlockManagerMaster(actorSystem, true, true)
+  }
 
-class BlockManagerSuite extends FunSuite with BeforeAndAfter{
-  before {
-     BlockManagerMaster.startBlockManagerMaster(true, true)
+  override def afterEach() {
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
+    actorSystem = null
   }
 
   test("manager-master interaction") {

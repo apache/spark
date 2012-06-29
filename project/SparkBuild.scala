@@ -33,7 +33,7 @@ object SparkBuild extends Build {
       "org.scalatest" %% "scalatest" % "1.6.1" % "test",
       "org.scala-tools.testing" %% "scalacheck" % "1.9" % "test"
     ),
-    parallelExecution in Test := false,
+    parallelExecution := false,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
       const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) }
@@ -58,9 +58,9 @@ object SparkBuild extends Build {
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.9",
-      "se.scalablesolutions.akka" % "akka-actor" % "1.3.1",
-      "se.scalablesolutions.akka" % "akka-remote" % "1.3.1",
-      "se.scalablesolutions.akka" % "akka-slf4j" % "1.3.1",
+      "com.typesafe.akka" % "akka-actor" % "2.0.2",
+      "com.typesafe.akka" % "akka-remote" % "2.0.2",
+      "com.typesafe.akka" % "akka-slf4j" % "2.0.2",
       "org.jboss.netty" % "netty" % "3.2.6.Final",
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0"

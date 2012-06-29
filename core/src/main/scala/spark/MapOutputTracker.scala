@@ -3,8 +3,11 @@ package spark
 import java.util.concurrent.ConcurrentHashMap
 
 import akka.actor._
-import akka.actor.Actor
-import akka.actor.Actor._
+import akka.dispatch._
+import akka.pattern.ask
+import akka.remote._
+import akka.util.Duration
+import akka.util.Timeout
 import akka.util.duration._
 
 import scala.collection.mutable.HashSet
@@ -20,19 +23,21 @@ extends Actor with Logging {
   def receive = {
     case GetMapOutputLocations(shuffleId: Int) =>
       logInfo("Asked to get map output locations for shuffle " + shuffleId)
-      self.reply(bmAddresses.get(shuffleId))
+      sender ! bmAddresses.get(shuffleId)
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerActor stopped!")
-      self.reply(true)
-      self.exit()
+      sender ! true
+      context.stop(self)
   }
 }
 
-class MapOutputTracker(isMaster: Boolean) extends Logging {
+class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logging {
   val ip: String = System.getProperty("spark.master.host", "localhost")
   val port: Int = System.getProperty("spark.master.port", "7077").toInt
-  val aName: String = "MapOutputTracker"
+  val actorName: String = "MapOutputTracker"
+
+  val timeout = 10.seconds
 
   private var bmAddresses = new ConcurrentHashMap[Int, Array[BlockManagerId]]
 
@@ -42,12 +47,31 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
   private var generationLock = new java.lang.Object
 
   var trackerActor: ActorRef = if (isMaster) {
-    val actor = actorOf(new MapOutputTrackerActor(bmAddresses))
-    remote.register(aName, actor)
-    logInfo("Registered MapOutputTrackerActor actor @ " + ip + ":" + port)
+    val actor = actorSystem.actorOf(Props(new MapOutputTrackerActor(bmAddresses)), name = actorName)
+    logInfo("Registered MapOutputTrackerActor actor")
     actor
   } else {
-    remote.actorFor(aName, ip, port)
+    val url = "akka://spark@%s:%s/%s".format(ip, port, actorName)
+    actorSystem.actorFor(url)
+  }
+
+  // Send a message to the trackerActor and get its result within a default timeout, or
+  // throw a SparkException if this fails.
+  def askTracker(message: Any): Any = {
+    try {
+      val future = trackerActor.ask(message)(timeout)
+      return Await.result(future, timeout)
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error communicating with MapOutputTracker", e)
+    }
+  }
+
+  // Send a one-way message to the trackerActor, to which we expect it to reply with true.
+  def communicate(message: Any) {
+    if (askTracker(message) != true) {
+      throw new SparkException("Error reply received from MapOutputTracker")
+    }
   }
 
   def registerShuffle(shuffleId: Int, numMaps: Int) {
@@ -110,7 +134,7 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
       }
       // We won the race to fetch the output locs; do so
       logInfo("Doing the fetch; tracker actor = " + trackerActor)
-      val fetched = (trackerActor ? GetMapOutputLocations(shuffleId)).as[Array[BlockManagerId]].get
+      val fetched = askTracker(GetMapOutputLocations(shuffleId)).asInstanceOf[Array[BlockManagerId]]
       
       logInfo("Got the output locations")
       bmAddresses.put(shuffleId, fetched)
@@ -125,7 +149,7 @@ class MapOutputTracker(isMaster: Boolean) extends Logging {
   }
 
   def stop() {
-    trackerActor !! StopMapOutputTracker
+    communicate(StopMapOutputTracker)
     bmAddresses.clear()
     trackerActor = null
   }

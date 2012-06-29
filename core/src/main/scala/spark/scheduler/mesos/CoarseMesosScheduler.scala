@@ -15,10 +15,12 @@ import scala.collection.JavaConversions._
 import scala.math.Ordering
 
 import akka.actor._
-import akka.actor.Actor
-import akka.actor.Actor._
-import akka.actor.Channel
-import akka.serialization.RemoteActorSerialization._
+import akka.dispatch._
+import akka.pattern.ask
+import akka.remote._
+import akka.util.Duration
+import akka.util.Timeout
+import akka.util.duration._
 
 import com.google.protobuf.ByteString
 
@@ -30,7 +32,7 @@ import spark._
 import spark.scheduler._
 
 sealed trait CoarseMesosSchedulerMessage
-case class RegisterSlave(slaveId: String, host: String, port: Int) extends CoarseMesosSchedulerMessage
+case class RegisterSlave(slaveId: String, host: String) extends CoarseMesosSchedulerMessage
 case class StatusUpdate(slaveId: String, status: TaskStatus) extends CoarseMesosSchedulerMessage
 case class LaunchTask(slaveId: String, task: MTaskInfo) extends CoarseMesosSchedulerMessage
 case class ReviveOffers() extends CoarseMesosSchedulerMessage
@@ -50,7 +52,9 @@ class CoarseMesosScheduler(
     frameworkName: String)
   extends MesosScheduler(sc, master, frameworkName) {
 
-  val CORES_PER_SLAVE = System.getProperty("spark.coarseMesosScheduler.coresPerSlave", "4").toInt
+  val actorSystem = sc.env.actorSystem
+  val actorName = "CoarseMesosScheduler"
+  val coresPerSlave = System.getProperty("spark.coarseMesosScheduler.coresPerSlave", "4").toInt
 
   class MasterActor extends Actor {
     val slaveActor = new HashMap[String, ActorRef]
@@ -58,11 +62,11 @@ class CoarseMesosScheduler(
     val freeCores = new HashMap[String, Int]
    
     def receive = {
-      case RegisterSlave(slaveId, host, port) =>
-        slaveActor(slaveId) = remote.actorFor("WorkerActor", host, port)
-        logInfo("Slave actor: " + slaveActor(slaveId))
+      case RegisterSlave(slaveId, host) =>
+        slaveActor(slaveId) = sender
+        logInfo("Slave actor: " + sender)
         slaveHost(slaveId) = host
-        freeCores(slaveId) = CORES_PER_SLAVE
+        freeCores(slaveId) = coresPerSlave
         makeFakeOffers()
 
       case StatusUpdate(slaveId, status) =>
@@ -92,9 +96,7 @@ class CoarseMesosScheduler(
     }
   }
 
-  val masterActor: ActorRef = actorOf(new MasterActor)
-  remote.register("MasterActor", masterActor)
-  masterActor.start()
+  val masterActor: ActorRef = actorSystem.actorOf(Props[MasterActor], name = actorName)
 
   val taskIdsOnSlave = new HashMap[String, HashSet[String]]
 
@@ -282,12 +284,8 @@ class WorkerTask(slaveId: String, host: String) extends Task[Unit](-1) {
   generation = 0
 
   def run(id: Int): Unit = {
-    val actor = actorOf(new WorkerActor(slaveId, host))
-    if (!remote.isRunning) {
-      remote.start(Utils.localIpAddress, 7078)
-    }
-    remote.register("WorkerActor", actor)
-    actor.start()
+    val actorSystem = SparkEnv.get.actorSystem
+    val actor = actorSystem.actorOf(Props(new WorkerActor(slaveId, host)), name = "WorkerActor")
     while (true) {
       Thread.sleep(10000)
     }
@@ -302,7 +300,8 @@ class WorkerActor(slaveId: String, host: String) extends Actor with Logging {
 
   val masterIp: String = System.getProperty("spark.master.host", "localhost")
   val masterPort: Int = System.getProperty("spark.master.port", "7077").toInt
-  val masterActor = remote.actorFor("MasterActor", masterIp, masterPort)
+  val masterActor = env.actorSystem.actorFor(
+    "akka://spark@%s:%s/%s".format(masterIp, masterPort, "CoarseMesosScheduler"))
 
   class TaskRunner(desc: MTaskInfo)
   extends Runnable {
@@ -352,9 +351,8 @@ class WorkerActor(slaveId: String, host: String) extends Actor with Logging {
   }
 
   override def preStart {
-    val ref = toRemoteActorRefProtocol(self).toByteArray
     logInfo("Registering with master")
-    masterActor ! RegisterSlave(slaveId, host, remote.address.getPort)
+    masterActor ! RegisterSlave(slaveId, host)
   }
 
   override def receive = {

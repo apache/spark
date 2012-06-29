@@ -5,101 +5,127 @@ import org.scalatest.FunSuite
 import scala.collection.mutable.HashMap
 
 import akka.actor._
-import akka.actor.Actor
-import akka.actor.Actor._
+import akka.dispatch._
+import akka.pattern.ask
+import akka.remote._
+import akka.util.Duration
+import akka.util.Timeout
+import akka.util.duration._
 
 class CacheTrackerSuite extends FunSuite {
+  // Send a message to an actor and wait for a reply, in a blocking manner
+  private def ask(actor: ActorRef, message: Any): Any = {
+    try {
+      val timeout = 10.seconds
+      val future = actor.ask(message)(timeout)
+      return Await.result(future, timeout)
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error communicating with actor", e)
+    } 
+  }
 
   test("CacheTrackerActor slave initialization & cache status") {
     //System.setProperty("spark.master.port", "1345")
     val initialSize = 2L << 20
 
-    val tracker = actorOf(new CacheTrackerActor)
-    tracker.start()
+    val actorSystem = ActorSystem("test")
+    val tracker = actorSystem.actorOf(Props[CacheTrackerActor])
 
-    tracker !! SlaveCacheStarted("host001", initialSize)
+    assert(ask(tracker, SlaveCacheStarted("host001", initialSize)) === true)
 
-    assert((tracker ? GetCacheStatus).get === Seq(("host001", 2097152L, 0L)))
+    assert(ask(tracker, GetCacheStatus) === Seq(("host001", 2097152L, 0L)))
 
-    tracker !! StopCacheTracker
+    assert(ask(tracker, StopCacheTracker) === true)
+    
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
   }
 
   test("RegisterRDD") {
     //System.setProperty("spark.master.port", "1345")
     val initialSize = 2L << 20
 
-    val tracker = actorOf(new CacheTrackerActor)
-    tracker.start()
+    val actorSystem = ActorSystem("test")
+    val tracker = actorSystem.actorOf(Props[CacheTrackerActor])
 
-    tracker !! SlaveCacheStarted("host001", initialSize)
+    assert(ask(tracker, SlaveCacheStarted("host001", initialSize)) === true)
 
-    tracker !! RegisterRDD(1, 3)
-    tracker !! RegisterRDD(2, 1)
+    assert(ask(tracker, RegisterRDD(1, 3)) === true)
+    assert(ask(tracker, RegisterRDD(2, 1)) === true)
 
-    assert(getCacheLocations(tracker) === Map(1 -> List(List(), List(), List()), 2 -> List(List())))
+    assert(getCacheLocations(tracker) === Map(1 -> List(Nil, Nil, Nil), 2 -> List(Nil)))
 
-    tracker !! StopCacheTracker
+    assert(ask(tracker, StopCacheTracker) === true)
+    
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
   }
 
   test("AddedToCache") {
     //System.setProperty("spark.master.port", "1345")
     val initialSize = 2L << 20
 
-    val tracker = actorOf(new CacheTrackerActor)
-    tracker.start()
+    val actorSystem = ActorSystem("test")
+    val tracker = actorSystem.actorOf(Props[CacheTrackerActor])
 
-    tracker !! SlaveCacheStarted("host001", initialSize)
+    assert(ask(tracker, SlaveCacheStarted("host001", initialSize)) === true)
 
-    tracker !! RegisterRDD(1, 2)
-    tracker !! RegisterRDD(2, 1)
+    assert(ask(tracker, RegisterRDD(1, 2)) === true)
+    assert(ask(tracker, RegisterRDD(2, 1)) === true)
 
-    tracker !! AddedToCache(1, 0, "host001", 2L << 15)
-    tracker !! AddedToCache(1, 1, "host001", 2L << 11)
-    tracker !! AddedToCache(2, 0, "host001", 3L << 10)
+    assert(ask(tracker, AddedToCache(1, 0, "host001", 2L << 15)) === true)
+    assert(ask(tracker, AddedToCache(1, 1, "host001", 2L << 11)) === true)
+    assert(ask(tracker, AddedToCache(2, 0, "host001", 3L << 10)) === true)
 
-    assert((tracker ? GetCacheStatus).get === Seq(("host001", 2097152L, 72704L)))
+    assert(ask(tracker, GetCacheStatus) === Seq(("host001", 2097152L, 72704L)))
 
     assert(getCacheLocations(tracker) === 
       Map(1 -> List(List("host001"), List("host001")), 2 -> List(List("host001"))))
 
-    tracker !! StopCacheTracker
+    assert(ask(tracker, StopCacheTracker) === true)
+    
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
   }
 
   test("DroppedFromCache") {
     //System.setProperty("spark.master.port", "1345")
     val initialSize = 2L << 20
 
-    val tracker = actorOf(new CacheTrackerActor)
-    tracker.start()
+    val actorSystem = ActorSystem("test")
+    val tracker = actorSystem.actorOf(Props[CacheTrackerActor])
 
-    tracker !! SlaveCacheStarted("host001", initialSize)
+    assert(ask(tracker, SlaveCacheStarted("host001", initialSize)) === true)
 
-    tracker !! RegisterRDD(1, 2)
-    tracker !! RegisterRDD(2, 1)
+    assert(ask(tracker, RegisterRDD(1, 2)) === true)
+    assert(ask(tracker, RegisterRDD(2, 1)) === true)
 
-    tracker !! AddedToCache(1, 0, "host001", 2L << 15)
-    tracker !! AddedToCache(1, 1, "host001", 2L << 11)
-    tracker !! AddedToCache(2, 0, "host001", 3L << 10)
+    assert(ask(tracker, AddedToCache(1, 0, "host001", 2L << 15)) === true)
+    assert(ask(tracker, AddedToCache(1, 1, "host001", 2L << 11)) === true)
+    assert(ask(tracker, AddedToCache(2, 0, "host001", 3L << 10)) === true)
 
-    assert((tracker ? GetCacheStatus).get === Seq(("host001", 2097152L, 72704L)))
+    assert(ask(tracker, GetCacheStatus) === Seq(("host001", 2097152L, 72704L)))
     assert(getCacheLocations(tracker) ===
       Map(1 -> List(List("host001"), List("host001")), 2 -> List(List("host001"))))
 
-    tracker !! DroppedFromCache(1, 1, "host001", 2L << 11)
+    assert(ask(tracker, DroppedFromCache(1, 1, "host001", 2L << 11)) === true)
 
-    assert((tracker ? GetCacheStatus).get === Seq(("host001", 2097152L, 68608L)))
+    assert(ask(tracker, GetCacheStatus) === Seq(("host001", 2097152L, 68608L)))
     assert(getCacheLocations(tracker) ===
       Map(1 -> List(List("host001"),List()), 2 -> List(List("host001"))))
 
-    tracker !! StopCacheTracker
+    assert(ask(tracker, StopCacheTracker) === true)
+    
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
   }
 
   /**
    * Helper function to get cacheLocations from CacheTracker
    */
-  def getCacheLocations(tracker: ActorRef) = (tracker ? GetCacheLocations).get match {
-    case h: HashMap[_, _] => h.asInstanceOf[HashMap[Int, Array[List[String]]]].map {
-      case (i, arr) => (i -> arr.toList)
-    }
+  def getCacheLocations(tracker: ActorRef): HashMap[Int, List[List[String]]] = {
+    val answer = ask(tracker, GetCacheLocations).asInstanceOf[HashMap[Int, Array[List[String]]]]
+    answer.map { case (i, arr) => (i, arr.toList) }
   }
 }

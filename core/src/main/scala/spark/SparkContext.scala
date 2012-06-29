@@ -6,7 +6,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import akka.actor.Actor
 import akka.actor.Actor._
 
-import scala.actors.remote.RemoteActor
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
@@ -64,14 +63,6 @@ class SparkContext(
     System.setProperty("spark.master.port", "7077")
   }
 
-  // Make sure a proper class loader is set for remote actors (unless user set one)
-  if (RemoteActor.classLoader == null) {
-    RemoteActor.classLoader = getClass.getClassLoader
-  }
-
-  remote.start(System.getProperty("spark.master.host"), 
-               System.getProperty("spark.master.port").toInt)
-  
   private val isLocal = master.startsWith("local") // TODO: better check for local
 
   // Create the Spark execution environment (cache, map output tracker, etc)
@@ -260,7 +251,6 @@ class SparkContext(
 
   // Stop the SparkContext
   def stop() {
-    remote.shutdownServerModule()
     dagScheduler.stop()
     dagScheduler = null
     taskScheduler = null
@@ -271,8 +261,11 @@ class SparkContext(
     env.shuffleManager.stop()
     env.blockManager.stop()
     BlockManagerMaster.stopBlockManagerMaster()
+    env.actorSystem.shutdown()
+    env.actorSystem.awaitTermination()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
+    logInfo("Successfully stopped SparkContext")
   }
 
   // Wait for the scheduler to be registered with the cluster manager

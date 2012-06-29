@@ -1,12 +1,15 @@
 package spark
 
-import akka.actor.Actor
+import akka.actor.ActorSystem
+
+import com.typesafe.config.ConfigFactory
 
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
 
 class SparkEnv (
+    val actorSystem: ActorSystem,
     val cache: Cache,
     val serializer: Serializer,
     val closureSerializer: Serializer,
@@ -19,7 +22,7 @@ class SparkEnv (
   ) {
 
   /** No-parameter constructor for unit tests. */
-  def this() = this(null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null)
+  def this() = this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null)
 }
 
 object SparkEnv {
@@ -34,10 +37,24 @@ object SparkEnv {
   }
 
   def createFromSystemProperties(isMaster: Boolean, isLocal: Boolean): SparkEnv = {
+    val host = System.getProperty("spark.master.host")
+    val port = System.getProperty("spark.master.port").toInt
+    if (port == 0) {
+      throw new IllegalArgumentException("Setting spark.master.port to 0 is not yet supported")
+    }
+    val akkaConf = ConfigFactory.parseString("""
+        akka.daemonic = on
+        akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+        akka.remote.transport = "akka.remote.netty.NettyRemoteTransport"
+        akka.remote.netty.hostname = "%s"
+        akka.remote.netty.port = %d
+      """.format(host, port))
+    val actorSystem = ActorSystem("spark", akkaConf, getClass.getClassLoader)
+
     val serializerClass = System.getProperty("spark.serializer", "spark.KryoSerializer")
     val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
     
-    BlockManagerMaster.startBlockManagerMaster(isMaster, isLocal)
+    BlockManagerMaster.startBlockManagerMaster(actorSystem, isMaster, isLocal)
     
     var blockManager = new BlockManager(serializer)
     
@@ -52,10 +69,10 @@ object SparkEnv {
     val cacheClass = System.getProperty("spark.cache.class", "spark.BoundedMemoryCache")
     val cache = Class.forName(cacheClass).newInstance().asInstanceOf[Cache]
 
-    val cacheTracker = new CacheTracker(isMaster, blockManager)
+    val cacheTracker = new CacheTracker(actorSystem, isMaster, blockManager)
     blockManager.cacheTracker = cacheTracker
 
-    val mapOutputTracker = new MapOutputTracker(isMaster)
+    val mapOutputTracker = new MapOutputTracker(actorSystem, isMaster)
 
     val shuffleFetcherClass = 
       System.getProperty("spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
@@ -81,7 +98,16 @@ object SparkEnv {
     }
     */
 
-    new SparkEnv(cache, serializer, closureSerializer, cacheTracker, mapOutputTracker, shuffleFetcher,
-        shuffleManager, blockManager, connectionManager)
+    new SparkEnv(
+      actorSystem,
+      cache,
+      serializer,
+      closureSerializer,
+      cacheTracker,
+      mapOutputTracker,
+      shuffleFetcher,
+      shuffleManager,
+      blockManager,
+      connectionManager)
   }
 }
