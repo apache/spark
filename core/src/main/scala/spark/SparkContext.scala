@@ -60,13 +60,17 @@ class SparkContext(
     System.setProperty("spark.master.host", Utils.localIpAddress)
   }
   if (System.getProperty("spark.master.port") == null) {
-    System.setProperty("spark.master.port", "7077")
+    System.setProperty("spark.master.port", "0")
   }
 
   private val isLocal = master.startsWith("local") // TODO: better check for local
 
   // Create the Spark execution environment (cache, map output tracker, etc)
-  val env = SparkEnv.createFromSystemProperties(true, isLocal) 
+  val env = SparkEnv.createFromSystemProperties(
+    System.getProperty("spark.master.host"),
+    System.getProperty("spark.master.port").toInt,
+    true,
+    isLocal)
   SparkEnv.set(env)
   Broadcast.initialize(true)
 

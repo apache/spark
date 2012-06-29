@@ -51,7 +51,7 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
     logInfo("Registered MapOutputTrackerActor actor")
     actor
   } else {
-    val url = "akka://spark@%s:%s/%s".format(ip, port, actorName)
+    val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
     actorSystem.actorFor(url)
   }
 

@@ -1,6 +1,8 @@
 package spark
 
 import akka.actor.ActorSystem
+import akka.actor.ActorSystemImpl
+import akka.remote.RemoteActorRefProvider
 
 import com.typesafe.config.ConfigFactory
 
@@ -36,20 +38,32 @@ object SparkEnv {
     env.get()
   }
 
-  def createFromSystemProperties(isMaster: Boolean, isLocal: Boolean): SparkEnv = {
-    val host = System.getProperty("spark.master.host")
-    val port = System.getProperty("spark.master.port").toInt
-    if (port == 0) {
-      throw new IllegalArgumentException("Setting spark.master.port to 0 is not yet supported")
-    }
+  def createFromSystemProperties(
+      hostname: String,
+      port: Int,
+      isMaster: Boolean,
+      isLocal: Boolean
+    ) : SparkEnv = {
+
     val akkaConf = ConfigFactory.parseString("""
-        akka.daemonic = on
-        akka.actor.provider = "akka.remote.RemoteActorRefProvider"
-        akka.remote.transport = "akka.remote.netty.NettyRemoteTransport"
-        akka.remote.netty.hostname = "%s"
-        akka.remote.netty.port = %d
-      """.format(host, port))
+      akka.daemonic = on
+      akka.event-handlers = ["akka.event.slf4j.Slf4jEventHandler"]
+      akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+      akka.remote.transport = "akka.remote.netty.NettyRemoteTransport"
+      akka.remote.netty.hostname = "%s"
+      akka.remote.netty.port = %d
+      """.format(hostname, port))
+
     val actorSystem = ActorSystem("spark", akkaConf, getClass.getClassLoader)
+
+    // Bit of a hack: If this is the master and our port was 0 (meaning bind to any free port),
+    // figure out which port number Akka actually bound to and set spark.master.port to it.
+    // Unfortunately Akka doesn't yet provide an API for this except if you cast objects as below.
+    if (isMaster && port == 0) {
+      val provider = actorSystem.asInstanceOf[ActorSystemImpl].provider
+      val port = provider.asInstanceOf[RemoteActorRefProvider].transport.address.port.get
+      System.setProperty("spark.master.port", port.toString)
+    }
 
     val serializerClass = System.getProperty("spark.serializer", "spark.KryoSerializer")
     val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]

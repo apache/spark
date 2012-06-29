@@ -348,8 +348,9 @@ object BlockManagerMaster extends Logging {
         Props(new BlockManagerMaster(isLocal)), name = AKKA_ACTOR_NAME)
       logInfo("Registered BlockManagerMaster Actor")
     } else {
-      val url = "akka://spark@%s:%s/%s".format(
+      val url = "akka://spark@%s:%s/user/%s".format(
         DEFAULT_MASTER_IP, DEFAULT_MASTER_PORT, AKKA_ACTOR_NAME)
+      logInfo("Connecting to BlockManagerMaster: " + url)
       masterActor = actorSystem.actorFor(url)
     }
   }
@@ -425,7 +426,7 @@ object BlockManagerMaster extends Logging {
     
     try {
       communicate(msg)
-      logInfo("Heartbeat sent successfully")
+      logDebug("Heartbeat sent successfully")
       logDebug("Got in syncHeartBeat 1 " + tmp + " 1 " + Utils.getUsedTimeMs(startTimeMs))
       return true
     } catch {
