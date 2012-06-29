@@ -47,8 +47,8 @@ def parse_args():
                     help="Show this help message and exit")
   parser.add_option("-s", "--slaves", type="int", default=1,
       help="Number of slaves to launch (default: 1)")
-  parser.add_option("-w", "--wait", type="int", default=90,
-      help="Seconds to wait for nodes to start (default: 90)")
+  parser.add_option("-w", "--wait", type="int", default=120,
+      help="Seconds to wait for nodes to start (default: 120)")
   parser.add_option("-k", "--key-pair",
       help="Key pair to use on instances")
   parser.add_option("-i", "--identity-file", 
