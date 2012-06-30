@@ -1,4 +1,4 @@
-package spark.deploy
+package spark.deploy.master
 
 import spark.util.IntParam
 import spark.Utils
@@ -7,9 +7,9 @@ import spark.Utils
  * Command-line parser for the master.
  */
 class MasterArguments(args: Array[String]) {
-  var ip: String = Utils.localIpAddress()
-  var port: Int = 7077
-  var webUiPort: Int = 8080
+  var ip = Utils.localIpAddress()
+  var port = 7077
+  var webUiPort = 8080
 
   parse(args.toList)
 
@@ -45,7 +45,7 @@ class MasterArguments(args: Array[String]) {
         "Options:\n" +
         "  -i IP, --ip IP         IP address or DNS name to listen on\n" +
         "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
-        "  --webui-port PORT      Port for web UI (default: 8080)\n")
+        "  --webui-port PORT      Port for web UI (default: 8080)")
     System.exit(exitCode)
   }
 }

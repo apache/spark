@@ -200,9 +200,27 @@ object Utils {
   }
 
   /**
-   * Use unit suffixes (Byte, Kilobyte, Megabyte, Gigabyte, Terabyte and
-   * Petabyte) in order to reduce the number of digits to four or less. For
-   * example, 4,000,000 is returned as 4MB.
+   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
+   * This is used to figure out how much memory to claim from Mesos based on the SPARK_MEM
+   * environment variable.
+   */
+  def memoryStringToMb(str: String): Int = {
+    val lower = str.toLowerCase
+    if (lower.endsWith("k")) {
+      (lower.substring(0, lower.length-1).toLong / 1024).toInt
+    } else if (lower.endsWith("m")) {
+      lower.substring(0, lower.length-1).toInt
+    } else if (lower.endsWith("g")) {
+      lower.substring(0, lower.length-1).toInt * 1024
+    } else if (lower.endsWith("t")) {
+      lower.substring(0, lower.length-1).toInt * 1024 * 1024
+    } else {// no suffix, so it's just a number in bytes
+      (lower.toLong / 1024 / 1024).toInt
+    }
+  }
+
+  /**
+   * Convert a memory quantity in bytes to a human-readable string such as "4.0 MB".
    */
   def memoryBytesToString(size: Long): String = {
     val TB = 1L << 40
@@ -224,5 +242,12 @@ object Utils {
       }
     }
     "%.1f %s".formatLocal(Locale.US, value, unit)
+  }
+
+  /**
+   * Convert a memory quantity in megabytes to a human-readable string such as "4.0 MB".
+   */
+  def memoryMegabytesToString(megabytes: Long): String = {
+    memoryBytesToString(megabytes * 1024L * 1024L)
   }
 }

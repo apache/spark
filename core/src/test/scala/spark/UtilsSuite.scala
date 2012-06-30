@@ -26,5 +26,25 @@ class UtilsSuite extends FunSuite {
 
     assert(os.toByteArray.toList.equals(bytes.toList))
   }
+
+  test("memoryStringToMb"){
+    assert(Utils.memoryStringToMb("1") == 0)
+    assert(Utils.memoryStringToMb("1048575") == 0)
+    assert(Utils.memoryStringToMb("3145728") == 3)
+
+    assert(Utils.memoryStringToMb("1024k") == 1)
+    assert(Utils.memoryStringToMb("5000k") == 4)
+    assert(Utils.memoryStringToMb("4024k") == Utils.memoryStringToMb("4024K"))
+
+    assert(Utils.memoryStringToMb("1024m") == 1024)
+    assert(Utils.memoryStringToMb("5000m") == 5000)
+    assert(Utils.memoryStringToMb("4024m") == Utils.memoryStringToMb("4024M"))
+
+    assert(Utils.memoryStringToMb("2g") == 2048)
+    assert(Utils.memoryStringToMb("3g") == Utils.memoryStringToMb("3G"))
+
+    assert(Utils.memoryStringToMb("2t") == 2097152)
+    assert(Utils.memoryStringToMb("3t") == Utils.memoryStringToMb("3T"))
+  }
 }
 

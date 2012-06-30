@@ -45,7 +45,7 @@ class MesosScheduler(
   // Memory used by each executor (in megabytes)
   val EXECUTOR_MEMORY = {
     if (System.getenv("SPARK_MEM") != null) {
-      MesosScheduler.memoryStringToMb(System.getenv("SPARK_MEM"))
+      Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
       // TODO: Might need to add some extra memory for the non-heap parts of the JVM
     } else {
       512
@@ -465,27 +465,5 @@ class MesosScheduler(
 
   def reviveOffers() {
     driver.reviveOffers()
-  }
-}
-
-object MesosScheduler {
-  /**
-   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes. 
-   * This is used to figure out how much memory to claim from Mesos based on the SPARK_MEM 
-   * environment variable.
-   */
-  def memoryStringToMb(str: String): Int = {
-    val lower = str.toLowerCase
-    if (lower.endsWith("k")) {
-      (lower.substring(0, lower.length-1).toLong / 1024).toInt
-    } else if (lower.endsWith("m")) {
-      lower.substring(0, lower.length-1).toInt
-    } else if (lower.endsWith("g")) {
-      lower.substring(0, lower.length-1).toInt * 1024
-    } else if (lower.endsWith("t")) {
-      lower.substring(0, lower.length-1).toInt * 1024 * 1024
-    } else {// no suffix, so it's just a number in bytes
-      (lower.toLong / 1024 / 1024).toInt
-    }
   }
 }

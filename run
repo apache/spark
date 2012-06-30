@@ -46,6 +46,7 @@ CLASSPATH="$SPARK_CLASSPATH"
 CLASSPATH+=":$MESOS_CLASSPATH"
 CLASSPATH+=":$FWDIR/conf"
 CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
 for jar in `find $CORE_DIR/lib -name '*jar'`; do
