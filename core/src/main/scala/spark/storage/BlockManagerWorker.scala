@@ -82,7 +82,7 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
     val block = blockManager.getLocal(id)
     val buffer = block match {
       case Some(tValues) => {
-        val values = tValues.asInstanceOf[Iterator[Any]]
+        val values = tValues
         val buffer = blockManager.dataSerialize(values)
         buffer
       }

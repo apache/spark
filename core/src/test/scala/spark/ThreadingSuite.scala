@@ -31,7 +31,7 @@ class ThreadingSuite extends FunSuite {
     new Thread {
       override def run() {
         answer1 = nums.reduce(_ + _)
-        answer2 = nums.first    // This will run "locally" in the current thread
+        answer2 = nums.first()    // This will run "locally" in the current thread
         sem.release()
       }
     }.start()
@@ -51,13 +51,13 @@ class ThreadingSuite extends FunSuite {
         override def run() {
           val answer1 = nums.reduce(_ + _)
           if (answer1 != 55) {
-            printf("In thread %d: answer1 was %d\n", i, answer1);
-            ok = false;
+            printf("In thread %d: answer1 was %d\n", i, answer1)
+            ok = false
           }
-          val answer2 = nums.first    // This will run "locally" in the current thread
+          val answer2 = nums.first()    // This will run "locally" in the current thread
           if (answer2 != 1) {
-            printf("In thread %d: answer2 was %d\n", i, answer2);
-            ok = false;
+            printf("In thread %d: answer2 was %d\n", i, answer2)
+            ok = false
           }
           sem.release()
         }
@@ -80,13 +80,13 @@ class ThreadingSuite extends FunSuite {
         override def run() {
           val answer1 = nums.reduce(_ + _)
           if (answer1 != 55) {
-            printf("In thread %d: answer1 was %d\n", i, answer1);
-            ok = false;
+            printf("In thread %d: answer1 was %d\n", i, answer1)
+            ok = false
           }
-          val answer2 = nums.first    // This will run "locally" in the current thread
+          val answer2 = nums.first()    // This will run "locally" in the current thread
           if (answer2 != 1) {
-            printf("In thread %d: answer2 was %d\n", i, answer2);
-            ok = false;
+            printf("In thread %d: answer2 was %d\n", i, answer2)
+            ok = false
           }
           sem.release()
         }

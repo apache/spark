@@ -14,9 +14,11 @@ object FailureSuiteState {
   var tasksRun = 0
   var tasksFailed = 0
 
-  def clear(): Unit = synchronized {
-    tasksRun = 0
-    tasksFailed = 0
+  def clear() {
+    synchronized {
+      tasksRun = 0
+      tasksFailed = 0
+    }
   }
 }
 

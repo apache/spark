@@ -1,7 +1,7 @@
 package spark
 
 class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with Serializable {
-  override val index = idx
+  override val index: Int = idx
 }
 
 class CartesianRDD[T: ClassManifest, U:ClassManifest](
@@ -24,7 +24,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     array
   }
 
-  override def splits = splits_.asInstanceOf[Array[Split]]
+  override def splits = splits_
 
   override def preferredLocations(split: Split) = {
     val currSplit = split.asInstanceOf[CartesianSplit]

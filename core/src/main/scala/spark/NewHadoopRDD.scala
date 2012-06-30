@@ -18,7 +18,7 @@ class NewHadoopSplit(rddId: Int, val index: Int, @transient rawSplit: InputSplit
   
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
 
-  override def hashCode(): Int = (41 * (41 + rddId) + index).toInt
+  override def hashCode(): Int = (41 * (41 + rddId) + index)
 }
 
 class NewHadoopRDD[K, V](
@@ -69,7 +69,7 @@ class NewHadoopRDD[K, V](
         finished = !reader.nextKeyValue
         havePair = !finished
         if (finished) {
-          reader.close
+          reader.close()
         }
       }
       !finished

@@ -49,7 +49,7 @@ class JavaSerializerInstance extends SerializerInstance {
   }
 
   def deserializeStream(s: InputStream): DeserializationStream = {
-    new JavaDeserializationStream(s, currentThread.getContextClassLoader)
+    new JavaDeserializationStream(s, Thread.currentThread.getContextClassLoader)
   }
 
   def deserializeStream(s: InputStream, loader: ClassLoader): DeserializationStream = {

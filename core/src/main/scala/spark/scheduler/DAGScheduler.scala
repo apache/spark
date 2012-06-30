@@ -529,7 +529,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocs(n.rdd, inPart)
           if (locs != Nil)
-            return locs;
+            return locs
         }
       case _ =>
     })

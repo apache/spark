@@ -26,7 +26,7 @@ class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
 
   override def hashCode(): Int = (41 * (41 + rddId) + idx).toInt
 
-  override val index = idx
+  override val index: Int = idx
 }
 
 /**

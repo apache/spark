@@ -44,37 +44,43 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
    * Set a handler to be called if this PartialResult's job fails. Only one failure handler
    * is supported per PartialResult.
    */
-  def onFail(handler: Exception => Unit): Unit = synchronized {
-    if (failureHandler != None) {
-      throw new UnsupportedOperationException("onFail cannot be called twice")
-    }
-    failureHandler = Some(handler)
-    if (failure != None) {
-      // We already have a failure, so let's call the handler
-      handler(failure.get)
+  def onFail(handler: Exception => Unit) {
+    synchronized {
+      if (failureHandler != None) {
+        throw new UnsupportedOperationException("onFail cannot be called twice")
+      }
+      failureHandler = Some(handler)
+      if (failure != None) {
+        // We already have a failure, so let's call the handler
+        handler(failure.get)
+      }
     }
   }
 
-  private[spark] def setFinalValue(value: R): Unit = synchronized {
-    if (finalValue != None) {
-      throw new UnsupportedOperationException("setFinalValue called twice on a PartialResult")
+  private[spark] def setFinalValue(value: R) {
+    synchronized {
+      if (finalValue != None) {
+        throw new UnsupportedOperationException("setFinalValue called twice on a PartialResult")
+      }
+      finalValue = Some(value)
+      // Call the completion handler if it was set
+      completionHandler.foreach(h => h(value))
+      // Notify any threads that may be calling getFinalValue()
+      this.notifyAll()
     }
-    finalValue = Some(value)
-    // Call the completion handler if it was set
-    completionHandler.foreach(h => h(value))
-    // Notify any threads that may be calling getFinalValue()
-    this.notifyAll()
   }
 
-  private[spark] def setFailure(exception: Exception): Unit = synchronized {
-    if (failure != None) {
-      throw new UnsupportedOperationException("setFailure called twice on a PartialResult")
+  private[spark] def setFailure(exception: Exception) {
+    synchronized {
+      if (failure != None) {
+        throw new UnsupportedOperationException("setFailure called twice on a PartialResult")
+      }
+      failure = Some(exception)
+      // Call the failure handler if it was set
+      failureHandler.foreach(h => h(exception))
+      // Notify any threads that may be calling getFinalValue()
+      this.notifyAll()
     }
-    failure = Some(exception)
-    // Call the failure handler if it was set
-    failureHandler.foreach(h => h(exception))
-    // Notify any threads that may be calling getFinalValue()
-    this.notifyAll()
   }
 
   override def toString: String = synchronized {

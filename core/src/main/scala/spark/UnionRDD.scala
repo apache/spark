@@ -11,7 +11,7 @@ class UnionSplit[T: ClassManifest](
   
   def iterator() = rdd.iterator(split)
   def preferredLocations() = rdd.preferredLocations(split)
-  override val index = idx
+  override val index: Int = idx
 }
 
 class UnionRDD[T: ClassManifest](

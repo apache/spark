@@ -11,7 +11,7 @@ case class NarrowCoGroupSplitDep(rdd: RDD[_], split: Split) extends CoGroupSplit
 case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
 
 class CoGroupSplit(idx: Int, val deps: Seq[CoGroupSplitDep]) extends Split with Serializable {
-  override val index = idx
+  override val index: Int = idx
   override def hashCode(): Int = idx
 }
 

@@ -41,7 +41,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
         val (blockId, blockOption) = x 
         blockOption match {
           case Some(block) => {
-            val values = block.asInstanceOf[Iterator[Any]]
+            val values = block
             for(value <- values) {
               val v = value.asInstanceOf[(K, V)]
               func(v._1, v._2)

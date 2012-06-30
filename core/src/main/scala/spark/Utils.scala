@@ -16,7 +16,7 @@ object Utils {
     val bos = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(bos)
     oos.writeObject(o)
-    oos.close
+    oos.close()
     return bos.toByteArray
   }
 
@@ -48,7 +48,7 @@ object Utils {
         j += 1
       }
       if (j > i) {
-        buf += s.substring(i, j);
+        buf += s.substring(i, j)
       }
       i = j
       while (i < s.length && !isAlpha(s.charAt(i))) {

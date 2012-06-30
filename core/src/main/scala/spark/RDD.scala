@@ -130,12 +130,12 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     
     if (num > initialCount) {
       total = maxSelected
-      fraction = Math.min(multiplier * (maxSelected + 1) / initialCount, 1.0)
+      fraction = math.min(multiplier * (maxSelected + 1) / initialCount, 1.0)
     } else if (num < 0) {
       throw(new IllegalArgumentException("Negative number of elements requested"))
     } else {
-      fraction = Math.min(multiplier * (num + 1) / initialCount, 1.0)
-      total = num.toInt
+      fraction = math.min(multiplier * (num + 1) / initialCount, 1.0)
+      total = num
     }
   
     var samples = this.sample(withReplacement, fraction, seed).collect()

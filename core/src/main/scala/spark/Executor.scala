@@ -67,7 +67,7 @@ class Executor extends org.apache.mesos.Executor with Logging {
 
   class TaskRunner(info: MTaskInfo, d: ExecutorDriver)
   extends Runnable {
-    override def run() = {
+    override def run() {
       val tid = info.getTaskId.getValue
       SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(classLoader)

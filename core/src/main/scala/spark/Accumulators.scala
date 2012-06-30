@@ -26,7 +26,7 @@ class Accumulator[T] (
  
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream) {
-    in.defaultReadObject
+    in.defaultReadObject()
     value_ = zero
     deserialized = true
     Accumulators.register(this, false)
@@ -53,18 +53,22 @@ private object Accumulators {
     return lastId
   }
 
-  def register(a: Accumulator[_], original: Boolean): Unit = synchronized {
-    if (original) {
-      originals(a.id) = a
-    } else {
-      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
-      accums(a.id) = a
+  def register(a: Accumulator[_], original: Boolean) {
+    synchronized {
+      if (original) {
+        originals(a.id) = a
+      } else {
+        val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
+        accums(a.id) = a
+      }
     }
   }
 
   // Clear the local (non-original) accumulators for the current thread
-  def clear: Unit = synchronized { 
-    localAccums.remove(Thread.currentThread)
+  def clear() {
+    synchronized {
+      localAccums.remove(Thread.currentThread)
+    }
   }
 
   // Get the values of the local accumulators for the current thread (by ID)
@@ -77,10 +81,12 @@ private object Accumulators {
   }
 
   // Add values to the original accumulators with some given IDs
-  def add(values: Map[Long, Any]): Unit = synchronized {
-    for ((id, value) <- values) {
-      if (originals.contains(id)) {
-        originals(id).asInstanceOf[Accumulator[Any]] += value
+  def add(values: Map[Long, Any]) {
+    synchronized {
+      for ((id, value) <- values) {
+        if (originals.contains(id)) {
+          originals(id).asInstanceOf[Accumulator[Any]] += value
+        }
       }
     }
   }

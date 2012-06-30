@@ -107,7 +107,7 @@ class MesosScheduler(
   override def start() {
     new Thread("MesosScheduler driver") {
       setDaemon(true)
-      override def run {
+      override def run() {
         val sched = MesosScheduler.this
         val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(frameworkName).build()
         driver = new MesosSchedulerDriver(sched, fwInfo, master)
@@ -122,7 +122,7 @@ class MesosScheduler(
     if (System.getProperty("spark.speculation", "false") == "true") {
       new Thread("MesosScheduler speculation check") {
         setDaemon(true)
-        override def run {
+        override def run() {
           waitForRegister()
           while (true) {
             try {
@@ -184,7 +184,7 @@ class MesosScheduler(
       activeTaskSetsQueue += manager
       taskSetTaskIds(taskSet.id) = new HashSet()
     }
-    reviveOffers();
+    reviveOffers()
   }
   
   def taskSetFinished(manager: TaskSetManager) {
@@ -331,7 +331,7 @@ class MesosScheduler(
     }
     if (failedHost != None) {
       listener.hostLost(failedHost.get)
-      reviveOffers();
+      reviveOffers()
     }
     if (taskFailed) {
       // Also revive offers if a task had failed for some reason other than host lost
@@ -439,7 +439,7 @@ class MesosScheduler(
     }
     if (failedHost != None) {
       listener.hostLost(failedHost.get)
-      reviveOffers();
+      reviveOffers()
     }
   }
 

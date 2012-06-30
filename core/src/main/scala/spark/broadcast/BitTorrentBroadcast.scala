@@ -60,7 +60,7 @@ extends Broadcast[T] with Logging with Serializable {
     sendBroadcast
   }
 
-  def sendBroadcast(): Unit = {
+  def sendBroadcast() {
     logInfo("Local host address: " + hostAddress)
 
     // Store a persistent copy in HDFS
@@ -96,7 +96,7 @@ extends Broadcast[T] with Logging with Serializable {
     // Must always come AFTER guideMR is created
     while (guidePort == -1) {
       guidePortLock.synchronized {
-        guidePortLock.wait
+        guidePortLock.wait()
       }
     }
 
@@ -108,7 +108,7 @@ extends Broadcast[T] with Logging with Serializable {
     // Must always come AFTER serveMR is created
     while (listenPort == -1) {
       listenPortLock.synchronized {
-        listenPortLock.wait
+        listenPortLock.wait()
       }
     }
 
@@ -127,8 +127,8 @@ extends Broadcast[T] with Logging with Serializable {
       SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes, blockSize))
   }
 
-  private def readObject(in: ObjectInputStream): Unit = {
-    in.defaultReadObject
+  private def readObject(in: ObjectInputStream) {
+    in.defaultReadObject()
     BitTorrentBroadcast.synchronized {
       val cachedVal = BitTorrentBroadcast.values.get(uuid, 0)
 
@@ -168,7 +168,7 @@ extends Broadcast[T] with Logging with Serializable {
   }
 
   // Initialize variables in the worker node. Master sends everything as 0/null
-  private def initializeWorkerVariables: Unit = {
+  private def initializeWorkerVariables() {
     arrayOfBlocks = null
     hasBlocksBitVector = null
     numCopiesSent = null
@@ -194,7 +194,7 @@ extends Broadcast[T] with Logging with Serializable {
     stopBroadcast = false
   }
 
-  private def registerBroadcast(uuid: UUID, gInfo: SourceInfo): Unit = {
+  private def registerBroadcast(uuid: UUID, gInfo: SourceInfo) {
     val socket = new Socket(Broadcast.MasterHostAddress,
       Broadcast.MasterTrackerPort)
     val oosST = new ObjectOutputStream(socket.getOutputStream)
@@ -222,7 +222,7 @@ extends Broadcast[T] with Logging with Serializable {
     socket.close()
   }
 
-  private def unregisterBroadcast(uuid: UUID): Unit = {
+  private def unregisterBroadcast(uuid: UUID) {
     val socket = new Socket(Broadcast.MasterHostAddress,
       Broadcast.MasterTrackerPort)
     val oosST = new ObjectOutputStream(socket.getOutputStream)
@@ -250,14 +250,14 @@ extends Broadcast[T] with Logging with Serializable {
     // Wait till hostName and listenPort are OK
     while (listenPort == -1) {
       listenPortLock.synchronized {
-        listenPortLock.wait
+        listenPortLock.wait()
       }
     }
 
     // Wait till totalBlocks and totalBytes are OK
     while (totalBlocks == -1) {
       totalBlocksLock.synchronized {
-        totalBlocksLock.wait
+        totalBlocksLock.wait()
       }
     }
 
@@ -275,7 +275,7 @@ extends Broadcast[T] with Logging with Serializable {
 
   // Add new SourceInfo to the listOfSources. Update if it exists already.
   // TODO: Optimizing just by OR-ing the BitVectors was BAD for performance
-  private def addToListOfSources(newSourceInfo: SourceInfo): Unit = {
+  private def addToListOfSources(newSourceInfo: SourceInfo) {
     listOfSources.synchronized {
       if (listOfSources.contains(newSourceInfo)) {
         listOfSources = listOfSources - newSourceInfo
@@ -284,7 +284,7 @@ extends Broadcast[T] with Logging with Serializable {
     }
   }
 
-  private def addToListOfSources(newSourceInfos: ListBuffer[SourceInfo]): Unit = {
+  private def addToListOfSources(newSourceInfos: ListBuffer[SourceInfo]) {
     newSourceInfos.foreach { newSourceInfo =>
       addToListOfSources(newSourceInfo)
     }
@@ -292,7 +292,7 @@ extends Broadcast[T] with Logging with Serializable {
 
   class TalkToGuide(gInfo: SourceInfo)
   extends Thread with Logging {
-    override def run: Unit = {
+    override def run() {
 
       // Keep exchaning information until all blocks have been received
       while (hasBlocks.get < totalBlocks) {
@@ -307,7 +307,7 @@ extends Broadcast[T] with Logging with Serializable {
     }
 
     // Connect to Guide and send this worker's information
-    private def talkOnce: Unit = {
+    private def talkOnce {
       var clientSocketToGuide: Socket = null
       var oosGuide: ObjectOutputStream = null
       var oisGuide: ObjectInputStream = null
@@ -402,7 +402,7 @@ extends Broadcast[T] with Logging with Serializable {
     // ServeMultipleRequests thread
     while (listenPort == -1) {
       listenPortLock.synchronized {
-        listenPortLock.wait
+        listenPortLock.wait()
       }
     }
 
@@ -412,7 +412,7 @@ extends Broadcast[T] with Logging with Serializable {
     hasBlocksBitVector = new BitSet(totalBlocks)
     numCopiesSent = new Array[Int](totalBlocks)
     totalBlocksLock.synchronized {
-      totalBlocksLock.notifyAll
+      totalBlocksLock.notifyAll()
     }
     totalBytes = gInfo.totalBytes
     blockSize = gInfo.blockSize
@@ -445,7 +445,7 @@ extends Broadcast[T] with Logging with Serializable {
     // certain bit is NOT unset upon failure resulting in an infinite loop.
     private var blocksInRequestBitVector = new BitSet(totalBlocks)
 
-    override def run: Unit = {
+    override def run() {
       var threadPool = Utils.newDaemonFixedThreadPool(Broadcast.MaxRxSlots)
 
       while (hasBlocks.get < totalBlocks) {
@@ -613,13 +613,13 @@ extends Broadcast[T] with Logging with Serializable {
       private var oosSource: ObjectOutputStream = null
       private var oisSource: ObjectInputStream = null
 
-      override def run: Unit = {
+      override def run() {
         // TODO: There is a possible bug here regarding blocksInRequestBitVector
         var blockToAskFor = -1
 
         // Setup the timeout mechanism
         var timeOutTask = new TimerTask {
-          override def run: Unit = {
+          override def run() {
             cleanUpConnections()
           }
         }
@@ -645,7 +645,7 @@ extends Broadcast[T] with Logging with Serializable {
           addToListOfSources(newPeerToTalkTo)
 
           // Turn the timer OFF, if the sender responds before timeout
-          timeOutTimer.cancel
+          timeOutTimer.cancel()
 
           // Send the latest SourceInfo
           oosSource.writeObject(getLocalSourceInfo)
@@ -836,7 +836,7 @@ extends Broadcast[T] with Logging with Serializable {
         }
       }
 
-      private def cleanUpConnections(): Unit = {
+      private def cleanUpConnections() {
         if (oisSource != null) {
           oisSource.close()
         }
@@ -860,7 +860,7 @@ extends Broadcast[T] with Logging with Serializable {
     // Keep track of sources that have completed reception
     private var setOfCompletedSources = Set[SourceInfo]()
 
-    override def run: Unit = {
+    override def run() {
       var threadPool = Utils.newDaemonCachedThreadPool()
       var serverSocket: ServerSocket = null
 
@@ -869,7 +869,7 @@ extends Broadcast[T] with Logging with Serializable {
       logInfo("GuideMultipleRequests => " + serverSocket + " " + guidePort)
 
       guidePortLock.synchronized {
-        guidePortLock.notifyAll
+        guidePortLock.notifyAll()
       }
 
       try {
@@ -920,7 +920,7 @@ extends Broadcast[T] with Logging with Serializable {
       }
     }
 
-    private def sendStopBroadcastNotifications: Unit = {
+    private def sendStopBroadcastNotifications() {
       listOfSources.synchronized {
         listOfSources.foreach { sourceInfo =>
 
@@ -972,7 +972,7 @@ extends Broadcast[T] with Logging with Serializable {
       private var sourceInfo: SourceInfo = null
       private var selectedSources: ListBuffer[SourceInfo] = null
 
-      override def run: Unit = {
+      override def run() {
         try {
           logInfo("new GuideSingleRequest is running")
           // Connecting worker is sending in its information
@@ -1060,14 +1060,14 @@ extends Broadcast[T] with Logging with Serializable {
     // Server at most Broadcast.MaxTxSlots peers
     var threadPool = Utils.newDaemonFixedThreadPool(Broadcast.MaxTxSlots)
 
-    override def run: Unit = {
+    override def run() {
       var serverSocket = new ServerSocket(0)
       listenPort = serverSocket.getLocalPort
 
       logInfo("ServeMultipleRequests started with " + serverSocket)
 
       listenPortLock.synchronized {
-        listenPortLock.notifyAll
+        listenPortLock.notifyAll()
       }
 
       try {
@@ -1111,7 +1111,7 @@ extends Broadcast[T] with Logging with Serializable {
 
       logInfo("new ServeSingleRequest is running")
 
-      override def run: Unit  = {
+      override def run() {
         try {
           // Send latest local SourceInfo to the receiver
           // In the case of receiver timeout and connection close, this will
@@ -1178,7 +1178,7 @@ extends Broadcast[T] with Logging with Serializable {
         }
       }
 
-      private def sendBlock(blockToSend: Int): Unit = {
+      private def sendBlock(blockToSend: Int) {
         try {
           oos.writeObject(arrayOfBlocks(blockToSend))
           oos.flush()
@@ -1195,12 +1195,13 @@ extends Broadcast[T] with Logging with Serializable {
 
 class BitTorrentBroadcastFactory
 extends BroadcastFactory {
-  def initialize(isMaster: Boolean) = {
+  def initialize(isMaster: Boolean) {
     BitTorrentBroadcast.initialize(isMaster)
   }
 
-  def newBroadcast[T](value_ : T, isLocal: Boolean) =
+  def newBroadcast[T](value_ : T, isLocal: Boolean) = {
     new BitTorrentBroadcast[T](value_, isLocal)
+  }
 }
 
 private object BitTorrentBroadcast
@@ -1217,7 +1218,7 @@ extends Logging {
 
   private var trackMV: TrackMultipleValues = null
 
-  def initialize(isMaster__ : Boolean): Unit = {
+  def initialize(isMaster__ : Boolean) {
     synchronized {
       if (!initialized) {
 
@@ -1245,7 +1246,7 @@ extends Logging {
 
   class TrackMultipleValues
   extends Thread with Logging {
-    override def run: Unit = {
+    override def run() {
       var threadPool = Utils.newDaemonCachedThreadPool()
       var serverSocket: ServerSocket = null
 
@@ -1267,7 +1268,7 @@ extends Logging {
           if (clientSocket != null) {
             try {
               threadPool.execute(new Thread {
-                override def run: Unit = {
+                override def run() {
                   val oos = new ObjectOutputStream(clientSocket.getOutputStream)
                   oos.flush()
                   val ois = new ObjectInputStream(clientSocket.getInputStream)

@@ -210,7 +210,7 @@ class CoarseMesosScheduler(
       }
       // Also report the loss to the DAGScheduler
       listener.hostLost(failedHost.get)
-      reviveOffers();
+      reviveOffers()
     }
   }
 
@@ -283,9 +283,9 @@ class CoarseMesosScheduler(
 class WorkerTask(slaveId: String, host: String) extends Task[Unit](-1) {
   generation = 0
 
-  def run(id: Int): Unit = {
+  def run(id: Int) {
     val env = SparkEnv.get
-    val classLoader = currentThread.getContextClassLoader
+    val classLoader = Thread.currentThread.getContextClassLoader
     val actor = env.actorSystem.actorOf(
       Props(new WorkerActor(slaveId, host, env, classLoader)),
       name = "WorkerActor")
@@ -309,7 +309,7 @@ class WorkerActor(slaveId: String, host: String, env: SparkEnv, classLoader: Cla
 
   class TaskRunner(desc: MTaskInfo)
   extends Runnable {
-    override def run() = {
+    override def run() {
       val tid = desc.getTaskId.getValue
       logInfo("Running task ID " + tid)
       try {
@@ -360,7 +360,7 @@ class WorkerActor(slaveId: String, host: String, env: SparkEnv, classLoader: Cla
   }
 
   override def receive = {
-    case LaunchTask(slaveId, task) =>
+    case LaunchTask(slaveId_, task) =>
       threadPool.execute(new TaskRunner(task))    
   }
 }
