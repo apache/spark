@@ -46,7 +46,8 @@ object SparkBuild extends Build {
     resolvers ++= Seq(
       "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/"
+      "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/",
+      "Spray Repository" at "http://repo.spray.cc/"
     ),
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "11.0.1",
@@ -63,7 +64,9 @@ object SparkBuild extends Build {
       "com.typesafe.akka" % "akka-slf4j" % "2.0.2",
       "org.jboss.netty" % "netty" % "3.2.6.Final",
       "it.unimi.dsi" % "fastutil" % "6.4.4",
-      "colt" % "colt" % "1.2.0"
+      "colt" % "colt" % "1.2.0",
+      "cc.spray" % "spray-can" % "1.0-M2.1",
+      "cc.spray" % "spray-server" % "1.0-M2.1"
     )
   ) ++ assemblySettings ++ extraAssemblySettings 
 
