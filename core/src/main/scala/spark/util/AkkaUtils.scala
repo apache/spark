@@ -53,7 +53,7 @@ object AkkaUtils {
     val server = actorSystem.actorOf(
       Props(new HttpServer(ioWorker, SingletonHandler(rootService))), name = "HttpServer")
     actorSystem.registerOnTermination { ioWorker.stop() }
-    val timeout = 1.seconds
+    val timeout = 3.seconds
     val future = server.ask(HttpServer.Bind(ip, port))(timeout)
     try {
       Await.result(future, timeout) match {

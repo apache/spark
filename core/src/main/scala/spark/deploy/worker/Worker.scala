@@ -2,22 +2,22 @@ package spark.deploy.worker
 
 
 import akka.actor.{ActorRef, Terminated, Props, Actor}
-import akka.pattern.ask
-import akka.util.duration._
-import spark.{SparkException, Logging, Utils}
-import spark.util.{IntParam, AkkaUtils}
-import spark.deploy.{RegisterSlave, RegisteredSlave}
-import akka.dispatch.Await
+import spark.{Logging, Utils}
+import spark.util.AkkaUtils
+import spark.deploy.{RegisterWorkerFailed, RegisterWorker, RegisteredWorker}
 import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
+import java.text.SimpleDateFormat
+import java.util.Date
 
 class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, masterUrl: String)
   extends Actor with Logging {
 
+  val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
   val MASTER_REGEX = "spark://([^:]+):([0-9]+)".r
 
   var master: ActorRef = null
-  var clusterId: String = null
-  var slaveId: Int = 0
+
+  val workerId = generateWorkerId()
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -34,19 +34,20 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
 
   def connectToMaster() {
     masterUrl match {
-      case MASTER_REGEX(masterHost, masterPort) =>
+      case MASTER_REGEX(masterHost, masterPort) => {
         logInfo("Connecting to master spark://" + masterHost + ":" + masterPort)
         val akkaUrl = "akka://spark@%s:%s/user/Master".format(masterHost, masterPort)
         try {
           master = context.actorFor(akkaUrl)
-          master ! RegisterSlave(ip, port, cores, memory)
+          master ! RegisterWorker(workerId, ip, port, cores, memory)
           context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-          context.watch(master)  // Doesn't work with remote actors, but useful for testing
+          context.watch(master) // Doesn't work with remote actors, but useful for testing
         } catch {
           case e: Exception =>
             logError("Failed to connect to master", e)
             System.exit(1)
         }
+      }
 
       case _ =>
         logError("Invalid master URL: " + masterUrl)
@@ -66,25 +67,26 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   }
 
   override def receive = {
-    case RegisteredSlave(clusterId_, slaveId_) =>
-      this.clusterId = clusterId_
-      this.slaveId = slaveId_
-      logInfo("Registered with master, cluster ID = " + clusterId + ", slave ID = " + slaveId)
+    case RegisteredWorker =>
+      logInfo("Successfully registered with master")
 
-    case RemoteClientDisconnected(_, _) =>
-      masterDisconnected()
+    case RegisterWorkerFailed(message) =>
+      logError("Worker registration failed: " + message)
+      System.exit(1)
 
-    case RemoteClientShutdown(_, _) =>
-      masterDisconnected()
-
-    case Terminated(_) =>
+    case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       masterDisconnected()
   }
 
   def masterDisconnected() {
-    // Not sure what to do here exactly, so just shut down for now.
+    // TODO: It would be nice to try to reconnect to the master, but just shut down for now.
+    // (Note that if reconnecting we would also need to assign IDs differently.)
     logError("Connection to master failed! Shutting down.")
     System.exit(1)
+  }
+
+  def generateWorkerId(): String = {
+    "worker-%s-%s-%d".format(DATE_FORMAT.format(new Date), ip, port)
   }
 }
 

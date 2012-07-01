@@ -1,47 +1,40 @@
 package spark.deploy.master
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import akka.actor._
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
 import java.text.SimpleDateFormat
 import java.util.Date
-import spark.deploy.{RegisteredSlave, RegisterSlave}
-import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
+import akka.remote.RemoteClientLifeCycleEvent
+import spark.deploy._
 import akka.remote.RemoteClientShutdown
-import spark.deploy.RegisteredSlave
 import akka.remote.RemoteClientDisconnected
+import spark.deploy.RegisterWorker
+import spark.deploy.RegisterWorkerFailed
 import akka.actor.Terminated
-import scala.Some
-import spark.deploy.RegisterSlave
-
-class SlaveInfo(
-                 val id: Int,
-                 val host: String,
-                 val port: Int,
-                 val cores: Int,
-                 val memory: Int,
-                 val actor: ActorRef) {
-  var coresUsed = 0
-  var memoryUsed = 0
-
-  def coresFree: Int = cores - coresUsed
-
-  def memoryFree: Int = memory - memoryUsed
-}
 
 class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
-  val clusterId = newClusterId()
-  var nextSlaveId = 0
-  var nextJobId = 0
-  val slaves = new HashMap[Int, SlaveInfo]
-  val actorToSlave = new HashMap[ActorRef, SlaveInfo]
-  val addressToSlave = new HashMap[Address, SlaveInfo]
+  val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For job IDs
+
+  var nextJobNumber = 0
+  val workers = new HashSet[WorkerInfo]
+  val idToWorker = new HashMap[String, WorkerInfo]
+  val actorToWorker = new HashMap[ActorRef, WorkerInfo]
+  val addressToWorker = new HashMap[Address, WorkerInfo]
+
+  val jobs = new HashSet[WorkerInfo]
+  val idToJob = new HashMap[String, JobInfo]
+  val actorToJob = new HashMap[ActorRef, JobInfo]
+  val addressToJob = new HashMap[Address, JobInfo]
+
+  val waitingJobs = new ArrayBuffer[JobInfo]
+  val completedJobs = new ArrayBuffer[JobInfo]
 
   override def preStart() {
     logInfo("Starting Spark master at spark://" + ip + ":" + port)
-    logInfo("Cluster ID: " + clusterId)
+    // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     startWebUi()
   }
@@ -58,50 +51,141 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   }
 
   override def receive = {
-    case RegisterSlave(host, slavePort, cores, memory) => {
-      logInfo("Registering slave %s:%d with %d cores, %s RAM".format(
-        host, slavePort, cores, Utils.memoryMegabytesToString(memory)))
-      val slave = addSlave(host, slavePort, cores, memory)
-      context.watch(sender)  // This doesn't work with remote actors but helps for testing
-      sender ! RegisteredSlave(clusterId, slave.id)
+    case RegisterWorker(id, host, workerPort, cores, memory) => {
+      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
+        host, workerPort, cores, Utils.memoryMegabytesToString(memory)))
+      if (idToWorker.contains(id)) {
+        sender ! RegisterWorkerFailed("Duplicate worker ID")
+      } else {
+        val worker = addWorker(id, host, workerPort, cores, memory)
+        context.watch(sender)  // This doesn't work with remote actors but helps for testing
+        sender ! RegisteredWorker
+        schedule()
+      }
     }
 
-    case RemoteClientDisconnected(transport, address) =>
-      logInfo("Remote client disconnected: " + address)
-      addressToSlave.get(address).foreach(s => removeSlave(s)) // Remove slave, if any, at address
+    case RegisterJob(description) => {
+      logInfo("Registering job " + description.name)
+      val job = addJob(description, sender)
+      logInfo("Registered job " + description.name + " with ID " + job.id)
+      waitingJobs += job
+      context.watch(sender)  // This doesn't work with remote actors but helps for testing
+      sender ! RegisteredJob(job.id)
+      schedule()
+    }
 
-    case RemoteClientShutdown(transport, address) =>
-      logInfo("Remote client shutdown: " + address)
-      addressToSlave.get(address).foreach(s => removeSlave(s)) // Remove slave, if any, at address
+    case ExecutorStateChanged(jobId, execId, state, message) => {
+      val execOption = idToJob.get(jobId).flatMap(job => job.executors.get(execId))
+      execOption match {
+        case Some(exec) => {
+          exec.state = state
+          exec.job.actor ! ExecutorUpdated(execId, state, message)
+          if (ExecutorState.isFinished(state)) {
+            // Remove this executor from the worker and job
+            logInfo("Removing executor " + exec.fullId)
+            idToJob(jobId).executors -= exec.id
+            exec.worker.removeExecutor(exec)
+          }
+        }
+        case None =>
+          logWarning("Got status update for unknown executor " + jobId + "/" + execId)
+      }
+    }
 
-    case Terminated(actor) =>
-      logInfo("Slave disconnected: " + actor)
-      actorToSlave.get(actor).foreach(s => removeSlave(s)) // Remove slave, if any, at actor
+    case Terminated(actor) => {
+      // The disconnected actor could've been either a worker or a job; remove whichever of
+      // those we have an entry for in the corresponding actor hashmap
+      actorToWorker.get(actor).foreach(removeWorker)
+      actorToJob.get(actor).foreach(removeJob)
+    }
+
+    case RemoteClientDisconnected(transport, address) => {
+      // The disconnected client could've been either a worker or a job; remove whichever it was
+      addressToWorker.get(address).foreach(removeWorker)
+      addressToJob.get(address).foreach(removeJob)
+    }
+
+    case RemoteClientShutdown(transport, address) => {
+      // The disconnected client could've been either a worker or a job; remove whichever it was
+      addressToWorker.get(address).foreach(removeWorker)
+      addressToJob.get(address).foreach(removeJob)
+    }
   }
 
-  def addSlave(host: String, slavePort: Int, cores: Int, memory: Int): SlaveInfo = {
-    val slave = new SlaveInfo(newSlaveId(), host, slavePort, cores, memory, sender)
-    slaves(slave.id) = slave
-    actorToSlave(sender) = slave
-    addressToSlave(sender.path.address) = slave
-    return slave
+  /**
+   * Schedule the currently available resources among waiting jobs. This method will be called
+   * every time a new job joins or resource availability changes.
+   */
+  def schedule() {
+    // Right now this is a very simple FIFO with backfilling. We keep looking through the jobs
+    // in order of submission time and launching the first one that fits in the cluster.
+    // It's also not very efficient in terms of algorithmic complexity.
+    for (job <- waitingJobs) {
+      // Figure out how many cores the job could use on the whole cluster
+      val jobMemory = job.desc.memoryPerSlave
+      val usableCores = workers.filter(_.memoryFree >= jobMemory).map(_.coresFree).sum
+      if (usableCores >= job.desc.cores) {
+        // We can launch it! Let's just partition the workers into executors for this job.
+        // TODO: Probably want to spread stuff out across nodes more.
+        var coresLeft = job.desc.cores
+        for (worker <- workers if worker.memoryFree >= jobMemory && coresLeft > 0) {
+          val coresToUse = math.min(worker.coresFree, coresLeft)
+          val exec = job.newExecutor(worker, coresToUse)
+          launchExecutor(worker, exec)
+          coresLeft -= coresToUse
+        }
+      }
+    }
   }
 
-  def removeSlave(slave: SlaveInfo) {
-    logInfo("Removing slave " + slave.id + " on " + slave.host + ":" + slave.port)
-    slaves -= slave.id
-    actorToSlave -= slave.actor
-    addressToSlave -= slave.actor.path.address
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo) {
+    logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
+    worker.addExecutor(exec)
+    worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc)
+    exec.job.actor ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
   }
 
-  def newClusterId(): String = {
-    val date = new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date())
-    "%s-%04d".format(date, (math.random * 10000).toInt)
+  def addWorker(id: String, host: String, port: Int, cores: Int, memory: Int): WorkerInfo = {
+    val worker = new WorkerInfo(id, host, port, cores, memory, sender)
+    idToWorker(worker.id) = worker
+    actorToWorker(sender) = worker
+    addressToWorker(sender.path.address) = worker
+    return worker
   }
 
-  def newSlaveId(): Int = {
-    nextSlaveId += 1
-    nextSlaveId - 1
+  def removeWorker(worker: WorkerInfo) {
+    logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
+    idToWorker -= worker.id
+    actorToWorker -= worker.actor
+    addressToWorker -= worker.actor.path.address
+  }
+
+  def addJob(desc: JobDescription, actor: ActorRef): JobInfo = {
+    val date = new Date
+    val job = new JobInfo(newJobId(date), desc, date, actor)
+    idToJob(job.id) = job
+    actorToJob(sender) = job
+    addressToJob(sender.path.address) = job
+    return job
+  }
+
+  def removeJob(job: JobInfo) {
+    logInfo("Removing job " + job.id)
+    idToJob -= job.id
+    actorToJob -= job.actor
+    addressToWorker -= job.actor.path.address
+    completedJobs += job   // Remember it in our history
+    for (exec <- job.executors.values) {
+
+    }
+    schedule()
+  }
+
+  /** Generate a new job ID given a job's submission date */
+  def newJobId(submitDate: Date): String = {
+    val jobId = "job-%s-%4d".format(DATE_FORMAT.format(submitDate), nextJobNumber)
+    nextJobNumber += 1
+    jobId
   }
 }
 
