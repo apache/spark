@@ -30,6 +30,7 @@ object AkkaUtils {
       akka.remote.transport = "akka.remote.netty.NettyRemoteTransport"
       akka.remote.netty.hostname = "%s"
       akka.remote.netty.port = %d
+      akka.remote.netty.connection-timeout = 1s
       """.format(host, port))
 
     val actorSystem = ActorSystem("spark", akkaConf, getClass.getClassLoader)
@@ -39,8 +40,6 @@ object AkkaUtils {
     val provider = actorSystem.asInstanceOf[ActorSystemImpl].provider
     val boundPort = provider.asInstanceOf[RemoteActorRefProvider].transport.address.port.get
     return (actorSystem, boundPort)
-
-    return (null, 0)
   }
 
   /**

@@ -2,12 +2,19 @@ package spark.deploy.master
 
 import scala.collection.mutable.HashMap
 
-import akka.actor.{Terminated, ActorRef, Props, Actor}
+import akka.actor._
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
 import java.text.SimpleDateFormat
 import java.util.Date
 import spark.deploy.{RegisteredSlave, RegisterSlave}
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
+import akka.remote.RemoteClientShutdown
+import spark.deploy.RegisteredSlave
+import akka.remote.RemoteClientDisconnected
+import akka.actor.Terminated
+import scala.Some
+import spark.deploy.RegisterSlave
 
 class SlaveInfo(
                  val id: Int,
@@ -30,10 +37,12 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   var nextJobId = 0
   val slaves = new HashMap[Int, SlaveInfo]
   val actorToSlave = new HashMap[ActorRef, SlaveInfo]
+  val addressToSlave = new HashMap[Address, SlaveInfo]
 
   override def preStart() {
     logInfo("Starting Spark master at spark://" + ip + ":" + port)
     logInfo("Cluster ID: " + clusterId)
+    context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     startWebUi()
   }
 
@@ -52,24 +61,37 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
     case RegisterSlave(host, slavePort, cores, memory) => {
       logInfo("Registering slave %s:%d with %d cores, %s RAM".format(
         host, slavePort, cores, Utils.memoryMegabytesToString(memory)))
-      val id = newSlaveId()
-      slaves(id) = new SlaveInfo(id, host, slavePort, cores, memory, sender)
-      actorToSlave(sender) = slaves(id)
-      context.watch(sender)
-      sender ! RegisteredSlave(clusterId, id)
+      val slave = addSlave(host, slavePort, cores, memory)
+      context.watch(sender)  // This doesn't work with remote actors but helps for testing
+      sender ! RegisteredSlave(clusterId, slave.id)
     }
 
-    case Terminated(actor) => {
+    case RemoteClientDisconnected(transport, address) =>
+      logInfo("Remote client disconnected: " + address)
+      addressToSlave.get(address).foreach(s => removeSlave(s)) // Remove slave, if any, at address
+
+    case RemoteClientShutdown(transport, address) =>
+      logInfo("Remote client shutdown: " + address)
+      addressToSlave.get(address).foreach(s => removeSlave(s)) // Remove slave, if any, at address
+
+    case Terminated(actor) =>
       logInfo("Slave disconnected: " + actor)
-      actorToSlave.get(actor) match {
-        case Some(slave) =>
-          logInfo("Removing slave " + slave.id)
-          slaves -= slave.id
-          actorToSlave -= actor
-        case None =>
-          logError("Did not have any slave registered for " + actor)
-      }
-    }
+      actorToSlave.get(actor).foreach(s => removeSlave(s)) // Remove slave, if any, at actor
+  }
+
+  def addSlave(host: String, slavePort: Int, cores: Int, memory: Int): SlaveInfo = {
+    val slave = new SlaveInfo(newSlaveId(), host, slavePort, cores, memory, sender)
+    slaves(slave.id) = slave
+    actorToSlave(sender) = slave
+    addressToSlave(sender.path.address) = slave
+    return slave
+  }
+
+  def removeSlave(slave: SlaveInfo) {
+    logInfo("Removing slave " + slave.id + " on " + slave.host + ":" + slave.port)
+    slaves -= slave.id
+    actorToSlave -= slave.actor
+    addressToSlave -= slave.actor.path.address
   }
 
   def newClusterId(): String = {

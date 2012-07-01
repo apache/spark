@@ -41,11 +41,11 @@ class MasterArguments(args: Array[String]) {
   def printUsageAndExit(exitCode: Int) {
     System.err.println(
       "Usage: spark-master [options]\n" +
-        "\n" +
-        "Options:\n" +
-        "  -i IP, --ip IP         IP address or DNS name to listen on\n" +
-        "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
-        "  --webui-port PORT      Port for web UI (default: 8080)")
+      "\n" +
+      "Options:\n" +
+      "  -i IP, --ip IP         IP address or DNS name to listen on\n" +
+      "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
+      "  --webui-port PORT      Port for web UI (default: 8080)")
     System.exit(exitCode)
   }
 }

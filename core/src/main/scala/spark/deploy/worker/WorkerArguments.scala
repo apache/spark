@@ -14,6 +14,7 @@ class WorkerArguments(args: Array[String]) {
   var webUiPort = 8081
   var cores = inferDefaultCores()
   var memory = inferDefaultMemory()
+  var master: String = null
 
   parse(args.toList)
 
@@ -41,7 +42,17 @@ class WorkerArguments(args: Array[String]) {
     case ("--help" | "-h") :: tail =>
       printUsageAndExit(0)
 
-    case Nil => {}
+    case value :: tail =>
+      if (master != null) {  // Two positional arguments were given
+        printUsageAndExit(1)
+      }
+      master = value
+      parse(tail)
+
+    case Nil =>
+      if (master == null) {  // No positional argument was given
+        printUsageAndExit(1)
+      }
 
     case _ =>
       printUsageAndExit(1)
@@ -52,14 +63,16 @@ class WorkerArguments(args: Array[String]) {
    */
   def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "Usage: spark-worker [options]\n" +
-        "\n" +
-        "Options:\n" +
-        "  -c CORES, --cores CORES  Number of cores to use\n" +
-        "  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)\n" +
-        "  -i IP, --ip IP           IP address or DNS name to listen on\n" +
-        "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
-        "  --webui-port PORT        Port for web UI (default: 8081)")
+      "Usage: spark-worker [options] <master>\n" +
+      "\n" +
+      "Master must be a URL of the form spark://hostname:port\n" +
+      "\n" +
+      "Options:\n" +
+      "  -c CORES, --cores CORES  Number of cores to use\n" +
+      "  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)\n" +
+      "  -i IP, --ip IP           IP address or DNS name to listen on\n" +
+      "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
+      "  --webui-port PORT        Port for web UI (default: 8081)")
     System.exit(exitCode)
   }
 
