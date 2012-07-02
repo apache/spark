@@ -1,7 +1,9 @@
 package spark.deploy
 
-object ExecutorState extends Enumeration("LAUNCHING", "RUNNING", "FINISHED", "FAILED") {
-  val LAUNCHING, RUNNING, FINISHED, FAILED = Value
+object ExecutorState
+  extends Enumeration("LAUNCHING", "LOADING", "RUNNING", "KILLED", "FAILED", "LOST") {
 
-  def isFinished(state: Value): Boolean = (state == FINISHED || state == FAILED)
+  val LAUNCHING, LOADING, RUNNING, KILLED, FAILED, LOST = Value
+
+  def isFinished(state: Value): Boolean = (state == KILLED || state == FAILED || state == LOST)
 }

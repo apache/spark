@@ -66,10 +66,10 @@ class Client(
 
       case ExecutorUpdated(id, state, message) =>
         val fullId = jobId + "/" + id
-        val messageText = if (message == null) "" else " (" + message + ")"
+        val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
-          listener.executorRemoved(fullId, message)
+          listener.executorRemoved(fullId, message.getOrElse(""))
         }
 
       case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>

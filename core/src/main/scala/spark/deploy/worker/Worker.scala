@@ -1,13 +1,20 @@
 package spark.deploy.worker
 
-
-import akka.actor.{ActorRef, Terminated, Props, Actor}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import akka.actor.{ActorRef, Props, Actor}
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
-import spark.deploy.{RegisterWorkerFailed, RegisterWorker, RegisteredWorker}
-import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
+import spark.deploy._
+import akka.remote.RemoteClientLifeCycleEvent
 import java.text.SimpleDateFormat
 import java.util.Date
+import akka.remote.RemoteClientShutdown
+import akka.remote.RemoteClientDisconnected
+import spark.deploy.RegisterWorker
+import spark.deploy.LaunchExecutor
+import spark.deploy.RegisterWorkerFailed
+import akka.actor.Terminated
+import java.io.File
 
 class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, masterUrl: String)
   extends Actor with Logging {
@@ -16,8 +23,11 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   val MASTER_REGEX = "spark://([^:]+):([0-9]+)".r
 
   var master: ActorRef = null
-
   val workerId = generateWorkerId()
+  var sparkHome: File = null
+  var workDir: File = null
+  val executors = new HashMap[String, ExecutorRunner]
+  val finishedExecutors = new ArrayBuffer[String]
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -25,9 +35,27 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 
+  def createWorkDir() {
+    workDir = new File(sparkHome, "work")
+    try {
+      if (!workDir.exists() && !workDir.mkdirs()) {
+        logError("Failed to create work directory " + workDir)
+        System.exit(1)
+      }
+    } catch {
+      case e: Exception =>
+        logError("Failed to create work directory " + workDir, e)
+        System.exit(1)
+    }
+  }
+
   override def preStart() {
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       ip, port, cores, Utils.memoryMegabytesToString(memory)))
+    val envVar = System.getenv("SPARK_HOME")
+    sparkHome = new File(if (envVar == null) "." else envVar)
+    logInfo("Spark home: " + sparkHome)
+    createWorkDir()
     connectToMaster()
     startWebUi()
   }
@@ -73,6 +101,21 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
     case RegisterWorkerFailed(message) =>
       logError("Worker registration failed: " + message)
       System.exit(1)
+
+    case LaunchExecutor(jobId, execId, jobDesc, cores_, memory_) =>
+      logInfo("Asked to launch executor %s/%d for %s".format(jobId, execId, jobDesc.name))
+      val er = new ExecutorRunner(jobId, execId, jobDesc, cores_, memory_, self, sparkHome, workDir)
+      executors(jobId + "/" + execId) = er
+      er.start()
+      master ! ExecutorStateChanged(jobId, execId, ExecutorState.LOADING, None)
+
+    case ExecutorStateChanged(jobId, execId, state, message) =>
+      master ! ExecutorStateChanged(jobId, execId, state, message)
+      if (ExecutorState.isFinished(state)) {
+        logInfo("Executor " + jobId + "/" + execId + " finished with state " + state)
+        executors -= jobId + "/" + execId
+        finishedExecutors += jobId + "/" + execId
+      }
 
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       masterDisconnected()

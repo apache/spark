@@ -7,6 +7,7 @@ import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 import java.util.{Locale, UUID}
+import scala.io.Source
 
 /**
  * Various utility methods used by Spark.
@@ -39,6 +40,7 @@ object Utils {
     (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
   }
 
+  /** Split a string into words at non-alphabetic characters */
   def splitWords(s: String): Seq[String] = {
     val buf = new ArrayBuffer[String]
     var i = 0
@@ -58,7 +60,7 @@ object Utils {
     return buf
   }
 
-  // Create a temporary directory inside the given parent directory
+  /** Create a temporary directory inside the given parent directory */
   def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
     var attempts = 0
     val maxAttempts = 10
@@ -85,7 +87,7 @@ object Utils {
     return dir
   }
 
-  // Copy all data from an InputStream to an OutputStream
+  /** Copy all data from an InputStream to an OutputStream */
   def copyStream(in: InputStream,
                  out: OutputStream,
                  closeStreams: Boolean = false)
@@ -104,9 +106,11 @@ object Utils {
     }
   }
 
-  // Shuffle the elements of a collection into a random order, returning the
-  // result in a new collection. Unlike scala.util.Random.shuffle, this method
-  // uses a local random number generator, avoiding inter-thread contention.
+  /**
+   * Shuffle the elements of a collection into a random order, returning the
+   * result in a new collection. Unlike scala.util.Random.shuffle, this method
+   * uses a local random number generator, avoiding inter-thread contention.
+   */
   def randomize[T](seq: TraversableOnce[T]): Seq[T] = {
     val buf = new ArrayBuffer[T]()
     buf ++= seq
@@ -136,7 +140,7 @@ object Utils {
   }
 
   /**
-   * Get the local machine's hostname
+   * Get the local machine's hostname.
    */
   def localHostName(): String = {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
@@ -249,5 +253,35 @@ object Utils {
    */
   def memoryMegabytesToString(megabytes: Long): String = {
     memoryBytesToString(megabytes * 1024L * 1024L)
+  }
+
+  /**
+   * Execute a command in the given working directory, throwing an exception if it completes
+   * with an exit code other than 0.
+   */
+  def execute(command: Seq[String], workingDir: File) {
+    val process = new ProcessBuilder(command: _*)
+        .directory(workingDir)
+        .redirectErrorStream(true)
+        .start()
+    new Thread("read stdout for " + command(0)) {
+      override def run() {
+        for (line <- Source.fromInputStream(process.getInputStream).getLines) {
+          System.err.println(line)
+        }
+      }
+    }.start()
+    val exitCode = process.waitFor()
+    if (exitCode != 0) {
+      throw new SparkException("Process " + command + " exited with code " + exitCode)
+    }
+  }
+
+  /**
+   * Execute a command in the current working directory, throwing an exception if it completes
+   * with an exit code other than 0.
+   */
+  def execute(command: Seq[String]) {
+    execute(command, new File("."))
   }
 }
