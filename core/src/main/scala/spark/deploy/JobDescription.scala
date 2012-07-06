@@ -4,7 +4,6 @@ class JobDescription(
     val name: String,
     val cores: Int,
     val memoryPerSlave: Int,
-    val fileUrls: Seq[String],
     val command: Command)
   extends Serializable {
 

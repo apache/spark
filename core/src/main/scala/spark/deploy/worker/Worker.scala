@@ -26,7 +26,7 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   val workerId = generateWorkerId()
   var sparkHome: File = null
   var workDir: File = null
-  val executors = new HashMap[String, ExecutorRunner]
+  val executors = new HashMap[String, ExecutorManager]
   val finishedExecutors = new ArrayBuffer[String]
 
   var coresUsed = 0
@@ -104,9 +104,10 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
 
     case LaunchExecutor(jobId, execId, jobDesc, cores_, memory_) =>
       logInfo("Asked to launch executor %s/%d for %s".format(jobId, execId, jobDesc.name))
-      val er = new ExecutorRunner(jobId, execId, jobDesc, cores_, memory_, self, sparkHome, workDir)
-      executors(jobId + "/" + execId) = er
-      er.start()
+      val manager = new ExecutorManager(
+        jobId, execId, jobDesc, cores_, memory_, self, sparkHome, workDir)
+      executors(jobId + "/" + execId) = manager
+      manager.start()
       master ! ExecutorStateChanged(jobId, execId, ExecutorState.LOADING, None)
 
     case ExecutorStateChanged(jobId, execId, state, message) =>

@@ -10,7 +10,10 @@ import org.apache.hadoop.conf.Configuration
 import scala.Some
 import spark.deploy.ExecutorStateChanged
 
-class ExecutorRunner(
+/**
+ * Manages the execution of one executor process.
+ */
+class ExecutorManager(
     jobId: String,
     execId: Int,
     jobDesc: JobDescription,
@@ -26,13 +29,13 @@ class ExecutorRunner(
   var process: Process = null
 
   def start() {
-    workerThread = new Thread("ExecutorRunner for " + fullId) {
+    workerThread = new Thread("ExecutorManager for " + fullId) {
       override def run() { fetchAndRunExecutor() }
     }
     workerThread.start()
   }
 
-  /** Stop this executor runner, including killing the process it launched */
+  /** Stop this executor manager, including killing the process it launched */
   def kill() {
     if (workerThread != null) {
       workerThread.interrupt()

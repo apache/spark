@@ -26,10 +26,13 @@ import com.google.protobuf.ByteString
 
 import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
-import org.apache.mesos.Protos.{TaskInfo => MTaskInfo, _}
+import org.apache.mesos.Protos.{TaskInfo => MTaskInfo, TaskState => MesosTaskState, _}
 
 import spark._
 import spark.scheduler._
+import spark.scheduler.cluster.{TaskSetManager, ClusterScheduler}
+
+/*
 
 sealed trait CoarseMesosSchedulerMessage
 case class RegisterSlave(slaveId: String, host: String) extends CoarseMesosSchedulerMessage
@@ -50,7 +53,7 @@ class CoarseMesosScheduler(
     sc: SparkContext,
     master: String,
     frameworkName: String)
-  extends MesosScheduler(sc, master, frameworkName) {
+  extends ClusterScheduler(sc, master, frameworkName) {
 
   val actorSystem = sc.env.actorSystem
   val actorName = "CoarseMesosScheduler"
@@ -161,7 +164,7 @@ class CoarseMesosScheduler(
               taskIdToSlaveId -= tid
               taskIdsOnSlave(slaveId) -= tid
             }
-            if (status.getState == TaskState.TASK_FAILED) {
+            if (status.getState == MesosTaskState.TASK_FAILED) {
               taskFailed = true
             }
           case None =>
@@ -205,7 +208,7 @@ class CoarseMesosScheduler(
         // TODO: Maybe call our statusUpdate() instead to clean our internal data structures
         activeTaskSets(taskSetId).statusUpdate(TaskStatus.newBuilder()
           .setTaskId(TaskID.newBuilder().setValue(tid).build())
-          .setState(TaskState.TASK_LOST)
+          .setState(MesosTaskState.TASK_LOST)
           .build())
       }
       // Also report the loss to the DAGScheduler
@@ -283,7 +286,7 @@ class CoarseMesosScheduler(
 class WorkerTask(slaveId: String, host: String) extends Task[Unit](-1) {
   generation = 0
 
-  def run(id: Int) {
+  def run(id: Long) {
     val env = SparkEnv.get
     val classLoader = Thread.currentThread.getContextClassLoader
     val actor = env.actorSystem.actorOf(
@@ -323,7 +326,7 @@ class WorkerActor(slaveId: String, host: String, env: SparkEnv, classLoader: Cla
         val result = new TaskResult(value, accumUpdates)
         masterActor ! StatusUpdate(slaveId, TaskStatus.newBuilder()
             .setTaskId(desc.getTaskId)
-            .setState(TaskState.TASK_FINISHED)
+            .setState(MesosTaskState.TASK_FINISHED)
             .setData(ByteString.copyFrom(Utils.serialize(result)))
             .build())
         logInfo("Finished task ID " + tid)
@@ -332,7 +335,7 @@ class WorkerActor(slaveId: String, host: String, env: SparkEnv, classLoader: Cla
           val reason = ffe.toTaskEndReason
           masterActor ! StatusUpdate(slaveId, TaskStatus.newBuilder()
               .setTaskId(desc.getTaskId)
-              .setState(TaskState.TASK_FAILED)
+              .setState(MesosTaskState.TASK_FAILED)
               .setData(ByteString.copyFrom(Utils.serialize(reason)))
               .build())
         }
@@ -340,7 +343,7 @@ class WorkerActor(slaveId: String, host: String, env: SparkEnv, classLoader: Cla
           val reason = ExceptionFailure(t)
           masterActor ! StatusUpdate(slaveId, TaskStatus.newBuilder()
               .setTaskId(desc.getTaskId)
-              .setState(TaskState.TASK_FAILED)
+              .setState(MesosTaskState.TASK_FAILED)
               .setData(ByteString.copyFrom(Utils.serialize(reason)))
               .build())
 
@@ -364,3 +367,5 @@ class WorkerActor(slaveId: String, host: String, env: SparkEnv, classLoader: Cla
       threadPool.execute(new TaskRunner(task))    
   }
 }
+
+*/

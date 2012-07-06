@@ -13,6 +13,7 @@ import scala.io.Source
  * Various utility methods used by Spark.
  */
 object Utils {
+  /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(bos)
@@ -21,12 +22,14 @@ object Utils {
     return bos.toByteArray
   }
 
+  /** Deserialize an object using Java serialization */
   def deserialize[T](bytes: Array[Byte]): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis)
     return ois.readObject.asInstanceOf[T]
   }
 
+  /** Deserialize an object using Java serialization and the given ClassLoader */
   def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis) {
@@ -104,6 +107,13 @@ object Utils {
       in.close()
       out.close()
     }
+  }
+
+  /** Copy a file on the local file system */
+  def copyFile(source: File, dest: File) {
+    val in = new FileInputStream(source)
+    val out = new FileOutputStream(dest)
+    copyStream(in, out, true)
   }
 
   /**

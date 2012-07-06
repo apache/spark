@@ -307,9 +307,12 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
     def writeShard(context: spark.TaskContext, iter: Iterator[(K,V)]): Int = {
+      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
+      // around by taking a mod. We expect that no task will be attempted 2 billion times.
+      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = new TaskAttemptID(jobtrackerID,
-        stageId, false, context.splitId, context.attemptId)
+        stageId, false, context.splitId, attemptNumber)
       val hadoopContext = new TaskAttemptContext(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
@@ -371,7 +374,11 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     writer.preSetup()
 
     def writeToFile(context: TaskContext, iter: Iterator[(K,V)]) {
-      writer.setup(context.stageId, context.splitId, context.attemptId)
+      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
+      // around by taking a mod. We expect that no task will be attempted 2 billion times.
+      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+
+      writer.setup(context.stageId, context.splitId, attemptNumber)
       writer.open()
       
       var count = 0

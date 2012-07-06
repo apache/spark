@@ -104,7 +104,7 @@ class ShuffleMapTask(
     split = in.readObject().asInstanceOf[Split]
   }
 
-  override def run(attemptId: Int): BlockManagerId = {
+  override def run(attemptId: Long): BlockManagerId = {
     val numOutputSplits = dep.partitioner.numPartitions
     val aggregator = dep.aggregator.asInstanceOf[Aggregator[Any, Any, Any]]
     val partitioner = dep.partitioner

@@ -41,8 +41,8 @@ import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
+import spark.scheduler.cluster.ClusterScheduler
 import spark.scheduler.mesos.MesosScheduler
-import spark.scheduler.mesos.CoarseMesosScheduler
 import spark.storage.BlockManagerMaster
 
 class SparkContext(
@@ -89,11 +89,17 @@ class SparkContext(
         new LocalScheduler(threads.toInt, maxFailures.toInt)
       case _ =>
         MesosNativeLibrary.load()
+        val sched = new ClusterScheduler(this)
+        val schedContext = new MesosScheduler(sched, this, master, frameworkName)
+        sched.initialize(schedContext)
+        sched
+        /*
         if (System.getProperty("spark.mesos.coarse", "false") == "true") {
           new CoarseMesosScheduler(this, master, frameworkName)
         } else {
           new MesosScheduler(this, master, frameworkName)
         }
+        */
     }
   }
   taskScheduler.start()
@@ -270,11 +276,6 @@ class SparkContext(
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
     logInfo("Successfully stopped SparkContext")
-  }
-
-  // Wait for the scheduler to be registered with the cluster manager
-  def waitForRegister() {
-    taskScheduler.waitForRegister()
   }
 
   // Get Spark's home location from either a value set through the constructor,

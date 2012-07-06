@@ -24,8 +24,8 @@ object TestClient {
   def main(args: Array[String]) {
     val url = args(0)
     val (actorSystem, port) = AkkaUtils.createActorSystem("spark", Utils.localIpAddress(), 0)
-    val desc = new JobDescription("TestClient", 1, 512, Seq(),
-      Command("spark.deploy.client.TestExecutor", Seq(), Map()))
+    val desc = new JobDescription(
+      "TestClient", 1, 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()))
     val listener = new TestListener
     val client = new Client(actorSystem, url, desc, listener)
     client.start()

@@ -83,6 +83,8 @@ class WorkerArguments(args: Array[String]) {
   def inferDefaultMemory(): Int = {
     val bean = ManagementFactory.getOperatingSystemMXBean
                                 .asInstanceOf[com.sun.management.OperatingSystemMXBean]
-    (bean.getTotalPhysicalMemorySize / 1024 / 1024).toInt
+    val totalMb = (bean.getTotalPhysicalMemorySize / 1024 / 1024).toInt
+    // Leave out 1 GB for the operating system, but don't return a negative memory size
+    math.max(totalMb - 1024, 512)
   }
 }
