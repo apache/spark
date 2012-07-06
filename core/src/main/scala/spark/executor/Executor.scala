@@ -69,17 +69,19 @@ class Executor extends Logging {
         val value = task.run(taskId.toInt)
         val accumUpdates = Accumulators.values
         val result = new TaskResult(value, accumUpdates)
-        context.statusUpdate(taskId, TaskState.FINISHED, ser.serialize(result))
+        val serializedResult = ser.serialize(result)
+        logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
+        context.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
         logInfo("Finished task ID " + taskId)
       } catch {
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason
-          context.statusUpdate(taskId, TaskState.FINISHED, ser.serialize(reason))
+          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
         }
 
         case t: Throwable => {
           val reason = ExceptionFailure(t)
-          context.statusUpdate(taskId, TaskState.FINISHED, ser.serialize(reason))
+          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may
           // have left some weird state around depending on when the exception was thrown, but on

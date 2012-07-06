@@ -188,10 +188,12 @@ class MesosScheduler(
       for ((taskList, index) <- taskLists.zipWithIndex) {
         if (!taskList.isEmpty) {
           val offerNum = offerableIndices(index)
+          val slaveId = offers(offerNum).getSlaveId.getValue
+          slaveIdsWithExecutors += slaveId
           mesosTasks(offerNum) = new JArrayList[MesosTaskInfo](taskList.size)
           for (taskDesc <- taskList) {
-            taskIdToSlaveId(taskDesc.taskId) = offers(offerNum).getSlaveId.getValue
-            mesosTasks(offerNum).add(createMesosTask(taskDesc, offers(offerNum).getSlaveId))
+            taskIdToSlaveId(taskDesc.taskId) = slaveId
+            mesosTasks(offerNum).add(createMesosTask(taskDesc, slaveId))
           }
         }
       }
@@ -214,7 +216,7 @@ class MesosScheduler(
   }
 
   /** Turn a Spark TaskDescription into a Mesos task */
-  def createMesosTask(task: TaskDescription, slaveId: SlaveID): MesosTaskInfo = {
+  def createMesosTask(task: TaskDescription, slaveId: String): MesosTaskInfo = {
     val taskId = TaskID.newBuilder().setValue(task.taskId.toString).build()
     val cpuResource = Resource.newBuilder()
       .setName("cpus")
@@ -223,7 +225,7 @@ class MesosScheduler(
       .build()
     return MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
-      .setSlaveId(slaveId)
+      .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
       .setExecutor(executorInfo)
       .setName(task.name)
       .addResources(cpuResource)

@@ -227,6 +227,7 @@ class TaskSetManager(
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+    logInfo("statusUpdate: " + tid + " is now " + state + " " + serializedData)
     state match {
       case TaskState.FINISHED =>
         taskFinished(tid, state, serializedData)

@@ -6,6 +6,7 @@ import org.apache.mesos.Protos.{TaskState => MesosTaskState, TaskStatus => Mesos
 import spark.TaskState.TaskState
 import com.google.protobuf.ByteString
 import spark.{Utils, Logging}
+import spark.TaskState
 
 class MesosExecutorRunner(executor: Executor)
   extends MesosExecutor
@@ -18,7 +19,7 @@ class MesosExecutorRunner(executor: Executor)
     val mesosTaskId = TaskID.newBuilder().setValue(taskId.toString).build()
     driver.sendStatusUpdate(MesosTaskStatus.newBuilder()
       .setTaskId(mesosTaskId)
-      .setState(MesosTaskState.TASK_FINISHED)
+      .setState(TaskState.toMesos(state))
       .setData(ByteString.copyFrom(data))
       .build())
   }
