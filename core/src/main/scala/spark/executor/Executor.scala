@@ -47,11 +47,11 @@ class Executor extends Logging {
       1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
   }
 
-  def launchTask(context: ExecutorContext, taskId: Long, serializedTask: ByteBuffer) {
+  def launchTask(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer) {
     threadPool.execute(new TaskRunner(context, taskId, serializedTask))
   }
 
-  class TaskRunner(context: ExecutorContext, taskId: Long, serializedTask: ByteBuffer)
+  class TaskRunner(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer)
     extends Runnable {
 
     override def run() {

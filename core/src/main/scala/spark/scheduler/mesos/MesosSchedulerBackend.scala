@@ -15,12 +15,12 @@ import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 import spark.TaskState
 
-class MesosScheduler(
+class MesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
     frameworkName: String)
-  extends ClusterSchedulerContext
+  extends SchedulerBackend
   with MScheduler
   with Logging {
 
@@ -58,11 +58,11 @@ class MesosScheduler(
 
   override def start() {
     synchronized {
-      new Thread("MesosScheduler driver") {
+      new Thread("MesosSchedulerBackend driver") {
         setDaemon(true)
 
         override def run() {
-          val sched = MesosScheduler.this
+          val sched = MesosSchedulerBackend.this
           val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(frameworkName).build()
           driver = new MesosSchedulerDriver(sched, fwInfo, master)
           try {

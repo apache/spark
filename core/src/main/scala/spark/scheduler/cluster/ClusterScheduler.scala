@@ -50,7 +50,7 @@ class ClusterScheduler(sc: SparkContext)
   // Listener object to pass upcalls into
   var listener: TaskSchedulerListener = null
 
-  var schedContext: ClusterSchedulerContext = null
+  var backend: SchedulerBackend = null
 
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
@@ -58,15 +58,15 @@ class ClusterScheduler(sc: SparkContext)
     this.listener = listener
   }
 
-  def initialize(context: ClusterSchedulerContext) {
-    schedContext = context
+  def initialize(context: SchedulerBackend) {
+    backend = context
     createJarServer()
   }
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
   override def start() {
-    schedContext.start()
+    backend.start()
 
     if (System.getProperty("spark.speculation", "false") == "true") {
       new Thread("ClusterScheduler speculation check") {
@@ -95,7 +95,7 @@ class ClusterScheduler(sc: SparkContext)
       activeTaskSetsQueue += manager
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
     }
-    schedContext.reviveOffers()
+    backend.reviveOffers()
   }
 
   def taskSetFinished(manager: TaskSetManager) {
@@ -197,11 +197,11 @@ class ClusterScheduler(sc: SparkContext)
     }
     if (failedHost != None) {
       listener.hostLost(failedHost.get)
-      schedContext.reviveOffers()
+      backend.reviveOffers()
     }
     if (taskFailed) {
       // Also revive offers if a task had failed for some reason other than host lost
-      schedContext.reviveOffers()
+      backend.reviveOffers()
     }
   }
 
@@ -227,15 +227,15 @@ class ClusterScheduler(sc: SparkContext)
   }
 
   override def stop() {
-    if (schedContext != null) {
-      schedContext.stop()
+    if (backend != null) {
+      backend.stop()
     }
     if (jarServer != null) {
       jarServer.stop()
     }
   }
 
-  override def defaultParallelism() = schedContext.defaultParallelism()
+  override def defaultParallelism() = backend.defaultParallelism()
 
   // Create a server for all the JARs added by the user to SparkContext.
   // We first copy the JARs to a temp directory for easier server setup.
@@ -271,7 +271,7 @@ class ClusterScheduler(sc: SparkContext)
       }
     }
     if (shouldRevive) {
-      schedContext.reviveOffers()
+      backend.reviveOffers()
     }
   }
 
@@ -288,7 +288,7 @@ class ClusterScheduler(sc: SparkContext)
     }
     if (failedHost != None) {
       listener.hostLost(failedHost.get)
-      schedContext.reviveOffers()
+      backend.reviveOffers()
     }
   }
 }

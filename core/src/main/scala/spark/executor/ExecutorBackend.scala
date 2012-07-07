@@ -4,8 +4,8 @@ import java.nio.ByteBuffer
 import spark.TaskState.TaskState
 
 /**
- * Interface used by Executor to send back updates to the cluster scheduler.
+ * A pluggable interface used by the Executor to send updates to the cluster scheduler.
  */
-trait ExecutorContext {
+trait ExecutorBackend {
   def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer)
 }

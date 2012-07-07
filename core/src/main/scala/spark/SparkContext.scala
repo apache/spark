@@ -42,7 +42,7 @@ import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.ClusterScheduler
-import spark.scheduler.mesos.MesosScheduler
+import spark.scheduler.mesos.MesosSchedulerBackend
 import spark.storage.BlockManagerMaster
 
 class SparkContext(
@@ -90,14 +90,14 @@ class SparkContext(
       case _ =>
         MesosNativeLibrary.load()
         val sched = new ClusterScheduler(this)
-        val schedContext = new MesosScheduler(sched, this, master, frameworkName)
+        val schedContext = new MesosSchedulerBackend(sched, this, master, frameworkName)
         sched.initialize(schedContext)
         sched
         /*
         if (System.getProperty("spark.mesos.coarse", "false") == "true") {
           new CoarseMesosScheduler(this, master, frameworkName)
         } else {
-          new MesosScheduler(this, master, frameworkName)
+          new MesosSchedulerBackend(this, master, frameworkName)
         }
         */
     }
