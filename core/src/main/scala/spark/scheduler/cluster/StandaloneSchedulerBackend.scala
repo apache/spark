@@ -1,4 +1,4 @@
-package spark.scheduler.standalone
+package spark.scheduler.cluster
 
 import scala.collection.mutable.{HashMap, HashSet}
 
@@ -7,10 +7,7 @@ import akka.util.duration._
 import akka.pattern.ask
 
 import spark.{SparkException, Logging, TaskState}
-import spark.TaskState.TaskState
-import spark.scheduler.cluster.{WorkerOffer, ClusterScheduler, SchedulerBackend}
 import akka.dispatch.Await
-import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -19,8 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * Mesos mode or standalone processes for Spark's standalone deploy mode (spark.deploy.*).
  */
 class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: ActorSystem)
-  extends SchedulerBackend
-  with Logging {
+  extends SchedulerBackend with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
@@ -40,7 +36,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         makeOffers()
 
       case StatusUpdate(slaveId, taskId, state, data) =>
-        scheduler.statusUpdate(taskId, state, ByteBuffer.wrap(data))
+        scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           freeCores(slaveId) += 1
           makeOffers(slaveId)
@@ -90,7 +86,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
       }
     } catch {
       case e: Exception =>
-        throw new SparkException("Error stopping standalone scheduler master actor", e)
+        throw new SparkException("Error stopping standalone scheduler's master actor", e)
     }
   }
 

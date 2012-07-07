@@ -1,5 +1,6 @@
 package spark.scheduler.mesos
 
+/*
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.util.{ArrayList => JArrayList}
 import java.util.{List => JList}
@@ -32,7 +33,6 @@ import spark._
 import spark.scheduler._
 import spark.scheduler.cluster.{TaskSetManager, ClusterScheduler}
 
-/*
 
 sealed trait CoarseMesosSchedulerMessage
 case class RegisterSlave(slaveId: String, host: String) extends CoarseMesosSchedulerMessage

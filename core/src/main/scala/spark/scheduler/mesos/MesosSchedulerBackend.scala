@@ -80,7 +80,7 @@ class MesosSchedulerBackend(
   }
 
   def createExecutorInfo(): ExecutorInfo = {
-    val sparkHome = sc.getSparkHome match {
+    val sparkHome = sc.getSparkHome() match {
       case Some(path) =>
         path
       case None =>

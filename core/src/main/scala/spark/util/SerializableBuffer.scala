@@ -5,9 +5,10 @@ import java.io.{IOException, ObjectOutputStream, EOFException, ObjectInputStream
 import java.nio.channels.Channels
 
 /**
- * A wrapper around java.nio.ByteBuffer to make it serializable through Java serialization.
+ * A wrapper around a java.nio.ByteBuffer that is serializable through Java serialization, to make
+ * it easier to pass ByteBuffers in case class messages.
  */
-class SerializableByteBuffer(@transient var buffer: ByteBuffer) {
+class SerializableBuffer(@transient var buffer: ByteBuffer) {
   def value = buffer
 
   private def readObject(in: ObjectInputStream) {
