@@ -52,7 +52,6 @@ extends Broadcast[T] with Logging with Serializable {
   @transient var listenPort = -1
   @transient var guidePort = -1
 
-  @transient var hasCopyInHDFS = false
   @transient var stopBroadcast = false
 
   // Must call this after all the variables have been created/initialized
@@ -62,14 +61,6 @@ extends Broadcast[T] with Logging with Serializable {
 
   def sendBroadcast() {
     logInfo("Local host address: " + hostAddress)
-
-    // Store a persistent copy in HDFS
-    // TODO: Turned OFF for now. Related to persistence
-    // val out = new ObjectOutputStream(BroadcastCH.openFileForWriting(uuid))
-    // out.writeObject(value_)
-    // out.close()
-    // FIXME: Fix this at some point
-    hasCopyInHDFS = true
 
     // Create a variableInfo object and store it in valueInfos
     var variableInfo = Broadcast.blockifyObject(value_)
@@ -149,16 +140,11 @@ extends Broadcast[T] with Logging with Serializable {
         val start = System.nanoTime
 
         val receptionSucceeded = receiveBroadcast(uuid)
-        // If does not succeed, then get from HDFS copy
         if (receptionSucceeded) {
           value_ = Broadcast.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
           BitTorrentBroadcast.values.put(uuid, 0, value_)
         }  else {
-          // TODO: This part won't work, cause HDFS writing is turned OFF
-          val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
-          value_ = fileIn.readObject.asInstanceOf[T]
-          BitTorrentBroadcast.values.put(uuid, 0, value_)
-          fileIn.close()
+          logError("Reading Broadcasted variable " + uuid + " failed")
         }
 
         val time = (System.nanoTime - start) / 1e9
@@ -874,7 +860,7 @@ extends Broadcast[T] with Logging with Serializable {
 
       try {
         // Don't stop until there is a copy in HDFS
-        while (!stopBroadcast || !hasCopyInHDFS) {
+        while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
             serverSocket.setSoTimeout(Broadcast.ServerSocketTimeout)
@@ -1221,22 +1207,15 @@ extends Logging {
   def initialize(isMaster__ : Boolean) {
     synchronized {
       if (!initialized) {
-
         isMaster_ = isMaster__
-
         if (isMaster) {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon(true)
           trackMV.start()
           // TODO: Logging the following line makes the Spark framework ID not
           // getting logged, cause it calls logInfo before log4j is initialized
-          logInfo("TrackMultipleValues started...")
+          // logInfo("TrackMultipleValues started...")
         }
-
-        // Initialize DfsBroadcast to be used for broadcast variable persistence
-        // TODO: Think about persistence
-        DfsBroadcast.initialize
-
         initialized = true
       }
     }
