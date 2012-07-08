@@ -30,7 +30,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
 
-import org.apache.mesos.MesosNativeLibrary
+import org.apache.mesos.{Scheduler, MesosNativeLibrary}
 
 import spark.broadcast._
 
@@ -41,8 +41,8 @@ import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.cluster.ClusterScheduler
-import spark.scheduler.mesos.MesosSchedulerBackend
+import spark.scheduler.cluster.{SchedulerBackend, ClusterScheduler}
+import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.BlockManagerMaster
 
 class SparkContext(
@@ -89,17 +89,15 @@ class SparkContext(
         new LocalScheduler(threads.toInt, maxFailures.toInt)
       case _ =>
         MesosNativeLibrary.load()
-        val sched = new ClusterScheduler(this)
-        val schedContext = new MesosSchedulerBackend(sched, this, master, frameworkName)
-        sched.initialize(schedContext)
-        sched
-        /*
-        if (System.getProperty("spark.mesos.coarse", "false") == "true") {
-          new CoarseMesosScheduler(this, master, frameworkName)
+        val scheduler = new ClusterScheduler(this)
+        val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
+        val backend = if (coarseGrained) {
+          new CoarseMesosSchedulerBackend(scheduler, this, master, frameworkName)
         } else {
-          new MesosSchedulerBackend(this, master, frameworkName)
+          new MesosSchedulerBackend(scheduler, this, master, frameworkName)
         }
-        */
+        scheduler.initialize(backend)
+        scheduler
     }
   }
   taskScheduler.start()

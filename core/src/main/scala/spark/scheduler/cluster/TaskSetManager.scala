@@ -191,7 +191,7 @@ class TaskSetManager(
   def slaveOffer(slaveId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
-      var localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
+      val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
 
       findTask(host, localOnly) match {
         case Some(index) => {
@@ -218,7 +218,7 @@ class TaskSetManager(
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
-          return Some(new TaskDescription(taskId, taskName, serializedTask))
+          return Some(new TaskDescription(taskId, slaveId, taskName, serializedTask))
         }
         case _ =>
       }
@@ -227,7 +227,6 @@ class TaskSetManager(
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
-    logInfo("statusUpdate: " + tid + " is now " + state + " " + serializedData)
     state match {
       case TaskState.FINISHED =>
         taskFinished(tid, state, serializedData)

@@ -1,6 +1,6 @@
 package spark.scheduler.cluster
 
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import akka.actor.{Props, Actor, ActorRef, ActorSystem}
 import akka.util.duration._
@@ -21,19 +21,24 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
 
-  class MasterActor extends Actor {
+  class MasterActor(sparkProperties: Seq[(String, String)]) extends Actor {
     val slaveActor = new HashMap[String, ActorRef]
     val slaveHost = new HashMap[String, String]
     val freeCores = new HashMap[String, Int]
 
     def receive = {
       case RegisterSlave(slaveId, host, cores) =>
-        slaveActor(slaveId) = sender
-        logInfo("Registered slave: " + sender + " with ID " + slaveId)
-        slaveHost(slaveId) = host
-        freeCores(slaveId) = cores
-        totalCoreCount.addAndGet(cores)
-        makeOffers()
+        if (slaveActor.contains(slaveId)) {
+          sender ! RegisterSlaveFailed("Duplicate slave ID: " + slaveId)
+        } else {
+          logInfo("Registered slave: " + sender + " with ID " + slaveId)
+          sender ! RegisteredSlave(sparkProperties)
+          slaveActor(slaveId) = sender
+          slaveHost(slaveId) = host
+          freeCores(slaveId) = cores
+          totalCoreCount.addAndGet(cores)
+          makeOffers()
+        }
 
       case StatusUpdate(slaveId, taskId, state, data) =>
         scheduler.statusUpdate(taskId, state, data.value)
@@ -41,10 +46,6 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
           freeCores(slaveId) += 1
           makeOffers(slaveId)
         }
-
-      case LaunchTask(slaveId, task) =>
-        freeCores(slaveId) -= 1
-        slaveActor(slaveId) ! LaunchTask(slaveId, task)
 
       case ReviveOffers =>
         makeOffers()
@@ -58,14 +59,22 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
     // Make fake resource offers on all slaves
     def makeOffers() {
-      scheduler.resourceOffers(
-        slaveHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))})
+      launchTasks(scheduler.resourceOffers(
+        slaveHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
     }
 
     // Make fake resource offers on just one slave
     def makeOffers(slaveId: String) {
-      scheduler.resourceOffers(
-        Seq(new WorkerOffer(slaveId, slaveHost(slaveId), freeCores(slaveId))))
+      launchTasks(scheduler.resourceOffers(
+        Seq(new WorkerOffer(slaveId, slaveHost(slaveId), freeCores(slaveId)))))
+    }
+
+    // Launch tasks returned by a set of resource offers
+    def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
+      for (task <- tasks.flatten) {
+        freeCores(task.slaveId) -= 1
+        slaveActor(task.slaveId) ! LaunchTask(task)
+      }
     }
   }
 
@@ -73,8 +82,17 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
   val taskIdsOnSlave = new HashMap[String, HashSet[String]]
 
   def start() {
+    val properties = new ArrayBuffer[(String, String)]
+    val iterator = System.getProperties.entrySet.iterator
+    while (iterator.hasNext) {
+      val entry = iterator.next
+      val (key, value) = (entry.getKey.toString, entry.getValue.toString)
+      if (key.startsWith("spark.")) {
+        properties += ((key, value))
+      }
+    }
     masterActor = actorSystem.actorOf(
-      Props(new MasterActor), name = StandaloneSchedulerBackend.ACTOR_NAME)
+      Props(new MasterActor(properties)), name = StandaloneSchedulerBackend.ACTOR_NAME)
   }
 
   def stop() {

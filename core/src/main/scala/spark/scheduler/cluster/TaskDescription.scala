@@ -3,7 +3,11 @@ package spark.scheduler.cluster
 import java.nio.ByteBuffer
 import spark.util.SerializableBuffer
 
-class TaskDescription(val taskId: Long, val name: String, _serializedTask: ByteBuffer)
+class TaskDescription(
+    val taskId: Long,
+    val slaveId: String,
+    val name: String,
+    _serializedTask: ByteBuffer)
   extends Serializable {
 
   // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer

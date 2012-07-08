@@ -7,11 +7,11 @@ import spark.util.AkkaUtils
 import akka.actor.{ActorRef, Actor, Props}
 import java.util.concurrent.{TimeUnit, ThreadPoolExecutor, SynchronousQueue}
 import akka.remote.RemoteClientLifeCycleEvent
-import spark.scheduler.standalone._
-import spark.scheduler.standalone.RegisteredSlave
-import spark.scheduler.standalone.LaunchTask
-import spark.scheduler.standalone.RegisterSlaveFailed
-import spark.scheduler.standalone.RegisterSlave
+import spark.scheduler.cluster._
+import spark.scheduler.cluster.RegisteredSlave
+import spark.scheduler.cluster.LaunchTask
+import spark.scheduler.cluster.RegisterSlaveFailed
+import spark.scheduler.cluster.RegisterSlave
 
 
 class StandaloneExecutorBackend(
@@ -31,6 +31,7 @@ class StandaloneExecutorBackend(
 
   override def preStart() {
     try {
+      logInfo("Connecting to master: " + masterUrl)
       master = context.actorFor(masterUrl)
       master ! RegisterSlave(slaveId, hostname, cores)
       context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
@@ -51,7 +52,8 @@ class StandaloneExecutorBackend(
       logError("Slave registration failed: " + message)
       System.exit(1)
 
-    case LaunchTask(slaveId_, taskDesc) =>
+    case LaunchTask(taskDesc) =>
+      logInfo("Got assigned task " + taskDesc.taskId)
       executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
   }
 

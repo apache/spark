@@ -15,6 +15,11 @@ import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 import spark.TaskState
 
+/**
+ * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
+ * separate Mesos task, allowing multiple applications to share cluster nodes both in space (tasks
+ * from multiple apps can run on different cores) and in time (a core can switch ownership).
+ */
 class MesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
@@ -60,11 +65,10 @@ class MesosSchedulerBackend(
     synchronized {
       new Thread("MesosSchedulerBackend driver") {
         setDaemon(true)
-
         override def run() {
-          val sched = MesosSchedulerBackend.this
+          val scheduler = MesosSchedulerBackend.this
           val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(frameworkName).build()
-          driver = new MesosSchedulerDriver(sched, fwInfo, master)
+          driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try {
             val ret = driver.run()
             logInfo("driver.run() returned with code " + ret)

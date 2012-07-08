@@ -7,7 +7,7 @@ import spark.util.SerializableBuffer
 sealed trait StandaloneClusterMessage extends Serializable
 
 // Master to slaves
-case class LaunchTask(slaveId: String, task: TaskDescription) extends StandaloneClusterMessage
+case class LaunchTask(task: TaskDescription) extends StandaloneClusterMessage
 case class RegisteredSlave(sparkProperties: Seq[(String, String)]) extends StandaloneClusterMessage
 case class RegisterSlaveFailed(message: String) extends StandaloneClusterMessage
 
