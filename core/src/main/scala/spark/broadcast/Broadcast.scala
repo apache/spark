@@ -13,7 +13,7 @@ trait Broadcast[T] extends Serializable {
   def value: T
 
   // We cannot have an abstract readObject here due to some weird issues with
-  // readObject having to be 'private' in sub-classes. Possibly a Scala bug!
+  // readObject having to be 'private' in sub-classes.
 
   override def toString = "spark.Broadcast(" + uuid + ")"
 }
@@ -82,8 +82,6 @@ object Broadcast extends Logging with Serializable {
   private var MaxKnockInterval_ = System.getProperty(
     "spark.broadcast.maxKnockInterval", "999").toInt
 
-  // Load ChainedBroadcast config params
-
   // Load TreeBroadcast config params
   private var MaxDegree_ = System.getProperty("spark.broadcast.maxDegree", "2").toInt
 
@@ -113,8 +111,6 @@ object Broadcast extends Logging with Serializable {
 
   def MinKnockInterval = MinKnockInterval_
   def MaxKnockInterval = MaxKnockInterval_
-
-  // ChainedBroadcast configs
 
   // TreeBroadcast configs
   def MaxDegree = MaxDegree_
@@ -187,38 +183,12 @@ object Broadcast extends Logging with Serializable {
   }  
 }
 
-case class BroadcastBlock (blockID: Int, byteArray: Array[Byte]) extends Serializable
+case class BroadcastBlock (blockID: Int, byteArray: Array[Byte]) 
+extends Serializable
 
 case class VariableInfo (@transient arrayOfBlocks : Array[BroadcastBlock],
-                         totalBlocks: Int,
-    totalBytes: Int)
-  extends Serializable {
-  
-  @transient
-  var hasBlocks = 0
-}
-
-class SpeedTracker extends Serializable {
-  // Mapping 'source' to '(totalTime, numBlocks)'
-  private var sourceToSpeedMap = Map[SourceInfo, (Long, Int)] ()
-
-  def addDataPoint (srcInfo: SourceInfo, timeInMillis: Long) {
-    sourceToSpeedMap.synchronized {
-      if (!sourceToSpeedMap.contains(srcInfo)) {
-        sourceToSpeedMap += (srcInfo -> (timeInMillis, 1))
-      } else {
-        val tTnB = sourceToSpeedMap (srcInfo)
-        sourceToSpeedMap += (srcInfo -> (tTnB._1 + timeInMillis, tTnB._2 + 1))
-      }
-    }
-  }
-
-  def getTimePerBlock (srcInfo: SourceInfo): Double = {
-    sourceToSpeedMap.synchronized {
-      val tTnB = sourceToSpeedMap (srcInfo)
-      return tTnB._1 / tTnB._2
-    }
-  }
-
-  override def toString = sourceToSpeedMap.toString
+                         totalBlocks: Int, 
+                         totalBytes: Int) 
+extends Serializable {
+ @transient var hasBlocks = 0 
 }

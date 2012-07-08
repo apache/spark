@@ -22,8 +22,6 @@ extends Broadcast[T] with Logging with Serializable {
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
   @transient var hasBlocks = 0
-  // CHANGED: BlockSize in the Broadcast object is expected to change over time
-  @transient var blockSize = Broadcast.BlockSize
 
   @transient var listenPortLock = new Object
   @transient var guidePortLock = new Object
@@ -85,7 +83,7 @@ extends Broadcast[T] with Logging with Serializable {
 
     // Must always come AFTER listenPort is created
     val masterSource =
-      SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes, blockSize)
+      SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes)
     listOfSources += masterSource
 
     // Register with the Tracker
@@ -130,7 +128,6 @@ extends Broadcast[T] with Logging with Serializable {
     totalBytes = -1
     totalBlocks = -1
     hasBlocks = 0
-    blockSize = -1
 
     listenPortLock = new Object
     totalBlocksLock = new Object
@@ -244,7 +241,6 @@ extends Broadcast[T] with Logging with Serializable {
         totalBlocksLock.notifyAll()
       }
       totalBytes = sourceInfo.totalBytes
-      blockSize = sourceInfo.blockSize
 
       logInfo("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)
 
@@ -466,7 +462,7 @@ extends Broadcast[T] with Logging with Serializable {
 
             // Add this new (if it can finish) source to the list of sources
             thisWorkerInfo = SourceInfo(sourceInfo.hostAddress,
-              sourceInfo.listenPort, totalBlocks, totalBytes, blockSize)
+              sourceInfo.listenPort, totalBlocks, totalBytes)
             logInfo("Adding possible new source to listOfSources: " + thisWorkerInfo)
             listOfSources += thisWorkerInfo
           }

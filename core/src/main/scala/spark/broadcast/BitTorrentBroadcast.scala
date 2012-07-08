@@ -25,8 +25,6 @@ extends Broadcast[T] with Logging with Serializable {
   @transient var totalBytes = -1
   @transient var totalBlocks = -1
   @transient var hasBlocks = new AtomicInteger(0)
-  // CHANGED: BlockSize in the Broadcast object is expected to change over time
-  @transient var blockSize = Broadcast.BlockSize
 
   // Used ONLY by Master to track how many unique blocks have been sent out
   @transient var sentBlocks = new AtomicInteger(0)
@@ -44,9 +42,6 @@ extends Broadcast[T] with Logging with Serializable {
 
   // Used only in Workers
   @transient var ttGuide: TalkToGuide = null
-
-  @transient var rxSpeeds = new SpeedTracker
-  @transient var txSpeeds = new SpeedTracker
 
   @transient var hostAddress = Utils.localIpAddress
   @transient var listenPort = -1
@@ -105,7 +100,7 @@ extends Broadcast[T] with Logging with Serializable {
 
     // Must always come AFTER listenPort is created
     val masterSource =
-      SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes, blockSize)
+      SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes)
     hasBlocksBitVector.synchronized {
       masterSource.hasBlocksBitVector = hasBlocksBitVector
     }
@@ -115,7 +110,7 @@ extends Broadcast[T] with Logging with Serializable {
 
     // Register with the Tracker
     registerBroadcast(uuid,
-      SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes, blockSize))
+      SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes))
   }
 
   private def readObject(in: ObjectInputStream) {
@@ -161,16 +156,12 @@ extends Broadcast[T] with Logging with Serializable {
     totalBytes = -1
     totalBlocks = -1
     hasBlocks = new AtomicInteger(0)
-    blockSize = -1
 
     listenPortLock = new Object
     totalBlocksLock = new Object
 
     serveMR = null
     ttGuide = null
-
-    rxSpeeds = new SpeedTracker
-    txSpeeds = new SpeedTracker
 
     hostAddress = Utils.localIpAddress
     listenPort = -1
@@ -248,7 +239,7 @@ extends Broadcast[T] with Logging with Serializable {
     }
 
     var localSourceInfo = SourceInfo(
-      hostAddress, listenPort, totalBlocks, totalBytes, blockSize)
+      hostAddress, listenPort, totalBlocks, totalBytes)
 
     localSourceInfo.hasBlocks = hasBlocks.get
 
@@ -401,7 +392,6 @@ extends Broadcast[T] with Logging with Serializable {
       totalBlocksLock.notifyAll()
     }
     totalBytes = gInfo.totalBytes
-    blockSize = gInfo.blockSize
 
     // Start ttGuide to periodically talk to the Guide
     var ttGuide = new TalkToGuide(gInfo)
@@ -673,8 +663,6 @@ extends Broadcast[T] with Logging with Serializable {
                   hasBlocksBitVector.set(bcBlock.blockID)
                   hasBlocks.getAndIncrement
                 }
-
-                rxSpeeds.addDataPoint(peerToTalkTo, receptionTime)
 
                 // Some block(may NOT be blockToAskFor) has arrived.
                 // In any case, blockToAskFor is not in request any more

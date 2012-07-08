@@ -6,15 +6,11 @@ import spark._
 
 /**
  * Used to keep and pass around information of peers involved in a broadcast
- * 
- * CHANGED: Keep track of the blockSize for THIS broadcast variable.
- * Broadcast.BlockSize is expected to be updated across different broadcasts
  */
 case class SourceInfo (hostAddress: String,
                        listenPort: Int,
                        totalBlocks: Int = SourceInfo.UnusedParam,
-                       totalBytes: Int = SourceInfo.UnusedParam,
-                       blockSize: Int = Broadcast.BlockSize)
+                       totalBytes: Int = SourceInfo.UnusedParam)
 extends Comparable[SourceInfo] with Logging {
 
   var currentLeechers = 0
