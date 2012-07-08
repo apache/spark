@@ -8,8 +8,9 @@ import scala.collection.mutable
 class JobInfo(val id: String, val desc: JobDescription, val submitDate: Date, val actor: ActorRef) {
   var state = JobState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]
+  var coresGranted = 0
 
-  var nextExecutorId = 0
+  private var nextExecutorId = 0
 
   def newExecutorId(): Int = {
     val id = nextExecutorId
@@ -17,9 +18,17 @@ class JobInfo(val id: String, val desc: JobDescription, val submitDate: Date, va
     id
   }
 
-  def newExecutor(worker: WorkerInfo, cores: Int): ExecutorInfo = {
+  def addExecutor(worker: WorkerInfo, cores: Int): ExecutorInfo = {
     val exec = new ExecutorInfo(newExecutorId(), this, worker, cores, desc.memoryPerSlave)
     executors(exec.id) = exec
+    coresGranted += cores
     exec
   }
+
+  def removeExecutor(exec: ExecutorInfo) {
+    executors -= exec.id
+    coresGranted -= exec.cores
+  }
+
+  def coresLeft: Int = desc.cores - coresGranted
 }

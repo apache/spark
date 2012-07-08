@@ -83,7 +83,7 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and job
             logInfo("Removing executor " + exec.fullId + " because it is " + state)
-            idToJob(jobId).executors -= exec.id
+            idToJob(jobId).removeExecutor(exec)
             exec.worker.removeExecutor(exec)
             // TODO: the worker would probably want to restart the executor a few times
             schedule()
@@ -119,26 +119,19 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
    * every time a new job joins or resource availability changes.
    */
   def schedule() {
-    // Right now this is a very simple FIFO with backfilling. We keep looking through the jobs
-    // in order of submission time and launching the first one that fits in the cluster.
-    // It's also not very efficient in terms of algorithmic complexity.
-    for (job <- waitingJobs.clone()) {
-      logInfo("Trying to schedule job " + job.id)
-      // Figure out how many cores the job could use on the whole cluster
-      val jobMemory = job.desc.memoryPerSlave
-      val usableCores = workers.filter(_.memoryFree >= jobMemory).map(_.coresFree).sum
-      logInfo("jobMemory: " + jobMemory + ", usableCores: " + usableCores)
-      if (usableCores >= job.desc.cores) {
-        // We can launch it! Let's just partition the workers into executors for this job.
-        // TODO: Probably want to spread stuff out across nodes more.
-        var coresLeft = job.desc.cores
-        for (worker <- workers if worker.memoryFree >= jobMemory && coresLeft > 0) {
-          val coresToUse = math.min(worker.coresFree, coresLeft)
-          val exec = job.newExecutor(worker, coresToUse)
+    // Right now this is a very simple FIFO scheduler. We keep looking through the jobs
+    // in order of submission time and launching the first one that fits on each node.
+    for (worker <- workers if worker.coresFree > 0) {
+      for (job <- waitingJobs.clone()) {
+        val jobMemory = job.desc.memoryPerSlave
+        if (worker.memoryFree >= jobMemory) {
+          val coresToUse = math.min(worker.coresFree, job.coresLeft)
+          val exec = job.addExecutor(worker, coresToUse)
           launchExecutor(worker, exec)
-          coresLeft -= coresToUse
         }
-        waitingJobs -= job
+        if (job.coresLeft == 0) {
+          waitingJobs -= job
+        }
       }
     }
   }
@@ -188,6 +181,7 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
     actorToJob -= job.actor
     addressToWorker -= job.actor.path.address
     completedJobs += job   // Remember it in our history
+    waitingJobs -= job
     for (exec <- job.executors.values) {
       exec.worker.removeExecutor(exec)
       exec.worker.actor ! KillExecutor(exec.job.id, exec.id)

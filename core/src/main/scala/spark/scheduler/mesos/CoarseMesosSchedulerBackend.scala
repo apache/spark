@@ -42,7 +42,7 @@ class CoarseMesosSchedulerBackend(
   )
 
   // Memory used by each executor (in megabytes)
-  val EXECUTOR_MEMORY = {
+  val executorMemory = {
     if (System.getenv("SPARK_MEM") != null) {
       Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
       // TODO: Might need to add some extra memory for the non-heap parts of the JVM
@@ -160,7 +160,7 @@ class CoarseMesosSchedulerBackend(
         val slaveId = offer.getSlaveId.toString
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
-        if (totalCoresAcquired < maxCores && mem >= EXECUTOR_MEMORY && cpus >= 1 &&
+        if (totalCoresAcquired < maxCores && mem >= executorMemory && cpus >= 1 &&
             !slaveIdsWithExecutors.contains(slaveId)) {
           // Launch an executor on the slave
           val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
@@ -171,7 +171,7 @@ class CoarseMesosSchedulerBackend(
             .setCommand(createCommand(offer, cpusToUse))
             .setName("Task " + taskId)
             .addResources(createResource("cpus", cpusToUse))
-            .addResources(createResource("mem", EXECUTOR_MEMORY))
+            .addResources(createResource("mem", executorMemory))
             .build()
           d.launchTasks(offer.getId, Collections.singletonList(task), filters)
         } else {

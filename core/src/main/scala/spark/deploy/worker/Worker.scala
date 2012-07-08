@@ -26,7 +26,7 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   val workerId = generateWorkerId()
   var sparkHome: File = null
   var workDir: File = null
-  val executors = new HashMap[String, ExecutorManager]
+  val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new ArrayBuffer[String]
 
   var coresUsed = 0
@@ -104,8 +104,8 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
 
     case LaunchExecutor(jobId, execId, jobDesc, cores_, memory_) =>
       logInfo("Asked to launch executor %s/%d for %s".format(jobId, execId, jobDesc.name))
-      val manager = new ExecutorManager(
-        jobId, execId, jobDesc, cores_, memory_, self, sparkHome, workDir)
+      val manager = new ExecutorRunner(
+        jobId, execId, jobDesc, cores_, memory_, self, workerId, ip, sparkHome, workDir)
       executors(jobId + "/" + execId) = manager
       manager.start()
       master ! ExecutorStateChanged(jobId, execId, ExecutorState.LOADING, None)
@@ -118,6 +118,13 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
         finishedExecutors += jobId + "/" + execId
       }
 
+    case KillExecutor(jobId, execId) =>
+      val fullId = jobId + "/" + execId
+      logInfo("Asked to kill executor " + fullId)
+      executors(jobId + "/" + execId).kill()
+      executors -= fullId
+      finishedExecutors += fullId
+
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       masterDisconnected()
   }
@@ -126,6 +133,7 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
     // TODO: It would be nice to try to reconnect to the master, but just shut down for now.
     // (Note that if reconnecting we would also need to assign IDs differently.)
     logError("Connection to master failed! Shutting down.")
+    executors.values.foreach(_.kill())
     System.exit(1)
   }
 

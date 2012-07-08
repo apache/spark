@@ -13,13 +13,15 @@ import spark.deploy.ExecutorStateChanged
 /**
  * Manages the execution of one executor process.
  */
-class ExecutorManager(
+class ExecutorRunner(
     jobId: String,
     execId: Int,
     jobDesc: JobDescription,
     cores: Int,
     memory: Int,
     worker: ActorRef,
+    workerId: String,
+    hostname: String,
     sparkHome: File,
     workDir: File)
   extends Logging {
@@ -29,17 +31,22 @@ class ExecutorManager(
   var process: Process = null
 
   def start() {
-    workerThread = new Thread("ExecutorManager for " + fullId) {
+    workerThread = new Thread("ExecutorRunner for " + fullId) {
       override def run() { fetchAndRunExecutor() }
     }
     workerThread.start()
   }
 
-  /** Stop this executor manager, including killing the process it launched */
+  /** Stop this executor runner, including killing the process it launched */
   def kill() {
     if (workerThread != null) {
       workerThread.interrupt()
       workerThread = null
+      if (process != null) {
+        logInfo("Killing process!")
+        process.destroy()
+      }
+      worker ! ExecutorStateChanged(jobId, execId, ExecutorState.KILLED, None)
     }
   }
 
@@ -75,10 +82,18 @@ class ExecutorManager(
     }
   }
 
+  /** Replace variables such as {{SLAVEID}} and {{CORES}} in a command argument passed to us */
+  def substituteVariables(argument: String): String = argument match {
+    case "{{SLAVEID}}" => workerId
+    case "{{HOSTNAME}}" => hostname
+    case "{{CORES}}" => cores.toString
+    case other => other
+  }
+
   def buildCommandSeq(): Seq[String] = {
     val command = jobDesc.command
     val runScript = new File(sparkHome, "run").getCanonicalPath
-    Seq(runScript, command.mainClass) ++ command.arguments
+    Seq(runScript, command.mainClass) ++ command.arguments.map(substituteVariables)
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
@@ -130,11 +145,7 @@ class ExecutorManager(
       worker ! ExecutorStateChanged(jobId, execId, ExecutorState.FAILED, Some(message))
     } catch {
       case interrupted: InterruptedException =>
-        logInfo("Runner thread interrupted -- killing executor " + fullId)
-        if (process != null) {
-          process.destroy()
-        }
-        worker ! ExecutorStateChanged(jobId, execId, ExecutorState.KILLED, None)
+        logInfo("Runner thread for executor " + fullId + " interrupted")
 
       case e: Exception => {
         logError("Error running executor", e)

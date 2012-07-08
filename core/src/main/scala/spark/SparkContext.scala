@@ -41,7 +41,7 @@ import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.cluster.{SchedulerBackend, ClusterScheduler}
+import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.BlockManagerMaster
 
@@ -57,7 +57,7 @@ class SparkContext(
 
   // Set Spark master host and port system properties
   if (System.getProperty("spark.master.host") == null) {
-    System.setProperty("spark.master.host", Utils.localIpAddress)
+    System.setProperty("spark.master.host", Utils.localIpAddress())
   }
   if (System.getProperty("spark.master.port") == null) {
     System.setProperty("spark.master.port", "0")
@@ -80,13 +80,25 @@ class SparkContext(
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
+    // Regular expression for connecting to Spark deploy clusters
+    val SPARK_REGEX = """(spark://.*)""".r
+
     master match {
       case "local" => 
         new LocalScheduler(1, 0)
+
       case LOCAL_N_REGEX(threads) => 
         new LocalScheduler(threads.toInt, 0)
+
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         new LocalScheduler(threads.toInt, maxFailures.toInt)
+
+      case SPARK_REGEX(sparkUrl) =>
+        val scheduler = new ClusterScheduler(this)
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
+        scheduler.initialize(backend)
+        scheduler
+
       case _ =>
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
