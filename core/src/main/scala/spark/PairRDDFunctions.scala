@@ -264,12 +264,20 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     }
   }
 
-  def saveAsHadoopFile [F <: OutputFormat[K, V]] (path: String) (implicit fm: ClassManifest[F]) {
+  def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassManifest[F]) {
     saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
   }
   
-  def saveAsNewAPIHadoopFile [F <: NewOutputFormat[K, V]] (path: String) (implicit fm: ClassManifest[F]) {
+  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassManifest[F]) {
     saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+  }
+
+  def saveAsNewAPIHadoopFile(
+      path: String,
+      keyClass: Class[_],
+      valueClass: Class[_],
+      outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
+    saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, new Configuration)
   }
 
   def saveAsNewAPIHadoopFile(
@@ -314,14 +322,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     jobCommitter.setupJob(jobTaskContext)
     val count = self.context.runJob(self, writeShard _).sum
     jobCommitter.cleanupJob(jobTaskContext)
-  }
-
-  def saveAsNewAPIHadoopFile(
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
-      outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
-    saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, new Configuration)
   }
 
   def saveAsHadoopFile(
