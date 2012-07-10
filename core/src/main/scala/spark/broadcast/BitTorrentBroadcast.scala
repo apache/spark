@@ -58,7 +58,7 @@ extends Broadcast[T] with Logging with Serializable {
     logInfo("Local host address: " + hostAddress)
 
     // Create a variableInfo object and store it in valueInfos
-    var variableInfo = Broadcast.blockifyObject(value_)
+    var variableInfo = MultiTracker.blockifyObject(value_)
 
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
@@ -109,7 +109,7 @@ extends Broadcast[T] with Logging with Serializable {
     listOfSources += masterSource
 
     // Register with the Tracker
-    Broadcast.registerBroadcast(uuid,
+    MultiTracker.registerBroadcast(uuid,
       SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes))
   }
 
@@ -136,7 +136,7 @@ extends Broadcast[T] with Logging with Serializable {
 
         val receptionSucceeded = receiveBroadcast(uuid)
         if (receptionSucceeded) {
-          value_ = Broadcast.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
+          value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
           Broadcast.values.put(uuid, 0, value_)
         }  else {
           logError("Reading Broadcasted variable " + uuid + " failed")
@@ -222,9 +222,9 @@ extends Broadcast[T] with Logging with Serializable {
       // Keep exchaning information until all blocks have been received
       while (hasBlocks.get < totalBlocks) {
         talkOnce
-        Thread.sleep(Broadcast.ranGen.nextInt(
-          Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
-          Broadcast.MinKnockInterval)
+        Thread.sleep(MultiTracker.ranGen.nextInt(
+          MultiTracker.MaxKnockInterval - MultiTracker.MinKnockInterval) +
+          MultiTracker.MinKnockInterval)
       }
 
       // Talk one more time to let the Guide know of reception completion
@@ -266,12 +266,12 @@ extends Broadcast[T] with Logging with Serializable {
 
     var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxOverGoToDefault)
 
-    var retriesLeft = Broadcast.MaxRetryCount
+    var retriesLeft = MultiTracker.MaxRetryCount
     do {
       try {
         // Connect to the tracker to find out GuideInfo
         clientSocketToTracker =
-          new Socket(Broadcast.MasterHostAddress, Broadcast.MasterTrackerPort)
+          new Socket(Broadcast.MasterHostAddress, MultiTracker.MasterTrackerPort)
         oosTracker =
           new ObjectOutputStream(clientSocketToTracker.getOutputStream)
         oosTracker.flush()
@@ -279,7 +279,7 @@ extends Broadcast[T] with Logging with Serializable {
           new ObjectInputStream(clientSocketToTracker.getInputStream)
 
         // Send messageType/intention
-        oosTracker.writeObject(Broadcast.FIND_BROADCAST_TRACKER)
+        oosTracker.writeObject(MultiTracker.FIND_BROADCAST_TRACKER)
         oosTracker.flush()
 
         // Send UUID and receive GuideInfo
@@ -302,9 +302,9 @@ extends Broadcast[T] with Logging with Serializable {
         }
       }
 
-      Thread.sleep(Broadcast.ranGen.nextInt(
-        Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
-        Broadcast.MinKnockInterval)
+      Thread.sleep(MultiTracker.ranGen.nextInt(
+        MultiTracker.MaxKnockInterval - MultiTracker.MinKnockInterval) +
+        MultiTracker.MinKnockInterval)
 
       retriesLeft -= 1
     } while (retriesLeft > 0 && gInfo.listenPort == SourceInfo.TxNotStartedRetry)
@@ -356,7 +356,7 @@ extends Broadcast[T] with Logging with Serializable {
     // FIXME: Must fix this. This might never break if broadcast fails.
     // We should be able to break and send false. Also need to kill threads
     while (hasBlocks.get < totalBlocks) {
-      Thread.sleep(Broadcast.MaxKnockInterval)
+      Thread.sleep(MultiTracker.MaxKnockInterval)
     }
 
     return true
@@ -370,11 +370,11 @@ extends Broadcast[T] with Logging with Serializable {
     private var blocksInRequestBitVector = new BitSet(totalBlocks)
 
     override def run() {
-      var threadPool = Utils.newDaemonFixedThreadPool(Broadcast.MaxRxSlots)
+      var threadPool = Utils.newDaemonFixedThreadPool(MultiTracker.MaxRxSlots)
 
       while (hasBlocks.get < totalBlocks) {
         var numThreadsToCreate =
-          math.min(listOfSources.size, Broadcast.MaxRxSlots) -
+          math.min(listOfSources.size, MultiTracker.MaxRxSlots) -
           threadPool.getActiveCount
 
         while (hasBlocks.get < totalBlocks && numThreadsToCreate > 0) {
@@ -399,7 +399,7 @@ extends Broadcast[T] with Logging with Serializable {
         }
 
         // Sleep for a while before starting some more threads
-        Thread.sleep(Broadcast.MinKnockInterval)
+        Thread.sleep(MultiTracker.MinKnockInterval)
       }
       // Shutdown the thread pool
       threadPool.shutdown()
@@ -440,7 +440,7 @@ extends Broadcast[T] with Logging with Serializable {
       // Now always picking randomly
       if (curPeer == null && peersNotInUse.size > 0) {
         // Pick uniformly the i'th required peer
-        var i = Broadcast.ranGen.nextInt(peersNotInUse.size)
+        var i = MultiTracker.ranGen.nextInt(peersNotInUse.size)
 
         var peerIter = peersNotInUse.iterator
         curPeer = peerIter.next
@@ -511,7 +511,7 @@ extends Broadcast[T] with Logging with Serializable {
         // Sort the peers based on how many rare blocks they have
         peersWithRareBlocks.sortBy(_._2)
 
-        var randomNumber = Broadcast.ranGen.nextDouble
+        var randomNumber = MultiTracker.ranGen.nextDouble
         var tempSum = 0.0
 
         var i = 0
@@ -549,7 +549,7 @@ extends Broadcast[T] with Logging with Serializable {
         }
 
         var timeOutTimer = new Timer
-        timeOutTimer.schedule(timeOutTask, Broadcast.MaxKnockInterval)
+        timeOutTimer.schedule(timeOutTask, MultiTracker.MaxKnockInterval)
 
         logInfo("TalkToPeer started... => " + peerToTalkTo)
 
@@ -663,8 +663,8 @@ extends Broadcast[T] with Logging with Serializable {
         }
 
         // Include blocks already in transmission ONLY IF
-        // BitTorrentBroadcast.EndGameFraction has NOT been achieved
-        if ((1.0 * hasBlocks.get / totalBlocks) < Broadcast.EndGameFraction) {
+        // MultiTracker.EndGameFraction has NOT been achieved
+        if ((1.0 * hasBlocks.get / totalBlocks) < MultiTracker.EndGameFraction) {
           blocksInRequestBitVector.synchronized {
             needBlocksBitVector.or(blocksInRequestBitVector)
           }
@@ -680,7 +680,7 @@ extends Broadcast[T] with Logging with Serializable {
           return -1
         } else {
           // Pick uniformly the i'th required block
-          var i = Broadcast.ranGen.nextInt(needBlocksBitVector.cardinality)
+          var i = MultiTracker.ranGen.nextInt(needBlocksBitVector.cardinality)
           var pickedBlockIndex = needBlocksBitVector.nextSetBit(0)
 
           while (i > 0) {
@@ -703,8 +703,8 @@ extends Broadcast[T] with Logging with Serializable {
         }
 
         // Include blocks already in transmission ONLY IF
-        // BitTorrentBroadcast.EndGameFraction has NOT been achieved
-        if ((1.0 * hasBlocks.get / totalBlocks) < Broadcast.EndGameFraction) {
+        // MultiTracker.EndGameFraction has NOT been achieved
+        if ((1.0 * hasBlocks.get / totalBlocks) < MultiTracker.EndGameFraction) {
           blocksInRequestBitVector.synchronized {
             needBlocksBitVector.or(blocksInRequestBitVector)
           }
@@ -752,7 +752,7 @@ extends Broadcast[T] with Logging with Serializable {
             return -1
           } else {
             // Pick uniformly the i'th index
-            var i = Broadcast.ranGen.nextInt(minBlocksIndices.size)
+            var i = MultiTracker.ranGen.nextInt(minBlocksIndices.size)
             return minBlocksIndices(i)
           }
         }
@@ -799,7 +799,7 @@ extends Broadcast[T] with Logging with Serializable {
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout(Broadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout(MultiTracker.ServerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
@@ -833,7 +833,7 @@ extends Broadcast[T] with Logging with Serializable {
         logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
 
-        Broadcast.unregisterBroadcast(uuid)
+        MultiTracker.unregisterBroadcast(uuid)
       } finally {
         if (serverSocket != null) {
           logInfo("GuideMultipleRequests now stopping...")
@@ -938,17 +938,17 @@ extends Broadcast[T] with Logging with Serializable {
         }
 
         listOfSources.synchronized {
-          if (listOfSources.size <= Broadcast.MaxPeersInGuideResponse) {
+          if (listOfSources.size <= MultiTracker.MaxPeersInGuideResponse) {
             selectedSources = listOfSources.clone
           } else {
-            var picksLeft = Broadcast.MaxPeersInGuideResponse
+            var picksLeft = MultiTracker.MaxPeersInGuideResponse
             var alreadyPicked = new BitSet(listOfSources.size)
 
             while (picksLeft > 0) {
               var i = -1
 
               do {
-                i = Broadcast.ranGen.nextInt(listOfSources.size)
+                i = MultiTracker.ranGen.nextInt(listOfSources.size)
               } while (alreadyPicked.get(i))
 
               var peerIter = listOfSources.iterator
@@ -979,8 +979,8 @@ extends Broadcast[T] with Logging with Serializable {
 
   class ServeMultipleRequests
   extends Thread with Logging {
-    // Server at most Broadcast.MaxTxSlots peers
-    var threadPool = Utils.newDaemonFixedThreadPool(Broadcast.MaxTxSlots)
+    // Server at most MultiTracker.MaxTxSlots peers
+    var threadPool = Utils.newDaemonFixedThreadPool(MultiTracker.MaxTxSlots)
 
     override def run() {
       var serverSocket = new ServerSocket(0)
@@ -996,7 +996,7 @@ extends Broadcast[T] with Logging with Serializable {
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout(Broadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout(MultiTracker.ServerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
@@ -1054,7 +1054,7 @@ extends Broadcast[T] with Logging with Serializable {
           val startTime = System.currentTimeMillis
           var curTime = startTime
           var keepSending = true
-          var numBlocksToSend = Broadcast.MaxChatBlocks
+          var numBlocksToSend = MultiTracker.MaxChatBlocks
 
           while (!stopBroadcast && keepSending && numBlocksToSend > 0) {
             // Receive which block to send
@@ -1062,7 +1062,7 @@ extends Broadcast[T] with Logging with Serializable {
 
             // If it is master AND at least one copy of each block has not been
             // sent out already, MODIFY blockToSend
-            if (Broadcast.isMaster && sentBlocks.get < totalBlocks) {
+            if (MultiTracker.isMaster && sentBlocks.get < totalBlocks) {
               blockToSend = sentBlocks.getAndIncrement
             }
 
@@ -1079,7 +1079,7 @@ extends Broadcast[T] with Logging with Serializable {
 
             curTime = System.currentTimeMillis
             // Revoke sending only if there is anyone waiting in the queue
-            if (curTime - startTime >= Broadcast.MaxChatTime &&
+            if (curTime - startTime >= MultiTracker.MaxChatTime &&
                 threadPool.getQueue.size > 0) {
               keepSending = false
             }
@@ -1118,7 +1118,7 @@ extends Broadcast[T] with Logging with Serializable {
 class BitTorrentBroadcastFactory
 extends BroadcastFactory {
   def initialize(isMaster: Boolean) {
-    // BitTorrentBroadcast.initialize(isMaster)
+    MultiTracker.initialize(isMaster)
   }
 
   def newBroadcast[T](value_ : T, isLocal: Boolean) = {

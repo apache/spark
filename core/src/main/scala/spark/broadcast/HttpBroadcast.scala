@@ -16,8 +16,8 @@ extends Broadcast[T] with Logging with Serializable {
   
   def value = value_
 
-  HttpBroadcast.synchronized { 
-    HttpBroadcast.values.put(uuid, 0, value_) 
+  Broadcast.synchronized { 
+    Broadcast.values.put(uuid, 0, value_) 
   }
 
   if (!isLocal) { 
@@ -28,14 +28,14 @@ extends Broadcast[T] with Logging with Serializable {
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
-      val cachedVal = HttpBroadcast.values.get(uuid, 0)
+      val cachedVal = Broadcast.values.get(uuid, 0)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
         logInfo("Started reading broadcast variable " + uuid)
         val start = System.nanoTime
         value_ = HttpBroadcast.read[T](uuid)
-        HttpBroadcast.values.put(uuid, 0, value_)
+        Broadcast.values.put(uuid, 0, value_)
         val time = (System.nanoTime - start) / 1e9
         logInfo("Reading broadcast variable " + uuid + " took " + time + " s")
       }
@@ -51,8 +51,6 @@ class HttpBroadcastFactory extends BroadcastFactory {
 }
 
 private object HttpBroadcast extends Logging {
-  val values = SparkEnv.get.cache.newKeySpace()
-
   private var initialized = false
 
   private var broadcastDir: File = null

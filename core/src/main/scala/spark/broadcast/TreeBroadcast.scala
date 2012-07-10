@@ -48,7 +48,7 @@ extends Broadcast[T] with Logging with Serializable {
     logInfo("Local host address: " + hostAddress)
 
     // Create a variableInfo object and store it in valueInfos
-    var variableInfo = Broadcast.blockifyObject(value_)
+    var variableInfo = MultiTracker.blockifyObject(value_)
 
     // Prepare the value being broadcasted
     // TODO: Refactoring and clean-up required here
@@ -87,7 +87,7 @@ extends Broadcast[T] with Logging with Serializable {
     listOfSources += masterSource
 
     // Register with the Tracker
-    Broadcast.registerBroadcast(uuid,
+    MultiTracker.registerBroadcast(uuid,
       SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes))
   }
 
@@ -112,7 +112,7 @@ extends Broadcast[T] with Logging with Serializable {
 
         val receptionSucceeded = receiveBroadcast(uuid)
         if (receptionSucceeded) {
-          value_ = Broadcast.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
+          value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
           Broadcast.values.put(uuid, 0, value_)
         }  else {
           logError("Reading Broadcasted variable " + uuid + " failed")
@@ -149,12 +149,12 @@ extends Broadcast[T] with Logging with Serializable {
 
     var masterListenPort: Int = SourceInfo.TxOverGoToDefault
 
-    var retriesLeft = Broadcast.MaxRetryCount
+    var retriesLeft = MultiTracker.MaxRetryCount
     do {
       try {
         // Connect to the tracker to find out the guide
         clientSocketToTracker =
-          new Socket(Broadcast.MasterHostAddress, Broadcast.MasterTrackerPort)
+          new Socket(Broadcast.MasterHostAddress, MultiTracker.MasterTrackerPort)
         oosTracker =
           new ObjectOutputStream(clientSocketToTracker.getOutputStream)
         oosTracker.flush()
@@ -182,9 +182,9 @@ extends Broadcast[T] with Logging with Serializable {
       }
       retriesLeft -= 1
 
-      Thread.sleep(Broadcast.ranGen.nextInt(
-        Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
-        Broadcast.MinKnockInterval)
+      Thread.sleep(MultiTracker.ranGen.nextInt(
+        MultiTracker.MaxKnockInterval - MultiTracker.MinKnockInterval) +
+        MultiTracker.MinKnockInterval)
 
     } while (retriesLeft > 0 && masterListenPort == SourceInfo.TxNotStartedRetry)
 
@@ -216,7 +216,7 @@ extends Broadcast[T] with Logging with Serializable {
 
     // Connect and receive broadcast from the specified source, retrying the
     // specified number of times in case of failures
-    var retriesLeft = Broadcast.MaxRetryCount
+    var retriesLeft = MultiTracker.MaxRetryCount
     do {
       // Connect to Master and send this worker's Information
       clientSocketToMaster =
@@ -354,7 +354,7 @@ extends Broadcast[T] with Logging with Serializable {
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout(Broadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout(MultiTracker.ServerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => {
@@ -383,7 +383,7 @@ extends Broadcast[T] with Logging with Serializable {
         logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
 
-        Broadcast.unregisterBroadcast(uuid)
+        MultiTracker.unregisterBroadcast(uuid)
       } finally {
         if (serverSocket != null) {
           logInfo("GuideMultipleRequests now stopping...")
@@ -536,7 +536,7 @@ extends Broadcast[T] with Logging with Serializable {
 
         listOfSources.foreach { source =>
           if (source != skipSourceInfo &&
-            source.currentLeechers < Broadcast.MaxDegree &&
+            source.currentLeechers < MultiTracker.MaxDegree &&
             source.currentLeechers > maxLeechers) {
               selectedSource = source
               maxLeechers = source.currentLeechers
@@ -569,7 +569,7 @@ extends Broadcast[T] with Logging with Serializable {
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
-            serverSocket.setSoTimeout(Broadcast.ServerSocketTimeout)
+            serverSocket.setSoTimeout(MultiTracker.ServerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => {
@@ -668,7 +668,7 @@ extends Broadcast[T] with Logging with Serializable {
 class TreeBroadcastFactory
 extends BroadcastFactory {
   def initialize(isMaster: Boolean) {
-    // TreeBroadcast.initialize(isMaster)
+    MultiTracker.initialize(isMaster)
   }
   def newBroadcast[T](value_ : T, isLocal: Boolean) =
     new TreeBroadcast[T](value_, isLocal)
