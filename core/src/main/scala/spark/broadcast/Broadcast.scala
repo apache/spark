@@ -19,7 +19,8 @@ trait Broadcast[T] extends Serializable {
 }
 
 object Broadcast extends Logging with Serializable {
-  // Messages
+
+  // Tracker Messages
   val REGISTER_BROADCAST_TRACKER = 0
   val UNREGISTER_BROADCAST_TRACKER = 1
   val FIND_BROADCAST_TRACKER = 2
@@ -30,7 +31,7 @@ object Broadcast extends Logging with Serializable {
   private var broadcastFactory: BroadcastFactory = null
 
   // Called by SparkContext or Executor before using Broadcast
-  def initialize (isMaster__ : Boolean) {
+  def initialize(isMaster__ : Boolean) {
     synchronized {
       if (!initialized) {
         val broadcastFactoryClass = System.getProperty(
@@ -126,7 +127,7 @@ object Broadcast extends Logging with Serializable {
 
   def EndGameFraction = EndGameFraction_
 
-  // Helper functions to convert an object to Array[BroadcastBlock]
+  // Helper method to convert an object to Array[BroadcastBlock]
   def blockifyObject[IN](obj: IN): VariableInfo = {
     val baos = new ByteArrayOutputStream
     val oos = new ObjectOutputStream(baos)
@@ -159,10 +160,10 @@ object Broadcast extends Logging with Serializable {
     return variableInfo
   }
 
-  // Helper function to convert Array[BroadcastBlock] to object
+  // Helper method to convert Array[BroadcastBlock] to object
   def unBlockifyObject[OUT](arrayOfBlocks: Array[BroadcastBlock],
-      totalBytes: Int, 
-      totalBlocks: Int): OUT = {
+                            totalBytes: Int, 
+                            totalBlocks: Int): OUT = {
 
     var retByteArray = new Array[Byte](totalBytes)
     for (i <- 0 until totalBlocks) {
@@ -183,12 +184,12 @@ object Broadcast extends Logging with Serializable {
   }  
 }
 
-case class BroadcastBlock (blockID: Int, byteArray: Array[Byte]) 
+case class BroadcastBlock(blockID: Int, byteArray: Array[Byte]) 
 extends Serializable
 
-case class VariableInfo (@transient arrayOfBlocks : Array[BroadcastBlock],
-                         totalBlocks: Int, 
-                         totalBytes: Int) 
+case class VariableInfo(@transient arrayOfBlocks : Array[BroadcastBlock],
+                        totalBlocks: Int, 
+                        totalBytes: Int) 
 extends Serializable {
  @transient var hasBlocks = 0 
 }

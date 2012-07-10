@@ -146,7 +146,7 @@ extends Broadcast[T] with Logging with Serializable {
     var oosTracker: ObjectOutputStream = null
     var oisTracker: ObjectInputStream = null
 
-    var masterListenPort: Int = SourceInfo.TxOverGoToHDFS
+    var masterListenPort: Int = SourceInfo.TxOverGoToDefault
 
     var retriesLeft = Broadcast.MaxRetryCount
     do {
@@ -194,7 +194,7 @@ extends Broadcast[T] with Logging with Serializable {
   def receiveBroadcast(variableUUID: UUID): Boolean = {
     val masterListenPort = getMasterListenPort(variableUUID)
 
-    if (masterListenPort == SourceInfo.TxOverGoToHDFS ||
+    if (masterListenPort == SourceInfo.TxOverGoToDefault ||
         masterListenPort == SourceInfo.TxNotStartedRetry) {
       // TODO: SourceInfo.TxNotStartedRetry is not really in use because we go
       // to HDFS anyway when receiveBroadcast returns false
@@ -695,9 +695,6 @@ extends Logging {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon(true)
           trackMV.start()
-          // TODO: Logging the following line makes the Spark framework ID not
-          // getting logged, cause it calls logInfo before log4j is initialized
-          // logInfo("TrackMultipleValues started...")
         }
         initialized = true
       }
@@ -715,7 +712,7 @@ extends Logging {
 
   def unregisterValue(uuid: UUID) {
     valueToGuidePortMap.synchronized {
-      valueToGuidePortMap(uuid) = SourceInfo.TxOverGoToHDFS
+      valueToGuidePortMap(uuid) = SourceInfo.TxOverGoToDefault
       logInfo("Value unregistered from the Tracker " + valueToGuidePortMap)
     }
   }

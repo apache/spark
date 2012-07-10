@@ -29,7 +29,7 @@ extends Comparable[SourceInfo] with Logging {
 object SourceInfo {
   // Constants for special values of listenPort
   val TxNotStartedRetry = -1
-  val TxOverGoToHDFS = 0
+  val TxOverGoToDefault = 0
   // Other constants
   val StopBroadcast = -2
   val UnusedParam = 0
