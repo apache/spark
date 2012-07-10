@@ -2,8 +2,10 @@ package spark.broadcast
 
 import java.io._
 import java.net._
-import java.util.{BitSet, UUID}
+import java.util.{BitSet, UUID, Random}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
+
+import scala.collection.mutable.Map
 
 import spark._
 
@@ -30,6 +32,18 @@ object Broadcast extends Logging with Serializable {
   private var isMaster_ = false
   private var broadcastFactory: BroadcastFactory = null
 
+  // Cache of broadcasted objects
+  val values = SparkEnv.get.cache.newKeySpace()
+
+  // Map to keep track of guides of ongoing broadcasts
+  var valueToGuideMap = Map[UUID, SourceInfo]()
+
+  // Random number generator
+  var ranGen = new Random
+
+  // Tracker object
+  private var trackMV: TrackMultipleValues = null
+
   // Called by SparkContext or Executor before using Broadcast
   def initialize(isMaster__ : Boolean) {
     synchronized {
@@ -46,6 +60,11 @@ object Broadcast extends Logging with Serializable {
         // Set masterHostAddress to the master's IP address for the slaves to read
         if (isMaster) {
           System.setProperty("spark.broadcast.masterHostAddress", Utils.localIpAddress)
+          
+          // Start the tracker
+          trackMV = new TrackMultipleValues
+          trackMV.setDaemon(true)
+          trackMV.start()
         }
 
         // Initialize appropriate BroadcastFactory and BroadcastObject
@@ -126,6 +145,167 @@ object Broadcast extends Logging with Serializable {
   def MaxChatBlocks = MaxChatBlocks_
 
   def EndGameFraction = EndGameFraction_
+
+  class TrackMultipleValues
+  extends Thread with Logging {
+    override def run() {
+      var threadPool = Utils.newDaemonCachedThreadPool()
+      var serverSocket: ServerSocket = null
+
+      serverSocket = new ServerSocket(Broadcast.MasterTrackerPort)
+      logInfo("TrackMultipleValues" + serverSocket)
+
+      try {
+        while (true) {
+          var clientSocket: Socket = null
+          try {
+            serverSocket.setSoTimeout(Broadcast.TrackerSocketTimeout)
+            clientSocket = serverSocket.accept()
+          } catch {
+            case e: Exception => {
+              logInfo("TrackMultipleValues Timeout. Stopping listening...")
+            }
+          }
+
+          if (clientSocket != null) {
+            try {
+              threadPool.execute(new Thread {
+                override def run() {
+                  val oos = new ObjectOutputStream(clientSocket.getOutputStream)
+                  oos.flush()
+                  val ois = new ObjectInputStream(clientSocket.getInputStream)
+
+                  try {
+                    // First, read message type
+                    val messageType = ois.readObject.asInstanceOf[Int]
+
+                    if (messageType == Broadcast.REGISTER_BROADCAST_TRACKER) {
+                      // Receive UUID
+                      val uuid = ois.readObject.asInstanceOf[UUID]
+                      // Receive hostAddress and listenPort
+                      val gInfo = ois.readObject.asInstanceOf[SourceInfo]
+
+                      // Add to the map
+                      valueToGuideMap.synchronized {
+                        valueToGuideMap += (uuid -> gInfo)
+                      }
+
+                      logInfo ("New broadcast registered with TrackMultipleValues " + uuid + " " + valueToGuideMap)
+
+                      // Send dummy ACK
+                      oos.writeObject(-1)
+                      oos.flush()
+                    } else if (messageType == Broadcast.UNREGISTER_BROADCAST_TRACKER) {
+                      // Receive UUID
+                      val uuid = ois.readObject.asInstanceOf[UUID]
+
+                      // Remove from the map
+                      valueToGuideMap.synchronized {
+                        valueToGuideMap(uuid) = SourceInfo("", SourceInfo.TxOverGoToDefault)
+                        logInfo("Value unregistered from the Tracker " + valueToGuideMap)
+                      }
+
+                      logInfo ("Broadcast unregistered from TrackMultipleValues " + uuid + " " + valueToGuideMap)
+
+                      // Send dummy ACK
+                      oos.writeObject(-1)
+                      oos.flush()
+                    } else if (messageType == Broadcast.FIND_BROADCAST_TRACKER) {
+                      // Receive UUID
+                      val uuid = ois.readObject.asInstanceOf[UUID]
+
+                      var gInfo =
+                        if (valueToGuideMap.contains(uuid)) valueToGuideMap(uuid)
+                        else SourceInfo("", SourceInfo.TxNotStartedRetry)
+
+                      logInfo("TrackMultipleValues: Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
+
+                      // Send reply back
+                      oos.writeObject(gInfo)
+                      oos.flush()
+                    } else if (messageType == Broadcast.GET_UPDATED_SHARE) {
+                      // TODO: Not implemented
+                    } else {
+                      throw new SparkException("Undefined messageType at TrackMultipleValues")
+                    }
+                  } catch {
+                    case e: Exception => {
+                      logInfo("TrackMultipleValues had a " + e)
+                    }
+                  } finally {
+                    ois.close()
+                    oos.close()
+                    clientSocket.close()
+                  }
+                }
+              })
+            } catch {
+              // In failure, close socket here; else, client thread will close
+              case ioe: IOException => {
+                clientSocket.close()
+              }
+            }
+          }
+        }
+      } finally {
+        serverSocket.close()
+      }
+      // Shutdown the thread pool
+      threadPool.shutdown()
+    }
+  }
+
+  def registerBroadcast(uuid: UUID, gInfo: SourceInfo) {
+    val socket = new Socket(Broadcast.MasterHostAddress,
+      Broadcast.MasterTrackerPort)
+    val oosST = new ObjectOutputStream(socket.getOutputStream)
+    oosST.flush()
+    val oisST = new ObjectInputStream(socket.getInputStream)
+
+    // Send messageType/intention
+    oosST.writeObject(Broadcast.REGISTER_BROADCAST_TRACKER)
+    oosST.flush()
+
+    // Send UUID of this broadcast
+    oosST.writeObject(uuid)
+    oosST.flush()
+
+    // Send this tracker's information
+    oosST.writeObject(gInfo)
+    oosST.flush()
+
+    // Receive ACK and throw it away
+    oisST.readObject.asInstanceOf[Int]
+
+    // Shut stuff down
+    oisST.close()
+    oosST.close()
+    socket.close()
+  }
+
+  def unregisterBroadcast(uuid: UUID) {
+    val socket = new Socket(Broadcast.MasterHostAddress,
+      Broadcast.MasterTrackerPort)
+    val oosST = new ObjectOutputStream(socket.getOutputStream)
+    oosST.flush()
+    val oisST = new ObjectInputStream(socket.getInputStream)
+
+    // Send messageType/intention
+    oosST.writeObject(Broadcast.UNREGISTER_BROADCAST_TRACKER)
+    oosST.flush()
+
+    // Send UUID of this broadcast
+    oosST.writeObject(uuid)
+    oosST.flush()
+
+    // Receive ACK and throw it away
+    oisST.readObject.asInstanceOf[Int]
+
+    // Shut stuff down
+    oisST.close()
+    oosST.close()
+    socket.close()
+  }
 
   // Helper method to convert an object to Array[BroadcastBlock]
   def blockifyObject[IN](obj: IN): VariableInfo = {

@@ -14,8 +14,8 @@ extends Broadcast[T] with Logging with Serializable {
 
   def value = value_
 
-  TreeBroadcast.synchronized {
-    TreeBroadcast.values.put(uuid, 0, value_)
+  Broadcast.synchronized {
+    Broadcast.values.put(uuid, 0, value_)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -87,13 +87,14 @@ extends Broadcast[T] with Logging with Serializable {
     listOfSources += masterSource
 
     // Register with the Tracker
-    TreeBroadcast.registerValue(uuid, guidePort)
+    Broadcast.registerBroadcast(uuid,
+      SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes))
   }
 
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
-    TreeBroadcast.synchronized {
-      val cachedVal = TreeBroadcast.values.get(uuid, 0)
+    Broadcast.synchronized {
+      val cachedVal = Broadcast.values.get(uuid, 0)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
@@ -112,7 +113,7 @@ extends Broadcast[T] with Logging with Serializable {
         val receptionSucceeded = receiveBroadcast(uuid)
         if (receptionSucceeded) {
           value_ = Broadcast.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
-          TreeBroadcast.values.put(uuid, 0, value_)
+          Broadcast.values.put(uuid, 0, value_)
         }  else {
           logError("Reading Broadcasted variable " + uuid + " failed")
         }
@@ -181,7 +182,7 @@ extends Broadcast[T] with Logging with Serializable {
       }
       retriesLeft -= 1
 
-      Thread.sleep(TreeBroadcast.ranGen.nextInt(
+      Thread.sleep(Broadcast.ranGen.nextInt(
         Broadcast.MaxKnockInterval - Broadcast.MinKnockInterval) +
         Broadcast.MinKnockInterval)
 
@@ -382,7 +383,7 @@ extends Broadcast[T] with Logging with Serializable {
         logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
 
-        TreeBroadcast.unregisterValue(uuid)
+        Broadcast.unregisterBroadcast(uuid)
       } finally {
         if (serverSocket != null) {
           logInfo("GuideMultipleRequests now stopping...")
@@ -666,116 +667,9 @@ extends Broadcast[T] with Logging with Serializable {
 
 class TreeBroadcastFactory
 extends BroadcastFactory {
-  def initialize(isMaster: Boolean) = TreeBroadcast.initialize(isMaster)
+  def initialize(isMaster: Boolean) {
+    // TreeBroadcast.initialize(isMaster)
+  }
   def newBroadcast[T](value_ : T, isLocal: Boolean) =
     new TreeBroadcast[T](value_, isLocal)
-}
-
-private object TreeBroadcast
-extends Logging {
-  val values = SparkEnv.get.cache.newKeySpace()
-
-  var valueToGuidePortMap = Map[UUID, Int]()
-
-  // Random number generator
-  var ranGen = new Random
-
-  private var initialized = false
-  private var isMaster_ = false
-
-  private var trackMV: TrackMultipleValues = null
-
-  private var MaxDegree_ : Int = 2
-
-  def initialize(isMaster__ : Boolean) {
-    synchronized {
-      if (!initialized) {
-        isMaster_ = isMaster__
-        if (isMaster) {
-          trackMV = new TrackMultipleValues
-          trackMV.setDaemon(true)
-          trackMV.start()
-        }
-        initialized = true
-      }
-    }
-  }
-
-  def isMaster = isMaster_
-
-  def registerValue(uuid: UUID, guidePort: Int) {
-    valueToGuidePortMap.synchronized {
-      valueToGuidePortMap += (uuid -> guidePort)
-      logInfo("New value registered with the Tracker " + valueToGuidePortMap)
-    }
-  }
-
-  def unregisterValue(uuid: UUID) {
-    valueToGuidePortMap.synchronized {
-      valueToGuidePortMap(uuid) = SourceInfo.TxOverGoToDefault
-      logInfo("Value unregistered from the Tracker " + valueToGuidePortMap)
-    }
-  }
-
-  class TrackMultipleValues
-  extends Thread with Logging {
-    override def run() {
-      var threadPool = Utils.newDaemonCachedThreadPool()
-      var serverSocket: ServerSocket = null
-
-      serverSocket = new ServerSocket(Broadcast.MasterTrackerPort)
-      logInfo("TrackMultipleValues" + serverSocket)
-
-      try {
-        while (true) {
-          var clientSocket: Socket = null
-          try {
-            serverSocket.setSoTimeout(Broadcast.TrackerSocketTimeout)
-            clientSocket = serverSocket.accept
-          } catch {
-            case e: Exception => {
-              logInfo("TrackMultipleValues Timeout. Stopping listening...")
-            }
-          }
-
-          if (clientSocket != null) {
-            try {
-              threadPool.execute(new Thread {
-                override def run() {
-                  val oos = new ObjectOutputStream(clientSocket.getOutputStream)
-                  oos.flush()
-                  val ois = new ObjectInputStream(clientSocket.getInputStream)
-                  try {
-                    val uuid = ois.readObject.asInstanceOf[UUID]
-                    var guidePort =
-                      if (valueToGuidePortMap.contains(uuid)) {
-                        valueToGuidePortMap(uuid)
-                      } else SourceInfo.TxNotStartedRetry
-                    logInfo("TrackMultipleValues: Got new request: " + clientSocket + " for " + uuid + " : " + guidePort)
-                    oos.writeObject(guidePort)
-                  } catch {
-                    case e: Exception => {
-                      logInfo("TrackMultipleValues had a " + e)
-                    }
-                  } finally {
-                    ois.close()
-                    oos.close()
-                    clientSocket.close()
-                  }
-                }
-              })
-            } catch {
-              // In failure, close() socket here; else, client thread will close()
-              case ioe: IOException => clientSocket.close()
-            }
-          }
-        }
-      } finally {
-        serverSocket.close()
-      }
-
-      // Shutdown the thread pool
-      threadPool.shutdown()
-    }
-  }
 }
