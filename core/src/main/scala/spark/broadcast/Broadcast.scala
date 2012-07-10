@@ -73,13 +73,3 @@ object Broadcast extends Logging with Serializable {
   
   def MasterHostAddress = MasterHostAddress_
 }
-
-case class BroadcastBlock(blockID: Int, byteArray: Array[Byte]) 
-extends Serializable
-
-case class VariableInfo(@transient arrayOfBlocks : Array[BroadcastBlock],
-                        totalBlocks: Int, 
-                        totalBytes: Int) 
-extends Serializable {
- @transient var hasBlocks = 0 
-}

@@ -327,3 +327,13 @@ extends Logging {
     return retVal
   }
 }
+
+case class BroadcastBlock(blockID: Int, byteArray: Array[Byte]) 
+extends Serializable
+
+case class VariableInfo(@transient arrayOfBlocks : Array[BroadcastBlock],
+                        totalBlocks: Int, 
+                        totalBytes: Int) 
+extends Serializable {
+ @transient var hasBlocks = 0 
+}
