@@ -221,6 +221,60 @@ extends Logging {
     }
   }
   
+  def getGuideInfo(variableUUID: UUID): SourceInfo = {
+    var clientSocketToTracker: Socket = null
+    var oosTracker: ObjectOutputStream = null
+    var oisTracker: ObjectInputStream = null
+
+    var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxOverGoToDefault)
+
+    var retriesLeft = MultiTracker.MaxRetryCount
+    do {
+      try {
+        // Connect to the tracker to find out GuideInfo
+        clientSocketToTracker =
+          new Socket(Broadcast.MasterHostAddress, MultiTracker.MasterTrackerPort)
+        oosTracker =
+          new ObjectOutputStream(clientSocketToTracker.getOutputStream)
+        oosTracker.flush()
+        oisTracker =
+          new ObjectInputStream(clientSocketToTracker.getInputStream)
+
+        // Send messageType/intention
+        oosTracker.writeObject(MultiTracker.FIND_BROADCAST_TRACKER)
+        oosTracker.flush()
+
+        // Send UUID and receive GuideInfo
+        oosTracker.writeObject(variableUUID)
+        oosTracker.flush()
+        gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
+      } catch {
+        case e: Exception => {
+          logInfo("getGuideInfo had a " + e)
+        }
+      } finally {
+        if (oisTracker != null) {
+          oisTracker.close()
+        }
+        if (oosTracker != null) {
+          oosTracker.close()
+        }
+        if (clientSocketToTracker != null) {
+          clientSocketToTracker.close()
+        }
+      }
+
+      Thread.sleep(MultiTracker.ranGen.nextInt(
+        MultiTracker.MaxKnockInterval - MultiTracker.MinKnockInterval) +
+        MultiTracker.MinKnockInterval)
+
+      retriesLeft -= 1
+    } while (retriesLeft > 0 && gInfo.listenPort == SourceInfo.TxNotStartedRetry)
+
+    logInfo("Got this guidePort from Tracker: " + gInfo.listenPort)
+    return gInfo
+  }
+  
   def registerBroadcast(uuid: UUID, gInfo: SourceInfo) {
     val socket = new Socket(Broadcast.MasterHostAddress, MasterTrackerPort)
     val oosST = new ObjectOutputStream(socket.getOutputStream)

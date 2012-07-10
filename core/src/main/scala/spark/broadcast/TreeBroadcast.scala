@@ -99,7 +99,8 @@ extends Broadcast[T] with Logging with Serializable {
         value_ = cachedVal.asInstanceOf[T]
       } else {
         // Initializing everything because Master will only send null/0 values
-        initializeSlaveVariables
+        // Only the 1st worker in a node can be here. Others will get from cache
+        initializeWorkerVariables
 
         logInfo("Local host address: " + hostAddress)
 
@@ -124,7 +125,7 @@ extends Broadcast[T] with Logging with Serializable {
     }
   }
 
-  private def initializeSlaveVariables() {
+  private def initializeWorkerVariables() {
     arrayOfBlocks = null
     totalBytes = -1
     totalBlocks = -1
@@ -142,63 +143,13 @@ extends Broadcast[T] with Logging with Serializable {
     stopBroadcast = false
   }
 
-  def getMasterListenPort(variableUUID: UUID): Int = {
-    var clientSocketToTracker: Socket = null
-    var oosTracker: ObjectOutputStream = null
-    var oisTracker: ObjectInputStream = null
-
-    var masterListenPort: Int = SourceInfo.TxOverGoToDefault
-
-    var retriesLeft = MultiTracker.MaxRetryCount
-    do {
-      try {
-        // Connect to the tracker to find out the guide
-        clientSocketToTracker =
-          new Socket(Broadcast.MasterHostAddress, MultiTracker.MasterTrackerPort)
-        oosTracker =
-          new ObjectOutputStream(clientSocketToTracker.getOutputStream)
-        oosTracker.flush()
-        oisTracker =
-          new ObjectInputStream(clientSocketToTracker.getInputStream)
-
-        // Send UUID and receive masterListenPort
-        oosTracker.writeObject(uuid)
-        oosTracker.flush()
-        masterListenPort = oisTracker.readObject.asInstanceOf[Int]
-      } catch {
-        case e: Exception => {
-          logInfo("getMasterListenPort had a " + e)
-        }
-      } finally {
-        if (oisTracker != null) {
-          oisTracker.close()
-        }
-        if (oosTracker != null) {
-          oosTracker.close()
-        }
-        if (clientSocketToTracker != null) {
-          clientSocketToTracker.close()
-        }
-      }
-      retriesLeft -= 1
-
-      Thread.sleep(MultiTracker.ranGen.nextInt(
-        MultiTracker.MaxKnockInterval - MultiTracker.MinKnockInterval) +
-        MultiTracker.MinKnockInterval)
-
-    } while (retriesLeft > 0 && masterListenPort == SourceInfo.TxNotStartedRetry)
-
-    logInfo("Got this guidePort from Tracker: " + masterListenPort)
-    return masterListenPort
-  }
-
   def receiveBroadcast(variableUUID: UUID): Boolean = {
-    val masterListenPort = getMasterListenPort(variableUUID)
-
-    if (masterListenPort == SourceInfo.TxOverGoToDefault ||
-        masterListenPort == SourceInfo.TxNotStartedRetry) {
+    val gInfo = MultiTracker.getGuideInfo(variableUUID)
+    
+    if (gInfo.listenPort == SourceInfo.TxOverGoToDefault ||
+        gInfo.listenPort == SourceInfo.TxNotStartedRetry) {
       // TODO: SourceInfo.TxNotStartedRetry is not really in use because we go
-      // to HDFS anyway when receiveBroadcast returns false
+      // to the default mechanism anyway when receiveBroadcast returns false
       return false
     }
 
@@ -220,7 +171,7 @@ extends Broadcast[T] with Logging with Serializable {
     do {
       // Connect to Master and send this worker's Information
       clientSocketToMaster =
-        new Socket(Broadcast.MasterHostAddress, masterListenPort)
+        new Socket(Broadcast.MasterHostAddress, gInfo.listenPort)
       // TODO: Guiding object connection is reusable
       oosMaster =
         new ObjectOutputStream(clientSocketToMaster.getOutputStream)
@@ -553,12 +504,13 @@ extends Broadcast[T] with Logging with Serializable {
 
   class ServeMultipleRequests
   extends Thread with Logging {
-    override def run() {
-      var threadPool = Utils.newDaemonCachedThreadPool()
-      var serverSocket: ServerSocket = null
-
-      serverSocket = new ServerSocket(0)
+    
+    var threadPool = Utils.newDaemonCachedThreadPool()
+    
+    override def run() {      
+      var serverSocket = new ServerSocket(0)
       listenPort = serverSocket.getLocalPort
+      
       logInfo("ServeMultipleRequests started with " + serverSocket)
 
       listenPortLock.synchronized {
@@ -581,7 +533,7 @@ extends Broadcast[T] with Logging with Serializable {
             try {
               threadPool.execute(new ServeSingleRequest(clientSocket))
             } catch {
-              // In failure, close() socket here; else, the thread will close() it
+              // In failure, close socket here; else, the thread will close it
               case ioe: IOException => clientSocket.close()
             }
           }
@@ -592,7 +544,6 @@ extends Broadcast[T] with Logging with Serializable {
           serverSocket.close()
         }
       }
-
       // Shutdown the thread pool
       threadPool.shutdown()
     }
@@ -624,7 +575,7 @@ extends Broadcast[T] with Logging with Serializable {
           }
         } catch {
           // If something went wrong, e.g., the worker at the other end died etc.
-          // then close() everything up
+          // then close everything up
           case e: Exception => {
             logInfo("ServeSingleRequest had a " + e)
           }

@@ -121,7 +121,8 @@ extends Broadcast[T] with Logging with Serializable {
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
-        // Only the first worker in a node can ever be inside this 'else'
+        // Initializing everything because Master will only send null/0 values
+        // Only the 1st worker in a node can be here. Others will get from cache
         initializeWorkerVariables
 
         logInfo("Local host address: " + hostAddress)
@@ -259,67 +260,13 @@ extends Broadcast[T] with Logging with Serializable {
     }
   }
 
-  def getGuideInfo(variableUUID: UUID): SourceInfo = {
-    var clientSocketToTracker: Socket = null
-    var oosTracker: ObjectOutputStream = null
-    var oisTracker: ObjectInputStream = null
-
-    var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxOverGoToDefault)
-
-    var retriesLeft = MultiTracker.MaxRetryCount
-    do {
-      try {
-        // Connect to the tracker to find out GuideInfo
-        clientSocketToTracker =
-          new Socket(Broadcast.MasterHostAddress, MultiTracker.MasterTrackerPort)
-        oosTracker =
-          new ObjectOutputStream(clientSocketToTracker.getOutputStream)
-        oosTracker.flush()
-        oisTracker =
-          new ObjectInputStream(clientSocketToTracker.getInputStream)
-
-        // Send messageType/intention
-        oosTracker.writeObject(MultiTracker.FIND_BROADCAST_TRACKER)
-        oosTracker.flush()
-
-        // Send UUID and receive GuideInfo
-        oosTracker.writeObject(uuid)
-        oosTracker.flush()
-        gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
-      } catch {
-        case e: Exception => {
-          logInfo("getGuideInfo had a " + e)
-        }
-      } finally {
-        if (oisTracker != null) {
-          oisTracker.close()
-        }
-        if (oosTracker != null) {
-          oosTracker.close()
-        }
-        if (clientSocketToTracker != null) {
-          clientSocketToTracker.close()
-        }
-      }
-
-      Thread.sleep(MultiTracker.ranGen.nextInt(
-        MultiTracker.MaxKnockInterval - MultiTracker.MinKnockInterval) +
-        MultiTracker.MinKnockInterval)
-
-      retriesLeft -= 1
-    } while (retriesLeft > 0 && gInfo.listenPort == SourceInfo.TxNotStartedRetry)
-
-    logInfo("Got this guidePort from Tracker: " + gInfo.listenPort)
-    return gInfo
-  }
-
   def receiveBroadcast(variableUUID: UUID): Boolean = {
-    val gInfo = getGuideInfo(variableUUID)
+    val gInfo = MultiTracker.getGuideInfo(variableUUID)
 
     if (gInfo.listenPort == SourceInfo.TxOverGoToDefault ||
         gInfo.listenPort == SourceInfo.TxNotStartedRetry) {
       // TODO: SourceInfo.TxNotStartedRetry is not really in use because we go
-      // to HDFS anyway when receiveBroadcast returns false
+      // to the default mechanism anyway when receiveBroadcast returns false
       return false
     }
 
@@ -1009,9 +956,7 @@ extends Broadcast[T] with Logging with Serializable {
               threadPool.execute(new ServeSingleRequest(clientSocket))
             } catch {
               // In failure, close socket here; else, the thread will close it
-              case ioe: IOException => {
-                clientSocket.close()
-              }
+              case ioe: IOException => clientSocket.close()
             }
           }
         }
@@ -1094,7 +1039,6 @@ extends Broadcast[T] with Logging with Serializable {
         } finally {
           logInfo("ServeSingleRequest is closing streams and sockets")
           ois.close()
-          // TODO: The following line causes a "java.net.SocketException: Socket closed"
           oos.close()
           clientSocket.close()
         }
