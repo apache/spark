@@ -44,10 +44,9 @@ extends Broadcast[T] with Logging with Serializable {
 }
 
 class HttpBroadcastFactory extends BroadcastFactory {
-  def initialize(isMaster: Boolean) {
-    HttpBroadcast.initialize(isMaster)
-  }
+  def initialize(isMaster: Boolean) = HttpBroadcast.initialize(isMaster)
   def newBroadcast[T](value_ : T, isLocal: Boolean) = new HttpBroadcast[T](value_, isLocal)
+  def stop() = HttpBroadcast.stop()
 }
 
 private object HttpBroadcast extends Logging {
@@ -70,6 +69,12 @@ private object HttpBroadcast extends Logging {
         serverUri = System.getProperty("spark.httpBroadcast.uri")
         initialized = true
       }
+    }
+  }
+  
+  def stop() {
+    if (server != null) {
+      server.stop()
     }
   }
 

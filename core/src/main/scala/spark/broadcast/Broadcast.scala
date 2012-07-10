@@ -56,7 +56,7 @@ object Broadcast extends Logging with Serializable {
   }
 
   def stop() {
-    // TODO:
+    broadcastFactory.stop()
   }
 
   def getBroadcastFactory: BroadcastFactory = {

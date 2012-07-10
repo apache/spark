@@ -51,7 +51,6 @@ extends Broadcast[T] with Logging with Serializable {
     var variableInfo = MultiTracker.blockifyObject(value_)
 
     // Prepare the value being broadcasted
-    // TODO: Refactoring and clean-up required here
     arrayOfBlocks = variableInfo.arrayOfBlocks
     totalBytes = variableInfo.totalBytes
     totalBlocks = variableInfo.totalBlocks
@@ -618,9 +617,7 @@ extends Broadcast[T] with Logging with Serializable {
 
 class TreeBroadcastFactory
 extends BroadcastFactory {
-  def initialize(isMaster: Boolean) {
-    MultiTracker.initialize(isMaster)
-  }
-  def newBroadcast[T](value_ : T, isLocal: Boolean) =
-    new TreeBroadcast[T](value_, isLocal)
+  def initialize(isMaster: Boolean) = MultiTracker.initialize(isMaster)
+  def newBroadcast[T](value_ : T, isLocal: Boolean) = new TreeBroadcast[T](value_, isLocal)
+  def stop() = MultiTracker.stop
 }

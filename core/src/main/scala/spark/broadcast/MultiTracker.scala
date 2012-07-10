@@ -27,6 +27,8 @@ extends Logging {
   private var initialized = false
   private var isMaster_ = false
 
+  private var stopBroadcast = false
+
   private var trackMV: TrackMultipleValues = null
 
   def initialize(isMaster__ : Boolean) {
@@ -44,6 +46,10 @@ extends Logging {
         initialized = true
       }
     }
+  }
+  
+  def stop() {
+    stopBroadcast = true
   }
 
   // Load common parameters
@@ -122,14 +128,16 @@ extends Logging {
       logInfo("TrackMultipleValues" + serverSocket)
 
       try {
-        while (true) {
+        while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
             serverSocket.setSoTimeout(TrackerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
-              logInfo("TrackMultipleValues Timeout. Stopping listening...")
+              if (stopBroadcast) {
+                logInfo("Stopping TrackMultipleValues...")
+              }              
             }
           }
 
@@ -207,9 +215,7 @@ extends Logging {
               })
             } catch {
               // In failure, close socket here; else, client thread will close
-              case ioe: IOException => {
-                clientSocket.close()
-              }
+              case ioe: IOException => clientSocket.close()
             }
           }
         }
