@@ -202,8 +202,24 @@ class SparkContext(
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration
-      ): RDD[(K, V)] = new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+      conf: Configuration): RDD[(K, V)] = {
+    val job = new NewHadoopJob(conf)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updatedConf = job.getConfiguration
+    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf)
+  }
+
+  /** 
+   * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
+   * and extra configuration options to pass to the input format.
+   */
+  def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
+      conf: Configuration,
+      fClass: Class[F],
+      kClass: Class[K],
+      vClass: Class[V]): RDD[(K, V)] = {
+    new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+  }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types */
   def sequenceFile[K, V](path: String,
