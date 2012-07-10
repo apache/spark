@@ -13,6 +13,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.NullWritable
@@ -275,8 +276,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
-    val job = new NewAPIHadoopJob
+      outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
+      conf: Configuration) {
+    val job = new NewAPIHadoopJob(conf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
     val wrappedConf = new SerializableWritable(job.getConfiguration)
@@ -312,6 +314,14 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     jobCommitter.setupJob(jobTaskContext)
     val count = self.context.runJob(self, writeShard _).sum
     jobCommitter.cleanupJob(jobTaskContext)
+  }
+
+  def saveAsNewAPIHadoopFile(
+      path: String,
+      keyClass: Class[_],
+      valueClass: Class[_],
+      outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
+    saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, new Configuration)
   }
 
   def saveAsHadoopFile(
