@@ -4,9 +4,9 @@ import java.io._
 
 import scala.collection.mutable.Map
 
-class Accumulator[T] (
+class Accumulable[T,R] (
     @transient initialValue: T,
-    param: AccumulatorParam[T])
+    param: AccumulableParam[T,R])
   extends Serializable {
   
   val id = Accumulators.newId
@@ -17,7 +17,19 @@ class Accumulator[T] (
 
   Accumulators.register(this, true)
 
-  def += (term: T) { value_ = param.addInPlace(value_, term) }
+  /**
+   * add more data to this accumulator / accumulable
+   * @param term
+   */
+  def += (term: R) { value_ = param.addToAccum(value_, term) }
+
+  /**
+   * merge two accumulable objects together
+   * <p>
+   * Normally, a user will not want to use this version, but will instead call `+=`.
+   * @param term
+   */
+  def ++= (term: T) { value_ = param.addInPlace(value_, term)}
   def value = this.value_
   def value_= (t: T) {
     if (!deserialized) value_ = t
@@ -35,48 +47,58 @@ class Accumulator[T] (
   override def toString = value_.toString
 }
 
-class Accumulatable[T,Y](
+class Accumulator[T](
     @transient initialValue: T,
-    param: AccumulatableParam[T,Y]) extends Accumulator[T](initialValue, param) {
-  /**
-   * add more data to the current value of the this accumulator, via
-   * AccumulatableParam.addToAccum
-   * @param term added to the current value of the accumulator
-   */
-  def +:= (term: Y) {value_ = param.addToAccum(value_, term)}
-}
+    param: AccumulatorParam[T]) extends Accumulable[T,T](initialValue, param)
 
 /**
- * A datatype that can be accumulated, ie. has a commutative & associative +
+ * A simpler version of [[spark.AccumulableParam]] where the only datatype you can add in is the same type
+ * as the accumulated value
  * @tparam T
  */
-trait AccumulatorParam[T] extends Serializable {
-  def addInPlace(t1: T, t2: T): T
-  def zero(initialValue: T): T
+trait AccumulatorParam[T] extends AccumulableParam[T,T] {
+  def addToAccum(t1: T, t2: T) : T = {
+    addInPlace(t1, t2)
+  }
 }
 
 /**
- * A datatype that can be accumulated.  Slightly extends [[spark.AccumulatorParam]] to allow you to
- * combine a different data type with value so far
+ * A datatype that can be accumulated, ie. has a commutative & associative +.
+ * <p>
+ * You must define how to add data, and how to merge two of these together.  For some datatypes, these might be
+ * the same operation (eg., a counter).  In that case, you might want to use [[spark.AccumulatorParam]].  They won't
+ * always be the same, though -- eg., imagine you are accumulating a set.  You will add items to the set, and you
+ * will union two sets together.
+ *
  * @tparam T the full accumulated data
- * @tparam Y partial data that can be added in
+ * @tparam R partial data that can be added in
  */
-trait AccumulatableParam[T,Y] extends AccumulatorParam[T] {
+trait AccumulableParam[T,R] extends Serializable {
   /**
    * Add additional data to the accumulator value.
    * @param t1 the current value of the accumulator
    * @param t2 the data to be added to the accumulator
    * @return the new value of the accumulator
    */
-  def addToAccum(t1: T, t2: Y) : T
+  def addToAccum(t1: T, t2: R) : T
+
+  /**
+   * merge two accumulated values together
+   * @param t1
+   * @param t2
+   * @return
+   */
+  def addInPlace(t1: T, t2: T): T
+
+  def zero(initialValue: T): T
 }
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
 private object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
-  val originals = Map[Long, Accumulator[_]]()
-  val localAccums = Map[Thread, Map[Long, Accumulator[_]]]()
+  val originals = Map[Long, Accumulable[_,_]]()
+  val localAccums = Map[Thread, Map[Long, Accumulable[_,_]]]()
   var lastId: Long = 0
   
   def newId: Long = synchronized {
@@ -84,14 +106,12 @@ private object Accumulators {
     return lastId
   }
 
-  def register(a: Accumulator[_], original: Boolean) {
-    synchronized {
-      if (original) {
-        originals(a.id) = a
-      } else {
-        val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
-        accums(a.id) = a
-      }
+  def register(a: Accumulable[_,_], original: Boolean): Unit = synchronized {
+    if (original) {
+      originals(a.id) = a
+    } else {
+      val accums = localAccums.getOrElseUpdate(Thread.currentThread, Map())
+      accums(a.id) = a
     }
   }
 
@@ -112,12 +132,10 @@ private object Accumulators {
   }
 
   // Add values to the original accumulators with some given IDs
-  def add(values: Map[Long, Any]) {
-    synchronized {
-      for ((id, value) <- values) {
-        if (originals.contains(id)) {
-          originals(id).asInstanceOf[Accumulator[Any]] += value
-        }
+  def add(values: Map[Long, Any]): Unit = synchronized {
+    for ((id, value) <- values) {
+      if (originals.contains(id)) {
+        originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
       }
     }
   }
