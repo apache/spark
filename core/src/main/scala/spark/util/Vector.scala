@@ -1,8 +1,8 @@
-package spark.examples
+package spark.util
 
 class Vector(val elements: Array[Double]) extends Serializable {
   def length = elements.length
-  
+
   def apply(index: Int) = elements(index)
 
   def + (other: Vector): Vector = {
@@ -30,11 +30,12 @@ class Vector(val elements: Array[Double]) extends Serializable {
   }
 
   def * (scale: Double): Vector = Vector(length, i => this(i) * scale)
+  def * (scale: Double): Vector = Vector(length, i => this(i) * scale)
 
   def / (d: Double): Vector = this * (1 / d)
 
   def unary_- = this * -1
-  
+
   def sum = elements.reduceLeft(_ + _)
 
   def squaredDist(other: Vector): Double = {
@@ -76,6 +77,8 @@ object Vector {
 
   implicit object VectorAccumParam extends spark.AccumulatorParam[Vector] {
     def addInPlace(t1: Vector, t2: Vector) = t1 + t2
+
     def zero(initialValue: Vector) = Vector.zeros(initialValue.length)
   }
+
 }
