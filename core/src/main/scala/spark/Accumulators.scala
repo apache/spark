@@ -35,9 +35,40 @@ class Accumulator[T] (
   override def toString = value_.toString
 }
 
+class Accumulatable[T,Y](
+    @transient initialValue: T,
+    param: AccumulatableParam[T,Y]) extends Accumulator[T](initialValue, param) {
+  /**
+   * add more data to the current value of the this accumulator, via
+   * AccumulatableParam.addToAccum
+   * @param term
+   */
+  def +:= (term: Y) {value_ = param.addToAccum(value_, term)}
+}
+
+/**
+ * A datatype that can be accumulated, ie. has a commutative & associative +
+ * @tparam T
+ */
 trait AccumulatorParam[T] extends Serializable {
   def addInPlace(t1: T, t2: T): T
   def zero(initialValue: T): T
+}
+
+/**
+ * A datatype that can be accumulated.  Slightly extends [[spark.AccumulatorParam]] to allow you to
+ * combine a different data type with value so far
+ * @tparam T the full accumulated data
+ * @tparam Y partial data that can be added in
+ */
+trait AccumulatableParam[T,Y] extends AccumulatorParam[T] {
+  /**
+   * Add additional data to the accumulator value.
+   * @param t1 the current value of the accumulator
+   * @param t2 the data to be added to the accumulator
+   * @return the new value of the accumulator
+   */
+  def addToAccum(t1: T, t2: Y) : T
 }
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
