@@ -29,7 +29,37 @@ class Vector(val elements: Array[Double]) extends Serializable {
     return ans
   }
 
-  def * (scale: Double): Vector = Vector(length, i => this(i) * scale)
+  /**
+   * return (this + plus) dot other, but without creating any intermediate storage
+   * @param plus
+   * @param other
+   * @return
+   */
+  def plusDot(plus: Vector, other: Vector): Double = {
+    if (length != other.length)
+      throw new IllegalArgumentException("Vectors of different length")
+    if (length != plus.length)
+      throw new IllegalArgumentException("Vectors of different length")
+    var ans = 0.0
+    var i = 0
+    while (i < length) {
+      ans += (this(i) + plus(i)) * other(i)
+      i += 1
+    }
+    return ans
+  }
+
+  def +=(other: Vector) {
+    if (length != other.length)
+      throw new IllegalArgumentException("Vectors of different length")
+    var ans = 0.0
+    var i = 0
+    while (i < length) {
+      elements(i) += other(i)
+      i += 1
+    }
+  }
+
   def * (scale: Double): Vector = Vector(length, i => this(i) * scale)
 
   def / (d: Double): Vector = this * (1 / d)
