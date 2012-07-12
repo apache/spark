@@ -41,7 +41,7 @@ class Accumulatable[T,Y](
   /**
    * add more data to the current value of the this accumulator, via
    * AccumulatableParam.addToAccum
-   * @param term
+   * @param term added to the current value of the accumulator
    */
   def +:= (term: Y) {value_ = param.addToAccum(value_, term)}
 }
