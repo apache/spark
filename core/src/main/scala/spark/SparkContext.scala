@@ -285,6 +285,18 @@ class SparkContext(
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
 
+  /**
+   * create an accumulatable shared variable, with a `+:=` method
+   * @param initialValue
+   * @param param
+   * @tparam T accumulator type
+   * @tparam Y type that can be added to the accumulator
+   * @return
+   */
+  def accumulatable[T,Y](initialValue: T)(implicit param: AccumulatableParam[T,Y]) =
+    new Accumulatable(initialValue, param)
+
+
   // Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = Broadcast.getBroadcastFactory.newBroadcast[T] (value, isLocal)
 
