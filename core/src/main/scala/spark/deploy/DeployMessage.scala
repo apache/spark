@@ -1,5 +1,7 @@
 package spark.deploy
 
+import spark.deploy.ExecutorState.ExecutorState
+
 sealed trait DeployMessage extends Serializable
 
 // Worker to Master
@@ -10,8 +12,7 @@ case class RegisterWorker(id: String, host: String, port: Int, cores: Int, memor
 case class ExecutorStateChanged(
     jobId: String,
     execId: Int,
-    state:
-    ExecutorState.Value,
+    state: ExecutorState,
     message: Option[String])
   extends DeployMessage
 
@@ -38,7 +39,7 @@ case class RegisterJob(jobDescription: JobDescription) extends DeployMessage
 
 case class RegisteredJob(jobId: String) extends DeployMessage
 case class ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int)
-case class ExecutorUpdated(id: Int, state: ExecutorState.Value, message: Option[String])
+case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String])
 case class JobKilled(message: String)
 
 // Internal message in Client

@@ -10,6 +10,9 @@ import org.apache.hadoop.conf.Configuration
 import scala.Some
 import spark.deploy.ExecutorStateChanged
 
+/**
+ * Manages the execution of one executor process.
+ */
 class ExecutorRunner(
     jobId: String,
     execId: Int,
@@ -17,6 +20,8 @@ class ExecutorRunner(
     cores: Int,
     memory: Int,
     worker: ActorRef,
+    workerId: String,
+    hostname: String,
     sparkHome: File,
     workDir: File)
   extends Logging {
@@ -37,6 +42,11 @@ class ExecutorRunner(
     if (workerThread != null) {
       workerThread.interrupt()
       workerThread = null
+      if (process != null) {
+        logInfo("Killing process!")
+        process.destroy()
+      }
+      worker ! ExecutorStateChanged(jobId, execId, ExecutorState.KILLED, None)
     }
   }
 
@@ -72,10 +82,18 @@ class ExecutorRunner(
     }
   }
 
+  /** Replace variables such as {{SLAVEID}} and {{CORES}} in a command argument passed to us */
+  def substituteVariables(argument: String): String = argument match {
+    case "{{SLAVEID}}" => workerId
+    case "{{HOSTNAME}}" => hostname
+    case "{{CORES}}" => cores.toString
+    case other => other
+  }
+
   def buildCommandSeq(): Seq[String] = {
     val command = jobDesc.command
     val runScript = new File(sparkHome, "run").getCanonicalPath
-    Seq(runScript, command.mainClass) ++ command.arguments
+    Seq(runScript, command.mainClass) ++ command.arguments.map(substituteVariables)
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
@@ -127,11 +145,7 @@ class ExecutorRunner(
       worker ! ExecutorStateChanged(jobId, execId, ExecutorState.FAILED, Some(message))
     } catch {
       case interrupted: InterruptedException =>
-        logInfo("Runner thread interrupted -- killing executor " + fullId)
-        if (process != null) {
-          process.destroy()
-        }
-        worker ! ExecutorStateChanged(jobId, execId, ExecutorState.KILLED, None)
+        logInfo("Runner thread for executor " + fullId + " interrupted")
 
       case e: Exception => {
         logError("Error running executor", e)

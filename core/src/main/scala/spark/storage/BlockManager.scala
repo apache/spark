@@ -61,7 +61,7 @@ class BlockLocker(numLockers: Int) {
   private val hashLocker = Array.fill(numLockers)(new Object())
   
   def getLock(blockId: String): Object = {
-    return hashLocker(Math.abs(blockId.hashCode % numLockers))
+    return hashLocker(math.abs(blockId.hashCode % numLockers))
   }
 }
 
@@ -312,7 +312,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
     // wait for and gather all the remote blocks
     for ((cmId, future) <- remoteBlockFutures) {
       var count = 0
-      val oneBlockId = remoteBlockIdsPerLocation(new BlockManagerId(cmId.host, cmId.port)).first
+      val oneBlockId = remoteBlockIdsPerLocation(new BlockManagerId(cmId.host, cmId.port)).head
       future() match {
         case Some(message) => {
           val bufferMessage = message.asInstanceOf[BufferMessage]

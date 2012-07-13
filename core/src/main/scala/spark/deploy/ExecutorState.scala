@@ -5,5 +5,7 @@ object ExecutorState
 
   val LAUNCHING, LOADING, RUNNING, KILLED, FAILED, LOST = Value
 
-  def isFinished(state: Value): Boolean = (state == KILLED || state == FAILED || state == LOST)
+  type ExecutorState = Value
+
+  def isFinished(state: ExecutorState): Boolean = Seq(KILLED, FAILED, LOST).contains(state)
 }

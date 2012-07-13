@@ -30,7 +30,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
 
-import org.apache.mesos.MesosNativeLibrary
+import org.apache.mesos.{Scheduler, MesosNativeLibrary}
 
 import spark.broadcast._
 
@@ -41,8 +41,8 @@ import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.mesos.MesosScheduler
-import spark.scheduler.mesos.CoarseMesosScheduler
+import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
+import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.BlockManagerMaster
 
 class SparkContext(
@@ -57,13 +57,13 @@ class SparkContext(
 
   // Set Spark master host and port system properties
   if (System.getProperty("spark.master.host") == null) {
-    System.setProperty("spark.master.host", Utils.localIpAddress)
+    System.setProperty("spark.master.host", Utils.localIpAddress())
   }
   if (System.getProperty("spark.master.port") == null) {
     System.setProperty("spark.master.port", "0")
   }
 
-  private val isLocal = master.startsWith("local") && !master.startsWith("local") // TODO: better check for local
+  private val isLocal = (master == "local" || master.startsWith("local["))
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   val env = SparkEnv.createFromSystemProperties(
@@ -80,20 +80,36 @@ class SparkContext(
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
+    // Regular expression for connecting to Spark deploy clusters
+    val SPARK_REGEX = """(spark://.*)""".r
+
     master match {
       case "local" => 
         new LocalScheduler(1, 0)
+
       case LOCAL_N_REGEX(threads) => 
         new LocalScheduler(threads.toInt, 0)
+
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         new LocalScheduler(threads.toInt, maxFailures.toInt)
+
+      case SPARK_REGEX(sparkUrl) =>
+        val scheduler = new ClusterScheduler(this)
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
+        scheduler.initialize(backend)
+        scheduler
+
       case _ =>
         MesosNativeLibrary.load()
-        if (System.getProperty("spark.mesos.coarse", "false") == "true") {
-          new CoarseMesosScheduler(this, master, frameworkName)
+        val scheduler = new ClusterScheduler(this)
+        val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
+        val backend = if (coarseGrained) {
+          new CoarseMesosSchedulerBackend(scheduler, this, master, frameworkName)
         } else {
-          new MesosScheduler(this, master, frameworkName)
+          new MesosSchedulerBackend(scheduler, this, master, frameworkName)
         }
+        scheduler.initialize(backend)
+        scheduler
     }
   }
   taskScheduler.start()
@@ -186,8 +202,24 @@ class SparkContext(
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration
-      ): RDD[(K, V)] = new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+      conf: Configuration): RDD[(K, V)] = {
+    val job = new NewHadoopJob(conf)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updatedConf = job.getConfiguration
+    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf)
+  }
+
+  /** 
+   * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
+   * and extra configuration options to pass to the input format.
+   */
+  def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
+      conf: Configuration,
+      fClass: Class[F],
+      kClass: Class[K],
+      vClass: Class[V]): RDD[(K, V)] = {
+    new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+  }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types */
   def sequenceFile[K, V](path: String,
@@ -270,11 +302,6 @@ class SparkContext(
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
     logInfo("Successfully stopped SparkContext")
-  }
-
-  // Wait for the scheduler to be registered with the cluster manager
-  def waitForRegister() {
-    taskScheduler.waitForRegister()
   }
 
   // Get Spark's home location from either a value set through the constructor,

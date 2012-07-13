@@ -8,12 +8,16 @@ abstract class Partitioner extends Serializable {
 class HashPartitioner(partitions: Int) extends Partitioner {
   def numPartitions = partitions
 
-  def getPartition(key: Any) = {
-    val mod = key.hashCode % partitions
-    if (mod < 0) {
-      mod + partitions
+  def getPartition(key: Any): Int = {
+    if (key == null) {
+      return 0
     } else {
-      mod // Guard against negative hash codes
+      val mod = key.hashCode % partitions
+      if (mod < 0) {
+        mod + partitions
+      } else {
+        mod // Guard against negative hash codes
+      }
     }
   }
   
