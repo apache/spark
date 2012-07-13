@@ -112,7 +112,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     masterActor ! ReviveOffers
   }
 
-  def defaultParallelism(): Int = totalCoreCount.get()
+  def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
 }
 
 object StandaloneSchedulerBackend {
