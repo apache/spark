@@ -16,7 +16,6 @@ extends Logging {
   val REGISTER_BROADCAST_TRACKER = 0
   val UNREGISTER_BROADCAST_TRACKER = 1
   val FIND_BROADCAST_TRACKER = 2
-  val GET_UPDATED_SHARE = 3
 
   // Map to keep track of guides of ongoing broadcasts
   var valueToGuideMap = Map[UUID, SourceInfo]()
@@ -197,8 +196,6 @@ extends Logging {
                       // Send reply back
                       oos.writeObject(gInfo)
                       oos.flush()
-                    } else if (messageType == GET_UPDATED_SHARE) {
-                      // TODO: Not implemented
                     } else {
                       throw new SparkException("Undefined messageType at TrackMultipleValues")
                     }
@@ -255,9 +252,7 @@ extends Logging {
         oosTracker.flush()
         gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
       } catch {
-        case e: Exception => {
-          logInfo("getGuideInfo had a " + e)
-        }
+        case e: Exception => logInfo("getGuideInfo had a " + e)
       } finally {
         if (oisTracker != null) {
           oisTracker.close()

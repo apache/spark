@@ -262,10 +262,7 @@ extends Broadcast[T] with Logging with Serializable {
   def receiveBroadcast(variableUUID: UUID): Boolean = {
     val gInfo = MultiTracker.getGuideInfo(variableUUID)
 
-    if (gInfo.listenPort == SourceInfo.TxOverGoToDefault ||
-        gInfo.listenPort == SourceInfo.TxNotStartedRetry) {
-      // TODO: SourceInfo.TxNotStartedRetry is not really in use because we go
-      // to the default mechanism anyway when receiveBroadcast returns false
+    if (gInfo.listenPort == SourceInfo.TxOverGoToDefault) {
       return false
     }
 
@@ -798,13 +795,10 @@ extends Broadcast[T] with Logging with Serializable {
 
           try {
             // Connect to the source
-            guideSocketToSource =
-              new Socket(sourceInfo.hostAddress, sourceInfo.listenPort)
-            gosSource =
-              new ObjectOutputStream(guideSocketToSource.getOutputStream)
+            guideSocketToSource = new Socket(sourceInfo.hostAddress, sourceInfo.listenPort)
+            gosSource = new ObjectOutputStream(guideSocketToSource.getOutputStream)
             gosSource.flush()
-            gisSource =
-              new ObjectInputStream(guideSocketToSource.getInputStream)
+            gisSource = new ObjectInputStream(guideSocketToSource.getInputStream)
 
             // Throw away whatever comes in
             gisSource.readObject.asInstanceOf[SourceInfo]
@@ -991,7 +985,6 @@ extends Broadcast[T] with Logging with Serializable {
           if (rxSourceInfo.listenPort == SourceInfo.StopBroadcast) {
             stopBroadcast = true
           } else {
-            // Carry on
             addToListOfSources(rxSourceInfo)
           }
 
@@ -1029,12 +1022,7 @@ extends Broadcast[T] with Logging with Serializable {
             }
           }
         } catch {
-          // If something went wrong, e.g., the worker at the other end died etc.
-          // then close everything up
-          // Exception can happen if the receiver stops receiving
-          case e: Exception => {
-            logInfo("ServeSingleRequest had a " + e)
-          }
+          case e: Exception => logInfo("ServeSingleRequest had a " + e)
         } finally {
           logInfo("ServeSingleRequest is closing streams and sockets")
           ois.close()
@@ -1048,9 +1036,7 @@ extends Broadcast[T] with Logging with Serializable {
           oos.writeObject(arrayOfBlocks(blockToSend))
           oos.flush()
         } catch {
-          case e: Exception => {
-            logInfo("sendBlock had a " + e)
-          }
+          case e: Exception => logInfo("sendBlock had a " + e)
         }
         logInfo("Sent block: " + blockToSend + " to " + clientSocket)
       }
