@@ -31,7 +31,7 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
       "org.scalatest" %% "scalatest" % "1.6.1" % "test",
-      "org.scala-tools.testing" %% "scalacheck" % "1.9" % "test"
+      "org.scalacheck" %% "scalacheck" % "1.9" % "test"
     ),
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
