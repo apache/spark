@@ -250,11 +250,8 @@ class SparkContext(
 
   /**
    * create an accumulatable shared variable, with a `+=` method
-   * @param initialValue
-   * @param param
    * @tparam T accumulator type
    * @tparam R type that can be added to the accumulator
-   * @return
    */
   def accumulable[T,R](initialValue: T)(implicit param: AccumulableParam[T,R]) =
     new Accumulable(initialValue, param)
