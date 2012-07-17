@@ -25,7 +25,7 @@ class Accumulable[T,R] (
 
   /**
    * merge two accumulable objects together
-   * <p>
+   * 
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other Accumulable that will get merged with this
    */
@@ -64,7 +64,7 @@ trait AccumulatorParam[T] extends AccumulableParam[T,T] {
 
 /**
  * A datatype that can be accumulated, ie. has a commutative & associative +.
- * 
+ *
  * You must define how to add data, and how to merge two of these together.  For some datatypes, these might be
  * the same operation (eg., a counter).  In that case, you might want to use [[spark.AccumulatorParam]].  They won't
  * always be the same, though -- eg., imagine you are accumulating a set.  You will add items to the set, and you
