@@ -26,7 +26,7 @@ object SparkEnv {
     val cache = Class.forName(cacheClass).newInstance().asInstanceOf[Cache]
     
     val serializerClass = System.getProperty("spark.serializer", "spark.JavaSerializer")
-    val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
+    val serializer = Class.forName(serializerClass, true, Thread.currentThread.getContextClassLoader).newInstance().asInstanceOf[Serializer]
 
     val closureSerializerClass =
       System.getProperty("spark.closure.serializer", "spark.JavaSerializer")
