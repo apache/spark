@@ -21,7 +21,7 @@ class Accumulable[T,R] (
    * add more data to this accumulator / accumulable
    * @param term
    */
-  def += (term: R) { value_ = param.addToAccum(value_, term) }
+  def += (term: R) { value_ = param.addAccumulator(value_, term) }
 
   /**
    * merge two accumulable objects together
@@ -57,7 +57,7 @@ class Accumulator[T](
  * @tparam T
  */
 trait AccumulatorParam[T] extends AccumulableParam[T,T] {
-  def addToAccum(t1: T, t2: T) : T = {
+  def addAccumulator(t1: T, t2: T) : T = {
     addInPlace(t1, t2)
   }
 }
@@ -80,7 +80,7 @@ trait AccumulableParam[T,R] extends Serializable {
    * @param t2 the data to be added to the accumulator
    * @return the new value of the accumulator
    */
-  def addToAccum(t1: T, t2: R) : T
+  def addAccumulator(t1: T, t2: R) : T
 
   /**
    * merge two accumulated values together
