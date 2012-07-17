@@ -53,7 +53,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers {
       t1 ++= t2
       t1
     }
-    def addToAccum(t1: mutable.Set[Any], t2: Any) : mutable.Set[Any] = {
+    def addAccumulator(t1: mutable.Set[Any], t2: Any) : mutable.Set[Any] = {
       t1 += t2
       t1
     }
