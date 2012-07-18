@@ -9,7 +9,7 @@ object MultiBroadcastTest {
       System.exit(1)
     }
     
-    val spark = new SparkContext(args(0), "Broadcast Test", System.getenv("SPARK_HOME"), List(System.getenv("EXAMPLES_JAR"))
+    val spark = new SparkContext(args(0), "Broadcast Test", System.getenv("SPARK_HOME"), List(System.getenv("EXAMPLES_JAR")))
     val slices = if (args.length > 1) args(1).toInt else 2
     val num = if (args.length > 2) args(2).toInt else 1000000
 
