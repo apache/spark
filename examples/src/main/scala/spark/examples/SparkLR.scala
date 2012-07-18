@@ -28,7 +28,7 @@ object SparkLR {
       System.err.println("Usage: SparkLR <host> [<slices>]")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "SparkLR")
+    val sc = new SparkContext(args(0), "SparkLR", System.getenv("SPARK_HOME"), List(System.getenv("EXAMPLES_JAR"))
     val numSlices = if (args.length > 1) args(1).toInt else 2
     val data = generateData
 
