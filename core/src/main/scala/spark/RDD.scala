@@ -112,6 +112,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
+  def distinct(): RDD[T] = map(x => (x, "")).reduceByKey((x, y) => x).map(_._1)
+
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
     new SampledRDD(this, withReplacement, fraction, seed)
 
@@ -357,6 +359,14 @@ class MappedRDD[U: ClassManifest, T: ClassManifest](
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = prev.iterator(split).map(f)
+}
+
+class PartitioningPreservingMappedRDD[U: ClassManifest, T: ClassManifest](
+  prev: RDD[T],
+  f: T => U)
+  extends MappedRDD[U, T](prev, f) {
+
+  override val partitioner = prev.partitioner
 }
 
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](

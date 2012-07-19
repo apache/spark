@@ -48,10 +48,13 @@ import spark.storage.BlockManagerMaster
 class SparkContext(
     master: String,
     frameworkName: String,
-    val sparkHome: String = null,
-    val jars: Seq[String] = Nil)
+    val sparkHome: String,
+    val jars: Seq[String])
   extends Logging {
   
+  def this(master: String, frameworkName: String) = this(master, frameworkName, null, Nil)
+
+
   // Ensure logging is initialized before we spawn any threads
   initLogging()
 
