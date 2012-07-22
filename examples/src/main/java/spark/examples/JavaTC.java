@@ -31,7 +31,7 @@ public class JavaTC {
   static class ProjectFn extends PairFunction<Tuple2<Integer, Tuple2<Integer, Integer>>,
       Integer, Integer> {
     static ProjectFn INSTANCE = new ProjectFn();
-    @Override
+
     public Tuple2<Integer, Integer> apply(Tuple2<Integer, Tuple2<Integer, Integer>> triple) {
       return new Tuple2<Integer, Integer>(triple._2()._2(), triple._2()._1());
     }

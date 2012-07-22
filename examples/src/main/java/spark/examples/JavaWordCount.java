@@ -14,43 +14,31 @@ import java.util.List;
 
 public class JavaWordCount {
 
-  public static class SplitFunction extends FlatMapFunction<String, String> {
-    @Override
-    public Iterable<String> apply(String s) {
-      StringOps op = new StringOps(s);
-      return Arrays.asList(op.split(' '));
-    }
-  }
-  
-  public static class MapFunction extends PairFunction<String, String, Integer> {
-    @Override
-    public Tuple2<String, Integer> apply(String s) {
-      return new Tuple2(s, 1);
-    }
-  }
-	
-  public static class ReduceFunction extends Function2<Integer, Integer, Integer> {
-    @Override
-    public Integer apply(Integer i1, Integer i2) {
-      return i1 + i2;
-    }
-  }
   public static void main(String[] args) throws Exception {
-    JavaSparkContext ctx = new JavaSparkContext("local", "JavaWordCount");
-    JavaRDD<String> lines = ctx.textFile("numbers.txt", 1).cache();
-    List<String> lineArr = lines.collect();
 
-    for (String line : lineArr) {
-      System.out.println(line);
+    if (args.length < 2) {
+      System.err.println("Usage: JavaWordCount <master> <file>");
+      System.exit(1);
     }
 
-    JavaRDD<String> words = lines.flatMap(new SplitFunction());
-    
-    JavaPairRDD<String, Integer> splits = words.map(new MapFunction());
+    JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaWordCount");
+    JavaRDD<String> lines = ctx.textFile(args[1], 1);
 
-    JavaPairRDD<String, Integer> counts = splits.reduceByKey(new ReduceFunction());
-    
-    System.out.println("output");
+    JavaPairRDD<String, Integer> counts = lines.flatMap(new FlatMapFunction<String, String>() {
+      public Iterable<String> apply(String s) {
+        StringOps op = new StringOps(s);
+        return Arrays.asList(op.split(' '));
+      }
+    }).map(new PairFunction<String, String, Integer>() {
+      public Tuple2<String, Integer> apply(String s) {
+        return new Tuple2(s, 1);
+      }
+    }).reduceByKey(new Function2<Integer, Integer, Integer>() {
+      public Integer apply(Integer i1, Integer i2) {
+        return i1 + i2;
+      }
+    });
+
     List<Tuple2<String, Integer>> output = counts.collect();
     for (Tuple2 tuple : output) {
       System.out.print(tuple._1 + ": ");
