@@ -253,17 +253,18 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
 object JavaPairRDD {
   def groupByResultToJava[K, T](rdd: RDD[(K, Seq[T])])(implicit kcm: ClassManifest[K],
     vcm: ClassManifest[T]): RDD[(K, JList[T])] =
-    new PartitioningPreservingMappedRDD(rdd, (x: (K, Seq[T])) => (x._1, seqAsJavaList(x._2)))
+    rddToPairRDDFunctions(rdd).mapValues(seqAsJavaList _)
 
-  def cogroupResultToJava[W, K, V](rdd: RDD[(K, (Seq[V], Seq[W]))])
-  : RDD[(K, (JList[V], JList[W]))] = new PartitioningPreservingMappedRDD(rdd,
-    (x: (K, (Seq[V], Seq[W]))) => (x._1, (seqAsJavaList(x._2._1), seqAsJavaList(x._2._2))))
+  def cogroupResultToJava[W, K, V](rdd: RDD[(K, (Seq[V], Seq[W]))])(implicit kcm: ClassManifest[K],
+    vcm: ClassManifest[V]): RDD[(K, (JList[V], JList[W]))] = rddToPairRDDFunctions(rdd).mapValues((x: (Seq[V],
+    Seq[W])) => (seqAsJavaList(x._1), seqAsJavaList(x._2)))
 
-  def cogroupResult2ToJava[W1, W2, K, V](rdd: RDD[(K, (Seq[V], Seq[W1], Seq[W2]))])
-  : RDD[(K, (JList[V], JList[W1], JList[W2]))] = new PartitioningPreservingMappedRDD(rdd,
-    (x: (K, (Seq[V], Seq[W1], Seq[W2]))) => (x._1, (seqAsJavaList(x._2._1),
-      seqAsJavaList(x._2._2),
-      seqAsJavaList(x._2._3))))
+  def cogroupResult2ToJava[W1, W2, K, V](rdd: RDD[(K, (Seq[V], Seq[W1],
+    Seq[W2]))])(implicit kcm: ClassManifest[K]) : RDD[(K, (JList[V], JList[W1],
+    JList[W2]))] = rddToPairRDDFunctions(rdd).mapValues(
+    (x: (Seq[V], Seq[W1], Seq[W2])) => (seqAsJavaList(x._1),
+      seqAsJavaList(x._2),
+      seqAsJavaList(x._3)))
 
   def fromRDD[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd)

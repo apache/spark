@@ -1,6 +1,6 @@
 package spark.api.java
 
-import spark.{PartitioningPreservingMappedRDD, Split, RDD}
+import spark.{Split, RDD}
 import spark.api.java.JavaPairRDD._
 import spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
 import spark.partial.{PartialResult, BoundedDouble}
@@ -48,8 +48,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def flatMap(f: DoubleFlatMapFunction[T]): JavaDoubleRDD = {
     import scala.collection.JavaConverters._
     def fn = (x: T) => f.apply(x).asScala
-    new JavaDoubleRDD(new PartitioningPreservingMappedRDD(rdd.flatMap(fn),
-      ((x: java.lang.Double) => x.doubleValue())))
+    new JavaDoubleRDD(rdd.flatMap(fn).map((x: java.lang.Double) => x.doubleValue()))
   }
 
   def flatMap[K, V](f: PairFlatMapFunction[T, K, V]): JavaPairRDD[K, V] = {

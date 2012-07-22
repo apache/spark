@@ -361,14 +361,6 @@ class MappedRDD[U: ClassManifest, T: ClassManifest](
   override def compute(split: Split) = prev.iterator(split).map(f)
 }
 
-class PartitioningPreservingMappedRDD[U: ClassManifest, T: ClassManifest](
-  prev: RDD[T],
-  f: T => U)
-  extends MappedRDD[U, T](prev, f) {
-
-  override val partitioner = prev.partitioner
-}
-
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
     f: T => TraversableOnce[U])
