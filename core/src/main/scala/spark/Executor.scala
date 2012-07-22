@@ -37,16 +37,16 @@ class Executor extends org.apache.mesos.Executor with Logging {
 
     // Make sure an appropriate class loader is set for remote actors
     RemoteActor.classLoader = getClass.getClassLoader
-
+    
+    // Create our ClassLoader (using spark properties) and set it on this thread
+    classLoader = createClassLoader()
+    Thread.currentThread.setContextClassLoader(classLoader)
+    
     // Initialize Spark environment (using system properties read above)
     env = SparkEnv.createFromSystemProperties(false)
     SparkEnv.set(env)
     // Old stuff that isn't yet using env
     Broadcast.initialize(false)
-    
-    // Create our ClassLoader (using spark properties) and set it on this thread
-    classLoader = createClassLoader()
-    Thread.currentThread.setContextClassLoader(classLoader)
     
     // Start worker thread pool
     threadPool = new ThreadPoolExecutor(
