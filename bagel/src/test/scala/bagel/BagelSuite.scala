@@ -13,11 +13,11 @@ import spark._
 class TestVertex(val active: Boolean, val age: Int) extends Vertex with Serializable
 class TestMessage(val targetId: String) extends Message[String] with Serializable
 
-class BagelSuite extends FunSuite with Assertions with BeforeAndAfter{
+class BagelSuite extends FunSuite with Assertions with BeforeAndAfter {
   
   var sc: SparkContext = _
   
-  after{
+  after {
     sc.stop()
   }
   

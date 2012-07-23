@@ -8,8 +8,8 @@ class SortingSuite extends FunSuite with BeforeAndAfter {
   
   var sc: SparkContext = _
   
-  after{
-    if(sc != null){
+  after {
+    if(sc != null) {
       sc.stop()
     }
   }

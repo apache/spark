@@ -5,12 +5,12 @@ import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 import SparkContext._
 
-class RDDSuite extends FunSuite with BeforeAndAfter{
+class RDDSuite extends FunSuite with BeforeAndAfter {
   
   var sc: SparkContext = _
   
-  after{
-    if(sc != null){
+  after {
+    if(sc != null) {
       sc.stop()
     }
   }

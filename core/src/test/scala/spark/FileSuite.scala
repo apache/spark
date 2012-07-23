@@ -11,12 +11,12 @@ import org.apache.hadoop.io._
 
 import SparkContext._
 
-class FileSuite extends FunSuite with BeforeAndAfter{
+class FileSuite extends FunSuite with BeforeAndAfter {
   
   var sc: SparkContext = _
   
-  after{
-    if(sc != null){
+  after {
+    if(sc != null) {
       sc.stop()
     }
   }
