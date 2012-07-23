@@ -8,7 +8,8 @@ import com.esotericsoftware.kryo._
 
 import SparkContext._
 
-class KryoSerializerSuite extends FunSuite {
+class KryoSerializerSuite extends FunSuite{
+  
   test("basic types") {
     val ser = (new KryoSerializer).newInstance()
     def check[T](t: T): Unit =
