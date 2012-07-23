@@ -1,8 +1,9 @@
 package spark.api.java
 
-import spark.{AccumulatorParam, RDD, SparkContext}
+import spark.{Accumulator, AccumulatorParam, RDD, SparkContext}
 import spark.SparkContext.IntAccumulatorParam
 import spark.SparkContext.DoubleAccumulatorParam
+import spark.broadcast.Broadcast
 
 import scala.collection.JavaConversions._
 
@@ -195,21 +196,22 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaDoubleRDD(sc.union(rdds: _*))
   }
 
-  def intAccumulator(initialValue: Int) = sc.accumulator(initialValue)(IntAccumulatorParam)
+  def intAccumulator(initialValue: Int): Accumulator[Int] =
+    sc.accumulator(initialValue)(IntAccumulatorParam)
 
-  def doubleAccumulator(initialValue: Double) =
+  def doubleAccumulator(initialValue: Double): Accumulator[Double] =
     sc.accumulator(initialValue)(DoubleAccumulatorParam)
 
-  def accumulator[T](initialValue: T, accumulatorParam: AccumulatorParam[T]) =
+  def accumulator[T](initialValue: T, accumulatorParam: AccumulatorParam[T]): Accumulator[T] =
     sc.accumulator(initialValue)(accumulatorParam)
 
-  def broadcast[T](value: T) = sc.broadcast(value)
+  def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)
 
   def stop() {
     sc.stop()
   }
 
-  def getSparkHome() = sc.getSparkHome()
+  def getSparkHome(): Option[String] = sc.getSparkHome()
 }
 
 object JavaSparkContext {

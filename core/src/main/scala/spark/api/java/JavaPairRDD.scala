@@ -24,25 +24,27 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
 
   def wrapRDD = JavaPairRDD.fromRDD _
 
-  def classManifest = implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[Tuple2[K, V]]]
+  def classManifest: ClassManifest[(K, V)] =
+    implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[Tuple2[K, V]]]
 
   import JavaPairRDD._
 
   // Common RDD functions
 
-  def cache() = new JavaPairRDD[K, V](rdd.cache())
+  def cache(): JavaPairRDD[K, V] = new JavaPairRDD[K, V](rdd.cache())
 
   // Transformations (return a new RDD)
 
-  def distinct() = new JavaPairRDD[K, V](rdd.distinct())
+  def distinct(): JavaPairRDD[K, V] = new JavaPairRDD[K, V](rdd.distinct())
 
-  def filter(f: Function[(K, V), java.lang.Boolean]) =
+  def filter(f: Function[(K, V), java.lang.Boolean]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.filter(x => f(x).booleanValue()))
 
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int) =
+  def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.sample(withReplacement, fraction, seed))
 
-  def union(other: JavaPairRDD[K, V]) = new JavaPairRDD[K, V](rdd.union(other.rdd))
+  def union(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
+    new JavaPairRDD[K, V](rdd.union(other.rdd))
 
   // first() has to be overridden here so that the generated method has the signature
   // 'public scala.Tuple2 first()'; if the trait's definition is used,
@@ -75,11 +77,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   def reduceByKey(partitioner: Partitioner, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
     fromRDD(rdd.reduceByKey(partitioner, func))
 
-  def reduceByKeyLocally(func: JFunction2[V, V, V]) = {
-    rdd.reduceByKeyLocally(func)
-  }
+  def reduceByKeyLocally(func: JFunction2[V, V, V]): java.util.Map[K, V] =
+    mapAsJavaMap(rdd.reduceByKeyLocally(func))
 
-  def countByKey() = rdd.countByKey()
+  def countByKey(): java.util.Map[K, Long] = mapAsJavaMap(rdd.countByKey())
 
   def countByKeyApprox(timeout: Long): PartialResult[java.util.Map[K, BoundedDouble]] =
     rdd.countByKeyApprox(timeout).map(mapAsJavaMap)
@@ -145,7 +146,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   def rightOuterJoin[W](other: JavaPairRDD[K, W], numSplits: Int): JavaPairRDD[K, (Option[V], W)] =
     fromRDD(rdd.rightOuterJoin(other, numSplits))
 
-  def collectAsMap(): Map[K, V] = rdd.collectAsMap()
+  def collectAsMap(): java.util.Map[K, V] = mapAsJavaMap(rdd.collectAsMap())
 
   def mapValues[U](f: Function[V, U]): JavaPairRDD[K, U] = {
     implicit val cm: ClassManifest[U] =

@@ -1,9 +1,10 @@
 package spark.api.java
 
-import spark.{Split, RDD}
+import spark.{SparkContext, Split, RDD}
 import spark.api.java.JavaPairRDD._
 import spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
 import spark.partial.{PartialResult, BoundedDouble}
+import spark.storage.StorageLevel
 
 import java.util.{List => JList}
 
@@ -18,11 +19,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
-  def context = rdd.context
+  def context: SparkContext = rdd.context
 
-  def id = rdd.id
+  def id: Int = rdd.id
 
-  def getStorageLevel = rdd.getStorageLevel
+  def getStorageLevel: StorageLevel = rdd.getStorageLevel
 
   def iterator(split: Split): java.util.Iterator[T] = asJavaIterator(rdd.iterator(split))
 
@@ -108,7 +109,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     combOp: JFunction2[U, U, U]): U =
     rdd.aggregate(zeroValue)(seqOp, combOp)(seqOp.returnType)
 
-  def count() = rdd.count()
+  def count(): Long = rdd.count()
 
   def countApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout, confidence)

@@ -3,14 +3,16 @@ package spark.api.java
 import spark.RDD
 import spark.SparkContext.doubleRDDToDoubleRDDFunctions
 import spark.api.java.function.{Function => JFunction}
+import spark.util.StatCounter
+import spark.partial.{BoundedDouble, PartialResult}
 
 import java.lang.Double
 
 class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, JavaDoubleRDD] {
 
-  val classManifest = implicitly[ClassManifest[Double]]
+  val classManifest: ClassManifest[Double] = implicitly[ClassManifest[Double]]
 
-  lazy val rdd = srdd.map(x => Double.valueOf(x))
+  lazy val rdd: RDD[Double] = srdd.map(x => Double.valueOf(x))
 
   def wrapRDD: (RDD[Double]) => JavaDoubleRDD = rdd => new JavaDoubleRDD(rdd.map(_.doubleValue))
 
@@ -25,35 +27,37 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
 
   // Transformations (return a new RDD)
 
-  def distinct() = fromRDD(srdd.distinct())
+  def distinct(): JavaDoubleRDD = fromRDD(srdd.distinct())
 
-  def filter(f: JFunction[Double, java.lang.Boolean]) =
+  def filter(f: JFunction[Double, java.lang.Boolean]): JavaDoubleRDD =
     fromRDD(srdd.filter(x => f(x).booleanValue()))
 
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int) =
+  def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaDoubleRDD =
     fromRDD(srdd.sample(withReplacement, fraction, seed))
 
-  def union(other: JavaDoubleRDD) = fromRDD(srdd.union(other.srdd))
+  def union(other: JavaDoubleRDD): JavaDoubleRDD = fromRDD(srdd.union(other.srdd))
 
   // Double RDD functions
 
-  def sum() = srdd.sum()
+  def sum(): Double = srdd.sum()
 
-  def stats() = srdd.stats()
+  def stats(): StatCounter = srdd.stats()
 
-  def mean() = srdd.mean()
+  def mean(): Double = srdd.mean()
 
-  def variance() = srdd.variance()
+  def variance(): Double = srdd.variance()
 
-  def stdev() = srdd.stdev()
+  def stdev(): Double = srdd.stdev()
 
-  def meanApprox(timeout: Long, confidence: Double) = srdd.meanApprox(timeout, confidence)
+  def meanApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
+    srdd.meanApprox(timeout, confidence)
 
-  def meanApprox(timeout: Long) = srdd.meanApprox(timeout)
+  def meanApprox(timeout: Long): PartialResult[BoundedDouble] = srdd.meanApprox(timeout)
 
-  def sumApprox(timeout: Long, confidence: Double) = srdd.sumApprox(timeout, confidence)
+  def sumApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
+    srdd.sumApprox(timeout, confidence)
 
-  def sumApprox(timeout: Long) = srdd.sumApprox(timeout)
+  def sumApprox(timeout: Long): PartialResult[BoundedDouble] = srdd.sumApprox(timeout)
 }
 
 object JavaDoubleRDD {
