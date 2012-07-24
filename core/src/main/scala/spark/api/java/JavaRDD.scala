@@ -6,7 +6,7 @@ import spark.api.java.function.{Function => JFunction}
 class JavaRDD[T](val rdd: RDD[T])(implicit val classManifest: ClassManifest[T]) extends
 JavaRDDLike[T, JavaRDD[T]] {
 
-  def wrapRDD: (RDD[T]) => JavaRDD[T] = JavaRDD.fromRDD
+  override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
 
   // Common RDD functions
 

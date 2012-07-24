@@ -54,7 +54,6 @@ class SparkContext(
   
   def this(master: String, frameworkName: String) = this(master, frameworkName, null, Nil)
 
-
   // Ensure logging is initialized before we spawn any threads
   initLogging()
 

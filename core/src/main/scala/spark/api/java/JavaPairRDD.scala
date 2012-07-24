@@ -22,9 +22,9 @@ import org.apache.hadoop.conf.Configuration
 class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManifest[K],
   implicit val vManifest: ClassManifest[V]) extends JavaRDDLike[(K, V), JavaPairRDD[K, V]] {
 
-  def wrapRDD = JavaPairRDD.fromRDD _
+  override def wrapRDD(rdd: RDD[(K, V)]): JavaPairRDD[K, V] = JavaPairRDD.fromRDD(rdd)
 
-  def classManifest: ClassManifest[(K, V)] =
+  override val classManifest: ClassManifest[(K, V)] =
     implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[Tuple2[K, V]]]
 
   import JavaPairRDD._

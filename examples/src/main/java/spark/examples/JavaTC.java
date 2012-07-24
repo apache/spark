@@ -45,14 +45,14 @@ public class JavaTC {
 
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaTC");
     Integer slices = (args.length > 1) ? Integer.parseInt(args[1]): 2;
-    JavaPairRDD<Integer, Integer> tc = sc.parallelizePairs(generateGraph(), slices);
+    JavaPairRDD<Integer, Integer> tc = sc.parallelizePairs(generateGraph(), slices).cache();
 
     // Linear transitive closure: each round grows paths by one edge,
     // by joining the graph's edges with the already-discovered paths.
     // e.g. join the path (y, z) from the TC with the edge (x, y) from
     // the graph to obtain the path (x, z).
 
-      // Because join() joins on keys, the edges are stored in reversed order.
+    // Because join() joins on keys, the edges are stored in reversed order.
     JavaPairRDD<Integer, Integer> edges = tc.map(new PairFunction<Tuple2<Integer, Integer>,
               Integer, Integer>() {
       @Override
@@ -62,13 +62,14 @@ public class JavaTC {
     });
 
     long oldCount = 0;
+    long nextCount = tc.count();
     do {
-      oldCount = tc.count();
+      oldCount = nextCount;
       // Perform the join, obtaining an RDD of (y, (z, x)) pairs,
       // then project the result to obtain the new (x, z) paths.
-
-      tc = tc.union(tc.join(edges).map(ProjectFn.INSTANCE)).distinct();
-    } while (tc.count() != oldCount);
+      tc = tc.union(tc.join(edges).map(ProjectFn.INSTANCE)).distinct().cache();
+      nextCount = tc.count();
+    } while (nextCount != oldCount);
 
     System.out.println("TC has " + tc.count() + " edges.");
     System.exit(0);

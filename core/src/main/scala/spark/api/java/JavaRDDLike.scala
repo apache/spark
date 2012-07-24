@@ -13,9 +13,9 @@ import java.lang
 import scala.Tuple2
 
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
-  def wrapRDD: (RDD[T] => This)
+  def wrapRDD(rdd: RDD[T]): This
 
-  implicit def classManifest: ClassManifest[T]
+  implicit val classManifest: ClassManifest[T]
 
   def rdd: RDD[T]
 

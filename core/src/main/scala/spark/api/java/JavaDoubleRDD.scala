@@ -10,11 +10,12 @@ import java.lang.Double
 
 class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, JavaDoubleRDD] {
 
-  val classManifest: ClassManifest[Double] = implicitly[ClassManifest[Double]]
+  override val classManifest: ClassManifest[Double] = implicitly[ClassManifest[Double]]
 
-  lazy val rdd: RDD[Double] = srdd.map(x => Double.valueOf(x))
+  override val rdd: RDD[Double] = srdd.map(x => Double.valueOf(x))
 
-  def wrapRDD: (RDD[Double]) => JavaDoubleRDD = rdd => new JavaDoubleRDD(rdd.map(_.doubleValue))
+  override def wrapRDD(rdd: RDD[Double]): JavaDoubleRDD =
+    new JavaDoubleRDD(rdd.map(_.doubleValue))
 
   // Common RDD functions
 

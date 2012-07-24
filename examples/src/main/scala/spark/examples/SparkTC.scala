@@ -28,7 +28,7 @@ object SparkTC {
     }
     val spark = new SparkContext(args(0), "SparkTC")
     val slices = if (args.length > 1) args(1).toInt else 2
-    var tc = spark.parallelize(generateGraph, slices)
+    var tc = spark.parallelize(generateGraph, slices).cache()
 
     // Linear transitive closure: each round grows paths by one edge,
     // by joining the graph's edges with the already-discovered paths.
@@ -40,12 +40,14 @@ object SparkTC {
 
     // This join is iterated until a fixed point is reached.
     var oldCount = 0L
+    var nextCount = tc.count()
     do {
-      oldCount = tc.count()
+      oldCount = nextCount
       // Perform the join, obtaining an RDD of (y, (z, x)) pairs,
       // then project the result to obtain the new (x, z) paths.
-      tc = tc.union(tc.join(edges).map(x => (x._2._2, x._2._1))).distinct()
-    } while (tc.count() != oldCount)
+      tc = tc.union(tc.join(edges).map(x => (x._2._2, x._2._1))).distinct().cache();
+      nextCount = tc.count()
+    } while (nextCount != oldCount)
 
     println("TC has " + tc.count() + " edges.")
     System.exit(0)
