@@ -1,7 +1,6 @@
 package spark.examples;
 
 import scala.Tuple2;
-import scala.collection.immutable.StringOps;
 import spark.api.java.JavaPairRDD;
 import spark.api.java.JavaRDD;
 import spark.api.java.JavaSparkContext;
@@ -26,8 +25,7 @@ public class JavaWordCount {
 
     JavaPairRDD<String, Integer> counts = lines.flatMap(new FlatMapFunction<String, String>() {
       public Iterable<String> apply(String s) {
-        StringOps op = new StringOps(s);
-        return Arrays.asList(op.split(' '));
+        return Arrays.asList(s.split(" "));
       }
     }).map(new PairFunction<String, String, Integer>() {
       public Tuple2<String, Integer> apply(String s) {
@@ -41,8 +39,7 @@ public class JavaWordCount {
 
     List<Tuple2<String, Integer>> output = counts.collect();
     for (Tuple2 tuple : output) {
-      System.out.print(tuple._1 + ": ");
-      System.out.println(tuple._2);
+      System.out.println(tuple._1 + ": " + tuple._2);
     }
     System.exit(0);
   }
