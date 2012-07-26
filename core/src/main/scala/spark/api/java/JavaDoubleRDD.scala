@@ -5,6 +5,7 @@ import spark.SparkContext.doubleRDDToDoubleRDDFunctions
 import spark.api.java.function.{Function => JFunction}
 import spark.util.StatCounter
 import spark.partial.{BoundedDouble, PartialResult}
+import spark.storage.StorageLevel
 
 import java.lang.Double
 
@@ -22,6 +23,8 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
   import JavaDoubleRDD.fromRDD
 
   def cache(): JavaDoubleRDD = fromRDD(srdd.cache())
+
+  def persist(newLevel: StorageLevel): JavaDoubleRDD = fromRDD(srdd.persist(newLevel))
 
   // first() has to be overriden here in order for its return type to be Double instead of Object.
   override def first(): Double = srdd.first()

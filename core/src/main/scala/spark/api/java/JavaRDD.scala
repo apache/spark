@@ -2,6 +2,7 @@ package spark.api.java
 
 import spark._
 import spark.api.java.function.{Function => JFunction}
+import spark.storage.StorageLevel
 
 class JavaRDD[T](val rdd: RDD[T])(implicit val classManifest: ClassManifest[T]) extends
 JavaRDDLike[T, JavaRDD[T]] {
@@ -11,6 +12,8 @@ JavaRDDLike[T, JavaRDD[T]] {
   // Common RDD functions
 
   def cache(): JavaRDD[T] = wrapRDD(rdd.cache())
+
+  def persist(newLevel: StorageLevel): JavaRDD[T] = wrapRDD(rdd.persist(newLevel))
 
   // Transformations (return a new RDD)
 

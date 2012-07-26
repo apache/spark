@@ -21,6 +21,7 @@ import spark.api.java.JavaSparkContext;
 import spark.api.java.function.*;
 import spark.partial.BoundedDouble;
 import spark.partial.PartialResult;
+import spark.storage.StorageLevel;
 import spark.util.StatCounter;
 
 import java.io.File;
@@ -335,6 +336,55 @@ public class JavaAPISuite implements Serializable {
     Double x = doubles.first();
     Assert.assertEquals(5.0, doubles.first().doubleValue(), 0.01);
     Assert.assertEquals(11, pairs.count());
+  }
+
+  @Test
+  public void mapPartitions() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
+    JavaRDD<Integer> partitionSums = rdd.mapPartitions(
+      new FlatMapFunction<Iterator<Integer>, Integer>() {
+        @Override
+        public Iterable<Integer> apply(Iterator<Integer> iter) {
+          int sum = 0;
+          while (iter.hasNext()) {
+            sum += iter.next();
+          }
+          return Collections.singletonList(sum);
+        }
+    });
+    Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
+  }
+
+  @Test
+  public void persist() {
+    JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
+    doubleRDD = doubleRDD.persist(StorageLevel.DISK_ONLY());
+    Assert.assertEquals(20, doubleRDD.sum(), 0.1);
+
+    List<Tuple2<Integer, String>> pairs = Arrays.asList(
+      new Tuple2<Integer, String>(1, "a"),
+      new Tuple2<Integer, String>(2, "aa"),
+      new Tuple2<Integer, String>(3, "aaa")
+    );
+    JavaPairRDD<Integer, String> pairRDD = sc.parallelizePairs(pairs);
+    pairRDD = pairRDD.persist(StorageLevel.DISK_ONLY());
+    Assert.assertEquals("a", pairRDD.first()._2());
+
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
+    rdd = rdd.persist(StorageLevel.DISK_ONLY());
+    Assert.assertEquals(1, rdd.first().intValue());
+  }
+
+  @Test
+  public void iterator() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
+    Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0)).next().intValue());
+  }
+
+  @Test
+  public void glom() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
+    Assert.assertEquals("[1, 2]", rdd.glom().first().toString());
   }
 
   // File input / output tests are largely adapted from FileSuite:

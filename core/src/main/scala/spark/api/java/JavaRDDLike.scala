@@ -9,7 +9,7 @@ import spark.storage.StorageLevel
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
-import java.lang
+import java.{util, lang}
 import scala.Tuple2
 
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
@@ -18,6 +18,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   implicit val classManifest: ClassManifest[T]
 
   def rdd: RDD[T]
+
+  def splits: JList[Split] = new java.util.ArrayList(rdd.splits.toSeq)
 
   def context: SparkContext = rdd.context
 
@@ -56,8 +58,27 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     import scala.collection.JavaConverters._
     def fn = (x: T) => f.apply(x).asScala
     def cm = implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[Tuple2[K, V]]]
-    new JavaPairRDD(rdd.flatMap(fn)(cm))(f.keyType(), f.valueType())
+    JavaPairRDD.fromRDD(rdd.flatMap(fn)(cm))(f.keyType(), f.valueType())
   }
+
+  def mapPartitions[U](f: FlatMapFunction[java.util.Iterator[T], U]): JavaRDD[U] = {
+    def fn = (x: Iterator[T]) => asScalaIterator(f.apply(asJavaIterator(x)).iterator())
+    JavaRDD.fromRDD(rdd.mapPartitions(fn)(f.elementType()))(f.elementType())
+  }
+
+  def mapPartitions(f: DoubleFlatMapFunction[java.util.Iterator[T]]): JavaDoubleRDD = {
+    def fn = (x: Iterator[T]) => asScalaIterator(f.apply(asJavaIterator(x)).iterator())
+    new JavaDoubleRDD(rdd.mapPartitions(fn).map((x: java.lang.Double) => x.doubleValue()))
+  }
+
+  def mapPartitions[K, V](f: PairFlatMapFunction[java.util.Iterator[T], K, V]):
+  JavaPairRDD[K, V] = {
+    def fn = (x: Iterator[T]) => asScalaIterator(f.apply(asJavaIterator(x)).iterator())
+    JavaPairRDD.fromRDD(rdd.mapPartitions(fn))(f.keyType(), f.valueType())
+  }
+
+  def glom(): JavaRDD[JList[T]] =
+    new JavaRDD(rdd.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
 
   def cartesian[U](other: JavaRDDLike[U, _]): JavaPairRDD[T, U] =
     JavaPairRDD.fromRDD(rdd.cartesian(other.rdd)(other.classManifest))(classManifest,

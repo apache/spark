@@ -5,13 +5,13 @@ import spark.api.java.function.{Function2 => JFunction2}
 import spark.api.java.function.{Function => JFunction}
 import spark.partial.BoundedDouble
 import spark.partial.PartialResult
+import spark.storage.StorageLevel
 import spark._
 
 import java.util.{List => JList}
 import java.util.Comparator
 
 import scala.Tuple2
-import scala.collection.Map
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.mapred.JobConf
@@ -32,6 +32,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   // Common RDD functions
 
   def cache(): JavaPairRDD[K, V] = new JavaPairRDD[K, V](rdd.cache())
+
+  def persist(newLevel: StorageLevel): JavaPairRDD[K, V] =
+    new JavaPairRDD[K, V](rdd.persist(newLevel))
 
   // Transformations (return a new RDD)
 
