@@ -11,7 +11,7 @@ class Accumulable[T,R] (
   
   val id = Accumulators.newId
   @transient
-  var value_ = initialValue // Current value on master
+  private var value_ = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   var deserialized = false
 
@@ -30,7 +30,13 @@ class Accumulable[T,R] (
    * @param term the other Accumulable that will get merged with this
    */
   def ++= (term: T) { value_ = param.addInPlace(value_, term)}
-  def value = this.value_
+  def value = {
+    if (!deserialized) value_
+    else throw new UnsupportedOperationException("Can't use read value in task")
+  }
+
+  private[spark] def localValue = value_
+
   def value_= (t: T) {
     if (!deserialized) value_ = t
     else throw new UnsupportedOperationException("Can't use value_= in task")
@@ -124,7 +130,7 @@ private object Accumulators {
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
     for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map())) {
-      ret(id) = accum.value
+      ret(id) = accum.localValue
     }
     return ret
   }
