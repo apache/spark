@@ -66,10 +66,9 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<String> sUnion = sc.union(s1, s2);
     Assert.assertEquals(4, sUnion.count());
     // List
-    List<JavaRDD<String>> srdds = new ArrayList<JavaRDD<String>>();
-    srdds.add(s1);
-    srdds.add(s2);
-    sUnion = sc.union(srdds);
+    List<JavaRDD<String>> list = new ArrayList<JavaRDD<String>>();
+    list.add(s2);
+    sUnion = sc.union(s1, list);
     Assert.assertEquals(4, sUnion.count());
 
     // Union of JavaDoubleRDDs

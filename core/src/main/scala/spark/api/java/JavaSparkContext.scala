@@ -174,22 +174,23 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.newAPIHadoopRDD(conf, fClass, kClass, vClass))
   }
 
-  override def union[T](jrdds: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
-    val rdds: Seq[RDD[T]] = asScalaBuffer(jrdds).map(_.rdd)
-    implicit val cm: ClassManifest[T] = jrdds.head.classManifest
+  override def union[T](first: JavaRDD[T], rest: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
+    val rdds: Seq[RDD[T]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
+    implicit val cm: ClassManifest[T] = first.classManifest
     sc.union(rdds: _*)(cm)
   }
 
-  override def union[K, V](jrdds: java.util.List[JavaPairRDD[K, V]]): JavaPairRDD[K, V] = {
-    val rdds: Seq[RDD[(K, V)]] = asScalaBuffer(jrdds).map(_.rdd)
-    implicit val cm: ClassManifest[(K, V)] = jrdds.head.classManifest
-    implicit val kcm: ClassManifest[K] = jrdds.head.kManifest
-    implicit val vcm: ClassManifest[V] = jrdds.head.vManifest
+  override def union[K, V](first: JavaPairRDD[K, V], rest: java.util.List[JavaPairRDD[K, V]])
+      : JavaPairRDD[K, V] = {
+    val rdds: Seq[RDD[(K, V)]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
+    implicit val cm: ClassManifest[(K, V)] = first.classManifest
+    implicit val kcm: ClassManifest[K] = first.kManifest
+    implicit val vcm: ClassManifest[V] = first.vManifest
     new JavaPairRDD(sc.union(rdds: _*)(cm))(kcm, vcm)
   }
 
-  override def union(jrdds: java.util.List[JavaDoubleRDD]): JavaDoubleRDD = {
-    val rdds: Seq[RDD[Double]] = asScalaBuffer(jrdds).map(_.srdd)
+  override def union(first: JavaDoubleRDD, rest: java.util.List[JavaDoubleRDD]): JavaDoubleRDD = {
+    val rdds: Seq[RDD[Double]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.srdd)
     new JavaDoubleRDD(sc.union(rdds: _*))
   }
 
