@@ -224,7 +224,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfterEach {
     assert(store.get("list4").get.size === 2)
   }
 
-  test("ByteBufferInputStream bugs") {
+  test("negative byte values in ByteBufferInputStream") {
     val buffer = ByteBuffer.wrap(Array[Int](254, 255, 0, 1, 2).map(_.toByte).toArray)
     val stream = new ByteBufferInputStream(buffer)
     val temp = new Array[Byte](10)
