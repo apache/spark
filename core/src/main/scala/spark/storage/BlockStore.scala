@@ -40,7 +40,7 @@ abstract class BlockStore(blockManager: BlockManager) extends Logging {
 class MemoryStore(blockManager: BlockManager, maxMemory: Long) 
   extends BlockStore(blockManager) {
 
-  case class Entry(var value: Any, size: Long, deserialized: Boolean, dropPending: Boolean = false)
+  case class Entry(value: Any, size: Long, deserialized: Boolean, var dropPending: Boolean = false)
   
   private val memoryStore = new LinkedHashMap[String, Entry](32, 0.75f, true)
   private var currentMemory = 0L
@@ -52,6 +52,7 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       try{
         while (true) {
           val blockId = blocksToDrop.take()
+          logDebug("Block " + blockId + " ready to be dropped")
           blockManager.dropFromMemory(blockId)
         }
       } catch {
@@ -143,15 +144,6 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     logInfo("MemoryStore cleared")
   }
 
-  private def drop(blockId: String) {
-    /*blockDropper.submit(new Runnable() {
-      def run() {
-        blockManager.dropFromMemory(blockId)
-      }
-    })
-    */
-  }
-
   private def ensureFreeSpace(space: Long) {
     logInfo("ensureFreeSpace(%d) called with curMem=%d, maxMem=%d".format(
       space, currentMemory, maxMemory))
@@ -169,13 +161,15 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           val entry = pair.getValue()
           if (!entry.dropPending) {
             selectedBlocks += blockId
+            entry.dropPending = true
           }
           selectedMemory += pair.getValue.size
-          logDebug("Block" + blockId + " selected for dropping")
+          logDebug("Block " + blockId + " selected for dropping")
         }
       }  
       
-      logDebug("" + selectedBlocks.size + " selected for dropping")
+      logDebug("" + selectedBlocks.size + " new blocks selected for dropping, " + 
+        blocksToDrop.size + " blocks pending")
       var i = 0 
       while (i < selectedBlocks.size) {
         blocksToDrop.add(selectedBlocks(i))
