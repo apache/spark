@@ -274,7 +274,11 @@ class SparkContext(
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] = new UnionRDD(this, rdds)
+  def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
+
+  /** Build the union of a list of RDDs. */
+  def union[T: ClassManifest](first: RDD[T], rest: RDD[T]*): RDD[T] =
+    new UnionRDD(this, Seq(first) ++ rest)
 
   // Methods for creating shared variables
 

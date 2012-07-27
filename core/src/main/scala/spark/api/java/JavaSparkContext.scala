@@ -177,7 +177,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   override def union[T](first: JavaRDD[T], rest: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
     val rdds: Seq[RDD[T]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
     implicit val cm: ClassManifest[T] = first.classManifest
-    sc.union(rdds: _*)(cm)
+    sc.union(rdds)(cm)
   }
 
   override def union[K, V](first: JavaPairRDD[K, V], rest: java.util.List[JavaPairRDD[K, V]])
@@ -186,12 +186,12 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     implicit val cm: ClassManifest[(K, V)] = first.classManifest
     implicit val kcm: ClassManifest[K] = first.kManifest
     implicit val vcm: ClassManifest[V] = first.vManifest
-    new JavaPairRDD(sc.union(rdds: _*)(cm))(kcm, vcm)
+    new JavaPairRDD(sc.union(rdds)(cm))(kcm, vcm)
   }
 
   override def union(first: JavaDoubleRDD, rest: java.util.List[JavaDoubleRDD]): JavaDoubleRDD = {
     val rdds: Seq[RDD[Double]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.srdd)
-    new JavaDoubleRDD(sc.union(rdds: _*))
+    new JavaDoubleRDD(sc.union(rdds))
   }
 
   def intAccumulator(initialValue: Int): Accumulator[Int] =
