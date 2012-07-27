@@ -105,7 +105,12 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     
     persist(level)
     sc.runJob(this, (iter: Iterator[T]) => {} )
-    new BlockRDD[T](sc, splits.map(getSplitKey).toArray)
+    
+    val p = this.partitioner
+    
+    new BlockRDD[T](sc, splits.map(getSplitKey).toArray) {
+      override val partitioner = p 
+    }
   }
   
   // Read this RDD; will read from cache if applicable, or otherwise compute
