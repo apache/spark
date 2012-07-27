@@ -57,6 +57,32 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
     }
   }
 
+  /**
+   * Transform this PartialResult into a PartialResult of type T.
+   */
+  def map[T](f: R => T) : PartialResult[T] = {
+    new PartialResult[T](f(initialVal), isFinal) {
+       override def getFinalValue() : T = synchronized {
+         f(PartialResult.this.getFinalValue())
+       }
+       override def onComplete(handler: T => Unit): PartialResult[T] = synchronized {
+         PartialResult.this.onComplete(handler.compose(f)).map(f)
+       }
+      override def onFail(handler: Exception => Unit) {
+        synchronized {
+          PartialResult.this.onFail(handler)
+        }
+      }
+      override def toString : String = synchronized {
+        PartialResult.this.getFinalValueInternal() match {
+          case Some(value) => "(final: " + f(value) + ")"
+          case None => "(partial: " + initialValue + ")"
+        }
+      }
+      def getFinalValueInternal() = PartialResult.this.getFinalValueInternal().map(f)
+    }
+  }
+
   private[spark] def setFinalValue(value: R) {
     synchronized {
       if (finalValue != None) {
@@ -69,6 +95,8 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
       this.notifyAll()
     }
   }
+
+  private def getFinalValueInternal() = finalValue
 
   private[spark] def setFailure(exception: Exception) {
     synchronized {

@@ -48,10 +48,12 @@ import spark.storage.BlockManagerMaster
 class SparkContext(
     master: String,
     frameworkName: String,
-    val sparkHome: String = null,
-    val jars: Seq[String] = Nil)
+    val sparkHome: String,
+    val jars: Seq[String])
   extends Logging {
   
+  def this(master: String, frameworkName: String) = this(master, frameworkName, null, Nil)
+
   // Ensure logging is initialized before we spawn any threads
   initLogging()
 
@@ -182,15 +184,12 @@ class SparkContext(
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](path: String)
       (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F]): RDD[(K, V)] = {
-    val job = new NewHadoopJob
-    NewFileInputFormat.addInputPath(job, new Path(path))
-    val conf = job.getConfiguration
     newAPIHadoopFile(
         path,
         fm.erasure.asInstanceOf[Class[F]],
         km.erasure.asInstanceOf[Class[K]],
         vm.erasure.asInstanceOf[Class[V]],
-        conf)
+        new Configuration)
   }
 
   /** 
