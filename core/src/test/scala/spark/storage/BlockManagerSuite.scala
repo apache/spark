@@ -215,6 +215,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfterEach {
     assert(store.get("list3").get.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
     store.put("list4", list4.iterator, StorageLevel.DISK_AND_MEMORY)
+    Thread.sleep(100)
     assert(store.get("list1") === None, "list1 was in store")
     assert(store.get("list2") != None, "list3 was not in store")
     assert(store.get("list2").get.size === 2)
