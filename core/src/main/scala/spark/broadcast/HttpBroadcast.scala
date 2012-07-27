@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import spark._
+import spark.storage.StorageLevel
 
 class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean)
 extends Broadcast[T] with Logging with Serializable {
@@ -17,7 +18,7 @@ extends Broadcast[T] with Logging with Serializable {
   def value = value_
 
   Broadcast.synchronized { 
-    Broadcast.values.put(uuid, 0, value_) 
+    Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
   }
 
   if (!isLocal) { 
@@ -28,14 +29,14 @@ extends Broadcast[T] with Logging with Serializable {
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
-      val cachedVal = Broadcast.values.get(uuid, 0)
+      val cachedVal = SparkEnv.get.blockManager.getSingle(uuid.toString)
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
         logInfo("Started reading broadcast variable " + uuid)
         val start = System.nanoTime
         value_ = HttpBroadcast.read[T](uuid)
-        Broadcast.values.put(uuid, 0, value_)
+        Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
         val time = (System.nanoTime - start) / 1e9
         logInfo("Reading broadcast variable " + uuid + " took " + time + " s")
       }

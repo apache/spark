@@ -27,7 +27,7 @@ object Broadcast extends Logging with Serializable {
   private var broadcastFactory: BroadcastFactory = null
 
   // Cache of broadcasted objects
-  val values = SparkEnv.get.cache.newKeySpace()
+  val values = SparkEnv.get.blockManager
 
   // Called by SparkContext or Executor before using Broadcast
   def initialize(isMaster__ : Boolean) {

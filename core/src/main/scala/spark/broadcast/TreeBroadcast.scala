@@ -8,6 +8,7 @@ import scala.collection.mutable.{ListBuffer, Map, Set}
 import scala.math
 
 import spark._
+import spark.storage.StorageLevel
 
 class TreeBroadcast[T](@transient var value_ : T, isLocal: Boolean)
 extends Broadcast[T] with Logging with Serializable {
@@ -15,7 +16,7 @@ extends Broadcast[T] with Logging with Serializable {
   def value = value_
 
   Broadcast.synchronized {
-    Broadcast.values.put(uuid, 0, value_)
+    Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -89,7 +90,8 @@ extends Broadcast[T] with Logging with Serializable {
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     Broadcast.synchronized {
-      val cachedVal = Broadcast.values.get(uuid, 0)
+      val cachedVal = SparkEnv.get.blockManager.getSingle(uuid.toString)
+
       if (cachedVal != null) {
         value_ = cachedVal.asInstanceOf[T]
       } else {
@@ -109,7 +111,7 @@ extends Broadcast[T] with Logging with Serializable {
         val receptionSucceeded = receiveBroadcast(uuid)
         if (receptionSucceeded) {
           value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
-          Broadcast.values.put(uuid, 0, value_)
+          Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
         }  else {
           logError("Reading Broadcasted variable " + uuid + " failed")
         }
