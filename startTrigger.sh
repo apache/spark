@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./run spark.stream.SentenceGenerator localhost 7078 sentences.txt 1
+./run spark.streaming.SentenceGenerator localhost 7078 sentences.txt 1
