@@ -409,6 +409,11 @@ class SparkContext(
  * various Spark features.
  */
 object SparkContext {
+
+  // TODO: temporary hack for using HDFS as input in streaing
+  var inputFile: String = null
+  var idealPartitions: Int = 1
+
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0

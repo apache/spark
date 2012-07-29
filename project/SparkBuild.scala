@@ -8,7 +8,7 @@ object SparkBuild extends Build {
   // "1.0.1" for Apache releases, or "0.20.2-cdh3u3" for Cloudera Hadoop.
   val HADOOP_VERSION = "0.20.205.0"
 
-  lazy val root = Project("root", file("."), settings = sharedSettings) aggregate(core, repl, examples, bagel)
+  lazy val root = Project("root", file("."), settings = sharedSettings) aggregate(core, repl, examples, bagel, streaming)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -17,6 +17,8 @@ object SparkBuild extends Build {
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core)
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
+
+  lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
@@ -81,6 +83,8 @@ object SparkBuild extends Build {
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
+
+  def streamingSettings = sharedSettings ++ Seq(name := "spark-streaming")
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
     mergeStrategy in assembly := { 
