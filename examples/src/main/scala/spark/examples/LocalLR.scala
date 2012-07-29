@@ -1,7 +1,7 @@
 package spark.examples
 
 import java.util.Random
-import Vector._
+import spark.util.Vector
 
 object LocalLR {
   val N = 10000  // Number of data points
