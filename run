@@ -78,6 +78,7 @@ export CLASSPATH # Needed for spark-shell
 # when we exit, so we allow it to set a variable to launch with scala.
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
   RUNNER="${SCALA_HOME}/bin/scala"
+  EXTRA_ARGS=""     # Java options will be passed to scala as JAVA_OPTS
 else
   CLASSPATH+=":$SCALA_HOME/lib/scala-library.jar"
   CLASSPATH+=":$SCALA_HOME/lib/scala-compiler.jar"
@@ -87,6 +88,8 @@ else
   else
     RUNNER=java
   fi
+  # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
+  EXTRA_ARGS="$JAVA_OPTS"
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" "$@"
+exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"
