@@ -46,7 +46,7 @@ extends Actor with Logging {
   val inputNames = inputRDSs.map(_.inputName).toArray
   val inputStates = new HashMap[Interval, InputState]()
   val currentJobs = System.getProperty("spark.stream.currentJobs", "1").toInt
-  val jobManager = new JobManager2(ssc, currentJobs)
+  val jobManager = new JobManager(ssc, currentJobs)
 
   // TODO(Haoyuan): The following line is for performance test only.
   var cnt: Int = System.getProperty("spark.stream.fake.cnt", "60").toInt

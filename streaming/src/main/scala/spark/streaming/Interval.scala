@@ -42,26 +42,6 @@ case class Interval (val beginTime: Time, val endTime: Time) {
 
 object Interval {
 
-  /*
-  implicit def longTupleToInterval (longTuple: (Long, Long)) =
-    Interval(longTuple._1, longTuple._2)
-  
-  implicit def intTupleToInterval (intTuple: (Int, Int)) =
-    Interval(intTuple._1, intTuple._2)
-  
-  implicit def string2Interval (str: String): Interval = {
-    val parts = str.split(",")
-    if (parts.length == 1)
-      return Interval.zero
-    return Interval (parts(0).toInt, parts(1).toInt)
-  }
-  
-  def getInterval (timeMs: Long, intervalDurationMs: Long): Interval = {
-    val intervalBeginMs = timeMs / intervalDurationMs * intervalDurationMs
-    Interval(intervalBeginMs, intervalBeginMs + intervalDurationMs)
-  }
-  */
-
   def zero() = new Interval (Time.zero, Time.zero)
 
   def currentInterval(intervalDuration: LongTime): Interval  = {
