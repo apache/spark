@@ -21,7 +21,20 @@ class SparkEnv (
   ) {
 
   /** No-parameter constructor for unit tests. */
-  def this() = this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null)
+  def this() = {
+    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null)
+  }
+
+  def stop() {
+    mapOutputTracker.stop()
+    cacheTracker.stop()
+    shuffleFetcher.stop()
+    shuffleManager.stop()
+    blockManager.stop()
+    BlockManagerMaster.stopBlockManagerMaster()
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
+  }
 }
 
 object SparkEnv {
@@ -54,8 +67,8 @@ object SparkEnv {
     val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
     
     BlockManagerMaster.startBlockManagerMaster(actorSystem, isMaster, isLocal)
-    
-    var blockManager = new BlockManager(serializer)
+
+    val blockManager = new BlockManager(serializer)
     
     val connectionManager = blockManager.connectionManager 
     
