@@ -102,23 +102,23 @@ class BlockMessage() extends Logging{
     set(buffer)
   }
   
-  def getType(): Int = {
+  def getType: Int = {
     return typ
   }
   
-  def getId(): String = {
+  def getId: String = {
     return id
   }
   
-  def getData(): ByteBuffer = {
+  def getData: ByteBuffer = {
     return data
   }
   
-  def getLevel(): StorageLevel = {
+  def getLevel: StorageLevel = {
     return level
   }
   
-  def toBufferMessage(): BufferMessage = {
+  def toBufferMessage: BufferMessage = {
     val startTime = System.currentTimeMillis
     val buffers = new ArrayBuffer[ByteBuffer]()
     var buffer = ByteBuffer.allocate(4 + 4 + id.length() * 2)
@@ -128,7 +128,7 @@ class BlockMessage() extends Logging{
     buffers += buffer
 
     if (typ == BlockMessage.TYPE_PUT_BLOCK) {
-      buffer = ByteBuffer.allocate(8).putInt(level.toInt()).putInt(level.replication)
+      buffer = ByteBuffer.allocate(8).putInt(level.toInt).putInt(level.replication)
       buffer.flip()
       buffers += buffer
       
@@ -164,7 +164,7 @@ class BlockMessage() extends Logging{
     return Message.createBufferMessage(buffers)
   }
 
-  override def toString(): String = { 
+  override def toString: String = {
     "BlockMessage [type = " + typ + ", id = " + id + ", level = " + level + 
     ", data = " + (if (data != null) data.remaining.toString  else "null") + "]"
   }
@@ -209,11 +209,11 @@ object BlockMessage {
   def main(args: Array[String]) {
     val B = new BlockMessage()
     B.set(new PutBlock("ABC", ByteBuffer.allocate(10), StorageLevel.DISK_AND_MEMORY_2))
-    val bMsg = B.toBufferMessage()
+    val bMsg = B.toBufferMessage
     val C = new BlockMessage()
     C.set(bMsg)
     
-    println(B.getId() + " " + B.getLevel())
-    println(C.getId() + " " + C.getLevel())
+    println(B.getId + " " + B.getLevel)
+    println(C.getId + " " + C.getLevel)
   }
 }

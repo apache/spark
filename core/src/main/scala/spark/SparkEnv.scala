@@ -31,7 +31,7 @@ class SparkEnv (
     shuffleFetcher.stop()
     shuffleManager.stop()
     blockManager.stop()
-    BlockManagerMaster.stopBlockManagerMaster()
+    blockManager.master.stop()
     actorSystem.shutdown()
     actorSystem.awaitTermination()
   }
@@ -66,9 +66,9 @@ object SparkEnv {
     val serializerClass = System.getProperty("spark.serializer", "spark.KryoSerializer")
     val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
     
-    BlockManagerMaster.startBlockManagerMaster(actorSystem, isMaster, isLocal)
+    val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
 
-    val blockManager = new BlockManager(serializer)
+    val blockManager = new BlockManager(blockManagerMaster, serializer)
     
     val connectionManager = blockManager.connectionManager 
     
