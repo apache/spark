@@ -274,12 +274,25 @@ class SparkContext(
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] = new UnionRDD(this, rdds)
+  def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
+
+  /** Build the union of a list of RDDs. */
+  def union[T: ClassManifest](first: RDD[T], rest: RDD[T]*): RDD[T] =
+    new UnionRDD(this, Seq(first) ++ rest)
 
   // Methods for creating shared variables
 
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
+
+  /**
+   * create an accumulatable shared variable, with a `+=` method
+   * @tparam T accumulator type
+   * @tparam R type that can be added to the accumulator
+   */
+  def accumulable[T,R](initialValue: T)(implicit param: AccumulableParam[T,R]) =
+    new Accumulable(initialValue, param)
+
 
   // Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = Broadcast.getBroadcastFactory.newBroadcast[T] (value, isLocal)

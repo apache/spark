@@ -1,7 +1,7 @@
 package spark.examples
 
 import java.util.Random
-import Vector._
+import spark.util.Vector
 
 object LocalFileLR {
   val D = 10   // Numer of dimensions
