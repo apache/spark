@@ -11,11 +11,8 @@ class StorageLevel(
 
   // TODO: Also add fields for caching priority, dataset ID, and flushing.
   
-  def this(booleanInt: Int, replication: Int) {
-    this(((booleanInt & 4) != 0),
-        ((booleanInt & 2) != 0), 
-        ((booleanInt & 1) != 0),
-        replication)
+  def this(flags: Int, replication: Int) {
+    this((flags & 4) != 0, (flags & 2) != 0, (flags & 1) != 0, replication)
   }
 
   def this() = this(false, true, false)  // For deserialization
@@ -33,25 +30,25 @@ class StorageLevel(
       false
   }
  
-  def isValid() = ((useMemory || useDisk) && (replication > 0))
+  def isValid = ((useMemory || useDisk) && (replication > 0))
 
-  def toInt(): Int = {
+  def toInt: Int = {
     var ret = 0
     if (useDisk) {
-      ret += 4
+      ret |= 4
     }
     if (useMemory) {
-      ret += 2
+      ret |= 2
     }
     if (deserialized) {
-      ret += 1
+      ret |= 1
     }
     return ret
   }
 
   override def writeExternal(out: ObjectOutput) {
-    out.writeByte(toInt().toByte)
-    out.writeByte(replication.toByte)
+    out.writeByte(toInt)
+    out.writeByte(replication)
   }
 
   override def readExternal(in: ObjectInput) {
@@ -62,7 +59,7 @@ class StorageLevel(
     replication = in.readByte()
   }
 
-  override def toString(): String =
+  override def toString: String =
     "StorageLevel(%b, %b, %b, %d)".format(useDisk, useMemory, deserialized, replication)
 }
 

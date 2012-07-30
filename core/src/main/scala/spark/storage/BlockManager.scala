@@ -66,8 +66,8 @@ class BlockLocker(numLockers: Int) {
 }
 
 
-
-class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging {
+class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
+  extends Logging {
 
   case class BlockInfo(level: StorageLevel, tellMaster: Boolean)
 
@@ -94,15 +94,16 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
    */
-  def this(serializer: Serializer) =
-    this(BlockManager.getMaxMemoryFromSystemProperties(), serializer)
+  def this(master: BlockManagerMaster, serializer: Serializer) = {
+    this(master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
+  }
 
   /**
    * Initialize the BlockManager. Register to the BlockManagerMaster, and start the
    * BlockManagerWorker actor.
    */
   private def initialize() {
-    BlockManagerMaster.mustRegisterBlockManager(
+    master.mustRegisterBlockManager(
       RegisterBlockManager(blockManagerId, maxMemory, maxMemory))
     BlockManagerWorker.startBlockManagerWorker(this)
   }
@@ -154,7 +155,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
    */
   def getLocations(blockId: String): Seq[String] = {
     val startTimeMs = System.currentTimeMillis
-    var managers = BlockManagerMaster.mustGetLocations(GetLocations(blockId))
+    var managers = master.mustGetLocations(GetLocations(blockId))
     val locations = managers.map(_.ip)
     logDebug("Get block locations in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
@@ -165,7 +166,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
    */
   def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
     val startTimeMs = System.currentTimeMillis
-    val locations = BlockManagerMaster.mustGetLocationsMultipleBlockIds(
+    val locations = master.mustGetLocationsMultipleBlockIds(
       GetLocationsMultipleBlockIds(blockIds)).map(_.map(_.ip).toSeq).toArray
     logDebug("Get multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
@@ -235,7 +236,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
     }
     logDebug("Getting remote block " + blockId)
     // Get locations of block
-    val locations = BlockManagerMaster.mustGetLocations(GetLocations(blockId))
+    val locations = master.mustGetLocations(GetLocations(blockId))
 
     // Get block from remote locations
     for (loc <- locations) {
@@ -321,8 +322,8 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
             if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
               throw new BlockException(oneBlockId, "Unexpected message received from " + cmId)
             }
-            val buffer = blockMessage.getData()
-            val blockId = blockMessage.getId()
+            val buffer = blockMessage.getData
+            val blockId = blockMessage.getId
             val block = dataDeserialize(buffer)
             blocks.update(blockId, Some(block))
             logDebug("Got remote block " + blockId + " in " + Utils.getUsedTimeMs(startTime))
@@ -490,7 +491,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
-    var peers = BlockManagerMaster.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
+    var peers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
     for (peer: BlockManagerId <- peers) {
       val start = System.nanoTime
       logDebug("Try to replicate BlockId " + blockId + " once; The size of the data is "
@@ -564,7 +565,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   }
 
   private def notifyMaster(heartBeat: HeartBeat) {
-    BlockManagerMaster.mustHeartBeat(heartBeat)
+    master.mustHeartBeat(heartBeat)
   }
 
   def stop() {
@@ -576,12 +577,9 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   }
 }
 
-
-object BlockManager extends Logging {
+object BlockManager {
   def getMaxMemoryFromSystemProperties(): Long = {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
-    val bytes = (Runtime.getRuntime.totalMemory * memoryFraction).toLong
-    logInfo("Maximum memory to use: " + bytes)
-    bytes
+    (Runtime.getRuntime.totalMemory * memoryFraction).toLong
   }
 }
