@@ -5,7 +5,7 @@ import java.nio._
 import java.nio.channels.FileChannel.MapMode
 import java.util.{HashMap => JHashMap}
 import java.util.LinkedHashMap
-import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.Collections
 
 import scala.actors._
@@ -74,7 +74,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   private val NUM_LOCKS = 337
   private val locker = new BlockLocker(NUM_LOCKS)
 
-  private val blockInfo = Collections.synchronizedMap(new JHashMap[String, BlockInfo])
+  private val blockInfo = new ConcurrentHashMap[String, BlockInfo]()
   private val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
   private val diskStore: BlockStore = new DiskStore(this, 
     System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
