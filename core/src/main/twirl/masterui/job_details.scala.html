@@ -1,0 +1,34 @@
+@(job: spark.deploy.master.JobInfo)
+
+@common.html.layout(title = "Job Details") {
+      
+  <!-- Job Details -->
+  <div class="row">
+    <div class="span12">
+      <ul class="unstyled">
+        <li><strong>ID:</strong> @job.id</li>
+        <li><strong>Description:</strong> @job.desc.name</li>
+        <li><strong>User:</strong> @job.desc.user</li>
+        <li><strong>Cores:</strong> @job.desc.cores</li>
+        <li><strong>Memory per Slave:</strong> @job.desc.memoryPerSlave</li>
+        <li><strong>Submit Date:</strong> @job.submitDate</li>
+        <li><strong>State:</strong> @job.state</li>
+        <li><strong>Cores Granted:</strong> @job.coresGranted</li>
+        <li><strong>Cores Left:</strong> @job.coresLeft</li>
+        <li><strong>Command:</strong> @job.desc.command</li>
+      </ul>
+    </div>
+  </div>
+  
+  <hr/>
+  
+  <!-- Executors -->
+  <div class="row">
+    <div class="span12">
+      <h3> Executor Summary </h3>
+      <br/>
+      @executors_table(job.executors.values.toList)
+    </div>
+  </div>
+      
+}

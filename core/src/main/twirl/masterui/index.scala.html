@@ -1,0 +1,37 @@
+@(jobs: List[spark.deploy.master.JobInfo], workers: List[spark.deploy.master.WorkerInfo])
+@import spark.deploy.master._
+
+@common.html.layout(title = "Master WebUI") {
+  
+  <!-- Cluster Summary (Workers) -->
+  <div class="row">
+    <div class="span12">
+      <h3> Cluster Summary </h3>
+      <br/>
+      @worker_table(workers)
+    </div>
+  </div>
+  
+  <hr/>
+  
+  <!-- Job Summary (Running) -->
+  <div class="row">
+    <div class="span12">
+      <h3> Running Jobs </h3>
+      <br/>
+      @job_table(jobs.filter(j => j.state == JobState.WAITING || j.state == JobState.RUNNING))
+    </div>
+  </div>
+  
+  <hr/>
+  
+  <!-- Job Summary (Completed) -->
+  <div class="row">
+    <div class="span12">
+      <h3> Completed Jobs </h3>
+      <br/>
+      @job_table(jobs.filter(j => j.state == JobState.FINISHED || j.state == JobState.FAILED))
+    </div>
+  </div>
+  
+}

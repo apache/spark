@@ -1,0 +1,15 @@
+@(executor: spark.deploy.master.ExecutorInfo)
+
+<tr>
+  <td>@executor.id</td>
+  <td>
+    <a href="@executor.worker.webUiAddress">@executor.worker.id</href>
+  </td>
+  <td>@executor.cores</td>
+  <td>@executor.memory</td>
+  <td>@executor.state</td>
+  <td>
+    <a href="@(executor.worker.webUiAddress)/log?jobId=@(executor.job.id)&executorId=@(executor.id)&logType=stdout">stdout</a>
+    <a href="@(executor.worker.webUiAddress)/log?jobId=@(executor.job.id)&executorId=@(executor.id)&logType=stderr">stderr</a>
+  </td>
+</tr>

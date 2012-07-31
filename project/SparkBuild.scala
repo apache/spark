@@ -2,6 +2,7 @@ import sbt._
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
+import twirl.sbt.TwirlPlugin._
 
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
@@ -69,7 +70,7 @@ object SparkBuild extends Build {
       "cc.spray" % "spray-can" % "1.0-M2.1",
       "cc.spray" % "spray-server" % "1.0-M2.1"
     )
-  ) ++ assemblySettings ++ extraAssemblySettings 
+  ) ++ assemblySettings ++ extraAssemblySettings ++ Seq(Twirl.settings: _*)
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",

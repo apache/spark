@@ -1,0 +1,31 @@
+@(title: String)(content: Html)
+
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8">
+    <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.0.4/css/bootstrap.min.css" type="text/css">
+    <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.0.4/css/bootstrap-responsive.min.css" type="text/css">
+    <title>Spark WebUI</title>
+  </head>
+
+  <body>
+    <div class="container">
+    
+      <!-- HEADER -->
+      <div class="row">
+        <div class="span12">
+          <img src="spark_logo.png">
+          <h1 style="vertical-align: bottom; margin-bottom: 10px; margin-left: 30px; display: inline-block;"> @title </h1>
+        </div>
+      </div>
+    
+      <hr/>
+      
+      @content
+    
+    </div>
+  </body>
+
+</html>
