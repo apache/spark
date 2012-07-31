@@ -123,13 +123,13 @@ object BlockMessageArray {
     val newBlockMessageArray = BlockMessageArray.fromBufferMessage(newBufferMessage)
     println("Converted back to block message array")
     newBlockMessageArray.foreach(blockMessage => {
-      blockMessage.getType() match {
+      blockMessage.getType match {
         case BlockMessage.TYPE_PUT_BLOCK => {
-          val pB = PutBlock(blockMessage.getId(), blockMessage.getData(), blockMessage.getLevel())
+          val pB = PutBlock(blockMessage.getId, blockMessage.getData, blockMessage.getLevel)
           println(pB)
         } 
         case BlockMessage.TYPE_GET_BLOCK => {
-          val gB = new GetBlock(blockMessage.getId())
+          val gB = new GetBlock(blockMessage.getId)
           println(gB)
         }
       }

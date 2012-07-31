@@ -134,7 +134,7 @@ class SparkContext(
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    */
@@ -286,7 +286,7 @@ class SparkContext(
     new Accumulator(initialValue, param)
 
   /**
-   * create an accumulatable shared variable, with a `+=` method
+   * Create an accumulable shared variable, with a `+=` method
    * @tparam T accumulator type
    * @tparam R type that can be added to the accumulator
    */
@@ -303,14 +303,7 @@ class SparkContext(
     dagScheduler = null
     taskScheduler = null
     // TODO: Broadcast.stop(), Cache.stop()?
-    env.mapOutputTracker.stop()
-    env.cacheTracker.stop()
-    env.shuffleFetcher.stop()
-    env.shuffleManager.stop()
-    env.blockManager.stop()
-    BlockManagerMaster.stopBlockManagerMaster()
-    env.actorSystem.shutdown()
-    env.actorSystem.awaitTermination()
+    env.stop()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
     logInfo("Successfully stopped SparkContext")
