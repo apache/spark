@@ -85,7 +85,7 @@ case class RemoveHost(host: String) extends ToBlockManagerMaster
 case object StopBlockManagerMaster extends ToBlockManagerMaster
 
 
-class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
+class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   
   class BlockManagerInfo(
       timeMs: Long,
@@ -134,19 +134,19 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
       }
     }
 
-    def getLastSeenMs(): Long = {
+    def getLastSeenMs: Long = {
       return lastSeenMs
     }
     
-    def getRemainedMem(): Long = {
+    def getRemainedMem: Long = {
       return remainedMem
     }
     
-    def getRemainedDisk(): Long = {
+    def getRemainedDisk: Long = {
       return remainedDisk
     }
 
-    override def toString(): String = {
+    override def toString: String = {
       return "BlockManagerInfo " + timeMs + " " + remainedMem + " " + remainedDisk  
     }
 
@@ -329,8 +329,8 @@ class BlockManagerMaster(val isLocal: Boolean) extends Actor with Logging {
   }
 }
 
-object BlockManagerMaster extends Logging {
-  initLogging()
+class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean)
+  extends Logging {
 
   val AKKA_ACTOR_NAME: String = "BlockMasterManager"
   val REQUEST_RETRY_INTERVAL_MS = 100
@@ -342,20 +342,18 @@ object BlockManagerMaster extends Logging {
   val timeout = 10.seconds
   var masterActor: ActorRef = null
 
-  def startBlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean) {
-    if (isMaster) {
-      masterActor = actorSystem.actorOf(
-        Props(new BlockManagerMaster(isLocal)), name = AKKA_ACTOR_NAME)
-      logInfo("Registered BlockManagerMaster Actor")
-    } else {
-      val url = "akka://spark@%s:%s/user/%s".format(
-        DEFAULT_MASTER_IP, DEFAULT_MASTER_PORT, AKKA_ACTOR_NAME)
-      logInfo("Connecting to BlockManagerMaster: " + url)
-      masterActor = actorSystem.actorFor(url)
-    }
+  if (isMaster) {
+    masterActor = actorSystem.actorOf(
+      Props(new BlockManagerMasterActor(isLocal)), name = AKKA_ACTOR_NAME)
+    logInfo("Registered BlockManagerMaster Actor")
+  } else {
+    val url = "akka://spark@%s:%s/user/%s".format(
+      DEFAULT_MASTER_IP, DEFAULT_MASTER_PORT, AKKA_ACTOR_NAME)
+    logInfo("Connecting to BlockManagerMaster: " + url)
+    masterActor = actorSystem.actorFor(url)
   }
   
-  def stopBlockManagerMaster() {
+  def stop() {
     if (masterActor != null) {
       communicate(StopBlockManagerMaster)
       masterActor = null
