@@ -86,7 +86,7 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   def startWebUi() {
     val webUi = new WorkerWebUI(context.system, self)
     try {
-      AkkaUtils.startSprayServer(context.system, ip, webUiPort, webUi.handler)
+      AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
     } catch {
       case e: Exception =>
         logError("Failed to create web UI", e)
