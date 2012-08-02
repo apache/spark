@@ -21,7 +21,20 @@ class SparkEnv (
   ) {
 
   /** No-parameter constructor for unit tests. */
-  def this() = this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null)
+  def this() = {
+    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null)
+  }
+
+  def stop() {
+    mapOutputTracker.stop()
+    cacheTracker.stop()
+    shuffleFetcher.stop()
+    shuffleManager.stop()
+    blockManager.stop()
+    blockManager.master.stop()
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
+  }
 }
 
 object SparkEnv {
@@ -53,9 +66,9 @@ object SparkEnv {
     val serializerClass = System.getProperty("spark.serializer", "spark.KryoSerializer")
     val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
     
-    BlockManagerMaster.startBlockManagerMaster(actorSystem, isMaster, isLocal)
-    
-    var blockManager = new BlockManager(serializer)
+    val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
+
+    val blockManager = new BlockManager(blockManagerMaster, serializer)
     
     val connectionManager = blockManager.connectionManager 
     
