@@ -5,6 +5,10 @@ bin=`cd "$bin"; pwd`
 
 . "$bin/spark-config.sh"
 
+if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
+  . "${SPARK_CONF_DIR}/spark-env.sh"
+fi
+
 # Find the port number for the master
 if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
