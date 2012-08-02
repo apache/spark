@@ -7,7 +7,7 @@ import java.util.concurrent.ThreadFactory
  */
 private object DaemonThreadFactory extends ThreadFactory {
   override def newThread(r: Runnable): Thread = {
-    val t = new Thread(r);
+    val t = new Thread(r)
     t.setDaemon(true)
     return t
   }

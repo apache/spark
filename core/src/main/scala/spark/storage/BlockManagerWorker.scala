@@ -48,15 +48,15 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   }
 
   def processBlockMessage(blockMessage: BlockMessage): Option[BlockMessage] = {
-    blockMessage.getType() match {
+    blockMessage.getType match {
       case BlockMessage.TYPE_PUT_BLOCK => {
-        val pB = PutBlock(blockMessage.getId(), blockMessage.getData(), blockMessage.getLevel())
+        val pB = PutBlock(blockMessage.getId, blockMessage.getData, blockMessage.getLevel)
         logInfo("Received [" + pB + "]")
         putBlock(pB.id, pB.data, pB.level)
         return None
       } 
       case BlockMessage.TYPE_GET_BLOCK => {
-        val gB = new GetBlock(blockMessage.getId())
+        val gB = new GetBlock(blockMessage.getId)
         logInfo("Received [" + gB + "]")
         val buffer = getBlock(gB.id)
         if (buffer == null) {
@@ -82,7 +82,7 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
     val block = blockManager.getLocal(id)
     val buffer = block match {
       case Some(tValues) => {
-        val values = tValues.asInstanceOf[Iterator[Any]]
+        val values = tValues
         val buffer = blockManager.dataSerialize(values)
         buffer
       }

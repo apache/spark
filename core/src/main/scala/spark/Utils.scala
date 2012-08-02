@@ -7,25 +7,29 @@ import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 import java.util.{Locale, UUID}
+import scala.io.Source
 
 /**
  * Various utility methods used by Spark.
  */
 object Utils {
+  /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(bos)
     oos.writeObject(o)
-    oos.close
+    oos.close()
     return bos.toByteArray
   }
 
+  /** Deserialize an object using Java serialization */
   def deserialize[T](bytes: Array[Byte]): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis)
     return ois.readObject.asInstanceOf[T]
   }
 
+  /** Deserialize an object using Java serialization and the given ClassLoader */
   def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis) {
@@ -39,6 +43,7 @@ object Utils {
     (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
   }
 
+  /** Split a string into words at non-alphabetic characters */
   def splitWords(s: String): Seq[String] = {
     val buf = new ArrayBuffer[String]
     var i = 0
@@ -48,7 +53,7 @@ object Utils {
         j += 1
       }
       if (j > i) {
-        buf += s.substring(i, j);
+        buf += s.substring(i, j)
       }
       i = j
       while (i < s.length && !isAlpha(s.charAt(i))) {
@@ -58,7 +63,7 @@ object Utils {
     return buf
   }
 
-  // Create a temporary directory inside the given parent directory
+  /** Create a temporary directory inside the given parent directory */
   def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
     var attempts = 0
     val maxAttempts = 10
@@ -85,7 +90,7 @@ object Utils {
     return dir
   }
 
-  // Copy all data from an InputStream to an OutputStream
+  /** Copy all data from an InputStream to an OutputStream */
   def copyStream(in: InputStream,
                  out: OutputStream,
                  closeStreams: Boolean = false)
@@ -104,9 +109,18 @@ object Utils {
     }
   }
 
-  // Shuffle the elements of a collection into a random order, returning the
-  // result in a new collection. Unlike scala.util.Random.shuffle, this method
-  // uses a local random number generator, avoiding inter-thread contention.
+  /** Copy a file on the local file system */
+  def copyFile(source: File, dest: File) {
+    val in = new FileInputStream(source)
+    val out = new FileOutputStream(dest)
+    copyStream(in, out, true)
+  }
+
+  /**
+   * Shuffle the elements of a collection into a random order, returning the
+   * result in a new collection. Unlike scala.util.Random.shuffle, this method
+   * uses a local random number generator, avoiding inter-thread contention.
+   */
   def randomize[T](seq: TraversableOnce[T]): Seq[T] = {
     val buf = new ArrayBuffer[T]()
     buf ++= seq
@@ -136,7 +150,7 @@ object Utils {
   }
 
   /**
-   * Get the local machine's hostname
+   * Get the local machine's hostname.
    */
   def localHostName(): String = {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
@@ -200,17 +214,38 @@ object Utils {
   }
 
   /**
-   * Use unit suffixes (Byte, Kilobyte, Megabyte, Gigabyte, Terabyte and
-   * Petabyte) in order to reduce the number of digits to four or less. For
-   * example, 4,000,000 is returned as 4MB.
+   * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
+   * This is used to figure out how much memory to claim from Mesos based on the SPARK_MEM
+   * environment variable.
+   */
+  def memoryStringToMb(str: String): Int = {
+    val lower = str.toLowerCase
+    if (lower.endsWith("k")) {
+      (lower.substring(0, lower.length-1).toLong / 1024).toInt
+    } else if (lower.endsWith("m")) {
+      lower.substring(0, lower.length-1).toInt
+    } else if (lower.endsWith("g")) {
+      lower.substring(0, lower.length-1).toInt * 1024
+    } else if (lower.endsWith("t")) {
+      lower.substring(0, lower.length-1).toInt * 1024 * 1024
+    } else {// no suffix, so it's just a number in bytes
+      (lower.toLong / 1024 / 1024).toInt
+    }
+  }
+
+  /**
+   * Convert a memory quantity in bytes to a human-readable string such as "4.0 MB".
    */
   def memoryBytesToString(size: Long): String = {
+    val TB = 1L << 40
     val GB = 1L << 30
     val MB = 1L << 20
     val KB = 1L << 10
 
     val (value, unit) = {
-      if (size >= 2*GB) {
+      if (size >= 2*TB) {
+        (size.asInstanceOf[Double] / TB, "TB")
+      } else if (size >= 2*GB) {
         (size.asInstanceOf[Double] / GB, "GB")
       } else if (size >= 2*MB) {
         (size.asInstanceOf[Double] / MB, "MB")
@@ -220,6 +255,43 @@ object Utils {
         (size.asInstanceOf[Double], "B")
       }
     }
-    "%.1f%s".formatLocal(Locale.US, value, unit)
+    "%.1f %s".formatLocal(Locale.US, value, unit)
+  }
+
+  /**
+   * Convert a memory quantity in megabytes to a human-readable string such as "4.0 MB".
+   */
+  def memoryMegabytesToString(megabytes: Long): String = {
+    memoryBytesToString(megabytes * 1024L * 1024L)
+  }
+
+  /**
+   * Execute a command in the given working directory, throwing an exception if it completes
+   * with an exit code other than 0.
+   */
+  def execute(command: Seq[String], workingDir: File) {
+    val process = new ProcessBuilder(command: _*)
+        .directory(workingDir)
+        .redirectErrorStream(true)
+        .start()
+    new Thread("read stdout for " + command(0)) {
+      override def run() {
+        for (line <- Source.fromInputStream(process.getInputStream).getLines) {
+          System.err.println(line)
+        }
+      }
+    }.start()
+    val exitCode = process.waitFor()
+    if (exitCode != 0) {
+      throw new SparkException("Process " + command + " exited with code " + exitCode)
+    }
+  }
+
+  /**
+   * Execute a command in the current working directory, throwing an exception if it completes
+   * with an exit code other than 0.
+   */
+  def execute(command: Seq[String]) {
+    execute(command, new File("."))
   }
 }

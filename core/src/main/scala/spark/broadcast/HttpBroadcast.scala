@@ -25,7 +25,7 @@ extends Broadcast[T] with Logging with Serializable {
   }
 
   // Called by JVM when deserializing an object
-  private def readObject(in: ObjectInputStream): Unit = {
+  private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
       val cachedVal = HttpBroadcast.values.get(uuid, 0)
@@ -44,7 +44,9 @@ extends Broadcast[T] with Logging with Serializable {
 }
 
 class HttpBroadcastFactory extends BroadcastFactory {
-  def initialize(isMaster: Boolean): Unit = HttpBroadcast.initialize(isMaster)
+  def initialize(isMaster: Boolean) {
+    HttpBroadcast.initialize(isMaster)
+  }
   def newBroadcast[T](value_ : T, isLocal: Boolean) = new HttpBroadcast[T](value_, isLocal)
 }
 
@@ -59,7 +61,7 @@ private object HttpBroadcast extends Logging {
   private var serverUri: String = null
   private var server: HttpServer = null
 
-  def initialize(isMaster: Boolean): Unit = {
+  def initialize(isMaster: Boolean) {
     synchronized {
       if (!initialized) {
         bufferSize = System.getProperty("spark.buffer.size", "65536").toInt

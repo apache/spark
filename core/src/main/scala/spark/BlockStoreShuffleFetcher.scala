@@ -15,7 +15,6 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
   def fetch[K, V](shuffleId: Int, reduceId: Int, func: (K, V) => Unit) {
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
-    val ser = SparkEnv.get.serializer.newInstance()
     val blockManager = SparkEnv.get.blockManager
     
     val startTime = System.currentTimeMillis
@@ -41,7 +40,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
         val (blockId, blockOption) = x 
         blockOption match {
           case Some(block) => {
-            val values = block.asInstanceOf[Iterator[Any]]
+            val values = block
             for(value <- values) {
               val v = value.asInstanceOf[(K, V)]
               func(v._1, v._2)

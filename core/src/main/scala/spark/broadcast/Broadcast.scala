@@ -30,26 +30,28 @@ object Broadcast extends Logging with Serializable {
   private var broadcastFactory: BroadcastFactory = null
 
   // Called by SparkContext or Executor before using Broadcast
-  def initialize (isMaster__ : Boolean): Unit = synchronized {
-    if (!initialized) {
-      val broadcastFactoryClass = System.getProperty(
-        "spark.broadcast.factory", "spark.broadcast.HttpBroadcastFactory")
+  def initialize (isMaster__ : Boolean) {
+    synchronized {
+      if (!initialized) {
+        val broadcastFactoryClass = System.getProperty(
+          "spark.broadcast.factory", "spark.broadcast.HttpBroadcastFactory")
 
-      broadcastFactory =
-        Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
+        broadcastFactory =
+          Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
 
-      // Setup isMaster before using it
-      isMaster_ = isMaster__
-      
-      // Set masterHostAddress to the master's IP address for the slaves to read
-      if (isMaster) {
-        System.setProperty("spark.broadcast.masterHostAddress", Utils.localIpAddress)
+        // Setup isMaster before using it
+        isMaster_ = isMaster__
+
+        // Set masterHostAddress to the master's IP address for the slaves to read
+        if (isMaster) {
+          System.setProperty("spark.broadcast.masterHostAddress", Utils.localIpAddress)
+        }
+
+        // Initialize appropriate BroadcastFactory and BroadcastObject
+        broadcastFactory.initialize(isMaster)
+
+        initialized = true
       }
-
-      // Initialize appropriate BroadcastFactory and BroadcastObject
-      broadcastFactory.initialize(isMaster)
-
-      initialized = true
     }
   }
 
@@ -175,7 +177,7 @@ object Broadcast extends Logging with Serializable {
   }
 
   private def byteArrayToObject[OUT](bytes: Array[Byte]): OUT = {
-    val in = new ObjectInputStream (new ByteArrayInputStream (bytes)){
+    val in = new ObjectInputStream (new ByteArrayInputStream (bytes)) {
       override def resolveClass(desc: ObjectStreamClass) =
         Class.forName(desc.getName, false, Thread.currentThread.getContextClassLoader)
     }    
@@ -185,11 +187,11 @@ object Broadcast extends Logging with Serializable {
   }  
 }
 
-case class BroadcastBlock (val blockID: Int, val byteArray: Array[Byte]) extends Serializable
+case class BroadcastBlock (blockID: Int, byteArray: Array[Byte]) extends Serializable
 
-case class VariableInfo (@transient val arrayOfBlocks : Array[BroadcastBlock],
-    val totalBlocks: Int, 
-    val totalBytes: Int)
+case class VariableInfo (@transient arrayOfBlocks : Array[BroadcastBlock],
+                         totalBlocks: Int,
+    totalBytes: Int)
   extends Serializable {
   
   @transient
@@ -200,7 +202,7 @@ class SpeedTracker extends Serializable {
   // Mapping 'source' to '(totalTime, numBlocks)'
   private var sourceToSpeedMap = Map[SourceInfo, (Long, Int)] ()
 
-  def addDataPoint (srcInfo: SourceInfo, timeInMillis: Long): Unit = {
+  def addDataPoint (srcInfo: SourceInfo, timeInMillis: Long) {
     sourceToSpeedMap.synchronized {
       if (!sourceToSpeedMap.contains(srcInfo)) {
         sourceToSpeedMap += (srcInfo -> (timeInMillis, 1))

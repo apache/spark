@@ -119,7 +119,7 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializabl
 
   private def getOutputCommitter(): OutputCommitter = {
     if (committer == null) {
-      committer = conf.value.getOutputCommitter().asInstanceOf[OutputCommitter]
+      committer = conf.value.getOutputCommitter
     }
     return committer
   }
@@ -149,11 +149,11 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializabl
   }
 
   private def setConfParams() {
-    conf.value.set("mapred.job.id", jID.value.toString);
-    conf.value.set("mapred.tip.id", taID.value.getTaskID.toString); 
-    conf.value.set("mapred.task.id", taID.value.toString);
-    conf.value.setBoolean("mapred.task.is.map", true);
-    conf.value.setInt("mapred.task.partition", splitID);
+    conf.value.set("mapred.job.id", jID.value.toString)
+    conf.value.set("mapred.tip.id", taID.value.getTaskID.toString)
+    conf.value.set("mapred.task.id", taID.value.toString)
+    conf.value.setBoolean("mapred.task.is.map", true)
+    conf.value.setInt("mapred.task.partition", splitID)
   }
 }
 

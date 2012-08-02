@@ -1,9 +1,9 @@
-package spark.scheduler.mesos
+package spark.scheduler.cluster
 
 /**
- * Information about a running task attempt.
+ * Information about a running task attempt inside a TaskSet.
  */
-class TaskInfo(val taskId: String, val index: Int, val launchTime: Long, val host: String) {
+class TaskInfo(val taskId: Long, val index: Int, val launchTime: Long, val host: String) {
   var finishTime: Long = 0
   var failed = false
 

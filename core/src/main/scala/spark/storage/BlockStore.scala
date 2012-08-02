@@ -1,16 +1,15 @@
 package spark.storage
 
 import spark.{Utils, Logging, Serializer, SizeEstimator}
-
 import scala.collection.mutable.ArrayBuffer
-
 import java.io.{File, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 import java.util.{UUID, LinkedHashMap}
 import java.util.concurrent.Executors
-
+import java.util.concurrent.ConcurrentHashMap
 import it.unimi.dsi.fastutil.io._
+import java.util.concurrent.ArrayBlockingQueue
 
 /**
  * Abstract class to store blocks
@@ -41,13 +40,29 @@ abstract class BlockStore(blockManager: BlockManager) extends Logging {
 class MemoryStore(blockManager: BlockManager, maxMemory: Long) 
   extends BlockStore(blockManager) {
 
-  class Entry(var value: Any, val size: Long, val deserialized: Boolean)
+  case class Entry(value: Any, size: Long, deserialized: Boolean, var dropPending: Boolean = false)
   
   private val memoryStore = new LinkedHashMap[String, Entry](32, 0.75f, true)
   private var currentMemory = 0L
  
-  private val blockDropper = Executors.newSingleThreadExecutor() 
-
+  //private val blockDropper = Executors.newSingleThreadExecutor() 
+  private val blocksToDrop = new ArrayBlockingQueue[String](10000, true)
+  private val blockDropper = new Thread("memory store - block dropper") {
+    override def run() {
+      try{
+        while (true) {
+          val blockId = blocksToDrop.take()
+          logDebug("Block " + blockId + " ready to be dropped")
+          blockManager.dropFromMemory(blockId)
+        }
+      } catch {
+        case ie: InterruptedException => 
+          logInfo("Shutting down block dropper")
+      }
+    }
+  }
+  blockDropper.start()
+  
   def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel) {
     if (level.deserialized) {
       bytes.rewind()
@@ -124,41 +139,45 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     memoryStore.synchronized {
       memoryStore.clear()
     }
-    blockDropper.shutdown()
+    //blockDropper.shutdown()
+    blockDropper.interrupt()
     logInfo("MemoryStore cleared")
-  }
-
-  private def drop(blockId: String) {
-    blockDropper.submit(new Runnable() {
-      def run() {
-        blockManager.dropFromMemory(blockId)
-      }
-    })
   }
 
   private def ensureFreeSpace(space: Long) {
     logInfo("ensureFreeSpace(%d) called with curMem=%d, maxMem=%d".format(
       space, currentMemory, maxMemory))
     
-    val droppedBlockIds = new ArrayBuffer[String]()
-    var droppedMemory = 0L
-    
-    memoryStore.synchronized {
-      val iter = memoryStore.entrySet().iterator()
-      while (maxMemory - (currentMemory - droppedMemory) < space && iter.hasNext) {
-        val pair = iter.next()
-        val blockId = pair.getKey
-        droppedBlockIds += blockId
-        droppedMemory += pair.getValue.size
-        logDebug("Decided to drop " + blockId)
+    if (maxMemory - currentMemory < space) {
+
+      val selectedBlocks = new ArrayBuffer[String]()
+      var selectedMemory = 0L
+      
+      memoryStore.synchronized {
+        val iter = memoryStore.entrySet().iterator()
+        while (maxMemory - (currentMemory - selectedMemory) < space && iter.hasNext) {
+          val pair = iter.next()
+          val blockId = pair.getKey
+          val entry = pair.getValue()
+          if (!entry.dropPending) {
+            selectedBlocks += blockId
+            entry.dropPending = true
+          }
+          selectedMemory += pair.getValue.size
+          logDebug("Block " + blockId + " selected for dropping")
+        }
+      }  
+      
+      logDebug("" + selectedBlocks.size + " new blocks selected for dropping, " + 
+        blocksToDrop.size + " blocks pending")
+      var i = 0 
+      while (i < selectedBlocks.size) {
+        blocksToDrop.add(selectedBlocks(i))
+        i += 1
       }
-    }  
-    
-    for (blockId <- droppedBlockIds) {
-      drop(blockId)
+      selectedBlocks.clear()      
     }
-    droppedBlockIds.clear()
-  }
+  }      
 }
 
 

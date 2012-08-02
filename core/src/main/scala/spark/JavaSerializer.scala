@@ -3,6 +3,8 @@ package spark
 import java.io._
 import java.nio.ByteBuffer
 
+import spark.util.ByteBufferInputStream
+
 class JavaSerializationStream(out: OutputStream) extends SerializationStream {
   val objOut = new ObjectOutputStream(out)
   def writeObject[T](t: T) { objOut.writeObject(t) }
@@ -31,13 +33,13 @@ class JavaSerializerInstance extends SerializerInstance {
   }
 
   def deserialize[T](bytes: ByteBuffer): T = {
-    val bis = new ByteArrayInputStream(bytes.array())
+    val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis)
     in.readObject().asInstanceOf[T]
   }
 
   def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes.array())
+    val bis = new ByteBufferInputStream(bytes)
     val in = deserializeStream(bis, loader)
     in.readObject().asInstanceOf[T]
   }
@@ -47,7 +49,7 @@ class JavaSerializerInstance extends SerializerInstance {
   }
 
   def deserializeStream(s: InputStream): DeserializationStream = {
-    new JavaDeserializationStream(s, currentThread.getContextClassLoader)
+    new JavaDeserializationStream(s, Thread.currentThread.getContextClassLoader)
   }
 
   def deserializeStream(s: InputStream, loader: ClassLoader): DeserializationStream = {

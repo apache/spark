@@ -13,15 +13,21 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
+# Check that SCALA_HOME has been specified
+if [ -z "$SCALA_HOME" ]; then
+  echo "SCALA_HOME is not set" >&2
+  exit 1
+fi
+
 # If the user specifies a Mesos JAR, put it before our included one on the classpath
 MESOS_CLASSPATH=""
-if [ "x$MESOS_JAR" != "x" ] ; then
+if [ -z "$MESOS_JAR" ] ; then
   MESOS_CLASSPATH="$MESOS_JAR"
 fi
 
 # Figure out how much memory to use per executor and set it as an environment
 # variable so that our process sees it and can report it to Mesos
-if [ "x$SPARK_MEM" == "x" ] ; then
+if [ -z "$SPARK_MEM" ] ; then
   SPARK_MEM="512m"
 fi
 export SPARK_MEM
@@ -46,6 +52,7 @@ CLASSPATH="$SPARK_CLASSPATH"
 CLASSPATH+=":$MESOS_CLASSPATH"
 CLASSPATH+=":$FWDIR/conf"
 CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
 for jar in `find $CORE_DIR/lib -name '*jar'`; do
@@ -60,13 +67,29 @@ done
 for jar in `find $REPL_DIR/lib -name '*jar'`; do
   CLASSPATH+=":$jar"
 done
-CLASSPATH+=:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes
+CLASSPATH+=":$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
 export CLASSPATH # Needed for spark-shell
 
-if [ -n "$SCALA_HOME" ]; then
-  SCALA="${SCALA_HOME}/bin/scala"
+# Figure out whether to run our class with java or with the scala launcher.
+# In most cases, we'd prefer to execute our process with java because scala
+# creates a shell script as the parent of its Java process, which makes it
+# hard to kill the child with stuff like Process.destroy(). However, for
+# the Spark shell, the wrapper is necessary to properly reset the terminal
+# when we exit, so we allow it to set a variable to launch with scala.
+if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
+  RUNNER="${SCALA_HOME}/bin/scala"
+  EXTRA_ARGS=""     # Java options will be passed to scala as JAVA_OPTS
 else
-  SCALA=scala
+  CLASSPATH+=":$SCALA_HOME/lib/scala-library.jar"
+  CLASSPATH+=":$SCALA_HOME/lib/scala-compiler.jar"
+  CLASSPATH+=":$SCALA_HOME/lib/jline.jar"
+  if [ -n "$JAVA_HOME" ]; then
+    RUNNER="${JAVA_HOME}/bin/java"
+  else
+    RUNNER=java
+  fi
+  # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
+  EXTRA_ARGS="$JAVA_OPTS"
 fi
 
-exec "$SCALA" -cp "$CLASSPATH" "$@"
+exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"

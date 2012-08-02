@@ -13,7 +13,7 @@ class ResultTask[T, U](
   
   val split = rdd.splits(partition)
 
-  override def run(attemptId: Int): U = {
+  override def run(attemptId: Long): U = {
     val context = new TaskContext(stageId, partition, attemptId)
     func(context, rdd.iterator(split))
   }

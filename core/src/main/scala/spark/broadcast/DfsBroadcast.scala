@@ -24,15 +24,15 @@ extends Broadcast[T] with Logging with Serializable {
     sendBroadcast 
   }
 
-  def sendBroadcast (): Unit = {
+  def sendBroadcast () {
     val out = new ObjectOutputStream (DfsBroadcast.openFileForWriting(uuid))
     out.writeObject (value_)
-    out.close
+    out.close()
   }
 
   // Called by JVM when deserializing an object
-  private def readObject(in: ObjectInputStream): Unit = {
-    in.defaultReadObject
+  private def readObject(in: ObjectInputStream) {
+    in.defaultReadObject()
     DfsBroadcast.synchronized {
       val cachedVal = DfsBroadcast.values.get(uuid, 0)
       if (cachedVal != null) {
@@ -44,7 +44,7 @@ extends Broadcast[T] with Logging with Serializable {
         val fileIn = new ObjectInputStream(DfsBroadcast.openFileForReading(uuid))
         value_ = fileIn.readObject.asInstanceOf[T]
         DfsBroadcast.values.put(uuid, 0, value_)
-        fileIn.close
+        fileIn.close()
         
         val time = (System.nanoTime - start) / 1e9
         logInfo( "Reading Broadcasted variable " + uuid + " took " + time + " s")
@@ -55,7 +55,9 @@ extends Broadcast[T] with Logging with Serializable {
 
 class DfsBroadcastFactory 
 extends BroadcastFactory {
-  def initialize (isMaster: Boolean) = DfsBroadcast.initialize
+  def initialize (isMaster: Boolean) {
+    DfsBroadcast.initialize
+  }
   def newBroadcast[T] (value_ : T, isLocal: Boolean) = 
     new DfsBroadcast[T] (value_, isLocal)
 }
@@ -71,7 +73,7 @@ extends Logging {
   private var compress: Boolean = false
   private var bufferSize: Int = 65536
 
-  def initialize (): Unit = {
+  def initialize() {
     synchronized {
       if (!initialized) {
         bufferSize = System.getProperty("spark.buffer.size", "65536").toInt

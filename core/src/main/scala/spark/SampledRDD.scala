@@ -3,7 +3,7 @@ package spark
 import java.util.Random
 
 class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Serializable {
-  override val index = prev.index
+  override val index: Int = prev.index
 }
 
 class SampledRDD[T: ClassManifest](
@@ -15,7 +15,7 @@ class SampledRDD[T: ClassManifest](
 
   @transient
   val splits_ = {
-    val rg = new Random(seed);
+    val rg = new Random(seed)
     prev.splits.map(x => new SampledRDDSplit(x, rg.nextInt))
   }
 
@@ -28,7 +28,7 @@ class SampledRDD[T: ClassManifest](
 
   override def compute(splitIn: Split) = {
     val split = splitIn.asInstanceOf[SampledRDDSplit]
-    val rg = new Random(split.seed);
+    val rg = new Random(split.seed)
     // Sampling with replacement (TODO: use reservoir sampling to make this more efficient?)
     if (withReplacement) {
       val oldData = prev.iterator(split.prev).toArray

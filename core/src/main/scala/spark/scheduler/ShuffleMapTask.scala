@@ -42,7 +42,7 @@ object ShuffleMapTask {
       if (old != null) {
         return old
       } else {
-        val loader = currentThread.getContextClassLoader
+        val loader = Thread.currentThread.getContextClassLoader
         val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
         val objIn = new ObjectInputStream(in) {
           override def resolveClass(desc: ObjectStreamClass) =
@@ -104,10 +104,10 @@ class ShuffleMapTask(
     split = in.readObject().asInstanceOf[Split]
   }
 
-  override def run(attemptId: Int): BlockManagerId = {
+  override def run(attemptId: Long): BlockManagerId = {
     val numOutputSplits = dep.partitioner.numPartitions
     val aggregator = dep.aggregator.asInstanceOf[Aggregator[Any, Any, Any]]
-    val partitioner = dep.partitioner.asInstanceOf[Partitioner]
+    val partitioner = dep.partitioner
     val buckets = Array.tabulate(numOutputSplits)(_ => new HashMap[Any, Any])
     for (elem <- rdd.iterator(split)) {
       val (k, v) = elem.asInstanceOf[(Any, Any)]

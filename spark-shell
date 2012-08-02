@@ -1,3 +1,4 @@
 #!/bin/sh
 FWDIR="`dirname $0`"
+export SPARK_LAUNCH_WITH_SCALA=1
 exec $FWDIR/run spark.repl.Main "$@"

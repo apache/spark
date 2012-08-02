@@ -30,7 +30,7 @@ class PipedRDD[T: ClassManifest](
     val pb = new ProcessBuilder(command)
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
-    envVars.foreach { case(variable, value) => currentEnvVars.put(variable, value) }
+    envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
     
     val proc = pb.start()
     val env = SparkEnv.get
@@ -38,7 +38,7 @@ class PipedRDD[T: ClassManifest](
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for " + command) {
       override def run() {
-        for(line <- Source.fromInputStream(proc.getErrorStream).getLines) {
+        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
           System.err.println(line)
         }
       }
@@ -49,7 +49,7 @@ class PipedRDD[T: ClassManifest](
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
-        for(elem <- parent.iterator(split)) {
+        for (elem <- parent.iterator(split)) {
           out.println(elem)
         }
         out.close()
@@ -66,8 +66,9 @@ object PipedRDD {
   def tokenize(command: String): Seq[String] = {
     val buf = new ArrayBuffer[String]
     val tok = new StringTokenizer(command)
-    while(tok.hasMoreElements)
+    while(tok.hasMoreElements) {
       buf += tok.nextToken()
+    }
     buf
   }
 }

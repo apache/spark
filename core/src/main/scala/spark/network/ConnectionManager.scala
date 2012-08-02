@@ -17,7 +17,7 @@ import java.nio.channels.spi._
 import java.net._
 import java.util.concurrent.Executors
 
-case class ConnectionManagerId(val host: String, val port: Int) {
+case class ConnectionManagerId(host: String, port: Int) {
   def toSocketAddress() = new InetSocketAddress(host, port)
 }
 
@@ -112,7 +112,7 @@ class ConnectionManager(port: Int) extends Logging {
         
         val selectedKeys = selector.selectedKeys().iterator()
         while (selectedKeys.hasNext()) {
-          val key = selectedKeys.next.asInstanceOf[SelectionKey]
+          val key = selectedKeys.next
           selectedKeys.remove()
           if (key.isValid) {
             if (key.isAcceptable) {
@@ -173,7 +173,7 @@ class ConnectionManager(port: Int) extends Logging {
             status.synchronized {
             status.attempted = true 
              status.acked = false
-             status.notifyAll
+             status.notifyAll()
             }
           })
 
@@ -204,7 +204,7 @@ class ConnectionManager(port: Int) extends Logging {
             status.synchronized {
             status.attempted = true 
              status.acked = false
-             status.notifyAll
+             status.notifyAll()
             }
           })
 
@@ -260,7 +260,7 @@ class ConnectionManager(port: Int) extends Logging {
             sentMessageStatus.ackMessage = Some(message)
             sentMessageStatus.attempted = true
             sentMessageStatus.acked = true
-            sentMessageStatus.notifyAll
+            sentMessageStatus.notifyAll()
           }
         } else {
           val ackMessage = if (onReceiveCallback != null) {

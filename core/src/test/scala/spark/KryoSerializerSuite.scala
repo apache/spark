@@ -8,11 +8,13 @@ import com.esotericsoftware.kryo._
 
 import SparkContext._
 
-class KryoSerializerSuite extends FunSuite {
+class KryoSerializerSuite extends FunSuite{
+  
   test("basic types") {
     val ser = (new KryoSerializer).newInstance()
-    def check[T](t: T): Unit =
+    def check[T](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
     check(1)
     check(1L)
     check(1.0f)
@@ -39,8 +41,9 @@ class KryoSerializerSuite extends FunSuite {
 
   test("pairs") {
     val ser = (new KryoSerializer).newInstance()
-    def check[T](t: T): Unit =
+    def check[T](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
     check((1, 1))
     check((1, 1L))
     check((1L, 1))
@@ -62,8 +65,9 @@ class KryoSerializerSuite extends FunSuite {
 
   test("Scala data structures") {
     val ser = (new KryoSerializer).newInstance()
-    def check[T](t: T): Unit =
+    def check[T](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
     check(List[Int]())
     check(List[Int](1, 2, 3))
     check(List[String]())
@@ -86,8 +90,9 @@ class KryoSerializerSuite extends FunSuite {
     System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
 
     val ser = (new KryoSerializer).newInstance()
-    def check[T](t: T): Unit =
+    def check[T](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
 
     check(CaseClass(17, "hello"))
 

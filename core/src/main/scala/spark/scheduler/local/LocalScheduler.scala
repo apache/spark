@@ -20,8 +20,6 @@ class LocalScheduler(threads: Int, maxFailures: Int) extends TaskScheduler with 
   // TODO: Need to take into account stage priority in scheduling
 
   override def start() {}
-  
-  override def waitForRegister() {}
 
   override def setListener(listener: TaskSchedulerListener) { 
     this.listener = listener

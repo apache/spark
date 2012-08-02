@@ -1,4 +1,4 @@
-package spark.scheduler.mesos
+package spark.scheduler.cluster
 
 import java.util.Arrays
 import java.util.{HashMap => JHashMap}
@@ -9,22 +9,19 @@ import scala.collection.mutable.HashSet
 import scala.math.max
 import scala.math.min
 
-import com.google.protobuf.ByteString
-
-import org.apache.mesos._
-import org.apache.mesos.Protos.{TaskInfo => MTaskInfo, _}
-
 import spark._
 import spark.scheduler._
+import spark.TaskState.TaskState
+import java.nio.ByteBuffer
 
 /**
- * Schedules the tasks within a single TaskSet in the MesosScheduler.
+ * Schedules the tasks within a single TaskSet in the ClusterScheduler.
  */
 class TaskSetManager(
-    sched: MesosScheduler, 
-    val taskSet: TaskSet)
+  sched: ClusterScheduler,
+  val taskSet: TaskSet)
   extends Logging {
-  
+
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
 
@@ -68,12 +65,12 @@ class TaskSetManager(
   // List containing all pending tasks (also used as a stack, as above)
   val allPendingTasks = new ArrayBuffer[Int]
 
-  // Tasks that can be specualted. Since these will be a small fraction of total
-  // tasks, we'll just hold them in a HaskSet.
+  // Tasks that can be speculated. Since these will be a small fraction of total
+  // tasks, we'll just hold them in a HashSet.
   val speculatableTasks = new HashSet[Int]
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
-  val taskInfos = new HashMap[String, TaskInfo]
+  val taskInfos = new HashMap[Long, TaskInfo]
 
   // Did the job fail?
   var failed = false
@@ -140,12 +137,13 @@ class TaskSetManager(
   // attempt running on this host, in case the host is slow. In addition, if localOnly is set, the
   // task must have a preference for this host (or no preferred locations at all).
   def findSpeculativeTask(host: String, localOnly: Boolean): Option[Int] = {
-    speculatableTasks.retain(index => !finished(index))  // Remove finished tasks from set
-    val localTask = speculatableTasks.find { index =>
-      val locations = tasks(index).preferredLocations.toSet & sched.hostsAlive
-      val attemptLocs = taskAttempts(index).map(_.host)
-      (locations.size == 0 || locations.contains(host)) && !attemptLocs.contains(host)
-    }
+    speculatableTasks.retain(index => !finished(index)) // Remove finished tasks from set
+    val localTask = speculatableTasks.find {
+        index =>
+          val locations = tasks(index).preferredLocations.toSet & sched.hostsAlive
+          val attemptLocs = taskAttempts(index).map(_.host)
+          (locations.size == 0 || locations.contains(host)) && !attemptLocs.contains(host)
+      }
     if (localTask != None) {
       speculatableTasks -= localTask.get
       return localTask
@@ -190,11 +188,11 @@ class TaskSetManager(
   }
 
   // Respond to an offer of a single slave from the scheduler by finding a task
-  def slaveOffer(slaveId: String, host: String, availableCpus: Double): Option[MTaskInfo] = {
+  def slaveOffer(slaveId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
-      var localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
-      
+      val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
+
       findTask(host, localOnly) match {
         case Some(index) => {
           // Found a task; do some bookkeeping and return a Mesos task for it
@@ -204,38 +202,23 @@ class TaskSetManager(
           val preferred = isPreferredLocation(task, host)
           val prefStr = if (preferred) "preferred" else "non-preferred"
           logInfo("Starting task %s:%d as TID %s on slave %s: %s (%s)".format(
-              taskSet.id, index, taskId.getValue, slaveId, host, prefStr))
+            taskSet.id, index, taskId, slaveId, host, prefStr))
           // Do various bookkeeping
           copiesRunning(index) += 1
-          val info = new TaskInfo(taskId.getValue, index, time, host)
-          taskInfos(taskId.getValue) = info
+          val info = new TaskInfo(taskId, index, time, host)
+          taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           if (preferred) {
             lastPreferredLaunchTime = time
           }
-          // Create and return the Mesos task object
-          val cpuRes = Resource.newBuilder()
-            .setName("cpus")
-            .setType(Value.Type.SCALAR)
-            .setScalar(Value.Scalar.newBuilder().setValue(CPUS_PER_TASK).build())
-            .build()
-
+          // Serialize and return the task
           val startTime = System.currentTimeMillis
           val serializedTask = ser.serialize(task)
           val timeTaken = System.currentTimeMillis - startTime
-
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
-
           val taskName = "task %s:%d".format(taskSet.id, index)
-          return Some(MTaskInfo.newBuilder()
-              .setTaskId(taskId)
-              .setSlaveId(SlaveID.newBuilder().setValue(slaveId))
-              .setExecutor(sched.executorInfo)
-              .setName(taskName)
-              .addResources(cpuRes)
-              .setData(ByteString.copyFrom(serializedTask))
-              .build())
+          return Some(new TaskDescription(taskId, slaveId, taskName, serializedTask))
         }
         case _ =>
       }
@@ -243,31 +226,30 @@ class TaskSetManager(
     return None
   }
 
-  def statusUpdate(status: TaskStatus) {
-    status.getState match {
-      case TaskState.TASK_FINISHED =>
-        taskFinished(status)
-      case TaskState.TASK_LOST =>
-        taskLost(status)
-      case TaskState.TASK_FAILED =>
-        taskLost(status)
-      case TaskState.TASK_KILLED =>
-        taskLost(status)
+  def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+    state match {
+      case TaskState.FINISHED =>
+        taskFinished(tid, state, serializedData)
+      case TaskState.LOST =>
+        taskLost(tid, state, serializedData)
+      case TaskState.FAILED =>
+        taskLost(tid, state, serializedData)
+      case TaskState.KILLED =>
+        taskLost(tid, state, serializedData)
       case _ =>
     }
   }
 
-  def taskFinished(status: TaskStatus) {
-    val tid = status.getTaskId.getValue
+  def taskFinished(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     val info = taskInfos(tid)
     val index = info.index
     info.markSuccessful()
     if (!finished(index)) {
       tasksFinished += 1
       logInfo("Finished TID %s in %d ms (progress: %d/%d)".format(
-          tid, info.duration, tasksFinished, numTasks))
+        tid, info.duration, tasksFinished, numTasks))
       // Deserialize task result and pass it to the scheduler
-      val result = ser.deserialize[TaskResult[_]](status.getData.asReadOnlyByteBuffer)
+      val result = ser.deserialize[TaskResult[_]](serializedData, getClass.getClassLoader)
       sched.listener.taskEnded(tasks(index), Success, result.value, result.accumUpdates)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
@@ -280,8 +262,7 @@ class TaskSetManager(
     }
   }
 
-  def taskLost(status: TaskStatus) {
-    val tid = status.getTaskId.getValue
+  def taskLost(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     val info = taskInfos(tid)
     val index = info.index
     info.markFailed()
@@ -290,8 +271,8 @@ class TaskSetManager(
       copiesRunning(index) -= 1
       // Check if the problem is a map output fetch failure. In that case, this
       // task will never succeed on any node, so tell the scheduler about it.
-      if (status.getData != null && status.getData.size > 0) {
-        val reason = ser.deserialize[TaskEndReason](status.getData.asReadOnlyByteBuffer)
+      if (serializedData != null && serializedData.limit() > 0) {
+        val reason = ser.deserialize[TaskEndReason](serializedData, getClass.getClassLoader)
         reason match {
           case fetchFailed: FetchFailed =>
             logInfo("Loss was due to fetch failure from " + fetchFailed.bmAddress)
@@ -332,11 +313,11 @@ class TaskSetManager(
       // On non-fetch failures, re-enqueue the task as pending for a max number of retries
       addPendingTask(index)
       // Count failed attempts only on FAILED and LOST state (not on KILLED)
-      if (status.getState == TaskState.TASK_FAILED || status.getState == TaskState.TASK_LOST) {
+      if (state == TaskState.FAILED || state == TaskState.LOST) {
         numFailures(index) += 1
         if (numFailures(index) > MAX_TASK_FAILURES) {
           logError("Task %s:%d failed more than %d times; aborting job".format(
-              taskSet.id, index, MAX_TASK_FAILURES))
+            taskSet.id, index, MAX_TASK_FAILURES))
           abort("Task %d failed more than %d times".format(index, MAX_TASK_FAILURES))
         }
       }
@@ -387,7 +368,7 @@ class TaskSetManager(
 
   /**
    * Check for tasks to be speculated and return true if there are any. This is called periodically
-   * by the MesosScheduler.
+   * by the ClusterScheduler.
    *
    * TODO: To make this scale to large jobs, we need to maintain a list of running tasks, so that
    * we don't scan the whole task set. It might also help to make this sorted by launch time.
@@ -412,8 +393,9 @@ class TaskSetManager(
       for ((tid, info) <- taskInfos) {
         val index = info.index
         if (!finished(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
-            !speculatableTasks.contains(index)) {
-          logInfo("Marking task %s:%d (on %s) as speculatable because it ran more than %.0f ms".format(
+          !speculatableTasks.contains(index)) {
+          logInfo(
+            "Marking task %s:%d (on %s) as speculatable because it ran more than %.0f ms".format(
               taskSet.id, index, info.host, threshold))
           speculatableTasks += index
           foundTasks = true

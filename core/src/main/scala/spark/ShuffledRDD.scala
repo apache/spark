@@ -40,7 +40,7 @@ class ShuffledRDD[K, V, C](
     return new Iterator[(K, C)] {
       var iter = combiners.entrySet().iterator()
 
-      def hasNext(): Boolean = iter.hasNext()
+      def hasNext: Boolean = iter.hasNext()
 
       def next(): (K, C) = {
         val entry = iter.next()
