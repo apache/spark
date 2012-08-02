@@ -11,6 +11,7 @@ import spark.deploy.{WorkerState, RequestWorkerState}
 
 class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/worker/webui"
+  val STATIC_RESOURCE_DIR = "spark/deploy/static"
 
   val handler = {
     get {
@@ -25,6 +26,9 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Direct
             getFromFileName("work/" + jobId + "/" + executorId + "/" + logType)
           }
         }
+      } ~
+      pathPrefix("static") {
+        getFromResourceDirectory(STATIC_RESOURCE_DIR)
       } ~
       getFromResourceDirectory(RESOURCE_DIR)
     }
