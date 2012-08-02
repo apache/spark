@@ -9,5 +9,13 @@
 # - SPARK_MEM, to change the amount of memory used per node (this should
 #   be in the same format as the JVM's -Xmx option, e.g. 300m or 1g).
 # - SPARK_LIBRARY_PATH, to add extra search paths for native libraries.
-# - SPARK_MASTER_PORT, to start the spark master on a different port (standalone mode only)
 
+# Settings used by the scripts in the bin/ directory, apply to standalone mode only.
+# Note that the same worker settings apply to all of the workers.
+# - SPARK_MASTER_IP, to bind the master to a different ip address, for example a public one (Default: local ip address)
+# - SPARK_MASTER_PORT, to start the spark master on a different port (Default: 7077)
+# - SPARK_MASTER_WEBUI_PORT, to specify a different port for the Master WebUI (Default: 8080)
+# - SPARK_WORKER_PORT, to start the spark worker on a specific port (Default: random)
+# - SPARK_WORKER_CORES, to specify the number of cores to use (Default: all available cores)
+# - SPARK_WORKER_MEMORY, to specify how much memory to use, e.g. 1000M, 2G (Default: MAX(Available - 1024MB, 512MB))
+# - SPARK_WORKER_WEBUI_PORT, to specify a different port for the Worker WebUI (Default: 8081)

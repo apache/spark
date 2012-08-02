@@ -7,4 +7,4 @@ bin=`cd "$bin"; pwd`
 
 . "$bin/spark-config.sh"
 
-"$bin"/spark-daemon.sh stop spark.deploy.worker.Worker
+"$bin"/spark-daemon.sh stop spark.deploy.master.Master
