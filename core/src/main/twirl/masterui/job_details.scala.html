@@ -9,11 +9,19 @@
         <li><strong>ID:</strong> @job.id</li>
         <li><strong>Description:</strong> @job.desc.name</li>
         <li><strong>User:</strong> @job.desc.user</li>
-        <li><strong>Cores:</strong> @job.desc.cores (@job.coresGranted Granted, @job.coresLeft Left)</li>
+        <li><strong>Cores:</strong> 
+          @job.desc.cores 
+          (@job.coresGranted Granted 
+          @if(job.desc.cores == Integer.MAX_VALUE) {
+
+          } else {
+            , @job.coresLeft
+          }
+          )
+        </li>
         <li><strong>Memory per Slave:</strong> @job.desc.memoryPerSlave</li>
         <li><strong>Submit Date:</strong> @job.submitDate</li>
         <li><strong>State:</strong> @job.state</li>
-        <li><strong>Command:</strong> @job.desc.command</li>
       </ul>
     </div>
   </div>

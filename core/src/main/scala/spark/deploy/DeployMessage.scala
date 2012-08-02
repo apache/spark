@@ -23,7 +23,7 @@ case class ExecutorStateChanged(
 
 // Master to Worker
 
-case object RegisteredWorker extends DeployMessage
+case class RegisteredWorker(masterWebUiUrl: String) extends DeployMessage
 case class RegisterWorkerFailed(message: String) extends DeployMessage
 case class KillExecutor(jobId: String, execId: Int) extends DeployMessage
 
@@ -57,11 +57,11 @@ case object RequestMasterState
 
 // Master to MasterWebUI
 
-case class MasterState(workers: List[WorkerInfo], jobs: HashMap[String, JobInfo])
+case class MasterState(uri : String, workers: List[WorkerInfo], activeJobs: List[JobInfo], completedJobs: List[JobInfo])
 
 //  WorkerWebUI to Worker
 case object RequestWorkerState
 
 // Worker to WorkerWebUI
 
-case class WorkerState(workerId: String, executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner], masterUrl: String, cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int)
+case class WorkerState(uri: String, workerId: String, executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner], masterUrl: String, cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String)

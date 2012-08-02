@@ -23,6 +23,7 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   val MASTER_REGEX = "spark://([^:]+):([0-9]+)".r
 
   var master: ActorRef = null
+  var masterWebUiUrl : String = ""
   val workerId = generateWorkerId()
   var sparkHome: File = null
   var workDir: File = null
@@ -95,7 +96,8 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   }
 
   override def receive = {
-    case RegisteredWorker =>
+    case RegisteredWorker(url) =>
+      masterWebUiUrl = url
       logInfo("Successfully registered with master")
 
     case RegisterWorkerFailed(message) =>
@@ -134,7 +136,7 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
       masterDisconnected()
       
     case RequestWorkerState => {
-      sender ! WorkerState(workerId, executors.values.toList, finishedExecutors.values.toList, masterUrl, cores, memory, coresUsed, memoryUsed)
+      sender ! WorkerState(ip + ":" + port, workerId, executors.values.toList, finishedExecutors.values.toList, masterUrl, cores, memory, coresUsed, memoryUsed, masterWebUiUrl)
     }
   }
 

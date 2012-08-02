@@ -51,15 +51,15 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   }
 
   override def receive = {
-    case RegisterWorker(id, host, workerPort, cores, memory, webUiPort) => {
+    case RegisterWorker(id, host, workerPort, cores, memory, worker_webUiPort) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         host, workerPort, cores, Utils.memoryMegabytesToString(memory)))
       if (idToWorker.contains(id)) {
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
-        addWorker(id, host, workerPort, cores, memory, webUiPort)
+        addWorker(id, host, workerPort, cores, memory, worker_webUiPort)
         context.watch(sender)  // This doesn't work with remote actors but helps for testing
-        sender ! RegisteredWorker
+        sender ! RegisteredWorker("http://" + ip + ":" + webUiPort)
         schedule()
       }
     }
@@ -114,7 +114,7 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
     }
     
     case RequestMasterState => {
-      sender ! MasterState(workers.toList, idToJob.clone)
+      sender ! MasterState(ip + ":" + port, workers.toList, jobs.toList, completedJobs.toList)
     }
   }
 
@@ -135,6 +135,7 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
         }
         if (job.coresLeft == 0) {
           waitingJobs -= job
+          job.state = JobState.RUNNING
         }
       }
     }
@@ -190,6 +191,7 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
       exec.worker.removeExecutor(exec)
       exec.worker.actor ! KillExecutor(exec.job.id, exec.id)
     }
+    job.state = JobState.FINISHED
     schedule()
   }
 

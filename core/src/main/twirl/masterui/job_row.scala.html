@@ -4,9 +4,14 @@
   <td>
     <a href="job?jobId=@(job.id)">@job.id</a>
   </td>
-  <td>@job.desc</td>
+  <td>@job.desc.name</td>
   <td>
-    @job.coresGranted Granted, @job.coresLeft Left
+    @job.coresGranted Granted
+    @if(job.desc.cores == Integer.MAX_VALUE) {
+      
+    } else {
+      , @job.coresLeft
+    }
   </td>
   <td>@job.desc.memoryPerSlave</td>
   <td>@job.submitDate</td>
