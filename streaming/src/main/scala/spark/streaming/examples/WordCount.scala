@@ -14,12 +14,12 @@ object WordCount {
     val ssc = new SparkStreamContext(args(0), "ExampleTwo")
     ssc.setBatchDuration(Seconds(2))
 
-    // Create the FileInputRDS on the directory and use the
+    // Create the FileInputDStream on the directory and use the
     // stream to count words in new files created
-    val inputRDS = ssc.createTextFileStream(args(1))
-    val wordsRDS = inputRDS.flatMap(_.split(" "))
-    val wordCountsRDS = wordsRDS.map(x => (x, 1)).reduceByKey(_ + _)
-    wordCountsRDS.print()
+    val lines = ssc.createTextFileStream(args(1))
+    val words = lines.flatMap(_.split(" "))
+    val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
+    wordCounts.print()
     ssc.start()
   }
 }

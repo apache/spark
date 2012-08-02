@@ -11,28 +11,28 @@ import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
 
-class ReducedWindowedRDS[K: ClassManifest, V: ClassManifest](
-    parent: RDS[(K, V)],
+class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
+    parent: DStream[(K, V)],
     reduceFunc: (V, V) => V,
     invReduceFunc: (V, V) => V, 
     _windowTime: Time,
     _slideTime: Time,
     numPartitions: Int)
-extends RDS[(K,V)](parent.ssc) {
+extends DStream[(K,V)](parent.ssc) {
 
   if (!_windowTime.isMultipleOf(parent.slideTime))
-    throw new Exception("The window duration of ReducedWindowedRDS (" + _slideTime + ") " + 
-    "must be multiple of the slide duration of parent RDS (" + parent.slideTime + ")")
+    throw new Exception("The window duration of ReducedWindowedDStream (" + _slideTime + ") " +
+    "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
 
   if (!_slideTime.isMultipleOf(parent.slideTime))
-    throw new Exception("The slide duration of ReducedWindowedRDS (" + _slideTime + ") " + 
-    "must be multiple of the slide duration of parent RDS (" + parent.slideTime + ")")
+    throw new Exception("The slide duration of ReducedWindowedDStream (" + _slideTime + ") " +
+    "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
 
-  val reducedRDS = parent.reduceByKey(reduceFunc, numPartitions)
+  val reducedStream = parent.reduceByKey(reduceFunc, numPartitions)
   val allowPartialWindows = true
-  //reducedRDS.persist(StorageLevel.MEMORY_ONLY_DESER_2)
+  //reducedStream.persist(StorageLevel.MEMORY_ONLY_DESER_2)
 
-  override def dependencies = List(reducedRDS)
+  override def dependencies = List(reducedStream)
 
   def windowTime: Time =  _windowTime
 
@@ -41,9 +41,9 @@ extends RDS[(K,V)](parent.ssc) {
   override def persist(
       storageLevel: StorageLevel, 
       checkpointLevel: StorageLevel, 
-      checkpointInterval: Time): RDS[(K,V)] = {
+      checkpointInterval: Time): DStream[(K,V)] = {
     super.persist(storageLevel, checkpointLevel, checkpointInterval)
-    reducedRDS.persist(storageLevel, checkpointLevel, checkpointInterval)
+    reducedStream.persist(storageLevel, checkpointLevel, checkpointInterval)
   }
   
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
@@ -80,7 +80,7 @@ extends RDS[(K,V)](parent.ssc) {
 
     if (allowPartialWindows) {
       if (currentTime - slideTime == parent.zeroTime) {
-        reducedRDS.getOrCompute(currentTime) match {
+        reducedStream.getOrCompute(currentTime) match {
           case Some(rdd) => return Some(rdd)
           case None => throw new Exception("Could not get first reduced RDD for time " + currentTime)
         }
@@ -94,11 +94,11 @@ extends RDS[(K,V)](parent.ssc) {
           val reducedRDDs = new ArrayBuffer[RDD[(K, V)]]()
           var t = currentWindow.endTime 
           while (t > currentWindow.beginTime) {
-            reducedRDS.getOrCompute(t) match {
+            reducedStream.getOrCompute(t) match {
               case Some(rdd) => reducedRDDs += rdd
               case None => throw new Exception("Could not get reduced RDD for time " + t)
             }
-            t -= reducedRDS.slideTime
+            t -= reducedStream.slideTime
           }
           if (reducedRDDs.size == 0) {
             throw new Exception("Could not generate the first RDD for time " + validTime) 
@@ -120,21 +120,21 @@ extends RDS[(K,V)](parent.ssc) {
     // Get the RDDs of the reduced values in "old time steps"
     var t = currentWindow.beginTime 
     while (t > previousWindow.beginTime) {
-      reducedRDS.getOrCompute(t) match {
+      reducedStream.getOrCompute(t) match {
         case Some(rdd) => oldRDDs += rdd.asInstanceOf[RDD[(_, _)]]
         case None => throw new Exception("Could not get old reduced RDD for time " + t)
       }
-      t -= reducedRDS.slideTime
+      t -= reducedStream.slideTime
     }
 
     // Get the RDDs of the reduced values in "new time steps"
     t = currentWindow.endTime 
     while (t > previousWindow.endTime) {
-      reducedRDS.getOrCompute(t) match {
+      reducedStream.getOrCompute(t) match {
         case Some(rdd) => newRDDs += rdd.asInstanceOf[RDD[(_, _)]]
         case None => throw new Exception("Could not get new reduced RDD for time " + t)
       }
-      t -= reducedRDS.slideTime
+      t -= reducedStream.slideTime
     }
     
     val partitioner = new HashPartitioner(numPartitions)

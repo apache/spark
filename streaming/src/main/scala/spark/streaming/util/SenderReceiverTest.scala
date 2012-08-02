@@ -23,7 +23,7 @@ object Receiver {
               count += 28 
             }
           } catch {
-            case e: Exception => e.printStackTrace
+            case e: Exception => e.printStackTrace()
           }
           val timeTaken = System.currentTimeMillis - time
           val tput = (count / 1024.0) / (timeTaken / 1000.0)

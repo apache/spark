@@ -8,19 +8,19 @@ import spark.SparkContext._
 
 import scala.collection.mutable.ArrayBuffer
 
-class WindowedRDS[T: ClassManifest](
-    parent: RDS[T],
+class WindowedDStream[T: ClassManifest](
+    parent: DStream[T],
     _windowTime: Time,
     _slideTime: Time) 
-  extends RDS[T](parent.ssc) {
+  extends DStream[T](parent.ssc) {
 
   if (!_windowTime.isMultipleOf(parent.slideTime))
-    throw new Exception("The window duration of WindowedRDS (" + _slideTime + ") " + 
-    "must be multiple of the slide duration of parent RDS (" + parent.slideTime + ")")
+    throw new Exception("The window duration of WindowedDStream (" + _slideTime + ") " +
+    "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
 
   if (!_slideTime.isMultipleOf(parent.slideTime))
-    throw new Exception("The slide duration of WindowedRDS (" + _slideTime + ") " + 
-    "must be multiple of the slide duration of parent RDS (" + parent.slideTime + ")")
+    throw new Exception("The slide duration of WindowedDStream (" + _slideTime + ") " +
+    "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
 
   val allowPartialWindows = true
   
@@ -44,7 +44,7 @@ class WindowedRDS[T: ClassManifest](
     
     if (windowStartTime >= parent.zeroTime) {
       // Walk back through time, from the 'windowEndTime' to 'windowStartTime'
-      // and get all parent RDDs from the parent RDS
+      // and get all parent RDDs from the parent DStream
       var t = windowEndTime
       while (t > windowStartTime) {
         parent.getOrCompute(t) match {

@@ -9,12 +9,11 @@ import scala.collection.mutable.HashMap
 
 sealed trait SchedulerMessage
 case class InputGenerated(inputName: String, interval: Interval, reference: AnyRef = null) extends SchedulerMessage
-case class Test extends SchedulerMessage
 
 class Scheduler(
     ssc: SparkStreamContext, 
-    inputRDSs: Array[InputRDS[_]], 
-    outputRDSs: Array[RDS[_]])
+    inputStreams: Array[InputDStream[_]],
+    outputStreams: Array[DStream[_]])
 extends Logging {
 
   initLogging()
@@ -26,21 +25,21 @@ extends Logging {
   def start() {
     
     val zeroTime = Time(timer.start())
-    outputRDSs.foreach(_.initialize(zeroTime))
-    inputRDSs.par.foreach(_.start())
+    outputStreams.foreach(_.initialize(zeroTime))
+    inputStreams.par.foreach(_.start())
     logInfo("Scheduler started")
   }
   
   def stop() {
     timer.stop()
-    inputRDSs.par.foreach(_.stop())
+    inputStreams.par.foreach(_.stop())
     logInfo("Scheduler stopped")    
   }
   
   def generateRDDs (time: Time) {
     logInfo("Generating RDDs for time " + time) 
-    outputRDSs.foreach(outputRDS => {
-        outputRDS.generateJob(time) match {
+    outputStreams.foreach(outputStream => {
+        outputStream.generateJob(time) match {
           case Some(job) => submitJob(job)
           case None => 
         }

@@ -18,12 +18,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 
-class FileInputRDS[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] : ClassManifest](
+class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] : ClassManifest](
     ssc: SparkStreamContext,
     directory: Path,
-    filter: PathFilter = FileInputRDS.defaultPathFilter,
+    filter: PathFilter = FileInputDStream.defaultPathFilter,
     newFilesOnly: Boolean = true) 
-  extends InputRDS[(K, V)](ssc) {
+  extends InputDStream[(K, V)](ssc) {
   
   val fs = directory.getFileSystem(new Configuration()) 
   var lastModTime: Long = 0
@@ -69,7 +69,7 @@ class FileInputRDS[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] 
   }
 }
 
-object FileInputRDS {
+object FileInputDStream {
   val defaultPathFilter = new PathFilter {
     def accept(path: Path): Boolean = {
       val file = path.getName()
@@ -83,12 +83,12 @@ object FileInputRDS {
 }
 
 /*
-class NetworkInputRDS[T: ClassManifest](
+class NetworkInputDStream[T: ClassManifest](
     val networkInputName: String,
     val addresses: Array[InetSocketAddress],
     batchDuration: Time,
     ssc: SparkStreamContext) 
-extends InputRDS[T](networkInputName, batchDuration, ssc) {
+extends InputDStream[T](networkInputName, batchDuration, ssc) {
 
  
   // TODO(Haoyuan): This is for the performance test.
@@ -139,11 +139,11 @@ extends InputRDS[T](networkInputName, batchDuration, ssc) {
 }
 
 
-class TestInputRDS(
+class TestInputDStream(
     val testInputName: String,
     batchDuration: Time,
     ssc: SparkStreamContext) 
-extends InputRDS[String](testInputName, batchDuration, ssc) {
+extends InputDStream[String](testInputName, batchDuration, ssc) {
   
   @transient val references = new HashMap[Time,Array[String]]
  

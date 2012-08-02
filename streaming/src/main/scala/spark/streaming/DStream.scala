@@ -15,7 +15,7 @@ import scala.collection.mutable.HashMap
 
 import java.util.concurrent.ArrayBlockingQueue 
 
-abstract class RDS[T: ClassManifest] (@transient val ssc: SparkStreamContext) 
+abstract class DStream[T: ClassManifest] (@transient val ssc: SparkStreamContext)
 extends Logging with Serializable {
 
   initLogging()
@@ -26,25 +26,25 @@ extends Logging with Serializable {
    * ---------------------------------------------- 
    */
 
-  // Time by which the window slides in this RDS
+  // Time by which the window slides in this DStream
   def slideTime: Time 
 
-  // List of parent RDSs on which this RDS depends on 
-  def dependencies: List[RDS[_]]
+  // List of parent DStreams on which this DStream depends on
+  def dependencies: List[DStream[_]]
 
   // Key method that computes RDD for a valid time 
   def compute (validTime: Time): Option[RDD[T]]
 
   /**
    * --------------------------------------- 
-   * Other general fields and methods of RDS 
+   * Other general fields and methods of DStream
    * --------------------------------------- 
    */
 
   // Variable to store the RDDs generated earlier in time
   @transient private val generatedRDDs = new HashMap[Time, RDD[T]] ()
   
-  // Variable to be set to the first time seen by the RDS (effective time zero)
+  // Variable to be set to the first time seen by the DStream (effective time zero)
   private[streaming] var zeroTime: Time = null
 
   // Variable to specify storage level
@@ -58,11 +58,11 @@ extends Logging with Serializable {
   def persist(
       storageLevel: StorageLevel,
       checkpointLevel: StorageLevel, 
-      checkpointInterval: Time): RDS[T] = {
+      checkpointInterval: Time): DStream[T] = {
     if (this.storageLevel != StorageLevel.NONE && this.storageLevel != storageLevel) {
-      // TODO: not sure this is necessary for RDSes
+      // TODO: not sure this is necessary for DStreams
       throw new UnsupportedOperationException(
-        "Cannot change storage level of an RDS after it was already assigned a level")
+        "Cannot change storage level of an DStream after it was already assigned a level")
     }
     this.storageLevel = storageLevel
     this.checkpointLevel = checkpointLevel
@@ -70,20 +70,20 @@ extends Logging with Serializable {
     this
   }
 
-  // Set caching level for the RDDs created by this RDS 
-  def persist(newLevel: StorageLevel): RDS[T] = persist(newLevel, StorageLevel.NONE, null)
+  // Set caching level for the RDDs created by this DStream
+  def persist(newLevel: StorageLevel): DStream[T] = persist(newLevel, StorageLevel.NONE, null)
 
-  def persist(): RDS[T] = persist(StorageLevel.MEMORY_ONLY_DESER)
+  def persist(): DStream[T] = persist(StorageLevel.MEMORY_ONLY_DESER)
   
   // Turn on the default caching level for this RDD
-  def cache(): RDS[T] = persist()
+  def cache(): DStream[T] = persist()
 
   def isInitialized = (zeroTime != null)
 
   /**
-   * This method initializes the RDS by setting the "zero" time, based on which
+   * This method initializes the DStream by setting the "zero" time, based on which
    * the validity of future times is calculated. This method also recursively initializes
-   * its parent RDSs. 
+   * its parent DStreams.
    */
   def initialize(time: Time) {
     if (zeroTime == null) {
@@ -105,20 +105,20 @@ extends Logging with Serializable {
   }
 
   /**
-   * This method either retrieves a precomputed RDD of this RDS,
+   * This method either retrieves a precomputed RDD of this DStream,
    * or computes the RDD (if the time is valid) 
    */  
   def getOrCompute(time: Time): Option[RDD[T]] = {
-    // If this RDS was not initialized (i.e., zeroTime not set), then do it
+    // If this DStream was not initialized (i.e., zeroTime not set), then do it
     // If RDD was already generated, then retrieve it from HashMap
     generatedRDDs.get(time) match {
       
       // If an RDD was already generated and is being reused, then 
-      // probably all RDDs in this RDS will be reused and hence should be cached
+      // probably all RDDs in this DStream will be reused and hence should be cached
       case Some(oldRDD) => Some(oldRDD)
       
       // if RDD was not generated, and if the time is valid 
-      // (based on sliding time of this RDS), then generate the RDD 
+      // (based on sliding time of this DStream), then generate the RDD
       case None =>
         if (isTimeValid(time)) {
           compute(time) match {
@@ -160,21 +160,21 @@ extends Logging with Serializable {
 
   /** 
    * --------------
-   * RDS operations
+   * DStream operations
    * -------------- 
    */
   
-  def map[U: ClassManifest](mapFunc: T => U) = new MappedRDS(this, ssc.sc.clean(mapFunc))
+  def map[U: ClassManifest](mapFunc: T => U) = new MappedDStream(this, ssc.sc.clean(mapFunc))
 
   def flatMap[U: ClassManifest](flatMapFunc: T => Traversable[U]) = 
-    new FlatMappedRDS(this, ssc.sc.clean(flatMapFunc))
+    new FlatMappedDStream(this, ssc.sc.clean(flatMapFunc))
 
-  def filter(filterFunc: T => Boolean) = new FilteredRDS(this, filterFunc)
+  def filter(filterFunc: T => Boolean) = new FilteredDStream(this, filterFunc)
 
-  def glom() = new GlommedRDS(this) 
+  def glom() = new GlommedDStream(this)
 
   def mapPartitions[U: ClassManifest](mapPartFunc: Iterator[T] => Iterator[U]) = 
-    new MapPartitionedRDS(this, ssc.sc.clean(mapPartFunc))
+    new MapPartitionedDStream(this, ssc.sc.clean(mapPartFunc))
 
   def reduce(reduceFunc: (T, T) => T) = this.map(x => (1, x)).reduceByKey(reduceFunc, 1).map(_._2)
 
@@ -183,18 +183,18 @@ extends Logging with Serializable {
   def collect() = this.map(x => (1, x)).groupByKey(1).map(_._2)
 
   def foreach(foreachFunc: T => Unit) = { 
-    val newrds = new PerElementForEachRDS(this, ssc.sc.clean(foreachFunc))
-    ssc.registerOutputStream(newrds)
-    newrds
+    val newStream = new PerElementForEachDStream(this, ssc.sc.clean(foreachFunc))
+    ssc.registerOutputStream(newStream)
+    newStream
   }
 
   def foreachRDD(foreachFunc: RDD[T] => Unit) = {
-    val newrds = new PerRDDForEachRDS(this, ssc.sc.clean(foreachFunc)) 
-    ssc.registerOutputStream(newrds)
-    newrds
+    val newStream = new PerRDDForEachDStream(this, ssc.sc.clean(foreachFunc))
+    ssc.registerOutputStream(newStream)
+    newStream
   }
 
-  private[streaming] def toQueue() = {
+  private[streaming] def toQueue = {
     val queue = new ArrayBlockingQueue[RDD[T]](10000)
     this.foreachRDD(rdd => {
       println("Added RDD " + rdd.id)
@@ -213,12 +213,12 @@ extends Logging with Serializable {
       if (first11.size > 10) println("...")
       println()
     }
-    val newrds = new PerRDDForEachRDS(this, ssc.sc.clean(foreachFunc))
-    ssc.registerOutputStream(newrds)
-    newrds
+    val newStream = new PerRDDForEachDStream(this, ssc.sc.clean(foreachFunc))
+    ssc.registerOutputStream(newStream)
+    newStream
   }
 
-  def window(windowTime: Time, slideTime: Time) = new WindowedRDS(this, windowTime, slideTime)
+  def window(windowTime: Time, slideTime: Time) = new WindowedDStream(this, windowTime, slideTime)
 
   def batch(batchTime: Time) = window(batchTime, batchTime)
 
@@ -241,15 +241,17 @@ extends Logging with Serializable {
     this.map(_ => 1).reduceByWindow(add _, subtract _, windowTime, slideTime)
   }
 
-  def union(that: RDS[T]) = new UnifiedRDS(Array(this, that))
+  def union(that: DStream[T]) = new UnifiedDStream(Array(this, that))
 
-  def register() = ssc.registerOutputStream(this)
+  def register() {
+    ssc.registerOutputStream(this)
+  }
 }
 
 
-abstract class InputRDS[T: ClassManifest] (
+abstract class InputDStream[T: ClassManifest] (
     ssc: SparkStreamContext)
-extends RDS[T](ssc) {
+extends DStream[T](ssc) {
   
   override def dependencies = List()
 
@@ -265,10 +267,10 @@ extends RDS[T](ssc) {
  * TODO
  */
 
-class MappedRDS[T: ClassManifest, U: ClassManifest] (
-    parent: RDS[T], 
+class MappedDStream[T: ClassManifest, U: ClassManifest] (
+    parent: DStream[T],
     mapFunc: T => U)
-extends RDS[U](parent.ssc) {
+extends DStream[U](parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -284,10 +286,10 @@ extends RDS[U](parent.ssc) {
  * TODO
  */
 
-class FlatMappedRDS[T: ClassManifest, U: ClassManifest](
-    parent: RDS[T], 
+class FlatMappedDStream[T: ClassManifest, U: ClassManifest](
+    parent: DStream[T],
     flatMapFunc: T => Traversable[U])
-extends RDS[U](parent.ssc) {
+extends DStream[U](parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -303,8 +305,8 @@ extends RDS[U](parent.ssc) {
  * TODO
  */
 
-class FilteredRDS[T: ClassManifest](parent: RDS[T], filterFunc: T => Boolean)
-extends RDS[T](parent.ssc) {
+class FilteredDStream[T: ClassManifest](parent: DStream[T], filterFunc: T => Boolean)
+extends DStream[T](parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -320,10 +322,10 @@ extends RDS[T](parent.ssc) {
  * TODO
  */
 
-class MapPartitionedRDS[T: ClassManifest, U: ClassManifest](
-    parent: RDS[T], 
+class MapPartitionedDStream[T: ClassManifest, U: ClassManifest](
+    parent: DStream[T],
     mapPartFunc: Iterator[T] => Iterator[U])
-extends RDS[U](parent.ssc) {
+extends DStream[U](parent.ssc) {
 
   override def dependencies = List(parent)
 
@@ -339,7 +341,7 @@ extends RDS[U](parent.ssc) {
  * TODO
  */
 
-class GlommedRDS[T: ClassManifest](parent: RDS[T]) extends RDS[Array[T]](parent.ssc) {
+class GlommedDStream[T: ClassManifest](parent: DStream[T]) extends DStream[Array[T]](parent.ssc) {
 
   override def dependencies = List(parent)
 
@@ -355,13 +357,13 @@ class GlommedRDS[T: ClassManifest](parent: RDS[T]) extends RDS[Array[T]](parent.
  * TODO
  */
 
-class ShuffledRDS[K: ClassManifest, V: ClassManifest, C: ClassManifest](
-    parent: RDS[(K,V)],
+class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
+    parent: DStream[(K,V)],
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
     numPartitions: Int)
-  extends RDS [(K,C)] (parent.ssc) {
+  extends DStream [(K,C)] (parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -388,8 +390,8 @@ class ShuffledRDS[K: ClassManifest, V: ClassManifest, C: ClassManifest](
  * TODO
  */
 
-class UnifiedRDS[T: ClassManifest](parents: Array[RDS[T]]) 
-extends RDS[T](parents(0).ssc) {
+class UnifiedDStream[T: ClassManifest](parents: Array[DStream[T]])
+extends DStream[T](parents(0).ssc) {
 
   if (parents.length == 0) {
     throw new IllegalArgumentException("Empty array of parents")
@@ -426,10 +428,10 @@ extends RDS[T](parents(0).ssc) {
  * TODO
  */
 
-class PerElementForEachRDS[T: ClassManifest] (
-    parent: RDS[T], 
+class PerElementForEachDStream[T: ClassManifest] (
+    parent: DStream[T],
     foreachFunc: T => Unit) 
-extends RDS[Unit](parent.ssc) {
+extends DStream[Unit](parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -457,12 +459,12 @@ extends RDS[Unit](parent.ssc) {
  * TODO
  */
 
-class PerRDDForEachRDS[T: ClassManifest] (
-    parent: RDS[T], 
+class PerRDDForEachDStream[T: ClassManifest] (
+    parent: DStream[T],
     foreachFunc: (RDD[T], Time) => Unit)
-extends RDS[Unit](parent.ssc) {
+extends DStream[Unit](parent.ssc) {
   
-  def this(parent: RDS[T], altForeachFunc: (RDD[T]) => Unit) =
+  def this(parent: DStream[T], altForeachFunc: (RDD[T]) => Unit) =
     this(parent, (rdd: RDD[T], time: Time) => altForeachFunc(rdd))
 
   override def dependencies = List(parent)

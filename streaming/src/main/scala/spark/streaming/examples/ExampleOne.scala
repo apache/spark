@@ -20,10 +20,10 @@ object ExampleOne {
     ssc.setBatchDuration(Seconds(1))
     
     // Create the queue through which RDDs can be pushed to 
-    // a QueueInputRDS
+    // a QueueInputDStream
     val rddQueue = new SynchronizedQueue[RDD[Int]]()
     
-    // Create the QueueInputRDs and use it do some processing
+    // Create the QueueInputDStream and use it do some processing
     val inputStream = ssc.createQueueStream(rddQueue)
     val mappedStream = inputStream.map(x => (x % 10, 1))
     val reducedStream = mappedStream.reduceByKey(_ + _)

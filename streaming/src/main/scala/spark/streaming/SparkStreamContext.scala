@@ -31,8 +31,8 @@ class SparkStreamContext (
   val sc = new SparkContext(master, frameworkName, sparkHome, jars)
   val env = SparkEnv.get
   
-  val inputRDSs = new ArrayBuffer[InputRDS[_]]()
-  val outputRDSs = new ArrayBuffer[RDS[_]]()
+  val inputStreams = new ArrayBuffer[InputDStream[_]]()
+  val outputStreams = new ArrayBuffer[DStream[_]]()
   var batchDuration: Time = null 
   var scheduler: Scheduler = null
   
@@ -48,17 +48,17 @@ class SparkStreamContext (
   def createNetworkStream[T: ClassManifest](
       name: String,
       addresses: Array[InetSocketAddress],
-      batchDuration: Time): RDS[T] = {
+      batchDuration: Time): DStream[T] = {
     
-    val inputRDS = new NetworkInputRDS[T](this, addresses)
-    inputRDSs += inputRDS
-    inputRDS
+    val inputStream = new NetworkinputStream[T](this, addresses)
+    inputStreams += inputStream
+    inputStream
   }  
   
   def createNetworkStream[T: ClassManifest](
       name: String,
       addresses: Array[String],
-      batchDuration: Long): RDS[T] = {
+      batchDuration: Long): DStream[T] = {
     
     def stringToInetSocketAddress (str: String): InetSocketAddress = {
       val parts = str.split(":")
@@ -83,13 +83,13 @@ class SparkStreamContext (
     K: ClassManifest, 
     V: ClassManifest, 
     F <: NewInputFormat[K, V]: ClassManifest
-  ](directory: String): RDS[(K, V)] = {
-    val inputRDS = new FileInputRDS[K, V, F](this, new Path(directory))
-    inputRDSs += inputRDS
-    inputRDS
+  ](directory: String): DStream[(K, V)] = {
+    val inputStream = new FileInputDStream[K, V, F](this, new Path(directory))
+    inputStreams += inputStream
+    inputStream
   }
 
-  def createTextFileStream(directory: String): RDS[String] = {
+  def createTextFileStream(directory: String): DStream[String] = {
     createFileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
   }
   
@@ -101,26 +101,26 @@ class SparkStreamContext (
       queue: Queue[RDD[T]],      
       oneAtATime: Boolean = true,
       defaultRDD: RDD[T] = null
-    ): RDS[T] = {
-    val inputRDS = new QueueInputRDS(this, queue, oneAtATime, defaultRDD)
-    inputRDSs += inputRDS
-    inputRDS
+    ): DStream[T] = {
+    val inputStream = new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
+    inputStreams += inputStream
+    inputStream
   }
   
-  def createQueueStream[T: ClassManifest](iterator: Iterator[RDD[T]]): RDS[T] = {
+  def createQueueStream[T: ClassManifest](iterator: Iterator[RDD[T]]): DStream[T] = {
     val queue = new Queue[RDD[T]]
-    val inputRDS = createQueueStream(queue, true, null)
+    val inputStream = createQueueStream(queue, true, null)
     queue ++= iterator
-    inputRDS
+    inputStream
   } 
 
   
   /**
-   * This function registers a RDS as an output stream that will be 
+   * This function registers a DStream as an output stream that will be
    * computed every interval.
    */  
-  def registerOutputStream (outputRDS: RDS[_]) {
-    outputRDSs += outputRDS
+  def registerOutputStream (outputStream: DStream[_]) {
+    outputStreams += outputStream
   }
   
   /**
@@ -133,11 +133,11 @@ class SparkStreamContext (
     if (batchDuration < Milliseconds(100)) {
       logWarning("Batch duration of " + batchDuration + " is very low")
     }
-    if (inputRDSs.size == 0) {
-      throw new Exception("No input RDSes created, so nothing to take input from")
+    if (inputStreams.size == 0) {
+      throw new Exception("No input streams created, so nothing to take input from")
     }
-    if (outputRDSs.size == 0) {
-      throw new Exception("No output RDSes registered, so nothing to execute")      
+    if (outputStreams.size == 0) {
+      throw new Exception("No output streams registered, so nothing to execute")
     }
     
   }
@@ -147,7 +147,7 @@ class SparkStreamContext (
    */  
   def start() {
     verify()
-    scheduler = new Scheduler(this, inputRDSs.toArray, outputRDSs.toArray)
+    scheduler = new Scheduler(this, inputStreams.toArray, outputStreams.toArray)
     scheduler.start()
   }
   
@@ -168,6 +168,6 @@ class SparkStreamContext (
 
 
 object SparkStreamContext {
-  implicit def rdsToPairRdsFunctions [K: ClassManifest, V: ClassManifest] (rds: RDS[(K,V)]) = 
-    new PairRDSFunctions (rds)
+  implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) =
+    new PairDStreamFunctions(stream)
 }

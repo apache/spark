@@ -24,12 +24,12 @@ object ExampleTwo {
     if (fs.exists(directory)) throw new Exception("This directory already exists")
     fs.mkdirs(directory)
     
-    // Create the FileInputRDS on the directory and use the 
+    // Create the FileInputDStream on the directory and use the
     // stream to count words in new files created
-    val inputRDS = ssc.createTextFileStream(directory.toString)
-    val wordsRDS = inputRDS.flatMap(_.split(" "))
-    val wordCountsRDS = wordsRDS.map(x => (x, 1)).reduceByKey(_ + _)
-    wordCountsRDS.print
+    val inputStream = ssc.createTextFileStream(directory.toString)
+    val words = inputStream.flatMap(_.split(" "))
+    val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
+    wordCounts.print()
     ssc.start()
     
     // Creating new files in the directory

@@ -3,23 +3,23 @@ package spark.streaming
 import scala.collection.mutable.ArrayBuffer
 import spark.streaming.SparkStreamContext._
 
-class PairRDSFunctions[K: ClassManifest, V: ClassManifest](rds: RDS[(K,V)])
+class PairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)])
 extends Serializable {
  
-  def ssc = rds.ssc
+  def ssc = stream.ssc
 
   /* ---------------------------------- */
-  /* RDS operations for key-value pairs */
+  /* DStream operations for key-value pairs */
   /* ---------------------------------- */
   
-  def groupByKey(numPartitions: Int = 0): ShuffledRDS[K, V, ArrayBuffer[V]] = {
+  def groupByKey(numPartitions: Int = 0): ShuffledDStream[K, V, ArrayBuffer[V]] = {
     def createCombiner(v: V) = ArrayBuffer[V](v)
     def mergeValue(c: ArrayBuffer[V], v: V) = (c += v)
     def mergeCombiner(c1: ArrayBuffer[V], c2: ArrayBuffer[V]) = (c1 ++ c2)
     combineByKey[ArrayBuffer[V]](createCombiner, mergeValue, mergeCombiner, numPartitions)
   }
   
-  def reduceByKey(reduceFunc: (V, V) => V, numPartitions: Int = 0): ShuffledRDS[K, V, V] = {
+  def reduceByKey(reduceFunc: (V, V) => V, numPartitions: Int = 0): ShuffledDStream[K, V, V] = {
     val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
     combineByKey[V]((v: V) => v, cleanedReduceFunc, cleanedReduceFunc, numPartitions)  
   }
@@ -28,23 +28,23 @@ extends Serializable {
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
-    numPartitions: Int) : ShuffledRDS[K, V, C] = {
-    new ShuffledRDS[K, V, C](rds, createCombiner, mergeValue, mergeCombiner, numPartitions)
+    numPartitions: Int) : ShuffledDStream[K, V, C] = {
+    new ShuffledDStream[K, V, C](stream, createCombiner, mergeValue, mergeCombiner, numPartitions)
   }
 
   def groupByKeyAndWindow(
     windowTime: Time, 
     slideTime: Time, 
-    numPartitions: Int = 0): ShuffledRDS[K, V, ArrayBuffer[V]] = {
-    rds.window(windowTime, slideTime).groupByKey(numPartitions)
+    numPartitions: Int = 0): ShuffledDStream[K, V, ArrayBuffer[V]] = {
+    stream.window(windowTime, slideTime).groupByKey(numPartitions)
   }
 
   def reduceByKeyAndWindow(
     reduceFunc: (V, V) => V, 
     windowTime: Time, 
     slideTime: Time, 
-    numPartitions: Int = 0): ShuffledRDS[K, V, V] = {
-    rds.window(windowTime, slideTime).reduceByKey(ssc.sc.clean(reduceFunc), numPartitions)
+    numPartitions: Int = 0): ShuffledDStream[K, V, V] = {
+    stream.window(windowTime, slideTime).reduceByKey(ssc.sc.clean(reduceFunc), numPartitions)
   }
 
   // This method is the efficient sliding window reduce operation, 
@@ -57,10 +57,10 @@ extends Serializable {
     invReduceFunc: (V, V) => V,
     windowTime: Time, 
     slideTime: Time,
-    numPartitions: Int): ReducedWindowedRDS[K, V] = {
+    numPartitions: Int): ReducedWindowedDStream[K, V] = {
 
-    new ReducedWindowedRDS[K, V](
-      rds, 
+    new ReducedWindowedDStream[K, V](
+      stream,
       ssc.sc.clean(reduceFunc),
       ssc.sc.clean(invReduceFunc),
       windowTime,

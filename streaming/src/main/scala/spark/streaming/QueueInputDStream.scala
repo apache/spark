@@ -6,12 +6,12 @@ import spark.UnionRDD
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
-class QueueInputRDS[T: ClassManifest](
+class QueueInputDStream[T: ClassManifest](
     ssc: SparkStreamContext,
     val queue: Queue[RDD[T]],
     oneAtATime: Boolean,
     defaultRDD: RDD[T]
-  ) extends InputRDS[T](ssc) {
+  ) extends InputDStream[T](ssc) {
   
   override def start() { }
   

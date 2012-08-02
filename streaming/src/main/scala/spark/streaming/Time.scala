@@ -50,11 +50,11 @@ class Time(private var millis: Long) {
 
   def isZero = (this.millis == 0)
 
-  override def toString() = (millis.toString + " ms")
+  override def toString = (millis.toString + " ms")
 
-  def toFormattedString() = millis.toString 
+  def toFormattedString = millis.toString
   
-  def milliseconds() = millis
+  def milliseconds = millis
 }
 
 object Time {

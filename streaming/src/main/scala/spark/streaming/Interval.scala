@@ -1,7 +1,6 @@
 package spark.streaming
 
-case class Interval (val beginTime: Time, val endTime: Time) {
-  
+case class Interval (beginTime: Time, endTime: Time) {
   def this(beginMs: Long, endMs: Long) = this(Time(beginMs), new Time(endMs))
   
   def duration(): Time = endTime - beginTime
@@ -33,7 +32,7 @@ case class Interval (val beginTime: Time, val endTime: Time) {
     this + (endTime - beginTime)
   }
 
-  def isZero() = (beginTime.isZero && endTime.isZero)
+  def isZero = (beginTime.isZero && endTime.isZero)
 
   def toFormattedString = beginTime.toFormattedString + "-" + endTime.toFormattedString
 
@@ -41,7 +40,6 @@ case class Interval (val beginTime: Time, val endTime: Time) {
 }
 
 object Interval {
-
   def zero() = new Interval (Time.zero, Time.zero)
 
   def currentInterval(intervalDuration: Time): Interval  = {
@@ -49,7 +47,6 @@ object Interval {
     val intervalBegin = time.floor(intervalDuration) 
     Interval(intervalBegin, intervalBegin + intervalDuration) 
   }
-
 }
 
 
