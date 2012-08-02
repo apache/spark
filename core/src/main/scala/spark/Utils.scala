@@ -185,7 +185,7 @@ object Utils {
    * millisecond. 
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
-    return " " + (System.currentTimeMillis - startTimeMs) + " ms "
+    return " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**

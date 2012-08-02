@@ -34,8 +34,8 @@ extends Thread with Logging {
   
   class DataHandler(
     inputName: String, 
-    longIntervalDuration: LongTime, 
-    shortIntervalDuration: LongTime,
+    longIntervalDuration: Time, 
+    shortIntervalDuration: Time,
     blockManager: BlockManager
   ) 
   extends Logging {
@@ -61,8 +61,8 @@ extends Thread with Logging {
 
     initLogging()
 
-    val shortIntervalDurationMillis = shortIntervalDuration.asInstanceOf[LongTime].milliseconds
-    val longIntervalDurationMillis = longIntervalDuration.asInstanceOf[LongTime].milliseconds
+    val shortIntervalDurationMillis = shortIntervalDuration.toLong
+    val longIntervalDurationMillis = longIntervalDuration.toLong
 
     var currentBlock: Block = null
     var currentBucket: Bucket = null
@@ -101,7 +101,7 @@ extends Thread with Logging {
 
     def updateCurrentBlock() {
       /*logInfo("Updating current block")*/
-      val currentTime: LongTime = LongTime(System.currentTimeMillis)
+      val currentTime = Time(System.currentTimeMillis)
       val shortInterval = getShortInterval(currentTime)
       val longInterval = getLongInterval(shortInterval)
 
@@ -318,12 +318,12 @@ extends Thread with Logging {
  
   val inputName = streamDetails.name
   val intervalDurationMillis = streamDetails.duration
-  val intervalDuration = LongTime(intervalDurationMillis)
+  val intervalDuration = Time(intervalDurationMillis)
 
   val dataHandler = new DataHandler(
     inputName, 
     intervalDuration, 
-    LongTime(TestStreamReceiver3.SHORT_INTERVAL_MILLIS), 
+    Time(TestStreamReceiver3.SHORT_INTERVAL_MILLIS), 
     blockManager)
   
   val connListener = new ConnectionListener(TestStreamReceiver3.PORT, dataHandler)
@@ -382,7 +382,7 @@ extends Thread with Logging {
 
   def waitFor(time: Time) {
     val currentTimeMillis = System.currentTimeMillis
-    val targetTimeMillis = time.asInstanceOf[LongTime].milliseconds
+    val targetTimeMillis = time.milliseconds
     if (currentTimeMillis < targetTimeMillis) {
       val sleepTime = (targetTimeMillis - currentTimeMillis)
       Thread.sleep(sleepTime + 1)
@@ -392,7 +392,7 @@ extends Thread with Logging {
   def notifyScheduler(interval: Interval, blockIds: Array[String]) {
     try {  
       sparkstreamScheduler ! InputGenerated(inputName, interval, blockIds.toArray)
-      val time = interval.endTime.asInstanceOf[LongTime]
+      val time = interval.endTime
       val delay = (System.currentTimeMillis - time.milliseconds) / 1000.0
       logInfo("Pushing delay for " + time + " is " + delay + " s")
     }  catch {

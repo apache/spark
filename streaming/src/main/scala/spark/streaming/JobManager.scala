@@ -1,6 +1,7 @@
 package spark.streaming
 
-import spark.{Logging, SparkEnv}
+import spark.Logging 
+import spark.SparkEnv
 import java.util.concurrent.Executors
 
 
@@ -10,19 +11,14 @@ class JobManager(ssc: SparkStreamContext, numThreads: Int = 1) extends Logging {
     def run() {
       SparkEnv.set(ssc.env)
       try {
-        logInfo("Starting "  + job)
-        job.run()
-        logInfo("Finished " + job)
-        if (job.time.isInstanceOf[LongTime]) {
-          val longTime = job.time.asInstanceOf[LongTime]
-          logInfo("Total notification + skew + processing delay for " + longTime + " is " +
-            (System.currentTimeMillis - longTime.milliseconds) / 1000.0  + " s")
-          if (System.getProperty("spark.stream.distributed", "false") == "true") {
-            TestInputBlockTracker.setEndTime(job.time)
-          }
-        }
+        val timeTaken = job.run()
+        logInfo(
+          "Runnning " + job + " took " + timeTaken + " ms, " +
+          "total delay was " + (System.currentTimeMillis - job.time) + " ms"
+        )
       } catch {
-        case e: Exception => logError("SparkStream job failed", e)
+        case e: Exception =>
+          logError("Running " + job + " failed", e)
       }
     }
   }
@@ -33,5 +29,6 @@ class JobManager(ssc: SparkStreamContext, numThreads: Int = 1) extends Logging {
   
   def runJob(job: Job) {
     jobExecutor.execute(new JobHandler(ssc, job))
+    logInfo("Added " + job + " to queue")
   }
 }

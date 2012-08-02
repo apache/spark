@@ -24,8 +24,8 @@ extends Thread with Logging {
 
   class DataHandler(
     inputName: String, 
-    longIntervalDuration: LongTime, 
-    shortIntervalDuration: LongTime,
+    longIntervalDuration: Time, 
+    shortIntervalDuration: Time,
     blockManager: BlockManager
   ) 
   extends Logging {
@@ -50,8 +50,8 @@ extends Thread with Logging {
 
     val syncOnLastShortInterval = true 
 
-    val shortIntervalDurationMillis = shortIntervalDuration.asInstanceOf[LongTime].milliseconds
-    val longIntervalDurationMillis = longIntervalDuration.asInstanceOf[LongTime].milliseconds
+    val shortIntervalDurationMillis = shortIntervalDuration.milliseconds
+    val longIntervalDurationMillis = longIntervalDuration.milliseconds
 
     val buffer = ByteBuffer.allocateDirect(100 * 1024 * 1024)
     var currentShortInterval = Interval.currentInterval(shortIntervalDuration)
@@ -145,7 +145,7 @@ extends Thread with Logging {
           if (syncOnLastShortInterval) {
             bucket += newBlock
           }
-          logDebug("Created " + newBlock + " with " + newBuffer.remaining + " bytes, creation delay is " + (System.currentTimeMillis - currentShortInterval.endTime.asInstanceOf[LongTime].milliseconds) / 1000.0 + " s" ) 
+          logDebug("Created " + newBlock + " with " + newBuffer.remaining + " bytes, creation delay is " + (System.currentTimeMillis - currentShortInterval.endTime.milliseconds) / 1000.0 + " s" ) 
           blockPushingExecutor.execute(new Runnable() { def run() { pushAndNotifyBlock(newBlock) } })
         }
       }
@@ -175,7 +175,7 @@ extends Thread with Logging {
       try{
         if (blockManager != null) {
           val startTime = System.currentTimeMillis
-          logInfo(block + " put start delay is " + (startTime - block.shortInterval.endTime.asInstanceOf[LongTime].milliseconds) + " ms")
+          logInfo(block + " put start delay is " + (startTime - block.shortInterval.endTime.milliseconds) + " ms")
           /*blockManager.putBytes(block.id.toString, block.buffer, StorageLevel.DISK_AND_MEMORY)*/
           /*blockManager.putBytes(block.id.toString, block.buffer, StorageLevel.DISK_AND_MEMORY_2)*/
           blockManager.putBytes(block.id.toString, block.buffer, StorageLevel.MEMORY_ONLY_2)
@@ -343,7 +343,7 @@ extends Thread with Logging {
 
   def waitFor(time: Time) {
     val currentTimeMillis = System.currentTimeMillis
-    val targetTimeMillis = time.asInstanceOf[LongTime].milliseconds
+    val targetTimeMillis = time.milliseconds
     if (currentTimeMillis < targetTimeMillis) {
       val sleepTime = (targetTimeMillis - currentTimeMillis)
       Thread.sleep(sleepTime + 1)
@@ -353,7 +353,7 @@ extends Thread with Logging {
   def notifyScheduler(interval: Interval, blockIds: Array[String]) {
     try {  
       sparkstreamScheduler ! InputGenerated(inputName, interval, blockIds.toArray)
-      val time = interval.endTime.asInstanceOf[LongTime]
+      val time = interval.endTime
       val delay = (System.currentTimeMillis - time.milliseconds) 
       logInfo("Notification delay for " + time + " is " + delay + " ms")
     }  catch {

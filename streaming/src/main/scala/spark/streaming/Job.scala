@@ -1,13 +1,14 @@
 package spark.streaming
 
+import spark.streaming.util.Utils
+
 class Job(val time: Time, func: () => _) {
   val id = Job.getNewId()
-  
-  def run() {
-    func()
+  def run(): Long = {
+    Utils.time { func() }
   }
 
-  override def toString = "SparkStream Job " + id + ":" + time 
+  override def toString = "streaming job " + id + " @ " + time 
 }
 
 object Job {

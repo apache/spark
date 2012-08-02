@@ -1,4 +1,5 @@
-package spark.streaming
+package spark.streaming.util
+
 import spark.SparkContext
 import SparkContext._
 

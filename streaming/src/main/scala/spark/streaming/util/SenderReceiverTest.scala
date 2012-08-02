@@ -1,4 +1,5 @@
-package spark.streaming
+package spark.streaming.util
+
 import java.net.{Socket, ServerSocket}
 import java.io.{ByteArrayOutputStream, DataOutputStream, DataInputStream, BufferedInputStream}
 
