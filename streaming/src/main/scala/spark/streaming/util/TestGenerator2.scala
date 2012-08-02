@@ -1,4 +1,4 @@
-package spark.streaming
+package spark.streaming.util
 
 import scala.util.Random
 import scala.io.Source

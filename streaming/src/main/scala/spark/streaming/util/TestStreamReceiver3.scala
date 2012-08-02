@@ -1,8 +1,9 @@
-package spark.streaming
+package spark.streaming.util
 
 import spark._
 import spark.storage._
 import spark.util.AkkaUtils
+import spark.streaming._
 
 import scala.math._
 import scala.collection.mutable.{Queue, HashMap, ArrayBuffer, SynchronizedMap}
