@@ -1,0 +1,20 @@
+@(job: spark.deploy.master.JobInfo)
+
+<tr>
+  <td>
+    <a href="job?jobId=@(job.id)">@job.id</a>
+  </td>
+  <td>@job.desc.name</td>
+  <td>
+    @job.coresGranted Granted
+    @if(job.desc.cores == Integer.MAX_VALUE) {
+      
+    } else {
+      , @job.coresLeft
+    }
+  </td>
+  <td>@job.desc.memoryPerSlave</td>
+  <td>@job.submitDate</td>
+  <td>@job.desc.user</td>
+  <td>@job.state.toString()</td>
+</tr>
