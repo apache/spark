@@ -43,12 +43,11 @@ class FileInputRDS[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] 
       var latestModTime = 0L
       
       def accept(path: Path): Boolean = {
-        
         if (!filter.accept(path)) {
           return false
         } else {
           val modTime = fs.getFileStatus(path).getModificationTime() 
-          if (modTime < lastModTime) {
+          if (modTime <= lastModTime) {
             return false
           }
           if (modTime > latestModTime) {
@@ -60,10 +59,12 @@ class FileInputRDS[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] 
     }
     
     val newFiles = fs.listStatus(directory, newFilter)
-    lastModTime = newFilter.latestModTime    
-    val newRDD = new UnionRDD(ssc.sc, newFiles.map(file =>
-      ssc.sc.newAPIHadoopFile[K, V, F](file.getPath.toString))
-    )
+    logInfo("New files: " + newFiles.map(_.getPath).mkString(", "))
+    if (newFiles.length > 0) {
+      lastModTime = newFilter.latestModTime
+    }
+    val newRDD = new UnionRDD(ssc.sc, newFiles.map(
+      file => ssc.sc.newAPIHadoopFile[K, V, F](file.getPath.toString)))
     Some(newRDD)
   }
 }

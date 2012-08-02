@@ -13,7 +13,7 @@ class JobManager(ssc: SparkStreamContext, numThreads: Int = 1) extends Logging {
       try {
         val timeTaken = job.run()
         logInfo(
-          "Runnning " + job + " took " + timeTaken + " ms, " +
+          "Running " + job + " took " + timeTaken + " ms, " +
           "total delay was " + (System.currentTimeMillis - job.time) + " ms"
         )
       } catch {
