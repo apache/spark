@@ -136,7 +136,9 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
       masterDisconnected()
       
     case RequestWorkerState => {
-      sender ! WorkerState(ip + ":" + port, workerId, executors.values.toList, finishedExecutors.values.toList, masterUrl, cores, memory, coresUsed, memoryUsed, masterWebUiUrl)
+      sender ! WorkerState(ip + ":" + port, workerId, executors.values.toList, 
+        finishedExecutors.values.toList, masterUrl, cores, memory, 
+        coresUsed, memoryUsed, masterWebUiUrl)
     }
   }
 

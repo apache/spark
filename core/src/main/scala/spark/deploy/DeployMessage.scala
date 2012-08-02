@@ -57,11 +57,14 @@ case object RequestMasterState
 
 // Master to MasterWebUI
 
-case class MasterState(uri : String, workers: List[WorkerInfo], activeJobs: List[JobInfo], completedJobs: List[JobInfo])
+case class MasterState(uri : String, workers: List[WorkerInfo], activeJobs: List[JobInfo], 
+  completedJobs: List[JobInfo])
 
 //  WorkerWebUI to Worker
 case object RequestWorkerState
 
 // Worker to WorkerWebUI
 
-case class WorkerState(uri: String, workerId: String, executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner], masterUrl: String, cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String)
+case class WorkerState(uri: String, workerId: String, executors: List[ExecutorRunner], 
+  finishedExecutors: List[ExecutorRunner], masterUrl: String, cores: Int, memory: Int, 
+  coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String)

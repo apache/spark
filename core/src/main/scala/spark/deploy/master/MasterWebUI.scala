@@ -26,8 +26,9 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
       path("job") {
         parameter("jobId") { jobId =>
           completeWith {
-            val masterState = getMasterState
-            // A bit ugly an inefficient, but we won't have a number of jobs so large that it will make a significant difference.
+            val masterState = getMasterState()
+            // A bit ugly an inefficient, but we won't have a number of jobs 
+            // so large that it will make a significant difference.
             (masterState.activeJobs ::: masterState.completedJobs).find(_.id == jobId) match {
               case Some(job) => masterui.html.job_details.render(job)
               case _ => null

@@ -72,7 +72,7 @@ object SparkBuild extends Build {
       "cc.spray" % "spray-can" % "1.0-M2.1",
       "cc.spray" % "spray-server" % "1.0-M2.1"
     )
-  ) ++ assemblySettings ++ extraAssemblySettings ++ mergeSettings ++ Seq(Twirl.settings: _*)
+  ) ++ assemblySettings ++ extraAssemblySettings ++ mergeSettings ++ Twirl.settings
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
