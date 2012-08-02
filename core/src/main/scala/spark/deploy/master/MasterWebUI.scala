@@ -13,25 +13,32 @@ import spark.deploy._
 class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/master/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
-
+  
+  implicit val timeout = Timeout(1 seconds)
+  
   val handler = {
     get {
       path("") {
         completeWith {
-          val masterState = getMasterState()
-          // Render the HTML
-          masterui.html.index.render(masterState)
+          val future = master ? RequestMasterState
+          future.map { 
+            masterState => masterui.html.index.render(masterState.asInstanceOf[MasterState])
+          }
         }
       } ~
       path("job") {
         parameter("jobId") { jobId =>
           completeWith {
-            val masterState = getMasterState()
-            // A bit ugly an inefficient, but we won't have a number of jobs 
-            // so large that it will make a significant difference.
-            (masterState.activeJobs ::: masterState.completedJobs).find(_.id == jobId) match {
-              case Some(job) => masterui.html.job_details.render(job)
-              case _ => null
+            val future = master ? RequestMasterState
+            future.map { state => 
+              val masterState = state.asInstanceOf[MasterState]
+              
+              // A bit ugly an inefficient, but we won't have a number of jobs 
+              // so large that it will make a significant difference.
+              (masterState.activeJobs ::: masterState.completedJobs).find(_.id == jobId) match {
+                case Some(job) => masterui.html.job_details.render(job)
+                case _ => null
+              }
             }
           }
         }
@@ -42,12 +49,5 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
       getFromResourceDirectory(RESOURCE_DIR)
     }
   }
-  
-  // Requests the current state from the Master and waits for the response
-  def getMasterState() : MasterState = {
-    implicit val timeout = Timeout(1 seconds)
-    val future = master ? RequestMasterState
-    return Await.result(future, timeout.duration).asInstanceOf[MasterState]
-  }
-  
+
 }

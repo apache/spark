@@ -12,12 +12,17 @@ import spark.deploy.{WorkerState, RequestWorkerState}
 class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/worker/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
-
+  
+  implicit val timeout = Timeout(1 seconds)
+  
   val handler = {
     get {
       path("") {
         completeWith{
-          workerui.html.index(getWorkerState())
+          val future = worker ? RequestWorkerState
+          future.map { workerState =>
+            workerui.html.index(workerState.asInstanceOf[WorkerState])
+          }
         }
       } ~
       path("log") {
@@ -32,13 +37,6 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Direct
       } ~
       getFromResourceDirectory(RESOURCE_DIR)
     }
-  }
-  
-  // Requests the current state from the Master and waits for the response
-  def getWorkerState() : WorkerState = {
-    implicit val timeout = Timeout(1 seconds)
-    val future = worker ? RequestWorkerState
-    return Await.result(future, timeout.duration).asInstanceOf[WorkerState]
   }
   
 }
