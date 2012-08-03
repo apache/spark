@@ -35,35 +35,41 @@ class RangePartitioner[K <% Ordered[K]: ClassManifest, V](
     private val ascending: Boolean = true) 
   extends Partitioner {
 
+  // An array of upper bounds for the first (partitions - 1) partitions
   private val rangeBounds: Array[K] = {
-    val rddSize = rdd.count()
-    val maxSampleSize = partitions * 10.0
-    val frac = math.min(maxSampleSize / math.max(rddSize, 1), 1.0)
-    val rddSample = rdd.sample(true, frac, 1).map(_._1).collect().sortWith(_ < _)
-    if (rddSample.length == 0) {
+    if (partitions == 1) {
       Array()
     } else {
-      val bounds = new Array[K](partitions)
-      for (i <- 0 until partitions) {
-        bounds(i) = rddSample(i * rddSample.length / partitions)
+      val rddSize = rdd.count()
+      val maxSampleSize = partitions * 10.0
+      val frac = math.min(maxSampleSize / math.max(rddSize, 1), 1.0)
+      val rddSample = rdd.sample(true, frac, 1).map(_._1).collect().sortWith(_ < _)
+      if (rddSample.length == 0) {
+        Array()
+      } else {
+        val bounds = new Array[K](partitions - 1)
+        for (i <- 0 until partitions - 1) {
+          val index = (rddSample.length - 1) * (i + 1) / partitions
+          bounds(i) = rddSample(index)
+        }
+        bounds
       }
-      bounds
     }
   }
 
-  def numPartitions = rangeBounds.length
+  def numPartitions = partitions
 
   def getPartition(key: Any): Int = {
     // TODO: Use a binary search here if number of partitions is large
     val k = key.asInstanceOf[K]
     var partition = 0
-    while (partition < rangeBounds.length - 1 && k > rangeBounds(partition)) {
+    while (partition < rangeBounds.length && k > rangeBounds(partition)) {
       partition += 1
     }
     if (ascending) {
       partition
     } else {
-      rangeBounds.length - 1 - partition
+      rangeBounds.length - partition
     }
   }
 
