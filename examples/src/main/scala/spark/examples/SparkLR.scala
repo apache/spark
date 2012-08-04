@@ -2,7 +2,7 @@ package spark.examples
 
 import java.util.Random
 import scala.math.exp
-import Vector._
+import spark.util.Vector
 import spark._
 
 object SparkLR {

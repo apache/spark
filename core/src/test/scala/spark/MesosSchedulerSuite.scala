@@ -3,7 +3,7 @@ package spark
 import org.scalatest.FunSuite
 
 class MesosSchedulerSuite extends FunSuite {
-  test("memoryStringToMb"){
+  test("memoryStringToMb") {
 
     assert(MesosScheduler.memoryStringToMb("1") == 0)
     assert(MesosScheduler.memoryStringToMb("1048575") == 0)

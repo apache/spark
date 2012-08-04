@@ -225,9 +225,10 @@ class CacheTracker(isMaster: Boolean, theCache: Cache) extends Logging {
 
   // Called by the Cache to report that an entry has been dropped from it
   def dropEntry(datasetId: Any, partition: Int) {
-    datasetId match {
-      //TODO - do we really want to use '!!' when nobody checks returned future? '!' seems to enough here.
-      case (cache.keySpaceId, rddId: Int) => trackerActor !! DroppedFromCache(rddId, partition, Utils.getHost)
+    val (keySpaceId, innerId) = datasetId.asInstanceOf[(Any, Any)]
+    if (keySpaceId == cache.keySpaceId) {
+      // TODO - do we really want to use '!!' when nobody checks returned future? '!' seems to enough here.
+      trackerActor !! DroppedFromCache(innerId.asInstanceOf[Int], partition, Utils.getHost)
     }
   }
 

@@ -175,7 +175,7 @@ object Broadcast extends Logging with Serializable {
   }
 
   private def byteArrayToObject[OUT](bytes: Array[Byte]): OUT = {
-    val in = new ObjectInputStream (new ByteArrayInputStream (bytes)){
+    val in = new ObjectInputStream (new ByteArrayInputStream (bytes)) {
       override def resolveClass(desc: ObjectStreamClass) =
         Class.forName(desc.getName, false, Thread.currentThread.getContextClassLoader)
     }    
