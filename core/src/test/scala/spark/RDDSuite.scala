@@ -30,6 +30,15 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     assert(partitionSums.collect().toList === List(3, 7))
   }
 
+  test("SparkContext.union") {
+    sc = new SparkContext("local", "test")
+    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    assert(sc.union(nums).collect().toList === List(1, 2, 3, 4))
+    assert(sc.union(nums, nums).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
+    assert(sc.union(Seq(nums)).collect().toList === List(1, 2, 3, 4))
+    assert(sc.union(Seq(nums, nums)).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
+  }
+
   test("aggregate") {
     sc = new SparkContext("local", "test")
     val pairs = sc.makeRDD(Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
@@ -49,5 +58,11 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     }
     val result = pairs.aggregate(emptyMap)(mergeElement, mergeMaps)
     assert(result.toSet === Set(("a", 6), ("b", 2), ("c", 5)))
+  }
+
+  test("checkpointing") {
+    sc = new SparkContext("local", "test")
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).flatMap(x => 1 to x).checkpoint()
+    assert(rdd.collect().toList === List(1, 1, 2, 1, 2, 3, 1, 2, 3, 4))
   }
 }

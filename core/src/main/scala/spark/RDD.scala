@@ -94,6 +94,25 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
   def getStorageLevel = storageLevel
   
+  def checkpoint(level: StorageLevel = StorageLevel.DISK_AND_MEMORY_DESER): RDD[T] = {
+    if (!level.useDisk && level.replication < 2) {
+      throw new Exception("Cannot checkpoint without using disk or replication (level requested was " + level + ")")
+    } 
+    
+    // This is a hack. Ideally this should re-use the code used by the CacheTracker
+    // to generate the key.
+    def getSplitKey(split: Split) = "rdd:%d:%d".format(this.id, split.index)
+    
+    persist(level)
+    sc.runJob(this, (iter: Iterator[T]) => {} )
+    
+    val p = this.partitioner
+    
+    new BlockRDD[T](sc, splits.map(getSplitKey).toArray) {
+      override val partitioner = p 
+    }
+  }
+  
   // Read this RDD; will read from cache if applicable, or otherwise compute
   final def iterator(split: Split): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
@@ -348,6 +367,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     this.glom
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
       .saveAsSequenceFile(path)
+  }
+
+  /** A private method for tests, to look at the contents of each partition */
+  private[spark] def collectPartitions(): Array[Array[T]] = {
+    sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
 }
 

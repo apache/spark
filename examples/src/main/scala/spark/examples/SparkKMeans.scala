@@ -1,8 +1,8 @@
 package spark.examples
 
 import java.util.Random
-import Vector._
 import spark.SparkContext
+import spark.util.Vector
 import spark.SparkContext._
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet

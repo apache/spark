@@ -1,0 +1,17 @@
+@(workers: List[spark.deploy.master.WorkerInfo])
+
+<table class="table table-bordered table-striped table-condensed sortable">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Address</th>
+      <th>Cores</th>
+      <th>Memory</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for(w <- workers) {
+      @worker_row(w)
+    }
+  </tbody>
+</table>

@@ -134,7 +134,7 @@ class SparkContext(
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    */
@@ -274,12 +274,25 @@ class SparkContext(
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] = new UnionRDD(this, rdds)
+  def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
+
+  /** Build the union of a list of RDDs. */
+  def union[T: ClassManifest](first: RDD[T], rest: RDD[T]*): RDD[T] =
+    new UnionRDD(this, Seq(first) ++ rest)
 
   // Methods for creating shared variables
 
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
+
+  /**
+   * Create an accumulable shared variable, with a `+=` method
+   * @tparam T accumulator type
+   * @tparam R type that can be added to the accumulator
+   */
+  def accumulable[T,R](initialValue: T)(implicit param: AccumulableParam[T,R]) =
+    new Accumulable(initialValue, param)
+
 
   // Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = Broadcast.getBroadcastFactory.newBroadcast[T] (value, isLocal)
@@ -290,14 +303,7 @@ class SparkContext(
     dagScheduler = null
     taskScheduler = null
     // TODO: Broadcast.stop(), Cache.stop()?
-    env.mapOutputTracker.stop()
-    env.cacheTracker.stop()
-    env.shuffleFetcher.stop()
-    env.shuffleManager.stop()
-    env.blockManager.stop()
-    BlockManagerMaster.stopBlockManagerMaster()
-    env.actorSystem.shutdown()
-    env.actorSystem.awaitTermination()
+    env.stop()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
     logInfo("Successfully stopped SparkContext")

@@ -14,16 +14,16 @@ import spark.deploy.ExecutorStateChanged
  * Manages the execution of one executor process.
  */
 class ExecutorRunner(
-    jobId: String,
-    execId: Int,
-    jobDesc: JobDescription,
-    cores: Int,
-    memory: Int,
-    worker: ActorRef,
-    workerId: String,
-    hostname: String,
-    sparkHome: File,
-    workDir: File)
+    val jobId: String,
+    val execId: Int,
+    val jobDesc: JobDescription,
+    val cores: Int,
+    val memory: Int,
+    val worker: ActorRef,
+    val workerId: String,
+    val hostname: String,
+    val sparkHome: File,
+    val workDir: File)
   extends Logging {
 
   val fullId = jobId + "/" + execId
