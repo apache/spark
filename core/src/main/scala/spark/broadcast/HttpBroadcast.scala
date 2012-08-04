@@ -29,16 +29,16 @@ extends Broadcast[T] with Logging with Serializable {
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
-      val cachedVal = SparkEnv.get.blockManager.getSingle(uuid.toString)
-      if (cachedVal != null) {
-        value_ = cachedVal.asInstanceOf[T]
-      } else {
-        logInfo("Started reading broadcast variable " + uuid)
-        val start = System.nanoTime
-        value_ = HttpBroadcast.read[T](uuid)
-        Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
-        val time = (System.nanoTime - start) / 1e9
-        logInfo("Reading broadcast variable " + uuid + " took " + time + " s")
+      SparkEnv.get.blockManager.getSingle(uuid.toString) match {
+        case Some(x) => value_ = x.asInstanceOf[T]
+        case None => {
+          logInfo("Started reading broadcast variable " + uuid)
+          val start = System.nanoTime
+          value_ = HttpBroadcast.read[T](uuid)
+          Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+          val time = (System.nanoTime - start) / 1e9
+          logInfo("Reading broadcast variable " + uuid + " took " + time + " s")
+        }
       }
     }
   }
