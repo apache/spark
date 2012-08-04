@@ -37,7 +37,7 @@ object SparkKMeans {
         System.err.println("Usage: SparkLocalKMeans <master> <file> <k> <convergeDist>")
         System.exit(1)
     }
-    val sc = new SparkContext(args(0), "SparkLocalKMeans", System.getenv("SPARK_HOME"), List(System.getenv("EXAMPLES_JAR")))
+    val sc = new SparkContext(args(0), "SparkLocalKMeans", System.getenv("SPARK_HOME"), List(System.getenv("SPARK_EXAMPLES_JAR")))
     val lines = sc.textFile(args(1))
     val data = lines.map(parseVector _).cache()
     val K = args(2).toInt

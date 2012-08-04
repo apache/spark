@@ -65,7 +65,7 @@ export CLASSPATH # Needed for spark-shell
 
 # The JAR file used in the examples.
 for jar in `find $EXAMPLES_DIR/target/scala-$SCALA_VERSION -name '*jar'`; do
-  export EXAMPLES_JAR="$jar"
+  export SPARK_EXAMPLES_JAR="$jar"
 done
 
 if [ -n "$SCALA_HOME" ]; then

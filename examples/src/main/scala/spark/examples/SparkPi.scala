@@ -12,7 +12,7 @@ object SparkPi {
       System.exit(1)
     }
     
-    val spark = new SparkContext(args(0), "SparkPi",  System.getenv("SPARK_HOME"), List(System.getenv("EXAMPLES_JAR")))
+    val spark = new SparkContext(args(0), "SparkPi",  System.getenv("SPARK_HOME"), List(System.getenv("SPARK_EXAMPLES_JAR")))
     val slices = if (args.length > 1) args(1).toInt else 2
     val n = 100000 * slices
     val count = spark.parallelize(1 to n, slices).map { i =>
