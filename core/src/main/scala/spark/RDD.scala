@@ -368,6 +368,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
       .saveAsSequenceFile(path)
   }
+
+  /** A private method for tests, to look at the contents of each partition */
+  private[spark] def collectPartitions(): Array[Array[T]] = {
+    sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+  }
 }
 
 class MappedRDD[U: ClassManifest, T: ClassManifest](

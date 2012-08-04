@@ -61,9 +61,8 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("checkpointing") {
-    val sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).flatMap(x => 1 to x).checkpoint()
     assert(rdd.collect().toList === List(1, 1, 2, 1, 2, 3, 1, 2, 3, 4))
-    sc.stop()
   }
 }

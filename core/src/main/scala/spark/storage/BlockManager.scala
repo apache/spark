@@ -580,6 +580,6 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 object BlockManager {
   def getMaxMemoryFromSystemProperties(): Long = {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
-    (Runtime.getRuntime.totalMemory * memoryFraction).toLong
+    (Runtime.getRuntime.maxMemory * memoryFraction).toLong
   }
 }
