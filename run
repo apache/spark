@@ -63,6 +63,11 @@ done
 CLASSPATH+=:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes
 export CLASSPATH # Needed for spark-shell
 
+# The JAR file used in the examples.
+for jar in `find $EXAMPLES_DIR/target/scala-$SCALA_VERSION -name '*jar'`; do
+  export SPARK_EXAMPLES_JAR="$jar"
+done
+
 if [ -n "$SCALA_HOME" ]; then
   SCALA="${SCALA_HOME}/bin/scala"
 else
