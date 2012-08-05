@@ -20,17 +20,15 @@ trait Broadcast[T] extends Serializable {
   override def toString = "spark.Broadcast(" + uuid + ")"
 }
 
-object Broadcast extends Logging with Serializable {
+class BroadcastManager(val isMaster_ : Boolean) extends Logging with Serializable {
 
   private var initialized = false
-  private var isMaster_ = false
   private var broadcastFactory: BroadcastFactory = null
 
-  // Cache of broadcasted objects
-  val values = SparkEnv.get.blockManager
+  initialize()
 
   // Called by SparkContext or Executor before using Broadcast
-  def initialize(isMaster__ : Boolean) {
+  private def initialize() {
     synchronized {
       if (!initialized) {
         val broadcastFactoryClass = System.getProperty(
@@ -38,14 +36,6 @@ object Broadcast extends Logging with Serializable {
 
         broadcastFactory =
           Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
-
-        // Setup isMaster before using it
-        isMaster_ = isMaster__
-
-        // Set masterHostAddress to the master's IP address for the slaves to read
-        if (isMaster) {
-          System.setProperty("spark.broadcast.masterHostAddress", Utils.localIpAddress)
-        }
 
         // Initialize appropriate BroadcastFactory and BroadcastObject
         broadcastFactory.initialize(isMaster)
@@ -59,17 +49,14 @@ object Broadcast extends Logging with Serializable {
     broadcastFactory.stop()
   }
 
-  def getBroadcastFactory: BroadcastFactory = {
+  private def getBroadcastFactory: BroadcastFactory = {
     if (broadcastFactory == null) {
       throw new SparkException ("Broadcast.getBroadcastFactory called before initialize")
     }
     broadcastFactory
   }
 
-  private var MasterHostAddress_ = System.getProperty(
-    "spark.broadcast.masterHostAddress", "")
+  def newBroadcast[T](value_ : T, isLocal: Boolean) = broadcastFactory.newBroadcast[T](value_, isLocal)
 
   def isMaster = isMaster_
-  
-  def MasterHostAddress = MasterHostAddress_
 }

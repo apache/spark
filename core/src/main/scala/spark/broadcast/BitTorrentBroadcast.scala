@@ -16,8 +16,8 @@ extends Broadcast[T] with Logging with Serializable {
 
   def value = value_
 
-  Broadcast.synchronized {
-    Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+  MultiTracker.synchronized {
+    SparkEnv.get.blockManager.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -111,10 +111,11 @@ extends Broadcast[T] with Logging with Serializable {
 
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
-    Broadcast.synchronized {
+    MultiTracker.synchronized {
       SparkEnv.get.blockManager.getSingle(uuid.toString) match {
         case Some(x) => x.asInstanceOf[T]
         case None => {
+          logInfo("Started reading broadcast variable " + uuid)
           // Initializing everything because Master will only send null/0 values
           // Only the 1st worker in a node can be here. Others will get from cache
           initializeWorkerVariables
@@ -132,7 +133,7 @@ extends Broadcast[T] with Logging with Serializable {
           val receptionSucceeded = receiveBroadcast(uuid)
           if (receptionSucceeded) {
             value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
-            Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+            SparkEnv.get.blockManager.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
           }  else {
             logError("Reading Broadcasted variable " + uuid + " failed")
           }
@@ -241,7 +242,7 @@ extends Broadcast[T] with Logging with Serializable {
       // Receive source information from Guide
       var suitableSources =
         oisGuide.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-      logInfo("Received suitableSources from Master " + suitableSources)
+      logDebug("Received suitableSources from Master " + suitableSources)
 
       addToListOfSources(suitableSources)
 
@@ -312,9 +313,9 @@ extends Broadcast[T] with Logging with Serializable {
           var peerToTalkTo = pickPeerToTalkToRandom
 
           if (peerToTalkTo != null)
-            logInfo("Peer chosen: " + peerToTalkTo + " with " + peerToTalkTo.hasBlocksBitVector)
+            logDebug("Peer chosen: " + peerToTalkTo + " with " + peerToTalkTo.hasBlocksBitVector)
           else
-            logInfo("No peer chosen...")
+            logDebug("No peer chosen...")
 
           if (peerToTalkTo != null) {
             threadPool.execute(new TalkToPeer(peerToTalkTo))
@@ -340,7 +341,7 @@ extends Broadcast[T] with Logging with Serializable {
       var curPeer: SourceInfo = null
       var curMax = 0
 
-      logInfo("Picking peers to talk to...")
+      logDebug("Picking peers to talk to...")
 
       // Find peers that are not connected right now
       var peersNotInUse = ListBuffer[SourceInfo]()
@@ -529,7 +530,7 @@ extends Broadcast[T] with Logging with Serializable {
               val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
               val receptionTime = (System.currentTimeMillis - recvStartTime)
 
-              logInfo("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
+              logDebug("Received block: " + bcBlock.blockID + " from " + peerToTalkTo + " in " + receptionTime + " millis.")
 
               if (!hasBlocksBitVector.get(bcBlock.blockID)) {
                 arrayOfBlocks(bcBlock.blockID) = bcBlock
@@ -560,7 +561,7 @@ extends Broadcast[T] with Logging with Serializable {
           // connection due to timeout
           case eofe: java.io.EOFException => { }
           case e: Exception => {
-            logInfo("TalktoPeer had a " + e)
+            logError("TalktoPeer had a " + e)
             // FIXME: Remove 'newPeerToTalkTo' from listOfSources
             // We probably should have the following in some form, but not
             // really here. This exception can happen if the sender just breaks connection
@@ -727,7 +728,7 @@ extends Broadcast[T] with Logging with Serializable {
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
-              logInfo("GuideMultipleRequests Timeout.")
+              logError("GuideMultipleRequests Timeout.")
 
               // Stop broadcast if at least one worker has connected and
               // everyone connected so far are done. Comparing with
@@ -739,7 +740,7 @@ extends Broadcast[T] with Logging with Serializable {
             }
           }
           if (clientSocket != null) {
-            logInfo("Guide: Accepted new client connection:" + clientSocket)
+            logDebug("Guide: Accepted new client connection:" + clientSocket)
             try {
               threadPool.execute(new GuideSingleRequest(clientSocket))
             } catch {
@@ -789,7 +790,7 @@ extends Broadcast[T] with Logging with Serializable {
             gosSource.flush()
           } catch {
             case e: Exception => {
-              logInfo("sendStopBroadcastNotifications had a " + e)
+              logError("sendStopBroadcastNotifications had a " + e)
             }
           } finally {
             if (gisSource != null) {
@@ -823,7 +824,7 @@ extends Broadcast[T] with Logging with Serializable {
 
           // Select a suitable source and send it back to the worker
           selectedSources = selectSuitableSources(sourceInfo)
-          logInfo("Sending selectedSources:" + selectedSources)
+          logDebug("Sending selectedSources:" + selectedSources)
           oos.writeObject(selectedSources)
           oos.flush()
 
@@ -837,6 +838,7 @@ extends Broadcast[T] with Logging with Serializable {
             }
           }
         } finally {
+          logInfo("GuideSingleRequest is closing streams and sockets")
           ois.close()
           oos.close()
           clientSocket.close()
@@ -915,11 +917,11 @@ extends Broadcast[T] with Logging with Serializable {
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
-              logInfo("ServeMultipleRequests Timeout.")
+              logError("ServeMultipleRequests Timeout.")
             }
           }
           if (clientSocket != null) {
-            logInfo("Serve: Accepted new client connection:" + clientSocket)
+            logDebug("Serve: Accepted new client connection:" + clientSocket)
             try {
               threadPool.execute(new ServeSingleRequest(clientSocket))
             } catch {
@@ -986,7 +988,7 @@ extends Broadcast[T] with Logging with Serializable {
 
             // Receive latest SourceInfo from the receiver
             rxSourceInfo = ois.readObject.asInstanceOf[SourceInfo]
-            // logInfo("rxSourceInfo: " + rxSourceInfo + " with " + rxSourceInfo.hasBlocksBitVector)
+            logDebug("rxSourceInfo: " + rxSourceInfo + " with " + rxSourceInfo.hasBlocksBitVector)
             addToListOfSources(rxSourceInfo)
 
             curTime = System.currentTimeMillis
@@ -997,7 +999,7 @@ extends Broadcast[T] with Logging with Serializable {
             }
           }
         } catch {
-          case e: Exception => logInfo("ServeSingleRequest had a " + e)
+          case e: Exception => logError("ServeSingleRequest had a " + e)
         } finally {
           logInfo("ServeSingleRequest is closing streams and sockets")
           ois.close()
@@ -1011,9 +1013,9 @@ extends Broadcast[T] with Logging with Serializable {
           oos.writeObject(arrayOfBlocks(blockToSend))
           oos.flush()
         } catch {
-          case e: Exception => logInfo("sendBlock had a " + e)
+          case e: Exception => logError("sendBlock had a " + e)
         }
-        logInfo("Sent block: " + blockToSend + " to " + clientSocket)
+        logDebug("Sent block: " + blockToSend + " to " + clientSocket)
       }
     }
   }

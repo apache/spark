@@ -74,7 +74,6 @@ class SparkContext(
     true,
     isLocal)
   SparkEnv.set(env)
-  Broadcast.initialize(true)
 
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
@@ -295,14 +294,14 @@ class SparkContext(
 
 
   // Keep around a weak hash map of values to Cached versions?
-  def broadcast[T](value: T) = Broadcast.getBroadcastFactory.newBroadcast[T] (value, isLocal)
+  def broadcast[T](value: T) = SparkEnv.get.broadcastManager.newBroadcast[T] (value, isLocal)
 
   // Stop the SparkContext
   def stop() {
     dagScheduler.stop()
     dagScheduler = null
     taskScheduler = null
-    // TODO: Broadcast.stop(), Cache.stop()?
+    // TODO: Cache.stop()?
     env.stop()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()

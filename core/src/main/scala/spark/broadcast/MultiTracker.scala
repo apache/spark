@@ -40,6 +40,9 @@ extends Logging {
           trackMV = new TrackMultipleValues
           trackMV.setDaemon(true)
           trackMV.start()
+        
+          // Set masterHostAddress to the master's IP address for the slaves to read
+          System.setProperty("spark.MultiTracker.MasterHostAddress", Utils.localIpAddress)
         }
 
         initialized = true
@@ -52,6 +55,8 @@ extends Logging {
   }
 
   // Load common parameters
+  private var MasterHostAddress_ = System.getProperty(
+    "spark.MultiTracker.MasterHostAddress", "")
   private var MasterTrackerPort_ = System.getProperty(
     "spark.broadcast.masterTrackerPort", "11111").toInt
   private var BlockSize_ = System.getProperty(
@@ -90,6 +95,7 @@ extends Logging {
   def isMaster = isMaster_
 
   // Common config params
+  def MasterHostAddress = MasterHostAddress_
   def MasterTrackerPort = MasterTrackerPort_
   def BlockSize = BlockSize_
   def MaxRetryCount = MaxRetryCount_
@@ -119,7 +125,7 @@ extends Logging {
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(MasterTrackerPort)
-      logInfo("TrackMultipleValues" + serverSocket)
+      logInfo("TrackMultipleValues started at " + serverSocket)
 
       try {
         while (!stopBroadcast) {
@@ -158,7 +164,7 @@ extends Logging {
                         valueToGuideMap += (uuid -> gInfo)
                       }
 
-                      logInfo ("New broadcast registered with TrackMultipleValues " + uuid + " " + valueToGuideMap)
+                      logInfo ("New broadcast " + uuid + " registered with TrackMultipleValues. Ongoing ones: " + valueToGuideMap)
 
                       // Send dummy ACK
                       oos.writeObject(-1)
@@ -170,10 +176,9 @@ extends Logging {
                       // Remove from the map
                       valueToGuideMap.synchronized {
                         valueToGuideMap(uuid) = SourceInfo("", SourceInfo.TxOverGoToDefault)
-                        logInfo("Value unregistered from the Tracker " + valueToGuideMap)
                       }
 
-                      logInfo ("Broadcast unregistered from TrackMultipleValues " + uuid + " " + valueToGuideMap)
+                      logInfo ("Broadcast " + uuid + " unregistered from TrackMultipleValues. Ongoing ones: " + valueToGuideMap)
 
                       // Send dummy ACK
                       oos.writeObject(-1)
@@ -186,7 +191,7 @@ extends Logging {
                         if (valueToGuideMap.contains(uuid)) valueToGuideMap(uuid)
                         else SourceInfo("", SourceInfo.TxNotStartedRetry)
 
-                      logInfo("TrackMultipleValues: Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
+                      logDebug("Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
 
                       // Send reply back
                       oos.writeObject(gInfo)
@@ -196,7 +201,7 @@ extends Logging {
                     }
                   } catch {
                     case e: Exception => {
-                      logInfo("TrackMultipleValues had a " + e)
+                      logError("TrackMultipleValues had a " + e)
                     }
                   } finally {
                     ois.close()
@@ -231,7 +236,7 @@ extends Logging {
       try {
         // Connect to the tracker to find out GuideInfo
         clientSocketToTracker =
-          new Socket(Broadcast.MasterHostAddress, MultiTracker.MasterTrackerPort)
+          new Socket(MultiTracker.MasterHostAddress, MultiTracker.MasterTrackerPort)
         oosTracker =
           new ObjectOutputStream(clientSocketToTracker.getOutputStream)
         oosTracker.flush()
@@ -247,7 +252,7 @@ extends Logging {
         oosTracker.flush()
         gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
       } catch {
-        case e: Exception => logInfo("getGuideInfo had a " + e)
+        case e: Exception => logError("getGuideInfo had a " + e)
       } finally {
         if (oisTracker != null) {
           oisTracker.close()
@@ -267,12 +272,12 @@ extends Logging {
       retriesLeft -= 1
     } while (retriesLeft > 0 && gInfo.listenPort == SourceInfo.TxNotStartedRetry)
 
-    logInfo("Got this guidePort from Tracker: " + gInfo.listenPort)
+    logDebug("Got this guidePort from Tracker: " + gInfo.listenPort)
     return gInfo
   }
   
   def registerBroadcast(uuid: UUID, gInfo: SourceInfo) {
-    val socket = new Socket(Broadcast.MasterHostAddress, MasterTrackerPort)
+    val socket = new Socket(MultiTracker.MasterHostAddress, MasterTrackerPort)
     val oosST = new ObjectOutputStream(socket.getOutputStream)
     oosST.flush()
     val oisST = new ObjectInputStream(socket.getInputStream)
@@ -299,7 +304,7 @@ extends Logging {
   }
 
   def unregisterBroadcast(uuid: UUID) {
-    val socket = new Socket(Broadcast.MasterHostAddress, MasterTrackerPort)
+    val socket = new Socket(MultiTracker.MasterHostAddress, MasterTrackerPort)
     val oosST = new ObjectOutputStream(socket.getOutputStream)
     oosST.flush()
     val oisST = new ObjectInputStream(socket.getInputStream)

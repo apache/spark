@@ -15,8 +15,8 @@ extends Broadcast[T] with Logging with Serializable {
 
   def value = value_
 
-  Broadcast.synchronized {
-    Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+  MultiTracker.synchronized {
+    SparkEnv.get.blockManager.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -89,10 +89,11 @@ extends Broadcast[T] with Logging with Serializable {
 
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
-    Broadcast.synchronized {
+    MultiTracker.synchronized {
       SparkEnv.get.blockManager.getSingle(uuid.toString) match {
         case Some(x) => x.asInstanceOf[T]
         case None => {
+          logInfo("Started reading broadcast variable " + uuid)
           // Initializing everything because Master will only send null/0 values
           // Only the 1st worker in a node can be here. Others will get from cache
           initializeWorkerVariables
@@ -109,7 +110,7 @@ extends Broadcast[T] with Logging with Serializable {
           val receptionSucceeded = receiveBroadcast(uuid)
           if (receptionSucceeded) {
             value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
-            Broadcast.values.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+            SparkEnv.get.blockManager.putSingle(uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
           }  else {
             logError("Reading Broadcasted variable " + uuid + " failed")
           }
@@ -161,12 +162,12 @@ extends Broadcast[T] with Logging with Serializable {
     var retriesLeft = MultiTracker.MaxRetryCount
     do {
       // Connect to Master and send this worker's Information
-      clientSocketToMaster = new Socket(Broadcast.MasterHostAddress, gInfo.listenPort)
+      clientSocketToMaster = new Socket(MultiTracker.MasterHostAddress, gInfo.listenPort)
       oosMaster = new ObjectOutputStream(clientSocketToMaster.getOutputStream)
       oosMaster.flush()
       oisMaster = new ObjectInputStream(clientSocketToMaster.getInputStream)
 
-      logInfo("Connected to Master's guiding object")
+      logDebug("Connected to Master's guiding object")
 
       // Send local source information
       oosMaster.writeObject(SourceInfo(hostAddress, listenPort))
@@ -179,7 +180,7 @@ extends Broadcast[T] with Logging with Serializable {
       totalBlocksLock.synchronized { totalBlocksLock.notifyAll() }
       totalBytes = sourceInfo.totalBytes
 
-      logInfo("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)
+      logDebug("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)
 
       val start = System.nanoTime
       val receptionSucceeded = receiveSingleTransmission(sourceInfo)
@@ -226,8 +227,8 @@ extends Broadcast[T] with Logging with Serializable {
       oosSource.flush()
       oisSource = new ObjectInputStream(clientSocketToSource.getInputStream)
 
-      logInfo("Inside receiveSingleTransmission")
-      logInfo("totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
+      logDebug("Inside receiveSingleTransmission")
+      logDebug("totalBlocks: "+ totalBlocks + " " + "hasBlocks: " + hasBlocks)
 
       // Send the range
       oosSource.writeObject((hasBlocks, totalBlocks))
@@ -238,7 +239,7 @@ extends Broadcast[T] with Logging with Serializable {
         val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
         val receptionTime = (System.currentTimeMillis - recvStartTime)
 
-        logInfo("Received block: " + bcBlock.blockID + " from " + sourceInfo + " in " + receptionTime + " millis.")
+        logDebug("Received block: " + bcBlock.blockID + " from " + sourceInfo + " in " + receptionTime + " millis.")
 
         arrayOfBlocks(hasBlocks) = bcBlock
         hasBlocks += 1
@@ -248,7 +249,7 @@ extends Broadcast[T] with Logging with Serializable {
         hasBlocksLock.synchronized { hasBlocksLock.notifyAll() }
       }
     } catch {
-      case e: Exception => logInfo("receiveSingleTransmission had a " + e)
+      case e: Exception => logError("receiveSingleTransmission had a " + e)
     } finally {
       if (oisSource != null) {
         oisSource.close()
@@ -287,7 +288,7 @@ extends Broadcast[T] with Logging with Serializable {
             clientSocket = serverSocket.accept
           } catch {
             case e: Exception => {
-              logInfo("GuideMultipleRequests Timeout.")
+              logError("GuideMultipleRequests Timeout.")
 
               // Stop broadcast if at least one worker has connected and
               // everyone connected so far are done. 
@@ -300,7 +301,7 @@ extends Broadcast[T] with Logging with Serializable {
             }
           }
           if (clientSocket != null) {
-            logInfo("Guide: Accepted new client connection: " + clientSocket)
+            logDebug("Guide: Accepted new client connection: " + clientSocket)
             try {
               threadPool.execute(new GuideSingleRequest(clientSocket))
             } catch {
@@ -346,7 +347,7 @@ extends Broadcast[T] with Logging with Serializable {
             gosSource.flush()
           } catch {
             case e: Exception => {
-              logInfo("sendStopBroadcastNotifications had a " + e)
+              logError("sendStopBroadcastNotifications had a " + e)
             }
           } finally {
             if (gisSource != null) {
@@ -382,14 +383,14 @@ extends Broadcast[T] with Logging with Serializable {
           listOfSources.synchronized {
             // Select a suitable source and send it back to the worker
             selectedSourceInfo = selectSuitableSource(sourceInfo)
-            logInfo("Sending selectedSourceInfo: " + selectedSourceInfo)
+            logDebug("Sending selectedSourceInfo: " + selectedSourceInfo)
             oos.writeObject(selectedSourceInfo)
             oos.flush()
 
             // Add this new (if it can finish) source to the list of sources
             thisWorkerInfo = SourceInfo(sourceInfo.hostAddress,
               sourceInfo.listenPort, totalBlocks, totalBytes)
-            logInfo("Adding possible new source to listOfSources: " + thisWorkerInfo)
+            logDebug("Adding possible new source to listOfSources: " + thisWorkerInfo)
             listOfSources += thisWorkerInfo
           }
 
@@ -437,6 +438,7 @@ extends Broadcast[T] with Logging with Serializable {
             }
           }
         } finally {
+          logInfo("GuideSingleRequest is closing streams and sockets")
           ois.close()
           oos.close()
           clientSocket.close()
@@ -486,11 +488,11 @@ extends Broadcast[T] with Logging with Serializable {
             serverSocket.setSoTimeout(MultiTracker.ServerSocketTimeout)
             clientSocket = serverSocket.accept
           } catch {
-            case e: Exception => logInfo("ServeMultipleRequests Timeout.")
+            case e: Exception => logError("ServeMultipleRequests Timeout.")
           }
           
           if (clientSocket != null) {
-            logInfo("Serve: Accepted new client connection: " + clientSocket)
+            logDebug("Serve: Accepted new client connection: " + clientSocket)
             try {
               threadPool.execute(new ServeSingleRequest(clientSocket))
             } catch {
@@ -534,7 +536,7 @@ extends Broadcast[T] with Logging with Serializable {
             sendObject
           }
         } catch {
-          case e: Exception => logInfo("ServeSingleRequest had a " + e)
+          case e: Exception => logError("ServeSingleRequest had a " + e)
         } finally {
           logInfo("ServeSingleRequest is closing streams and sockets")
           ois.close()
@@ -557,9 +559,9 @@ extends Broadcast[T] with Logging with Serializable {
             oos.writeObject(arrayOfBlocks(i))
             oos.flush()
           } catch {
-            case e: Exception => logInfo("sendObject had a " + e)
+            case e: Exception => logError("sendObject had a " + e)
           }
-          logInfo("Sent block: " + i + " to " + clientSocket)
+          logDebug("Sent block: " + i + " to " + clientSocket)
         }
       }
     }
