@@ -1,6 +1,7 @@
 package spark.streaming
 
 import spark.streaming.util.RecurringTimer
+import spark.streaming.util.Clock
 import spark.SparkEnv
 import spark.Logging
 
@@ -20,8 +21,10 @@ extends Logging {
 
   val concurrentJobs = System.getProperty("spark.stream.concurrentJobs", "1").toInt
   val jobManager = new JobManager(ssc, concurrentJobs)
-  val timer = new RecurringTimer(ssc.batchDuration, generateRDDs(_))
-    
+  val clockClass = System.getProperty("spark.streaming.clock", "spark.streaming.util.SystemClock")
+  val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+  val timer = new RecurringTimer(clock, ssc.batchDuration, generateRDDs(_))
+  
   def start() {
     
     val zeroTime = Time(timer.start())

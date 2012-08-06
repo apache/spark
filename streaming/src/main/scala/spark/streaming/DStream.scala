@@ -197,7 +197,6 @@ extends Logging with Serializable {
   private[streaming] def toQueue = {
     val queue = new ArrayBlockingQueue[RDD[T]](10000)
     this.foreachRDD(rdd => {
-      println("Added RDD " + rdd.id)
       queue.add(rdd)
     })
     queue

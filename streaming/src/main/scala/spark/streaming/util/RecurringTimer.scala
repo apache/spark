@@ -1,6 +1,6 @@
 package spark.streaming.util
 
-class RecurringTimer(period: Long, callback: (Long) => Unit) {
+class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) => Unit) {
   
   val minPollTime = 25L
   
@@ -19,7 +19,7 @@ class RecurringTimer(period: Long, callback: (Long) => Unit) {
   var nextTime = 0L   
   
   def start(): Long = {
-    nextTime = (math.floor(System.currentTimeMillis() / period) + 1).toLong * period
+    nextTime = (math.floor(clock.currentTime / period) + 1).toLong * period
     thread.start() 
     nextTime
   }
@@ -31,22 +31,32 @@ class RecurringTimer(period: Long, callback: (Long) => Unit) {
   def loop() {
     try {
       while (true) {
-        val beforeSleepTime = System.currentTimeMillis()
-        while (beforeSleepTime >= nextTime) {
-          callback(nextTime)          
-          nextTime += period
-        }
-        val sleepTime = if (nextTime - beforeSleepTime < 2 * pollTime) {
-          nextTime - beforeSleepTime
-        } else {
-          pollTime
-        }
-        Thread.sleep(sleepTime)
-        val afterSleepTime = System.currentTimeMillis()
+        clock.waitTillTime(nextTime)
+        callback(nextTime)
+        nextTime += period
       }
+      
     } catch {
       case e: InterruptedException =>
     }
+  }
+}
+
+object RecurringTimer {
+  
+  def main(args: Array[String]) {
+    var lastRecurTime = 0L
+    val period = 1000
+    
+    def onRecur(time: Long) {
+      val currentTime = System.currentTimeMillis()
+      println("" + currentTime + ": " + (currentTime - lastRecurTime))
+      lastRecurTime = currentTime
+    }
+    val timer = new  RecurringTimer(new SystemClock(), period, onRecur)
+    timer.start()
+    Thread.sleep(30 * 1000)
+    timer.stop()
   }
 }
 

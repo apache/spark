@@ -1,6 +1,8 @@
 package spark.streaming
 
-import spark.{Logging, RDD}
+import spark.Logging
+import spark.RDD
+import spark.streaming.util.ManualClock
 
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
@@ -13,11 +15,13 @@ class DStreamSuite extends FunSuite with BeforeAndAfter with Logging {
   var ssc: SparkStreamContext = null
   val batchDurationMillis = 1000
   
+  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+  
   def testOp[U: ClassManifest, V: ClassManifest](
       input: Seq[Seq[U]],
       operation: DStream[U] => DStream[V],
       expectedOutput: Seq[Seq[V]]) {
-    try {
+    try {      
       ssc = new SparkStreamContext("local", "test")
       ssc.setBatchDuration(Milliseconds(batchDurationMillis))
       
@@ -26,12 +30,14 @@ class DStreamSuite extends FunSuite with BeforeAndAfter with Logging {
       val outputQueue = outputStream.toQueue
       
       ssc.start()
-      Thread.sleep(batchDurationMillis * input.size)
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      clock.addToTime(input.size * batchDurationMillis)
+      
+      Thread.sleep(100)
       
       val output = new ArrayBuffer[Seq[V]]()
       while(outputQueue.size > 0) {
-        val rdd = outputQueue.take()
-        logInfo("Collecting RDD " + rdd.id + ", " + rdd.getClass.getSimpleName + ", " + rdd.splits.size)
+        val rdd = outputQueue.take()        
         output += (rdd.collect())
       }
       assert(output.size === expectedOutput.size)
@@ -58,8 +64,14 @@ class DStreamSuite extends FunSuite with BeforeAndAfter with Logging {
 
 object DStreamSuite {
   def main(args: Array[String]) {
-    val r = new DStreamSuite()
-    val inputData = Array(1 to 4, 5 to 8, 9 to 12)    
-    r.testOp(inputData, (r: DStream[Int]) => r.map(_.toString), inputData.map(_.map(_.toString)))
+    try {
+      val r = new DStreamSuite()
+      val inputData = Array(1 to 4, 5 to 8, 9 to 12)    
+      r.testOp(inputData, (r: DStream[Int]) => r.map(_.toString), inputData.map(_.map(_.toString)))
+    
+    } catch {
+      case e: Exception => e.printStackTrace()
+    }
+    System.exit(0)
   }
 }

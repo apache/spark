@@ -1,5 +1,7 @@
 package spark.streaming
 
+import java.util.concurrent.atomic.AtomicLong
+
 class Job(val time: Time, func: () => _) {
   val id = Job.getNewId()
   def run(): Long = {
@@ -13,11 +15,8 @@ class Job(val time: Time, func: () => _) {
 }
 
 object Job {
-  var lastId = 1
+  val id = new AtomicLong(0)
 
-  def getNewId() = synchronized {
-    lastId += 1
-    lastId
-  }
+  def getNewId() = id.getAndIncrement()
 }
 
