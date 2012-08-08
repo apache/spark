@@ -324,7 +324,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = new TaskAttemptID(jobtrackerID,
-        stageId, TaskType.REDUCE, context.splitId, context.attemptId)
+        stageId, TaskType.REDUCE, context.splitId, attemptNumber)
       val hadoopContext = new TaskAttemptContextImpl(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
