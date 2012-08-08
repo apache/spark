@@ -5,7 +5,7 @@ import java.util.HashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConversions
+import scala.collection.JavaConversions._
 
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
@@ -126,7 +126,7 @@ class ShuffleMapTask(
     for (i <- 0 until numOutputSplits) {
       val blockId = "shuffleid_" + dep.shuffleId + "_" + partition + "_" + i
       // Get a scala iterator from java map
-      val iter = JavaConversions.mapAsScalaMap(buckets(i)).iterator
+      val iter: Iterator[(Any, Any)] = buckets(i).iterator
       // TODO: This should probably be DISK_ONLY
       blockManager.put(blockId, iter, StorageLevel.MEMORY_ONLY, false)
     }
