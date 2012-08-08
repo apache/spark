@@ -15,7 +15,21 @@ class WorkerArguments(args: Array[String]) {
   var cores = inferDefaultCores()
   var memory = inferDefaultMemory()
   var master: String = null
-
+  
+  // Check for settings in environment variables 
+  if (System.getenv("SPARK_WORKER_PORT") != null) {
+    port = System.getenv("SPARK_WORKER_PORT").toInt
+  }
+  if (System.getenv("SPARK_WORKER_CORES") != null) {
+    cores = System.getenv("SPARK_WORKER_CORES").toInt
+  }
+  if (System.getenv("SPARK_WORKER_MEMORY") != null) {
+    memory = Utils.memoryStringToMb(System.getenv("SPARK_WORKER_MEMORY"))
+  }
+  if (System.getenv("SPARK_WORKER_WEBUI_PORT") != null) {
+    webUiPort = System.getenv("SPARK_WORKER_WEBUI_PORT").toInt
+  }
+  
   parse(args.toList)
 
   def parse(args: List[String]): Unit = args match {

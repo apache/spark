@@ -2,6 +2,7 @@ import sbt._
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
+import twirl.sbt.TwirlPlugin._
 
 object SparkBuild extends Build {
   // Hadoop version to build against. For the YARN branch, this needs to support YARN.
@@ -67,13 +68,12 @@ object SparkBuild extends Build {
       "com.typesafe.akka" % "akka-actor" % "2.0.2",
       "com.typesafe.akka" % "akka-remote" % "2.0.2",
       "com.typesafe.akka" % "akka-slf4j" % "2.0.2",
-      "org.jboss.netty" % "netty" % "3.2.6.Final",
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
       "cc.spray" % "spray-can" % "1.0-M2.1",
       "cc.spray" % "spray-server" % "1.0-M2.1"
     )
-  ) ++ assemblySettings ++ extraAssemblySettings
+  ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
