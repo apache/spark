@@ -5,6 +5,7 @@ import java.util.HashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions
 
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
@@ -124,18 +125,10 @@ class ShuffleMapTask(
     val blockManager = SparkEnv.get.blockManager
     for (i <- 0 until numOutputSplits) {
       val blockId = "shuffleid_" + dep.shuffleId + "_" + partition + "_" + i
-      val iter = buckets(i).entrySet().iterator()
-      // Create an iterator to avoid a copy. blockManager will traverse this
-      // to create an block
-      val entryIter = new Iterator[Any] {
-        override def hasNext() = iter.hasNext()
-        override def next() = {
-          val entry = iter.next()
-          (entry.getKey(), entry.getValue())
-        }
-      }
+      // Get a scala iterator from java map
+      val iter = JavaConversions.mapAsScalaMap(buckets(i)).iterator
       // TODO: This should probably be DISK_ONLY
-      blockManager.put(blockId, entryIter, StorageLevel.MEMORY_ONLY, false)
+      blockManager.put(blockId, iter, StorageLevel.MEMORY_ONLY, false)
     }
     return SparkEnv.get.blockManager.blockManagerId
   }
