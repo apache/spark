@@ -1,0 +1,9 @@
+# The Python API relies on some new features from the Py4J development branch.
+# pip can't install Py4J from git because the setup.py file for the Python
+# package is not at the root of the git repository.  It may be possible to
+# install Py4J from git once https://github.com/pypa/pip/pull/526 is merged.
+
+# git+git://github.com/bartdag/py4j.git@3dbf380d3d2cdeb9aab394454ea74d80c4aba1ea
+
+simplejson==2.6.1
+cloud==2.5.5
