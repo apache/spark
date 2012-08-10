@@ -64,8 +64,9 @@ class PipedRDD[T: ClassManifest](
         if (lines.hasNext) {
           true
         } else {
-          if (proc.waitFor() != 0) {
-            throw new Exception("Subprocess exited with non-zero exit status")
+          val exitStatus = proc.waitFor()
+          if (exitStatus != 0) {
+            throw new Exception("Subprocess exited with status " + exitStatus)
           }
           false
         }
