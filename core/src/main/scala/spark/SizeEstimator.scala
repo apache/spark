@@ -19,8 +19,6 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
  */
 object SizeEstimator {
-  private val OBJECT_SIZE  = 8 // Minimum size of a java.lang.Object
-  private val POINTER_SIZE = 4 // Size of an object reference
 
   // Sizes of primitive types
   private val BYTE_SIZE    = 1
@@ -31,6 +29,28 @@ object SizeEstimator {
   private val LONG_SIZE    = 8
   private val FLOAT_SIZE   = 4
   private val DOUBLE_SIZE  = 8
+
+  // Object and pointer sizes are arch dependent
+  val is64bit = System.getProperty("os.arch").contains("64")
+
+  // Size of an object reference
+  // TODO: Get this from jvm/system property
+  val isCompressedOops = Runtime.getRuntime.maxMemory < (Integer.MAX_VALUE.toLong*2)
+
+  // Minimum size of a java.lang.Object
+  val OBJECT_SIZE = if (!is64bit) 8 else { 
+    if(!isCompressedOops) {
+      16
+    } else {
+      12
+    }
+  }
+
+  val POINTER_SIZE = if (is64bit && !isCompressedOops) 8 else 4
+
+  // Alignment boundary for objects
+  // TODO: Is this arch dependent ?
+  private val ALIGN_SIZE = 8
 
   // A cache of ClassInfo objects for each class
   private val classInfos = new ConcurrentHashMap[Class[_], ClassInfo]
@@ -101,10 +121,17 @@ object SizeEstimator {
   private def visitArray(array: AnyRef, cls: Class[_], state: SearchState) {
     val length = JArray.getLength(array)
     val elementClass = cls.getComponentType
+
+    // Arrays have object header and length field which is an integer
+    var arrSize: Long = alignSize(OBJECT_SIZE + INT_SIZE)
+
     if (elementClass.isPrimitive) {
-      state.size += length * primitiveSize(elementClass)
+      arrSize += alignSize(length * primitiveSize(elementClass))
+      state.size += arrSize
     } else {
-      state.size += length * POINTER_SIZE
+      arrSize += alignSize(length * POINTER_SIZE)
+      state.size += arrSize
+
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
         for (i <- 0 until length) {
           state.enqueue(JArray.get(array, i))
@@ -176,9 +203,16 @@ object SizeEstimator {
       }
     }
 
+    shellSize = alignSize(shellSize)
+
     // Create and cache a new ClassInfo
     val newInfo = new ClassInfo(shellSize, pointerFields)
     classInfos.put(cls, newInfo)
     return newInfo
+  }
+
+  private def alignSize(size: Long): Long = {
+    val rem = size % ALIGN_SIZE
+    return if (rem == 0) size else (size + ALIGN_SIZE - rem)
   }
 }
