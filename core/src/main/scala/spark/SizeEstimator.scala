@@ -63,6 +63,9 @@ object SizeEstimator extends Logging {
   classInfos.put(classOf[Object], new ClassInfo(OBJECT_SIZE, Nil))
 
   private def getIsCompressedOops : Boolean = {
+    if (System.getProperty("spark.test.useCompressedOops") != null) {
+      return System.getProperty("spark.test.useCompressedOops").toBoolean 
+    }
     try {
       val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic";
       val server = ManagementFactory.getPlatformMBeanServer();
