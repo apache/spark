@@ -7,6 +7,10 @@ import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Random
 
+import javax.management.MBeanServer
+import java.lang.management.ManagementFactory
+import com.sun.management.HotSpotDiagnosticMXBean
+
 import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
@@ -18,7 +22,7 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet
  * Based on the following JavaWorld article:
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
  */
-object SizeEstimator {
+object SizeEstimator extends Logging {
 
   // Sizes of primitive types
   private val BYTE_SIZE    = 1
@@ -34,8 +38,7 @@ object SizeEstimator {
   val is64bit = System.getProperty("os.arch").contains("64")
 
   // Size of an object reference
-  // TODO: Get this from jvm/system property
-  val isCompressedOops = Runtime.getRuntime.maxMemory < (Integer.MAX_VALUE.toLong*2)
+  val isCompressedOops = getIsCompressedOops
 
   // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
   // section, "Which oops are compressed"
@@ -58,6 +61,28 @@ object SizeEstimator {
   // A cache of ClassInfo objects for each class
   private val classInfos = new ConcurrentHashMap[Class[_], ClassInfo]
   classInfos.put(classOf[Object], new ClassInfo(OBJECT_SIZE, Nil))
+
+  private def getIsCompressedOops : Boolean = {
+    try {
+      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic";
+      val server = ManagementFactory.getPlatformMBeanServer();
+      val bean = ManagementFactory.newPlatformMXBeanProxy(server, 
+        hotSpotMBeanName, classOf[HotSpotDiagnosticMXBean]);
+      return bean.getVMOption("UseCompressedOops").getValue.toBoolean
+    } catch {
+      case e: IllegalArgumentException => {
+        logWarning("Exception while trying to check if compressed oops is enabled", e)
+        // Fall back to checking if maxMemory < 32GB
+        return Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+      }
+
+      case e: SecurityException => {
+        logWarning("No permission to create MBeanServer", e)
+        // Fall back to checking if maxMemory < 32GB
+        return Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+      }
+    }
+  }
 
   /**
    * The state of an ongoing size estimation. Contains a stack of objects to visit as well as an
