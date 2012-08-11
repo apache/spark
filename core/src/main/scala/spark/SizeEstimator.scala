@@ -37,6 +37,9 @@ object SizeEstimator {
   // TODO: Get this from jvm/system property
   val isCompressedOops = Runtime.getRuntime.maxMemory < (Integer.MAX_VALUE.toLong*2)
 
+  // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
+  // section, "Which oops are compressed"
+
   // Minimum size of a java.lang.Object
   val OBJECT_SIZE = if (!is64bit) 8 else { 
     if(!isCompressedOops) {
