@@ -34,8 +34,6 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
 
     try {
       val blockOptions = blockManager.get(blocksByAddress)
-      logDebug("Fetching map output blocks for shuffle %d, reduce %d took %d ms".format(
-        shuffleId, reduceId, System.currentTimeMillis - startTime))
       blockOptions.foreach(x => {
         val (blockId, blockOption) = x 
         blockOption match {
@@ -65,5 +63,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
         }
       }
     }
+    logDebug("Fetching and merging outputs of shuffle %d, reduce %d took %d ms".format(
+      shuffleId, reduceId, System.currentTimeMillis - startTime))
   }
 }
