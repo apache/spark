@@ -9,12 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.Collections
 
-import scala.actors._
-import scala.actors.Actor._
-import scala.actors.Future
-import scala.actors.Futures.future
-import scala.actors.remote._
-import scala.actors.remote.RemoteActor._
+import akka.dispatch.{Await, Future}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
@@ -30,6 +25,7 @@ import spark.SparkException
 import spark.Utils
 import spark.util.ByteBufferInputStream
 import spark.network._
+import akka.util.Duration
 
 class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
   def this() = this(null, 0)
@@ -81,6 +77,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
   
   val connectionManager = new ConnectionManager(0)
+  implicit val futureExecContext = connectionManager.futureExecContext
   
   val connectionManagerId = connectionManager.id
   val blockManagerId = new BlockManagerId(connectionManagerId.host, connectionManagerId.port)
@@ -439,7 +436,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     // Initiate the replication before storing it locally. This is faster as 
     // data is already serialized and ready for sending
     val replicationFuture = if (level.replication > 1) {
-      future {
+      Future {
         replicate(blockId, bytes, level)
       }
     } else {
@@ -475,7 +472,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       if (replicationFuture == null) {
         throw new Exception("Unexpected")
       }
-      replicationFuture() 
+      Await.ready(replicationFuture, Duration.Inf)
     }
 
     val finishTime = System.currentTimeMillis

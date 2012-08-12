@@ -2,20 +2,19 @@ package spark.network
 
 import spark._
 
-import scala.actors.Future
-import scala.actors.Futures.future
+import java.nio._
+import java.nio.channels._
+import java.nio.channels.spi._
+import java.net._
+import java.util.concurrent.Executors
+
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.SynchronizedMap
 import scala.collection.mutable.SynchronizedQueue
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
-import java.io._
-import java.nio._
-import java.nio.channels._
-import java.nio.channels.spi._
-import java.net._
-import java.util.concurrent.Executors
+import akka.dispatch.{ExecutionContext, Future}
 
 case class ConnectionManagerId(host: String, port: Int) {
   def toSocketAddress() = new InetSocketAddress(host, port)
@@ -44,6 +43,9 @@ class ConnectionManager(port: Int) extends Logging {
   val connectionRequests = new SynchronizedQueue[SendingConnection]
   val keyInterestChangeRequests = new SynchronizedQueue[(SelectionKey, Int)]
   val sendMessageRequests = new Queue[(Message, SendingConnection)]
+
+  implicit val futureExecContext = ExecutionContext.fromExecutor(
+    Executors.newCachedThreadPool(DaemonThreadFactory))
   
   var onReceiveCallback: (BufferMessage, ConnectionManagerId) => Option[Message]= null
 
@@ -312,9 +314,9 @@ class ConnectionManager(port: Int) extends Logging {
       messageStatuses += ((message.id, messageStatus))
     }
     sendMessage(connectionManagerId, message)
-    future {
+    Future {
       messageStatus.synchronized {
-        if (!messageStatus.attempted) {
+        while (!messageStatus.attempted) {
           logTrace("Waiting, " + messageStatuses.size + " statuses" )
           messageStatus.wait()
           logTrace("Done waiting")
