@@ -263,14 +263,16 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * an Iterator of (block ID, value) pairs so that clients may handle blocks in a pipelined
    * fashion as they're received.
    */
-  def get(blocksByAddress: Seq[(BlockManagerId, Seq[String])]): Iterator[(String, Option[Iterator[Any]])] = {
+  def getMultiple(blocksByAddress: Seq[(BlockManagerId, Seq[String])])
+      : Iterator[(String, Option[Iterator[Any]])] = {
+
     if (blocksByAddress == null) {
       throw new IllegalArgumentException("BlocksByAddress is null")
     }
     val totalBlocks = blocksByAddress.map(_._2.size).sum
     logDebug("Getting " + totalBlocks + " blocks")
     var startTime = System.currentTimeMillis
-    val blocks = new ArrayBuffer[(String, Option[Iterator[Any]])](totalBlocks)
+    val results = new LinkedBlockingQueue[(String, Option[Iterator[Any]])]
     val localBlockIds = new ArrayBuffer[String]()
     val remoteBlockIds = new ArrayBuffer[String]()
     val remoteBlockIdsPerLocation = new HashMap[BlockManagerId, Seq[String]]()
@@ -286,12 +288,34 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
     
     // Start getting remote blocks
-    val remoteBlockFutures = remoteBlockIdsPerLocation.toSeq.map { case (bmId, bIds) =>
+    for ((bmId, bIds) <- remoteBlockIdsPerLocation) {
       val cmId = ConnectionManagerId(bmId.ip, bmId.port)
       val blockMessages = bIds.map(bId => BlockMessage.fromGetBlock(GetBlock(bId)))
       val blockMessageArray = new BlockMessageArray(blockMessages)
       val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
-      (cmId, future)
+      future.onSuccess {
+        case Some(message) => {
+          val bufferMessage = message.asInstanceOf[BufferMessage]
+          val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
+          blockMessageArray.foreach(blockMessage => {
+            if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
+              throw new SparkException(
+                "Unexpected message " + blockMessage.getType + " received from " + cmId)
+            }
+            val buffer = blockMessage.getData
+            val blockId = blockMessage.getId
+            val block = dataDeserialize(buffer)
+            results.put((blockId, Some(block)))
+            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+          })
+        }
+        case None => {
+          logError("Could not get blocks from " + cmId)
+          for (blockId <- bIds) {
+            results.put((blockId, None))
+          }
+        }
+      }
     }
     logDebug("Started remote gets for " + remoteBlockIds.size + " blocks in " + 
       Utils.getUsedTimeMs(startTime) + " ms")
@@ -301,7 +325,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     localBlockIds.foreach(id => {
       get(id) match {
         case Some(block) => {
-          blocks += ((id, Some(block)))
+          results.put((id, Some(block)))
           logDebug("Got local block " + id)
         }
         case None => {
@@ -311,36 +335,17 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }) 
     logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
 
-    // wait for and gather all the remote blocks
-    for ((cmId, future) <- remoteBlockFutures) {
-      var count = 0
-      val oneBlockId = remoteBlockIdsPerLocation(new BlockManagerId(cmId.host, cmId.port)).head
-      future() match {
-        case Some(message) => {
-          val bufferMessage = message.asInstanceOf[BufferMessage]
-          val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-          blockMessageArray.foreach(blockMessage => {
-            if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
-              throw new BlockException(oneBlockId, "Unexpected message received from " + cmId)
-            }
-            val buffer = blockMessage.getData
-            val blockId = blockMessage.getId
-            val block = dataDeserialize(buffer)
-            blocks += ((blockId, Some(block)))
-            logDebug("Got remote block " + blockId + " in " + Utils.getUsedTimeMs(startTime))
-            count += 1
-          })
-        }
-        case None => {
-          throw new BlockException(oneBlockId, "Could not get blocks from " + cmId)
-        }
-      }
-      logDebug("Got remote " + count + " blocks from " + cmId.host + " in " +
-        Utils.getUsedTimeMs(startTime) + " ms")
-    }
+    // Return an iterator that will read fetched blocks off the queue as they arrive
+    return new Iterator[(String, Option[Iterator[Any]])] {
+      var resultsGotten = 0
 
-    logDebug("Got all blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
-    return blocks.iterator
+      def hasNext: Boolean = resultsGotten < totalBlocks
+
+      def next(): (String, Option[Iterator[Any]]) = {
+        resultsGotten += 1
+        results.take()
+      }
+    }
   }
 
   /**

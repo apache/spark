@@ -33,9 +33,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
     }
 
     try {
-      val blockOptions = blockManager.get(blocksByAddress)
-      blockOptions.foreach(x => {
-        val (blockId, blockOption) = x 
+      for ((blockId, blockOption) <- blockManager.getMultiple(blocksByAddress)) {
         blockOption match {
           case Some(block) => {
             val values = block
@@ -48,7 +46,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
             throw new BlockException(blockId, "Did not get block " + blockId)         
           }
         }
-      })
+      }
     } catch {
       case be: BlockException => {
         val regex = "shuffledid_([0-9]*)_([0-9]*)_([0-9]]*)".r
