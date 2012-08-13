@@ -47,17 +47,22 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     
     // Extra options for the JVM
     var JAVA_OPTS = ""
+    // Set the JVM memory
+    val workerMemoryString = workerMemory + "m"
+    JAVA_OPTS += "-Xms" + workerMemoryString + " -Xmx" + workerMemoryString + " "
     if (env.isDefinedAt("SPARK_JAVA_OPTS")) {
       JAVA_OPTS += env("SPARK_JAVA_OPTS") + " "
     }
     
     ctx.setUser(UserGroupInformation.getCurrentUser().getShortUserName())
-    val commands = List[String]("java spark.executor.StandaloneExecutorBackend " +
+    val commands = List[String]("java " +
+      JAVA_OPTS + 
+      "spark.executor.StandaloneExecutorBackend " +
       masterAddress + " " +
       slaveId + " " +
       hostname + " " +
       "default " +
-      JAVA_OPTS +
+      
       " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
       " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
     logInfo("Setting up worker with commands: " + commands)

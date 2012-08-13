@@ -142,7 +142,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
     val rsrcRequest = Records.newRecord(classOf[ResourceRequest]).asInstanceOf[ResourceRequest]
     // Set the required memory
     val memCapability = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
-    memCapability.setMemory(args.workerMemory)
+    // There probably is some overhead here, let's reserve a bit more memory.
+    memCapability.setMemory(args.workerMemory + 128)
     rsrcRequest.setCapability(memCapability)
     // Set the Priority
     // TODO: Make priority a command-line argument
