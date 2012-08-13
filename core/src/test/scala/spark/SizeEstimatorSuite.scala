@@ -2,6 +2,7 @@ package spark
 
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.PrivateMethodTester
 
 class DummyClass1 {}
 
@@ -18,7 +19,7 @@ class DummyClass4(val d: DummyClass3) {
   val x: Int = 0
 }
 
-class SizeEstimatorSuite extends FunSuite with BeforeAndAfterAll {
+class SizeEstimatorSuite extends FunSuite with BeforeAndAfterAll with PrivateMethodTester {
   var oldArch: String = _
   var oldOops: String = _
 
@@ -29,17 +30,8 @@ class SizeEstimatorSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   override def afterAll() {
-    if (oldArch != null) {
-      System.setProperty("os.arch", oldArch)
-    } else {
-      System.clearProperty("os.arch")
-    }
-
-    if (oldOops != null) {
-      System.setProperty("spark.test.useCompressedOops", oldOops)
-    } else {
-      System.clearProperty("spark.test.useCompressedOops")
-    }
+    resetOrClear("os.arch", oldArch)
+    resetOrClear("spark.test.useCompressedOops", oldOops)
   }
 
   test("simple classes") {
@@ -99,5 +91,42 @@ class SizeEstimatorSuite extends FunSuite with BeforeAndAfterAll {
     assert(estimatedSize >= 4000, "Estimated size " + estimatedSize + " should be more than 4000")
     assert(estimatedSize <= 4200, "Estimated size " + estimatedSize + " should be less than 4100")
   }
-}
 
+  test("32-bit arch") {
+    val arch = System.setProperty("os.arch", "x86")
+
+    val initialize = PrivateMethod[Unit]('initialize)
+    SizeEstimator invokePrivate initialize()
+
+    expect(40)(SizeEstimator.estimate(""))
+    expect(48)(SizeEstimator.estimate("a"))
+    expect(48)(SizeEstimator.estimate("ab"))
+    expect(56)(SizeEstimator.estimate("abcdefgh"))
+
+    resetOrClear("os.arch", arch)
+  }
+
+  test("64-bit arch with no compressed oops") {
+    val arch = System.setProperty("os.arch", "amd64")
+    val oops = System.setProperty("spark.test.useCompressedOops", "false")
+
+    val initialize = PrivateMethod[Unit]('initialize)
+    SizeEstimator invokePrivate initialize()
+
+    expect(64)(SizeEstimator.estimate(""))
+    expect(72)(SizeEstimator.estimate("a"))
+    expect(72)(SizeEstimator.estimate("ab"))
+    expect(80)(SizeEstimator.estimate("abcdefgh"))
+
+    resetOrClear("os.arch", arch)
+    resetOrClear("spark.test.useCompressedOops", oops)
+  }
+
+  def resetOrClear(prop: String, oldValue: String) {
+    if (oldValue != null) {
+      System.setProperty(prop, oldValue)
+    } else {
+      System.clearProperty(prop)
+    }
+  }
+}
