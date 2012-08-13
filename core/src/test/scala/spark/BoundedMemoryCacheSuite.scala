@@ -1,8 +1,9 @@
 package spark
 
 import org.scalatest.FunSuite
+import org.scalatest.PrivateMethodTester
 
-class BoundedMemoryCacheSuite extends FunSuite {
+class BoundedMemoryCacheSuite extends FunSuite with PrivateMethodTester {
   test("constructor test") {
     val cache = new BoundedMemoryCache(60)
     expect(60)(cache.getCapacity)
@@ -12,6 +13,8 @@ class BoundedMemoryCacheSuite extends FunSuite {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case 
     val oldArch = System.setProperty("os.arch", "amd64")
     val oldOops = System.setProperty("spark.test.useCompressedOops", "true")
+    val initialize = PrivateMethod[Unit]('initialize)
+    SizeEstimator invokePrivate initialize()
 
     val cache = new BoundedMemoryCache(60) {
       //TODO sorry about this, but there is not better way how to skip 'cacheTracker.dropEntry'
