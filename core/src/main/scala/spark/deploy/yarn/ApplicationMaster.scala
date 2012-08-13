@@ -1,14 +1,7 @@
 package spark.deploy.yarn
 
-import akka.actor._
-import akka.dispatch.Await
-import akka.pattern.ask
-import akka.util.Timeout
-import akka.util.duration._
 import java.net.{InetSocketAddress, URI}
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.yarn.api._
@@ -17,11 +10,10 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import scala.collection.mutable.HashMap
+import scala.collection.JavaConversions._
 import spark.{Logging, Utils}
-import spark.scheduler.cluster._
-import spark.deploy._
-import spark.deploy.master._
-import spark.util.AkkaUtils
+import spark.scheduler.cluster.StandaloneSchedulerBackend
 
 class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) extends Logging {
   
@@ -30,7 +22,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
   var rpc : YarnRPC = YarnRPC.create(conf)
   var resourceManager : AMRMProtocol = null
   var appAttemptId : ApplicationAttemptId = null
-  var schedulerBackend : StandaloneSchedulerBackend = null
   val numWorkersRunning = new AtomicInteger()
   val numWorkersConnected = new AtomicInteger()
   val lastResponseId = new AtomicInteger()

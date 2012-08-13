@@ -112,7 +112,6 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
       manager.start()
       coresUsed += cores_
       memoryUsed += memory_
-      logInfo(jobDesc.command.mainClass + " " + jobDesc.command.arguments)
       master ! ExecutorStateChanged(jobId, execId, ExecutorState.LOADING, None)
 
     case ExecutorStateChanged(jobId, execId, state, message) =>

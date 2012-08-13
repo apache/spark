@@ -1,8 +1,6 @@
 package spark.deploy.yarn
 
 import java.net.{InetSocketAddress, URI};
-import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.net.NetUtils
@@ -13,6 +11,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.Records
 import org.apache.hadoop.yarn.util.ConverterUtils
+import scala.collection.mutable.HashMap
+import scala.collection.JavaConversions._
 import spark.{Logging, Utils}
 
 class Client(conf: Configuration, args: ClientArguments) extends Logging {

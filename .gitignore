@@ -1,6 +1,7 @@
 *~
 *.swp
 *.iml
+*log4j.properties
 .idea/
 .settings
 .cache
