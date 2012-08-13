@@ -12,9 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public class JavaWordCount {
-
   public static void main(String[] args) throws Exception {
-
     if (args.length < 2) {
       System.err.println("Usage: JavaWordCount <master> <file>");
       System.exit(1);
@@ -23,16 +21,20 @@ public class JavaWordCount {
     JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaWordCount");
     JavaRDD<String> lines = ctx.textFile(args[1], 1);
 
-    JavaPairRDD<String, Integer> counts = lines.flatMap(new FlatMapFunction<String, String>() {
-      public Iterable<String> apply(String s) {
+    JavaRDD<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
+      public Iterable<String> call(String s) {
         return Arrays.asList(s.split(" "));
       }
-    }).map(new PairFunction<String, String, Integer>() {
-      public Tuple2<String, Integer> apply(String s) {
+    });
+    
+    JavaPairRDD<String, Integer> ones = words.map(new PairFunction<String, String, Integer>() {
+      public Tuple2<String, Integer> call(String s) {
         return new Tuple2(s, 1);
       }
-    }).reduceByKey(new Function2<Integer, Integer, Integer>() {
-      public Integer apply(Integer i1, Integer i2) {
+    });
+    
+    JavaPairRDD<String, Integer> counts = ones.reduceByKey(new Function2<Integer, Integer, Integer>() {
+      public Integer call(Integer i1, Integer i2) {
         return i1 + i2;
       }
     });

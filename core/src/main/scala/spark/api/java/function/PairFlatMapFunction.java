@@ -9,8 +9,11 @@ import java.io.Serializable;
 
 // PairFlatMapFunction does not extend FlatMapFunction because flatMap is
 // overloaded for both FlatMapFunction and PairFlatMapFunction.
-public abstract class PairFlatMapFunction<T, K, V> extends AbstractFunction1<T, Iterable<Tuple2<K,
-  V>>> implements Serializable {
+public abstract class PairFlatMapFunction<T, K, V>
+  extends WrappedFunction1<T, Iterable<Tuple2<K, V>>>
+  implements Serializable {
+
+  public abstract Iterable<Tuple2<K, V>> call(T t) throws Exception;
 
   public ClassManifest<K> keyType() {
     return (ClassManifest<K>) ClassManifest$.MODULE$.fromClass(Object.class);
@@ -19,7 +22,4 @@ public abstract class PairFlatMapFunction<T, K, V> extends AbstractFunction1<T, 
   public ClassManifest<V> valueType() {
     return (ClassManifest<V>) ClassManifest$.MODULE$.fromClass(Object.class);
   }
-
-  public abstract Iterable<Tuple2<K, V>> apply(T t);
-
 }

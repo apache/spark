@@ -57,7 +57,21 @@ class PipedRDD[T: ClassManifest](
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    Source.fromInputStream(proc.getInputStream).getLines
+    val lines = Source.fromInputStream(proc.getInputStream).getLines
+    return new Iterator[String] {
+      def next() = lines.next()
+      def hasNext = {
+        if (lines.hasNext) {
+          true
+        } else {
+          val exitStatus = proc.waitFor()
+          if (exitStatus != 0) {
+            throw new Exception("Subprocess exited with status " + exitStatus)
+          }
+          false
+        }
+      }
+    }
   }
 }
 

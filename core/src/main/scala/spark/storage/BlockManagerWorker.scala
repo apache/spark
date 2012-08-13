@@ -114,7 +114,7 @@ object BlockManagerWorker extends Logging {
     val blockMessage = BlockMessage.fromPutBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val resultMessage = connectionManager.sendMessageReliablySync(
-        toConnManagerId, blockMessageArray.toBufferMessage())
+        toConnManagerId, blockMessageArray.toBufferMessage)
     return (resultMessage != None)
   }
   
@@ -125,7 +125,7 @@ object BlockManagerWorker extends Logging {
     val blockMessage = BlockMessage.fromGetBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val responseMessage = connectionManager.sendMessageReliablySync(
-        toConnManagerId, blockMessageArray.toBufferMessage())
+        toConnManagerId, blockMessageArray.toBufferMessage)
     responseMessage match {
       case Some(message) => {
         val bufferMessage = message.asInstanceOf[BufferMessage]

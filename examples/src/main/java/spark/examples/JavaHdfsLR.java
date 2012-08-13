@@ -26,8 +26,7 @@ public class JavaHdfsLR {
   }
 
   static class ParsePoint extends Function<String, DataPoint> {
-
-    public DataPoint apply(String line) {
+    public DataPoint call(String line) {
       StringTokenizer tok = new StringTokenizer(line, " ");
       double y = Double.parseDouble(tok.nextToken());
       double[] x = new double[D];
@@ -41,8 +40,7 @@ public class JavaHdfsLR {
   }
 
   static class VectorSum extends Function2<double[], double[], double[]> {
-
-    public double[] apply(double[] a, double[] b) {
+    public double[] call(double[] a, double[] b) {
       double[] result = new double[D];
       for (int j = 0; j < D; j++) {
         result[j] = a[j] + b[j];
@@ -52,14 +50,13 @@ public class JavaHdfsLR {
   }
 
   static class ComputeGradient extends Function<DataPoint, double[]> {
-
     double[] weights;
 
     public ComputeGradient(double[] weights) {
       this.weights = weights;
     }
 
-    public double[] apply(DataPoint p) {
+    public double[] call(DataPoint p) {
       double[] gradient = new double[D];
       for (int i = 0; i < D; i++) {
         double dot = dot(weights, p.x);
