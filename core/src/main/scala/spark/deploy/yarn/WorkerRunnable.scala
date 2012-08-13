@@ -51,6 +51,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       slaveId + " " +
       hostname + " " +
       "default " +
+      env("SPARK_JAVA_OPTS") + " " +
       " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
       " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
     logInfo("Setting up worker with commands: " + commands)

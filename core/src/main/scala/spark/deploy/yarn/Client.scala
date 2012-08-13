@@ -143,6 +143,7 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
       " --args " + args.userArgs +
       " --worker-memory " + args.workerMemory +
       " --num-workers " + args.numWorkers +
+      env("SPARK_JAVA_OPTS") + " " +
       " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
       " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
     logInfo("Command for the ApplicationMaster: " + commands(0))
