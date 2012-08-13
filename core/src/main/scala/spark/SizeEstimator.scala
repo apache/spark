@@ -34,33 +34,43 @@ object SizeEstimator extends Logging {
   private val FLOAT_SIZE   = 4
   private val DOUBLE_SIZE  = 8
 
-  // Object and pointer sizes are arch dependent
-  val is64bit = System.getProperty("os.arch").contains("64")
-
-  // Size of an object reference
-  val isCompressedOops = getIsCompressedOops
-
-  // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
-  // section, "Which oops are compressed"
-
-  // Minimum size of a java.lang.Object
-  val OBJECT_SIZE = if (!is64bit) 8 else { 
-    if(!isCompressedOops) {
-      16
-    } else {
-      12
-    }
-  }
-
-  val POINTER_SIZE = if (is64bit && !isCompressedOops) 8 else 4
-
   // Alignment boundary for objects
   // TODO: Is this arch dependent ?
   private val ALIGN_SIZE = 8
 
   // A cache of ClassInfo objects for each class
   private val classInfos = new ConcurrentHashMap[Class[_], ClassInfo]
-  classInfos.put(classOf[Object], new ClassInfo(OBJECT_SIZE, Nil))
+
+  // Object and pointer sizes are arch dependent
+  private var is64bit = false
+
+  // Size of an object reference
+  // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
+  private var isCompressedOops = false
+  private var pointerSize = 4
+
+  // Minimum size of a java.lang.Object
+  private var objectSize = 8
+
+  initialize()
+
+  // Sets object size, pointer size based on architecture and CompressedOops settings
+  // from the JVM.
+  private def initialize() {
+    is64bit = System.getProperty("os.arch").contains("64")
+    isCompressedOops = getIsCompressedOops
+
+    objectSize = if (!is64bit) 8 else {
+      if(!isCompressedOops) {
+        16
+      } else {
+        12
+      }
+    }
+    pointerSize = if (is64bit && !isCompressedOops) 8 else 4
+    classInfos.clear()
+    classInfos.put(classOf[Object], new ClassInfo(objectSize, Nil))
+  }
 
   private def getIsCompressedOops : Boolean = {
     if (System.getProperty("spark.test.useCompressedOops") != null) {
@@ -154,13 +164,13 @@ object SizeEstimator extends Logging {
     val elementClass = cls.getComponentType
 
     // Arrays have object header and length field which is an integer
-    var arrSize: Long = alignSize(OBJECT_SIZE + INT_SIZE)
+    var arrSize: Long = alignSize(objectSize + INT_SIZE)
 
     if (elementClass.isPrimitive) {
       arrSize += alignSize(length * primitiveSize(elementClass))
       state.size += arrSize
     } else {
-      arrSize += alignSize(length * POINTER_SIZE)
+      arrSize += alignSize(length * pointerSize)
       state.size += arrSize
 
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
@@ -228,7 +238,7 @@ object SizeEstimator extends Logging {
           shellSize += primitiveSize(fieldClass)
         } else {
           field.setAccessible(true) // Enable future get()'s on this field
-          shellSize += POINTER_SIZE
+          shellSize += pointerSize
           pointerFields = field :: pointerFields
         }
       }
