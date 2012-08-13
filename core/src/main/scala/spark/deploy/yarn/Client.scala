@@ -91,7 +91,6 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
     val fs = FileSystem.get(conf)
     Map("spark.jar" -> System.getenv("SPARK_JAR"), "app.jar" -> args.userJar)
     .foreach { case(destName, localPath) => 
-      
       val src = new Path(localPath)
       val pathSuffix = appName + "/" + appId.getId() + destName
       val dst = new Path(fs.getHomeDirectory(), pathSuffix)
@@ -107,7 +106,6 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
       amJarRsrc.setSize(destStatus.getLen())
       locaResources(destName) = amJarRsrc
     }
-    
     return locaResources
   }
   
@@ -168,10 +166,8 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
     applicationsManager.submitApplication(appRequest)
   }
   
-  def monitorApplication(appId: ApplicationId) : Boolean = {
-    
+  def monitorApplication(appId: ApplicationId) : Boolean = {  
     while(true) {
-      
       Thread.sleep(1000)
       val reportRequest = Records.newRecord(classOf[GetApplicationReportRequest])
         .asInstanceOf[GetApplicationReportRequest]
@@ -200,13 +196,9 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
         state == YarnApplicationState.KILLED) {
           return true
       }
-      
     }
-    
     return true
-    
   }
-  
 }
 
 object Client {

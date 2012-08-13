@@ -12,7 +12,6 @@ class ClientArguments(val args: Array[String]) {
   var amUser = System.getProperty("user.name")
   var amMemory = 512
   
-  
   parse(args.toList)
   
   def parse(args: List[String]) : Unit = args match {

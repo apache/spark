@@ -48,10 +48,10 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
     // This is pretty hacky, but we need to wait until the spark.master.port property has
     // been set by the Thread executing the user class.
     while (System.getProperty("spark.master.port") == null 
-      || System.getProperty("spark.master.port") == 0) {
-      logInfo("Port: " + System.getProperty("spark.master.port"))
-      Thread.sleep(100)
+      || System.getProperty("spark.master.port").toInt == 0) {
+      Thread.sleep(10)
     }
+    logInfo("Port: " + System.getProperty("spark.master.port"))
     
     // Allocate all containers
     allocateWorkers()
@@ -61,6 +61,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
      
     // Finish the ApplicationMaster
     finishApplicationMaster()
+    // TODO: Exit based on success/failure
     System.exit(0)
   }
   
@@ -106,10 +107,10 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
     return t
   }
   
-  def allocateWorkers() = {
+  def allocateWorkers() {
     logInfo("Allocating " + args.numWorkers + " workers.")
     // Wait until all containers have finished
-    // TODO: Can we make this nicer?
+    // TODO: This is a bit ugly. Can we make it nicer?
     // TODO: Handle container failure
     while(numWorkersRunning.intValue < args.numWorkers) {
       // Keep polling the Resource Manager for containers
@@ -128,13 +129,14 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
           val workerHostname = container.getNodeId().getHost()
           // YARN does not support requesting resources by the number of cores yet.
           // TODO: How do we handle this?
-          val workerCores = 1
+          // val workerCores = 1
           new Thread(
             new WorkerRunnable(container, conf, masterUrl, workerId, 
-              workerHostname, args.workerMemory, workerCores)
+              workerHostname, args.workerMemory)
           ).start()
+          numWorkersRunning.incrementAndGet()
         }
-        numWorkersRunning.addAndGet(allocatedContainers.size)
+        
       }
       Thread.sleep(100)
     }
@@ -184,7 +186,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
     }
   }
   
-  def finishApplicationMaster() = { 
+  def finishApplicationMaster() { 
     val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
       .asInstanceOf[FinishApplicationMasterRequest]
     finishReq.setAppAttemptId(appAttemptId)

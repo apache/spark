@@ -74,10 +74,14 @@ object StandaloneExecutorBackend {
   }
 
   def main(args: Array[String]) {
-    if (args.length != 4) {
+    if (args.length < 3) {
       System.err.println("Usage: StandaloneExecutorBackend <master> <slaveId> <hostname> <cores>")
       System.exit(1)
     }
-    run(args(0), args(1), args(2), args(3).toInt)
+    val numCores = args(3) match {
+      case "default" => Runtime.getRuntime.availableProcessors()
+      case x => x.toInt
+    }
+    run(args(0), args(1), args(2), numCores)
   }
 }
