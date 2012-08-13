@@ -1,6 +1,10 @@
 package spark.deploy.yarn
 
 import akka.actor._
+import akka.dispatch.Await
+import akka.pattern.ask
+import akka.util.Timeout
+import akka.util.duration._
 import java.net.{InetSocketAddress, URI}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.HashMap
@@ -14,89 +18,74 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import spark.{Logging, Utils}
+import spark.scheduler.cluster._
+import spark.deploy._
 import spark.deploy.master._
 import spark.util.AkkaUtils
 
-class ApplicationMaster(userJar: String, userClass: String, userArgs: String, numWorkers : Int, workerMemory: Int, conf : Configuration) extends Logging {
+class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) extends Logging {
   
-  def this(userJar: String, userClass: String, userArgs: String, numWorkers : Int, workerMemory: Int) = this(userJar, userClass, userArgs, numWorkers, workerMemory, new Configuration())
+  def this(args: ApplicationMasterArguments) = this(args, new Configuration())
   
   var rpc : YarnRPC = YarnRPC.create(conf)
   var resourceManager : AMRMProtocol = null
   var appAttemptId : ApplicationAttemptId = null
+  var schedulerBackend : StandaloneSchedulerBackend = null
   val numWorkersRunning = new AtomicInteger()
-  val numWorkersCompleted = new AtomicInteger()
+  val numWorkersConnected = new AtomicInteger()
   val lastResponseId = new AtomicInteger()
   
   def run = {
     
     // Initialization
-    appAttemptId = getApplicationAttemptId
-    resourceManager = registerWithResourceManager
-    registerApplicationMaster
+    appAttemptId = getApplicationAttemptId()
+    resourceManager = registerWithResourceManager()
+    registerApplicationMaster()
     
-    // Start a standalone Spark Master
-    startStandaloneSparkMaster
+    // Start the user's JAR
+    val userThread = startUserClass()
     
-    // Keep polling the Resource Manager for containers
-    // TODO: Can we make this nicer? Use actors?
-    while(numWorkersRunning.intValue < numWorkers) {
-      // Allocating resources for the Workers
-      val amResp = allocateWorkerResources(numWorkers - numWorkersRunning.intValue).getAMResponse()
-      val allocatedContainers = amResp.getAllocatedContainers
-      println("Allocated " + allocatedContainers.size + " containers and cluster has resources: " + amResp.getAvailableResources)
-      // Run each of the allocated containers
-      for (container <- allocatedContainers) {
-        // TODO: Best way to get master url and port?
-        new Thread(new WorkerRunnable(container, conf, "spark://" + Utils.localIpAddress() + ":7077", workerMemory)).start
-      }
-      numWorkersRunning.addAndGet(allocatedContainers.size)
-      Thread.sleep(1000)
-    }
-    
-    // Wait until all containers have finished
-    // TODO: Handle container failure
-    var isDone = false
-    while(!isDone) {
-      println("Checking for completed containers")
-      val amResp = allocateWorkerResources(0).getAMResponse()
-      val completedContainers = amResp.getCompletedContainersStatuses()
-      println("Found " + completedContainers.size + " completed containers")
-      for(status <- completedContainers) {
-        numWorkersCompleted.incrementAndGet()
-      }
-      if (numWorkersCompleted.get() == numWorkers) {
-        isDone = true
-      }
+    // This is pretty hacky, but we need to wait until the spark.master.port property has
+    // been set by the Thread executing the user class.
+    while (System.getProperty("spark.master.port") == null 
+      || System.getProperty("spark.master.port") == 0) {
+      logInfo("Port: " + System.getProperty("spark.master.port"))
       Thread.sleep(100)
     }
     
-    // Finish the Application
-    finishApplicationMaster
+    // Allocate all containers
+    allocateWorkers()
     
+    // Wait for the user class to Finish     
+    userThread.join()
+     
+    // Finish the ApplicationMaster
+    finishApplicationMaster()
+    System.exit(0)
   }
   
-  def getApplicationAttemptId : ApplicationAttemptId = {
+  def getApplicationAttemptId() : ApplicationAttemptId = {
     val envs = System.getenv()
     val containerIdString = envs.get(ApplicationConstants.AM_CONTAINER_ID_ENV)
     val containerId = ConverterUtils.toContainerId(containerIdString)
     val appAttemptId = containerId.getApplicationAttemptId()
-    println("ApplicationAttemptId: " + appAttemptId)
+    logInfo("ApplicationAttemptId: " + appAttemptId)
     return appAttemptId
   }
   
-  def registerWithResourceManager : AMRMProtocol = {
+  def registerWithResourceManager() : AMRMProtocol = {
     val yarnConf = new YarnConfiguration(conf)
     val rmAddress = NetUtils.createSocketAddr(yarnConf.get(
       YarnConfiguration.RM_SCHEDULER_ADDRESS,
       YarnConfiguration.DEFAULT_RM_SCHEDULER_ADDRESS))
-    println("Connecting to ResourceManager at " + rmAddress)
+    logInfo("Connecting to ResourceManager at " + rmAddress)
     return rpc.getProxy(classOf[AMRMProtocol], rmAddress, conf).asInstanceOf[AMRMProtocol]
   }
   
-  def registerApplicationMaster : RegisterApplicationMasterResponse = {
-    println("Registering the ApplicationMaster")
-    val appMasterRequest = Records.newRecord(classOf[RegisterApplicationMasterRequest]).asInstanceOf[RegisterApplicationMasterRequest]
+  def registerApplicationMaster() : RegisterApplicationMasterResponse = {
+    logInfo("Registering the ApplicationMaster")
+    val appMasterRequest = Records.newRecord(classOf[RegisterApplicationMasterRequest])
+      .asInstanceOf[RegisterApplicationMasterRequest]
     appMasterRequest.setApplicationAttemptId(appAttemptId)
     appMasterRequest.setHost("")
     appMasterRequest.setRpcPort(0)
@@ -104,21 +93,63 @@ class ApplicationMaster(userJar: String, userClass: String, userArgs: String, nu
     return resourceManager.registerApplicationMaster(appMasterRequest)
   }
   
-  def startStandaloneSparkMaster = {
-    val args = new MasterArguments(Array())
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", args.ip, args.port)
-    val actor = actorSystem.actorOf(
-      Props(new Master(args.ip, boundPort, args.webUiPort)), name = "Master")
+  def startUserClass() : Thread  = {
+    logInfo("Starting the user JAR in a separate Thread")
+    val mainMethod = Class.forName(args.userClass, false, Thread.currentThread.getContextClassLoader)
+      .getMethod("main", classOf[Array[String]])
+    val t = new Thread {
+      override def run() {
+        mainMethod.invoke(null, Array[String]("standalone"))
+      }
+    }
+    t.start()
+    return t
+  }
+  
+  def allocateWorkers() = {
+    logInfo("Allocating " + args.numWorkers + " workers.")
+    // Wait until all containers have finished
+    // TODO: Can we make this nicer?
+    // TODO: Handle container failure
+    while(numWorkersRunning.intValue < args.numWorkers) {
+      // Keep polling the Resource Manager for containers
+      val workersToRequest = math.max(args.numWorkers - numWorkersRunning.intValue, 0)
+      val amResp = allocateWorkerResources(workersToRequest).getAMResponse()
+      val allocatedContainers = amResp.getAllocatedContainers
+      if (allocatedContainers.size > 0) {
+       logInfo("Allocated " + allocatedContainers.size + " containers.")
+       logInfo("Cluster Resources: " + amResp.getAvailableResources)
+        // Run each of the allocated containers
+        for (container <- allocatedContainers) {
+          val masterUrl = "akka://spark@%s:%s/user/%s".format(
+            System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
+            StandaloneSchedulerBackend.ACTOR_NAME)
+          val workerId = numWorkersRunning.intValue.toString
+          val workerHostname = container.getNodeId().getHost()
+          // YARN does not support requesting resources by the number of cores yet.
+          // TODO: How do we handle this?
+          val workerCores = 1
+          new Thread(
+            new WorkerRunnable(container, conf, masterUrl, workerId, 
+              workerHostname, args.workerMemory, workerCores)
+          ).start()
+        }
+        numWorkersRunning.addAndGet(allocatedContainers.size)
+      }
+      Thread.sleep(100)
+    }
+    logInfo("All workers have launched.")
   }
   
   def allocateWorkerResources(numWorkers: Int) : AllocateResponse = {
-    println("Allocating " + numWorkers + " worker containers with " + workerMemory + " of memory each.")
+    logInfo("Allocating " + numWorkers + " worker containers with " 
+      + args.workerMemory + " of memory each.")
     // We assume the client has already checked the cluster capabilities
     // Request numWorkers containers, each with workerMemory memory
     val rsrcRequest = Records.newRecord(classOf[ResourceRequest]).asInstanceOf[ResourceRequest]
     // Set the required memory
     val memCapability = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
-    memCapability.setMemory(workerMemory)
+    memCapability.setMemory(args.workerMemory)
     rsrcRequest.setCapability(memCapability)
     // Set the Priority
     // TODO: Make priority a command-line argument
@@ -137,13 +168,12 @@ class ApplicationMaster(userJar: String, userClass: String, userArgs: String, nu
     req.addAllReleases(releasedContainers)
     req.setApplicationAttemptId(appAttemptId)
     val resp = resourceManager.allocate(req)
-    println(resp.getAMResponse)
     return resp
   }
   
   def printContainers(containers : List[Container]) = {
     for (container <- containers) {
-      println("Launching shell command on a new container."
+      logInfo("Launching shell command on a new container."
         + ", containerId=" + container.getId()
         + ", containerNode=" + container.getNodeId().getHost() 
         + ":" + container.getNodeId().getPort()
@@ -154,20 +184,20 @@ class ApplicationMaster(userJar: String, userClass: String, userArgs: String, nu
     }
   }
   
-  def finishApplicationMaster = { 
-    val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest]).asInstanceOf[FinishApplicationMasterRequest]
+  def finishApplicationMaster() = { 
+    val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
+      .asInstanceOf[FinishApplicationMasterRequest]
     finishReq.setAppAttemptId(appAttemptId)
-    // TODO: Check if the application failed or succeeded
+    // TODO: Check if the application has failed or succeeded
     finishReq.setFinishApplicationStatus(FinalApplicationStatus.SUCCEEDED)
     resourceManager.finishApplicationMaster(finishReq)
   }
-  
  
 }
 
 object ApplicationMaster {
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
-    new ApplicationMaster(args.userJar, args.userClass, args.userArgs, args.numWorkers, args.workerMemory).run
+    new ApplicationMaster(args).run
   }
 }

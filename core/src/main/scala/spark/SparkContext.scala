@@ -41,7 +41,7 @@ import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
+import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.BlockManagerMaster
 
@@ -88,19 +88,25 @@ class SparkContext(
     master match {
       case "local" => 
         new LocalScheduler(1, 0)
-
+      
       case LOCAL_N_REGEX(threads) => 
         new LocalScheduler(threads.toInt, 0)
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         new LocalScheduler(threads.toInt, maxFailures.toInt)
-
+      
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
         scheduler.initialize(backend)
         scheduler
-
+      
+      case "standalone" =>
+        val scheduler = new ClusterScheduler(this)
+        val backend = new StandaloneSchedulerBackend(scheduler, this.env.actorSystem)
+        scheduler.initialize(backend)
+        scheduler
+        
       case _ =>
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)

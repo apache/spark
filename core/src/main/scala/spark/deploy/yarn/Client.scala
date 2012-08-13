@@ -8,7 +8,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationRequest, GetNewApplicationResponse, SubmitApplicationRequest}
+import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.Records
@@ -22,51 +22,49 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
   var applicationsManager : ClientRMProtocol = null
   var rpc : YarnRPC = YarnRPC.create(conf)
   
-  
-  def run = {
-    connectToASM
+  def run() {
+    connectToASM()
     
-    val newApp = getNewApplication
-    val appId = newApp.getApplicationId
+    val newApp = getNewApplication()
+    val appId = newApp.getApplicationId()
     
     verifyClusterResources(newApp)
     val appContext = createApplicationSubmissionContext(appId)
     val localResources = prepareLocalResources(appId, "spark")
-    val env = setupLaunchEnvironment(localResources)
+    val env = setupLaunchEnv(localResources)
     val amContainer = createContainerLaunchContext(localResources, env)
     
     appContext.setAMContainerSpec(amContainer)
-    // TODO: Get the user from the command line
-    appContext.setUser("dennybritz")
+    appContext.setUser(args.amUser)
     
-    // Submit the application to the applications manager
     submitApp(appContext)  
     
+    monitorApplication(appId)
     System.exit(0)
   }
   
   
-  def connectToASM  = {
+  def connectToASM() {
     val yarnConf : YarnConfiguration = new YarnConfiguration()
     val rmAddress : InetSocketAddress = NetUtils.createSocketAddr(
       yarnConf.get(YarnConfiguration.RM_ADDRESS, YarnConfiguration.DEFAULT_RM_ADDRESS)
     )
-    println("Connecting to ResourceManager at" + rmAddress)
+    logInfo("Connecting to ResourceManager at" + rmAddress)
     applicationsManager = rpc.getProxy(classOf[ClientRMProtocol], rmAddress, conf)
       .asInstanceOf[ClientRMProtocol]
   }
   
-  def getNewApplication : GetNewApplicationResponse = {
-    println("Requesting new Application")
+  def getNewApplication() : GetNewApplicationResponse = {
+    logInfo("Requesting new Application")
     val request = Records.newRecord(classOf[GetNewApplicationRequest])
     val response = applicationsManager.getNewApplication(request)
-    println("Got new ApplicationId: " + response.getApplicationId())
+    logInfo("Got new ApplicationId: " + response.getApplicationId())
     return response
   }
   
   def verifyClusterResources(app: GetNewApplicationResponse) = { 
     val maxMem = app.getMaximumResourceCapability().getMemory()
-    println("Max mem capabililty of resources in this cluster " + maxMem)
+    logInfo("Max mem capabililty of resources in this cluster " + maxMem)
     
     // If the cluster does not have enough memory resources, exit.
     val requestedMem = args.amMemory + args.numWorkers * args.workerMemory
@@ -77,24 +75,27 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
   }
   
   def createApplicationSubmissionContext(appId : ApplicationId) : ApplicationSubmissionContext = {
-    println("Setting up application submission context for ASM")
+    logInfo("Setting up application submission context for ASM")
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     appContext.setApplicationId(appId)
     appContext.setApplicationName("Spark")
     return appContext
   }
   
-  def prepareLocalResources(appId : ApplicationId, appName : String) : HashMap[String, LocalResource] = {
-    println("Preparing Local resources")
+  def prepareLocalResources(appId : ApplicationId, appName : String) 
+    : HashMap[String, LocalResource] = {
+    logInfo("Preparing Local resources")
     val locaResources = HashMap[String, LocalResource]()
     // Upload Spark and the application JAR to the remote file system
     // Add them as local resources to the AM
     val fs = FileSystem.get(conf)
-    Map("spark.jar" -> System.getenv("SPARK_JAR"), "app.jar" -> args.userJar).foreach { case(destName, localPath) => 
+    Map("spark.jar" -> System.getenv("SPARK_JAR"), "app.jar" -> args.userJar)
+    .foreach { case(destName, localPath) => 
+      
       val src = new Path(localPath)
       val pathSuffix = appName + "/" + appId.getId() + destName
       val dst = new Path(fs.getHomeDirectory(), pathSuffix)
-      println("Uploading " + src + " to " + dst)
+      logInfo("Uploading " + src + " to " + dst)
       fs.copyFromLocalFile(false, true, src, dst)
       val destStatus = fs.getFileStatus(dst)
       
@@ -110,8 +111,8 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
     return locaResources
   }
   
-  def setupLaunchEnvironment(localResources: HashMap[String, LocalResource]) : HashMap[String, String] = {
-    println("Setting up the launch environment")
+  def setupLaunchEnv(localResources: HashMap[String, LocalResource]) : HashMap[String, String] = {
+    logInfo("Setting up the launch environment")
     val env = new HashMap[String, String]()
     env("CLASSPATH") = "$CLASSPATH:./*:"
     env("SPARK_YARN_JAR_PATH") = 
@@ -124,11 +125,15 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
       localResources("app.jar").getResource().getFile().toString()
     env("SPARK_YARN_USERJAR_TIMESTAMP") =  localResources("app.jar").getTimestamp().toString()
     env("SPARK_YARN_USERJAR_SIZE") =  localResources("app.jar").getSize().toString()
+    // Add each SPARK-* key to the environment
+    System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
     return env
   }
   
-  def createContainerLaunchContext(localResources: HashMap[String, LocalResource], env: HashMap[String, String]) : ContainerLaunchContext = {
-    println("Setting up container launch context")
+  def createContainerLaunchContext(
+      localResources: HashMap[String, LocalResource], 
+      env: HashMap[String, String]) : ContainerLaunchContext = {
+    logInfo("Setting up container launch context")
     val amContainer = Records.newRecord(classOf[ContainerLaunchContext])
     amContainer.setLocalResources(localResources)
     amContainer.setEnvironment(env)
@@ -142,7 +147,7 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
       " --num-workers " + args.numWorkers +
       " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
       " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
-    println("Command for the ApplicationMaster: " + commands(0))
+    logInfo("Command for the ApplicationMaster: " + commands(0))
     amContainer.setCommands(commands)
     
     val capability = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
@@ -155,11 +160,51 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
   
   def submitApp(appContext: ApplicationSubmissionContext) = {
     // Create the request to send to the applications manager 
-    val appRequest = Records.newRecord(classOf[SubmitApplicationRequest]).asInstanceOf[SubmitApplicationRequest]
+    val appRequest = Records.newRecord(classOf[SubmitApplicationRequest])
+      .asInstanceOf[SubmitApplicationRequest]
     appRequest.setApplicationSubmissionContext(appContext)
     // Submit the application to the applications manager
-    println("Submitting application to ASM")
+    logInfo("Submitting application to ASM")
     applicationsManager.submitApplication(appRequest)
+  }
+  
+  def monitorApplication(appId: ApplicationId) : Boolean = {
+    
+    while(true) {
+      
+      Thread.sleep(1000)
+      val reportRequest = Records.newRecord(classOf[GetApplicationReportRequest])
+        .asInstanceOf[GetApplicationReportRequest]
+      reportRequest.setApplicationId(appId)
+      val reportResponse = applicationsManager.getApplicationReport(reportRequest)
+      val report = reportResponse.getApplicationReport()
+      
+      logInfo("Application report from ASM: \n" +
+        "\t appId: " + appId.getId() + "\n" +
+        "\t clientToken: " + report.getClientToken() + "\n" +
+        "\t appDiagnostics: " + report.getDiagnostics() + "\n" +
+        "\t appMasterHost: " + report.getHost() + "\n" +
+        "\t appQueue: " + report.getQueue() + "\n" +
+        "\t appMasterRpcPort: " + report.getRpcPort() + "\n" +
+        "\t appStartTime: " + report.getStartTime() + "\n" +
+        "\t yarnAppState: " + report.getYarnApplicationState() + "\n" +
+        "\t distributedFinalState: " + report.getFinalApplicationStatus() + "\n" +
+        "\t appTrackingUrl: " + report.getTrackingUrl() + "\n" +
+        "\t appUser: " + report.getUser()
+      )
+      
+      val state = report.getYarnApplicationState()
+      val dsStatus = report.getFinalApplicationStatus()
+      if (state == YarnApplicationState.FINISHED || 
+        state == YarnApplicationState.FAILED ||
+        state == YarnApplicationState.KILLED) {
+          return true
+      }
+      
+    }
+    
+    return true
+    
   }
   
 }

@@ -1,9 +1,0 @@
-12/08/02 16:12:07 INFO slf4j.Slf4jEventHandler: Slf4jEventHandler started
-12/08/02 16:12:07 INFO actor.ActorSystemImpl: REMOTE: RemoteServerStarted@akka://spark@128.32.45.32:53766
-12/08/02 16:12:07 INFO worker.Worker: Starting Spark worker 128.32.45.32:53766 with 4 cores, 3.0 GB RAM
-12/08/02 16:12:07 INFO worker.Worker: Spark home: /Users/dennybritz/projects/amplab/spark
-12/08/02 16:12:07 INFO worker.Worker: Connecting to master spark://128.32.45.32:2020
-12/08/02 16:12:07 INFO actor.ActorSystemImpl: REMOTE: RemoteClientStarted@akka://spark@128.32.45.32:2020
-12/08/02 16:12:07 INFO io.IoWorker: IoWorker thread 'spray-io-worker-0' started
-12/08/02 16:12:08 INFO server.HttpServer: akka://spark/user/HttpServer started on /0.0.0.0:2022
-12/08/02 16:12:08 INFO worker.Worker: Successfully registered with master

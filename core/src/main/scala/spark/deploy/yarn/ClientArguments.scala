@@ -9,7 +9,9 @@ class ClientArguments(val args: Array[String]) {
   var userArgs = ""
   var workerMemory = 1024
   var numWorkers = 2
-  val amMemory = 512
+  var amUser = System.getProperty("user.name")
+  var amMemory = 512
+  
   
   parse(args.toList)
   
@@ -33,6 +35,10 @@ class ClientArguments(val args: Array[String]) {
     case ("--worker-memory") :: MemoryParam(value) :: tail =>
       workerMemory = value
       parse(tail)
+      
+    case ("--user") :: value :: tail =>
+      amUser = value
+      parse(tail)
     
     case Nil =>
       if (userJar == null || userClass == null) {
@@ -51,7 +57,9 @@ class ClientArguments(val args: Array[String]) {
       "  --class CLASS_NAME   Name of your application's main class (required)\n" +
       "  --args ARGS          Arguments to be passed to your application's main class\n" + 
       "  --num-workers NUM    Number of workers to start (Default: 2)\n" +
-      "  --worker-memory MEM  Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n")
+      "  --worker-memory MEM  Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n" +
+      "  --user USERNAME      Run the ApplicationMaster as a different user\n"
+      )
     System.exit(exitCode)
   }
   
