@@ -349,7 +349,7 @@ def setup_mesos_cluster(master, opts):
 def setup_standalone_cluster(master, slave_nodes, opts):
   slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
   ssh(master, opts, "echo \"%s\" > spark/conf/slaves" % (slave_ips))
-  ssh(master, opts, "/home/ec2-user/spark/bin/start-all.sh")
+  ssh(master, opts, "/root/spark/bin/start-all.sh")
   
 
 # Wait for a whole cluster (masters, slaves and ZooKeeper) to start up
