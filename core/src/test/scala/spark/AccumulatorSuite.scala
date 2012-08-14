@@ -112,4 +112,19 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       sc.stop()
     }
   }
+
+  test ("localValue readable in tasks") {
+    import SetAccum._
+    val maxI = 1000
+    for (nThreads <- List(1, 10)) { //test single & multi-threaded
+    val sc = new SparkContext("local[" + nThreads + "]", "test")
+      val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
+      val d = sc.parallelize(1 to maxI)
+      d.foreach {
+        x => acc.localValue += x
+      }
+      acc.value should be ( (1 to maxI).toSet)
+    }
+  }
+
 }
