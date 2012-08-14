@@ -448,7 +448,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes):
               dest.close()
   # rsync the whole directory over to the master machine
   command = (("rsync -rv -e 'ssh -o StrictHostKeyChecking=no -i %s' " + 
-      "'%s/' '%s@%s:~'") % (opts.identity_file, tmp_dir, opts.user, active_master))
+      "'%s/' '%s@%s:/'") % (opts.identity_file, tmp_dir, opts.user, active_master))
   subprocess.check_call(command, shell=True)
   # Remove the temp directory we created above
   shutil.rmtree(tmp_dir)
