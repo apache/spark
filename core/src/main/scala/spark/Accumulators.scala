@@ -3,6 +3,7 @@ package spark
 import java.io._
 
 import scala.collection.mutable.Map
+import collection.generic.Growable
 
 class Accumulable[T,R] (
     @transient initialValue: T,
@@ -97,6 +98,18 @@ trait AccumulableParam[R,T] extends Serializable {
   def addInPlace(t1: R, t2: R): R
 
   def zero(initialValue: R): R
+}
+
+class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable, T] extends AccumulableParam[R,T] {
+  def addAccumulator(growable: R, elem: T) : R = {
+    growable += elem
+    growable
+  }
+  def addInPlace(t1: R, t2: R) : R = {
+    t1 ++= t2
+    t1
+  }
+  def zero(initialValue: R) = initialValue
 }
 
 // TODO: The multi-thread support in accumulators is kind of lame; check

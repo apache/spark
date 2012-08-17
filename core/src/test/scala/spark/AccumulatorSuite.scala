@@ -3,9 +3,6 @@ package spark
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 import collection.mutable
-import java.util.Random
-import scala.math.exp
-import scala.math.signum
 import spark.SparkContext._
 
 class AccumulatorSuite extends FunSuite with ShouldMatchers {
@@ -77,6 +74,33 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers {
       } should produce [SparkException]
       println(thrown)
     }
+  }
+
+  test ("collection accumulators") {
+    val maxI = 1000
+    for (nThreads <- List(1, 10)) {
+      //test single & multi-threaded
+      val sc = new SparkContext("local[" + nThreads + "]", "test")
+      val setAcc = sc.accumlableCollection(mutable.HashSet[Int]())
+      val bufferAcc = sc.accumlableCollection(mutable.ArrayBuffer[Int]())
+      val mapAcc = sc.accumlableCollection(mutable.HashMap[Int,String]())
+      val d = sc.parallelize( (1 to maxI) ++ (1 to maxI))
+      d.foreach {
+        x => {setAcc += x; bufferAcc += x; mapAcc += (x -> x.toString)}
+      }
+
+      //NOTE that this is typed correctly -- no casts necessary
+      setAcc.value.size should be (maxI)
+      bufferAcc.value.size should be (2 * maxI)
+      mapAcc.value.size should be (maxI)
+      for (i <- 1 to maxI) {
+        setAcc.value should contain(i)
+        bufferAcc.value should contain(i)
+        mapAcc.value should contain (i -> i.toString)
+      }
+      sc.stop()
+    }
+
   }
 
 }
