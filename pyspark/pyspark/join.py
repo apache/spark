@@ -30,15 +30,12 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
-from pyspark.serializers import PairSerializer, OptionSerializer, \
-    ArraySerializer
 
 
-def _do_python_join(rdd, other, numSplits, dispatch, valSerializer):
-    vs = rdd.mapPairs(lambda (k, v): (k, (1, v)))
-    ws = other.mapPairs(lambda (k, v): (k, (2, v)))
-    return vs.union(ws).groupByKey(numSplits) \
-             .flatMapValues(dispatch, valSerializer)
+def _do_python_join(rdd, other, numSplits, dispatch):
+    vs = rdd.map(lambda (k, v): (k, (1, v)))
+    ws = other.map(lambda (k, v): (k, (2, v)))
+    return vs.union(ws).groupByKey(numSplits).flatMapValues(dispatch)
 
 
 def python_join(rdd, other, numSplits):
@@ -50,8 +47,7 @@ def python_join(rdd, other, numSplits):
             elif n == 2:
                 wbuf.append(v)
         return [(v, w) for v in vbuf for w in wbuf]
-    valSerializer = PairSerializer(rdd.valSerializer, other.valSerializer)
-    return _do_python_join(rdd, other, numSplits, dispatch, valSerializer)
+    return _do_python_join(rdd, other, numSplits, dispatch)
 
 
 def python_right_outer_join(rdd, other, numSplits):
@@ -65,9 +61,7 @@ def python_right_outer_join(rdd, other, numSplits):
         if not vbuf:
             vbuf.append(None)
         return [(v, w) for v in vbuf for w in wbuf]
-    valSerializer = PairSerializer(OptionSerializer(rdd.valSerializer),
-                                   other.valSerializer)
-    return _do_python_join(rdd, other, numSplits, dispatch, valSerializer)
+    return _do_python_join(rdd, other, numSplits, dispatch)
 
 
 def python_left_outer_join(rdd, other, numSplits):
@@ -81,17 +75,12 @@ def python_left_outer_join(rdd, other, numSplits):
         if not wbuf:
             wbuf.append(None)
         return [(v, w) for v in vbuf for w in wbuf]
-    valSerializer = PairSerializer(rdd.valSerializer,
-                                   OptionSerializer(other.valSerializer))
-    return _do_python_join(rdd, other, numSplits, dispatch, valSerializer)
+    return _do_python_join(rdd, other, numSplits, dispatch)
 
 
 def python_cogroup(rdd, other, numSplits):
-    resultValSerializer = PairSerializer(
-        ArraySerializer(rdd.valSerializer),
-        ArraySerializer(other.valSerializer))
-    vs = rdd.mapPairs(lambda (k, v): (k, (1, v)))
-    ws = other.mapPairs(lambda (k, v): (k, (2, v)))
+    vs = rdd.map(lambda (k, v): (k, (1, v)))
+    ws = other.map(lambda (k, v): (k, (2, v)))
     def dispatch(seq):
         vbuf, wbuf = [], []
         for (n, v) in seq:
@@ -100,5 +89,4 @@ def python_cogroup(rdd, other, numSplits):
             elif n == 2:
                 wbuf.append(v)
         return (vbuf, wbuf)
-    return vs.union(ws).groupByKey(numSplits) \
-             .mapValues(dispatch, resultValSerializer)
+    return vs.union(ws).groupByKey(numSplits).mapValues(dispatch)

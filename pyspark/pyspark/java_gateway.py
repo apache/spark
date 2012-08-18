@@ -16,5 +16,4 @@ def launch_gateway():
     java_import(gateway.jvm, "spark.api.java.*")
     java_import(gateway.jvm, "spark.api.python.*")
     java_import(gateway.jvm, "scala.Tuple2")
-    java_import(gateway.jvm, "spark.api.python.PythonRDD.pythonDump")
     return gateway

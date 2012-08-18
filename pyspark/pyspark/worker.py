@@ -6,8 +6,8 @@ from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
 from pyspark.cloudpickle import CloudPickler
+from pyspark.serializers import dumps, loads, PickleSerializer
 import cPickle
-
 
 # Redirect stdout to stderr so that users must return values from functions.
 old_stdout = sys.stdout
@@ -19,58 +19,64 @@ def load_function():
 
 
 def output(x):
-    for line in x.split("\n"):
-        old_stdout.write(line.rstrip("\r\n") + "\n")
+    dumps(x, old_stdout)
 
 
 def read_input():
-    for line in sys.stdin:
-        yield line.rstrip("\r\n")
-
+    try:
+        while True:
+            yield loads(sys.stdin)
+    except EOFError:
+        return
 
 def do_combine_by_key():
     create_combiner = load_function()
     merge_value = load_function()
     merge_combiners = load_function()  # TODO: not used.
-    depickler = load_function()
-    key_pickler = load_function()
-    combiner_pickler = load_function()
     combiners = {}
-    for line in read_input():
-        # Discard the hashcode added in the Python combineByKey() method.
-        (key, value) = depickler(line)[1]
+    for obj in read_input():
+        (key, value) = PickleSerializer.loads(obj)
         if key not in combiners:
             combiners[key] = create_combiner(value)
         else:
             combiners[key] = merge_value(combiners[key], value)
     for (key, combiner) in combiners.iteritems():
-        output(key_pickler(key))
-        output(combiner_pickler(combiner))
+        output(PickleSerializer.dumps((key, combiner)))
 
 
-def do_map(map_pairs=False):
+def do_map(flat=False):
     f = load_function()
-    for line in read_input():
+    for obj in read_input():
         try:
-            out = f(line)
+            #from pickletools import dis
+            #print repr(obj)
+            #print dis(obj)
+            out = f(PickleSerializer.loads(obj))
             if out is not None:
-                if map_pairs:
+                if flat:
                     for x in out:
-                        output(x)
+                        output(PickleSerializer.dumps(x))
                 else:
-                    output(out)
+                    output(PickleSerializer.dumps(out))
         except:
-            sys.stderr.write("Error processing line '%s'\n" % line)
+            sys.stderr.write("Error processing obj %s\n" % repr(obj))
             raise
+
+
+def do_shuffle_map_step():
+    for obj in read_input():
+        key = PickleSerializer.loads(obj)[1]
+        output(str(hash(key)))
+        output(obj)
 
 
 def do_reduce():
     f = load_function()
-    dumps = load_function()
     acc = None
-    for line in read_input():
-        acc = f(line, acc)
-    output(dumps(acc))
+    for obj in read_input():
+        acc = f(PickleSerializer.loads(obj), acc)
+    if acc is not None:
+        output(PickleSerializer.dumps(acc))
 
 
 def do_echo():
@@ -80,13 +86,15 @@ def do_echo():
 def main():
     command = sys.stdin.readline().strip()
     if command == "map":
-        do_map(map_pairs=False)
-    elif command == "mapPairs":
-        do_map(map_pairs=True)
+        do_map(flat=False)
+    elif command == "flatmap":
+        do_map(flat=True)
     elif command == "combine_by_key":
         do_combine_by_key()
     elif command == "reduce":
         do_reduce()
+    elif command == "shuffle_map_step":
+        do_shuffle_map_step()
     elif command == "echo":
         do_echo()
     else:
