@@ -4,6 +4,3 @@
 # install Py4J from git once https://github.com/pypa/pip/pull/526 is merged.
 
 # git+git://github.com/bartdag/py4j.git@3dbf380d3d2cdeb9aab394454ea74d80c4aba1ea
-
-simplejson==2.6.1
-cloud==2.5.5

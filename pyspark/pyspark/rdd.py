@@ -1,5 +1,5 @@
 from base64 import standard_b64encode as b64enc
-from cloud.serialization import cloudpickle
+from pyspark import cloudpickle
 from itertools import chain
 
 from pyspark.serializers import PairSerializer, NopSerializer, \

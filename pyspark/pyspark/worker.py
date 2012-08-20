@@ -5,7 +5,7 @@ import sys
 from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
-from cloud.serialization.cloudpickle import CloudPickler
+from pyspark.cloudpickle import CloudPickler
 import cPickle
 
 
