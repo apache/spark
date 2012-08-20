@@ -85,11 +85,12 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers {
     for (nThreads <- List(1, 10)) { //test single & multi-threaded
     val sc = new SparkContext("local[" + nThreads + "]", "test")
       val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
-      val d = sc.parallelize(1 to maxI)
+      val groupedInts = (1 to (maxI/20)).map {x => (20 * (x - 1) to 20 * x).toSet}
+      val d = sc.parallelize(groupedInts)
       d.foreach {
-        x => acc.localValue += x
+        x => acc.localValue ++= x
       }
-      acc.value should be ( (1 to maxI).toSet)
+      acc.value should be ( (0 to maxI).toSet)
     }
   }
 

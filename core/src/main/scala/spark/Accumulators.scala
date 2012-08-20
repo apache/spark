@@ -36,7 +36,7 @@ class Accumulable[T,R] (
   }
 
   /**
-   * get the current value of this accumulator from within a task.
+   * Get the current value of this accumulator from within a task.
    *
    * This is NOT the global value of the accumulator.  To get the global value after a
    * completed operation on the dataset, call `value`.
