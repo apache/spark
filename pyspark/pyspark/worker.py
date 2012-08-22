@@ -48,9 +48,6 @@ def do_map(flat=False):
     f = load_function()
     for obj in read_input():
         try:
-            #from pickletools import dis
-            #print repr(obj)
-            #print dis(obj)
             out = f(PickleSerializer.loads(obj))
             if out is not None:
                 if flat:
@@ -64,9 +61,10 @@ def do_map(flat=False):
 
 
 def do_shuffle_map_step():
+    hashFunc = load_function()
     for obj in read_input():
-        key = PickleSerializer.loads(obj)[1]
-        output(str(hash(key)))
+        key = PickleSerializer.loads(obj)[0]
+        output(str(hashFunc(key)))
         output(obj)
 
 

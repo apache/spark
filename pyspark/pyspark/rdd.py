@@ -71,7 +71,7 @@ class RDD(object):
 
     def takeSample(self, withReplacement, num, seed):
         vals = self._jrdd.takeSample(withReplacement, num, seed)
-        return [PickleSerializer.loads(x) for x in vals]
+        return [PickleSerializer.loads(bytes(x)) for x in vals]
 
     def union(self, other):
         """
@@ -218,17 +218,16 @@ class RDD(object):
 
     # TODO: pipelining
     # TODO: optimizations
-    def shuffle(self, numSplits):
+    def shuffle(self, numSplits, hashFunc=hash):
         if numSplits is None:
             numSplits = self.ctx.defaultParallelism
-        pipe_command = RDD._get_pipe_command('shuffle_map_step', [])
+        pipe_command = RDD._get_pipe_command('shuffle_map_step', [hashFunc])
         class_manifest = self._jrdd.classManifest()
         python_rdd = self.ctx.jvm.PythonPairRDD(self._jrdd.rdd(),
             pipe_command, False, self.ctx.pythonExec, class_manifest)
         partitioner = self.ctx.jvm.spark.HashPartitioner(numSplits)
         jrdd = python_rdd.asJavaPairRDD().partitionBy(partitioner)
         jrdd = jrdd.map(self.ctx.jvm.ExtractValue())
-        # TODO: extract second value.
         return RDD(jrdd, self.ctx)
 
 
@@ -276,8 +275,6 @@ class RDD(object):
     def mapValues(self, f):
         map_values_fn = lambda (k, v): (k, f(v))
         return self.map(map_values_fn, preservesPartitioning=True)
-
-    # TODO: implement shuffle.
 
     # TODO: support varargs cogroup of several RDDs.
     def groupWith(self, other):

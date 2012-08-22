@@ -101,7 +101,13 @@ trait PythonRDDBase {
           stream.readFully(obj)
           obj
         } catch {
-          case eof: EOFException => { new Array[Byte](0) }
+          case eof: EOFException => {
+            val exitStatus = proc.waitFor()
+            if (exitStatus != 0) {
+              throw new Exception("Subprocess exited with status " + exitStatus)
+            }
+            new Array[Byte](0)
+          }
           case e => throw e
         }
       }
