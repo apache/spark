@@ -10,7 +10,7 @@ if __name__ == "__main__":
             "Usage: PythonPi <host> [<slices>]"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonKMeans")
-    slices = sys.argv[2] if len(sys.argv) > 2 else 2
+    slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2
     n = 100000 * slices
     def f(_):
         x = random() * 2 - 1
