@@ -7,6 +7,10 @@ import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Random
 
+import javax.management.MBeanServer
+import java.lang.management.ManagementFactory
+import com.sun.management.HotSpotDiagnosticMXBean
+
 import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
@@ -18,9 +22,7 @@ import it.unimi.dsi.fastutil.ints.IntOpenHashSet
  * Based on the following JavaWorld article:
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
  */
-object SizeEstimator {
-  private val OBJECT_SIZE  = 8 // Minimum size of a java.lang.Object
-  private val POINTER_SIZE = 4 // Size of an object reference
+object SizeEstimator extends Logging {
 
   // Sizes of primitive types
   private val BYTE_SIZE    = 1
@@ -32,9 +34,68 @@ object SizeEstimator {
   private val FLOAT_SIZE   = 4
   private val DOUBLE_SIZE  = 8
 
+  // Alignment boundary for objects
+  // TODO: Is this arch dependent ?
+  private val ALIGN_SIZE = 8
+
   // A cache of ClassInfo objects for each class
   private val classInfos = new ConcurrentHashMap[Class[_], ClassInfo]
-  classInfos.put(classOf[Object], new ClassInfo(OBJECT_SIZE, Nil))
+
+  // Object and pointer sizes are arch dependent
+  private var is64bit = false
+
+  // Size of an object reference
+  // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
+  private var isCompressedOops = false
+  private var pointerSize = 4
+
+  // Minimum size of a java.lang.Object
+  private var objectSize = 8
+
+  initialize()
+
+  // Sets object size, pointer size based on architecture and CompressedOops settings
+  // from the JVM.
+  private def initialize() {
+    is64bit = System.getProperty("os.arch").contains("64")
+    isCompressedOops = getIsCompressedOops
+
+    objectSize = if (!is64bit) 8 else {
+      if(!isCompressedOops) {
+        16
+      } else {
+        12
+      }
+    }
+    pointerSize = if (is64bit && !isCompressedOops) 8 else 4
+    classInfos.clear()
+    classInfos.put(classOf[Object], new ClassInfo(objectSize, Nil))
+  }
+
+  private def getIsCompressedOops : Boolean = {
+    if (System.getProperty("spark.test.useCompressedOops") != null) {
+      return System.getProperty("spark.test.useCompressedOops").toBoolean 
+    }
+    try {
+      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic";
+      val server = ManagementFactory.getPlatformMBeanServer();
+      val bean = ManagementFactory.newPlatformMXBeanProxy(server, 
+        hotSpotMBeanName, classOf[HotSpotDiagnosticMXBean]);
+      return bean.getVMOption("UseCompressedOops").getValue.toBoolean
+    } catch {
+      case e: IllegalArgumentException => {
+        logWarning("Exception while trying to check if compressed oops is enabled", e)
+        // Fall back to checking if maxMemory < 32GB
+        return Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+      }
+
+      case e: SecurityException => {
+        logWarning("No permission to create MBeanServer", e)
+        // Fall back to checking if maxMemory < 32GB
+        return Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+      }
+    }
+  }
 
   /**
    * The state of an ongoing size estimation. Contains a stack of objects to visit as well as an
@@ -101,10 +162,17 @@ object SizeEstimator {
   private def visitArray(array: AnyRef, cls: Class[_], state: SearchState) {
     val length = JArray.getLength(array)
     val elementClass = cls.getComponentType
+
+    // Arrays have object header and length field which is an integer
+    var arrSize: Long = alignSize(objectSize + INT_SIZE)
+
     if (elementClass.isPrimitive) {
-      state.size += length * primitiveSize(elementClass)
+      arrSize += alignSize(length * primitiveSize(elementClass))
+      state.size += arrSize
     } else {
-      state.size += length * POINTER_SIZE
+      arrSize += alignSize(length * pointerSize)
+      state.size += arrSize
+
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
         for (i <- 0 until length) {
           state.enqueue(JArray.get(array, i))
@@ -170,15 +238,22 @@ object SizeEstimator {
           shellSize += primitiveSize(fieldClass)
         } else {
           field.setAccessible(true) // Enable future get()'s on this field
-          shellSize += POINTER_SIZE
+          shellSize += pointerSize
           pointerFields = field :: pointerFields
         }
       }
     }
 
+    shellSize = alignSize(shellSize)
+
     // Create and cache a new ClassInfo
     val newInfo = new ClassInfo(shellSize, pointerFields)
     classInfos.put(cls, newInfo)
     return newInfo
+  }
+
+  private def alignSize(size: Long): Long = {
+    val rem = size % ALIGN_SIZE
+    return if (rem == 0) size else (size + ALIGN_SIZE - rem)
   }
 }

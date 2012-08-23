@@ -349,7 +349,7 @@ def setup_mesos_cluster(master, opts):
 def setup_standalone_cluster(master, slave_nodes, opts):
   slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
   ssh(master, opts, "echo \"%s\" > spark/conf/slaves" % (slave_ips))
-  ssh(master, opts, "/home/ec2-user/spark/bin/start-all.sh")
+  ssh(master, opts, "/root/spark/bin/start-all.sh")
   
 
 # Wait for a whole cluster (masters, slaves and ZooKeeper) to start up
@@ -448,7 +448,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes):
               dest.close()
   # rsync the whole directory over to the master machine
   command = (("rsync -rv -e 'ssh -o StrictHostKeyChecking=no -i %s' " + 
-      "'%s/' '%s@%s:~'") % (opts.identity_file, tmp_dir, opts.user, active_master))
+      "'%s/' '%s@%s:/'") % (opts.identity_file, tmp_dir, opts.user, active_master))
   subprocess.check_call(command, shell=True)
   # Remove the temp directory we created above
   shutil.rmtree(tmp_dir)
