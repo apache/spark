@@ -16,8 +16,9 @@ class FileSuite extends FunSuite with BeforeAndAfter {
   var sc: SparkContext = _
   
   after {
-    if(sc != null) {
+    if (sc != null) {
       sc.stop()
+      sc = null
     }
   }
   
