@@ -76,6 +76,7 @@ private object HttpBroadcast extends Logging {
   def stop() {
     if (server != null) {
       server.stop()
+      server = null
     }
   }
 
