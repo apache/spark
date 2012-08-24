@@ -11,7 +11,7 @@ object WordCount {
     }
 
     // Create the context and set the batch size
-    val ssc = new SparkStreamContext(args(0), "ExampleTwo")
+    val ssc = new SparkStreamContext(args(0), "WordCount")
     ssc.setBatchDuration(Seconds(2))
 
     // Create the FileInputDStream on the directory and use the
