@@ -9,8 +9,9 @@ class PipedRDDSuite extends FunSuite with BeforeAndAfter {
   var sc: SparkContext = _
   
   after {
-    if(sc != null) {
+    if (sc != null) {
       sc.stop()
+      sc = null
     }
   }
   
@@ -37,6 +38,15 @@ class PipedRDDSuite extends FunSuite with BeforeAndAfter {
     assert(c.size === 2)
     assert(c(0) === "LALALA")
     assert(c(1) === "LALALA")
+  }
+
+  test("pipe with non-zero exit status") {
+    sc = new SparkContext("local", "test")
+    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val piped = nums.pipe("cat nonexistent_file")
+    intercept[SparkException] {
+      piped.collect()
+    }
   }
 
 }

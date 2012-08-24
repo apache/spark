@@ -10,7 +10,18 @@ class MasterArguments(args: Array[String]) {
   var ip = Utils.localIpAddress()
   var port = 7077
   var webUiPort = 8080
-
+  
+  // Check for settings in environment variables 
+  if (System.getenv("SPARK_MASTER_IP") != null) {
+    ip = System.getenv("SPARK_MASTER_IP")
+  }
+  if (System.getenv("SPARK_MASTER_PORT") != null) {
+    port = System.getenv("SPARK_MASTER_PORT").toInt
+  }
+  if (System.getenv("SPARK_MASTER_WEBUI_PORT") != null) {
+    webUiPort = System.getenv("SPARK_MASTER_WEBUI_PORT").toInt
+  }
+  
   parse(args.toList)
 
   def parse(args: List[String]): Unit = args match {

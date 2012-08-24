@@ -33,11 +33,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
     }
 
     try {
-      val blockOptions = blockManager.get(blocksByAddress)
-      logDebug("Fetching map output blocks for shuffle %d, reduce %d took %d ms".format(
-        shuffleId, reduceId, System.currentTimeMillis - startTime))
-      blockOptions.foreach(x => {
-        val (blockId, blockOption) = x 
+      for ((blockId, blockOption) <- blockManager.getMultiple(blocksByAddress)) {
         blockOption match {
           case Some(block) => {
             val values = block
@@ -50,7 +46,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
             throw new BlockException(blockId, "Did not get block " + blockId)         
           }
         }
-      })
+      }
     } catch {
       case be: BlockException => {
         val regex = "shuffledid_([0-9]*)_([0-9]*)_([0-9]]*)".r
@@ -65,5 +61,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
         }
       }
     }
+    logDebug("Fetching and merging outputs of shuffle %d, reduce %d took %d ms".format(
+      shuffleId, reduceId, System.currentTimeMillis - startTime))
   }
 }

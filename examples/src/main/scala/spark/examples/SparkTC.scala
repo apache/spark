@@ -5,6 +5,9 @@ import SparkContext._
 import scala.util.Random
 import scala.collection.mutable
 
+/**
+ * Transitive closure on a graph.
+ */
 object SparkTC {
 
   val numEdges = 200

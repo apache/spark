@@ -11,6 +11,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Transitive closure on a graph, implemented in Java.
+ */
 public class JavaTC {
 
   static int numEdges = 200;
@@ -32,7 +35,7 @@ public class JavaTC {
       Integer, Integer> {
     static ProjectFn INSTANCE = new ProjectFn();
 
-    public Tuple2<Integer, Integer> apply(Tuple2<Integer, Tuple2<Integer, Integer>> triple) {
+    public Tuple2<Integer, Integer> call(Tuple2<Integer, Tuple2<Integer, Integer>> triple) {
       return new Tuple2<Integer, Integer>(triple._2()._2(), triple._2()._1());
     }
   }
@@ -53,12 +56,11 @@ public class JavaTC {
     // the graph to obtain the path (x, z).
 
     // Because join() joins on keys, the edges are stored in reversed order.
-    JavaPairRDD<Integer, Integer> edges = tc.map(new PairFunction<Tuple2<Integer, Integer>,
-              Integer, Integer>() {
-      @Override
-      public Tuple2<Integer, Integer> apply(Tuple2<Integer, Integer> e) {
-        return new Tuple2<Integer, Integer>(e._2(), e._1());
-      }
+    JavaPairRDD<Integer, Integer> edges = tc.map(
+      new PairFunction<Tuple2<Integer, Integer>, Integer, Integer>() {
+        public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> e) {
+          return new Tuple2<Integer, Integer>(e._2(), e._1());
+        }
     });
 
     long oldCount = 0;

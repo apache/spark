@@ -18,7 +18,10 @@ class BagelSuite extends FunSuite with Assertions with BeforeAndAfter {
   var sc: SparkContext = _
   
   after {
-    sc.stop()
+    if (sc != null) {
+      sc.stop()
+      sc = null
+    }
   }
   
   test("halting by voting") {
