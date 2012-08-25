@@ -1,4 +1,5 @@
 from base64 import standard_b64encode as b64enc
+from collections import Counter
 from itertools import chain, ifilter, imap
 
 from pyspark import cloudpickle
@@ -47,6 +48,15 @@ class RDD(object):
         def func(iterator): return chain.from_iterable(imap(f, iterator))
         return PipelinedRDD(self, func)
 
+    def mapPartitions(self, f):
+        """
+        >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
+        >>> def f(iterator): yield sum(iterator)
+        >>> rdd.mapPartitions(f).collect()
+        [3, 7]
+        """
+        return PipelinedRDD(self, f)
+
     def filter(self, f):
         """
         >>> rdd = sc.parallelize([1, 2, 3, 4, 5])
@@ -93,7 +103,14 @@ class RDD(object):
 
     # TODO: Overload __add___?
 
-    # TODO: glom
+    def glom(self):
+        """
+        >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
+        >>> rdd.glom().first()
+        [1, 2]
+        """
+        def func(iterator): yield list(iterator)
+        return PipelinedRDD(self, func)
 
     def cartesian(self, other):
         """
@@ -114,8 +131,6 @@ class RDD(object):
         return self.map(lambda x: (f(x), x)).groupByKey(numSplits)
 
     # TODO: pipe
-
-    # TODO: mapPartitions
 
     def foreach(self, f):
         """
@@ -177,7 +192,16 @@ class RDD(object):
         """
         return self._jrdd.count()
 
-    # TODO: count approx methods
+    def countByValue(self):
+        """
+        >>> sc.parallelize([1, 2, 1, 2, 2]).countByValue().most_common()
+        [(2, 3), (1, 2)]
+        """
+        def countPartition(iterator):
+            yield Counter(iterator)
+        def mergeMaps(m1, m2):
+            return m1 + m2
+        return self.mapPartitions(countPartition).reduce(mergeMaps)
 
     def take(self, num):
         """
