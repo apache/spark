@@ -25,17 +25,17 @@ def output(x):
 def read_input():
     try:
         while True:
-            yield loads(sys.stdin)
+            yield cPickle.loads(loads(sys.stdin))
     except EOFError:
         return
+
 
 def do_combine_by_key():
     create_combiner = load_function()
     merge_value = load_function()
     merge_combiners = load_function()  # TODO: not used.
     combiners = {}
-    for obj in read_input():
-        (key, value) = PickleSerializer.loads(obj)
+    for (key, value) in read_input():
         if key not in combiners:
             combiners[key] = create_combiner(value)
         else:
@@ -44,57 +44,32 @@ def do_combine_by_key():
         output(PickleSerializer.dumps((key, combiner)))
 
 
-def do_map(flat=False):
+def do_pipeline():
     f = load_function()
-    for obj in read_input():
-        try:
-            out = f(PickleSerializer.loads(obj))
-            if out is not None:
-                if flat:
-                    for x in out:
-                        output(PickleSerializer.dumps(x))
-                else:
-                    output(PickleSerializer.dumps(out))
-        except:
-            sys.stderr.write("Error processing obj %s\n" % repr(obj))
-            raise
+    for obj in f(read_input()):
+        output(PickleSerializer.dumps(obj))
 
 
 def do_shuffle_map_step():
     hashFunc = load_function()
-    for obj in read_input():
-        key = PickleSerializer.loads(obj)[0]
+    while True:
+        try:
+            pickled = loads(sys.stdin)
+        except EOFError:
+            return
+        key = cPickle.loads(pickled)[0]
         output(str(hashFunc(key)))
-        output(obj)
-
-
-def do_reduce():
-    f = load_function()
-    acc = None
-    for obj in read_input():
-        acc = f(PickleSerializer.loads(obj), acc)
-    if acc is not None:
-        output(PickleSerializer.dumps(acc))
-
-
-def do_echo():
-    old_stdout.writelines(sys.stdin.readlines())
+        output(pickled)
 
 
 def main():
     command = sys.stdin.readline().strip()
-    if command == "map":
-        do_map(flat=False)
-    elif command == "flatmap":
-        do_map(flat=True)
+    if command == "pipeline":
+        do_pipeline()
     elif command == "combine_by_key":
         do_combine_by_key()
-    elif command == "reduce":
-        do_reduce()
     elif command == "shuffle_map_step":
         do_shuffle_map_step()
-    elif command == "echo":
-        do_echo()
     else:
         raise Exception("Unsupported command %s" % command)
 
