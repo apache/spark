@@ -5,6 +5,7 @@ import sys
 from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
+from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import dumps, loads, PickleSerializer
 import cPickle
@@ -63,6 +64,11 @@ def do_shuffle_map_step():
 
 
 def main():
+    num_broadcast_variables = int(sys.stdin.readline().strip())
+    for _ in range(num_broadcast_variables):
+        uuid = sys.stdin.read(36)
+        value = loads(sys.stdin)
+        _broadcastRegistry[uuid] = Broadcast(uuid, cPickle.loads(value))
     command = sys.stdin.readline().strip()
     if command == "pipeline":
         do_pipeline()

@@ -6,6 +6,8 @@ from pyspark.serializers import PickleSerializer
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 
+from py4j.java_collections import ListConverter
+
 
 class RDD(object):
 
@@ -15,11 +17,15 @@ class RDD(object):
         self.ctx = ctx
 
     @classmethod
-    def _get_pipe_command(cls, command, functions):
+    def _get_pipe_command(cls, ctx, command, functions):
         worker_args = [command]
         for f in functions:
             worker_args.append(b64enc(cloudpickle.dumps(f)))
-        return " ".join(worker_args)
+        broadcast_vars = [x._jbroadcast for x in ctx._pickled_broadcast_vars]
+        broadcast_vars = ListConverter().convert(broadcast_vars,
+                                                 ctx.gateway._gateway_client)
+        ctx._pickled_broadcast_vars.clear()
+        return (" ".join(worker_args), broadcast_vars)
 
     def cache(self):
         self.is_cached = True
@@ -52,9 +58,10 @@ class RDD(object):
 
     def _pipe(self, functions, command):
         class_manifest = self._jrdd.classManifest()
-        pipe_command = RDD._get_pipe_command(command, functions)
+        (pipe_command, broadcast_vars) = \
+            RDD._get_pipe_command(self.ctx, command, functions)
         python_rdd = self.ctx.jvm.PythonRDD(self._jrdd.rdd(), pipe_command,
-            False, self.ctx.pythonExec, class_manifest)
+            False, self.ctx.pythonExec, broadcast_vars, class_manifest)
         return python_rdd.asJavaRDD()
 
     def distinct(self):
@@ -249,10 +256,12 @@ class RDD(object):
     def shuffle(self, numSplits, hashFunc=hash):
         if numSplits is None:
             numSplits = self.ctx.defaultParallelism
-        pipe_command = RDD._get_pipe_command('shuffle_map_step', [hashFunc])
+        (pipe_command, broadcast_vars) = \
+            RDD._get_pipe_command(self.ctx, 'shuffle_map_step', [hashFunc])
         class_manifest = self._jrdd.classManifest()
         python_rdd = self.ctx.jvm.PythonPairRDD(self._jrdd.rdd(),
-            pipe_command, False, self.ctx.pythonExec, class_manifest)
+            pipe_command, False, self.ctx.pythonExec, broadcast_vars,
+            class_manifest)
         partitioner = self.ctx.jvm.spark.HashPartitioner(numSplits)
         jrdd = python_rdd.asJavaPairRDD().partitionBy(partitioner)
         jrdd = jrdd.map(self.ctx.jvm.ExtractValue())
@@ -360,12 +369,12 @@ class PipelinedRDD(RDD):
     @property
     def _jrdd(self):
         if not self._jrdd_val:
-            funcs = [self.func]
-            pipe_command = RDD._get_pipe_command("pipeline", funcs)
+            (pipe_command, broadcast_vars) = \
+                RDD._get_pipe_command(self.ctx, "pipeline", [self.func])
             class_manifest = self._prev_jrdd.classManifest()
             python_rdd = self.ctx.jvm.PythonRDD(self._prev_jrdd.rdd(),
                 pipe_command, self.preservesPartitioning, self.ctx.pythonExec,
-                class_manifest)
+                broadcast_vars, class_manifest)
             self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
 

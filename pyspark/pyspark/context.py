@@ -2,6 +2,7 @@ import os
 import atexit
 from tempfile import NamedTemporaryFile
 
+from pyspark.broadcast import Broadcast
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, dumps
 from pyspark.rdd import RDD
@@ -24,6 +25,11 @@ class SparkContext(object):
         self.defaultParallelism = \
             defaultParallelism or self._jsc.sc().defaultParallelism()
         self.pythonExec = pythonExec
+        # Broadcast's __reduce__ method stores Broadcast instances here.
+        # This allows other code to determine which Broadcast instances have
+        # been pickled, so it can determine which Java broadcast objects to
+        # send.
+        self._pickled_broadcast_vars = set()
 
     def __del__(self):
         if self._jsc:
@@ -52,7 +58,12 @@ class SparkContext(object):
         jrdd = self.pickleFile(self._jsc, tempFile.name, numSlices)
         return RDD(jrdd, self)
 
-    def textFile(self, name, numSlices=None):
-        numSlices = numSlices or self.defaultParallelism
-        jrdd = self._jsc.textFile(name, numSlices)
+    def textFile(self, name, minSplits=None):
+        minSplits = minSplits or min(self.defaultParallelism, 2)
+        jrdd = self._jsc.textFile(name, minSplits)
         return RDD(jrdd, self)
+
+    def broadcast(self, value):
+        jbroadcast = self._jsc.broadcast(bytearray(PickleSerializer.dumps(value)))
+        return Broadcast(jbroadcast.uuid().toString(), value, jbroadcast,
+                         self._pickled_broadcast_vars)
