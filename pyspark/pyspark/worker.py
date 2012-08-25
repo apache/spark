@@ -31,20 +31,6 @@ def read_input():
         return
 
 
-def do_combine_by_key():
-    create_combiner = load_function()
-    merge_value = load_function()
-    merge_combiners = load_function()  # TODO: not used.
-    combiners = {}
-    for (key, value) in read_input():
-        if key not in combiners:
-            combiners[key] = create_combiner(value)
-        else:
-            combiners[key] = merge_value(combiners[key], value)
-    for (key, combiner) in combiners.iteritems():
-        output(PickleSerializer.dumps((key, combiner)))
-
-
 def do_pipeline():
     f = load_function()
     for obj in f(read_input()):
@@ -72,8 +58,6 @@ def main():
     command = sys.stdin.readline().strip()
     if command == "pipeline":
         do_pipeline()
-    elif command == "combine_by_key":
-        do_combine_by_key()
     elif command == "shuffle_map_step":
         do_shuffle_map_step()
     else:
