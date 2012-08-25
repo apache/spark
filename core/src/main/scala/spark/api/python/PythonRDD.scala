@@ -151,37 +151,17 @@ class PythonRDD[T: ClassManifest](
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
 
-class PythonPairRDD[T: ClassManifest] (
-  parent: RDD[T], command: Seq[String], envVars: Map[String, String],
-  preservePartitoning: Boolean, pythonExec: String, broadcastVars: java.util.List[Broadcast[Array[Byte]]])
-  extends RDD[(Array[Byte], Array[Byte])](parent.context) with PythonRDDBase {
-
-  def this(parent: RDD[T], command: Seq[String], preservePartitoning: Boolean,
-    pythonExec: String, broadcastVars: java.util.List[Broadcast[Array[Byte]]]) =
-    this(parent, command, Map(), preservePartitoning, pythonExec, broadcastVars)
-
-  // Similar to Runtime.exec(), if we are given a single string, split it into words
-  // using a standard StringTokenizer (i.e. by spaces)
-  def this(parent: RDD[T], command: String, preservePartitoning: Boolean, pythonExec: String,
-    broadcastVars: java.util.List[Broadcast[Array[Byte]]]) =
-    this(parent, PipedRDD.tokenize(command), preservePartitoning, pythonExec, broadcastVars)
-
-  override def splits = parent.splits
-
-  override val dependencies = List(new OneToOneDependency(parent))
-
-  override val partitioner = if (preservePartitoning) parent.partitioner else None
-
-  override def compute(split: Split): Iterator[(Array[Byte], Array[Byte])] = {
-    compute(split, envVars, command, parent, pythonExec, broadcastVars).grouped(2).map {
+private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
+  RDD[(Array[Byte], Array[Byte])](prev.context) {
+  override def splits = prev.splits
+  override val dependencies = List(new OneToOneDependency(prev))
+  override def compute(split: Split) =
+    prev.iterator(split).grouped(2).map {
       case Seq(a, b) => (a, b)
-      case x          => throw new Exception("PythonPairRDD: unexpected value: " + x)
+      case x          => throw new Exception("PairwiseRDD: unexpected value: " + x)
     }
-  }
-
   val asJavaPairRDD : JavaPairRDD[Array[Byte], Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
-
 
 object PythonRDD {
 

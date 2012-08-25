@@ -4,7 +4,7 @@ from tempfile import NamedTemporaryFile
 
 from pyspark.broadcast import Broadcast
 from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import PickleSerializer, dumps
+from pyspark.serializers import dump_pickle, write_with_length
 from pyspark.rdd import RDD
 
 
@@ -16,9 +16,8 @@ class SparkContext(object):
     asPickle = jvm.spark.api.python.PythonRDD.asPickle
     arrayAsPickle = jvm.spark.api.python.PythonRDD.arrayAsPickle
 
-
     def __init__(self, master, name, defaultParallelism=None,
-        pythonExec='python'):
+                 pythonExec='python'):
         self.master = master
         self.name = name
         self._jsc = self.jvm.JavaSparkContext(master, name)
@@ -52,7 +51,7 @@ class SparkContext(object):
         # objects are written to a file and loaded through textFile().
         tempFile = NamedTemporaryFile(delete=False)
         for x in c:
-            dumps(PickleSerializer.dumps(x), tempFile)
+            write_with_length(dump_pickle(x), tempFile)
         tempFile.close()
         atexit.register(lambda: os.unlink(tempFile.name))
         jrdd = self.pickleFile(self._jsc, tempFile.name, numSlices)
@@ -64,6 +63,6 @@ class SparkContext(object):
         return RDD(jrdd, self)
 
     def broadcast(self, value):
-        jbroadcast = self._jsc.broadcast(bytearray(PickleSerializer.dumps(value)))
+        jbroadcast = self._jsc.broadcast(bytearray(dump_pickle(value)))
         return Broadcast(jbroadcast.uuid().toString(), value, jbroadcast,
                          self._pickled_broadcast_vars)

@@ -3,7 +3,7 @@ from collections import Counter
 from itertools import chain, ifilter, imap
 
 from pyspark import cloudpickle
-from pyspark.serializers import PickleSerializer
+from pyspark.serializers import dump_pickle, load_pickle
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 
@@ -16,17 +16,6 @@ class RDD(object):
         self._jrdd = jrdd
         self.is_cached = False
         self.ctx = ctx
-
-    @classmethod
-    def _get_pipe_command(cls, ctx, command, functions):
-        worker_args = [command]
-        for f in functions:
-            worker_args.append(b64enc(cloudpickle.dumps(f)))
-        broadcast_vars = [x._jbroadcast for x in ctx._pickled_broadcast_vars]
-        broadcast_vars = ListConverter().convert(broadcast_vars,
-                                                 ctx.gateway._gateway_client)
-        ctx._pickled_broadcast_vars.clear()
-        return (" ".join(worker_args), broadcast_vars)
 
     def cache(self):
         self.is_cached = True
@@ -66,14 +55,6 @@ class RDD(object):
         def func(iterator): return ifilter(f, iterator)
         return self.mapPartitions(func)
 
-    def _pipe(self, functions, command):
-        class_manifest = self._jrdd.classManifest()
-        (pipe_command, broadcast_vars) = \
-            RDD._get_pipe_command(self.ctx, command, functions)
-        python_rdd = self.ctx.jvm.PythonRDD(self._jrdd.rdd(), pipe_command,
-            False, self.ctx.pythonExec, broadcast_vars, class_manifest)
-        return python_rdd.asJavaRDD()
-
     def distinct(self):
         """
         >>> sorted(sc.parallelize([1, 1, 2, 3]).distinct().collect())
@@ -89,7 +70,7 @@ class RDD(object):
 
     def takeSample(self, withReplacement, num, seed):
         vals = self._jrdd.takeSample(withReplacement, num, seed)
-        return [PickleSerializer.loads(bytes(x)) for x in vals]
+        return [load_pickle(bytes(x)) for x in vals]
 
     def union(self, other):
         """
@@ -148,7 +129,7 @@ class RDD(object):
 
     def collect(self):
         pickle = self.ctx.arrayAsPickle(self._jrdd.rdd().collect())
-        return PickleSerializer.loads(bytes(pickle))
+        return load_pickle(bytes(pickle))
 
     def reduce(self, f):
         """
@@ -216,18 +197,16 @@ class RDD(object):
         [2, 3]
         """
         pickle = self.ctx.arrayAsPickle(self._jrdd.rdd().take(num))
-        return PickleSerializer.loads(bytes(pickle))
+        return load_pickle(bytes(pickle))
 
     def first(self):
         """
         >>> sc.parallelize([2, 3, 4]).first()
         2
         """
-        return PickleSerializer.loads(bytes(self.ctx.asPickle(self._jrdd.first())))
+        return load_pickle(bytes(self.ctx.asPickle(self._jrdd.first())))
 
     # TODO: saveAsTextFile
-
-    # TODO: saveAsObjectFile
 
     # Pair functions
 
@@ -303,19 +282,18 @@ class RDD(object):
         """
         return python_right_outer_join(self, other, numSplits)
 
-    # TODO: pipelining
-    # TODO: optimizations
     def partitionBy(self, numSplits, hashFunc=hash):
         if numSplits is None:
             numSplits = self.ctx.defaultParallelism
-        (pipe_command, broadcast_vars) = \
-            RDD._get_pipe_command(self.ctx, 'shuffle_map_step', [hashFunc])
-        class_manifest = self._jrdd.classManifest()
-        python_rdd = self.ctx.jvm.PythonPairRDD(self._jrdd.rdd(),
-            pipe_command, False, self.ctx.pythonExec, broadcast_vars,
-            class_manifest)
+        def add_shuffle_key(iterator):
+            for (k, v) in iterator:
+                yield str(hashFunc(k))
+                yield dump_pickle((k, v))
+        keyed = PipelinedRDD(self, add_shuffle_key)
+        keyed._bypass_serializer = True
+        pairRDD = self.ctx.jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
         partitioner = self.ctx.jvm.spark.HashPartitioner(numSplits)
-        jrdd = python_rdd.asJavaPairRDD().partitionBy(partitioner)
+        jrdd = pairRDD.partitionBy(partitioner)
         jrdd = jrdd.map(self.ctx.jvm.ExtractValue())
         return RDD(jrdd, self.ctx)
 
@@ -430,17 +408,23 @@ class PipelinedRDD(RDD):
         self.ctx = prev.ctx
         self.prev = prev
         self._jrdd_val = None
+        self._bypass_serializer = False
 
     @property
     def _jrdd(self):
-        if not self._jrdd_val:
-            (pipe_command, broadcast_vars) = \
-                RDD._get_pipe_command(self.ctx, "pipeline", [self.func])
-            class_manifest = self._prev_jrdd.classManifest()
-            python_rdd = self.ctx.jvm.PythonRDD(self._prev_jrdd.rdd(),
-                pipe_command, self.preservesPartitioning, self.ctx.pythonExec,
-                broadcast_vars, class_manifest)
-            self._jrdd_val = python_rdd.asJavaRDD()
+        if self._jrdd_val:
+            return self._jrdd_val
+        funcs = [self.func, self._bypass_serializer]
+        pipe_command = ' '.join(b64enc(cloudpickle.dumps(f)) for f in funcs)
+        broadcast_vars = ListConverter().convert(
+            [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
+            self.ctx.gateway._gateway_client)
+        self.ctx._pickled_broadcast_vars.clear()
+        class_manifest = self._prev_jrdd.classManifest()
+        python_rdd = self.ctx.jvm.PythonRDD(self._prev_jrdd.rdd(),
+            pipe_command, self.preservesPartitioning, self.ctx.pythonExec,
+            broadcast_vars, class_manifest)
+        self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
 
 

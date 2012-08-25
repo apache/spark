@@ -7,61 +7,41 @@ from base64 import standard_b64decode
 # copy_reg module.
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
-from pyspark.serializers import dumps, loads, PickleSerializer
-import cPickle
+from pyspark.serializers import write_with_length, read_with_length, \
+    dump_pickle, load_pickle
+
 
 # Redirect stdout to stderr so that users must return values from functions.
 old_stdout = sys.stdout
 sys.stdout = sys.stderr
 
 
-def load_function():
-    return cPickle.loads(standard_b64decode(sys.stdin.readline().strip()))
-
-
-def output(x):
-    dumps(x, old_stdout)
+def load_obj():
+    return load_pickle(standard_b64decode(sys.stdin.readline().strip()))
 
 
 def read_input():
     try:
         while True:
-            yield cPickle.loads(loads(sys.stdin))
+            yield load_pickle(read_with_length(sys.stdin))
     except EOFError:
         return
-
-
-def do_pipeline():
-    f = load_function()
-    for obj in f(read_input()):
-        output(PickleSerializer.dumps(obj))
-
-
-def do_shuffle_map_step():
-    hashFunc = load_function()
-    while True:
-        try:
-            pickled = loads(sys.stdin)
-        except EOFError:
-            return
-        key = cPickle.loads(pickled)[0]
-        output(str(hashFunc(key)))
-        output(pickled)
 
 
 def main():
     num_broadcast_variables = int(sys.stdin.readline().strip())
     for _ in range(num_broadcast_variables):
         uuid = sys.stdin.read(36)
-        value = loads(sys.stdin)
-        _broadcastRegistry[uuid] = Broadcast(uuid, cPickle.loads(value))
-    command = sys.stdin.readline().strip()
-    if command == "pipeline":
-        do_pipeline()
-    elif command == "shuffle_map_step":
-        do_shuffle_map_step()
+        value = read_with_length(sys.stdin)
+        _broadcastRegistry[uuid] = Broadcast(uuid, load_pickle(value))
+    func = load_obj()
+    bypassSerializer = load_obj()
+    if bypassSerializer:
+        dumps = lambda x: x
     else:
-        raise Exception("Unsupported command %s" % command)
+        dumps = dump_pickle
+    for obj in func(read_input()):
+        write_with_length(dumps(obj), old_stdout)
 
 
 if __name__ == '__main__':
