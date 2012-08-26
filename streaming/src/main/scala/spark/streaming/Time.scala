@@ -55,6 +55,14 @@ class Time(private var millis: Long) extends Serializable {
   def toFormattedString = millis.toString
   
   def milliseconds = millis
+
+  override def hashCode = millis.toInt
+
+  override def equals(other: Any): Boolean = other match {
+    case null => false
+    case t: Time => t.millis == millis
+    case _ => false
+  }
 }
 
 object Time {
