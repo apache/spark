@@ -1,6 +1,6 @@
 package spark.streaming
 
-class Time(private var millis: Long) {
+class Time(private var millis: Long) extends Serializable {
 
   def copy() = new Time(this.millis) 
  
