@@ -19,9 +19,12 @@ object Receiver {
             val is = new DataInputStream(new BufferedInputStream(socket.getInputStream))
             var loop = true
             var string: String = null
-            while((string = is.readUTF) != null) {
-              count += 28 
-            }
+            do {
+              string = is.readUTF()
+              if (string != null) {
+                count += 28 
+              }
+            } while (string != null)
           } catch {
             case e: Exception => e.printStackTrace()
           }
