@@ -14,7 +14,8 @@ import scala.collection.mutable.SynchronizedQueue
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
-import akka.dispatch.{Promise, ExecutionContext, Future}
+import akka.dispatch.{Await, Promise, ExecutionContext, Future}
+import akka.util.Duration
 
 case class ConnectionManagerId(host: String, port: Int) {
   def toSocketAddress() = new InetSocketAddress(host, port)
@@ -325,7 +326,7 @@ class ConnectionManager(port: Int) extends Logging {
   }
 
   def sendMessageReliablySync(connectionManagerId: ConnectionManagerId, message: Message): Option[Message] = {
-    sendMessageReliably(connectionManagerId, message)()
+    Await.result(sendMessageReliably(connectionManagerId, message), Duration.Inf)
   }
 
   def onReceiveMessage(callback: (Message, ConnectionManagerId) => Option[Message]) {
