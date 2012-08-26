@@ -248,7 +248,7 @@ class ConnectionManager(port: Int) extends Logging {
   }
 
   private def handleMessage(connectionManagerId: ConnectionManagerId, message: Message) {
-    logInfo("Handling [" + message + "] from [" + connectionManagerId + "]") 
+    logDebug("Handling [" + message + "] from [" + connectionManagerId + "]")
     message match {
       case bufferMessage: BufferMessage => {
         if (bufferMessage.hasAckId) {
