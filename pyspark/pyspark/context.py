@@ -7,6 +7,8 @@ from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import dump_pickle, write_with_length
 from pyspark.rdd import RDD
 
+from py4j.java_collections import ListConverter
+
 
 class SparkContext(object):
 
@@ -39,12 +41,6 @@ class SparkContext(object):
         self._jsc = None
 
     def parallelize(self, c, numSlices=None):
-        """
-        >>> sc = SparkContext("local", "test")
-        >>> rdd = sc.parallelize([(1, 2), (3, 4)])
-        >>> rdd.collect()
-        [(1, 2), (3, 4)]
-        """
         numSlices = numSlices or self.defaultParallelism
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
@@ -61,6 +57,12 @@ class SparkContext(object):
         minSplits = minSplits or min(self.defaultParallelism, 2)
         jrdd = self._jsc.textFile(name, minSplits)
         return RDD(jrdd, self)
+
+    def union(self, rdds):
+        first = rdds[0]._jrdd
+        rest = [x._jrdd for x in rdds[1:]]
+        rest = ListConverter().convert(rest, self.gateway._gateway_client)
+        return RDD(self._jsc.union(first, rest), self)
 
     def broadcast(self, value):
         jbroadcast = self._jsc.broadcast(bytearray(dump_pickle(value)))

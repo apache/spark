@@ -9,6 +9,7 @@ import spark._
 import api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import broadcast.Broadcast
 import scala.collection
+import java.nio.charset.Charset
 
 trait PythonRDDBase {
   def compute[T](split: Split, envVars: Map[String, String],
@@ -238,9 +239,12 @@ private object Pickle {
   val MARK : Byte = '('
   val APPENDS : Byte = 'e'
 }
-class ExtractValue extends spark.api.java.function.Function[(Array[Byte],
+
+private class ExtractValue extends spark.api.java.function.Function[(Array[Byte],
   Array[Byte]), Array[Byte]] {
-
   override def call(pair: (Array[Byte], Array[Byte])) : Array[Byte] = pair._2
+}
 
+private class BytesToString extends spark.api.java.function.Function[Array[Byte], String] {
+  override def call(arr: Array[Byte]) : String = new String(arr, "UTF-8")
 }

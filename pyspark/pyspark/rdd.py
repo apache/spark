@@ -1,6 +1,9 @@
 from base64 import standard_b64encode as b64enc
 from collections import Counter
 from itertools import chain, ifilter, imap
+import shlex
+from subprocess import Popen, PIPE
+from threading import Thread
 
 from pyspark import cloudpickle
 from pyspark.serializers import dump_pickle, load_pickle
@@ -118,7 +121,20 @@ class RDD(object):
         """
         return self.map(lambda x: (f(x), x)).groupByKey(numSplits)
 
-    # TODO: pipe
+    def pipe(self, command, env={}):
+        """
+        >>> sc.parallelize([1, 2, 3]).pipe('cat').collect()
+        ['1', '2', '3']
+        """
+        def func(iterator):
+            pipe = Popen(shlex.split(command), env=env, stdin=PIPE, stdout=PIPE)
+            def pipe_objs(out):
+                for obj in iterator:
+                    out.write(str(obj).rstrip('\n') + '\n')
+                out.close()
+            Thread(target=pipe_objs, args=[pipe.stdin]).start()
+            return (x.rstrip('\n') for x in pipe.stdout)
+        return self.mapPartitions(func)
 
     def foreach(self, f):
         """
@@ -206,7 +222,12 @@ class RDD(object):
         """
         return load_pickle(bytes(self.ctx.asPickle(self._jrdd.first())))
 
-    # TODO: saveAsTextFile
+    def saveAsTextFile(self, path):
+        def func(iterator):
+            return (str(x).encode("utf-8") for x in iterator)
+        keyed = PipelinedRDD(self, func)
+        keyed._bypass_serializer = True
+        keyed._jrdd.map(self.ctx.jvm.BytesToString()).saveAsTextFile(path)
 
     # Pair functions
 
