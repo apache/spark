@@ -27,7 +27,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
   
   def run = {
     logInfo("Starting Worker Container")
-    cm = conntectToCM
+    cm = connectToCM
     startContainer
   }
   
@@ -110,7 +110,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     return env
   }
   
-  def conntectToCM : ContainerManager = {
+  def connectToCM : ContainerManager = {
     val cmIpPortStr = container.getNodeId().getHost() + ":" + container.getNodeId().getPort()
     val cmAddress = NetUtils.createSocketAddr(cmIpPortStr)
     logInfo("Connecting to ContainerManager at " + cmIpPortStr)
