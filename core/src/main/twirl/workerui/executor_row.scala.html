@@ -1,0 +1,20 @@
+@(executor: spark.deploy.worker.ExecutorRunner)
+
+<tr>
+  <td>@executor.execId</td>
+  <td>@executor.cores</td>
+  <td>@executor.memory</td>
+  <td>
+    <ul class="unstyled">
+      <li><strong>ID:</strong> @executor.jobId</li>
+      <li><strong>Name:</strong> @executor.jobDesc.name</li>
+      <li><strong>User:</strong> @executor.jobDesc.user</li>
+      <li><strong>Cores:</strong> @executor.jobDesc.cores </li>
+      <li><strong>Memory per Slave:</strong> @executor.jobDesc.memoryPerSlave</li>
+    </ul>
+  </td>
+  <td>
+    <a href="log?jobId=@(executor.jobId)&executorId=@(executor.execId)&logType=stdout">stdout</a>
+    <a href="log?jobId=@(executor.jobId)&executorId=@(executor.execId)&logType=stderr">stderr</a>
+  </td>
+</tr>

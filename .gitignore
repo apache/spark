@@ -1,7 +1,10 @@
 *~
 *.swp
 *.iml
+*log4j.properties
 .idea/
+.settings
+.cache
 /build/
 work/
 out/
@@ -24,3 +27,5 @@ project/build/target/
 project/plugins/target/
 project/plugins/lib_managed/
 project/plugins/src_managed/
+logs/
+log/

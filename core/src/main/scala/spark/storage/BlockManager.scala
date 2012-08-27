@@ -5,15 +5,11 @@ import java.nio._
 import java.nio.channels.FileChannel.MapMode
 import java.util.{HashMap => JHashMap}
 import java.util.LinkedHashMap
-import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.Collections
 
-import scala.actors._
-import scala.actors.Actor._
-import scala.actors.Future
-import scala.actors.Futures.future
-import scala.actors.remote._
-import scala.actors.remote.RemoteActor._
+import akka.dispatch.{Await, Future}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
@@ -29,6 +25,7 @@ import spark.SparkException
 import spark.Utils
 import spark.util.ByteBufferInputStream
 import spark.network._
+import akka.util.Duration
 
 class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
   def this() = this(null, 0)
@@ -61,25 +58,26 @@ class BlockLocker(numLockers: Int) {
   private val hashLocker = Array.fill(numLockers)(new Object())
   
   def getLock(blockId: String): Object = {
-    return hashLocker(Math.abs(blockId.hashCode % numLockers))
+    return hashLocker(math.abs(blockId.hashCode % numLockers))
   }
 }
 
 
-
-class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging {
+class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
+  extends Logging {
 
   case class BlockInfo(level: StorageLevel, tellMaster: Boolean)
 
   private val NUM_LOCKS = 337
   private val locker = new BlockLocker(NUM_LOCKS)
 
-  private val blockInfo = Collections.synchronizedMap(new JHashMap[String, BlockInfo])
+  private val blockInfo = new ConcurrentHashMap[String, BlockInfo]()
   private val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
   private val diskStore: BlockStore = new DiskStore(this, 
     System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
   
   val connectionManager = new ConnectionManager(0)
+  implicit val futureExecContext = connectionManager.futureExecContext
   
   val connectionManagerId = connectionManager.id
   val blockManagerId = new BlockManagerId(connectionManagerId.host, connectionManagerId.port)
@@ -94,15 +92,16 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
    */
-  def this(serializer: Serializer) =
-    this(BlockManager.getMaxMemoryFromSystemProperties(), serializer)
+  def this(master: BlockManagerMaster, serializer: Serializer) = {
+    this(master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
+  }
 
   /**
    * Initialize the BlockManager. Register to the BlockManagerMaster, and start the
    * BlockManagerWorker actor.
    */
   private def initialize() {
-    BlockManagerMaster.mustRegisterBlockManager(
+    master.mustRegisterBlockManager(
       RegisterBlockManager(blockManagerId, maxMemory, maxMemory))
     BlockManagerWorker.startBlockManagerWorker(this)
   }
@@ -154,8 +153,8 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
    */
   def getLocations(blockId: String): Seq[String] = {
     val startTimeMs = System.currentTimeMillis
-    var managers: Array[BlockManagerId] = BlockManagerMaster.mustGetLocations(GetLocations(blockId))
-    val locations = managers.map((manager: BlockManagerId) => { manager.ip }).toSeq
+    var managers = master.mustGetLocations(GetLocations(blockId))
+    val locations = managers.map(_.ip)
     logDebug("Get block locations in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
@@ -165,7 +164,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
    */
   def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
     val startTimeMs = System.currentTimeMillis
-    val locations = BlockManagerMaster.mustGetLocationsMultipleBlockIds(
+    val locations = master.mustGetLocationsMultipleBlockIds(
       GetLocationsMultipleBlockIds(blockIds)).map(_.map(_.ip).toSeq).toArray
     logDebug("Get multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
@@ -235,7 +234,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
     }
     logDebug("Getting remote block " + blockId)
     // Get locations of block
-    val locations = BlockManagerMaster.mustGetLocations(GetLocations(blockId))
+    val locations = master.mustGetLocations(GetLocations(blockId))
 
     // Get block from remote locations
     for (loc <- locations) {
@@ -260,15 +259,20 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   }
 
   /**
-   * Get many blocks from local and remote block manager using their BlockManagerIds.
+   * Get multiple blocks from local and remote block manager using their BlockManagerIds. Returns
+   * an Iterator of (block ID, value) pairs so that clients may handle blocks in a pipelined
+   * fashion as they're received.
    */
-  def get(blocksByAddress: Seq[(BlockManagerId, Seq[String])]): HashMap[String, Option[Iterator[Any]]] = {
+  def getMultiple(blocksByAddress: Seq[(BlockManagerId, Seq[String])])
+      : Iterator[(String, Option[Iterator[Any]])] = {
+
     if (blocksByAddress == null) {
       throw new IllegalArgumentException("BlocksByAddress is null")
     }
-    logDebug("Getting " + blocksByAddress.map(_._2.size).sum + " blocks")
+    val totalBlocks = blocksByAddress.map(_._2.size).sum
+    logDebug("Getting " + totalBlocks + " blocks")
     var startTime = System.currentTimeMillis
-    val blocks = new HashMap[String,Option[Iterator[Any]]]() 
+    val results = new LinkedBlockingQueue[(String, Option[Iterator[Any]])]
     val localBlockIds = new ArrayBuffer[String]()
     val remoteBlockIds = new ArrayBuffer[String]()
     val remoteBlockIdsPerLocation = new HashMap[BlockManagerId, Seq[String]]()
@@ -284,12 +288,34 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
     }
     
     // Start getting remote blocks
-    val remoteBlockFutures = remoteBlockIdsPerLocation.toSeq.map { case (bmId, bIds) =>
+    for ((bmId, bIds) <- remoteBlockIdsPerLocation) {
       val cmId = ConnectionManagerId(bmId.ip, bmId.port)
       val blockMessages = bIds.map(bId => BlockMessage.fromGetBlock(GetBlock(bId)))
       val blockMessageArray = new BlockMessageArray(blockMessages)
       val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
-      (cmId, future)
+      future.onSuccess {
+        case Some(message) => {
+          val bufferMessage = message.asInstanceOf[BufferMessage]
+          val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
+          blockMessageArray.foreach(blockMessage => {
+            if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
+              throw new SparkException(
+                "Unexpected message " + blockMessage.getType + " received from " + cmId)
+            }
+            val buffer = blockMessage.getData
+            val blockId = blockMessage.getId
+            val block = dataDeserialize(buffer)
+            results.put((blockId, Some(block)))
+            logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
+          })
+        }
+        case None => {
+          logError("Could not get blocks from " + cmId)
+          for (blockId <- bIds) {
+            results.put((blockId, None))
+          }
+        }
+      }
     }
     logDebug("Started remote gets for " + remoteBlockIds.size + " blocks in " + 
       Utils.getUsedTimeMs(startTime) + " ms")
@@ -299,7 +325,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
     localBlockIds.foreach(id => {
       get(id) match {
         case Some(block) => {
-          blocks.update(id, Some(block))
+          results.put((id, Some(block)))
           logDebug("Got local block " + id)
         }
         case None => {
@@ -309,36 +335,17 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
     }) 
     logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
 
-    // wait for and gather all the remote blocks
-    for ((cmId, future) <- remoteBlockFutures) {
-      var count = 0
-      val oneBlockId = remoteBlockIdsPerLocation(new BlockManagerId(cmId.host, cmId.port)).first
-      future() match {
-        case Some(message) => {
-          val bufferMessage = message.asInstanceOf[BufferMessage]
-          val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-          blockMessageArray.foreach(blockMessage => {
-            if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
-              throw new BlockException(oneBlockId, "Unexpected message received from " + cmId)
-            }
-            val buffer = blockMessage.getData()
-            val blockId = blockMessage.getId()
-            val block = dataDeserialize(buffer)
-            blocks.update(blockId, Some(block))
-            logDebug("Got remote block " + blockId + " in " + Utils.getUsedTimeMs(startTime))
-            count += 1
-          })
-        }
-        case None => {
-          throw new BlockException(oneBlockId, "Could not get blocks from " + cmId)
-        }
-      }
-      logDebug("Got remote " + count + " blocks from " + cmId.host + " in " +
-        Utils.getUsedTimeMs(startTime) + " ms")
-    }
+    // Return an iterator that will read fetched blocks off the queue as they arrive
+    return new Iterator[(String, Option[Iterator[Any]])] {
+      var resultsGotten = 0
 
-    logDebug("Got all blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
-    return blocks
+      def hasNext: Boolean = resultsGotten < totalBlocks
+
+      def next(): (String, Option[Iterator[Any]]) = {
+        resultsGotten += 1
+        results.take()
+      }
+    }
   }
 
   /**
@@ -434,7 +441,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
     // Initiate the replication before storing it locally. This is faster as 
     // data is already serialized and ready for sending
     val replicationFuture = if (level.replication > 1) {
-      future {
+      Future {
         replicate(blockId, bytes, level)
       }
     } else {
@@ -470,7 +477,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
       if (replicationFuture == null) {
         throw new Exception("Unexpected")
       }
-      replicationFuture() 
+      Await.ready(replicationFuture, Duration.Inf)
     }
 
     val finishTime = System.currentTimeMillis
@@ -490,8 +497,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
-    var peers: Array[BlockManagerId] = BlockManagerMaster.mustGetPeers(
-      GetPeers(blockManagerId, level.replication - 1))
+    var peers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
     for (peer: BlockManagerId <- peers) {
       val start = System.nanoTime
       logDebug("Try to replicate BlockId " + blockId + " once; The size of the data is "
@@ -565,7 +571,7 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   }
 
   private def notifyMaster(heartBeat: HeartBeat) {
-    BlockManagerMaster.mustHeartBeat(heartBeat)
+    master.mustHeartBeat(heartBeat)
   }
 
   def stop() {
@@ -577,12 +583,9 @@ class BlockManager(maxMemory: Long, val serializer: Serializer) extends Logging 
   }
 }
 
-
-object BlockManager extends Logging {
+object BlockManager {
   def getMaxMemoryFromSystemProperties(): Long = {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
-    val bytes = (Runtime.getRuntime.totalMemory * memoryFraction).toLong
-    logInfo("Maximum memory to use: " + bytes)
-    bytes
+    (Runtime.getRuntime.maxMemory * memoryFraction).toLong
   }
 }

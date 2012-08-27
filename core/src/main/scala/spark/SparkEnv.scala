@@ -1,12 +1,15 @@
 package spark
 
-import akka.actor.Actor
+import akka.actor.ActorSystem
 
+import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
+import spark.util.AkkaUtils
 
 class SparkEnv (
+    val actorSystem: ActorSystem,
     val cache: Cache,
     val serializer: Serializer,
     val closureSerializer: Serializer,
@@ -14,12 +17,27 @@ class SparkEnv (
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
     val shuffleManager: ShuffleManager,
+    val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager
   ) {
 
   /** No-parameter constructor for unit tests. */
-  def this() = this(null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null)
+  def this() = {
+    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
+  }
+
+  def stop() {
+    mapOutputTracker.stop()
+    cacheTracker.stop()
+    shuffleFetcher.stop()
+    shuffleManager.stop()
+    broadcastManager.stop()
+    blockManager.stop()
+    blockManager.master.stop()
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
+  }
 }
 
 object SparkEnv {
@@ -33,17 +51,33 @@ object SparkEnv {
     env.get()
   }
 
-  def createFromSystemProperties(isMaster: Boolean, isLocal: Boolean): SparkEnv = {
+  def createFromSystemProperties(
+      hostname: String,
+      port: Int,
+      isMaster: Boolean,
+      isLocal: Boolean
+    ) : SparkEnv = {
+
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port)
+
+    // Bit of a hack: If this is the master and our port was 0 (meaning bind to any free port),
+    // figure out which port number Akka actually bound to and set spark.master.port to it.
+    if (isMaster && port == 0) {
+      System.setProperty("spark.master.port", boundPort.toString)
+    }
+
     val serializerClass = System.getProperty("spark.serializer", "spark.KryoSerializer")
     val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
     
-    BlockManagerMaster.startBlockManagerMaster(isMaster, isLocal)
-    
-    var blockManager = new BlockManager(serializer)
+    val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
+
+    val blockManager = new BlockManager(blockManagerMaster, serializer)
     
     val connectionManager = blockManager.connectionManager 
     
     val shuffleManager = new ShuffleManager()
+
+    val broadcastManager = new BroadcastManager(isMaster)
 
     val closureSerializerClass =
       System.getProperty("spark.closure.serializer", "spark.JavaSerializer")
@@ -52,10 +86,10 @@ object SparkEnv {
     val cacheClass = System.getProperty("spark.cache.class", "spark.BoundedMemoryCache")
     val cache = Class.forName(cacheClass).newInstance().asInstanceOf[Cache]
 
-    val cacheTracker = new CacheTracker(isMaster, blockManager)
+    val cacheTracker = new CacheTracker(actorSystem, isMaster, blockManager)
     blockManager.cacheTracker = cacheTracker
 
-    val mapOutputTracker = new MapOutputTracker(isMaster)
+    val mapOutputTracker = new MapOutputTracker(actorSystem, isMaster)
 
     val shuffleFetcherClass = 
       System.getProperty("spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
@@ -81,7 +115,17 @@ object SparkEnv {
     }
     */
 
-    new SparkEnv(cache, serializer, closureSerializer, cacheTracker, mapOutputTracker, shuffleFetcher,
-        shuffleManager, blockManager, connectionManager)
+    new SparkEnv(
+      actorSystem,
+      cache,
+      serializer,
+      closureSerializer,
+      cacheTracker,
+      mapOutputTracker,
+      shuffleFetcher,
+      shuffleManager,
+      broadcastManager,
+      blockManager,
+      connectionManager)
   }
 }

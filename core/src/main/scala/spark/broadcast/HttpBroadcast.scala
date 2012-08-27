@@ -10,14 +10,16 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import spark._
+import spark.storage.StorageLevel
 
 class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean)
 extends Broadcast[T] with Logging with Serializable {
   
   def value = value_
 
-  HttpBroadcast.synchronized { 
-    HttpBroadcast.values.put(uuid, 0, value_) 
+  HttpBroadcast.synchronized {
+    SparkEnv.get.blockManager.putSingle(
+      uuid.toString, value_, StorageLevel.MEMORY_ONLY_DESER, false)
   }
 
   if (!isLocal) { 
@@ -25,32 +27,32 @@ extends Broadcast[T] with Logging with Serializable {
   }
 
   // Called by JVM when deserializing an object
-  private def readObject(in: ObjectInputStream): Unit = {
+  private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
-      val cachedVal = HttpBroadcast.values.get(uuid, 0)
-      if (cachedVal != null) {
-        value_ = cachedVal.asInstanceOf[T]
-      } else {
-        logInfo("Started reading broadcast variable " + uuid)
-        val start = System.nanoTime
-        value_ = HttpBroadcast.read[T](uuid)
-        HttpBroadcast.values.put(uuid, 0, value_)
-        val time = (System.nanoTime - start) / 1e9
-        logInfo("Reading broadcast variable " + uuid + " took " + time + " s")
+      SparkEnv.get.blockManager.getSingle(uuid.toString) match {
+        case Some(x) => value_ = x.asInstanceOf[T]
+        case None => {
+          logInfo("Started reading broadcast variable " + uuid)
+          val start = System.nanoTime
+          value_ = HttpBroadcast.read[T](uuid)
+          SparkEnv.get.blockManager.putSingle(
+            uuid.toString, value_, StorageLevel.MEMORY_ONLY_DESER, false)
+          val time = (System.nanoTime - start) / 1e9
+          logInfo("Reading broadcast variable " + uuid + " took " + time + " s")
+        }
       }
     }
   }
 }
 
 class HttpBroadcastFactory extends BroadcastFactory {
-  def initialize(isMaster: Boolean): Unit = HttpBroadcast.initialize(isMaster)
+  def initialize(isMaster: Boolean) = HttpBroadcast.initialize(isMaster)
   def newBroadcast[T](value_ : T, isLocal: Boolean) = new HttpBroadcast[T](value_, isLocal)
+  def stop() = HttpBroadcast.stop()
 }
 
 private object HttpBroadcast extends Logging {
-  val values = SparkEnv.get.cache.newKeySpace()
-
   private var initialized = false
 
   private var broadcastDir: File = null
@@ -59,7 +61,7 @@ private object HttpBroadcast extends Logging {
   private var serverUri: String = null
   private var server: HttpServer = null
 
-  def initialize(isMaster: Boolean): Unit = {
+  def initialize(isMaster: Boolean) {
     synchronized {
       if (!initialized) {
         bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
@@ -70,6 +72,13 @@ private object HttpBroadcast extends Logging {
         serverUri = System.getProperty("spark.httpBroadcast.uri")
         initialized = true
       }
+    }
+  }
+  
+  def stop() {
+    if (server != null) {
+      server.stop()
+      server = null
     }
   }
 

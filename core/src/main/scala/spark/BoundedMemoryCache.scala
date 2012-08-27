@@ -91,7 +91,15 @@ class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
   protected def reportEntryDropped(datasetId: Any, partition: Int, entry: Entry) {
     logInfo("Dropping key (%s, %d) of size %d to make space".format(datasetId, partition, entry.size))
     // TODO: remove BoundedMemoryCache
-    SparkEnv.get.cacheTracker.dropEntry(datasetId.asInstanceOf[(Int, Int)]._2, partition)
+    
+    val (keySpaceId, innerDatasetId) = datasetId.asInstanceOf[(Any, Any)] 
+    innerDatasetId match {
+      case rddId: Int =>
+        SparkEnv.get.cacheTracker.dropEntry(rddId, partition)
+      case broadcastUUID: java.util.UUID =>
+        // TODO: Maybe something should be done if the broadcasted variable falls out of cache  
+      case _ => 
+    }    
   }
 }
 

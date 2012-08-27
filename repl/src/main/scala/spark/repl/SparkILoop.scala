@@ -819,7 +819,6 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
         spark.repl.Main.interp.out.println("Creating SparkContext...");
         spark.repl.Main.interp.out.flush();
         @transient val sc = spark.repl.Main.interp.createSparkContext();
-        sc.waitForRegister();
         spark.repl.Main.interp.out.println("Spark context available as sc.");
         spark.repl.Main.interp.out.flush();
         """)

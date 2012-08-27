@@ -1,6 +1,7 @@
 package spark
 
 import org.scalatest.FunSuite
+import org.scalatest.BeforeAndAfter
 import org.scalatest.prop.Checkers
 
 import scala.collection.mutable.ArrayBuffer
@@ -14,17 +15,29 @@ object FailureSuiteState {
   var tasksRun = 0
   var tasksFailed = 0
 
-  def clear(): Unit = synchronized {
-    tasksRun = 0
-    tasksFailed = 0
+  def clear() {
+    synchronized {
+      tasksRun = 0
+      tasksFailed = 0
+    }
   }
 }
 
-class FailureSuite extends FunSuite {
+class FailureSuite extends FunSuite with BeforeAndAfter {
+  
+  var sc: SparkContext = _
+    
+  after {
+    if (sc != null) {
+      sc.stop()
+      sc = null
+    }
+  }
+  
   // Run a 3-task map job in which task 1 deterministically fails once, and check
   // whether the job completes successfully and we ran 4 tasks in total.
   test("failure in a single-stage job") {
-    val sc = new SparkContext("local[1,1]", "test")
+    sc = new SparkContext("local[1,1]", "test")
     val results = sc.makeRDD(1 to 3, 3).map { x =>
       FailureSuiteState.synchronized {
         FailureSuiteState.tasksRun += 1
@@ -39,13 +52,12 @@ class FailureSuite extends FunSuite {
       assert(FailureSuiteState.tasksRun === 4)
     }
     assert(results.toList === List(1,4,9))
-    sc.stop()
     FailureSuiteState.clear()
   }
 
   // Run a map-reduce job in which a reduce task deterministically fails once.
   test("failure in a two-stage job") {
-    val sc = new SparkContext("local[1,1]", "test")
+    sc = new SparkContext("local[1,1]", "test")
     val results = sc.makeRDD(1 to 3).map(x => (x, x)).groupByKey(3).map {
       case (k, v) => 
         FailureSuiteState.synchronized {
@@ -61,12 +73,11 @@ class FailureSuite extends FunSuite {
       assert(FailureSuiteState.tasksRun === 4)
     }
     assert(results.toSet === Set((1, 1), (2, 4), (3, 9)))
-    sc.stop()
     FailureSuiteState.clear()
   }
 
   test("failure because task results are not serializable") {
-    val sc = new SparkContext("local[1,1]", "test")
+    sc = new SparkContext("local[1,1]", "test")
     val results = sc.makeRDD(1 to 3).map(x => new NonSerializable)
 
     val thrown = intercept[spark.SparkException] {
@@ -75,7 +86,6 @@ class FailureSuite extends FunSuite {
     assert(thrown.getClass === classOf[spark.SparkException])
     assert(thrown.getMessage.contains("NotSerializableException"))
 
-    sc.stop()
     FailureSuiteState.clear()
   }
 

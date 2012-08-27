@@ -18,7 +18,7 @@ class ParallelCollectionSplit[T: ClassManifest](
     case _ => false
   }
 
-  override val index = slice
+  override val index: Int = slice
 }
 
 class ParallelCollection[T: ClassManifest](

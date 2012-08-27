@@ -17,7 +17,7 @@ trait Logging {
   // Method to get or create the logger for this object
   def log: Logger = {
     if (log_ == null) {
-      var className = this.getClass().getName()
+      var className = this.getClass.getName
       // Ignore trailing $'s in the class names for Scala objects
       if (className.endsWith("$")) {
         className = className.substring(0, className.length - 1)
@@ -28,31 +28,46 @@ trait Logging {
   }
 
   // Log methods that take only a String
-  def logInfo(msg: => String) = if (log.isInfoEnabled /*&& msg.contains("job finished in")*/) log.info(msg)
+  def logInfo(msg: => String) {
+    if (log.isInfoEnabled) log.info(msg)
+  }
 
-  def logDebug(msg: => String) = if (log.isDebugEnabled) log.debug(msg)
+  def logDebug(msg: => String) {
+    if (log.isDebugEnabled) log.debug(msg)
+  }
   
-  def logTrace(msg: => String) = if (log.isTraceEnabled) log.trace(msg)
+  def logTrace(msg: => String) {
+    if (log.isTraceEnabled) log.trace(msg)
+  }
 
-  def logWarning(msg: => String) = if (log.isWarnEnabled) log.warn(msg)
+  def logWarning(msg: => String) {
+    if (log.isWarnEnabled) log.warn(msg)
+  }
 
-  def logError(msg: => String) = if (log.isErrorEnabled) log.error(msg)
+  def logError(msg: => String) {
+    if (log.isErrorEnabled) log.error(msg)
+  }
 
   // Log methods that take Throwables (Exceptions/Errors) too
-  def logInfo(msg: => String, throwable: Throwable) =
-    if (log.isInfoEnabled) log.info(msg)
+  def logInfo(msg: => String, throwable: Throwable) {
+    if (log.isInfoEnabled) log.info(msg, throwable)
+  }
 
-  def logDebug(msg: => String, throwable: Throwable) =
-    if (log.isDebugEnabled) log.debug(msg)
+  def logDebug(msg: => String, throwable: Throwable) {
+    if (log.isDebugEnabled) log.debug(msg, throwable)
+  }
 
-  def logTrace(msg: => String, throwable: Throwable) =
-    if (log.isTraceEnabled) log.trace(msg)
+  def logTrace(msg: => String, throwable: Throwable) {
+    if (log.isTraceEnabled) log.trace(msg, throwable)
+  }
 
-  def logWarning(msg: => String, throwable: Throwable) =
+  def logWarning(msg: => String, throwable: Throwable) {
     if (log.isWarnEnabled) log.warn(msg, throwable)
+  }
 
-  def logError(msg: => String, throwable: Throwable) =
+  def logError(msg: => String, throwable: Throwable) {
     if (log.isErrorEnabled) log.error(msg, throwable)
+  }
 
   // Method for ensuring that logging is initialized, to avoid having multiple
   // threads do it concurrently (as SLF4J initialization is not thread safe).

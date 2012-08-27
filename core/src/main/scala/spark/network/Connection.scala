@@ -107,7 +107,7 @@ extends Connection(SocketChannel.open, selector_) {
     val defaultChunkSize = 65536  //32768 //16384 
     var nextMessageToBeUsed = 0
 
-    def addMessage(message: Message): Unit = {
+    def addMessage(message: Message) {
       messages.synchronized{ 
         /*messages += message*/
         messages.enqueue(message)

@@ -76,7 +76,7 @@ object ClosureCleaner extends Logging {
     }
   }
   
-  def clean(func: AnyRef): Unit = {
+  def clean(func: AnyRef) {
     // TODO: cache outerClasses / innerClasses / accessedFields
     val outerClasses = getOuterClasses(func)
     val innerClasses = getInnerClasses(func)
@@ -109,7 +109,7 @@ object ClosureCleaner extends Logging {
     // Clone the closure objects themselves, nulling out any fields that are not
     // used in the closure we're working on or any of its inner closures.
     for ((cls, obj) <- outerPairs) {
-      outer = instantiateClass(cls, outer, inInterpreter);
+      outer = instantiateClass(cls, outer, inInterpreter)
       for (fieldName <- accessedFields(cls)) {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)
@@ -139,10 +139,10 @@ object ClosureCleaner extends Logging {
       return cons.newInstance(params: _*).asInstanceOf[AnyRef]
     } else {
       // Use reflection to instantiate object without calling constructor
-      val rf = sun.reflect.ReflectionFactory.getReflectionFactory();
-      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor();
+      val rf = sun.reflect.ReflectionFactory.getReflectionFactory()
+      val parentCtor = classOf[java.lang.Object].getDeclaredConstructor()
       val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
-      val obj = newCtor.newInstance().asInstanceOf[AnyRef];
+      val obj = newCtor.newInstance().asInstanceOf[AnyRef]
       if (outer != null) {
         //logInfo("3: Setting $outer on " + cls + " to " + outer);
         val field = cls.getDeclaredField("$outer")

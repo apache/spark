@@ -1,12 +1,24 @@
 package spark
 
 import org.scalatest.FunSuite
+import org.scalatest.BeforeAndAfter
 
 import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
 
-class PartitioningSuite extends FunSuite {
+class PartitioningSuite extends FunSuite with BeforeAndAfter {
+  
+  var sc: SparkContext = _
+  
+  after {
+    if(sc != null) {
+      sc.stop()
+      sc = null
+    }
+  }
+  
+  
   test("HashPartitioner equality") {
     val p2 = new HashPartitioner(2)
     val p4 = new HashPartitioner(4)
@@ -20,7 +32,7 @@ class PartitioningSuite extends FunSuite {
   }
 
   test("RangePartitioner equality") {
-    val sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
 
     // Make an RDD where all the elements are the same so that the partition range bounds
     // are deterministically all the same.
@@ -46,12 +58,10 @@ class PartitioningSuite extends FunSuite {
     assert(p4 != descendingP4)
     assert(descendingP2 != p2)
     assert(descendingP4 != p4)
-
-    sc.stop()
   }
 
   test("HashPartitioner not equal to RangePartitioner") {
-    val sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
     val rdd = sc.parallelize(1 to 10).map(x => (x, x))
     val rangeP2 = new RangePartitioner(2, rdd)
     val hashP2 = new HashPartitioner(2)
@@ -59,11 +69,10 @@ class PartitioningSuite extends FunSuite {
     assert(hashP2 === hashP2)
     assert(hashP2 != rangeP2)
     assert(rangeP2 != hashP2)
-    sc.stop()
   }
 
   test("partitioner preservation") {
-    val sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
 
     val rdd = sc.parallelize(1 to 10, 4).map(x => (x, x))
 
@@ -95,7 +104,5 @@ class PartitioningSuite extends FunSuite {
     assert(grouped2.leftOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.rightOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.cogroup(reduced2).partitioner === grouped2.partitioner)
-
-    sc.stop()
   }
 }

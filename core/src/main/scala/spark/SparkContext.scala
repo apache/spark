@@ -6,7 +6,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import akka.actor.Actor
 import akka.actor.Actor._
 
-import scala.actors.remote.RemoteActor
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
@@ -31,7 +30,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
 
-import org.apache.mesos.MesosNativeLibrary
+import org.apache.mesos.{Scheduler, MesosNativeLibrary}
 
 import spark.broadcast._
 
@@ -42,42 +41,39 @@ import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.mesos.MesosScheduler
-import spark.scheduler.mesos.CoarseMesosScheduler
+import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
+import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.BlockManagerMaster
 
 class SparkContext(
     master: String,
     frameworkName: String,
-    val sparkHome: String = null,
-    val jars: Seq[String] = Nil)
+    val sparkHome: String,
+    val jars: Seq[String])
   extends Logging {
   
+  def this(master: String, frameworkName: String) = this(master, frameworkName, null, Nil)
+
   // Ensure logging is initialized before we spawn any threads
   initLogging()
 
   // Set Spark master host and port system properties
   if (System.getProperty("spark.master.host") == null) {
-    System.setProperty("spark.master.host", Utils.localIpAddress)
+    System.setProperty("spark.master.host", Utils.localIpAddress())
   }
   if (System.getProperty("spark.master.port") == null) {
-    System.setProperty("spark.master.port", "7077")
+    System.setProperty("spark.master.port", "0")
   }
 
-  // Make sure a proper class loader is set for remote actors (unless user set one)
-  if (RemoteActor.classLoader == null) {
-    RemoteActor.classLoader = getClass.getClassLoader
-  }
-
-  remote.start(System.getProperty("spark.master.host"), 
-               System.getProperty("spark.master.port").toInt)
-  
-  private val isLocal = master.startsWith("local") // TODO: better check for local
+  private val isLocal = (master == "local" || master.startsWith("local["))
 
   // Create the Spark execution environment (cache, map output tracker, etc)
-  val env = SparkEnv.createFromSystemProperties(true, isLocal) 
+  val env = SparkEnv.createFromSystemProperties(
+    System.getProperty("spark.master.host"),
+    System.getProperty("spark.master.port").toInt,
+    true,
+    isLocal)
   SparkEnv.set(env)
-  Broadcast.initialize(true)
 
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
@@ -85,20 +81,42 @@ class SparkContext(
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
+    // Regular expression for connecting to Spark deploy clusters
+    val SPARK_REGEX = """(spark://.*)""".r
+
     master match {
       case "local" => 
         new LocalScheduler(1, 0)
+      
       case LOCAL_N_REGEX(threads) => 
         new LocalScheduler(threads.toInt, 0)
+
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         new LocalScheduler(threads.toInt, maxFailures.toInt)
+      
+      case SPARK_REGEX(sparkUrl) =>
+        val scheduler = new ClusterScheduler(this)
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
+        scheduler.initialize(backend)
+        scheduler
+      
+      case "standalone" =>
+        val scheduler = new ClusterScheduler(this)
+        val backend = new StandaloneSchedulerBackend(scheduler, this.env.actorSystem)
+        scheduler.initialize(backend)
+        scheduler
+        
       case _ =>
-        System.loadLibrary("mesos")
-        if (System.getProperty("spark.mesos.coarse", "false") == "true") {
-          new CoarseMesosScheduler(this, master, frameworkName)
+        MesosNativeLibrary.load()
+        val scheduler = new ClusterScheduler(this)
+        val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
+        val backend = if (coarseGrained) {
+          new CoarseMesosSchedulerBackend(scheduler, this, master, frameworkName)
         } else {
-          new MesosScheduler(this, master, frameworkName)
+          new MesosSchedulerBackend(scheduler, this, master, frameworkName)
         }
+        scheduler.initialize(backend)
+        scheduler
     }
   }
   taskScheduler.start()
@@ -121,7 +139,7 @@ class SparkContext(
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    */
@@ -171,15 +189,12 @@ class SparkContext(
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](path: String)
       (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F]): RDD[(K, V)] = {
-    val job = new NewHadoopJob
-    NewFileInputFormat.addInputPath(job, new Path(path))
-    val conf = job.getConfiguration
     newAPIHadoopFile(
         path,
         fm.erasure.asInstanceOf[Class[F]],
         km.erasure.asInstanceOf[Class[K]],
         vm.erasure.asInstanceOf[Class[V]],
-        conf)
+        new Configuration)
   }
 
   /** 
@@ -191,8 +206,24 @@ class SparkContext(
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration
-      ): RDD[(K, V)] = new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+      conf: Configuration): RDD[(K, V)] = {
+    val job = new NewHadoopJob(conf)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updatedConf = job.getConfiguration
+    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf)
+  }
+
+  /** 
+   * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
+   * and extra configuration options to pass to the input format.
+   */
+  def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
+      conf: Configuration,
+      fClass: Class[F],
+      kClass: Class[K],
+      vClass: Class[V]): RDD[(K, V)] = {
+    new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+  }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types */
   def sequenceFile[K, V](path: String,
@@ -248,36 +279,39 @@ class SparkContext(
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassManifest](rdds: RDD[T]*): RDD[T] = new UnionRDD(this, rdds)
+  def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
+
+  /** Build the union of a list of RDDs. */
+  def union[T: ClassManifest](first: RDD[T], rest: RDD[T]*): RDD[T] =
+    new UnionRDD(this, Seq(first) ++ rest)
 
   // Methods for creating shared variables
 
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
 
+  /**
+   * Create an accumulable shared variable, with a `+=` method
+   * @tparam T accumulator type
+   * @tparam R type that can be added to the accumulator
+   */
+  def accumulable[T,R](initialValue: T)(implicit param: AccumulableParam[T,R]) =
+    new Accumulable(initialValue, param)
+
+
   // Keep around a weak hash map of values to Cached versions?
-  def broadcast[T](value: T) = Broadcast.getBroadcastFactory.newBroadcast[T] (value, isLocal)
+  def broadcast[T](value: T) = SparkEnv.get.broadcastManager.newBroadcast[T] (value, isLocal)
 
   // Stop the SparkContext
   def stop() {
-    remote.shutdownServerModule()
     dagScheduler.stop()
     dagScheduler = null
     taskScheduler = null
-    // TODO: Broadcast.stop(), Cache.stop()?
-    env.mapOutputTracker.stop()
-    env.cacheTracker.stop()
-    env.shuffleFetcher.stop()
-    env.shuffleManager.stop()
-    env.blockManager.stop()
-    BlockManagerMaster.stopBlockManagerMaster()
+    // TODO: Cache.stop()?
+    env.stop()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
-  }
-
-  // Wait for the scheduler to be registered with the cluster manager
-  def waitForRegister() {
-    taskScheduler.waitForRegister()
+    logInfo("Successfully stopped SparkContext")
   }
 
   // Get Spark's home location from either a value set through the constructor,
@@ -427,18 +461,6 @@ object SparkContext {
   implicit def stringToText(s: String) = new Text(s)
 
   private implicit def arrayToArrayWritable[T <% Writable: ClassManifest](arr: Traversable[T]): ArrayWritable = {
-    def getWritableClass[T <% Writable: ClassManifest](): Class[_ <: Writable] = {
-      val c = {
-       if (classOf[Writable].isAssignableFrom(classManifest[T].erasure)) {
-         classManifest[T].erasure
-       } else {
-         implicitly[T => Writable].getClass.getMethods()(0).getReturnType
-       }
-       // TODO: use something like WritableConverter to avoid reflection
-      }
-      c.asInstanceOf[Class[ _ <: Writable]]
-    }
-
     def anyToWritable[U <% Writable](u: U): Writable = u
     
     new ArrayWritable(classManifest[T].erasure.asInstanceOf[Class[Writable]],

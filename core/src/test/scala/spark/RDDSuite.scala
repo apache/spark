@@ -2,11 +2,22 @@ package spark
 
 import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
+import org.scalatest.BeforeAndAfter
 import SparkContext._
 
-class RDDSuite extends FunSuite {
+class RDDSuite extends FunSuite with BeforeAndAfter {
+  
+  var sc: SparkContext = _
+  
+  after {
+    if (sc != null) {
+      sc.stop()
+      sc = null
+    }
+  }
+  
   test("basic operations") {
-    val sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
     assert(nums.reduce(_ + _) === 10)
@@ -18,11 +29,19 @@ class RDDSuite extends FunSuite {
     assert(nums.glom().map(_.toList).collect().toList === List(List(1, 2), List(3, 4)))
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
     assert(partitionSums.collect().toList === List(3, 7))
-    sc.stop()
+  }
+
+  test("SparkContext.union") {
+    sc = new SparkContext("local", "test")
+    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    assert(sc.union(nums).collect().toList === List(1, 2, 3, 4))
+    assert(sc.union(nums, nums).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
+    assert(sc.union(Seq(nums)).collect().toList === List(1, 2, 3, 4))
+    assert(sc.union(Seq(nums, nums)).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
   }
 
   test("aggregate") {
-    val sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
     val pairs = sc.makeRDD(Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
     type StringMap = HashMap[String, Int]
     val emptyMap = new StringMap {
@@ -40,6 +59,11 @@ class RDDSuite extends FunSuite {
     }
     val result = pairs.aggregate(emptyMap)(mergeElement, mergeMaps)
     assert(result.toSet === Set(("a", 6), ("b", 2), ("c", 5)))
-    sc.stop()
+  }
+
+  test("checkpointing") {
+    sc = new SparkContext("local", "test")
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).flatMap(x => 1 to x).checkpoint()
+    assert(rdd.collect().toList === List(1, 1, 2, 1, 2, 3, 1, 2, 3, 4))
   }
 }

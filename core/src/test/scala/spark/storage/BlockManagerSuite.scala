@@ -1,17 +1,55 @@
 package spark.storage
 
-import spark.KryoSerializer
+import java.nio.ByteBuffer
+
+import akka.actor._
 
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester
 
-class BlockManagerSuite extends FunSuite with BeforeAndAfter{
+import spark.KryoSerializer
+import spark.SizeEstimator
+import spark.util.ByteBufferInputStream
+
+class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
+  var actorSystem: ActorSystem = null
+  var master: BlockManagerMaster = null
+  var oldArch: String = _
+  var oldOops: String = _
+
   before {
-     BlockManagerMaster.startBlockManagerMaster(true, true)
+    actorSystem = ActorSystem("test")
+    master = new BlockManagerMaster(actorSystem, true, true)
+
+    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case 
+    oldArch = System.setProperty("os.arch", "amd64")
+    oldOops = System.setProperty("spark.test.useCompressedOops", "true")
+    val initialize = PrivateMethod[Unit]('initialize)
+    SizeEstimator invokePrivate initialize()
   }
-  
+
+  after {
+    actorSystem.shutdown()
+    actorSystem.awaitTermination()
+    actorSystem = null
+    master = null
+
+    if (oldArch != null) {
+      System.setProperty("os.arch", oldArch)
+    } else {
+      System.clearProperty("os.arch")
+    }
+
+    if (oldOops != null) {
+      System.setProperty("spark.test.useCompressedOops", oldOops)
+    } else {
+      System.clearProperty("spark.test.useCompressedOops")
+    }
+  }
+
   test("manager-master interaction") {
-    val store = new BlockManager(2000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 2000)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -27,21 +65,21 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
     assert(store.getSingle("a3") != None, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
-    assert(BlockManagerMaster.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
-    assert(BlockManagerMaster.mustGetLocations(GetLocations("a2")).size > 0, "master was not told about a2")
-    assert(BlockManagerMaster.mustGetLocations(GetLocations("a3")).size === 0, "master was told about a3")
+    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
+    assert(master.mustGetLocations(GetLocations("a2")).size > 0, "master was not told about a2")
+    assert(master.mustGetLocations(GetLocations("a3")).size === 0, "master was told about a3")
     
     // Setting storage level of a1 and a2 to invalid; they should be removed from store and master
     store.setLevel("a1", new StorageLevel(false, false, false, 1))
     store.setLevel("a2", new StorageLevel(true, false, false, 0))
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
-    assert(BlockManagerMaster.mustGetLocations(GetLocations("a1")).size === 0, "master did not remove a1")
-    assert(BlockManagerMaster.mustGetLocations(GetLocations("a2")).size === 0, "master did not remove a2")
+    assert(master.mustGetLocations(GetLocations("a1")).size === 0, "master did not remove a1")
+    assert(master.mustGetLocations(GetLocations("a2")).size === 0, "master did not remove a2")
   }
 
   test("in-memory LRU storage") {
-    val store = new BlockManager(1000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -62,7 +100,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
   }
   
   test("in-memory LRU storage with serialization") {
-    val store = new BlockManager(1000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -83,7 +121,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
   }
   
   test("on-disk storage") {
-    val store = new BlockManager(1000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -96,7 +134,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
   }
 
   test("disk and memory storage") {
-    val store = new BlockManager(1000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -110,7 +148,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
   }
 
   test("disk and memory storage with serialization") {
-    val store = new BlockManager(1000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -124,7 +162,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
   }
 
   test("LRU with mixed storage levels") {
-    val store = new BlockManager(1000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -150,7 +188,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
   }
 
   test("in-memory LRU with streams") {
-    val store = new BlockManager(1000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
@@ -176,7 +214,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
   }
 
   test("LRU with mixed storage levels and streams") {
-    val store = new BlockManager(1000, new KryoSerializer)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
@@ -201,6 +239,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
     assert(store.get("list3").get.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
     store.put("list4", list4.iterator, StorageLevel.DISK_AND_MEMORY)
+    Thread.sleep(100)
     assert(store.get("list1") === None, "list1 was in store")
     assert(store.get("list2") != None, "list3 was not in store")
     assert(store.get("list2").get.size === 2)
@@ -208,5 +247,17 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter{
     assert(store.get("list3").get.size === 2)
     assert(store.get("list4") != None, "list4 was not in store")
     assert(store.get("list4").get.size === 2)
-  } 
+  }
+
+  test("negative byte values in ByteBufferInputStream") {
+    val buffer = ByteBuffer.wrap(Array[Int](254, 255, 0, 1, 2).map(_.toByte).toArray)
+    val stream = new ByteBufferInputStream(buffer)
+    val temp = new Array[Byte](10)
+    assert(stream.read() === 254, "unexpected byte read")
+    assert(stream.read() === 255, "unexpected byte read")
+    assert(stream.read() === 0, "unexpected byte read")
+    assert(stream.read(temp, 0, temp.length) === 2, "unexpected number of bytes read")
+    assert(stream.read() === -1, "end of stream not signalled")
+    assert(stream.read(temp, 0, temp.length) === -1, "end of stream not signalled")
+  }
 }

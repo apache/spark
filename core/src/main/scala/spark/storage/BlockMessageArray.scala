@@ -36,7 +36,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
     println()
     println()
     */
-    while(buffer.remaining() > 0) {
+    while (buffer.remaining() > 0) {
       val size = buffer.getInt()
       logDebug("Creating block message of size " + size + " bytes")
       val newBuffer = buffer.slice()
@@ -53,7 +53,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
     this.blockMessages = newBlockMessages 
   }
   
-  def toBufferMessage(): BufferMessage = {
+  def toBufferMessage: BufferMessage = {
     val buffers = new ArrayBuffer[ByteBuffer]()
 
     blockMessages.foreach(blockMessage => {
@@ -123,13 +123,13 @@ object BlockMessageArray {
     val newBlockMessageArray = BlockMessageArray.fromBufferMessage(newBufferMessage)
     println("Converted back to block message array")
     newBlockMessageArray.foreach(blockMessage => {
-      blockMessage.getType() match {
+      blockMessage.getType match {
         case BlockMessage.TYPE_PUT_BLOCK => {
-          val pB = PutBlock(blockMessage.getId(), blockMessage.getData(), blockMessage.getLevel())
+          val pB = PutBlock(blockMessage.getId, blockMessage.getData, blockMessage.getLevel)
           println(pB)
         } 
         case BlockMessage.TYPE_GET_BLOCK => {
-          val gB = new GetBlock(blockMessage.getId())
+          val gB = new GetBlock(blockMessage.getId)
           println(gB)
         }
       }

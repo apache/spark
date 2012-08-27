@@ -5,6 +5,7 @@ import java.util.HashMap
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions._
 
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
@@ -42,7 +43,7 @@ object ShuffleMapTask {
       if (old != null) {
         return old
       } else {
-        val loader = currentThread.getContextClassLoader
+        val loader = Thread.currentThread.getContextClassLoader
         val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
         val objIn = new ObjectInputStream(in) {
           override def resolveClass(desc: ObjectStreamClass) =
@@ -104,10 +105,10 @@ class ShuffleMapTask(
     split = in.readObject().asInstanceOf[Split]
   }
 
-  override def run(attemptId: Int): BlockManagerId = {
+  override def run(attemptId: Long): BlockManagerId = {
     val numOutputSplits = dep.partitioner.numPartitions
     val aggregator = dep.aggregator.asInstanceOf[Aggregator[Any, Any, Any]]
-    val partitioner = dep.partitioner.asInstanceOf[Partitioner]
+    val partitioner = dep.partitioner
     val buckets = Array.tabulate(numOutputSplits)(_ => new HashMap[Any, Any])
     for (elem <- rdd.iterator(split)) {
       val (k, v) = elem.asInstanceOf[(Any, Any)]
@@ -124,14 +125,10 @@ class ShuffleMapTask(
     val blockManager = SparkEnv.get.blockManager
     for (i <- 0 until numOutputSplits) {
       val blockId = "shuffleid_" + dep.shuffleId + "_" + partition + "_" + i
-      val arr = new ArrayBuffer[Any]
-      val iter = buckets(i).entrySet().iterator()
-      while (iter.hasNext()) {
-        val entry = iter.next()
-        arr += ((entry.getKey(), entry.getValue()))
-      }
+      // Get a scala iterator from java map
+      val iter: Iterator[(Any, Any)] = buckets(i).iterator
       // TODO: This should probably be DISK_ONLY
-      blockManager.put(blockId, arr.iterator, StorageLevel.MEMORY_ONLY, false)
+      blockManager.put(blockId, iter, StorageLevel.MEMORY_ONLY, false)
     }
     return SparkEnv.get.blockManager.blockManagerId
   }

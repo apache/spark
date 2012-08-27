@@ -498,7 +498,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     if (!deadHosts.contains(host)) {
       logInfo("Host lost: " + host)
       deadHosts += host
-      BlockManagerMaster.notifyADeadHost(host)
+      env.blockManager.master.notifyADeadHost(host)
       // TODO: This will be really slow if we keep accumulating shuffle map stages
       for ((shuffleId, stage) <- shuffleToMapStage) {
         stage.removeOutputsOnHost(host)
@@ -529,7 +529,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocs(n.rdd, inPart)
           if (locs != Nil)
-            return locs;
+            return locs
         }
       case _ =>
     })

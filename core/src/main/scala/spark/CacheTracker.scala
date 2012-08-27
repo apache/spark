@@ -1,8 +1,11 @@
 package spark
 
 import akka.actor._
-import akka.actor.Actor
-import akka.actor.Actor._
+import akka.dispatch._
+import akka.pattern.ask
+import akka.remote._
+import akka.util.Duration
+import akka.util.Timeout
 import akka.util.duration._
 
 import scala.collection.mutable.ArrayBuffer
@@ -44,12 +47,12 @@ class CacheTrackerActor extends Actor with Logging {
         Utils.memoryBytesToString(size), host))
       slaveCapacity.put(host, size)
       slaveUsage.put(host, 0)
-      self.reply(true)
+      sender ! true
 
     case RegisterRDD(rddId: Int, numPartitions: Int) =>
       logInfo("Registering RDD " + rddId + " with " + numPartitions + " partitions")
       locs(rddId) = Array.fill[List[String]](numPartitions)(Nil)
-      self.reply(true)
+      sender ! true
 
     case AddedToCache(rddId, partition, host, size) =>
       slaveUsage.put(host, getCacheUsage(host) + size)
@@ -57,7 +60,7 @@ class CacheTrackerActor extends Actor with Logging {
         rddId, partition, host, Utils.memoryBytesToString(size),
         Utils.memoryBytesToString(getCacheAvailable(host))))
       locs(rddId)(partition) = host :: locs(rddId)(partition)
-      self.reply(true)
+      sender ! true
 
     case DroppedFromCache(rddId, partition, host, size) =>
       logInfo("Cache entry removed: (%s, %s) on %s (size dropped: %s, available: %s)".format(
@@ -70,7 +73,7 @@ class CacheTrackerActor extends Actor with Logging {
         logError("Cache usage on %s is negative (%d)".format(host, usage))
       }
       locs(rddId)(partition) = locs(rddId)(partition).filterNot(_ == host)
-      self.reply(true)
+      sender ! true
 
     case MemoryCacheLost(host) =>
       logInfo("Memory cache lost on " + host)
@@ -79,48 +82,67 @@ class CacheTrackerActor extends Actor with Logging {
           locations(i) = locations(i).filterNot(_ == host)
         }
       }
-      self.reply(true)
+      sender ! true
 
     case GetCacheLocations =>
       logInfo("Asked for current cache locations")
-      self.reply(locs.map{case (rrdId, array) => (rrdId -> array.clone())})
+      sender ! locs.map{case (rrdId, array) => (rrdId -> array.clone())}
 
     case GetCacheStatus =>
       val status = slaveCapacity.map { case (host, capacity) =>
         (host, capacity, getCacheUsage(host))
       }.toSeq
-      self.reply(status)
+      sender ! status
 
     case StopCacheTracker =>
-      logInfo("CacheTrackerActor Server stopped!")
-      self.reply(true)
-      self.exit()
+      logInfo("Stopping CacheTrackerActor")
+      sender ! true
+      context.stop(self)
   }
 }
 
-class CacheTracker(isMaster: Boolean, blockManager: BlockManager) extends Logging {
+class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: BlockManager)
+  extends Logging {
+ 
   // Tracker actor on the master, or remote reference to it on workers
   val ip: String = System.getProperty("spark.master.host", "localhost")
   val port: Int = System.getProperty("spark.master.port", "7077").toInt
-  val aName: String = "CacheTracker"
-  
-  if (isMaster) {
-  }
+  val actorName: String = "CacheTracker"
+
+  val timeout = 10.seconds
   
   var trackerActor: ActorRef = if (isMaster) {
-    val actor = actorOf(new CacheTrackerActor)
-    remote.register(aName, actor)
-    actor.start()
-    logInfo("Registered CacheTrackerActor actor @ " + ip + ":" + port)
+    val actor = actorSystem.actorOf(Props[CacheTrackerActor], name = actorName)
+    logInfo("Registered CacheTrackerActor actor")
     actor
   } else {
-    remote.actorFor(aName, ip, port)
+    val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
+    actorSystem.actorFor(url)
   }
 
   val registeredRddIds = new HashSet[Int]
 
   // Remembers which splits are currently being loaded (on worker nodes)
   val loading = new HashSet[String]
+
+  // Send a message to the trackerActor and get its result within a default timeout, or
+  // throw a SparkException if this fails.
+  def askTracker(message: Any): Any = {
+    try {
+      val future = trackerActor.ask(message)(timeout)
+      return Await.result(future, timeout)
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error communicating with CacheTracker", e)
+    }
+  }
+
+  // Send a one-way message to the trackerActor, to which we expect it to reply with true.
+  def communicate(message: Any) {
+    if (askTracker(message) != true) {
+      throw new SparkException("Error reply received from CacheTracker")
+    }
+  }
   
   // Registers an RDD (on master only)
   def registerRDD(rddId: Int, numPartitions: Int) {
@@ -128,62 +150,33 @@ class CacheTracker(isMaster: Boolean, blockManager: BlockManager) extends Loggin
       if (!registeredRddIds.contains(rddId)) {
         logInfo("Registering RDD ID " + rddId + " with cache")
         registeredRddIds += rddId
-        (trackerActor ? RegisterRDD(rddId, numPartitions)).as[Any] match {
-          case Some(true) =>
-            logInfo("CacheTracker registerRDD " + RegisterRDD(rddId, numPartitions) + " successfully.")
-          case Some(oops) =>
-            logError("CacheTracker registerRDD" + RegisterRDD(rddId, numPartitions) + " failed: " + oops)
-          case None => 
-            logError("CacheTracker registerRDD None. " + RegisterRDD(rddId, numPartitions))
-            throw new SparkException("Internal error: CacheTracker registerRDD None.")
-        }
+        communicate(RegisterRDD(rddId, numPartitions))
+        logInfo(RegisterRDD(rddId, numPartitions) + " successful")
       }
     }
   }
   
   // For BlockManager.scala only
   def cacheLost(host: String) {
-    (trackerActor ? MemoryCacheLost(host)).as[Any] match {
-       case Some(true) =>
-         logInfo("CacheTracker successfully removed entries on " + host)
-       case _ =>
-         logError("CacheTracker did not reply to MemoryCacheLost")
-    }
+    communicate(MemoryCacheLost(host))
+    logInfo("CacheTracker successfully removed entries on " + host)
   }
 
   // Get the usage status of slave caches. Each tuple in the returned sequence
   // is in the form of (host name, capacity, usage).
   def getCacheStatus(): Seq[(String, Long, Long)] = {
-    (trackerActor ? GetCacheStatus) match {
-      case h: Seq[(String, Long, Long)] => h.asInstanceOf[Seq[(String, Long, Long)]]
-
-      case _ =>
-        throw new SparkException(
-          "Internal error: CacheTrackerActor did not reply with a Seq[Tuple3[String, Long, Long]")
-    }
+    askTracker(GetCacheStatus).asInstanceOf[Seq[(String, Long, Long)]]
   }
   
   // For BlockManager.scala only
   def notifyTheCacheTrackerFromBlockManager(t: AddedToCache) {
-    (trackerActor ? t).as[Any] match {
-      case Some(true) =>
-        logInfo("CacheTracker notifyTheCacheTrackerFromBlockManager successfully.")
-      case Some(oops) =>
-        logError("CacheTracker notifyTheCacheTrackerFromBlockManager failed: " + oops)
-      case None => 
-        logError("CacheTracker notifyTheCacheTrackerFromBlockManager None.")
-    }
+    communicate(t)
+    logInfo("notifyTheCacheTrackerFromBlockManager successful")
   }
   
   // Get a snapshot of the currently known locations
   def getLocationsSnapshot(): HashMap[Int, Array[List[String]]] = {
-    (trackerActor ? GetCacheLocations).as[Any] match {
-      case Some(h: HashMap[_, _]) =>
-        h.asInstanceOf[HashMap[Int, Array[List[String]]]]
-        
-      case _ => 
-        throw new SparkException("Internal error: CacheTrackerActor did not reply with a HashMap")
-    }
+    askTracker(GetCacheLocations).asInstanceOf[HashMap[Int, Array[List[String]]]]
   }
   
   // Gets or computes an RDD split
@@ -229,11 +222,16 @@ class CacheTracker(isMaster: Boolean, blockManager: BlockManager) extends Loggin
         // TODO: also register a listener for when it unloads
         logInfo("Computing partition " + split)
         try {
-          val values = new ArrayBuffer[Any]
-          values ++= rdd.compute(split)
-          blockManager.put(key, values.iterator, storageLevel, false)
+          // BlockManager will iterate over results from compute to create RDD
+          blockManager.put(key, rdd.compute(split), storageLevel, false)
           //future.apply() // Wait for the reply from the cache tracker
-          return values.iterator.asInstanceOf[Iterator[T]]
+          blockManager.get(key) match {
+            case Some(values) => 
+              return values.asInstanceOf[Iterator[T]]
+            case None =>
+              logWarning("loading partition failed after computing it " + key) 
+              return null
+          }
         } finally {
           loading.synchronized {
             loading.remove(key)
@@ -245,12 +243,11 @@ class CacheTracker(isMaster: Boolean, blockManager: BlockManager) extends Loggin
 
   // Called by the Cache to report that an entry has been dropped from it
   def dropEntry(rddId: Int, partition: Int) {
-    //TODO - do we really want to use '!!' when nobody checks returned future? '!' seems to enough here.
-    trackerActor !! DroppedFromCache(rddId, partition, Utils.localHostName())
+    communicate(DroppedFromCache(rddId, partition, Utils.localHostName()))
   }
 
   def stop() {
-    trackerActor !! StopCacheTracker
+    communicate(StopCacheTracker)
     registeredRddIds.clear()
     trackerActor = null
   }

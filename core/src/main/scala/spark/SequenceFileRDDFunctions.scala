@@ -31,7 +31,7 @@ import SparkContext._
  * we need more implicit parameters to convert our keys and values to Writable.
  */
 class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : ClassManifest](
-    self: RDD[(K,V)])
+    self: RDD[(K, V)])
   extends Logging
   with Serializable {
   

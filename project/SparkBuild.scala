@@ -2,6 +2,7 @@ import sbt._
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
+import twirl.sbt.TwirlPlugin._
 
 object SparkBuild extends Build {
   // Hadoop version to build against. For the YARN branch, this needs to support YARN.
@@ -30,9 +31,10 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
       "org.scalatest" %% "scalatest" % "1.6.1" % "test",
-      "org.scala-tools.testing" %% "scalacheck" % "1.9" % "test"
+      "org.scalacheck" %% "scalacheck" % "1.9" % "test",
+      "com.novocode" % "junit-interface" % "0.8" % "test"
     ),
-    parallelExecution in Test := false,
+    parallelExecution := false,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
       const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) }
@@ -45,7 +47,8 @@ object SparkBuild extends Build {
     resolvers ++= Seq(
       "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/"
+      "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/",
+      "Spray Repository" at "http://repo.spray.cc/"
     ),
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "11.0.1",
@@ -62,23 +65,33 @@ object SparkBuild extends Build {
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.9",
-      "se.scalablesolutions.akka" % "akka-actor" % "1.3.1",
-      "se.scalablesolutions.akka" % "akka-remote" % "1.3.1",
-      "se.scalablesolutions.akka" % "akka-slf4j" % "1.3.1",
-      "org.jboss.netty" % "netty" % "3.2.6.Final",
+      "com.typesafe.akka" % "akka-actor" % "2.0.2",
+      "com.typesafe.akka" % "akka-remote" % "2.0.2",
+      "com.typesafe.akka" % "akka-slf4j" % "2.0.2",
       "it.unimi.dsi" % "fastutil" % "6.4.4",
-      "colt" % "colt" % "1.2.0"
+      "colt" % "colt" % "1.2.0",
+      "cc.spray" % "spray-can" % "1.0-M2.1",
+      "cc.spray" % "spray-server" % "1.0-M2.1"
     )
-  ) ++ assemblySettings ++ Seq(test in assembly := {})
+  ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  ) ++ assemblySettings ++ Seq(test in assembly := {})
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples"
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
+
+  def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
+    mergeStrategy in assembly := { 
+      case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard 
+      case "reference.conf" => MergeStrategy.concat
+      case _ => MergeStrategy.first
+    }
+  ) 
+
 }

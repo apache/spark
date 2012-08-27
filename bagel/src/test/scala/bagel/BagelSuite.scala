@@ -1,6 +1,6 @@
 package spark.bagel
 
-import org.scalatest.{FunSuite, Assertions}
+import org.scalatest.{FunSuite, Assertions, BeforeAndAfter}
 import org.scalatest.prop.Checkers
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
@@ -13,9 +13,19 @@ import spark._
 class TestVertex(val active: Boolean, val age: Int) extends Vertex with Serializable
 class TestMessage(val targetId: String) extends Message[String] with Serializable
 
-class BagelSuite extends FunSuite with Assertions {
+class BagelSuite extends FunSuite with Assertions with BeforeAndAfter {
+  
+  var sc: SparkContext = _
+  
+  after {
+    if (sc != null) {
+      sc.stop()
+      sc = null
+    }
+  }
+  
   test("halting by voting") {
-    val sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
     val verts = sc.parallelize(Array("a", "b", "c", "d").map(id => (id, new TestVertex(true, 0))))
     val msgs = sc.parallelize(Array[(String, TestMessage)]())
     val numSupersteps = 5
@@ -26,11 +36,10 @@ class BagelSuite extends FunSuite with Assertions {
       }
     for ((id, vert) <- result.collect)
       assert(vert.age === numSupersteps)
-    sc.stop()
   }
 
   test("halting by message silence") {
-    val sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test")
     val verts = sc.parallelize(Array("a", "b", "c", "d").map(id => (id, new TestVertex(false, 0))))
     val msgs = sc.parallelize(Array("a" -> new TestMessage("a")))
     val numSupersteps = 5
@@ -48,6 +57,5 @@ class BagelSuite extends FunSuite with Assertions {
       }
     for ((id, vert) <- result.collect)
       assert(vert.age === numSupersteps)
-    sc.stop()
   }
 }
