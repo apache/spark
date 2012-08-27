@@ -123,7 +123,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
           // val workerCores = 1
           new Thread(
             new WorkerRunnable(container, conf, masterUrl, workerId, 
-              workerHostname, args.workerMemory)
+              workerHostname, args.workerMemory, args.workerCores)
           ).start()
           numWorkersRunning.incrementAndGet()
         }

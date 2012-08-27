@@ -78,10 +78,6 @@ object StandaloneExecutorBackend {
       System.err.println("Usage: StandaloneExecutorBackend <master> <slaveId> <hostname> <cores>")
       System.exit(1)
     }
-    val numCores = args(3) match {
-      case "default" => Runtime.getRuntime.availableProcessors()
-      case x => x.toInt
-    }
-    run(args(0), args(1), args(2), numCores)
+    run(args(0), args(1), args(2), args(3).toInt)
   }
 }

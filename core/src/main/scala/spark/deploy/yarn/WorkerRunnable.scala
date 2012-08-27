@@ -19,7 +19,7 @@ import scala.collection.mutable.HashMap
 import spark.{Logging, Utils}
 
 class WorkerRunnable(container: Container, conf: Configuration, masterAddress: String, 
-    slaveId: String, hostname: String, workerMemory: Int) 
+    slaveId: String, hostname: String, workerMemory: Int, workerCores: Int) 
     extends Runnable with Logging {
   
   var rpc : YarnRPC = YarnRPC.create(conf)
@@ -61,8 +61,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       masterAddress + " " +
       slaveId + " " +
       hostname + " " +
-      "default " +
-      
+      workerCores +
       " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
       " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
     logInfo("Setting up worker with commands: " + commands)
