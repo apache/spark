@@ -306,7 +306,7 @@ class ConnectionManager(port: Int) extends Logging {
     }
     val connection = connectionsById.getOrElse(connectionManagerId, startNewConnection())
     message.senderAddress = id.toSocketAddress()
-    logInfo("Sending [" + message + "] to [" + connectionManagerId + "]") 
+    logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")
     /*connection.send(message)*/
     sendMessageRequests.synchronized {
       sendMessageRequests += ((message, connection))
