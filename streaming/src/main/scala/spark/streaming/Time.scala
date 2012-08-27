@@ -1,43 +1,21 @@
 package spark.streaming
 
-class Time(private var millis: Long) extends Serializable {
-
-  def copy() = new Time(this.millis) 
- 
+case class Time(millis: Long) {
   def zero = Time.zero
 
-  def < (that: Time): Boolean =
-    (this.millis < that.millis)
+  def < (that: Time): Boolean = (this.millis < that.millis)
  
-  def <= (that: Time) = (this < that || this == that)
+  def <= (that: Time) = (this.millis <= that.millis)
   
-  def > (that: Time) = !(this <= that)
+  def > (that: Time) = (this.millis > that.millis)
   
-  def >= (that: Time) = !(this < that)  
-  
-  def += (that: Time): Time = {
-    this.millis += that.millis
-    this
-  }
-  
-  def -= (that: Time): Time = {
-    this.millis -= that.millis
-    this
-  }
+  def >= (that: Time) = (this.millis >= that.millis)
 
-  def + (that: Time) = this.copy() += that
+  def + (that: Time) = new Time(millis + that.millis)
   
-  def - (that: Time) = this.copy() -= that
+  def - (that: Time) = new Time(millis - that.millis)
   
-  def * (times: Int) = {
-    var count = 0
-    var result = this.copy()
-    while (count < times) {
-      result += this
-      count += 1
-    }
-    result
-  }
+  def * (times: Int) = new Time(millis * times)
   
   def floor(that: Time): Time = {
     val t = that.millis
@@ -55,21 +33,11 @@ class Time(private var millis: Long) extends Serializable {
   def toFormattedString = millis.toString
   
   def milliseconds = millis
-
-  override def hashCode = millis.toInt
-
-  override def equals(other: Any): Boolean = other match {
-    case null => false
-    case t: Time => t.millis == millis
-    case _ => false
-  }
 }
 
 object Time {
   val zero = new Time(0)
-  
-  def apply(milliseconds: Long) = new Time(milliseconds)
-  
+
   implicit def toTime(long: Long) = Time(long)
   
   implicit def toLong(time: Time) = time.milliseconds  

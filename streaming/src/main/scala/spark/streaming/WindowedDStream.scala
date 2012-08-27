@@ -32,7 +32,7 @@ class WindowedDStream[T: ClassManifest](
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     val parentRDDs = new ArrayBuffer[RDD[T]]()
-    val windowEndTime = validTime.copy()
+    val windowEndTime = validTime
     val windowStartTime = if (allowPartialWindows && windowEndTime - windowTime < parent.zeroTime) {
           parent.zeroTime
         } else { 

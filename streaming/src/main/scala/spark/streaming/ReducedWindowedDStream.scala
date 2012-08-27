@@ -70,7 +70,7 @@ extends DStream[(K,V)](parent.ssc) {
       Interval(beginTime, endTime)
     }
     
-    val currentTime = validTime.copy
+    val currentTime = validTime
     val currentWindow = getAdjustedWindow(currentTime, windowTime)
     val previousWindow = getAdjustedWindow(currentTime - slideTime, windowTime)
     
