@@ -148,6 +148,7 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
       " --jar " + args.userJar +
       " --args " + args.userArgs +
       " --worker-memory " + args.workerMemory +
+      " --worker-cores " + args.workerCores +
       " --num-workers " + args.numWorkers +
       JAVA_OPTS +
       " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
