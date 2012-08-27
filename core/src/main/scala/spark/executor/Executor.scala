@@ -63,6 +63,7 @@ class Executor extends Logging {
         Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear()
         val task = ser.deserialize[Task[Any]](serializedTask, classLoader)
+        logInfo("Its generation is " + task.generation)
         env.mapOutputTracker.updateGeneration(task.generation)
         val value = task.run(taskId.toInt)
         val accumUpdates = Accumulators.values
