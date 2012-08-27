@@ -118,9 +118,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
             StandaloneSchedulerBackend.ACTOR_NAME)
           val workerId = numWorkersRunning.intValue.toString
           val workerHostname = container.getNodeId().getHost()
-          // YARN does not support requesting resources by the number of cores yet.
-          // TODO: How do we handle this?
-          // val workerCores = 1
           new Thread(
             new WorkerRunnable(container, conf, masterUrl, workerId, 
               workerHostname, args.workerMemory, args.workerCores)
