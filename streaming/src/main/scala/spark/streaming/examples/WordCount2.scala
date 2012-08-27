@@ -70,15 +70,17 @@ object WordCount2 {
   
   def main (args: Array[String]) {
     
-    if (args.length < 4) {
-      println ("Usage: SparkStreamContext <host> <file> <mapTasks> <reduceTasks>")
+    if (args.length != 5) {
+      println ("Usage: SparkStreamContext <host> <file> <mapTasks> <reduceTasks> <batchMillis>")
       System.exit(1)
     }
 
-    val Array(master, file, mapTasks, reduceTasks) = args
+    val Array(master, file, mapTasks, reduceTasks, batchMillis) = args
+
+    val BATCH_DURATION = Milliseconds(batchMillis.toLong)
     
     val ssc = new SparkStreamContext(master, "WordCount2")
-    ssc.setBatchDuration(Seconds(1))
+    ssc.setBatchDuration(BATCH_DURATION)
 
     val data = ssc.sc.textFile(file, mapTasks.toInt).persist(StorageLevel.MEMORY_ONLY_DESER_2)
     println("Data count: " + data.count())
@@ -92,7 +94,7 @@ object WordCount2 {
 
     val windowedCounts = sentences
       .mapPartitions(splitAndCountPartitions)
-      .reduceByKeyAndWindow(add _, subtract _, Seconds(10), Seconds(1), reduceTasks.toInt)
+      .reduceByKeyAndWindow(add _, subtract _, Seconds(10), BATCH_DURATION, reduceTasks.toInt)
     windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, StorageLevel.MEMORY_ONLY_DESER_2, Seconds(10))
     windowedCounts.print()
 
