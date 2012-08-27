@@ -9,7 +9,7 @@ if __name__ == "__main__":
         print >> sys.stderr, \
             "Usage: PythonPi <host> [<slices>]"
         exit(-1)
-    sc = SparkContext(sys.argv[1], "PythonKMeans")
+    sc = SparkContext(sys.argv[1], "PythonPi")
     slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2
     n = 100000 * slices
     def f(_):

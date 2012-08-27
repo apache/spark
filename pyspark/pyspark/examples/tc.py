@@ -22,9 +22,9 @@ if __name__ == "__main__":
         print >> sys.stderr, \
             "Usage: PythonTC <host> [<slices>]"
         exit(-1)
-    sc = SparkContext(sys.argv[1], "PythonKMeans")
+    sc = SparkContext(sys.argv[1], "PythonTC")
     slices = sys.argv[2] if len(sys.argv) > 2 else 2
-    tc = sc.parallelizePairs(generateGraph(), slices).cache()
+    tc = sc.parallelize(generateGraph(), slices).cache()
 
     # Linear transitive closure: each round grows paths by one edge,
     # by joining the graph's edges with the already-discovered paths.
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # the graph to obtain the path (x, z).
 
     # Because join() joins on keys, the edges are stored in reversed order.
-    edges = tc.mapPairs(lambda (x, y): (y, x))
+    edges = tc.map(lambda (x, y): (y, x))
 
     oldCount = 0L
     nextCount = tc.count()
@@ -40,7 +40,7 @@ if __name__ == "__main__":
         oldCount = nextCount
         # Perform the join, obtaining an RDD of (y, (z, x)) pairs,
         # then project the result to obtain the new (x, z) paths.
-        new_edges = tc.join(edges).mapPairs(lambda (_, (a, b)): (b, a))
+        new_edges = tc.join(edges).map(lambda (_, (a, b)): (b, a))
         tc = tc.union(new_edges).distinct().cache()
         nextCount = tc.count()
         if nextCount == oldCount:
