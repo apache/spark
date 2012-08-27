@@ -14,6 +14,7 @@ class PartitioningSuite extends FunSuite with BeforeAndAfter {
   after {
     if(sc != null) {
       sc.stop()
+      sc = null
     }
   }
   

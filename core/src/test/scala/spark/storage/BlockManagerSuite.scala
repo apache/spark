@@ -6,17 +6,27 @@ import akka.actor._
 
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester
 
 import spark.KryoSerializer
+import spark.SizeEstimator
 import spark.util.ByteBufferInputStream
 
-class BlockManagerSuite extends FunSuite with BeforeAndAfter {
+class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
+  var oldArch: String = _
+  var oldOops: String = _
 
   before {
     actorSystem = ActorSystem("test")
     master = new BlockManagerMaster(actorSystem, true, true)
+
+    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case 
+    oldArch = System.setProperty("os.arch", "amd64")
+    oldOops = System.setProperty("spark.test.useCompressedOops", "true")
+    val initialize = PrivateMethod[Unit]('initialize)
+    SizeEstimator invokePrivate initialize()
   }
 
   after {
@@ -24,6 +34,18 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
     actorSystem.awaitTermination()
     actorSystem = null
     master = null
+
+    if (oldArch != null) {
+      System.setProperty("os.arch", oldArch)
+    } else {
+      System.clearProperty("os.arch")
+    }
+
+    if (oldOops != null) {
+      System.setProperty("spark.test.useCompressedOops", oldOops)
+    } else {
+      System.clearProperty("spark.test.useCompressedOops")
+    }
   }
 
   test("manager-master interaction") {
@@ -57,7 +79,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("in-memory LRU storage") {
-    val store = new BlockManager(master, new KryoSerializer, 1000)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -78,7 +100,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
   }
   
   test("in-memory LRU storage with serialization") {
-    val store = new BlockManager(master, new KryoSerializer, 1000)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -99,7 +121,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
   }
   
   test("on-disk storage") {
-    val store = new BlockManager(master, new KryoSerializer, 1000)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -112,7 +134,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("disk and memory storage") {
-    val store = new BlockManager(master, new KryoSerializer, 1000)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -126,7 +148,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("disk and memory storage with serialization") {
-    val store = new BlockManager(master, new KryoSerializer, 1000)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -140,7 +162,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("LRU with mixed storage levels") {
-    val store = new BlockManager(master, new KryoSerializer, 1000)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -166,7 +188,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("in-memory LRU with streams") {
-    val store = new BlockManager(master, new KryoSerializer, 1000)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
@@ -192,7 +214,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("LRU with mixed storage levels and streams") {
-    val store = new BlockManager(master, new KryoSerializer, 1000)
+    val store = new BlockManager(master, new KryoSerializer, 1200)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))

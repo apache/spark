@@ -35,8 +35,6 @@ class Executor extends Logging {
     // Initialize Spark environment (using system properties read above)
     env = SparkEnv.createFromSystemProperties(slaveHostname, 0, false, false)
     SparkEnv.set(env)
-    // Old stuff that isn't yet using env
-    Broadcast.initialize(false)
 
     // Create our ClassLoader (using spark properties) and set it on this thread
     classLoader = createClassLoader()
