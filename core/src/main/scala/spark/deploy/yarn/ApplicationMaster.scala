@@ -1,6 +1,6 @@
 package spark.deploy.yarn
 
-import java.net.{InetSocketAddress, URI}
+import java.net.{InetSocketAddress, URI, Socket}
 import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.net.NetUtils
@@ -36,13 +36,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
     // Start the user's JAR
     val userThread = startUserClass()
     
-    // This is pretty hacky, but we need to wait until the spark.master.port property has
+    // This a bit hacky, but we need to wait until the spark.master.port property has
     // been set by the Thread executing the user class.
-    while (System.getProperty("spark.master.port") == null 
-      || System.getProperty("spark.master.port").toInt == 0) {
-      Thread.sleep(10)
-    }
-    logInfo("Port: " + System.getProperty("spark.master.port"))
+    waitForSparkMaster()
     
     // Allocate all containers
     allocateWorkers()
@@ -83,6 +79,26 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
     appMasterRequest.setRpcPort(0)
     appMasterRequest.setTrackingUrl("")
     return resourceManager.registerApplicationMaster(appMasterRequest)
+  }
+  
+  def waitForSparkMaster() { 
+    logInfo("Waiting for spark master to be reachable.")
+    var masterUp = false 
+    while(!masterUp) {
+      val masterHost = System.getProperty("spark.master.host")
+      val masterPort = System.getProperty("spark.master.port")
+      var socket : Socket = null
+      try {
+        val socket = new Socket(masterHost, masterPort.toInt)
+        socket.close()
+        logInfo("Master now available: " + masterHost + ":" + masterPort)
+        masterUp = true
+      } catch {
+        case e : Exception =>
+          logError("Failed to connect to master at " + masterHost + ":" + masterPort)
+        Thread.sleep(100)
+      }
+    }
   }
   
   def startUserClass() : Thread  = {
