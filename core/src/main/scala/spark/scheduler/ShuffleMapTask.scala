@@ -85,6 +85,7 @@ class ShuffleMapTask(
     out.writeInt(bytes.length)
     out.write(bytes)
     out.writeInt(partition)
+    out.writeLong(generation)
     out.writeObject(split)
   }
 
@@ -97,6 +98,7 @@ class ShuffleMapTask(
     rdd = rdd_
     dep = dep_
     partition = in.readInt()
+    generation = in.readLong()
     split = in.readObject().asInstanceOf[Split]
   }
 
