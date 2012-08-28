@@ -1,7 +1,7 @@
 package spark.streaming.examples
 
-import spark.streaming.SparkStreamContext
-import spark.streaming.SparkStreamContext._
+import spark.streaming.StreamingContext
+import spark.streaming.StreamingContext._
 import spark.streaming.Seconds
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
@@ -15,7 +15,7 @@ object ExampleTwo {
     }
     
     // Create the context and set the batch size
-    val ssc = new SparkStreamContext(args(0), "ExampleTwo")
+    val ssc = new StreamingContext(args(0), "ExampleTwo")
     ssc.setBatchDuration(Seconds(2))
     
     // Create the new directory 

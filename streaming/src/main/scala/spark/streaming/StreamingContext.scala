@@ -8,6 +8,7 @@ import spark.SparkContext
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
+import java.io.InputStream
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicInteger
@@ -19,7 +20,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 
-class SparkStreamContext (
+class StreamingContext (
     master: String,
     frameworkName: String,
     val sparkHome: String = null,
@@ -33,8 +34,12 @@ class SparkStreamContext (
   
   val inputStreams = new ArrayBuffer[InputDStream[_]]()
   val outputStreams = new ArrayBuffer[DStream[_]]()
+  val nextNetworkInputStreamId = new AtomicInteger(0)
+  
   var batchDuration: Time = null 
   var scheduler: Scheduler = null
+  var networkInputTracker: NetworkInputTracker = null
+  var receiverJobThread: Thread = null 
   
   def setBatchDuration(duration: Long) {
     setBatchDuration(Time(duration))
@@ -43,35 +48,32 @@ class SparkStreamContext (
   def setBatchDuration(duration: Time) {
     batchDuration = duration
   }
-    
-  /*
-  def createNetworkStream[T: ClassManifest](
-      name: String,
-      addresses: Array[InetSocketAddress],
-      batchDuration: Time): DStream[T] = {
-    
-    val inputStream = new NetworkinputStream[T](this, addresses)
-    inputStreams += inputStream
-    inputStream
-  }  
+  
+  private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
+  
+  def createNetworkTextStream(hostname: String, port: Int): DStream[String] = {
+    createNetworkStream[String](hostname, port, NetworkInputReceiver.bytesToLines)
+  }
   
   def createNetworkStream[T: ClassManifest](
-      name: String,
-      addresses: Array[String],
-      batchDuration: Long): DStream[T] = {
-    
-    def stringToInetSocketAddress (str: String): InetSocketAddress = {
-      val parts = str.split(":")
-      if (parts.length != 2) {
-        throw new IllegalArgumentException ("Address format error")
-      }
-      new InetSocketAddress(parts(0), parts(1).toInt)
-    }
-
-    readNetworkStream(
-        name,
-        addresses.map(stringToInetSocketAddress).toArray,
-        LongTime(batchDuration))
+      hostname: String, 
+      port: Int, 
+      converter: (InputStream) => Iterator[T]
+    ): DStream[T] = {
+    val inputStream = new NetworkInputDStream[T](this, hostname, port, converter)
+    inputStreams += inputStream
+    inputStream
+  }
+ 
+  /*
+  def createHttpTextStream(url: String): DStream[String] = {
+    createHttpStream(url, NetworkInputReceiver.bytesToLines)
+  }
+  
+  def createHttpStream[T: ClassManifest](
+      url: String, 
+      converter: (InputStream) => Iterator[T]
+    ): DStream[T] = {
   }
   */
 
@@ -126,7 +128,7 @@ class SparkStreamContext (
   /**
    * This function verify whether the stream computation is eligible to be executed.
    */
-  def verify() {
+  private def verify() {
     if (batchDuration == null) {
       throw new Exception("Batch duration has not been set")
     }
@@ -147,8 +149,21 @@ class SparkStreamContext (
    */  
   def start() {
     verify()
+    val networkInputStreams = inputStreams.filter(s => s match {
+        case n: NetworkInputDStream[_] => true 
+        case _ => false
+      }).map(_.asInstanceOf[NetworkInputDStream[_]]).toArray
+     
+    if (networkInputStreams.length > 0) {
+      // Start the network input tracker (must start before receivers)
+      networkInputTracker = new NetworkInputTracker(this, networkInputStreams)
+      networkInputTracker.start()
+    }
+
+    Thread.sleep(1000)
+    // Start the scheduler 
     scheduler = new Scheduler(this, inputStreams.toArray, outputStreams.toArray)
-    scheduler.start()
+    scheduler.start()    
   }
   
   /**
@@ -156,18 +171,22 @@ class SparkStreamContext (
    */
   def stop() {
     try {
-      scheduler.stop()
+      if (scheduler != null) scheduler.stop()
+      if (networkInputTracker != null) networkInputTracker.stop()
+      if (receiverJobThread != null) receiverJobThread.interrupt()
       sc.stop() 
     } catch {
       case e: Exception => logWarning("Error while stopping", e)
     }
     
-    logInfo("SparkStreamContext stopped")
+    logInfo("StreamingContext stopped")
   }
 }
 
 
-object SparkStreamContext {
-  implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) =
-    new PairDStreamFunctions(stream)
+object StreamingContext {
+  implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) = {
+    new PairDStreamFunctions[K, V](stream)
+  }
 }
+

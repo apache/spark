@@ -1,7 +1,7 @@
 package spark.streaming
 
 import scala.collection.mutable.ArrayBuffer
-import spark.streaming.SparkStreamContext._
+import spark.streaming.StreamingContext._
 
 class PairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)])
 extends Serializable {

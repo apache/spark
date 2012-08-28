@@ -7,7 +7,7 @@ import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
 class QueueInputDStream[T: ClassManifest](
-    ssc: SparkStreamContext,
+    ssc: StreamingContext,
     val queue: Queue[RDD[T]],
     oneAtATime: Boolean,
     defaultRDD: RDD[T]

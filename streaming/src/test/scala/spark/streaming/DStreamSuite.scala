@@ -12,7 +12,7 @@ import scala.collection.mutable.SynchronizedQueue
 
 class DStreamSuite extends FunSuite with BeforeAndAfter with Logging {
   
-  var ssc: SparkStreamContext = null
+  var ssc: StreamingContext = null
   val batchDurationMillis = 1000
   
   System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
@@ -22,7 +22,7 @@ class DStreamSuite extends FunSuite with BeforeAndAfter with Logging {
       operation: DStream[U] => DStream[V],
       expectedOutput: Seq[Seq[V]]) {
     try {      
-      ssc = new SparkStreamContext("local", "test")
+      ssc = new StreamingContext("local", "test")
       ssc.setBatchDuration(Milliseconds(batchDurationMillis))
       
       val inputStream = ssc.createQueueStream(input.map(ssc.sc.makeRDD(_, 2)).toIterator)

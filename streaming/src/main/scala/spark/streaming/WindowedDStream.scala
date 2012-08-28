@@ -1,6 +1,6 @@
 package spark.streaming
 
-import spark.streaming.SparkStreamContext._
+import spark.streaming.StreamingContext._
 
 import spark.RDD
 import spark.UnionRDD

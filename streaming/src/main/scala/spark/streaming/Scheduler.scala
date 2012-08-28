@@ -12,7 +12,7 @@ sealed trait SchedulerMessage
 case class InputGenerated(inputName: String, interval: Interval, reference: AnyRef = null) extends SchedulerMessage
 
 class Scheduler(
-    ssc: SparkStreamContext, 
+    ssc: StreamingContext, 
     inputStreams: Array[InputDStream[_]],
     outputStreams: Array[DStream[_]])
 extends Logging {
@@ -40,6 +40,7 @@ extends Logging {
   }
   
   def generateRDDs (time: Time) {
+    println("\n-----------------------------------------------------\n")
     logInfo("Generating RDDs for time " + time) 
     outputStreams.foreach(outputStream => {
         outputStream.generateJob(time) match {

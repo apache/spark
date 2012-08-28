@@ -5,9 +5,9 @@ import spark.SparkEnv
 import java.util.concurrent.Executors
 
 
-class JobManager(ssc: SparkStreamContext, numThreads: Int = 1) extends Logging {
+class JobManager(ssc: StreamingContext, numThreads: Int = 1) extends Logging {
   
-  class JobHandler(ssc: SparkStreamContext, job: Job) extends Runnable {
+  class JobHandler(ssc: StreamingContext, job: Job) extends Runnable {
     def run() {
       SparkEnv.set(ssc.env)
       try {

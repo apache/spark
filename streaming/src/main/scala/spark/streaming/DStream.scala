@@ -1,6 +1,6 @@
 package spark.streaming
 
-import spark.streaming.SparkStreamContext._
+import spark.streaming.StreamingContext._
 
 import spark.RDD
 import spark.BlockRDD
@@ -15,7 +15,7 @@ import scala.collection.mutable.HashMap
 
 import java.util.concurrent.ArrayBlockingQueue 
 
-abstract class DStream[T: ClassManifest] (@transient val ssc: SparkStreamContext)
+abstract class DStream[T: ClassManifest] (@transient val ssc: StreamingContext)
 extends Logging with Serializable {
 
   initLogging()
@@ -142,7 +142,7 @@ extends Logging with Serializable {
   }
 
   /**
-   * This method generates a SparkStream job for the given time
+   * This method generates a SparkStreaming job for the given time
    * and may require to be overriden by subclasses
    */
   def generateJob(time: Time): Option[Job] = {
@@ -249,7 +249,7 @@ extends Logging with Serializable {
 
 
 abstract class InputDStream[T: ClassManifest] (
-    ssc: SparkStreamContext)
+    @transient ssc: StreamingContext)
 extends DStream[T](ssc) {
   
   override def dependencies = List()
@@ -397,7 +397,7 @@ extends DStream[T](parents(0).ssc) {
   }
 
   if (parents.map(_.ssc).distinct.size > 1) {
-    throw new IllegalArgumentException("Array of parents have different SparkStreamContexts")
+    throw new IllegalArgumentException("Array of parents have different StreamingContexts")
   }
   
   if (parents.map(_.slideTime).distinct.size > 1) {
