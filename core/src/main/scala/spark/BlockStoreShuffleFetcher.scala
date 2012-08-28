@@ -48,8 +48,9 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
         }
       }
     } catch {
+      // TODO: this is really ugly -- let's find a better way of throwing a FetchFailedException
       case be: BlockException => {
-        val regex = "shuffledid_([0-9]*)_([0-9]*)_([0-9]]*)".r
+        val regex = "shuffleid_([0-9]*)_([0-9]*)_([0-9]]*)".r
         be.blockId match {
           case regex(sId, mId, rId) => { 
             val address = addresses(mId.toInt)

@@ -116,7 +116,7 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
   def getServerAddresses(shuffleId: Int): Array[BlockManagerId] = {
     val locs = bmAddresses.get(shuffleId)
     if (locs == null) {
-      logInfo("Don't have map outputs for shuffe " + shuffleId + ", fetching them")
+      logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       fetching.synchronized {
         if (fetching.contains(shuffleId)) {
           // Someone else is fetching it; wait for them to be done
@@ -158,6 +158,7 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
   def incrementGeneration() {
     generationLock.synchronized {
       generation += 1
+      logDebug("Increasing generation to " + generation)
     }
   }
 
