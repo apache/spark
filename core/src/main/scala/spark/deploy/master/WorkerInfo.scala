@@ -9,7 +9,8 @@ class WorkerInfo(
   val port: Int,
   val cores: Int,
   val memory: Int,
-  val actor: ActorRef) {
+  val actor: ActorRef,
+  val webUiPort: Int) {
 
   var executors = new mutable.HashMap[String, ExecutorInfo]  // fullId => info
 
@@ -31,5 +32,9 @@ class WorkerInfo(
       coresUsed -= exec.cores
       memoryUsed -= exec.memory
     }
+  }
+  
+  def webUiAddress : String = {
+    "http://" + this.host + ":" + this.webUiPort
   }
 }

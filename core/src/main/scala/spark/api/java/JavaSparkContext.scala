@@ -20,6 +20,12 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   def this(master: String, frameworkName: String) = this(new SparkContext(master, frameworkName))
 
+  def this(master: String, frameworkName: String, sparkHome: String, jarFile: String) =
+    this(new SparkContext(master, frameworkName, sparkHome, Seq(jarFile)))
+
+  def this(master: String, frameworkName: String, sparkHome: String, jars: Array[String]) =
+    this(new SparkContext(master, frameworkName, sparkHome, jars.toSeq))
+
   val env = sc.env
 
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {

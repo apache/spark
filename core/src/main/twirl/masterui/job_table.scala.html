@@ -1,0 +1,20 @@
+@(jobs: List[spark.deploy.master.JobInfo])
+
+<table class="table table-bordered table-striped table-condensed sortable">
+  <thead>
+    <tr>
+      <th>JobID</th>
+      <th>Description</th>
+      <th>Cores</th>
+      <th>Memory per Slave</th>
+      <th>Submit Date</th>
+      <th>User</th>
+      <th>State</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for(j <- jobs) {
+      @job_row(j)
+    }
+  </tbody>
+</table>

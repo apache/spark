@@ -1,67 +1,42 @@
 package spark.streaming
 
-class Time (private var millis: Long) extends Serializable {
-
-  def copy() = new Time(this.millis) 
+case class Time(millis: Long) extends Serializable {
+  
+  def < (that: Time): Boolean = (this.millis < that.millis)
  
-  def zero = Time.zero
+  def <= (that: Time): Boolean = (this.millis <= that.millis)
+  
+  def > (that: Time): Boolean = (this.millis > that.millis)
+  
+  def >= (that: Time): Boolean = (this.millis >= that.millis)
 
-  def < (that: Time): Boolean =
-    (this.millis < that.millis)
- 
-  def <= (that: Time) = (this < that || this == that)
+  def + (that: Time): Time = Time(millis + that.millis)
   
-  def > (that: Time) = !(this <= that)
+  def - (that: Time): Time = Time(millis - that.millis)
   
-  def >= (that: Time) = !(this < that)  
-  
-  def += (that: Time): Time = {
-    this.millis += that.millis
-    this
-  }
-  
-  def -= (that: Time): Time = {
-    this.millis -= that.millis
-    this
-  }
-
-  def + (that: Time) = this.copy() += that
-  
-  def - (that: Time) = this.copy() -= that
-  
-  def * (times: Int) = {
-    var count = 0
-    var result = this.copy()
-    while (count < times) {
-      result += this
-      count += 1
-    }
-    result
-  }
+  def * (times: Int): Time = Time(millis * times)
   
   def floor(that: Time): Time = {
     val t = that.millis
     val m = math.floor(this.millis / t).toLong 
-    new Time(m * t)
+    Time(m * t)
   }
 
   def isMultipleOf(that: Time): Boolean = 
     (this.millis % that.millis == 0)
 
-  def isZero = (this.millis == 0)
+  def isZero: Boolean = (this.millis == 0)
 
-  override def toString = (millis.toString + " ms")
+  override def toString: String = (millis.toString + " ms")
 
-  def toFormattedString = millis.toString
+  def toFormattedString: String = millis.toString
   
-  def milliseconds = millis
+  def milliseconds: Long = millis
 }
 
 object Time {
-  val zero = new Time(0)
-  
-  def apply(milliseconds: Long) = new Time(milliseconds)
-  
+  val zero = Time(0)
+
   implicit def toTime(long: Long) = Time(long)
   
   implicit def toLong(time: Time) = time.milliseconds  

@@ -2,20 +2,20 @@ package spark.network
 
 import spark._
 
-import scala.actors.Future
-import scala.actors.Futures.future
+import java.nio._
+import java.nio.channels._
+import java.nio.channels.spi._
+import java.net._
+import java.util.concurrent.Executors
+
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.SynchronizedMap
 import scala.collection.mutable.SynchronizedQueue
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
-import java.io._
-import java.nio._
-import java.nio.channels._
-import java.nio.channels.spi._
-import java.net._
-import java.util.concurrent.Executors
+import akka.dispatch.{Await, Promise, ExecutionContext, Future}
+import akka.util.Duration
 
 case class ConnectionManagerId(host: String, port: Int) {
   def toSocketAddress() = new InetSocketAddress(host, port)
@@ -29,10 +29,16 @@ object ConnectionManagerId {
   
 class ConnectionManager(port: Int) extends Logging {
 
-  case class MessageStatus(message: Message, connectionManagerId: ConnectionManagerId) {
+  class MessageStatus(
+      val message: Message,
+      val connectionManagerId: ConnectionManagerId,
+      completionHandler: MessageStatus => Unit) {
+
     var ackMessage: Option[Message] = None
     var attempted = false
     var acked = false
+
+    def markDone() { completionHandler(this) }
   }
   
   val selector = SelectorProvider.provider.openSelector()
@@ -44,6 +50,9 @@ class ConnectionManager(port: Int) extends Logging {
   val connectionRequests = new SynchronizedQueue[SendingConnection]
   val keyInterestChangeRequests = new SynchronizedQueue[(SelectionKey, Int)]
   val sendMessageRequests = new Queue[(Message, SendingConnection)]
+
+  implicit val futureExecContext = ExecutionContext.fromExecutor(
+    Executors.newCachedThreadPool(DaemonThreadFactory))
   
   var onReceiveCallback: (BufferMessage, ConnectionManagerId) => Option[Message]= null
 
@@ -173,7 +182,7 @@ class ConnectionManager(port: Int) extends Logging {
             status.synchronized {
             status.attempted = true 
              status.acked = false
-             status.notifyAll()
+             status.markDone()
             }
           })
 
@@ -198,15 +207,14 @@ class ConnectionManager(port: Int) extends Logging {
       connectionsById -= sendingConnectionManagerId
       
       messageStatuses.synchronized {
-        messageStatuses
-          .values.filter(_.connectionManagerId == sendingConnectionManagerId).foreach(status => {
-            logInfo("Notifying " + status)
-            status.synchronized {
-            status.attempted = true 
-             status.acked = false
-             status.notifyAll()
-            }
-          })
+        for (s <- messageStatuses.values if s.connectionManagerId == sendingConnectionManagerId) {
+          logInfo("Notifying " + s)
+          s.synchronized {
+            s.attempted = true
+            s.acked = false
+            s.markDone()
+          }
+        }
 
         messageStatuses.retain((i, status) => { 
           status.connectionManagerId != sendingConnectionManagerId 
@@ -240,7 +248,7 @@ class ConnectionManager(port: Int) extends Logging {
   }
 
   private def handleMessage(connectionManagerId: ConnectionManagerId, message: Message) {
-    logInfo("Handling [" + message + "] from [" + connectionManagerId + "]") 
+    logDebug("Handling [" + message + "] from [" + connectionManagerId + "]")
     message match {
       case bufferMessage: BufferMessage => {
         if (bufferMessage.hasAckId) {
@@ -260,7 +268,7 @@ class ConnectionManager(port: Int) extends Logging {
             sentMessageStatus.ackMessage = Some(message)
             sentMessageStatus.attempted = true
             sentMessageStatus.acked = true
-            sentMessageStatus.notifyAll()
+            sentMessageStatus.markDone()
           }
         } else {
           val ackMessage = if (onReceiveCallback != null) {
@@ -296,9 +304,9 @@ class ConnectionManager(port: Int) extends Logging {
       connectionRequests += newConnection
       newConnection   
     }
-    val connection = connectionsById.getOrElse(connectionManagerId, startNewConnection) 
+    val connection = connectionsById.getOrElse(connectionManagerId, startNewConnection())
     message.senderAddress = id.toSocketAddress()
-    logInfo("Sending [" + message + "] to [" + connectionManagerId + "]") 
+    logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")
     /*connection.send(message)*/
     sendMessageRequests.synchronized {
       sendMessageRequests += ((message, connection))
@@ -306,26 +314,19 @@ class ConnectionManager(port: Int) extends Logging {
     selector.wakeup()
   }
 
-  def sendMessageReliably(connectionManagerId: ConnectionManagerId, message: Message): Future[Option[Message]] = {
-    val messageStatus = new MessageStatus(message, connectionManagerId) 
+  def sendMessageReliably(connectionManagerId: ConnectionManagerId, message: Message)
+      : Future[Option[Message]] = {
+    val promise = Promise[Option[Message]]
+    val status = new MessageStatus(message, connectionManagerId, s => promise.success(s.ackMessage))
     messageStatuses.synchronized {
-      messageStatuses += ((message.id, messageStatus))
+      messageStatuses += ((message.id, status))
     }
     sendMessage(connectionManagerId, message)
-    future {
-      messageStatus.synchronized {
-        if (!messageStatus.attempted) {
-          logTrace("Waiting, " + messageStatuses.size + " statuses" )
-          messageStatus.wait()
-          logTrace("Done waiting")
-        }
-      }
-      messageStatus.ackMessage 
-    }
+    promise.future
   }
 
   def sendMessageReliablySync(connectionManagerId: ConnectionManagerId, message: Message): Option[Message] = {
-    sendMessageReliably(connectionManagerId, message)()
+    Await.result(sendMessageReliably(connectionManagerId, message), Duration.Inf)
   }
 
   def onReceiveMessage(callback: (Message, ConnectionManagerId) => Option[Message]) {

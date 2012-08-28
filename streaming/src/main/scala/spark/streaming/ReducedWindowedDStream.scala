@@ -70,16 +70,17 @@ extends DStream[(K,V)](parent.ssc) {
       Interval(beginTime, endTime)
     }
     
-    val currentTime = validTime.copy
+    val currentTime = validTime
     val currentWindow = getAdjustedWindow(currentTime, windowTime)
     val previousWindow = getAdjustedWindow(currentTime - slideTime, windowTime)
     
     logInfo("Current window = " + currentWindow)
+    logInfo("Slide time = " + slideTime)
     logInfo("Previous window = " + previousWindow)
     logInfo("Parent.zeroTime = " + parent.zeroTime)
 
     if (allowPartialWindows) {
-      if (currentTime - slideTime == parent.zeroTime) {
+      if (currentTime - slideTime <= parent.zeroTime) {
         reducedStream.getOrCompute(currentTime) match {
           case Some(rdd) => return Some(rdd)
           case None => throw new Exception("Could not get first reduced RDD for time " + currentTime)

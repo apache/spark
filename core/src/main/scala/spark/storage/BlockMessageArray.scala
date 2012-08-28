@@ -36,7 +36,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
     println()
     println()
     */
-    while(buffer.remaining() > 0) {
+    while (buffer.remaining() > 0) {
       val size = buffer.getInt()
       logDebug("Creating block message of size " + size + " bytes")
       val newBuffer = buffer.slice()
@@ -53,7 +53,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
     this.blockMessages = newBlockMessages 
   }
   
-  def toBufferMessage(): BufferMessage = {
+  def toBufferMessage: BufferMessage = {
     val buffers = new ArrayBuffer[ByteBuffer]()
 
     blockMessages.foreach(blockMessage => {

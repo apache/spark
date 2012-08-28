@@ -1,15 +1,9 @@
 package spark.streaming
 
-case class Interval (beginTime: Time, endTime: Time) {
+case class Interval(beginTime: Time, endTime: Time) {
   def this(beginMs: Long, endMs: Long) = this(Time(beginMs), new Time(endMs))
   
   def duration(): Time = endTime - beginTime
-  
-  def += (time: Time) {
-    beginTime += time
-    endTime += time
-    this
-  }
 
   def + (time: Time): Interval = {
     new Interval(beginTime + time, endTime + time) 

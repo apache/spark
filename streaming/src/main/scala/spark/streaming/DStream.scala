@@ -130,7 +130,7 @@ extends Logging with Serializable {
                 newRDD.persist(storageLevel)
                 logInfo("Persisting " + newRDD + " to " + storageLevel + " at time " + time)
               }
-              generatedRDDs.put(time.copy(), newRDD)
+              generatedRDDs.put(time, newRDD)
               Some(newRDD)
             case None => 
               None

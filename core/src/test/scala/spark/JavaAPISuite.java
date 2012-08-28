@@ -117,7 +117,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(new VoidFunction<String>() {
       @Override
-      public void apply(String s) {
+      public void call(String s) {
         System.out.println(s);
       }
     });
@@ -128,7 +128,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
     Function<Integer, Boolean> isOdd = new Function<Integer, Boolean>() {
       @Override
-      public Boolean apply(Integer x) {
+      public Boolean call(Integer x) {
         return x % 2 == 0;
       }
     };
@@ -166,7 +166,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
     Function2<Integer, Integer, Integer> add = new Function2<Integer, Integer, Integer>() {
       @Override
-      public Integer apply(Integer a, Integer b) {
+      public Integer call(Integer a, Integer b) {
         return a + b;
       }
     };
@@ -191,7 +191,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, Integer> counts = rdd.reduceByKey(
       new Function2<Integer, Integer, Integer>() {
         @Override
-        public Integer apply(Integer a, Integer b) {
+        public Integer call(Integer a, Integer b) {
          return a + b;
         }
     });
@@ -207,7 +207,7 @@ public class JavaAPISuite implements Serializable {
    localCounts = rdd.reduceByKeyLocally(new Function2<Integer, Integer,
       Integer>() {
       @Override
-      public Integer apply(Integer a, Integer b) {
+      public Integer call(Integer a, Integer b) {
         return a + b;
       }
     });
@@ -252,7 +252,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(5, distinct.count());
     JavaDoubleRDD filter = rdd.filter(new Function<Double, Boolean>() {
       @Override
-      public Boolean apply(Double x) {
+      public Boolean call(Double x) {
         return x > 2.0;
       }
     });
@@ -279,19 +279,19 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     JavaDoubleRDD doubles = rdd.map(new DoubleFunction<Integer>() {
       @Override
-      public Double apply(Integer x) {
+      public Double call(Integer x) {
         return 1.0 * x;
       }
     }).cache();
     JavaPairRDD<Integer, Integer> pairs = rdd.map(new PairFunction<Integer, Integer, Integer>() {
       @Override
-      public Tuple2<Integer, Integer> apply(Integer x) {
+      public Tuple2<Integer, Integer> call(Integer x) {
         return new Tuple2<Integer, Integer>(x, x);
       }
     }).cache();
     JavaRDD<String> strings = rdd.map(new Function<Integer, String>() {
       @Override
-      public String apply(Integer x) {
+      public String call(Integer x) {
         return x.toString();
       }
     }).cache();
@@ -303,7 +303,7 @@ public class JavaAPISuite implements Serializable {
       "The quick brown fox jumps over the lazy dog."));
     JavaRDD<String> words = rdd.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> apply(String x) {
+      public Iterable<String> call(String x) {
         return Arrays.asList(x.split(" "));
       }
     });
@@ -314,7 +314,7 @@ public class JavaAPISuite implements Serializable {
       new PairFlatMapFunction<String, String, String>() {
 
         @Override
-        public Iterable<Tuple2<String, String>> apply(String s) {
+        public Iterable<Tuple2<String, String>> call(String s) {
           List<Tuple2<String, String>> pairs = new LinkedList<Tuple2<String, String>>();
           for (String word : s.split(" ")) pairs.add(new Tuple2<String, String>(word, word));
           return pairs;
@@ -326,7 +326,7 @@ public class JavaAPISuite implements Serializable {
 
     JavaDoubleRDD doubles = rdd.flatMap(new DoubleFlatMapFunction<String>() {
       @Override
-      public Iterable<Double> apply(String s) {
+      public Iterable<Double> call(String s) {
         List<Double> lengths = new LinkedList<Double>();
         for (String word : s.split(" ")) lengths.add(word.length() * 1.0);
         return lengths;
@@ -343,7 +343,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> partitionSums = rdd.mapPartitions(
       new FlatMapFunction<Iterator<Integer>, Integer>() {
         @Override
-        public Iterable<Integer> apply(Iterator<Integer> iter) {
+        public Iterable<Integer> call(Iterator<Integer> iter) {
           int sum = 0;
           while (iter.hasNext()) {
             sum += iter.next();
@@ -417,7 +417,7 @@ public class JavaAPISuite implements Serializable {
 
     rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
-      public Tuple2<IntWritable, Text> apply(Tuple2<Integer, String> pair) {
+      public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
       }
     }).saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
@@ -426,7 +426,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, String> readRDD = sc.sequenceFile(outputDir, IntWritable.class,
       Text.class).map(new PairFunction<Tuple2<IntWritable, Text>, Integer, String>() {
       @Override
-      public Tuple2<Integer, String> apply(Tuple2<IntWritable, Text> pair) {
+      public Tuple2<Integer, String> call(Tuple2<IntWritable, Text> pair) {
         return new Tuple2<Integer, String>(pair._1().get(), pair._2().toString());
       }
     });
@@ -446,7 +446,7 @@ public class JavaAPISuite implements Serializable {
 
     rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
-      public Tuple2<IntWritable, Text> apply(Tuple2<Integer, String> pair) {
+      public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
       }
     }).saveAsNewAPIHadoopFile(outputDir, IntWritable.class, Text.class,
@@ -457,7 +457,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>,
       String>() {
       @Override
-      public String apply(Tuple2<IntWritable, Text> x) {
+      public String call(Tuple2<IntWritable, Text> x) {
         return x.toString();
       }
     }).collect().toString());
@@ -476,7 +476,7 @@ public class JavaAPISuite implements Serializable {
 
     rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
-      public Tuple2<IntWritable, Text> apply(Tuple2<Integer, String> pair) {
+      public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
       }
     }).saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
@@ -487,7 +487,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>,
       String>() {
       @Override
-      public String apply(Tuple2<IntWritable, Text> x) {
+      public String call(Tuple2<IntWritable, Text> x) {
         return x.toString();
       }
     }).collect().toString());
@@ -534,7 +534,7 @@ public class JavaAPISuite implements Serializable {
 
     rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
-      public Tuple2<IntWritable, Text> apply(Tuple2<Integer, String> pair) {
+      public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
       }
     }).saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
@@ -544,7 +544,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(pairs.toString(), output.map(new Function<Tuple2<IntWritable, Text>,
       String>() {
       @Override
-      public String apply(Tuple2<IntWritable, Text> x) {
+      public String call(Tuple2<IntWritable, Text> x) {
         return x.toString();
       }
     }).collect().toString());
