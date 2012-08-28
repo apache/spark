@@ -158,7 +158,7 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
   def incrementGeneration() {
     generationLock.synchronized {
       generation += 1
-      logInfo("Increasing generation to " + generation)
+      logDebug("Increasing generation to " + generation)
     }
   }
 

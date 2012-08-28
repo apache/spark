@@ -88,7 +88,7 @@ class TaskSetManager(
 
   // Figure out the current map output tracker generation and set it on all tasks
   val generation = sched.mapOutputTracker.getGeneration
-  logInfo("Generation for " + taskSet.id + ": " + generation)
+  logDebug("Generation for " + taskSet.id + ": " + generation)
   for (t <- tasks) {
     t.generation = generation
   }
