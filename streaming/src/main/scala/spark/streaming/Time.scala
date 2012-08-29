@@ -1,6 +1,6 @@
 package spark.streaming
 
-case class Time(millis: Long) extends Serializable {
+case class Time(millis: Long) {
   
   def < (that: Time): Boolean = (this.millis < that.millis)
  

@@ -3,7 +3,7 @@ package spark.streaming.examples
 import spark.SparkContext
 import SparkContext._
 import spark.streaming._
-import SparkStreamContext._
+import StreamingContext._
 
 import spark.storage.StorageLevel
 
@@ -71,7 +71,7 @@ object WordCount2 {
   def main (args: Array[String]) {
     
     if (args.length != 5) {
-      println ("Usage: SparkStreamContext <host> <file> <mapTasks> <reduceTasks> <batchMillis>")
+      println ("Usage: WordCount2 <host> <file> <mapTasks> <reduceTasks> <batchMillis>")
       System.exit(1)
     }
 
@@ -79,7 +79,7 @@ object WordCount2 {
 
     val BATCH_DURATION = Milliseconds(batchMillis.toLong)
     
-    val ssc = new SparkStreamContext(master, "WordCount2")
+    val ssc = new StreamingContext(master, "WordCount2")
     ssc.setBatchDuration(BATCH_DURATION)
 
     val data = ssc.sc.textFile(file, mapTasks.toInt).persist(StorageLevel.MEMORY_ONLY_DESER_2)
