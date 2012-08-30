@@ -17,9 +17,13 @@ object BroadcastTest {
     for (i <- 0 until arr1.length) 
       arr1(i) = i
     
-    val barr1 = spark.broadcast(arr1)
-    spark.parallelize(1 to 10, slices).foreach {
-      i => println(barr1.value.size)
+    for (i <- 0 until 2) {
+      println("Iteration " + i)
+      println("===========")
+      val barr1 = spark.broadcast(arr1)
+      spark.parallelize(1 to 10, slices).foreach {
+        i => println(barr1.value.size)
+      }
     }
 
     System.exit(0)

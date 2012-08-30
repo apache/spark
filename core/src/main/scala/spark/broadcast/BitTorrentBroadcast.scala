@@ -722,7 +722,6 @@ extends Broadcast[T] with Logging with Serializable {
       guidePortLock.synchronized { guidePortLock.notifyAll() }
 
       try {
-        // Don't stop until there is a copy in HDFS
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
@@ -730,14 +729,13 @@ extends Broadcast[T] with Logging with Serializable {
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
-              logError("GuideMultipleRequests Timeout.")
-
               // Stop broadcast if at least one worker has connected and
               // everyone connected so far are done. Comparing with
               // listOfSources.size - 1, because it includes the Guide itself
               if (listOfSources.size > 1 &&
                 setOfCompletedSources.size == listOfSources.size - 1) {
                 stopBroadcast = true
+                logInfo("GuideMultipleRequests Timeout. stopBroadcast == true.")
               }
             }
           }
@@ -918,9 +916,7 @@ extends Broadcast[T] with Logging with Serializable {
             serverSocket.setSoTimeout(MultiTracker.ServerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
-            case e: Exception => {
-              logError("ServeMultipleRequests Timeout.")
-            }
+            case e: Exception => { }
           }
           if (clientSocket != null) {
             logDebug("Serve: Accepted new client connection:" + clientSocket)
