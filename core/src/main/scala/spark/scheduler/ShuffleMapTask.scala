@@ -108,7 +108,7 @@ class ShuffleMapTask(
     val partitioner = dep.partitioner
 
     val bucketIterators =
-      if (aggregator.mergeCombiners != null) {
+      if (aggregator.mapSideCombine) {
         // Apply combiners (map-side aggregation) to the map output.
         val buckets = Array.tabulate(numOutputSplits)(_ => new HashMap[Any, Any])
         for (elem <- rdd.iterator(split)) {
