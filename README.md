@@ -24,8 +24,7 @@ will need to set the `SCALA_HOME` environment variable to point to where
 you've installed Scala. Scala must be accessible through one of these
 methods on Mesos slave nodes as well as on the master.
 
-To run one of the examples, first run `sbt/sbt package` to create a JAR with
-the example classes. Then use `./run <class> <params>`. For example:
+To run one of the examples, first run `sbt/sbt package` to build them. Then use `./run <class> <params>`. For example:
 
     ./run spark.examples.SparkLR local[2]
 
