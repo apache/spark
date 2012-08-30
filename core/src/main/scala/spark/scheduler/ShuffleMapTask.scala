@@ -106,27 +106,44 @@ class ShuffleMapTask(
     val numOutputSplits = dep.partitioner.numPartitions
     val aggregator = dep.aggregator.asInstanceOf[Aggregator[Any, Any, Any]]
     val partitioner = dep.partitioner
-    val buckets = Array.tabulate(numOutputSplits)(_ => new HashMap[Any, Any])
-    for (elem <- rdd.iterator(split)) {
-      val (k, v) = elem.asInstanceOf[(Any, Any)]
-      var bucketId = partitioner.getPartition(k)
-      val bucket = buckets(bucketId)
-      var existing = bucket.get(k)
-      if (existing == null) {
-        bucket.put(k, aggregator.createCombiner(v))
+
+    val bucketIterators =
+      if (aggregator.mapSideCombine) {
+        // Apply combiners (map-side aggregation) to the map output.
+        val buckets = Array.tabulate(numOutputSplits)(_ => new HashMap[Any, Any])
+        for (elem <- rdd.iterator(split)) {
+          val (k, v) = elem.asInstanceOf[(Any, Any)]
+          val bucketId = partitioner.getPartition(k)
+          val bucket = buckets(bucketId)
+          val existing = bucket.get(k)
+          if (existing == null) {
+            bucket.put(k, aggregator.createCombiner(v))
+          } else {
+            bucket.put(k, aggregator.mergeValue(existing, v))
+          }
+        }
+        buckets.map(_.iterator)
       } else {
-        bucket.put(k, aggregator.mergeValue(existing, v))
+        // No combiners (no map-side aggregation). Simply partition the map output.
+        val buckets = Array.tabulate(numOutputSplits)(_ => new ArrayBuffer[(Any, Any)])
+        for (elem <- rdd.iterator(split)) {
+          val pair = elem.asInstanceOf[(Any, Any)]
+          val bucketId = partitioner.getPartition(pair._1)
+          buckets(bucketId) += pair
+        }
+        buckets.map(_.iterator)
       }
-    }
+
     val ser = SparkEnv.get.serializer.newInstance()
     val blockManager = SparkEnv.get.blockManager
     for (i <- 0 until numOutputSplits) {
       val blockId = "shuffleid_" + dep.shuffleId + "_" + partition + "_" + i
       // Get a scala iterator from java map
-      val iter: Iterator[(Any, Any)] = buckets(i).iterator
+      val iter: Iterator[(Any, Any)] = bucketIterators(i)
       // TODO: This should probably be DISK_ONLY
       blockManager.put(blockId, iter, StorageLevel.MEMORY_ONLY, false)
     }
+
     return SparkEnv.get.blockManager.blockManagerId
   }
 
