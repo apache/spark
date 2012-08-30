@@ -4,7 +4,9 @@ import java.io.{File, FileOutputStream}
 import java.net.{URL, URLClassLoader}
 import java.util.concurrent._
 
-import scala.collection.mutable.ArrayBuffer
+import org.apache.hadoop.fs.FileUtil
+
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import spark.broadcast._
 import spark.scheduler._
@@ -18,6 +20,8 @@ class Executor extends Logging {
   var classLoader: ClassLoader = null
   var threadPool: ExecutorService = null
   var env: SparkEnv = null
+  
+  val fileSet: HashMap[String, Long] = new HashMap[String, Long]()
 
   val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
@@ -63,6 +67,7 @@ class Executor extends Logging {
         Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear()
         val task = ser.deserialize[Task[Any]](serializedTask, classLoader)
+        task.downloadFileDependencies(fileSet)
         logInfo("Its generation is " + task.generation)
         env.mapOutputTracker.updateGeneration(task.generation)
         val value = task.run(taskId.toInt)
@@ -108,7 +113,7 @@ class Executor extends Logging {
     for (uri <- uris.split(",").filter(_.size > 0)) {
       val url = new URL(uri)
       val filename = url.getPath.split("/").last
-      downloadFile(url, filename)
+      Utils.downloadFile(url, filename)
       localFiles += filename
     }
     if (localFiles.size > 0) {
@@ -136,10 +141,4 @@ class Executor extends Logging {
     return loader
   }
 
-  // Download a file from a given URL to the local filesystem
-  private def downloadFile(url: URL, localPath: String) {
-    val in = url.openStream()
-    val out = new FileOutputStream(localPath)
-    Utils.copyStream(in, out, true)
-  }
 }

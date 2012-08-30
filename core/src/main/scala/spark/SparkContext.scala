@@ -2,11 +2,12 @@ package spark
 
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
+import java.net.URI
 
 import akka.actor.Actor
 import akka.actor.Actor._
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
@@ -76,7 +77,10 @@ class SparkContext(
     true,
     isLocal)
   SparkEnv.set(env)
-
+  
+  // Used to store a URL for each static file together with the file's local timestamp
+  val files = HashMap[String, Long]()
+  
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
@@ -90,13 +94,13 @@ class SparkContext(
     
     master match {
       case "local" => 
-        new LocalScheduler(1, 0)
+        new LocalScheduler(1, 0, this)
 
       case LOCAL_N_REGEX(threads) => 
-        new LocalScheduler(threads.toInt, 0)
+        new LocalScheduler(threads.toInt, 0, this)
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
-        new LocalScheduler(threads.toInt, maxFailures.toInt)
+        new LocalScheduler(threads.toInt, maxFailures.toInt, this)
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
@@ -131,7 +135,7 @@ class SparkContext(
   taskScheduler.start()
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
-
+  
   // Methods for creating RDDs
 
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism ): RDD[T] = {
@@ -310,7 +314,24 @@ class SparkContext(
 
   // Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = SparkEnv.get.broadcastManager.newBroadcast[T] (value, isLocal)
-
+  
+  // Adds a file dependency to all Tasks executed in the future.
+  def addFile(path: String) : String = {
+    val uri = new URI(path)
+    uri.getScheme match {
+      // A local file
+      case null | "file" => 
+        val file = new File(uri.getPath)
+        val url = env.httpFileServer.addFile(file)
+        files(url) = System.currentTimeMillis
+        logInfo("Added file " + path + " at " + url + " with timestamp " + files(url))
+        return url
+      case _ =>
+        files(path) = System.currentTimeMillis
+        return path
+    }
+  }
+  
   // Stop the SparkContext
   def stop() {
     dagScheduler.stop()

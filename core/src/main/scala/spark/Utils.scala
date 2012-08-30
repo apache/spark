@@ -1,18 +1,19 @@
 package spark
 
 import java.io._
-import java.net.InetAddress
+import java.net.{InetAddress, URL, URI}
+import java.util.{Locale, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
-
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, FileSystem}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
-import java.util.{Locale, UUID}
 import scala.io.Source
 
 /**
  * Various utility methods used by Spark.
  */
-object Utils {
+object Utils extends Logging {
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -114,6 +115,47 @@ object Utils {
     val in = new FileInputStream(source)
     val out = new FileOutputStream(dest)
     copyStream(in, out, true)
+  }
+  
+  
+  
+  /* Download a file from a given URL to the local filesystem */
+  def downloadFile(url: URL, localPath: String) {
+    val in = url.openStream()
+    val out = new FileOutputStream(localPath)
+    Utils.copyStream(in, out, true)
+  }
+  
+  /**
+   * Download a file requested by the executor. Supports fetching the file in a variety of ways,
+   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   */
+  def fetchFile(url: String, targetDir: File) {
+    val filename = url.split("/").last
+    val targetFile = new File(targetDir, filename)
+    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ftp://")) {
+      // Use the java.net library to fetch it
+      logInfo("Fetching " + url + " to " + targetFile)
+      val in = new URL(url).openStream()
+      val out = new FileOutputStream(targetFile)
+      Utils.copyStream(in, out, true)
+    } else {
+      // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
+      val uri = new URI(url)
+      val conf = new Configuration()
+      val fs = FileSystem.get(uri, conf)
+      val in = fs.open(new Path(uri))
+      val out = new FileOutputStream(targetFile)
+      Utils.copyStream(in, out, true)
+    }
+    // Decompress the file if it's a .tar or .tar.gz
+    if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
+      logInfo("Untarring " + filename)
+      Utils.execute(Seq("tar", "-xzf", filename), targetDir)
+    } else if (filename.endsWith(".tar")) {
+      logInfo("Untarring " + filename)
+      Utils.execute(Seq("tar", "-xf", filename), targetDir)
+    }
   }
 
   /**
