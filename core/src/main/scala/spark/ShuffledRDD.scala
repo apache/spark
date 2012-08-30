@@ -27,16 +27,36 @@ class ShuffledRDD[K, V, C](
 
   override def compute(split: Split): Iterator[(K, C)] = {
     val combiners = new JHashMap[K, C]
-    def mergePair(k: K, c: C) {
-      val oldC = combiners.get(k)
-      if (oldC == null) {
-        combiners.put(k, c)
-      } else {
-        combiners.put(k, aggregator.mergeCombiners(oldC, c))
-      }
-    }
     val fetcher = SparkEnv.get.shuffleFetcher
-    fetcher.fetch[K, C](dep.shuffleId, split.index, mergePair)
+
+    if (aggregator.mergeCombiners != null) {
+      // If mergeCombiners is specified, combiners are applied on the map
+      // partitions. In this case, post-shuffle we get a list of outputs from
+      // the combiners and merge them using mergeCombiners.
+      def mergePairWithMapSideCombiners(k: K, c: C) {
+        val oldC = combiners.get(k)
+        if (oldC == null) {
+          combiners.put(k, c)
+        } else {
+          combiners.put(k, aggregator.mergeCombiners(oldC, c))
+        }
+      }
+      fetcher.fetch[K, C](dep.shuffleId, split.index, mergePairWithMapSideCombiners)
+    } else {
+      // If mergeCombiners is not specified, no combiner is applied on the map
+      // partitions (i.e. map side aggregation is turned off). Post-shuffle we
+      // get a list of values and we use mergeValue to merge them.
+      def mergePairWithoutMapSideCombiners(k: K, v: V) {
+        val oldC = combiners.get(k)
+        if (oldC == null) {
+          combiners.put(k, aggregator.createCombiner(v))
+        } else {
+          combiners.put(k, aggregator.mergeValue(oldC, v))
+        }
+      }
+      fetcher.fetch[K, V](dep.shuffleId, split.index, mergePairWithoutMapSideCombiners)
+    }
+
     return new Iterator[(K, C)] {
       var iter = combiners.entrySet().iterator()
 
