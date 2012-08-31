@@ -59,12 +59,12 @@ object WordCount2_ExtraFunctions {
 
 object WordCount2 {
 
-  def moreWarmup(sc: SparkContext) {
-    (0 until 40).foreach {i =>
+  def warmup(sc: SparkContext) {
+    (0 until 10).foreach {i =>
       sc.parallelize(1 to 20000000, 1000)
-        .map(_ % 1331).map(_.toString)
-        .mapPartitions(WordCount2_ExtraFunctions.splitAndCountPartitions).reduceByKey(_ + _, 10)
-        .collect()
+        .map(x => (x % 337, x % 1331))
+        .reduceByKey(_ + _)
+        .count()
     }
   }
   
@@ -82,7 +82,10 @@ object WordCount2 {
     val ssc = new StreamingContext(master, "WordCount2")
     ssc.setBatchDuration(batchDuration)
 
-    val data = ssc.sc.textFile(file, mapTasks.toInt).persist(StorageLevel.MEMORY_ONLY_DESER_2)
+    //warmup(ssc.sc)
+
+    val data = ssc.sc.textFile(file, mapTasks.toInt).persist(
+      new StorageLevel(false, true, true, 2))  // Memory only, deserialized, 2 replicas
     println("Data count: " + data.count())
     println("Data count: " + data.count())
     println("Data count: " + data.count())
@@ -94,7 +97,7 @@ object WordCount2 {
 
     val windowedCounts = sentences
       .mapPartitions(splitAndCountPartitions)
-      .reduceByKeyAndWindow(add _, subtract _, Seconds(10), batchDuration, reduceTasks.toInt)
+      .reduceByKeyAndWindow(add _, subtract _, Seconds(30), batchDuration, reduceTasks.toInt)
     windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, StorageLevel.MEMORY_ONLY_DESER_2,
       Milliseconds(chkptMillis.toLong))
     windowedCounts.print()
