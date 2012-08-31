@@ -272,10 +272,14 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     val totalBlocks = blocksByAddress.map(_._2.size).sum
     logDebug("Getting " + totalBlocks + " blocks")
     var startTime = System.currentTimeMillis
-    val results = new LinkedBlockingQueue[(String, Option[Iterator[Any]])]
     val localBlockIds = new ArrayBuffer[String]()
     val remoteBlockIds = new ArrayBuffer[String]()
     val remoteBlockIdsPerLocation = new HashMap[BlockManagerId, Seq[String]]()
+
+    // A queue to hold our results. Because we want all the deserializing the happen in the
+    // caller's thread, this will actually hold functions to produce the Iterator for each block.
+    // For local blocks we'll have an iterator already, while for remote ones we'll deserialize.
+    val results = new LinkedBlockingQueue[(String, Option[() => Iterator[Any]])]
 
     // Split local and remote blocks
     for ((address, blockIds) <- blocksByAddress) {
@@ -302,10 +306,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
               throw new SparkException(
                 "Unexpected message " + blockMessage.getType + " received from " + cmId)
             }
-            val buffer = blockMessage.getData
             val blockId = blockMessage.getId
-            val block = dataDeserialize(buffer)
-            results.put((blockId, Some(block)))
+            results.put((blockId, Some(() => dataDeserialize(blockMessage.getData))))
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           })
         }
@@ -323,9 +325,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     // Get the local blocks while remote blocks are being fetched
     startTime = System.currentTimeMillis
     localBlockIds.foreach(id => {
-      get(id) match {
+      getLocal(id) match {
         case Some(block) => {
-          results.put((id, Some(block)))
+          results.put((id, Some(() => block)))
           logDebug("Got local block " + id)
         }
         case None => {
@@ -343,7 +345,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
       def next(): (String, Option[Iterator[Any]]) = {
         resultsGotten += 1
-        results.take()
+        val (blockId, functionOption) = results.take()
+        (blockId, functionOption.map(_.apply()))
       }
     }
   }
