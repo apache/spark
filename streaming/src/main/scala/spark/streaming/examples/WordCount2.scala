@@ -70,17 +70,17 @@ object WordCount2 {
   
   def main (args: Array[String]) {
     
-    if (args.length != 5) {
-      println ("Usage: WordCount2 <host> <file> <mapTasks> <reduceTasks> <batchMillis>")
+    if (args.length != 6) {
+      println ("Usage: WordCount2 <host> <file> <mapTasks> <reduceTasks> <batchMillis> <chkptMillis>")
       System.exit(1)
     }
 
-    val Array(master, file, mapTasks, reduceTasks, batchMillis) = args
+    val Array(master, file, mapTasks, reduceTasks, batchMillis, chkptMillis) = args
 
-    val BATCH_DURATION = Milliseconds(batchMillis.toLong)
+    val batchDuration = Milliseconds(batchMillis.toLong)
     
     val ssc = new StreamingContext(master, "WordCount2")
-    ssc.setBatchDuration(BATCH_DURATION)
+    ssc.setBatchDuration(batchDuration)
 
     val data = ssc.sc.textFile(file, mapTasks.toInt).persist(StorageLevel.MEMORY_ONLY_DESER_2)
     println("Data count: " + data.count())
@@ -94,8 +94,9 @@ object WordCount2 {
 
     val windowedCounts = sentences
       .mapPartitions(splitAndCountPartitions)
-      .reduceByKeyAndWindow(add _, subtract _, Seconds(10), BATCH_DURATION, reduceTasks.toInt)
-    windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, StorageLevel.MEMORY_ONLY_DESER_2, Seconds(10))
+      .reduceByKeyAndWindow(add _, subtract _, Seconds(10), batchDuration, reduceTasks.toInt)
+    windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, StorageLevel.MEMORY_ONLY_DESER_2,
+      Milliseconds(chkptMillis.toLong))
     windowedCounts.print()
 
     ssc.start()
