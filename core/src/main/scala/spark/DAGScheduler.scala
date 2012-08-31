@@ -309,6 +309,7 @@ private trait DAGScheduler extends Scheduler with Logging {
                 // outputs on the node as dead.
               case _ =>
                 // Non-fetch failure -- probably a bug in the job, so bail out
+                eventQueues -= runId
                 throw new SparkException("Task failed: " + evt.task + ", reason: " + evt.reason)
                 // TODO: Cancel all tasks that are still running
             }

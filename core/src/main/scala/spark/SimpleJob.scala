@@ -293,6 +293,9 @@ class SimpleJob(
         if (numFailures(index) > MAX_TASK_FAILURES) {
           logError("Task %d:%d failed more than %d times; aborting job".format(
             jobId, index, MAX_TASK_FAILURES))
+          val taskEndReason = ser.deserialize[TaskEndReason](
+            status.getData.toByteArray, getClass.getClassLoader)
+          sched.taskEnded(tasks(index), taskEndReason, null, null)  // To make DAGScheduler stop
           abort("Task %d failed more than %d times".format(index, MAX_TASK_FAILURES))
         }
       }
