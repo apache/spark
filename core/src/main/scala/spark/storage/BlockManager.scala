@@ -456,7 +456,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     // data is already serialized and ready for sending
     val replicationFuture = if (level.replication > 1) {
       Future {
-        replicate(blockId, bytes, level)
+        replicate(blockId, bytes.duplicate(), level)
       }
     } else {
       null
