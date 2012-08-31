@@ -13,7 +13,7 @@ class JobManager(ssc: StreamingContext, numThreads: Int = 1) extends Logging {
       try {
         val timeTaken = job.run()
         logInfo("Total delay: %.4f s for job %s; execution was %.4f s".format(
-          System.currentTimeMillis() - job.time, timeTaken))
+          (System.currentTimeMillis() - job.time) / 1000.0, timeTaken / 1000.0))
       } catch {
         case e: Exception =>
           logError("Running " + job + " failed", e)
