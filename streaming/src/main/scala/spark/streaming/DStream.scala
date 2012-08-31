@@ -3,13 +3,12 @@ package spark.streaming
 import spark.streaming.StreamingContext._
 
 import spark.RDD
-import spark.BlockRDD
 import spark.UnionRDD
 import spark.Logging
-import spark.SparkContext
 import spark.SparkContext._
 import spark.storage.StorageLevel
-    
+import spark.Partitioner
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
@@ -95,12 +94,12 @@ extends Logging with Serializable {
 
   /** This method checks whether the 'time' is valid wrt slideTime for generating RDD */
   private def isTimeValid (time: Time): Boolean = {
-    if (!isInitialized) 
+    if (!isInitialized) {
       throw new Exception (this.toString + " has not been initialized")
-    if ((time - zeroTime).isMultipleOf(slideTime)) { 
-      true
-    } else {
+    } else if (time < zeroTime || ! (time - zeroTime).isMultipleOf(slideTime)) {
       false
+    } else {
+      true
     }
   }
 
@@ -119,7 +118,7 @@ extends Logging with Serializable {
       
       // if RDD was not generated, and if the time is valid 
       // (based on sliding time of this DStream), then generate the RDD
-      case None =>
+      case None => {
         if (isTimeValid(time)) {
           compute(time) match {
             case Some(newRDD) =>
@@ -138,6 +137,7 @@ extends Logging with Serializable {
         } else {
           None
         }
+      }
     }
   }
 
@@ -361,24 +361,19 @@ class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
-    numPartitions: Int)
+    partitioner: Partitioner)
   extends DStream [(K,C)] (parent.ssc) {
   
   override def dependencies = List(parent)
 
   override def slideTime: Time = parent.slideTime
+
+
  
   override def compute(validTime: Time): Option[RDD[(K,C)]] = {
     parent.getOrCompute(validTime) match {
-      case Some(rdd) => 
-        val newrdd = {
-          if (numPartitions > 0) {
-            rdd.combineByKey[C](createCombiner, mergeValue, mergeCombiner, numPartitions) 
-          } else {
-            rdd.combineByKey[C](createCombiner, mergeValue, mergeCombiner)
-          }
-        }
-        Some(newrdd)
+      case Some(rdd) =>
+        Some(rdd.combineByKey[C](createCombiner, mergeValue, mergeCombiner, partitioner))
       case None => None
     }
   }
