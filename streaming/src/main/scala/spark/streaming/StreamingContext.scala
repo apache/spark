@@ -52,22 +52,22 @@ class StreamingContext (
   private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
   
   def createNetworkTextStream(hostname: String, port: Int): DStream[String] = {
-    createNetworkStream[String](hostname, port, NetworkInputReceiver.bytesToLines)
+    createNetworkObjectStream[String](hostname, port, ObjectInputReceiver.bytesToLines)
   }
   
-  def createNetworkStream[T: ClassManifest](
+  def createNetworkObjectStream[T: ClassManifest](
       hostname: String, 
       port: Int, 
       converter: (InputStream) => Iterator[T]
     ): DStream[T] = {
-    val inputStream = new NetworkInputDStream[T](this, hostname, port, converter)
+    val inputStream = new ObjectInputDStream[T](this, hostname, port, converter)
     inputStreams += inputStream
     inputStream
   }
  
   /*
   def createHttpTextStream(url: String): DStream[String] = {
-    createHttpStream(url, NetworkInputReceiver.bytesToLines)
+    createHttpStream(url, ObjectInputReceiver.bytesToLines)
   }
   
   def createHttpStream[T: ClassManifest](

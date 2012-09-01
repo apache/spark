@@ -52,9 +52,7 @@ extends Logging {
         if (!iterator.hasNext) {
           throw new Exception("Could not start receiver as details not found.")
         }
-        val stream = iterator.next
-        val receiver = stream.createReceiver()
-        receiver.run()
+        iterator.next().runReceiver()
       }
       
       ssc.sc.runJob(tempRDD, startReceiver)
@@ -62,8 +60,7 @@ extends Logging {
     
     def stopReceivers() {
       implicit val ec = env.actorSystem.dispatcher
-      val message = new StopReceiver() 
-      val listOfFutures = receiverInfo.values.map(_.ask(message)(timeout)).toList
+      val listOfFutures = receiverInfo.values.map(_.ask(StopReceiver)(timeout)).toList
       val futureOfList = Future.sequence(listOfFutures)
       Await.result(futureOfList, timeout) 
     }
