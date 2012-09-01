@@ -342,6 +342,7 @@ class TaskSetManager(
     failed = true
     causeOfFailure = message
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
+    sched.listener.taskSetFailed(taskSet, message)
     sched.taskSetFinished(this)
   }
 
