@@ -21,7 +21,7 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
     while (pos < length) {
       val writeSize = math.min(length - pos, CHUNK_SIZE)
       waitToWrite(writeSize)
-      out.write(bytes, offset + pos, length - pos)
+      out.write(bytes, offset + pos, writeSize)
       pos += writeSize
     }
   }

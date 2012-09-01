@@ -15,6 +15,7 @@ object RawTextSender extends Logging {
   def main(args: Array[String]) {
     if (args.length != 4) {
       System.err.println("Usage: RawTextSender <port> <file> <blockSize> <bytesPerSec>")
+      System.exit(1)
     }
     // Parse the arguments using a pattern match
     val Array(IntParam(port), file, IntParam(blockSize), IntParam(bytesPerSec)) = args
@@ -36,6 +37,7 @@ object RawTextSender extends Logging {
 
     while (true) {
       val socket = serverSocket.accept()
+      logInfo("Got a new connection")
       val out = new RateLimitedOutputStream(socket.getOutputStream, bytesPerSec)
       try {
         while (true) {
@@ -43,7 +45,7 @@ object RawTextSender extends Logging {
         }
       } catch {
         case e: IOException =>
-          logError("Socket closed: ", e)
+          logError("Socket closed", e)
           socket.close()
       }
     }
