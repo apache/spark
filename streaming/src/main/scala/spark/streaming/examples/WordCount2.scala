@@ -100,7 +100,7 @@ object WordCount2 {
       .reduceByKeyAndWindow(add _, subtract _, Seconds(30), batchDuration, reduceTasks.toInt)
     windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, StorageLevel.MEMORY_ONLY_DESER_2,
       Milliseconds(chkptMillis.toLong))
-    windowedCounts.print()
+    windowedCounts.foreachRDD(r => println("Element count: " + r.count()))
 
     ssc.start()
 
