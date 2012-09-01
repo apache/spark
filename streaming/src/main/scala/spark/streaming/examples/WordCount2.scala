@@ -85,7 +85,7 @@ object WordCount2 {
     //warmup(ssc.sc)
 
     val data = ssc.sc.textFile(file, mapTasks.toInt).persist(
-      new StorageLevel(false, true, true, 2))  // Memory only, deserialized, 2 replicas
+      new StorageLevel(false, true, false, 2))  // Memory only, serialized, 2 replicas
     println("Data count: " + data.count())
     println("Data count: " + data.count())
     println("Data count: " + data.count())

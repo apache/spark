@@ -22,7 +22,8 @@ import spark.storage.StorageLevel
 class RawInputDStream[T: ClassManifest](
     @transient ssc: StreamingContext,
     host: String,
-    port: Int)
+    port: Int,
+    storageLevel: StorageLevel)
   extends NetworkInputDStream[T](ssc) with Logging {
 
   val streamId = id
@@ -49,7 +50,7 @@ class RawInputDStream[T: ClassManifest](
           val buffer = queue.take()
           val blockId = "input-" + streamId + "-" + nextBlockNumber
           nextBlockNumber += 1
-          env.blockManager.putBytes(blockId, buffer, StorageLevel.MEMORY_ONLY_2)
+          env.blockManager.putBytes(blockId, buffer, storageLevel)
           actor ! BlockPublished(blockId)
         }
       }

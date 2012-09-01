@@ -176,7 +176,7 @@ extends Logging with Serializable {
   def mapPartitions[U: ClassManifest](mapPartFunc: Iterator[T] => Iterator[U]) = 
     new MapPartitionedDStream(this, ssc.sc.clean(mapPartFunc))
 
-  def reduce(reduceFunc: (T, T) => T) = this.map(x => (1, x)).reduceByKey(reduceFunc, 1).map(_._2)
+  def reduce(reduceFunc: (T, T) => T) = this.map(x => (null, x)).reduceByKey(reduceFunc, 1).map(_._2)
 
   def count() = this.map(_ => 1).reduce(_ + _)
   

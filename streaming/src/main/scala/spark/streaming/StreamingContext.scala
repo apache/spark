@@ -4,6 +4,7 @@ import spark.RDD
 import spark.Logging
 import spark.SparkEnv
 import spark.SparkContext
+import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
@@ -61,6 +62,16 @@ class StreamingContext (
       converter: (InputStream) => Iterator[T]
     ): DStream[T] = {
     val inputStream = new ObjectInputDStream[T](this, hostname, port, converter)
+    inputStreams += inputStream
+    inputStream
+  }
+  
+  def createRawNetworkStream[T: ClassManifest](
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_2
+    ): DStream[T] = {
+    val inputStream = new RawInputDStream[T](this, hostname, port, storageLevel)
     inputStreams += inputStream
     inputStream
   }

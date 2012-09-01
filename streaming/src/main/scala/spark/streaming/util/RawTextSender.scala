@@ -1,5 +1,6 @@
 package spark.streaming.util
 
+import java.nio.ByteBuffer
 import spark.util.{RateLimitedOutputStream, IntParam}
 import java.net.ServerSocket
 import spark.{Logging, KryoSerializer}
@@ -33,7 +34,12 @@ object RawTextSender extends Logging {
     bufferStream.trim()
     val array = bufferStream.array
 
+    val countBuf = ByteBuffer.wrap(new Array[Byte](4))
+    countBuf.putInt(array.length)
+    countBuf.flip()
+
     val serverSocket = new ServerSocket(port)
+    logInfo("Listening on port " + port)
 
     while (true) {
       val socket = serverSocket.accept()
@@ -41,6 +47,7 @@ object RawTextSender extends Logging {
       val out = new RateLimitedOutputStream(socket.getOutputStream, bytesPerSec)
       try {
         while (true) {
+          out.write(countBuf.array)
           out.write(array)
         }
       } catch {
