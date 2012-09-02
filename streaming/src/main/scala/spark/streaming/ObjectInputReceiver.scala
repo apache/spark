@@ -26,23 +26,22 @@ import akka.pattern.ask
 import akka.util.duration._
 import akka.dispatch._
 
-trait NetworkInputReceiverMessage
-case class GetBlockIds(time: Long) extends NetworkInputReceiverMessage
-case class GotBlockIds(streamId: Int, blocksIds: Array[String]) extends NetworkInputReceiverMessage
-case class StopReceiver() extends NetworkInputReceiverMessage
-
-class NetworkInputReceiver[T: ClassManifest](streamId: Int, host: String, port: Int, bytesToObjects: InputStream => Iterator[T]) 
-extends Logging {
+class ObjectInputReceiver[T: ClassManifest](
+    streamId: Int,
+    host: String,
+    port: Int,
+    bytesToObjects: InputStream => Iterator[T])
+  extends Logging {
  
   class ReceiverActor extends Actor {    
-    override def preStart() = {
+    override def preStart() {
       logInfo("Attempting to register")
       val ip = System.getProperty("spark.master.host", "localhost")
       val port = System.getProperty("spark.master.port", "7077").toInt
       val actorName: String = "NetworkInputTracker"
       val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
       val trackerActor = env.actorSystem.actorFor(url)
-      val timeout = 100.milliseconds
+      val timeout = 1.seconds
       val future = trackerActor.ask(RegisterReceiver(streamId, self))(timeout)
       Await.result(future, timeout)         
     }
@@ -53,7 +52,7 @@ extends Logging {
         sender ! GotBlockIds(streamId, dataHandler.getPushedBlocks())        
       }
       
-      case StopReceiver() => {
+      case StopReceiver => {
         if (receivingThread != null) {
           receivingThread.interrupt()
         }
@@ -63,11 +62,10 @@ extends Logging {
   }
   
   class DataHandler {
-    
     class Block(val time: Long, val iterator: Iterator[T]) {
       val blockId = "input-" + streamId + "-" + time
       var pushed = true
-      override def toString() = "input block " + blockId
+      override def toString = "input block " + blockId
     }
     
     val clock = new SystemClock()
@@ -157,7 +155,7 @@ extends Logging {
     try {
       if (SparkEnv.get != null) {
         receiverActor = SparkEnv.get.actorSystem.actorOf(Props(new ReceiverActor), "ReceiverActor-" + streamId)      
-      }      
+      }
       dataHandler.start()            
       socket = connect()
       receivingThread = Thread.currentThread()
@@ -188,8 +186,7 @@ extends Logging {
 }
 
 
-object NetworkInputReceiver {
-  
+object ObjectInputReceiver {
   def bytesToLines(inputStream: InputStream): Iterator[String] = {
     val bufferedInputStream = new BufferedInputStream(inputStream)
     val dataInputStream = new DataInputStream(bufferedInputStream)   
@@ -219,7 +216,6 @@ object NetworkInputReceiver {
         }
         !finished
       }
-  
       
       override def next(): String = {
         if (!gotNext) {
@@ -237,12 +233,12 @@ object NetworkInputReceiver {
   
   def main(args: Array[String]) {
     if (args.length < 2) {
-      println("NetworkReceiver <hostname> <port>")
+      println("ObjectInputReceiver <hostname> <port>")
       System.exit(1)
     }
     val host = args(0)
     val port = args(1).toInt
-    val receiver = new NetworkInputReceiver(0, host, port, bytesToLines)
+    val receiver = new ObjectInputReceiver(0, host, port, bytesToLines)
     receiver.run()
   }
 }

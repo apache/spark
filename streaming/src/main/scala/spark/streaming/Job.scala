@@ -8,7 +8,7 @@ class Job(val time: Time, func: () => _) {
     val startTime = System.currentTimeMillis 
     func() 
     val stopTime = System.currentTimeMillis
-    (startTime - stopTime)
+    (stopTime - startTime)
   }
 
   override def toString = "streaming job " + id + " @ " + time 

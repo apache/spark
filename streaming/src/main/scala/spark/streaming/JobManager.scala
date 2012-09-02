@@ -12,10 +12,8 @@ class JobManager(ssc: StreamingContext, numThreads: Int = 1) extends Logging {
       SparkEnv.set(ssc.env)
       try {
         val timeTaken = job.run()
-        logInfo(
-          "Running " + job + " took " + timeTaken + " ms, " +
-          "total delay was " + (System.currentTimeMillis - job.time) + " ms"
-        )
+        logInfo("Total delay: %.5f s for job %s (execution: %.5f s)".format(
+          (System.currentTimeMillis() - job.time) / 1000.0, job.id, timeTaken / 1000.0))
       } catch {
         case e: Exception =>
           logError("Running " + job + " failed", e)
