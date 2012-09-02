@@ -105,7 +105,7 @@ class DStreamSuite extends FunSuite with BeforeAndAfter with Logging {
         Seq(("a", 1), ("b", 1), ("c", 1)),
         Seq(("a", 2), ("b", 2), ("c", 2)),
         Seq(("a", 3), ("b", 3), ("c", 3))
-      )//.map(array => array.toSeq.map(x => (x._1, new RichInt(x._2))))
+      )
 
     val updateStateOp =(s: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: RichInt) => {

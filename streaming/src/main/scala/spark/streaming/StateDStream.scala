@@ -4,7 +4,6 @@ import spark.RDD
 import spark.Partitioner
 import spark.MapPartitionsRDD
 import spark.SparkContext._
-import javax.annotation.Nullable
 
 
 class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManifest](
