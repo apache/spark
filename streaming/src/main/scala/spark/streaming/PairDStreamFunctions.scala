@@ -19,32 +19,32 @@ extends Serializable {
   /* DStream operations for key-value pairs */
   /* ---------------------------------- */
 
-  def groupByKey(): ShuffledDStream[K, V, ArrayBuffer[V]] = {
+  def groupByKey(): DStream[(K, Seq[V])] = {
     groupByKey(defaultPartitioner())
   }
 
-  def groupByKey(numPartitions: Int): ShuffledDStream[K, V, ArrayBuffer[V]] = {
+  def groupByKey(numPartitions: Int): DStream[(K, Seq[V])] = {
     groupByKey(defaultPartitioner(numPartitions))
   }
 
-  def groupByKey(partitioner: Partitioner): ShuffledDStream[K, V, ArrayBuffer[V]] = {
+  def groupByKey(partitioner: Partitioner): DStream[(K, Seq[V])] = {
     def createCombiner(v: V) = ArrayBuffer[V](v)
     def mergeValue(c: ArrayBuffer[V], v: V) = (c += v)
     def mergeCombiner(c1: ArrayBuffer[V], c2: ArrayBuffer[V]) = (c1 ++ c2)
-    combineByKey[ArrayBuffer[V]](createCombiner _, mergeValue _, mergeCombiner _, partitioner)
+    combineByKey(createCombiner _, mergeValue _, mergeCombiner _, partitioner).asInstanceOf[DStream[(K, Seq[V])]]
   }
 
-  def reduceByKey(reduceFunc: (V, V) => V): ShuffledDStream[K, V, V] = {
+  def reduceByKey(reduceFunc: (V, V) => V): DStream[(K, V)] = {
     reduceByKey(reduceFunc, defaultPartitioner())
   }
 
-  def reduceByKey(reduceFunc: (V, V) => V, numPartitions: Int): ShuffledDStream[K, V, V] = {
+  def reduceByKey(reduceFunc: (V, V) => V, numPartitions: Int): DStream[(K, V)] = {
     reduceByKey(reduceFunc, defaultPartitioner(numPartitions))
   }
 
-  def reduceByKey(reduceFunc: (V, V) => V, partitioner: Partitioner): ShuffledDStream[K, V, V] = {
+  def reduceByKey(reduceFunc: (V, V) => V, partitioner: Partitioner): DStream[(K, V)] = {
     val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
-    combineByKey[V]((v: V) => v, cleanedReduceFunc, cleanedReduceFunc, partitioner)
+    combineByKey((v: V) => v, cleanedReduceFunc, cleanedReduceFunc, partitioner)
   }
 
   private def combineByKey[C: ClassManifest](
@@ -55,11 +55,15 @@ extends Serializable {
     new ShuffledDStream[K, V, C](stream, createCombiner, mergeValue, mergeCombiner, partitioner)
   }
 
-  def groupByKeyAndWindow(windowTime: Time, slideTime: Time): ShuffledDStream[K, V, ArrayBuffer[V]] = {
+  def groupByKeyAndWindow(windowTime: Time, slideTime: Time): DStream[(K, Seq[V])] = {
     groupByKeyAndWindow(windowTime, slideTime, defaultPartitioner())
   }
 
-  def groupByKeyAndWindow(windowTime: Time, slideTime: Time, numPartitions: Int): ShuffledDStream[K, V, ArrayBuffer[V]] = {
+  def groupByKeyAndWindow(
+      windowTime: Time, 
+      slideTime: Time, 
+      numPartitions: Int
+    ): DStream[(K, Seq[V])] = {
     groupByKeyAndWindow(windowTime, slideTime, defaultPartitioner(numPartitions))
   }
 
@@ -67,15 +71,24 @@ extends Serializable {
       windowTime: Time,
       slideTime: Time,
       partitioner: Partitioner
-    ): ShuffledDStream[K, V, ArrayBuffer[V]] = {
+    ): DStream[(K, Seq[V])] = {
     stream.window(windowTime, slideTime).groupByKey(partitioner)
   }
 
-  def reduceByKeyAndWindow(reduceFunc: (V, V) => V, windowTime: Time, slideTime: Time): ShuffledDStream[K, V, V] = {
+  def reduceByKeyAndWindow(
+      reduceFunc: (V, V) => V, 
+      windowTime: Time, 
+      slideTime: Time
+    ): DStream[(K, V)] = {
     reduceByKeyAndWindow(reduceFunc, windowTime, slideTime, defaultPartitioner())
   }
 
-  def reduceByKeyAndWindow(reduceFunc: (V, V) => V, windowTime: Time, slideTime: Time, numPartitions: Int): ShuffledDStream[K, V, V] = {
+  def reduceByKeyAndWindow(
+      reduceFunc: (V, V) => V, 
+      windowTime: Time, 
+      slideTime: Time, 
+      numPartitions: Int
+    ): DStream[(K, V)] = {
     reduceByKeyAndWindow(reduceFunc, windowTime, slideTime, defaultPartitioner(numPartitions))
   }
 
@@ -84,7 +97,7 @@ extends Serializable {
       windowTime: Time,
       slideTime: Time,
       partitioner: Partitioner
-    ): ShuffledDStream[K, V, V] = {
+    ): DStream[(K, V)] = {
     stream.window(windowTime, slideTime).reduceByKey(ssc.sc.clean(reduceFunc), partitioner)
   }
 
@@ -93,12 +106,13 @@ extends Serializable {
   // so that new elements introduced in the window can be "added" using
   // reduceFunc to the previous window's result and old elements can be
   // "subtracted using invReduceFunc.
+  
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V,
       invReduceFunc: (V, V) => V,
       windowTime: Time,
       slideTime: Time
-    ): ReducedWindowedDStream[K, V] = {
+    ): DStream[(K, V)] = {
 
     reduceByKeyAndWindow(
       reduceFunc, invReduceFunc, windowTime, slideTime, defaultPartitioner())
@@ -110,7 +124,7 @@ extends Serializable {
       windowTime: Time,
       slideTime: Time,
       numPartitions: Int
-    ): ReducedWindowedDStream[K, V] = {
+    ): DStream[(K, V)] = {
 
     reduceByKeyAndWindow(
       reduceFunc, invReduceFunc, windowTime, slideTime, defaultPartitioner(numPartitions))
@@ -122,7 +136,7 @@ extends Serializable {
       windowTime: Time,
       slideTime: Time,
       partitioner: Partitioner
-    ): ReducedWindowedDStream[K, V] = {
+    ): DStream[(K, V)] = {
 
     val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
     val cleanedInvReduceFunc = ssc.sc.clean(invReduceFunc)
@@ -137,21 +151,21 @@ extends Serializable {
   //
   def updateStateByKey[S <: AnyRef : ClassManifest](
       updateFunc: (Seq[V], S) => S
-    ): StateDStream[K, V, S] = {
+    ): DStream[(K, S)] = {
     updateStateByKey(updateFunc, defaultPartitioner())
   }
 
   def updateStateByKey[S <: AnyRef : ClassManifest](
       updateFunc: (Seq[V], S) => S,
       numPartitions: Int
-    ): StateDStream[K, V, S] = {
+    ): DStream[(K, S)] = {
     updateStateByKey(updateFunc, defaultPartitioner(numPartitions))
   }
 
   def updateStateByKey[S <: AnyRef : ClassManifest](
       updateFunc: (Seq[V], S) => S,
       partitioner: Partitioner
-    ): StateDStream[K, V, S] = {
+    ): DStream[(K, S)] = {
     val func = (iterator: Iterator[(K, Seq[V], S)]) => {
       iterator.map(tuple => (tuple._1, updateFunc(tuple._2, tuple._3)))
     }
@@ -162,7 +176,7 @@ extends Serializable {
       updateFunc: (Iterator[(K, Seq[V], S)]) => Iterator[(K, S)],
       partitioner: Partitioner,
       rememberPartitioner: Boolean
-    ): StateDStream[K, V, S] = {
+    ): DStream[(K, S)] = {
      new StateDStream(stream, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner)
   }
 }
