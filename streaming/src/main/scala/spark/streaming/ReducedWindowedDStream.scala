@@ -5,7 +5,7 @@ import spark.streaming.StreamingContext._
 import spark.RDD
 import spark.UnionRDD
 import spark.CoGroupedRDD
-import spark.HashPartitioner
+import spark.Partitioner
 import spark.SparkContext._
 import spark.storage.StorageLevel
 
@@ -17,8 +17,8 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     invReduceFunc: (V, V) => V, 
     _windowTime: Time,
     _slideTime: Time,
-    numPartitions: Int)
-extends DStream[(K,V)](parent.ssc) {
+    partitioner: Partitioner
+  ) extends DStream[(K,V)](parent.ssc) {
 
   if (!_windowTime.isMultipleOf(parent.slideTime))
     throw new Exception("The window duration of ReducedWindowedDStream (" + _slideTime + ") " +
@@ -28,7 +28,7 @@ extends DStream[(K,V)](parent.ssc) {
     throw new Exception("The slide duration of ReducedWindowedDStream (" + _slideTime + ") " +
     "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
 
-  val reducedStream = parent.reduceByKey(reduceFunc, numPartitions)
+  val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
   val allowPartialWindows = true
   //reducedStream.persist(StorageLevel.MEMORY_ONLY_DESER_2)
 
@@ -104,7 +104,7 @@ extends DStream[(K,V)](parent.ssc) {
           if (reducedRDDs.size == 0) {
             throw new Exception("Could not generate the first RDD for time " + validTime) 
           }
-          return Some(new UnionRDD(ssc.sc, reducedRDDs).reduceByKey(reduceFunc, numPartitions))
+          return Some(new UnionRDD(ssc.sc, reducedRDDs).reduceByKey(partitioner, reduceFunc))
         }
       }
     }
@@ -137,8 +137,7 @@ extends DStream[(K,V)](parent.ssc) {
       }
       t -= reducedStream.slideTime
     }
-    
-    val partitioner = new HashPartitioner(numPartitions)
+
     val allRDDs = new ArrayBuffer[RDD[(_, _)]]()
     allRDDs += previousWindowRDD
     allRDDs ++= oldRDDs

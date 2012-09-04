@@ -84,7 +84,9 @@ object SparkBuild extends Build {
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
 
-  def streamingSettings = sharedSettings ++ Seq(name := "spark-streaming")
+  def streamingSettings = sharedSettings ++ Seq(
+    name := "spark-streaming"
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
     mergeStrategy in assembly := { 

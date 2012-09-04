@@ -41,7 +41,7 @@ extends Logging {
   
   def generateRDDs (time: Time) {
     println("\n-----------------------------------------------------\n")
-    logInfo("Generating RDDs for time " + time) 
+    logInfo("Generating RDDs for time " + time)
     outputStreams.foreach(outputStream => {
         outputStream.generateJob(time) match {
           case Some(job) => submitJob(job)

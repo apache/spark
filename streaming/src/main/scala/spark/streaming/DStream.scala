@@ -3,17 +3,16 @@ package spark.streaming
 import spark.streaming.StreamingContext._
 
 import spark.RDD
-import spark.BlockRDD
 import spark.UnionRDD
 import spark.Logging
-import spark.SparkContext
 import spark.SparkContext._
 import spark.storage.StorageLevel
-    
+import spark.Partitioner
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import java.util.concurrent.ArrayBlockingQueue 
+import java.util.concurrent.ArrayBlockingQueue
 
 abstract class DStream[T: ClassManifest] (@transient val ssc: StreamingContext)
 extends Logging with Serializable {
@@ -95,12 +94,12 @@ extends Logging with Serializable {
 
   /** This method checks whether the 'time' is valid wrt slideTime for generating RDD */
   private def isTimeValid (time: Time): Boolean = {
-    if (!isInitialized) 
+    if (!isInitialized) {
       throw new Exception (this.toString + " has not been initialized")
-    if ((time - zeroTime).isMultipleOf(slideTime)) { 
-      true
-    } else {
+    } else if (time < zeroTime || ! (time - zeroTime).isMultipleOf(slideTime)) {
       false
+    } else {
+      true
     }
   }
 
@@ -119,7 +118,7 @@ extends Logging with Serializable {
       
       // if RDD was not generated, and if the time is valid 
       // (based on sliding time of this DStream), then generate the RDD
-      case None =>
+      case None => {
         if (isTimeValid(time)) {
           compute(time) match {
             case Some(newRDD) =>
@@ -138,6 +137,7 @@ extends Logging with Serializable {
         } else {
           None
         }
+      }
     }
   }
 
@@ -166,15 +166,17 @@ extends Logging with Serializable {
   
   def map[U: ClassManifest](mapFunc: T => U) = new MappedDStream(this, ssc.sc.clean(mapFunc))
 
-  def flatMap[U: ClassManifest](flatMapFunc: T => Traversable[U]) = 
+  def flatMap[U: ClassManifest](flatMapFunc: T => Traversable[U]) = {
     new FlatMappedDStream(this, ssc.sc.clean(flatMapFunc))
+  }
 
   def filter(filterFunc: T => Boolean) = new FilteredDStream(this, filterFunc)
 
   def glom() = new GlommedDStream(this)
 
-  def mapPartitions[U: ClassManifest](mapPartFunc: Iterator[T] => Iterator[U]) = 
+  def mapPartitions[U: ClassManifest](mapPartFunc: Iterator[T] => Iterator[U]) = {
     new MapPartitionedDStream(this, ssc.sc.clean(mapPartFunc))
+  }
 
   def reduce(reduceFunc: (T, T) => T) = this.map(x => (null, x)).reduceByKey(reduceFunc, 1).map(_._2)
 
@@ -182,16 +184,28 @@ extends Logging with Serializable {
   
   def collect() = this.map(x => (1, x)).groupByKey(1).map(_._2)
 
-  def foreach(foreachFunc: T => Unit) = { 
+  def foreach(foreachFunc: T => Unit) {
     val newStream = new PerElementForEachDStream(this, ssc.sc.clean(foreachFunc))
     ssc.registerOutputStream(newStream)
     newStream
   }
 
-  def foreachRDD(foreachFunc: RDD[T] => Unit) = {
+  def foreachRDD(foreachFunc: RDD[T] => Unit) {
+    foreachRDD((r: RDD[T], t: Time) => foreachFunc(r))
+  }
+
+  def foreachRDD(foreachFunc: (RDD[T], Time) => Unit) {
     val newStream = new PerRDDForEachDStream(this, ssc.sc.clean(foreachFunc))
     ssc.registerOutputStream(newStream)
     newStream
+  }
+
+  def transformRDD[U: ClassManifest](transformFunc: RDD[T] => RDD[U]): DStream[U] = {
+    transformRDD((r: RDD[T], t: Time) => transformFunc(r))
+  }
+
+  def transformRDD[U: ClassManifest](transformFunc: (RDD[T], Time) => RDD[U]): DStream[U] = {
+    new TransformedDStream(this, ssc.sc.clean(transformFunc))
   }
 
   private[streaming] def toQueue = {
@@ -361,24 +375,17 @@ class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
-    numPartitions: Int)
-  extends DStream [(K,C)] (parent.ssc) {
+    partitioner: Partitioner
+  ) extends DStream [(K,C)] (parent.ssc) {
   
   override def dependencies = List(parent)
 
   override def slideTime: Time = parent.slideTime
- 
+
   override def compute(validTime: Time): Option[RDD[(K,C)]] = {
     parent.getOrCompute(validTime) match {
-      case Some(rdd) => 
-        val newrdd = {
-          if (numPartitions > 0) {
-            rdd.combineByKey[C](createCombiner, mergeValue, mergeCombiner, numPartitions) 
-          } else {
-            rdd.combineByKey[C](createCombiner, mergeValue, mergeCombiner)
-          }
-        }
-        Some(newrdd)
+      case Some(rdd) =>
+        Some(rdd.combineByKey[C](createCombiner, mergeValue, mergeCombiner, partitioner))
       case None => None
     }
   }
@@ -390,7 +397,7 @@ class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
  */
 
 class UnifiedDStream[T: ClassManifest](parents: Array[DStream[T]])
-extends DStream[T](parents(0).ssc) {
+  extends DStream[T](parents(0).ssc) {
 
   if (parents.length == 0) {
     throw new IllegalArgumentException("Empty array of parents")
@@ -429,8 +436,8 @@ extends DStream[T](parents(0).ssc) {
 
 class PerElementForEachDStream[T: ClassManifest] (
     parent: DStream[T],
-    foreachFunc: T => Unit) 
-extends DStream[Unit](parent.ssc) {
+    foreachFunc: T => Unit
+  ) extends DStream[Unit](parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -460,11 +467,8 @@ extends DStream[Unit](parent.ssc) {
 
 class PerRDDForEachDStream[T: ClassManifest] (
     parent: DStream[T],
-    foreachFunc: (RDD[T], Time) => Unit)
-extends DStream[Unit](parent.ssc) {
-  
-  def this(parent: DStream[T], altForeachFunc: (RDD[T]) => Unit) =
-    this(parent, (rdd: RDD[T], time: Time) => altForeachFunc(rdd))
+    foreachFunc: (RDD[T], Time) => Unit
+  ) extends DStream[Unit](parent.ssc) {
 
   override def dependencies = List(parent)
 
@@ -483,3 +487,22 @@ extends DStream[Unit](parent.ssc) {
     }
   }
 }
+
+
+/**
+ * TODO
+ */
+
+class TransformedDStream[T: ClassManifest, U: ClassManifest] (
+    parent: DStream[T],
+    transformFunc: (RDD[T], Time) => RDD[U]
+  ) extends DStream[U](parent.ssc) {
+
+    override def dependencies = List(parent)
+
+    override def slideTime: Time = parent.slideTime
+
+    override def compute(validTime: Time): Option[RDD[U]] = {
+      parent.getOrCompute(validTime).map(transformFunc(_, validTime))
+    }
+  }
