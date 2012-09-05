@@ -31,6 +31,7 @@ object AkkaUtils {
       akka.remote.netty.hostname = "%s"
       akka.remote.netty.port = %d
       akka.remote.netty.connection-timeout = 1s
+      akka.remote.netty.execution-pool-size = 10
       """.format(host, port))
 
     val actorSystem = ActorSystem("spark", akkaConf, getClass.getClassLoader)
