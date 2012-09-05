@@ -81,9 +81,11 @@ class SparkContext(
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
+    // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
+    val SPARK_LOCALCLUSTER_REGEX = """spark-cluster\[([0-9]+)\,([0-9]+),([0-9]+)]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """(spark://.*)""".r
-
+    
     master match {
       case "local" => 
         new LocalScheduler(1, 0)
@@ -96,6 +98,14 @@ class SparkContext(
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
+        scheduler.initialize(backend)
+        scheduler
+      
+      case SPARK_LOCALCLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerlave) =>
+        val scheduler = new ClusterScheduler(this)
+        val sparkUrl = spark.deploy.DeployUtils.startLocalSparkCluster(numSlaves.toInt, 
+          coresPerSlave.toInt, memoryPerlave.toInt)
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
         scheduler.initialize(backend)
         scheduler
