@@ -10,8 +10,10 @@ import scala.collection.mutable
 import com.esotericsoftware.kryo._
 import com.esotericsoftware.kryo.{Serializer => KSerializer}
 import com.esotericsoftware.kryo.serialize.ClassSerializer
+import com.esotericsoftware.kryo.serialize.SerializableSerializer
 import de.javakaffee.kryoserializers.KryoReflectionFactorySupport
 
+import spark.broadcast._
 import spark.storage._
 
 /**
@@ -202,6 +204,10 @@ class KryoSerializer extends Serializer with Logging {
     // Register the following classes for passing closures.
     kryo.register(classOf[Class[_]], new ClassSerializer(kryo))
     kryo.setRegistrationOptional(true)
+
+    // Allow sending SerializableWritable
+    kryo.register(classOf[SerializableWritable[_]], new SerializableSerializer())
+    kryo.register(classOf[HttpBroadcast[_]], new SerializableSerializer())
 
     // Register some commonly used Scala singleton objects. Because these
     // are singletons, we must return the exact same local object when we
