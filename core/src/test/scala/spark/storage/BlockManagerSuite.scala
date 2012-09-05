@@ -70,8 +70,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(master.mustGetLocations(GetLocations("a3")).size === 0, "master was told about a3")
     
     // Setting storage level of a1 and a2 to invalid; they should be removed from store and master
-    store.setLevel("a1", new StorageLevel(false, false, false, 1))
-    store.setLevel("a2", new StorageLevel(true, false, false, 0))
+    store.setLevelAndTellMaster("a1", new StorageLevel(false, false, false, 1))
+    store.setLevelAndTellMaster("a2", new StorageLevel(true, false, false, 0))
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
     assert(master.mustGetLocations(GetLocations("a1")).size === 0, "master did not remove a1")
