@@ -41,17 +41,17 @@ extends Logging with Serializable {
    */
 
   // Variable to store the RDDs generated earlier in time
-  @transient private val generatedRDDs = new HashMap[Time, RDD[T]] ()
+  @transient protected val generatedRDDs = new HashMap[Time, RDD[T]] ()
   
   // Variable to be set to the first time seen by the DStream (effective time zero)
-  private[streaming] var zeroTime: Time = null
+  protected[streaming] var zeroTime: Time = null
 
   // Variable to specify storage level
-  private var storageLevel: StorageLevel = StorageLevel.NONE
+  protected var storageLevel: StorageLevel = StorageLevel.NONE
 
   // Checkpoint level and checkpoint interval
-  private var checkpointLevel: StorageLevel = StorageLevel.NONE  // NONE means don't checkpoint
-  private var checkpointInterval: Time = null 
+  protected var checkpointLevel: StorageLevel = StorageLevel.NONE  // NONE means don't checkpoint
+  protected var checkpointInterval: Time = null
 
   // Change this RDD's storage level
   def persist(
@@ -84,7 +84,7 @@ extends Logging with Serializable {
    * the validity of future times is calculated. This method also recursively initializes
    * its parent DStreams.
    */
-  def initialize(time: Time) {
+  protected[streaming] def initialize(time: Time) {
     if (zeroTime == null) {
       zeroTime = time
     }
@@ -93,7 +93,7 @@ extends Logging with Serializable {
   }
 
   /** This method checks whether the 'time' is valid wrt slideTime for generating RDD */
-  private def isTimeValid (time: Time): Boolean = {
+  protected def isTimeValid (time: Time): Boolean = {
     if (!isInitialized) {
       throw new Exception (this.toString + " has not been initialized")
     } else if (time < zeroTime || ! (time - zeroTime).isMultipleOf(slideTime)) {
@@ -208,7 +208,7 @@ extends Logging with Serializable {
     new TransformedDStream(this, ssc.sc.clean(transformFunc))
   }
 
-  private[streaming] def toQueue = {
+  def toQueue = {
     val queue = new ArrayBlockingQueue[RDD[T]](10000)
     this.foreachRDD(rdd => {
       queue.add(rdd)
