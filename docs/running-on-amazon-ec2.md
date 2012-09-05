@@ -6,7 +6,7 @@ This guide describes how to get Spark running on an EC2 cluster. It assumes you 
 
 # For Spark 0.5
 
-Spark now includes some [[EC2 Scripts]] for launching and managing clusters on EC2. You can typically launch a cluster in about five minutes. Follow the instructions at this link for details.
+Spark now includes some [EC2 Scripts](/ec2-scripts.html) for launching and managing clusters on EC2. You can typically launch a cluster in about five minutes. Follow the instructions at this link for details.
 
 # For older versions of Spark
 
