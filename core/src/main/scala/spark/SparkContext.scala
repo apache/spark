@@ -2,14 +2,14 @@ package spark
 
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
-import java.net.URI
+import java.net.{URI, URLClassLoader}
 
 import akka.actor.Actor
 import akka.actor.Actor._
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileUtil, Path}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.SequenceFileInputFormat
@@ -78,8 +78,12 @@ class SparkContext(
     isLocal)
   SparkEnv.set(env)
   
-  // Used to store a URL for each static file together with the file's local timestamp
-  val files = HashMap[String, Long]()
+  // Used to store a URL for each static file/jar together with the file's local timestamp
+  val addedFiles = HashMap[String, Long]()
+  val addedJars = HashMap[String, Long]()
+  
+  // Add each JAR given through the constructor
+  jars.foreach { addJar(_) }
   
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
@@ -316,20 +320,40 @@ class SparkContext(
   def broadcast[T](value: T) = SparkEnv.get.broadcastManager.newBroadcast[T] (value, isLocal)
   
   // Adds a file dependency to all Tasks executed in the future.
-  def addFile(path: String) : String = {
+  def addFile(path: String) {
     val uri = new URI(path)
-    uri.getScheme match {
-      // A local file
-      case null | "file" => 
-        val file = new File(uri.getPath)
-        val url = env.httpFileServer.addFile(file)
-        files(url) = System.currentTimeMillis
-        logInfo("Added file " + path + " at " + url + " with timestamp " + files(url))
-        return url
-      case _ =>
-        files(path) = System.currentTimeMillis
-        return path
+    val key = uri.getScheme match {
+      case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
+      case _ => path
     }
+    addedFiles(key) = System.currentTimeMillis
+    
+    // Fetch the file locally in case the task is executed locally
+    val filename = new File(path.split("/").last)
+    Utils.fetchFile(path, new File(""))
+    
+    logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
+  }
+
+  def clearFiles() {
+    addedFiles.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
+    addedFiles.clear()
+  }
+  
+  // Adds a jar dependency to all Tasks executed in the future.
+  def addJar(path: String) {
+    val uri = new URI(path)
+    val key = uri.getScheme match {
+      case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
+      case _ => path
+    }
+    addedJars(key) = System.currentTimeMillis
+    logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+  }
+
+  def clearJars() {
+    addedJars.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
+    addedJars.clear()
   }
   
   // Stop the SparkContext
@@ -339,6 +363,9 @@ class SparkContext(
     taskScheduler = null
     // TODO: Cache.stop()?
     env.stop()
+    // Clean up locally linked files
+    clearFiles()
+    clearJars()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
     logInfo("Successfully stopped SparkContext")

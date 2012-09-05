@@ -60,7 +60,6 @@ class ClusterScheduler(sc: SparkContext)
 
   def initialize(context: SchedulerBackend) {
     backend = context
-    createJarServer()
   }
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
@@ -88,7 +87,10 @@ class ClusterScheduler(sc: SparkContext)
 
   def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
-    tasks.foreach { task => task.fileSet ++= sc.files }
+    tasks.foreach { task => 
+      task.fileSet ++= sc.addedFiles
+      task.jarSet ++= sc.addedJars
+    }
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet)
@@ -237,25 +239,6 @@ class ClusterScheduler(sc: SparkContext)
 
   override def defaultParallelism() = backend.defaultParallelism()
   
-  // Copies all the JARs added by the user to the SparkContext
-  // to the fileserver directory.
-  private def createJarServer() {
-    val fileServerDir = SparkEnv.get.httpFileServer.fileDir
-    val fileServerUri = SparkEnv.get.httpFileServer.serverUri
-    val filenames = ArrayBuffer[String]()
-    for ((path, index) <- sc.jars.zipWithIndex) {
-      val file = new File(path)
-      if (file.exists) {
-        val filename = index + "_" + file.getName
-        Utils.copyFile(file, new File(fileServerDir, filename))
-        filenames += filename
-      }
-    }
-    jarUris = filenames.map(f => fileServerUri + "/" + f).mkString(",")
-    System.setProperty("spark.jar.uris", jarUris)
-    logInfo("JARs available at " + jarUris)
-  }
-
   // Check for speculatable tasks in all our active jobs.
   def checkSpeculatableTasks() {
     var shouldRevive = false

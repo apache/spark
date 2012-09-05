@@ -5,7 +5,7 @@ import java.net.{InetAddress, URL, URI}
 import java.util.{Locale, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 import scala.io.Source
@@ -133,20 +133,27 @@ object Utils extends Logging {
   def fetchFile(url: String, targetDir: File) {
     val filename = url.split("/").last
     val targetFile = new File(targetDir, filename)
-    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ftp://")) {
-      // Use the java.net library to fetch it
-      logInfo("Fetching " + url + " to " + targetFile)
-      val in = new URL(url).openStream()
-      val out = new FileOutputStream(targetFile)
-      Utils.copyStream(in, out, true)
-    } else {
-      // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-      val uri = new URI(url)
-      val conf = new Configuration()
-      val fs = FileSystem.get(uri, conf)
-      val in = fs.open(new Path(uri))
-      val out = new FileOutputStream(targetFile)
-      Utils.copyStream(in, out, true)
+    val uri = new URI(url)
+    uri.getScheme match {
+      case "http" | "https" | "ftp" =>
+        logInfo("Fetching " + url + " to " + targetFile)
+        val in = new URL(url).openStream()
+        val out = new FileOutputStream(targetFile)
+        Utils.copyStream(in, out, true)
+      case "file" | null =>
+        // Remove the file if it already exists
+        targetFile.delete()
+        // Symlink the file locally
+        logInfo("Symlinking " + url + " to " + targetFile)
+        FileUtil.symLink(url, targetFile.toString)
+      case _ =>
+        // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
+        val uri = new URI(url)
+        val conf = new Configuration()
+        val fs = FileSystem.get(uri, conf)
+        val in = fs.open(new Path(uri))
+        val out = new FileOutputStream(targetFile)
+        Utils.copyStream(in, out, true)
     }
     // Decompress the file if it's a .tar or .tar.gz
     if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {

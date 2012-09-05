@@ -1,5 +1,7 @@
 package spark.scheduler.local
 
+import java.io.File
+import java.net.URLClassLoader
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.HashMap
@@ -18,10 +20,11 @@ class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkContext) extends T
   val env = SparkEnv.get
   var listener: TaskSchedulerListener = null
   val fileSet: HashMap[String, Long] = new HashMap[String, Long]()
+  val jarSet: HashMap[String, Long] = new HashMap[String, Long]()
   
   // TODO: Need to take into account stage priority in scheduling
 
-  override def start() {}
+  override def start() { }
 
   override def setListener(listener: TaskSchedulerListener) { 
     this.listener = listener
@@ -32,7 +35,8 @@ class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkContext) extends T
     val failCount = new Array[Int](tasks.size)
 
     def submitTask(task: Task[_], idInJob: Int) {
-      task.fileSet ++= sc.files
+      task.fileSet ++= sc.addedFiles
+      task.jarSet ++= sc.addedJars
       val myAttemptId = attemptId.getAndIncrement()
       threadPool.submit(new Runnable {
         def run() {
@@ -45,7 +49,9 @@ class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkContext) extends T
       logInfo("Running task " + idInJob)
       // Set the Spark execution environment for the worker thread
       SparkEnv.set(env)
-      task.downloadFileDependencies(fileSet)
+      task.downloadDependencies(fileSet, jarSet)
+      // Create a new classLaoder for the downloaded JARs
+      Thread.currentThread.setContextClassLoader(createClassLoader())
       try {
         // Serialize and deserialize the task so that accumulators are changed to thread-local ones;
         // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
@@ -88,6 +94,15 @@ class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkContext) extends T
   
   override def stop() {
     threadPool.shutdownNow()
+  }
+
+  private def createClassLoader() : ClassLoader = {
+    val currentLoader = Thread.currentThread.getContextClassLoader()
+    val urls = jarSet.keySet.map { uri => 
+      new File(uri.split("/").last).toURI.toURL
+    }.toArray
+    logInfo("Creating ClassLoader with jars: " + urls.mkString)
+    return new URLClassLoader(urls, currentLoader)
   }
 
   override def defaultParallelism() = threads

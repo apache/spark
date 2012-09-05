@@ -7,25 +7,39 @@ import org.apache.hadoop.fs.FileUtil
 
 class HttpFileServer extends Logging {
   
+  var baseDir : File = null
   var fileDir : File = null
+  var jarDir : File = null
   var httpServer : HttpServer = null
   var serverUri : String = null
   
   def initialize() {
-    fileDir = Utils.createTempDir()
-    logInfo("HTTP File server directory is " + fileDir)
+    baseDir = Utils.createTempDir()
+    fileDir = new File(baseDir, "files")
+    jarDir = new File(baseDir, "jars")
+    fileDir.mkdir()
+    jarDir.mkdir()
+    logInfo("HTTP File server directory is " + baseDir)
     httpServer = new HttpServer(fileDir)
     httpServer.start()
     serverUri = httpServer.uri
   }
   
-  def addFile(file: File) : String = {
-    Utils.copyFile(file, new File(fileDir, file.getName))
-    return serverUri + "/" + file.getName
-  }
-  
   def stop() {
     httpServer.stop()
+  }
+  
+  def addFile(file: File) : String = {
+    return addFileToDir(file, fileDir)
+  }
+  
+  def addJar(file: File) : String = {
+    return addFileToDir(file, jarDir)
+  }
+  
+  def addFileToDir(file: File, dir: File) : String = {
+    Utils.copyFile(file, new File(dir, file.getName))
+    return dir + "/" + file.getName
   }
   
 }

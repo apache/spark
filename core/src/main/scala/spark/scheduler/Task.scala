@@ -1,6 +1,6 @@
 package spark.scheduler
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap}
 import spark.HttpFileServer
 import spark.Utils
 import java.io.File
@@ -14,20 +14,29 @@ abstract class Task[T](val stageId: Int) extends Serializable {
 
   var generation: Long = -1   // Map output tracker generation. Will be set by TaskScheduler.
   
-  // Stores file dependencies for this task. 
+  // Stores jar and file dependencies for this task. 
   var fileSet : HashMap[String, Long] = new HashMap[String, Long]()
+  var jarSet : HashMap[String, Long] = new HashMap[String, Long]()
   
   // Downloads all file dependencies from the Master file server
-  def downloadFileDependencies(currentFileSet : HashMap[String, Long]) {
-    // Find files that either don't exist or have an earlier timestamp
-    val missingFiles = fileSet.filter { case(k,v) => 
-      !currentFileSet.isDefinedAt(k) || currentFileSet(k) <= v 
-    }
-    // Fetch each missing file
-    missingFiles.foreach { case (k,v) => 
+  def downloadDependencies(currentFileSet : HashMap[String, Long], 
+    currentJarSet : HashMap[String, Long]) {
+
+    // Fetch missing file dependencies
+    fileSet.filter { case(k,v) => 
+      !currentFileSet.contains(k) || currentFileSet(k) <= v 
+    }.foreach { case (k,v) => 
       Utils.fetchFile(k, new File(System.getProperty("user.dir")))
       currentFileSet(k) = v
     }
+    // Fetch missing jar dependencies
+    jarSet.filter { case(k,v) => 
+      !currentJarSet.contains(k) || currentJarSet(k) <= v 
+    }.foreach { case (k,v) => 
+      Utils.fetchFile(k, new File(System.getProperty("user.dir")))
+      currentJarSet(k) = v
+    }
+    
   }
   
 }
