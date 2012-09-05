@@ -5,10 +5,10 @@ import spark.storage.StorageLevel
 import spark.streaming._
 import spark.streaming.StreamingContext._
 
-object WordCountRaw {
+object TopKWordCountRaw {
   def main(args: Array[String]) {
     if (args.length != 7) {
-      System.err.println("Usage: WordCountRaw <master> <streams> <host> <port> <batchMs> <chkptMs> <reduces>")
+      System.err.println("Usage: TopKWordCountRaw <master> <streams> <host> <port> <batchMs> <chkptMs> <reduces>")
       System.exit(1)
     }
 
@@ -36,14 +36,14 @@ object WordCountRaw {
       Milliseconds(chkptMs))
     //windowedCounts.print()    // TODO: something else?
 
-    def topK(data: Iterator[(String, JLong)], k: Int): Iterator[(String, JLong)] = {
-      val taken = new Array[(String, JLong)](k)
+    def topK(data: Iterator[(String, Long)], k: Int): Iterator[(String, Long)] = {
+      val taken = new Array[(String, Long)](k)
       
       var i = 0
       var len = 0
       var done = false
-      var value: (String, JLong) = null
-      var swap: (String, JLong) = null
+      var value: (String, Long) = null
+      var swap: (String, Long) = null
       var count = 0
 
       while(data.hasNext) {
