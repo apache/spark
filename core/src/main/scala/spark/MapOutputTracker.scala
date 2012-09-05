@@ -1,5 +1,6 @@
 package spark
 
+import java.io.{DataInputStream, DataOutputStream, ByteArrayOutputStream, ByteArrayInputStream}
 import java.util.concurrent.ConcurrentHashMap
 
 import akka.actor._
@@ -10,6 +11,7 @@ import akka.util.Duration
 import akka.util.Timeout
 import akka.util.duration._
 
+import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
 import spark.storage.BlockManagerId
@@ -18,12 +20,11 @@ sealed trait MapOutputTrackerMessage
 case class GetMapOutputLocations(shuffleId: Int) extends MapOutputTrackerMessage 
 case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-class MapOutputTrackerActor(bmAddresses: ConcurrentHashMap[Int, Array[BlockManagerId]]) 
-extends Actor with Logging {
+class MapOutputTrackerActor(tracker: MapOutputTracker) extends Actor with Logging {
   def receive = {
     case GetMapOutputLocations(shuffleId: Int) =>
       logInfo("Asked to get map output locations for shuffle " + shuffleId)
-      sender ! bmAddresses.get(shuffleId)
+      sender ! tracker.getSerializedLocations(shuffleId)
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerActor stopped!")
@@ -39,15 +40,19 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
 
   val timeout = 10.seconds
 
-  private var bmAddresses = new ConcurrentHashMap[Int, Array[BlockManagerId]]
+  var bmAddresses = new ConcurrentHashMap[Int, Array[BlockManagerId]]
 
   // Incremented every time a fetch fails so that client nodes know to clear
   // their cache of map output locations if this happens.
   private var generation: Long = 0
   private var generationLock = new java.lang.Object
 
+  // Cache a serialized version of the output locations for each shuffle to send them out faster
+  var cacheGeneration = generation
+  val cachedSerializedLocs = new HashMap[Int, Array[Byte]]
+
   var trackerActor: ActorRef = if (isMaster) {
-    val actor = actorSystem.actorOf(Props(new MapOutputTrackerActor(bmAddresses)), name = actorName)
+    val actor = actorSystem.actorOf(Props(new MapOutputTrackerActor(this)), name = actorName)
     logInfo("Registered MapOutputTrackerActor actor")
     actor
   } else {
@@ -134,15 +139,16 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
       }
       // We won the race to fetch the output locs; do so
       logInfo("Doing the fetch; tracker actor = " + trackerActor)
-      val fetched = askTracker(GetMapOutputLocations(shuffleId)).asInstanceOf[Array[BlockManagerId]]
+      val fetchedBytes = askTracker(GetMapOutputLocations(shuffleId)).asInstanceOf[Array[Byte]]
+      val fetchedLocs = deserializeLocations(fetchedBytes)
       
       logInfo("Got the output locations")
-      bmAddresses.put(shuffleId, fetched)
+      bmAddresses.put(shuffleId, fetchedLocs)
       fetching.synchronized {
         fetching -= shuffleId
         fetching.notifyAll()
       }
-      return fetched
+      return fetchedLocs
     } else {
       return locs
     }
@@ -180,5 +186,71 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
         generation = newGen
       }
     }
+  }
+
+  def getSerializedLocations(shuffleId: Int): Array[Byte] = {
+    var locs: Array[BlockManagerId] = null
+    var generationGotten: Long = -1
+    generationLock.synchronized {
+      if (generation > cacheGeneration) {
+        cachedSerializedLocs.clear()
+        cacheGeneration = generation
+      }
+      cachedSerializedLocs.get(shuffleId) match {
+        case Some(bytes) =>
+          return bytes
+        case None =>
+          locs = bmAddresses.get(shuffleId)
+          generationGotten = generation
+      }
+    }
+    // If we got here, we failed to find the serialized locations in the cache, so we pulled
+    // out a snapshot of the locations as "locs"; let's serialize and return that
+    val bytes = serializeLocations(locs)
+    // Add them into the table only if the generation hasn't changed while we were working
+    generationLock.synchronized {
+      if (generation == generationGotten) {
+        cachedSerializedLocs(shuffleId) = bytes
+      }
+    }
+    return bytes
+  }
+
+  // Serialize an array of map output locations into an efficient byte format so that we can send
+  // it to reduce tasks. We do this by grouping together the locations by block manager ID.
+  def serializeLocations(locs: Array[BlockManagerId]): Array[Byte] = {
+    val out = new ByteArrayOutputStream
+    val dataOut = new DataOutputStream(out)
+    dataOut.writeInt(locs.length)
+    val grouped = locs.zipWithIndex.groupBy(_._1)
+    dataOut.writeInt(grouped.size)
+    for ((id, pairs) <- grouped) {
+      dataOut.writeUTF(id.ip)
+      dataOut.writeInt(id.port)
+      dataOut.writeInt(pairs.length)
+      for ((_, blockIndex) <- pairs) {
+        dataOut.writeInt(blockIndex)
+      }
+    }
+    dataOut.close()
+    out.toByteArray
+  }
+
+  // Opposite of serializeLocations.
+  def deserializeLocations(bytes: Array[Byte]): Array[BlockManagerId] = {
+    val dataIn = new DataInputStream(new ByteArrayInputStream(bytes))
+    val length = dataIn.readInt()
+    val array = new Array[BlockManagerId](length)
+    val numGroups = dataIn.readInt()
+    for (i <- 0 until numGroups) {
+      val ip = dataIn.readUTF()
+      val port = dataIn.readInt()
+      val id = new BlockManagerId(ip, port)
+      val numBlocks = dataIn.readInt()
+      for (j <- 0 until numBlocks) {
+        array(dataIn.readInt()) = id
+      }
+    }
+    array
   }
 }
