@@ -38,7 +38,7 @@ class LocalSparkCluster(numSlaves : Int, coresPerSlave : Int,
     })
 
     /* Start the Slaves */
-    (1 to numSlaves + 1).foreach { slaveNum =>
+    (1 to numSlaves).foreach { slaveNum =>
       val (actorSystem, boundPort) = 
         AkkaUtils.createActorSystem("sparkWorker" + slaveNum, localIpAddress, 0)
       threadPool.execute(new Runnable {
