@@ -1,6 +1,6 @@
 package spark.storage
 
-import java.io._
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 class StorageLevel(
     var useDisk: Boolean, 

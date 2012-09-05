@@ -43,8 +43,6 @@ class CacheTrackerActor extends Actor with Logging {
   
   def receive = {
     case SlaveCacheStarted(host: String, size: Long) =>
-      logInfo("Started slave cache (size %s) on %s".format(
-        Utils.memoryBytesToString(size), host))
       slaveCapacity.put(host, size)
       slaveUsage.put(host, 0)
       sender ! true
@@ -56,22 +54,12 @@ class CacheTrackerActor extends Actor with Logging {
 
     case AddedToCache(rddId, partition, host, size) =>
       slaveUsage.put(host, getCacheUsage(host) + size)
-      logInfo("Cache entry added: (%s, %s) on %s (size added: %s, available: %s)".format(
-        rddId, partition, host, Utils.memoryBytesToString(size),
-        Utils.memoryBytesToString(getCacheAvailable(host))))
       locs(rddId)(partition) = host :: locs(rddId)(partition)
       sender ! true
 
     case DroppedFromCache(rddId, partition, host, size) =>
-      logInfo("Cache entry removed: (%s, %s) on %s (size dropped: %s, available: %s)".format(
-        rddId, partition, host, Utils.memoryBytesToString(size),
-        Utils.memoryBytesToString(getCacheAvailable(host))))
       slaveUsage.put(host, getCacheUsage(host) - size)
       // Do a sanity check to make sure usage is greater than 0.
-      val usage = getCacheUsage(host)
-      if (usage < 0) {
-        logError("Cache usage on %s is negative (%d)".format(host, usage))
-      }
       locs(rddId)(partition) = locs(rddId)(partition).filterNot(_ == host)
       sender ! true
 
@@ -223,7 +211,7 @@ class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: Bl
         logInfo("Computing partition " + split)
         try {
           // BlockManager will iterate over results from compute to create RDD
-          blockManager.put(key, rdd.compute(split), storageLevel, false)
+          blockManager.put(key, rdd.compute(split), storageLevel, true)
           //future.apply() // Wait for the reply from the cache tracker
           blockManager.get(key) match {
             case Some(values) => 

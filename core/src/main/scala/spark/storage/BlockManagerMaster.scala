@@ -3,22 +3,18 @@ package spark.storage
 import java.io._
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import akka.actor._
 import akka.dispatch._
 import akka.pattern.ask
 import akka.remote._
-import akka.util.Duration
-import akka.util.Timeout
+import akka.util.{Duration, Timeout}
 import akka.util.duration._
 
-import spark.Logging
-import spark.SparkException
-import spark.Utils
+import spark.{Logging, SparkException, Utils}
+
 
 sealed trait ToBlockManagerMaster
 
@@ -27,13 +23,13 @@ case class RegisterBlockManager(
     maxMemSize: Long,
     maxDiskSize: Long)
   extends ToBlockManagerMaster
-  
+
 class HeartBeat(
     var blockManagerId: BlockManagerId,
     var blockId: String,
     var storageLevel: StorageLevel,
-    var deserializedSize: Long,
-    var size: Long)
+    var memSize: Long,
+    var diskSize: Long)
   extends ToBlockManagerMaster
   with Externalizable {
 
@@ -43,8 +39,8 @@ class HeartBeat(
     blockManagerId.writeExternal(out)
     out.writeUTF(blockId)
     storageLevel.writeExternal(out)
-    out.writeInt(deserializedSize.toInt)
-    out.writeInt(size.toInt)
+    out.writeInt(memSize.toInt)
+    out.writeInt(diskSize.toInt)
   }
 
   override def readExternal(in: ObjectInput) {
@@ -53,8 +49,8 @@ class HeartBeat(
     blockId = in.readUTF()
     storageLevel = new StorageLevel()
     storageLevel.readExternal(in)
-    deserializedSize = in.readInt()
-    size = in.readInt()
+    memSize = in.readInt()
+    diskSize = in.readInt()
   }
 }
 
@@ -62,15 +58,14 @@ object HeartBeat {
   def apply(blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
-      deserializedSize: Long,
-      size: Long): HeartBeat = {
-    new HeartBeat(blockManagerId, blockId, storageLevel, deserializedSize, size)
+      memSize: Long,
+      diskSize: Long): HeartBeat = {
+    new HeartBeat(blockManagerId, blockId, storageLevel, memSize, diskSize)
   }
 
- 
   // For pattern-matching
   def unapply(h: HeartBeat): Option[(BlockManagerId, String, StorageLevel, Long, Long)] = {
-    Some((h.blockManagerId, h.blockId, h.storageLevel, h.deserializedSize, h.size))
+    Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize))
   }
 }
   
@@ -88,49 +83,64 @@ case object StopBlockManagerMaster extends ToBlockManagerMaster
 class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   
   class BlockManagerInfo(
+      val blockManagerId: BlockManagerId,
       timeMs: Long,
-      maxMem: Long,
-      maxDisk: Long) {
+      val maxMem: Long,
+      val maxDisk: Long) {
     private var lastSeenMs = timeMs
     private var remainedMem = maxMem
     private var remainedDisk = maxDisk
     private val blocks = new JHashMap[String, StorageLevel]
+
+    logInfo("Registering block manager (%s:%d, ram: %d, disk: %d)".format(
+      blockManagerId.ip, blockManagerId.port, maxMem, maxDisk))
     
     def updateLastSeenMs() {
       lastSeenMs = System.currentTimeMillis() / 1000
     }
     
-    def addBlock(blockId: String, storageLevel: StorageLevel, deserializedSize: Long, size: Long) =
-        synchronized {
+    def updateBlockInfo(
+      blockId: String, storageLevel: StorageLevel, memSize: Long, diskSize: Long) = synchronized {
+
       updateLastSeenMs()
       
       if (blocks.containsKey(blockId)) {
-        val oriLevel: StorageLevel = blocks.get(blockId)
+        // The block exists on the slave already.
+        val originalLevel: StorageLevel = blocks.get(blockId)
         
-        if (oriLevel.deserialized) {
-          remainedMem += deserializedSize
+        if (originalLevel.useMemory) {
+          remainedMem += memSize
         }
-        if (oriLevel.useMemory) {
-          remainedMem += size
-        }
-        if (oriLevel.useDisk) {
-          remainedDisk += size
+        if (originalLevel.useDisk) {
+          remainedDisk += diskSize
         }
       }
       
-      if (storageLevel.isValid) { 
+      if (storageLevel.isValid) {
+        // isValid means it is either stored in-memory or on-disk.
         blocks.put(blockId, storageLevel)
-        if (storageLevel.deserialized) {
-          remainedMem -= deserializedSize
-        }
         if (storageLevel.useMemory) {
-          remainedMem -= size
+          remainedMem -= memSize
+          logInfo("Added %s in memory on %s:%d (size: %d, free: %d)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, memSize, remainedMem))
         }
         if (storageLevel.useDisk) {
-          remainedDisk -= size
+          remainedDisk -= diskSize
+          logInfo("Added %s on disk on %s:%d (size: %d, free: %d)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, diskSize, remainedDisk))
         }
-      } else {
+      } else if (blocks.containsKey(blockId)) {
+        // If isValid is not true, drop the block.
+        val originalLevel: StorageLevel = blocks.get(blockId)
         blocks.remove(blockId)
+        if (originalLevel.useMemory) {
+          logInfo("Removed %s on %s:%d in memory (size: %d, free: %d)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, memSize, remainedDisk))
+        }
+        if (originalLevel.useDisk) {
+          logInfo("Removed %s on %s:%d on disk (size: %d, free: %d)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, diskSize, remainedDisk))
+        }
       }
     }
 
@@ -204,12 +214,11 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " "
     logDebug("Got in register 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
-    logInfo("Got Register Msg from " + blockManagerId)
     if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
       logInfo("Got Register Msg from master node, don't register it")
     } else {
       blockManagerInfo += (blockManagerId -> new BlockManagerInfo(
-        System.currentTimeMillis() / 1000, maxMemSize, maxDiskSize))
+        blockManagerId, System.currentTimeMillis() / 1000, maxMemSize, maxDiskSize))
     }
     logDebug("Got in register 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
     sender ! true
@@ -219,8 +228,8 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
-      deserializedSize: Long,
-      size: Long) {
+      memSize: Long,
+      diskSize: Long) {
     
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " " + blockId + " "
@@ -231,7 +240,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       sender ! true
     }
     
-    blockManagerInfo(blockManagerId).addBlock(blockId, storageLevel, deserializedSize, size)
+    blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
     
     var locations: HashSet[BlockManagerId] = null
     if (blockInfo.containsKey(blockId)) {
