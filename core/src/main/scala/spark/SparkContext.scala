@@ -34,6 +34,8 @@ import org.apache.mesos.{Scheduler, MesosNativeLibrary}
 
 import spark.broadcast._
 
+import spark.deploy.LocalSparkCluster
+
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 
@@ -104,8 +106,8 @@ class SparkContext(
       
       case SPARK_LOCALCLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerlave) =>
         val scheduler = new ClusterScheduler(this)
-        val sparkUrl = spark.deploy.DeployUtils.startLocalSparkCluster(numSlaves.toInt, 
-          coresPerSlave.toInt, memoryPerlave.toInt)
+        val localCluster = new LocalSparkCluster(numSlaves.toInt, coresPerSlave.toInt, memoryPerlave.toInt)
+        val sparkUrl = localCluster.start()
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
         scheduler.initialize(backend)
         scheduler
