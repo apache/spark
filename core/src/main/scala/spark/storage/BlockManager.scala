@@ -1,29 +1,21 @@
 package spark.storage
 
-import java.io._
-import java.nio._
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.Collections
-
 import akka.dispatch.{Await, Future}
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.{HashMap, HashSet}
-import scala.collection.mutable.Queue
+import akka.util.Duration
+
+import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.nio.ByteBuffer
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConversions._
 
-import it.unimi.dsi.fastutil.io._
-
-import spark.CacheTracker
-import spark.Logging
-import spark.Serializer
-import spark.SizeEstimator
-import spark.SparkEnv
-import spark.SparkException
-import spark.Utils
-import spark.util.ByteBufferInputStream
+import spark.{CacheTracker, Logging, Serializer, SizeEstimator, SparkException, Utils}
 import spark.network._
-import akka.util.Duration
+import spark.util.ByteBufferInputStream
+
 
 class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
   def this() = this(null, 0)
@@ -49,7 +41,8 @@ class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
 }
 
 
-case class BlockException(blockId: String, message: String, ex: Exception = null) extends Exception(message)
+case class BlockException(blockId: String, message: String, ex: Exception = null)
+extends Exception(message)
 
 
 class BlockLocker(numLockers: Int) {
@@ -83,6 +76,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   // TODO: This will be removed after cacheTracker is removed from the code base.
   var cacheTracker: CacheTracker = null
 
+  val numParallelFetches = BlockManager.getNumParallelFetchesFromSystemProperties()
+
   initLogging()
 
   initialize()
@@ -113,10 +108,14 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   /**
-   * Change storage level for a local block and tell master is necesary. 
-   * If new level is invalid, then block info (if it exists) will be silently removed.
+   * Change the storage level for a local block in the block info meta data, and
+   * tell the master if necessary. Note that this is only a meta data change and
+   * does NOT actually change the storage of the block. If the new level is
+   * invalid, then block info (if exists) will be silently removed.
    */
-  def setLevel(blockId: String, level: StorageLevel, tellMaster: Boolean = true) {
+  private[spark] def setLevelAndTellMaster(
+    blockId: String, level: StorageLevel, tellMaster: Boolean = true) {
+
     if (level == null) {
       throw new IllegalArgumentException("Storage level is null")
     }
@@ -139,8 +138,13 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    
     // Tell master if necessary
     if (newTellMaster) {
+      master.mustHeartBeat(HeartBeat(
+        blockManagerId,
+        blockId,
+        level,
+        if (level.isValid && level.useMemory) memoryStore.getSize(blockId) else 0,
+        if (level.isValid && level.useDisk) diskStore.getSize(blockId) else 0))
       logDebug("Told master about block " + blockId)
-      notifyMaster(HeartBeat(blockManagerId, blockId, level, 0, 0)) 
     } else {
       logDebug("Did not tell master about block " + blockId)
     }
@@ -279,7 +283,6 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     val results = new LinkedBlockingQueue[(String, Option[() => Iterator[Any]])]
 
     // Bound the number and memory usage of fetched remote blocks.
-    val parallelFetches = BlockManager.getNumParallelFetchesFromSystemProperties
     val blocksToRequest = new Queue[(BlockManagerId, BlockMessage)]
 
     def sendRequest(bmId: BlockManagerId, blockMessages: Seq[BlockMessage]) {
@@ -290,7 +293,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
         case Some(message) => {
           val bufferMessage = message.asInstanceOf[BufferMessage]
           val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-          blockMessageArray.foreach(blockMessage => {
+          for (blockMessage <- blockMessageArray) {
             if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
               throw new SparkException(
                 "Unexpected message " + blockMessage.getType + " received from " + cmId)
@@ -298,7 +301,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
             val blockId = blockMessage.getId
             results.put((blockId, Some(() => dataDeserialize(blockMessage.getData))))
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
-          })
+          }
         }
         case None => {
           logError("Could not get block(s) from " + cmId)
@@ -318,9 +321,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
         localBlockIds ++= blockIds
       } else {
         remoteBlockIds ++= blockIds
-        blockIds.foreach{blockId =>
+        for (blockId <- blockIds) {
           val blockMessage = BlockMessage.fromGetBlock(GetBlock(blockId))
-          if (initialRequests < parallelFetches) {
+          if (initialRequests < numParallelFetches) {
             initialRequestBlocks.getOrElseUpdate(address, new ArrayBuffer[BlockMessage])
               .append(blockMessage)
             initialRequests += 1
@@ -331,15 +334,17 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
     }
 
-    // Send out initial request(s) for 'parallelFetches' blocks.
-    for ((bmId, blockMessages) <- initialRequestBlocks) { sendRequest(bmId, blockMessages) }
+    // Send out initial request(s) for 'numParallelFetches' blocks.
+    for ((bmId, blockMessages) <- initialRequestBlocks) {
+      sendRequest(bmId, blockMessages)
+    }
 
-    logDebug("Started remote gets for " + parallelFetches + " blocks in " +
+    logDebug("Started remote gets for " + numParallelFetches + " blocks in " +
       Utils.getUsedTimeMs(startTime) + " ms")
 
     // Get the local blocks while remote blocks are being fetched.
     startTime = System.currentTimeMillis
-    localBlockIds.foreach(id => {
+    for (id <- localBlockIds) {
       getLocal(id) match {
         case Some(block) => {
           results.put((id, Some(() => block)))
@@ -349,7 +354,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
           throw new BlockException(id, "Could not get block " + id + " from local machine")
         }
       }
-    }) 
+    }
     logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
 
     // Return an iterator that will read fetched blocks off the queue as they arrive.
@@ -362,8 +367,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
         resultsGotten += 1
         val (blockId, functionOption) = results.take()
         if (remoteBlockIds.contains(blockId) && !blocksToRequest.isEmpty) {
-           val (bmId, blockMessage) = blocksToRequest.dequeue
-           sendRequest(bmId, Seq(blockMessage))
+          val (bmId, blockMessage) = blocksToRequest.dequeue()
+          sendRequest(bmId, Seq(blockMessage))
         }
         (blockId, functionOption.map(_.apply()))
       }
@@ -428,9 +433,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
           case _ => throw new Exception("Unexpected return value")
         }
       }
-        
+
       // Store the storage level
-      setLevel(blockId, level, tellMaster)
+      setLevelAndTellMaster(blockId, level, tellMaster)
     }
     logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))
 
@@ -458,7 +463,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   /**
    * Put a new block of serialized bytes to the block manager.
    */
-  def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel, tellMaster: Boolean = true) {
+  def putBytes(
+    blockId: String, bytes: ByteBuffer, level: StorageLevel, tellMaster: Boolean = true) {
+
     if (blockId == null) {
       throw new IllegalArgumentException("Block Id is null")
     }
@@ -497,7 +504,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
 
       // Store the storage level
-      setLevel(blockId, level, tellMaster)
+      setLevelAndTellMaster(blockId, level, tellMaster)
     }
 
     // TODO: This code will be removed when CacheTracker is gone.
@@ -584,7 +591,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
       memoryStore.remove(blockId)  
       val newLevel = new StorageLevel(level.useDisk, false, level.deserialized, level.replication)
-      setLevel(blockId, newLevel)
+      setLevelAndTellMaster(blockId, newLevel)
     }
   }
 
@@ -601,10 +608,6 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     val ser = serializer.newInstance()
     bytes.rewind()
     return ser.deserializeStream(new ByteBufferInputStream(bytes)).toIterator
-  }
-
-  private def notifyMaster(heartBeat: HeartBeat) {
-    master.mustHeartBeat(heartBeat)
   }
 
   def stop() {
