@@ -62,10 +62,10 @@ object WordCount2_ExtraFunctions {
 object WordCount2 {
 
   def warmup(sc: SparkContext) {
-    (0 until 10).foreach {i =>
-      sc.parallelize(1 to 20000000, 1000)
+    (0 until 3).foreach {i =>
+      sc.parallelize(1 to 20000000, 500)
         .map(x => (x % 337, x % 1331))
-        .reduceByKey(_ + _)
+        .reduceByKey(_ + _, 100)
         .count()
     }
   }
@@ -88,7 +88,7 @@ object WordCount2 {
 
     val data = ssc.sc.textFile(file, mapTasks.toInt).persist(
       new StorageLevel(false, true, false, 3))  // Memory only, serialized, 3 replicas
-    println("Data count: " + data.count())
+    println("Data count: " + data.map(x => if (x == "") 1 else x.split(" ").size / x.split(" ").size).count())
     println("Data count: " + data.count())
     println("Data count: " + data.count())
     

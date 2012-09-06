@@ -99,7 +99,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
     // Remove a disconnected slave from the cluster
     def removeSlave(slaveId: String) {
-      logInfo("Slave " + slaveId + " disconnected, so removing it")
+      logWarning("Slave " + slaveId + " disconnected, so removing it")
       val numCores = freeCores(slaveId)
       actorToSlaveId -= slaveActor(slaveId)
       addressToSlaveId -= slaveAddress(slaveId)
