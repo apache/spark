@@ -224,7 +224,7 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
     dataOut.writeInt(locs.length)
     val grouped = locs.zipWithIndex.groupBy(_._1)
     dataOut.writeInt(grouped.size)
-    for ((id, pairs) <- grouped) {
+    for ((id, pairs) <- grouped if id != null) {
       dataOut.writeUTF(id.ip)
       dataOut.writeInt(id.port)
       dataOut.writeInt(pairs.length)
