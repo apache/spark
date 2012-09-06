@@ -84,7 +84,7 @@ object WordCount2 {
     val ssc = new StreamingContext(master, "WordCount2")
     ssc.setBatchDuration(batchDuration)
 
-    warmup(ssc.sc)
+    //warmup(ssc.sc)
 
     val data = ssc.sc.textFile(file, mapTasks.toInt).persist(
       new StorageLevel(false, true, false, 3))  // Memory only, serialized, 3 replicas
