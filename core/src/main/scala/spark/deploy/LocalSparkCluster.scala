@@ -19,7 +19,7 @@ class LocalSparkCluster(numSlaves : Int, coresPerSlave : Int,
   var masterPort : Int = _
   var masterUrl : String = _
   
-  val slaveActors = ArrayBuffer[ActorRef]() 
+  val slaveActors = ArrayBuffer[ActorRef]()
   
   def start() : String = {
 

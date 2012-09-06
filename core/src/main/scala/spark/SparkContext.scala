@@ -84,7 +84,7 @@ class SparkContext(
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
     // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
-    val SPARK_LOCALCLUSTER_REGEX = """spark-cluster\[([0-9]+)\,([0-9]+),([0-9]+)]""".r
+    val SPARK_LOCALCLUSTER_REGEX = """local-cluster\[([0-9]+)\,([0-9]+),([0-9]+)]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """(spark://.*)""".r
     
