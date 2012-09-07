@@ -25,7 +25,11 @@ class QueueInputDStream[T: ClassManifest](
       buffer ++= queue
     }
     if (buffer.size > 0) {
-      Some(new UnionRDD(ssc.sc, buffer.toSeq))
+      if (oneAtATime) {
+        Some(buffer.first)
+      } else {
+        Some(new UnionRDD(ssc.sc, buffer.toSeq))
+      }
     } else if (defaultRDD != null) {
       Some(defaultRDD)
     } else {

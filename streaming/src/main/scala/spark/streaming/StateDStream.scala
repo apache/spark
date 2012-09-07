@@ -7,7 +7,7 @@ import spark.SparkContext._
 
 
 class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManifest](
-    parent: DStream[(K, V)],
+    @transient parent: DStream[(K, V)],
     updateFunc: (Iterator[(K, Seq[V], S)]) => Iterator[(K, S)],
     partitioner: Partitioner,
     rememberPartitioner: Boolean
