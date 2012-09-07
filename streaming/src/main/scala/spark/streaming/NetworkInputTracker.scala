@@ -4,6 +4,7 @@ import spark.Logging
 import spark.SparkEnv
 
 import scala.collection.mutable.HashMap
+import scala.collection.mutable.Queue
 
 import akka.actor._
 import akka.pattern.ask
@@ -28,6 +29,17 @@ extends Logging {
         logInfo("Registered receiver for network stream " + streamId)
         sender ! true
       } 
+      case GotBlockIds(streamId, blockIds) => {
+        val tmp = receivedBlockIds.synchronized {
+          if (!receivedBlockIds.contains(streamId)) {
+            receivedBlockIds += ((streamId, new Queue[String]))
+          }
+          receivedBlockIds(streamId)
+        }
+        tmp.synchronized {
+          tmp ++= blockIds
+        }
+      }
     }
   }
   
@@ -69,8 +81,8 @@ extends Logging {
   val networkInputStreamIds = networkInputStreams.map(_.id).toArray
   val receiverExecutor = new ReceiverExecutor()
   val receiverInfo = new HashMap[Int, ActorRef]
-  val receivedBlockIds = new HashMap[Int, Array[String]]
-  val timeout = 1000.milliseconds
+  val receivedBlockIds = new HashMap[Int, Queue[String]]
+  val timeout = 5000.milliseconds
   
   
   var currentTime: Time = null 
@@ -86,22 +98,12 @@ extends Logging {
   }
   
   def getBlockIds(receiverId: Int, time: Time): Array[String] = synchronized {
-    if (currentTime == null || time > currentTime) {
-      logInfo("Getting block ids from receivers for " + time)
-      implicit val ec = ssc.env.actorSystem.dispatcher
-      receivedBlockIds.clear()
-      val message = new GetBlockIds(time)
-      val listOfFutures = receiverInfo.values.map(
-          _.ask(message)(timeout).mapTo[GotBlockIds]
-        ).toList
-      val futureOfList = Future.sequence(listOfFutures)
-      val allBlockIds = Await.result(futureOfList, timeout)
-      receivedBlockIds ++= allBlockIds.map(x => (x.streamId, x.blocksIds))
-      if (receivedBlockIds.size != receiverInfo.size) {
-        throw new Exception("Unexpected number of the Block IDs received")
-      }
-      currentTime = time
+    val queue =  receivedBlockIds.synchronized {
+      receivedBlockIds.getOrElse(receiverId, new Queue[String]())
     }
-    receivedBlockIds.getOrElse(receiverId, Array[String]())    
+    val result = queue.synchronized {
+      queue.dequeueAll(x => true)
+    }
+    result.toArray
   }  
 }

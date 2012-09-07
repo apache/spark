@@ -22,6 +22,8 @@ object WordCount2_ExtraFunctions {
 
   def subtract(v1: Long, v2: Long) = (v1 - v2) 
 
+  def max(v1: Long, v2: Long) = math.max(v1, v2) 
+
   def splitAndCountPartitions(iter: Iterator[String]): Iterator[(String, Long)] = {
     //val map = new java.util.HashMap[String, Long]
     val map = new OLMap[String]
@@ -60,10 +62,10 @@ object WordCount2_ExtraFunctions {
 object WordCount2 {
 
   def warmup(sc: SparkContext) {
-    (0 until 10).foreach {i =>
-      sc.parallelize(1 to 20000000, 1000)
+    (0 until 3).foreach {i =>
+      sc.parallelize(1 to 20000000, 500)
         .map(x => (x % 337, x % 1331))
-        .reduceByKey(_ + _)
+        .reduceByKey(_ + _, 100)
         .count()
     }
   }
@@ -85,8 +87,8 @@ object WordCount2 {
     //warmup(ssc.sc)
 
     val data = ssc.sc.textFile(file, mapTasks.toInt).persist(
-      new StorageLevel(false, true, false, 2))  // Memory only, serialized, 2 replicas
-    println("Data count: " + data.count())
+      new StorageLevel(false, true, false, 3))  // Memory only, serialized, 3 replicas
+    println("Data count: " + data.map(x => if (x == "") 1 else x.split(" ").size / x.split(" ").size).count())
     println("Data count: " + data.count())
     println("Data count: " + data.count())
     
@@ -98,7 +100,9 @@ object WordCount2 {
     val windowedCounts = sentences
       .mapPartitions(splitAndCountPartitions)
       .reduceByKeyAndWindow(add _, subtract _, Seconds(30), batchDuration, reduceTasks.toInt)
-    windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, StorageLevel.MEMORY_ONLY_DESER_2,
+    windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, 
+      StorageLevel.MEMORY_ONLY_DESER_2,
+      //new StorageLevel(false, true, true, 3),
       Milliseconds(chkptMillis.toLong))
     windowedCounts.foreachRDD(r => println("Element count: " + r.count()))
 

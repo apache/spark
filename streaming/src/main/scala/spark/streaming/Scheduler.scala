@@ -39,8 +39,8 @@ extends Logging {
   }
   
   def generateRDDs (time: Time) {
-    println("\n-----------------------------------------------------\n")
     SparkEnv.set(ssc.env)
+    logInfo("\n-----------------------------------------------------\n")
     logInfo("Generating RDDs for time " + time)
     outputStreams.foreach(outputStream => {
         outputStream.generateJob(time) match {
