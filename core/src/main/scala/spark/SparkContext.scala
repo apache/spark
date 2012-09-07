@@ -253,7 +253,13 @@ class SparkContext(
   def accumulable[T,R](initialValue: T)(implicit param: AccumulableParam[T,R]) =
     new Accumulable(initialValue, param)
 
-  def accumlableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable, T](initialValue: R) = {
+  /**
+   * create an accumulator from a "mutable collection" type.
+   * 
+   * Growable and TraversableOnce are the standard apis that guarantee += and ++=, implemented by
+   * standard mutable collections.  So you can use this with mutable Map, Set, etc.
+   */
+  def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable, T](initialValue: R) = {
     val param = new GrowableAccumulableParam[R,T]
     new Accumulable(initialValue, param)
   }
