@@ -15,6 +15,6 @@ object ExceptionHandlingTest {
         throw new Exception("Testing exception handling")
     }
 
-    System.exit(0)
+    sc.stop()
   }
 }

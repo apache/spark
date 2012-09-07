@@ -114,6 +114,6 @@ public class JavaHdfsLR {
 
     System.out.print("Final w: ");
     printWeights(w);
-    System.exit(0);
+    sc.stop();
   }
 }
