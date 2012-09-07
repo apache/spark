@@ -33,7 +33,7 @@ object GroupByTest {
     
     println(pairs1.groupByKey(numReducers).count)
 
-    System.exit(0)
+    sc.stop()
   }
 }
 

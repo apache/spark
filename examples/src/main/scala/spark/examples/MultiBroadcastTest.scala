@@ -27,6 +27,6 @@ object MultiBroadcastTest {
       i => println(barr1.value.size + barr2.value.size)
     }
     
-    System.exit(0)
+    spark.stop()
   }
 }

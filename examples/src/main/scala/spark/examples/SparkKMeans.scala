@@ -69,6 +69,6 @@ object SparkKMeans {
     }
 
     println("Final centers: " + kPoints)
-    System.exit(0)
+    sc.stop()
   }
 }

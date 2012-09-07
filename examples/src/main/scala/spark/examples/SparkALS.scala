@@ -138,6 +138,6 @@ object SparkALS {
       println()
     }
 
-    System.exit(0)
+    spark.stop()
   }
 }

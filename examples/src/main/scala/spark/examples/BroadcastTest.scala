@@ -22,6 +22,6 @@ object BroadcastTest {
       i => println(barr1.value.size)
     }
 
-    System.exit(0)
+    spark.stop()
   }
 }

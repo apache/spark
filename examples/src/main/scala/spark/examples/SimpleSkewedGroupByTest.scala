@@ -47,7 +47,7 @@ object SimpleSkewedGroupByTest {
     //                           .map{case (k,v) => (k, v.size)}
     //                           .collectAsMap)
 
-    System.exit(0)
+    sc.stop()
   }
 }
 
