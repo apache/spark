@@ -56,7 +56,7 @@ class DStreamBasicSuite extends DStreamSuiteBase {
         var newState = 0
         if (values != null) newState += values.reduce(_ + _)
         if (state != null) newState += state.self
-        println("values = " + values + ", state = " + state + ", " + " new state = " + newState)
+        //println("values = " + values + ", state = " + state + ", " + " new state = " + newState)
         new RichInt(newState)
       }
       s.map(x => (x, 1)).updateStateByKey[RichInt](updateFunc).map(t => (t._1, t._2.self))

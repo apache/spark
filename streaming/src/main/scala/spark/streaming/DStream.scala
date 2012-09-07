@@ -256,10 +256,16 @@ extends Logging with Serializable {
 
   def union(that: DStream[T]) = new UnifiedDStream(Array(this, that))
 
+  def slice(interval: Interval): Seq[RDD[T]] = {
+    slice(interval.beginTime, interval.endTime)
+  }
+
+  // Get all the RDDs between fromTime to toTime (both included)
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = {
 
     val rdds = new ArrayBuffer[RDD[T]]()
     var time = toTime.floor(slideTime)
+
 
     while (time >= zeroTime && time >= fromTime) {
       getOrCompute(time) match {
