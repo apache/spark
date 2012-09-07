@@ -35,6 +35,19 @@ class ExecutorRunner(
       override def run() { fetchAndRunExecutor() }
     }
     workerThread.start()
+
+    // Shutdown hook that kills actors on shutdown.
+    Runtime.getRuntime.addShutdownHook(
+      new Thread() { 
+        override def run() {
+          if(process != null) {
+            logInfo("Shutdown Hook killing process.")
+            process.destroy()
+            process.waitFor()
+          }  
+        }
+    })
+
   }
 
   /** Stop this executor runner, including killing the process it launched */
@@ -131,6 +144,9 @@ class ExecutorRunner(
       }
       env.put("SPARK_CORES", cores.toString)
       env.put("SPARK_MEMORY", memory.toString)
+      // In case we are running this from within the Spark Shell
+      // so we are not creating a parent process.
+      env.put("SPARK_LAUNCH_WITH_SCALA", "0")
       process = builder.start()
 
       // Redirect its stdout and stderr to files
