@@ -86,14 +86,15 @@ class RawInputDStream[T: ClassManifest](
   private class ReceiverActor(env: SparkEnv, receivingThread: Thread) extends Actor {
     val newBlocks = new ArrayBuffer[String]
 
+    logInfo("Attempting to register with tracker")
+    val ip = System.getProperty("spark.master.host", "localhost")
+    val port = System.getProperty("spark.master.port", "7077").toInt
+    val actorName: String = "NetworkInputTracker"
+    val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
+    val trackerActor = env.actorSystem.actorFor(url)
+    val timeout = 5.seconds
+
     override def preStart() {
-      logInfo("Attempting to register with tracker")
-      val ip = System.getProperty("spark.master.host", "localhost")
-      val port = System.getProperty("spark.master.port", "7077").toInt
-      val actorName: String = "NetworkInputTracker"
-      val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
-      val trackerActor = env.actorSystem.actorFor(url)
-      val timeout = 1.seconds
       val future = trackerActor.ask(RegisterReceiver(streamId, self))(timeout)
       Await.result(future, timeout)
     }
@@ -101,6 +102,7 @@ class RawInputDStream[T: ClassManifest](
     override def receive = {
       case BlockPublished(blockId) =>
         newBlocks += blockId
+        val future = trackerActor ! GotBlockIds(streamId, Array(blockId))
 
       case GetBlockIds(time) =>
         logInfo("Got request for block IDs for " + time)
@@ -111,5 +113,6 @@ class RawInputDStream[T: ClassManifest](
         receivingThread.interrupt()
         sender ! true
     }
+
   }
 }

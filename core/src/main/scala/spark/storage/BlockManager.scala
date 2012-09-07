@@ -509,10 +509,15 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * Replicate block to another node.
    */
 
+  var firstTime = true
+  var peers : Seq[BlockManagerId] = null
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
-    var peers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
+    if (firstTime) {
+      peers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
+      firstTime = false;
+    } 
     for (peer: BlockManagerId <- peers) {
       val start = System.nanoTime
       data.rewind()
