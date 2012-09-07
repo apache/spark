@@ -26,14 +26,14 @@ class LocalSparkCluster(numSlaves : Int, coresPerSlave : Int,
     logInfo("Starting a local Spark cluster with " + numSlaves + " slaves.")
 
     /* Start the Master */
-    val (actorSystem, masterPort) = AkkaUtils.createActorSystem("sparkMaster", localIpAddress, 0)
+    val (masterActorSystem, masterPort) = AkkaUtils.createActorSystem("sparkMaster", localIpAddress, 0)
     masterUrl = "spark://" + localIpAddress + ":" + masterPort
     threadPool.execute(new Runnable {
       def run() {
-        val actor = actorSystem.actorOf(
+        val actor = masterActorSystem.actorOf(
           Props(new Master(localIpAddress, masterPort, 8080)), name = "Master")
         masterActor = actor
-        actorSystem.awaitTermination()
+        masterActorSystem.awaitTermination()
       }
     })
 
@@ -51,6 +51,20 @@ class LocalSparkCluster(numSlaves : Int, coresPerSlave : Int,
         }
       })
     }
+
+
+    // Shutdown hook that kills actors on shutdown.
+    Runtime.getRuntime.addShutdownHook(
+      new Thread() { 
+        override def run() {
+          masterActorSystem.stop(masterActor)
+          masterActorSystem.shutdown()
+          // Since above is asynchronous wait for the master actor to shut down
+          while(!masterActor.isTerminated) {
+            Thread.sleep(10)
+          }
+        }
+      })
 
     return masterUrl
   }
