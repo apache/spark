@@ -110,6 +110,9 @@ class SparkContext(
         val sparkUrl = localCluster.start()
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
         scheduler.initialize(backend)
+        backend.shutdownHook = (backend: SparkDeploySchedulerBackend) => {
+          localCluster.stop()
+        }
         scheduler
 
       case _ =>

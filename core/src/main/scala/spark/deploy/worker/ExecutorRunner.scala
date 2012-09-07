@@ -35,6 +35,19 @@ class ExecutorRunner(
       override def run() { fetchAndRunExecutor() }
     }
     workerThread.start()
+
+    // Shutdown hook that kills actors on shutdown.
+    Runtime.getRuntime.addShutdownHook(
+      new Thread() { 
+        override def run() {
+          if(process != null) {
+            logInfo("Shutdown Hook killing process.")
+            process.destroy()
+            process.waitFor()
+          }  
+        }
+    })
+
   }
 
   /** Stop this executor runner, including killing the process it launched */
