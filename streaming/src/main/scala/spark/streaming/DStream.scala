@@ -143,7 +143,7 @@ extends Logging with Serializable {
 
   /**
    * This method generates a SparkStreaming job for the given time
-   * and may require to be overriden by subclasses
+   * and may required to be overriden by subclasses
    */
   def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
@@ -208,7 +208,7 @@ extends Logging with Serializable {
     new TransformedDStream(this, ssc.sc.clean(transformFunc))
   }
 
-  def toQueue = {
+  def toBlockingQueue = {
     val queue = new ArrayBlockingQueue[RDD[T]](10000)
     this.foreachRDD(rdd => {
       queue.add(rdd)
@@ -255,6 +255,28 @@ extends Logging with Serializable {
   }
 
   def union(that: DStream[T]) = new UnifiedDStream(Array(this, that))
+
+  def slice(interval: Interval): Seq[RDD[T]] = {
+    slice(interval.beginTime, interval.endTime)
+  }
+
+  // Get all the RDDs between fromTime to toTime (both included)
+  def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = {
+
+    val rdds = new ArrayBuffer[RDD[T]]()
+    var time = toTime.floor(slideTime)
+
+
+    while (time >= zeroTime && time >= fromTime) {
+      getOrCompute(time) match {
+        case Some(rdd) => rdds += rdd
+        case None => throw new Exception("Could not get old reduced RDD for time " + time)
+      }
+      time -= slideTime
+    }
+
+    rdds.toSeq
+  }
 
   def register() {
     ssc.registerOutputStream(this)

@@ -9,6 +9,10 @@ case class Interval(beginTime: Time, endTime: Time) {
     new Interval(beginTime + time, endTime + time) 
   }
 
+  def - (time: Time): Interval = {
+    new Interval(beginTime - time, endTime - time)
+  }
+
   def < (that: Interval): Boolean = {
     if (this.duration != that.duration) {
       throw new Exception("Comparing two intervals with different durations [" + this + ", " + that + "]")

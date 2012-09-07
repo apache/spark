@@ -12,7 +12,7 @@ import spark.storage.StorageLevel
 import scala.collection.mutable.ArrayBuffer
 
 class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
-    parent: DStream[(K, V)],
+    @transient parent: DStream[(K, V)],
     reduceFunc: (V, V) => V,
     invReduceFunc: (V, V) => V, 
     _windowTime: Time,
@@ -28,9 +28,7 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     throw new Exception("The slide duration of ReducedWindowedDStream (" + _slideTime + ") " +
     "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
 
-  val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
-  val allowPartialWindows = true
-  //reducedStream.persist(StorageLevel.MEMORY_ONLY_DESER_2)
+  @transient val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
 
   override def dependencies = List(reducedStream)
 
@@ -44,174 +42,95 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
       checkpointInterval: Time): DStream[(K,V)] = {
     super.persist(storageLevel, checkpointLevel, checkpointInterval)
     reducedStream.persist(storageLevel, checkpointLevel, checkpointInterval)
+    this
   }
-  
-  override def compute(validTime: Time): Option[RDD[(K, V)]] = {
-    
 
-    // Notation: 
+  override def compute(validTime: Time): Option[RDD[(K, V)]] = {
+
+    val currentTime = validTime
+    val currentWindow = Interval(currentTime - windowTime + parent.slideTime, currentTime)
+    val previousWindow = currentWindow - slideTime
+
+    logDebug("Window time = " + windowTime)
+    logDebug("Slide time = " + slideTime)
+    logDebug("ZeroTime = " + zeroTime)
+    logDebug("Current window = " + currentWindow)
+    logDebug("Previous window = " + previousWindow)
+
     //  _____________________________
-    // |  previous window   _________|___________________   
-    // |___________________|       current window        |  --------------> Time  
+    // |  previous window   _________|___________________
+    // |___________________|       current window        |  --------------> Time
     //                     |_____________________________|
-    // 
+    //
     // |________ _________|          |________ _________|
     //          |                             |
     //          V                             V
-    //   old time steps                new time steps   
+    //       old RDDs                     new RDDs
     //
-    def getAdjustedWindow(endTime: Time, windowTime: Time): Interval = {
-      val beginTime = 
-        if (allowPartialWindows && endTime - windowTime < parent.zeroTime) {
-          parent.zeroTime
-        } else { 
-          endTime - windowTime 
-        }
-      Interval(beginTime, endTime)
-    }
-    
-    val currentTime = validTime
-    val currentWindow = getAdjustedWindow(currentTime, windowTime)
-    val previousWindow = getAdjustedWindow(currentTime - slideTime, windowTime)
-    
-    logInfo("Current window = " + currentWindow)
-    logInfo("Slide time = " + slideTime)
-    logInfo("Previous window = " + previousWindow)
-    logInfo("Parent.zeroTime = " + parent.zeroTime)
 
-    if (allowPartialWindows) {
-      if (currentTime - slideTime <= parent.zeroTime) {
-        reducedStream.getOrCompute(currentTime) match {
-          case Some(rdd) => return Some(rdd)
-          case None => throw new Exception("Could not get first reduced RDD for time " + currentTime)
-        }
-      } 
-    } else {
-      if (previousWindow.beginTime < parent.zeroTime) {
-        if (currentWindow.beginTime < parent.zeroTime) {
-          return None
-        } else {
-          // If this is the first feasible window, then generate reduced value in the naive manner
-          val reducedRDDs = new ArrayBuffer[RDD[(K, V)]]()
-          var t = currentWindow.endTime 
-          while (t > currentWindow.beginTime) {
-            reducedStream.getOrCompute(t) match {
-              case Some(rdd) => reducedRDDs += rdd
-              case None => throw new Exception("Could not get reduced RDD for time " + t)
-            }
-            t -= reducedStream.slideTime
-          }
-          if (reducedRDDs.size == 0) {
-            throw new Exception("Could not generate the first RDD for time " + validTime) 
-          }
-          return Some(new UnionRDD(ssc.sc, reducedRDDs).reduceByKey(partitioner, reduceFunc))
-        }
-      }
-    }
-    
-    // Get the RDD of the reduced value of the previous window
-    val previousWindowRDD = getOrCompute(previousWindow.endTime) match {
-      case Some(rdd) => rdd.asInstanceOf[RDD[(_, _)]]
-      case None => throw new Exception("Could not get previous RDD for time " + previousWindow.endTime) 
-    }
-
-    val oldRDDs = new ArrayBuffer[RDD[(_, _)]]()
-    val newRDDs = new ArrayBuffer[RDD[(_, _)]]()
-    
     // Get the RDDs of the reduced values in "old time steps"
-    var t = currentWindow.beginTime 
-    while (t > previousWindow.beginTime) {
-      reducedStream.getOrCompute(t) match {
-        case Some(rdd) => oldRDDs += rdd.asInstanceOf[RDD[(_, _)]]
-        case None => throw new Exception("Could not get old reduced RDD for time " + t)
-      }
-      t -= reducedStream.slideTime
-    }
+    val oldRDDs = reducedStream.slice(previousWindow.beginTime, currentWindow.beginTime - parent.slideTime)
+    logDebug("# old RDDs = " + oldRDDs.size)
 
     // Get the RDDs of the reduced values in "new time steps"
-    t = currentWindow.endTime 
-    while (t > previousWindow.endTime) {
-      reducedStream.getOrCompute(t) match {
-        case Some(rdd) => newRDDs += rdd.asInstanceOf[RDD[(_, _)]]
-        case None => throw new Exception("Could not get new reduced RDD for time " + t)
-      }
-      t -= reducedStream.slideTime
+    val newRDDs = reducedStream.slice(previousWindow.endTime + parent.slideTime, currentWindow.endTime)
+    logDebug("# new RDDs = " + newRDDs.size)
+
+    // Get the RDD of the reduced value of the previous window
+    val previousWindowRDD = getOrCompute(previousWindow.endTime).getOrElse(ssc.sc.makeRDD(Seq[(K,V)]()))
+
+    // Make the list of RDDs that needs to cogrouped together for reducing their reduced values
+    val allRDDs = new ArrayBuffer[RDD[(K, V)]]() += previousWindowRDD ++= oldRDDs ++= newRDDs
+
+    // Cogroup the reduced RDDs and merge the reduced values
+    val cogroupedRDD = new CoGroupedRDD[K](allRDDs.toSeq.asInstanceOf[Seq[RDD[(_, _)]]], partitioner)
+    val mergeValuesFunc = mergeValues(oldRDDs.size, newRDDs.size) _
+    val mergedValuesRDD = cogroupedRDD.asInstanceOf[RDD[(K,Seq[Seq[V]])]].mapValues(mergeValuesFunc)
+
+    Some(mergedValuesRDD)
+  }
+
+  def mergeValues(numOldValues: Int, numNewValues: Int)(seqOfValues: Seq[Seq[V]]): V = {
+
+    if (seqOfValues.size != 1 + numOldValues + numNewValues) {
+      throw new Exception("Unexpected number of sequences of reduced values")
     }
 
-    val allRDDs = new ArrayBuffer[RDD[(_, _)]]()
-    allRDDs += previousWindowRDD
-    allRDDs ++= oldRDDs
-    allRDDs ++= newRDDs
-   
+    // Getting reduced values "old time steps" that will be removed from current window
+    val oldValues = (1 to numOldValues).map(i => seqOfValues(i)).filter(!_.isEmpty).map(_.head)
 
-    val numOldRDDs = oldRDDs.size
-    val numNewRDDs = newRDDs.size
-    logInfo("Generated numOldRDDs = " + numOldRDDs + ", numNewRDDs = " + numNewRDDs)
-    logInfo("Generating CoGroupedRDD with " + allRDDs.size + " RDDs")
-    val newRDD = new CoGroupedRDD[K](allRDDs.toSeq, partitioner).asInstanceOf[RDD[(K,Seq[Seq[V]])]].map(x => {
-      val (key, value) = x 
-      logDebug("value.size = " + value.size + ", numOldRDDs = " + numOldRDDs + ", numNewRDDs = " + numNewRDDs)
-      if (value.size != 1 + numOldRDDs + numNewRDDs) {
-        throw new Exception("Number of groups not odd!")
+    // Getting reduced values "new time steps"
+    val newValues = (1 to numNewValues).map(i => seqOfValues(numOldValues + i)).filter(!_.isEmpty).map(_.head)
+
+    if (seqOfValues(0).isEmpty) {
+
+      // If previous window's reduce value does not exist, then at least new values should exist
+      if (newValues.isEmpty) {
+        throw new Exception("Neither previous window has value for key, nor new values found")
       }
 
-      // old values = reduced values of the "old time steps" that are eliminated from current window
-      // new values = reduced values of the "new time steps" that are introduced to the current window
-      // previous value = reduced value of the previous window 
+      // Reduce the new values
+      // println("new values = " + newValues.map(_.toString).reduce(_ + " " + _))
+      return newValues.reduce(reduceFunc)
+    } else {
 
-      /*val numOldValues = (value.size - 1) / 2*/
-      // Getting reduced values "old time steps"
-      val oldValues = 
-        (0 until numOldRDDs).map(i => value(1 + i)).filter(_.size > 0).map(x => x(0))
-      // Getting reduced values "new time steps"
-      val newValues = 
-        (0 until numNewRDDs).map(i => value(1 + numOldRDDs + i)).filter(_.size > 0).map(x => x(0))
-       
-      // If reduced value for the key does not exist in previous window, it should not exist in "old time steps"
-      if (value(0).size == 0 && oldValues.size != 0) {
-        throw new Exception("Unexpected: Key exists in old reduced values but not in previous reduced values")
+      // Get the previous window's reduced value
+      var tempValue = seqOfValues(0).head
+
+      // If old values exists, then inverse reduce then from previous value
+      if (!oldValues.isEmpty) {
+        // println("old values = " + oldValues.map(_.toString).reduce(_ + " " + _))
+        tempValue = invReduceFunc(tempValue, oldValues.reduce(reduceFunc))
       }
 
-      // For the key, at least one of "old time steps", "new time steps" and previous window should have reduced values
-      if (value(0).size == 0 && oldValues.size == 0 && newValues.size == 0) {
-        throw new Exception("Unexpected: Key does not exist in any of old, new, or previour reduced values")
+      // If new values exists, then reduce them with previous value
+      if (!newValues.isEmpty) {
+        // println("new values = " + newValues.map(_.toString).reduce(_ + " " + _))
+        tempValue = reduceFunc(tempValue, newValues.reduce(reduceFunc))
       }
-
-      // Logic to generate the final reduced value for current window:
-      //
-      // If previous window did not have reduced value for the key
-      // Then, return reduced value of "new time steps" as the final value
-      // Else, reduced value exists in previous window
-      //     If "old" time steps did not have reduced value for the key
-      //     Then, reduce previous window's reduced value with that of "new time steps" for final value
-      //     Else, reduced values exists in "old time steps"
-      //         If "new values" did not have reduced value for the key
-      //         Then, inverse-reduce "old values" from previous window's reduced value for final value
-      //         Else, all 3 values exist, combine all of them together 
-      //
-      logDebug("# old values = " + oldValues.size + ", # new values = " + newValues)
-      val finalValue = {
-        if (value(0).size == 0) {
-          newValues.reduce(reduceFunc)
-        } else {
-          val prevValue = value(0)(0)
-          logDebug("prev value = " + prevValue)
-          if (oldValues.size == 0) {
-            // assuming newValue.size > 0 (all 3 cannot be zero, as checked earlier)  
-            val temp = newValues.reduce(reduceFunc)
-            reduceFunc(prevValue, temp)
-          } else if (newValues.size == 0) {
-            invReduceFunc(prevValue, oldValues.reduce(reduceFunc))
-          } else {
-            val tempValue = invReduceFunc(prevValue, oldValues.reduce(reduceFunc))
-            reduceFunc(tempValue, newValues.reduce(reduceFunc))
-          }
-        }
-      }
-      (key, finalValue)
-    })
-    //newRDD.persist(StorageLevel.MEMORY_ONLY_DESER_2)
-    Some(newRDD)
+      // println("final value = " + tempValue)
+      return tempValue
+    }
   }
 }
 
