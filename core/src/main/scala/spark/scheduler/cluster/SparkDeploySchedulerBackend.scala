@@ -16,6 +16,7 @@ class SparkDeploySchedulerBackend(
 
   var client: Client = null
   var stopping = false
+  var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = System.getProperty("spark.cores.max", Int.MaxValue.toString).toInt
 
@@ -61,6 +62,9 @@ class SparkDeploySchedulerBackend(
     stopping = true;
     super.stop()
     client.stop()
+    if (shutdownCallback != null) {
+      shutdownCallback(this)
+    }
   }
 
   def connected(jobId: String) {

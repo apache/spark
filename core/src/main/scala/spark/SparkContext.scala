@@ -34,6 +34,8 @@ import org.apache.mesos.{Scheduler, MesosNativeLibrary}
 
 import spark.broadcast._
 
+import spark.deploy.LocalSparkCluster
+
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 
@@ -65,7 +67,7 @@ class SparkContext(
     System.setProperty("spark.master.port", "0")
   }
 
-  private val isLocal = (master == "local" || master.startsWith("local["))
+  private val isLocal = (master == "local" || master.startsWith("local\\["))
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   val env = SparkEnv.createFromSystemProperties(
@@ -81,9 +83,11 @@ class SparkContext(
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
+    // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
+    val LOCAL_CLUSTER_REGEX = """local-cluster\[([0-9]+),([0-9]+),([0-9]+)]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """(spark://.*)""".r
-
+    
     master match {
       case "local" => 
         new LocalScheduler(1, 0)
@@ -98,6 +102,17 @@ class SparkContext(
         val scheduler = new ClusterScheduler(this)
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
         scheduler.initialize(backend)
+        scheduler
+      
+      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerlave) =>
+        val scheduler = new ClusterScheduler(this)
+        val localCluster = new LocalSparkCluster(numSlaves.toInt, coresPerSlave.toInt, memoryPerlave.toInt)
+        val sparkUrl = localCluster.start()
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
+        scheduler.initialize(backend)
+        backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
+          localCluster.stop()
+        }
         scheduler
 
       case _ =>

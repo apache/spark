@@ -153,6 +153,10 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   def generateWorkerId(): String = {
     "worker-%s-%s-%d".format(DATE_FORMAT.format(new Date), ip, port)
   }
+
+  override def postStop() {
+    executors.values.foreach(_.kill())
+  }
 }
 
 object Worker {
