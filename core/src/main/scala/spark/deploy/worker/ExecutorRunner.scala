@@ -29,6 +29,7 @@ class ExecutorRunner(
   val fullId = jobId + "/" + execId
   var workerThread: Thread = null
   var process: Process = null
+  var shutdownHook: Thread = null
 
   def start() {
     workerThread = new Thread("ExecutorRunner for " + fullId) {
@@ -37,17 +38,16 @@ class ExecutorRunner(
     workerThread.start()
 
     // Shutdown hook that kills actors on shutdown.
-    Runtime.getRuntime.addShutdownHook(
-      new Thread() { 
-        override def run() {
-          if(process != null) {
-            logInfo("Shutdown Hook killing process.")
-            process.destroy()
-            process.waitFor()
-          }  
+    shutdownHook = new Thread() { 
+      override def run() {
+        if (process != null) {
+          logInfo("Shutdown hook killing child process.")
+          process.destroy()
+          process.waitFor()
         }
-    })
-
+      }
+    }
+    Runtime.getRuntime.addShutdownHook(shutdownHook)
   }
 
   /** Stop this executor runner, including killing the process it launched */
@@ -58,8 +58,10 @@ class ExecutorRunner(
       if (process != null) {
         logInfo("Killing process!")
         process.destroy()
+        process.waitFor()
       }
       worker ! ExecutorStateChanged(jobId, execId, ExecutorState.KILLED, None)
+      Runtime.getRuntime.removeShutdownHook(shutdownHook)
     }
   }
 
@@ -114,7 +116,12 @@ class ExecutorRunner(
     val out = new FileOutputStream(file)
     new Thread("redirect output to " + file) {
       override def run() {
-        Utils.copyStream(in, out, true)
+        try {
+          Utils.copyStream(in, out, true)
+        } catch {
+          case e: IOException =>
+            logInfo("Redirection to " + file + " closed: " + e.getMessage)
+        }
       }
     }.start()
   }
