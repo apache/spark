@@ -67,7 +67,7 @@ class SparkContext(
     System.setProperty("spark.master.port", "0")
   }
 
-  private val isLocal = (master == "local" || master.startsWith("local["))
+  private val isLocal = (master == "local" || master.startsWith("local\\["))
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   val env = SparkEnv.createFromSystemProperties(
@@ -84,7 +84,7 @@ class SparkContext(
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
     val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
     // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
-    val SPARK_LOCALCLUSTER_REGEX = """local-cluster\[([0-9]+)\,([0-9]+),([0-9]+)]""".r
+    val LOCAL_CLUSTER_REGEX = """local-cluster\[([0-9]+),([0-9]+),([0-9]+)]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """(spark://.*)""".r
     
@@ -104,13 +104,13 @@ class SparkContext(
         scheduler.initialize(backend)
         scheduler
       
-      case SPARK_LOCALCLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerlave) =>
+      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerlave) =>
         val scheduler = new ClusterScheduler(this)
         val localCluster = new LocalSparkCluster(numSlaves.toInt, coresPerSlave.toInt, memoryPerlave.toInt)
         val sparkUrl = localCluster.start()
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
         scheduler.initialize(backend)
-        backend.shutdownHook = (backend: SparkDeploySchedulerBackend) => {
+        backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
         }
         scheduler
