@@ -330,7 +330,7 @@ class SparkContext(
     
     // Fetch the file locally in case the task is executed locally
     val filename = new File(path.split("/").last)
-    Utils.fetchFile(path, new File(""))
+    Utils.fetchFile(path, new File("."))
     
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
   }

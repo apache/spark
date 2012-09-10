@@ -141,7 +141,7 @@ class ShuffleMapTask(
     val jarSetNumBytes = in.readInt()
     val jarSetBytes = new Array[Byte](jarSetNumBytes)
     in.readFully(jarSetBytes)
-    fileSet = ShuffleMapTask.deserializeFileSet(jarSetBytes)
+    jarSet = ShuffleMapTask.deserializeFileSet(jarSetBytes)
 
     partition = in.readInt()
     generation = in.readLong()
