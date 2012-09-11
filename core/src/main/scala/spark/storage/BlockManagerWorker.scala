@@ -34,7 +34,7 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
           /*logDebug("Processed block messages")*/
           return Some(new BlockMessageArray(responseMessages).toBufferMessage)
         } catch {
-          case e: Exception => logError("Exception handling buffer message: " + e.getMessage)
+          case e: Exception => logError("Exception handling buffer message: " + e)
           return None
         }
       }
