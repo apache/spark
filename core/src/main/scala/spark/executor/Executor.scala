@@ -146,7 +146,8 @@ class Executor extends Logging {
   }
 
   // The addURL method in URLClassLoader is protected. We subclass it to make it accessible.
-  class ExecutorURLClassLoader(urls : Array[URL], parent : ClassLoader) extends URLClassLoader(urls, parent) {
+  class ExecutorURLClassLoader(urls : Array[URL], parent : ClassLoader) 
+    extends URLClassLoader(urls, parent) {
     override def addURL(url: URL) {
       super.addURL(url)
     }
