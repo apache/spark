@@ -8,6 +8,7 @@ import akka.actor.Actor
 import akka.actor.Actor._
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.generic.Growable
 
 import org.apache.hadoop.fs.{FileUtil, Path}
 import org.apache.hadoop.conf.Configuration
@@ -315,6 +316,16 @@ class SparkContext(
   def accumulable[T,R](initialValue: T)(implicit param: AccumulableParam[T,R]) =
     new Accumulable(initialValue, param)
 
+  /**
+   * Create an accumulator from a "mutable collection" type.
+   * 
+   * Growable and TraversableOnce are the standard APIs that guarantee += and ++=, implemented by
+   * standard mutable collections. So you can use this with mutable Map, Set, etc.
+   */
+  def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable, T](initialValue: R) = {
+    val param = new GrowableAccumulableParam[R,T]
+    new Accumulable(initialValue, param)
+  }
 
   // Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = SparkEnv.get.broadcastManager.newBroadcast[T] (value, isLocal)
