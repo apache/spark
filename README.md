@@ -17,15 +17,14 @@ Spark requires Scala 2.9.1. This version has been tested with 2.9.1.final.
 The project is built using Simple Build Tool (SBT), which is packaged with it.
 To build Spark and its example programs, run:
 
-    sbt/sbt compile
+    sbt/sbt package
 
 To run Spark, you will need to have Scala's bin in your `PATH`, or you
 will need to set the `SCALA_HOME` environment variable to point to where
 you've installed Scala. Scala must be accessible through one of these
 methods on Mesos slave nodes as well as on the master.
 
-To run one of the examples, first run `sbt/sbt package` to create a JAR with
-the example classes. Then use `./run <class> <params>`. For example:
+To run one of the examples, first run `sbt/sbt package` to build them. Then use `./run <class> <params>`. For example:
 
     ./run spark.examples.SparkLR local[2]
 

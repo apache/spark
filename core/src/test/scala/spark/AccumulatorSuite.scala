@@ -81,9 +81,9 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers {
     for (nThreads <- List(1, 10)) {
       //test single & multi-threaded
       val sc = new SparkContext("local[" + nThreads + "]", "test")
-      val setAcc = sc.accumlableCollection(mutable.HashSet[Int]())
-      val bufferAcc = sc.accumlableCollection(mutable.ArrayBuffer[Int]())
-      val mapAcc = sc.accumlableCollection(mutable.HashMap[Int,String]())
+      val setAcc = sc.accumulableCollection(mutable.HashSet[Int]())
+      val bufferAcc = sc.accumulableCollection(mutable.ArrayBuffer[Int]())
+      val mapAcc = sc.accumulableCollection(mutable.HashMap[Int,String]())
       val d = sc.parallelize( (1 to maxI) ++ (1 to maxI))
       d.foreach {
         x => {setAcc += x; bufferAcc += x; mapAcc += (x -> x.toString)}
@@ -100,7 +100,21 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers {
       }
       sc.stop()
     }
+  }
 
+  test ("localValue readable in tasks") {
+    import SetAccum._
+    val maxI = 1000
+    for (nThreads <- List(1, 10)) { //test single & multi-threaded
+    val sc = new SparkContext("local[" + nThreads + "]", "test")
+      val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
+      val groupedInts = (1 to (maxI/20)).map {x => (20 * (x - 1) to 20 * x).toSet}
+      val d = sc.parallelize(groupedInts)
+      d.foreach {
+        x => acc.localValue ++= x
+      }
+      acc.value should be ( (0 to maxI).toSet)
+    }
   }
 
 }
