@@ -3,7 +3,7 @@ package spark
 import java.io._
 
 import scala.collection.mutable.Map
-import collection.generic.Growable
+import scala.collection.generic.Growable
 
 class Accumulable[T,R] (
     @transient initialValue: T,
@@ -109,16 +109,26 @@ trait AccumulableParam[R,T] extends Serializable {
   def zero(initialValue: R): R
 }
 
-class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable, T] extends AccumulableParam[R,T] {
+class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable, T]
+extends AccumulableParam[R,T] {
   def addAccumulator(growable: R, elem: T) : R = {
     growable += elem
     growable
   }
+
   def addInPlace(t1: R, t2: R) : R = {
     t1 ++= t2
     t1
   }
-  def zero(initialValue: R) = initialValue
+
+  def zero(initialValue: R): R = {
+    // We need to clone initialValue, but it's hard to specify that R should also be Cloneable.
+    // Instead we'll serialize it to a buffer and load it back.
+    val ser = (new spark.JavaSerializer).newInstance
+    val copy = ser.deserialize[R](ser.serialize(initialValue))
+    copy.clear()   // In case it contained stuff
+    copy
+  }
 }
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
