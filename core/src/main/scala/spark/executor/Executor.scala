@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
  * The Mesos executor for Spark.
  */
 class Executor extends Logging {
-  var urlClassLoader : URLClassLoader = null
+  var urlClassLoader : ExecutorURLClassLoader = null
   var threadPool: ExecutorService = null
   var env: SparkEnv = null
   
@@ -104,7 +104,7 @@ class Executor extends Logging {
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): URLClassLoader = {
+  private def createClassLoader(): ExecutorURLClassLoader = {
 
     var loader = this.getClass().getClassLoader()
 
@@ -132,23 +132,24 @@ class Executor extends Logging {
       }
     }
 
-    return new URLClassLoader(Array(), loader)
+    return new ExecutorURLClassLoader(Array(), loader)
   }
 
   def updateClassLoader() {
     val currentURLs = urlClassLoader.getURLs()
-
     val urlSet = jarSet.keySet.map { x => new File(x.split("/").last).toURI.toURL }
-
-    // For abstraction reasons the addURL method in URLClassLoader is protected.
-    // We'll save us the hassle of sublassing here and use relfection instead.
-    val m = classOf[URLClassLoader].getDeclaredMethod("addURL", classOf[URL])
-    m.setAccessible(true)
     urlSet.filterNot(currentURLs.contains(_)).foreach {  url =>
       logInfo("Adding " + url + " to the class loader.")
-      m.invoke(urlClassLoader, url)
+      urlClassLoader.addURL(url)
     }
 
+  }
+
+  // The addURL method in URLClassLoader is protected. We subclass it to make it accessible.
+  class ExecutorURLClassLoader(urls : Array[URL], parent : ClassLoader) extends URLClassLoader(urls, parent) {
+    override def addURL(url: URL) {
+      super.addURL(url)
+    }
   }
 
 }
