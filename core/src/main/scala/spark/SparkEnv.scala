@@ -19,15 +19,17 @@ class SparkEnv (
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
-    val connectionManager: ConnectionManager
+    val connectionManager: ConnectionManager,
+    val httpFileServer: HttpFileServer
   ) {
 
   /** No-parameter constructor for unit tests. */
   def this() = {
-    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
+    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null, null)
   }
 
   def stop() {
+    httpFileServer.stop()
     mapOutputTracker.stop()
     cacheTracker.stop()
     shuffleFetcher.stop()
@@ -95,7 +97,11 @@ object SparkEnv {
       System.getProperty("spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
     val shuffleFetcher = 
       Class.forName(shuffleFetcherClass).newInstance().asInstanceOf[ShuffleFetcher]
-
+    
+    val httpFileServer = new HttpFileServer()
+    httpFileServer.initialize()
+    System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
+    
     /*
     if (System.getProperty("spark.stream.distributed", "false") == "true") {
       val blockManagerClass = classOf[spark.storage.BlockManager].asInstanceOf[Class[_]] 
@@ -126,6 +132,7 @@ object SparkEnv {
       shuffleManager,
       broadcastManager,
       blockManager,
-      connectionManager)
+      connectionManager,
+      httpFileServer)
   }
 }

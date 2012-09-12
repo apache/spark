@@ -2,14 +2,15 @@ package spark
 
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
+import java.net.{URI, URLClassLoader}
 
 import akka.actor.Actor
 import akka.actor.Actor._
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.generic.Growable
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileUtil, Path}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.SequenceFileInputFormat
@@ -77,7 +78,14 @@ class SparkContext(
     true,
     isLocal)
   SparkEnv.set(env)
-
+  
+  // Used to store a URL for each static file/jar together with the file's local timestamp
+  val addedFiles = HashMap[String, Long]()
+  val addedJars = HashMap[String, Long]()
+  
+  // Add each JAR given through the constructor
+  jars.foreach { addJar(_) }
+  
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
@@ -91,13 +99,13 @@ class SparkContext(
     
     master match {
       case "local" => 
-        new LocalScheduler(1, 0)
+        new LocalScheduler(1, 0, this)
 
       case LOCAL_N_REGEX(threads) => 
-        new LocalScheduler(threads.toInt, 0)
+        new LocalScheduler(threads.toInt, 0, this)
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
-        new LocalScheduler(threads.toInt, maxFailures.toInt)
+        new LocalScheduler(threads.toInt, maxFailures.toInt, this)
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
@@ -132,7 +140,7 @@ class SparkContext(
   taskScheduler.start()
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
-
+  
   // Methods for creating RDDs
 
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism ): RDD[T] = {
@@ -321,7 +329,44 @@ class SparkContext(
 
   // Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = SparkEnv.get.broadcastManager.newBroadcast[T] (value, isLocal)
+  
+  // Adds a file dependency to all Tasks executed in the future.
+  def addFile(path: String) {
+    val uri = new URI(path)
+    val key = uri.getScheme match {
+      case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
+      case _ => path
+    }
+    addedFiles(key) = System.currentTimeMillis
+    
+    // Fetch the file locally in case the task is executed locally
+    val filename = new File(path.split("/").last)
+    Utils.fetchFile(path, new File("."))
+    
+    logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
+  }
 
+  def clearFiles() {
+    addedFiles.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
+    addedFiles.clear()
+  }
+  
+  // Adds a jar dependency to all Tasks executed in the future.
+  def addJar(path: String) {
+    val uri = new URI(path)
+    val key = uri.getScheme match {
+      case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
+      case _ => path
+    }
+    addedJars(key) = System.currentTimeMillis
+    logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+  }
+
+  def clearJars() {
+    addedJars.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
+    addedJars.clear()
+  }
+  
   // Stop the SparkContext
   def stop() {
     dagScheduler.stop()
@@ -329,6 +374,9 @@ class SparkContext(
     taskScheduler = null
     // TODO: Cache.stop()?
     env.stop()
+    // Clean up locally linked files
+    clearFiles()
+    clearJars()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
     logInfo("Successfully stopped SparkContext")
