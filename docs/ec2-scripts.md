@@ -143,4 +143,4 @@ Limitations
 - Support for spot instances is limited.
 
 If you have a patch or suggestion for one of these limitations, feel free to
-[
+[contribute]({{HOME_PATH}}contributing-to-spark.html) it!
