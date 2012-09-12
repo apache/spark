@@ -24,7 +24,7 @@ This is done through the following constructor:
 
     new SparkContext(master, jobName, [sparkHome], [jars])
 
-The `master` parameter is a string specifying a [Mesos](Running Spark on Mesos) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running on Mesos, as described later.
+The `master` parameter is a string specifying a [Mesos]({{HOME_PATH}}running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running on Mesos, as described later.
 
 In the Spark interpreter, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, run `MASTER=local[4] ./spark-shell` to run locally with four cores.
 
@@ -36,7 +36,7 @@ The master name can be in one of three formats:
 <tr><th>Master Name</th><th>Meaning</th></tr>
 <tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
 <tr><td> local[K] </td><td> Run Spark locally with K worker threads (which should be set to the number of cores on your machine). </td></tr>
-<tr><td> HOST:PORT </td><td> Connect Spark to the given <a href="https://github.com/mesos/spark/wiki/Running-spark-on-mesos">Mesos</a> master to run on a cluster. The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, which is 5050 by default. 
+<tr><td> HOST:PORT </td><td> Connect Spark to the given (Mesos)({{HOME_PATH}}running-on-mesos.html) master to run on a cluster. The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, which is 5050 by default. 
 <br /><br />
 <strong>NOTE:</strong> In earlier versions of Mesos (the <code>old-mesos</code> branch of Spark), you need to use master@HOST:PORT.
 </td></tr>
@@ -49,7 +49,7 @@ If you want to run your job on a cluster, you will need to specify the two optio
 * `sparkHome`: The path at which Spark is installed on your worker machines (it should be the same on all of them).
 * `jars`: A list of JAR files on the local machine containing your job's code and any dependencies, which Spark will deploy to all the worker nodes. You'll need to package your job into a set of JARs using your build system. For example, if you're using SBT, the [sbt-assembly](https://github.com/sbt/sbt-assembly) plugin is a good way to make a single JAR with your code and dependencies.
 
-If some classes will be shared across _all_ your jobs, it's also possible to copy them to the workers manually and set the `SPARK_CLASSPATH` environment variable in `conf/spark-env.sh` to point to them; see [[Configuration]] for details.
+If some classes will be shared across _all_ your jobs, it's also possible to copy them to the workers manually and set the `SPARK_CLASSPATH` environment variable in `conf/spark-env.sh` to point to them; see [Configuration]({{HOME_PATH}}configuration.html) for details.
 
 
 # Distributed Datasets
@@ -72,7 +72,7 @@ One important parameter for parallel collections is the number of *slices* to cu
 
 ## Hadoop Datasets
 
-Spark can create distributed datasets from any file stored in the Hadoop distributed file system (HDFS) or other storage systems supported by Hadoop (including your local file system, [Amazon S3|http://wiki.apache.org/hadoop/AmazonS3]], Hypertable, HBase, etc). Spark supports text files, [[SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop InputFormat.
+Spark can create distributed datasets from any file stored in the Hadoop distributed file system (HDFS) or other storage systems supported by Hadoop (including your local file system, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), Hypertable, HBase, etc). Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop InputFormat.
 
 Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, `kfs://`, etc URI). Here is an example invocation:
 
@@ -157,6 +157,7 @@ Accumulators are variables that are only "added" to through an associative opera
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks running on the cluster can then add to it using the `+=` operator. However, they cannot read its value. Only the driver program can read the accumulator's value, using its `value` method.
 
 The interpreter session below shows an accumulator being used to add up the elements of an array:
+
     scala> val accum = sc.accumulator(0)
     accum: spark.Accumulator[Int] = 0
     
