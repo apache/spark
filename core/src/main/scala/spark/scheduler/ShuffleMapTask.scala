@@ -31,7 +31,8 @@ object ShuffleMapTask {
         return old
       } else {
         val out = new ByteArrayOutputStream
-        val objOut = new ObjectOutputStream(new GZIPOutputStream(out))
+        val ser = SparkEnv.get.closureSerializer.newInstance
+        val objOut = ser.serializeStream(new GZIPOutputStream(out))
         objOut.writeObject(rdd)
         objOut.writeObject(dep)
         objOut.close()
@@ -63,10 +64,8 @@ object ShuffleMapTask {
     synchronized {
       val loader = Thread.currentThread.getContextClassLoader
       val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
-      val objIn = new ObjectInputStream(in) {
-        override def resolveClass(desc: ObjectStreamClass) =
-          Class.forName(desc.getName, false, loader)
-      }
+      val ser = SparkEnv.get.closureSerializer.newInstance
+      val objIn = ser.deserializeStream(in)
       val rdd = objIn.readObject().asInstanceOf[RDD[_]]
       val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_,_,_]]
       return (rdd, dep)

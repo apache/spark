@@ -484,8 +484,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     // Initiate the replication before storing it locally. This is faster as 
     // data is already serialized and ready for sending
     val replicationFuture = if (level.replication > 1) {
+      val bufferView = bytes.duplicate() // Doesn't copy the bytes, just creates a wrapper
       Future {
-        replicate(blockId, bytes, level)
+        replicate(blockId, bufferView, level)
       }
     } else {
       null
@@ -537,21 +538,27 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * Replicate block to another node.
    */
 
+  var firstTime = true
+  var peers : Seq[BlockManagerId] = null
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
-    var peers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
+    if (firstTime) {
+      peers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
+      firstTime = false;
+    } 
     for (peer: BlockManagerId <- peers) {
       val start = System.nanoTime
+      data.rewind()
       logDebug("Try to replicate BlockId " + blockId + " once; The size of the data is "
-        + data.array().length + " Bytes. To node: " + peer)
+        + data.limit() + " Bytes. To node: " + peer)
       if (!BlockManagerWorker.syncPutBlock(PutBlock(blockId, data, tLevel),
         new ConnectionManagerId(peer.ip, peer.port))) {
         logError("Failed to call syncPutBlock to " + peer)
       }
       logDebug("Replicated BlockId " + blockId + " once used " +
         (System.nanoTime - start) / 1e6 + " s; The size of the data is " +
-        data.array().length + " bytes.")
+        data.limit() + " bytes.")
     }
   }
 
