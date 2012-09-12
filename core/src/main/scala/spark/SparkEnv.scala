@@ -1,6 +1,8 @@
 package spark
 
 import akka.actor.ActorSystem
+import akka.actor.ActorSystemImpl
+import akka.remote.RemoteActorRefProvider
 
 import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
@@ -39,6 +41,8 @@ class SparkEnv (
     blockManager.master.stop()
     actorSystem.shutdown()
     actorSystem.awaitTermination()
+    // Akka's awaitTermination doesn't actually wait until the port is unbound, so sleep a bit
+    Thread.sleep(100)
   }
 }
 
