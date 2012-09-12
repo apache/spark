@@ -87,12 +87,12 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       logInfo("Block %s stored as values to memory (estimated size %d, free %d)".format(
         blockId, sizeEstimate, freeMemory))
     } else {
-      val entry = new Entry(bytes, bytes.array().length, false)
-      ensureFreeSpace(bytes.array.length)
+      val entry = new Entry(bytes, bytes.limit, false)
+      ensureFreeSpace(bytes.limit)
       memoryStore.synchronized { memoryStore.put(blockId, entry) }
-      currentMemory += bytes.array().length
+      currentMemory += bytes.limit
       logInfo("Block %s stored as %d bytes to memory (free %d)".format(
-        blockId, bytes.array().length, freeMemory))
+        blockId, bytes.limit, freeMemory))
     }
   }
 
@@ -111,12 +111,12 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       return Left(elements.iterator) 
     } else {
       val bytes = dataSerialize(values)
-      ensureFreeSpace(bytes.array().length)
-      val entry = new Entry(bytes, bytes.array().length, false)
+      ensureFreeSpace(bytes.limit)
+      val entry = new Entry(bytes, bytes.limit, false)
       memoryStore.synchronized { memoryStore.put(blockId, entry) } 
-      currentMemory += bytes.array().length
+      currentMemory += bytes.limit
       logInfo("Block %s stored as %d bytes to memory (free %d)".format(
-        blockId, bytes.array.length, freeMemory))
+        blockId, bytes.limit, freeMemory))
       return Right(bytes)
     }
   }
@@ -133,7 +133,7 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     if (entry.deserialized) {
       return Some(entry.value.asInstanceOf[ArrayBuffer[Any]].toIterator)
     } else {
-      return Some(dataDeserialize(entry.value.asInstanceOf[ByteBuffer])) 
+      return Some(dataDeserialize(entry.value.asInstanceOf[ByteBuffer].duplicate())) 
     }
   }
 
@@ -219,12 +219,12 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
     val file = createFile(blockId)
     if (file != null) {
       val channel = new RandomAccessFile(file, "rw").getChannel()
-      val buffer = channel.map(MapMode.READ_WRITE, 0, bytes.array.length)
-      buffer.put(bytes.array)
+      val buffer = channel.map(MapMode.READ_WRITE, 0, bytes.limit)
+      buffer.put(bytes)
       channel.close()
       val finishTime = System.currentTimeMillis
       logDebug("Block %s stored to file of %d bytes to disk in %d ms".format(
-        blockId, bytes.array.length, (finishTime - startTime)))
+        blockId, bytes.limit, (finishTime - startTime)))
     } else {
       logError("File not created for block " + blockId)
     }
@@ -233,7 +233,7 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
   def putValues(blockId: String, values: Iterator[Any], level: StorageLevel)
   : Either[Iterator[Any], ByteBuffer] = {
     val bytes = dataSerialize(values) 
-    logDebug("Converted block " + blockId + " to " + bytes.array.length + " bytes")
+    logDebug("Converted block " + blockId + " to " + bytes.limit + " bytes")
     putBytes(blockId, bytes, level)
     return Right(bytes)
   }
@@ -242,9 +242,7 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
     val file = getFile(blockId) 
     val length = file.length().toInt
     val channel = new RandomAccessFile(file, "r").getChannel()
-    val bytes = ByteBuffer.allocate(length)
-    bytes.put(channel.map(MapMode.READ_WRITE, 0, length))
-    return Some(bytes)  
+    Some(channel.map(MapMode.READ_WRITE, 0, length))
   }
 
   def getValues(blockId: String): Option[Iterator[Any]] = {

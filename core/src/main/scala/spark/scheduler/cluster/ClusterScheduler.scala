@@ -118,6 +118,7 @@ class ClusterScheduler(sc: SparkContext)
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = {
     synchronized {
+      SparkEnv.set(sc.env)
       // Mark each slave as alive and remember its hostname
       for (o <- offers) {
         slaveIdToHost(o.slaveId) = o.hostname
