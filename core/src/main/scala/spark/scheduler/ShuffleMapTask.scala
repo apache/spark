@@ -188,7 +188,7 @@ class ShuffleMapTask(
       // Get a scala iterator from java map
       val iter: Iterator[(Any, Any)] = bucketIterators(i)
       // TODO: This should probably be DISK_ONLY
-      blockManager.put(blockId, iter, StorageLevel.MEMORY_ONLY, false)
+      blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
     }
 
     return SparkEnv.get.blockManager.blockManagerId
