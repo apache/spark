@@ -53,6 +53,8 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 * [Spark Programming Guide]({{HOME_PATH}}programming-guide.html): how to get started using Spark, and details on the API
 * [Running Spark on Amazon EC2]({{HOME_PATH}}running-on-amazon-ec2.html): scripts that let you launch a cluster on EC2 in about 5 minutes
 * [Running Spark on Mesos]({{HOME_PATH}}running-on-mesos.html): instructions on how to deploy to a private cluster
+* [Running Spark on YARN]({{HOME_PATH}}running-on-yarn.html): instructions on how to run Spark on top of a YARN cluster
+* [Spark Standalone Mode]({{HOME_PATH}}spark-standalone.html): instructions on running Spark without Mesos
 * [Configuration]({{HOME_PATH}}configuration.html)
 * [Bagel Programming Guide]({{HOME_PATH}}bagel-programming-guide.html): implementation of Google's Pregel on Spark
 * [Spark Debugger]({{HOME_PATH}}spark-debugger.html): experimental work on a debugger for Spark jobs
