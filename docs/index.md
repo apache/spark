@@ -14,7 +14,7 @@ Get Spark by checking out the master branch of the Git repository, using `git cl
 
 Spark requires [Scala 2.9](http://www.scala-lang.org/).
 In addition, to run Spark on a cluster, you will need to install [Mesos](http://incubator.apache.org/mesos/), using the steps in
-[[Running Spark on Mesos]]. However, if you just want to run Spark on a single machine (possibly using multiple cores),
+[Running Spark on Mesos]({{HOME_PATH}}running-on-mesos.html). However, if you just want to run Spark on a single machine (possibly using multiple cores),
 you do not need Mesos.
 
 To build and run Spark, you will need to have Scala's `bin` directory in your `PATH`,
@@ -51,12 +51,12 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 # Where to Go from Here
 
-* [Spark Programming Guide](/programming-guide.html): how to get started using Spark, and details on the API
-* [Running Spark on Amazon EC2](/running-on-amazon-ec2.html): scripts that let you launch a cluster on EC2 in about 5 minutes
-* [Running Spark on Mesos](/running-on-mesos.html): instructions on how to deploy to a private cluster
-* [Configuration](/configuration.html)
-* [Bagel Programming Guide](/bagel-programming-guide.html): implementation of Google's Pregel on Spark
-* [Spark Debugger](/spark-debugger.html): experimental work on a debugger for Spark jobs
+* [Spark Programming Guide]({{HOME_PATH}}programming-guide.html): how to get started using Spark, and details on the API
+* [Running Spark on Amazon EC2]({{HOME_PATH}}running-on-amazon-ec2.html): scripts that let you launch a cluster on EC2 in about 5 minutes
+* [Running Spark on Mesos]({{HOME_PATH}}running-on-mesos.html): instructions on how to deploy to a private cluster
+* [Configuration]({{HOME_PATH}}configuration.html)
+* [Bagel Programming Guide]({{HOME_PATH}}bagel-programming-guide.html): implementation of Google's Pregel on Spark
+* [Spark Debugger]({{HOME_PATH}}spark-debugger.html): experimental work on a debugger for Spark jobs
 * [Contributing to Spark](contributing-to-spark.html)
 
 # Other Resources
@@ -73,4 +73,4 @@ To keep up with Spark development or get help, sign up for the [spark-users mail
 
 If you're in the San Francisco Bay Area, there's a regular [Spark meetup](http://www.meetup.com/spark-users/) every few weeks. Come by to meet the developers and other users.
 
-If you'd like to contribute code to Spark, read [how to contribute](Contributing to Spark).
+If you'd like to contribute code to Spark, read [how to contribute]({{HOME_PATH}}contributing-to-spark.html).

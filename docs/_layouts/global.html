@@ -10,17 +10,18 @@
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width">
 
-        <link rel="stylesheet" href="css/bootstrap.min.css">
+        <link rel="stylesheet" href="{{HOME_PATH}}css/bootstrap.min.css">
         <style>
             body {
                 padding-top: 60px;
                 padding-bottom: 40px;
             }
         </style>
-        <link rel="stylesheet" href="css/bootstrap-responsive.min.css">
-        <link rel="stylesheet" href="css/main.css">
+        <link rel="stylesheet" href="{{HOME_PATH}}css/bootstrap-responsive.min.css">
+        <link rel="stylesheet" href="{{HOME_PATH}}css/main.css">
 
-        <script src="js/vendor/modernizr-2.6.1-respond-1.1.0.min.js"></script>
+        <script src="{{HOME_PATH}}js/vendor/modernizr-2.6.1-respond-1.1.0.min.js"></script>
+        <link rel="stylesheet" href="{{HOME_PATH}}css/pygments-default.css">
     </head>
     <body>
         <!--[if lt IE 7]>
@@ -37,13 +38,13 @@
                         <span class="icon-bar"></span>
                         <span class="icon-bar"></span>
                     </a>
-                    <a class="brand" href="#">Spark</a>
+                    <a class="brand" href="{{HOME_PATH}}index.html">Spark</a>
                     <div class="nav-collapse collapse">
                         <ul class="nav">
                             <!--TODO(andyk): Add class="active" attribute to li some how.-->
-                            <li><a href="/">Home</a></li>
-                            <li><a href="/programming-guide.html">Programming Guide</a></li>
-                            <li><a href="/api">API (Scaladoc)</a></li>
+                            <li><a href="{{HOME_PATH}}index.html">Home</a></li>
+                            <li><a href="{{HOME_PATH}}programming-guide.html">Programming Guide</a></li>
+                            <li><a href="{{HOME_PATH}}api">API (Scaladoc)</a></li>
                             <!--
                             <li class="dropdown">
                                 <a href="#" class="dropdown-toggle" data-toggle="dropdown">Versions ({{ page.spark-version }})<b class="caret"></b></a>

@@ -1,3 +1,28 @@
+---
+---
 /* ==========================================================================
    Author's custom styles
    ========================================================================== */
+
+/*.brand {
+  background: url({{HOME_PATH}}img/spark-logo.jpg) no-repeat left center;
+  height: 40px;
+  width: 100px;
+}
+*/
+
+body {
+  line-height: 1.6; /* Inspired by Github's wiki style */
+}
+
+h1 {
+  font-size: 28px;
+}
+
+code {
+  color: #333;
+}
+
+.container {
+  max-width: 914px;
+}
