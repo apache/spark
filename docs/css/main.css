@@ -11,7 +11,7 @@
 }
 */
 
-body {
+body #content {
   line-height: 1.6; /* Inspired by Github's wiki style */
 }
 
