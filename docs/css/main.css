@@ -1,15 +1,13 @@
----
----
 /* ==========================================================================
    Author's custom styles
    ========================================================================== */
 
-/*.brand {
-  background: url({{HOME_PATH}}img/spark-logo.jpg) no-repeat left center;
+.navbar .brand {
+  background: url(../img/spark-logo-100x40px.png) no-repeat left center;
   height: 40px;
   width: 100px;
+  padding: 0px;
 }
-*/
 
 body #content {
   line-height: 1.6; /* Inspired by Github's wiki style */
