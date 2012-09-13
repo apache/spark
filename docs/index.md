@@ -62,6 +62,7 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 # Other Resources
 
 * [Spark Homepage](http://www.spark-project.org)
+* [AMPCamp](http://ampcamp.berkeley.edu/): All AMPCamp presentation videos are available online. Going through the videos and exercises is a great way to sharpen your Spark skills.
 * [Paper describing the programming model](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
 * [Code Examples](http://spark-project.org/examples.html) (more also available in the [examples subfolder](https://github.com/mesos/spark/tree/master/examples/src/main/scala/spark/examples) of the Spark codebase)
 * [Mailing List](http://groups.google.com/group/spark-users)
