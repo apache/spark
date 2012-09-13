@@ -2,7 +2,6 @@
 layout: global
 title: Bagel Programming Guide
 ---
-# Bagel Programming Guide
 
 **Bagel** is a Spark implementation of Google's [Pregel](http://portal.acm.org/citation.cfm?id=1807184) graph processing framework. Bagel currently supports basic graph computation, combiners, and aggregators.
 
