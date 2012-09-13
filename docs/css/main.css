@@ -6,7 +6,7 @@
   background: url(../img/spark-logo-77x40px-hd.png) no-repeat left center;
   height: 40px;
   width: 77px;
-  padding: 0px;
+  padding: 0 10px 0 0;
 }
 
 .navbar-inner {
