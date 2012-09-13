@@ -14,17 +14,21 @@ To write a Spark application, you will need to add both Spark and its dependenci
 
 In addition, you'll need to import some Spark classes and implicit conversions. Add the following lines at the top of your program:
 
-    import spark.SparkContext
-    import SparkContext._
+{% highlight scala %}
+import spark.SparkContext
+import SparkContext._
+{% endhighlight %}
 
 # Initializing Spark
 
 The first thing a Spark program must do is to create a `SparkContext` object, which tells Spark how to access a cluster.
 This is done through the following constructor:
 
-    new SparkContext(master, jobName, [sparkHome], [jars])
+{% highlight scala %}
+new SparkContext(master, jobName, [sparkHome], [jars])
+{% endhighlight %}
 
-The `master` parameter is a string specifying a [Mesos](Running Spark on Mesos) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running on Mesos, as described later.
+The `master` parameter is a string specifying a [Mesos]({{HOME_PATH}}running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running on Mesos, as described later.
 
 In the Spark interpreter, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, run `MASTER=local[4] ./spark-shell` to run locally with four cores.
 
@@ -36,7 +40,7 @@ The master name can be in one of three formats:
 <tr><th>Master Name</th><th>Meaning</th></tr>
 <tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
 <tr><td> local[K] </td><td> Run Spark locally with K worker threads (which should be set to the number of cores on your machine). </td></tr>
-<tr><td> HOST:PORT </td><td> Connect Spark to the given <a href="https://github.com/mesos/spark/wiki/Running-spark-on-mesos">Mesos</a> master to run on a cluster. The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, which is 5050 by default. 
+<tr><td> HOST:PORT </td><td> Connect Spark to the given (Mesos)({{HOME_PATH}}running-on-mesos.html) master to run on a cluster. The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, which is 5050 by default. 
 <br /><br />
 <strong>NOTE:</strong> In earlier versions of Mesos (the <code>old-mesos</code> branch of Spark), you need to use master@HOST:PORT.
 </td></tr>
@@ -49,7 +53,7 @@ If you want to run your job on a cluster, you will need to specify the two optio
 * `sparkHome`: The path at which Spark is installed on your worker machines (it should be the same on all of them).
 * `jars`: A list of JAR files on the local machine containing your job's code and any dependencies, which Spark will deploy to all the worker nodes. You'll need to package your job into a set of JARs using your build system. For example, if you're using SBT, the [sbt-assembly](https://github.com/sbt/sbt-assembly) plugin is a good way to make a single JAR with your code and dependencies.
 
-If some classes will be shared across _all_ your jobs, it's also possible to copy them to the workers manually and set the `SPARK_CLASSPATH` environment variable in `conf/spark-env.sh` to point to them; see [[Configuration]] for details.
+If some classes will be shared across _all_ your jobs, it's also possible to copy them to the workers manually and set the `SPARK_CLASSPATH` environment variable in `conf/spark-env.sh` to point to them; see [Configuration]({{HOME_PATH}}configuration.html) for details.
 
 
 # Distributed Datasets
@@ -60,11 +64,13 @@ Spark revolves around the concept of a _resilient distributed dataset_ (RDD), wh
 
 Parallelized collections are created by calling `SparkContext`'s `parallelize` method on an existing Scala collection (a `Seq` object). The elements of the collection are copied to form a distributed dataset that can be operated on in parallel. For example, here is some interpreter output showing how to create a parallel collection from an array:
 
-    scala> val data = Array(1, 2, 3, 4, 5)
-    data: Array[Int] = Array(1, 2, 3, 4, 5)
-    
-    scala> val distData = sc.parallelize(data)
-    distData: spark.RDD[Int] = spark.ParallelCollection@10d13e3e
+{% highlight scala %}
+scala> val data = Array(1, 2, 3, 4, 5)
+data: Array[Int] = Array(1, 2, 3, 4, 5)
+
+scala> val distData = sc.parallelize(data)
+distData: spark.RDD[Int] = spark.ParallelCollection@10d13e3e
+{% endhighlight %}
 
 Once created, the distributed dataset (`distData` here) can be operated on in parallel. For example, we might call `distData.reduce(_ + _)` to add up the elements of the array. We describe operations on distributed datasets later on.
 
@@ -72,12 +78,14 @@ One important parameter for parallel collections is the number of *slices* to cu
 
 ## Hadoop Datasets
 
-Spark can create distributed datasets from any file stored in the Hadoop distributed file system (HDFS) or other storage systems supported by Hadoop (including your local file system, [Amazon S3|http://wiki.apache.org/hadoop/AmazonS3]], Hypertable, HBase, etc). Spark supports text files, [[SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop InputFormat.
+Spark can create distributed datasets from any file stored in the Hadoop distributed file system (HDFS) or other storage systems supported by Hadoop (including your local file system, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), Hypertable, HBase, etc). Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop InputFormat.
 
 Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, `kfs://`, etc URI). Here is an example invocation:
 
-    scala> val distFile = sc.textFile("data.txt")
-    distFile: spark.RDD[String] = spark.HadoopRDD@1d4cee08
+{% highlight scala %}
+scala> val distFile = sc.textFile("data.txt")
+distFile: spark.RDD[String] = spark.HadoopRDD@1d4cee08
+{% endhighlight %}
 
 Once created, `distFile` can be acted on by dataset operations. For example, we can add up the sizes of all the lines using the `map` and `reduce` operations as follows: `distFile.map(_.size).reduce(_ + _)`.
 
@@ -142,11 +150,13 @@ Broadcast variables allow the programmer to keep a read-only variable cached on 
 
 Broadcast variables are created from a variable `v` by calling `SparkContext.broadcast(v)`. The broadcast variable is a wrapper around `v`, and its value can be accessed by calling the `value` method. The interpreter session below shows this:
 
-    scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
-    broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
+{% highlight scala %}
+scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
+broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
 
-    scala> broadcastVar.value
-    res0: Array[Int] = Array(1, 2, 3)
+scala> broadcastVar.value
+res0: Array[Int] = Array(1, 2, 3)
+{% endhighlight %}
 
 After the broadcast variable is created, it should be used instead of the value `v` in any functions run on the cluster so that `v` is not shipped to the nodes more than once. In addition, the object `v` should not be modified after it is broadcast in order to ensure that all nodes get the same value of the broadcast variable (e.g. if the variable is shipped to a new node later).
 
@@ -157,15 +167,18 @@ Accumulators are variables that are only "added" to through an associative opera
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks running on the cluster can then add to it using the `+=` operator. However, they cannot read its value. Only the driver program can read the accumulator's value, using its `value` method.
 
 The interpreter session below shows an accumulator being used to add up the elements of an array:
-    scala> val accum = sc.accumulator(0)
-    accum: spark.Accumulator[Int] = 0
-    
-    scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
-    ...
-    10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
-    
-    scala> accum.value
-    res2: Int = 10
+
+{% highlight scala %}
+scala> val accum = sc.accumulator(0)
+accum: spark.Accumulator[Int] = 0
+
+scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
+...
+10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
+
+scala> accum.value
+res2: Int = 10
+{% endhighlight %}
 
 # Where to Go from Here
 

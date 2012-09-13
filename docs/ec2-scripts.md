@@ -122,11 +122,11 @@ root partitions and their `persistent-hdfs`. Stopped machines will not
 cost you any EC2 cycles, but ***will*** continue to cost money for EBS
 storage.
 
--   To stop one of your clusters, go into the `ec2` directory and run
+- To stop one of your clusters, go into the `ec2` directory and run
 `./spark-ec2 stop <cluster-name>`.
--   To restart it later, run
+- To restart it later, run
 `./spark-ec2 -i <key-file> start <cluster-name>`.
--   To ultimately destroy the cluster and stop consuming EBS space, run
+- To ultimately destroy the cluster and stop consuming EBS space, run
 `./spark-ec2 destroy <cluster-name>` as described in the previous
 section.
 
@@ -137,10 +137,10 @@ Limitations
   It should not be hard to make it launch VMs in other zones, but you will need
   to create your own AMIs in them.
 - Support for "cluster compute" nodes is limited -- there's no way to specify a
-  locality group. However, you can launch slave nodes in your `<clusterName>-slaves`
-  group manually and then use `spark-ec2 launch --resume` to start a cluster with
-  them.
+  locality group. However, you can launch slave nodes in your
+  `<clusterName>-slaves` group manually and then use `spark-ec2 launch
+  --resume` to start a cluster with them.
 - Support for spot instances is limited.
 
 If you have a patch or suggestion for one of these limitations, feel free to
-[[contribute|Contributing to Spark]] it!
+[contribute]({{HOME_PATH}}contributing-to-spark.html) it!
