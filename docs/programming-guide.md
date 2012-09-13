@@ -14,15 +14,19 @@ To write a Spark application, you will need to add both Spark and its dependenci
 
 In addition, you'll need to import some Spark classes and implicit conversions. Add the following lines at the top of your program:
 
-    import spark.SparkContext
-    import SparkContext._
+{% highlight scala %}
+import spark.SparkContext
+import SparkContext._
+{% endhighlight %}
 
 # Initializing Spark
 
 The first thing a Spark program must do is to create a `SparkContext` object, which tells Spark how to access a cluster.
 This is done through the following constructor:
 
-    new SparkContext(master, jobName, [sparkHome], [jars])
+{% highlight scala %}
+new SparkContext(master, jobName, [sparkHome], [jars])
+{% endhighlight %}
 
 The `master` parameter is a string specifying a [Mesos]({{HOME_PATH}}running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running on Mesos, as described later.
 
@@ -60,11 +64,13 @@ Spark revolves around the concept of a _resilient distributed dataset_ (RDD), wh
 
 Parallelized collections are created by calling `SparkContext`'s `parallelize` method on an existing Scala collection (a `Seq` object). The elements of the collection are copied to form a distributed dataset that can be operated on in parallel. For example, here is some interpreter output showing how to create a parallel collection from an array:
 
-    scala> val data = Array(1, 2, 3, 4, 5)
-    data: Array[Int] = Array(1, 2, 3, 4, 5)
-    
-    scala> val distData = sc.parallelize(data)
-    distData: spark.RDD[Int] = spark.ParallelCollection@10d13e3e
+{% highlight scala %}
+scala> val data = Array(1, 2, 3, 4, 5)
+data: Array[Int] = Array(1, 2, 3, 4, 5)
+
+scala> val distData = sc.parallelize(data)
+distData: spark.RDD[Int] = spark.ParallelCollection@10d13e3e
+{% endhighlight %}
 
 Once created, the distributed dataset (`distData` here) can be operated on in parallel. For example, we might call `distData.reduce(_ + _)` to add up the elements of the array. We describe operations on distributed datasets later on.
 
@@ -76,8 +82,10 @@ Spark can create distributed datasets from any file stored in the Hadoop distrib
 
 Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, `kfs://`, etc URI). Here is an example invocation:
 
-    scala> val distFile = sc.textFile("data.txt")
-    distFile: spark.RDD[String] = spark.HadoopRDD@1d4cee08
+{% highlight scala %}
+scala> val distFile = sc.textFile("data.txt")
+distFile: spark.RDD[String] = spark.HadoopRDD@1d4cee08
+{% endhighlight %}
 
 Once created, `distFile` can be acted on by dataset operations. For example, we can add up the sizes of all the lines using the `map` and `reduce` operations as follows: `distFile.map(_.size).reduce(_ + _)`.
 
@@ -142,11 +150,13 @@ Broadcast variables allow the programmer to keep a read-only variable cached on 
 
 Broadcast variables are created from a variable `v` by calling `SparkContext.broadcast(v)`. The broadcast variable is a wrapper around `v`, and its value can be accessed by calling the `value` method. The interpreter session below shows this:
 
-    scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
-    broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
+{% highlight scala %}
+scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
+broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
 
-    scala> broadcastVar.value
-    res0: Array[Int] = Array(1, 2, 3)
+scala> broadcastVar.value
+res0: Array[Int] = Array(1, 2, 3)
+{% endhighlight %}
 
 After the broadcast variable is created, it should be used instead of the value `v` in any functions run on the cluster so that `v` is not shipped to the nodes more than once. In addition, the object `v` should not be modified after it is broadcast in order to ensure that all nodes get the same value of the broadcast variable (e.g. if the variable is shipped to a new node later).
 
@@ -158,15 +168,17 @@ An accumulator is created from an initial value `v` by calling `SparkContext.acc
 
 The interpreter session below shows an accumulator being used to add up the elements of an array:
 
-    scala> val accum = sc.accumulator(0)
-    accum: spark.Accumulator[Int] = 0
-    
-    scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
-    ...
-    10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
-    
-    scala> accum.value
-    res2: Int = 10
+{% highlight scala %}
+scala> val accum = sc.accumulator(0)
+accum: spark.Accumulator[Int] = 0
+
+scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
+...
+10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
+
+scala> accum.value
+res2: Int = 10
+{% endhighlight %}
 
 # Where to Go from Here
 
