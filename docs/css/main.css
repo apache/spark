@@ -3,10 +3,15 @@
    ========================================================================== */
 
 .navbar .brand {
-  background: url(../img/spark-logo-100x40px.png) no-repeat left center;
+  background: url(../img/spark-logo-77x40px-hd.png) no-repeat left center;
   height: 40px;
-  width: 100px;
+  width: 77px;
   padding: 0px;
+}
+
+.navbar-inner {
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 body #content {
