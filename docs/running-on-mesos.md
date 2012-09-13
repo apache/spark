@@ -2,7 +2,6 @@
 layout: global
 title: Running Spark on Mesos
 ---
-# Running Spark on Mesos
 
 To run on a cluster, Spark uses the [Apache Mesos](http://incubator.apache.org/mesos/) resource manager. Follow the steps below to install Mesos and Spark:
 

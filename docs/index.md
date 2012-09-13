@@ -1,8 +1,7 @@
 ---
 layout: global
-title: Spark - Fast Cluster Computing
+title: Spark Overview
 ---
-# Spark Overview
 
 Spark is a MapReduce-like cluster computing framework designed to support low-latency iterative jobs and interactive use from an interpreter. It is written in [Scala](http://www.scala-lang.org), a high-level language for the JVM, and exposes a clean language-integrated syntax that makes it easy to write parallel jobs. Spark runs on top of the [Apache Mesos](http://incubator.apache.org/mesos/) cluster manager.
 

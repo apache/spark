@@ -1,8 +1,7 @@
 ---
 layout: global
-title: How to Contribute to Spark
+title: Contributing to Spark
 ---
-# Contributing to Spark
 
 The Spark team welcomes contributions in the form of GitHub pull requests. Here are a few tips to get your contribution in:
 

@@ -15,8 +15,20 @@ body {
   line-height: 1.6; /* Inspired by Github's wiki style */
 }
 
+.title {
+  font-size: 32px;
+}
+
 h1 {
   font-size: 28px;
+}
+
+h2 {
+  font-size: 24px;
+}
+
+h3 {
+  font-size: 21px;
 }
 
 code {
