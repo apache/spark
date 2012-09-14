@@ -8,7 +8,6 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
         <title>{{ page.title }}</title>
         <meta name="description" content="">
-        <meta name="viewport" content="width=device-width">
 
         <link rel="stylesheet" href="{{HOME_PATH}}css/bootstrap.min.css">
         <style>
@@ -17,6 +16,7 @@
                 padding-bottom: 40px;
             }
         </style>
+        <meta name="viewport" content="width=device-width">
         <link rel="stylesheet" href="{{HOME_PATH}}css/bootstrap-responsive.min.css">
         <link rel="stylesheet" href="{{HOME_PATH}}css/main.css">
 
@@ -33,32 +33,25 @@
         <div class="navbar navbar-fixed-top">
             <div class="navbar-inner">
                 <div class="container">
-                    <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
-                        <span class="icon-bar"></span>
-                        <span class="icon-bar"></span>
-                        <span class="icon-bar"></span>
-                    </a>
-                    <a class="brand" href="{{HOME_PATH}}index.html">Spark</a>
-                    <div class="nav-collapse collapse">
-                        <ul class="nav">
-                            <!--TODO(andyk): Add class="active" attribute to li some how.-->
-                            <li><a href="{{HOME_PATH}}index.html">Home</a></li>
-                            <li><a href="{{HOME_PATH}}programming-guide.html">Programming Guide</a></li>
-                            <li><a href="{{HOME_PATH}}api">API (Scaladoc)</a></li>
-                            <!--
-                            <li class="dropdown">
-                                <a href="#" class="dropdown-toggle" data-toggle="dropdown">Versions ({{ page.spark-version }})<b class="caret"></b></a>
-                                <ul class="dropdown-menu">
-                                    <li><a href="#">Something else here</a></li>
-                                    <li class="divider"></li>
-                                    <li class="nav-header">Nav header</li>
-                                    <li><a href="#">Separated link</a></li>
-                                    <li><a href="#">One more separated link</a></li>
-                                </ul>
-                            </li>
-                            -->
-                        </ul>
-                    </div><!--/.nav-collapse -->
+                    <a class="brand" href="{{HOME_PATH}}index.html"></a>
+                    <ul class="nav">
+                        <!--TODO(andyk): Add class="active" attribute to li some how.-->
+                        <li><a href="{{HOME_PATH}}index.html">Home</a></li>
+                        <li><a href="{{HOME_PATH}}programming-guide.html">Programming Guide</a></li>
+                        <li><a href="{{HOME_PATH}}api.html">API (Scaladoc)</a></li>
+                        <!--
+                        <li class="dropdown">
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown">Versions ({{ page.spark-version }})<b class="caret"></b></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="#">Something else here</a></li>
+                                <li class="divider"></li>
+                                <li class="nav-header">Nav header</li>
+                                <li><a href="#">Separated link</a></li>
+                                <li><a href="#">One more separated link</a></li>
+                            </ul>
+                        </li>
+                        -->
+                    </ul>
                 </div>
             </div>
         </div>
