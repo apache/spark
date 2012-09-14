@@ -284,9 +284,8 @@ extends Logging with Serializable {
 }
 
 
-abstract class InputDStream[T: ClassManifest] (
-    @transient ssc: StreamingContext)
-extends DStream[T](ssc) {
+abstract class InputDStream[T: ClassManifest] (@transient ssc: StreamingContext)
+  extends DStream[T](ssc) {
   
   override def dependencies = List()
 
@@ -303,9 +302,9 @@ extends DStream[T](ssc) {
  */
 
 class MappedDStream[T: ClassManifest, U: ClassManifest] (
-    parent: DStream[T],
-    mapFunc: T => U)
-extends DStream[U](parent.ssc) {
+    @transient parent: DStream[T],
+    mapFunc: T => U
+  ) extends DStream[U](parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -322,9 +321,9 @@ extends DStream[U](parent.ssc) {
  */
 
 class FlatMappedDStream[T: ClassManifest, U: ClassManifest](
-    parent: DStream[T],
-    flatMapFunc: T => Traversable[U])
-extends DStream[U](parent.ssc) {
+    @transient parent: DStream[T],
+    flatMapFunc: T => Traversable[U]
+  ) extends DStream[U](parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -340,8 +339,10 @@ extends DStream[U](parent.ssc) {
  * TODO
  */
 
-class FilteredDStream[T: ClassManifest](parent: DStream[T], filterFunc: T => Boolean)
-extends DStream[T](parent.ssc) {
+class FilteredDStream[T: ClassManifest](
+    @transient parent: DStream[T], 
+    filterFunc: T => Boolean
+  ) extends DStream[T](parent.ssc) {
   
   override def dependencies = List(parent)
 
@@ -358,9 +359,9 @@ extends DStream[T](parent.ssc) {
  */
 
 class MapPartitionedDStream[T: ClassManifest, U: ClassManifest](
-    parent: DStream[T],
-    mapPartFunc: Iterator[T] => Iterator[U])
-extends DStream[U](parent.ssc) {
+    @transient parent: DStream[T],
+    mapPartFunc: Iterator[T] => Iterator[U]
+  ) extends DStream[U](parent.ssc) {
 
   override def dependencies = List(parent)
 
@@ -376,7 +377,8 @@ extends DStream[U](parent.ssc) {
  * TODO
  */
 
-class GlommedDStream[T: ClassManifest](parent: DStream[T]) extends DStream[Array[T]](parent.ssc) {
+class GlommedDStream[T: ClassManifest](@transient parent: DStream[T]) 
+  extends DStream[Array[T]](parent.ssc) {
 
   override def dependencies = List(parent)
 
@@ -393,7 +395,7 @@ class GlommedDStream[T: ClassManifest](parent: DStream[T]) extends DStream[Array
  */
 
 class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
-    parent: DStream[(K,V)],
+    @transient parent: DStream[(K,V)],
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
@@ -418,7 +420,7 @@ class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
  * TODO
  */
 
-class UnifiedDStream[T: ClassManifest](parents: Array[DStream[T]])
+class UnifiedDStream[T: ClassManifest](@transient parents: Array[DStream[T]])
   extends DStream[T](parents(0).ssc) {
 
   if (parents.length == 0) {
@@ -457,7 +459,7 @@ class UnifiedDStream[T: ClassManifest](parents: Array[DStream[T]])
  */
 
 class PerElementForEachDStream[T: ClassManifest] (
-    parent: DStream[T],
+    @transient parent: DStream[T],
     foreachFunc: T => Unit
   ) extends DStream[Unit](parent.ssc) {
   
@@ -488,7 +490,7 @@ class PerElementForEachDStream[T: ClassManifest] (
  */
 
 class PerRDDForEachDStream[T: ClassManifest] (
-    parent: DStream[T],
+    @transient parent: DStream[T],
     foreachFunc: (RDD[T], Time) => Unit
   ) extends DStream[Unit](parent.ssc) {
 
@@ -516,7 +518,7 @@ class PerRDDForEachDStream[T: ClassManifest] (
  */
 
 class TransformedDStream[T: ClassManifest, U: ClassManifest] (
-    parent: DStream[T],
+    @transient parent: DStream[T],
     transformFunc: (RDD[T], Time) => RDD[U]
   ) extends DStream[U](parent.ssc) {
 
