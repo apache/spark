@@ -72,7 +72,7 @@ object SparkEnv {
       System.setProperty("spark.master.port", boundPort.toString)
     }
 
-    val serializerClass = System.getProperty("spark.serializer", "spark.KryoSerializer")
+    val serializerClass = System.getProperty("spark.serializer", "spark.JavaSerializer")
     val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
     
     val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
