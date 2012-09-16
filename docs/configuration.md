@@ -2,8 +2,6 @@
 layout: global
 title: Spark Configuration
 ---
-# Spark Configuration
-
 Spark is configured primarily through the `conf/spark-env.sh` script. This script doesn't exist in the Git repository, but you can create it by copying `conf/spark-env.sh.template`. Make sure the script is executable.
 
 Inside this script, you can set several environment variables:

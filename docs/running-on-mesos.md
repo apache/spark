@@ -5,8 +5,6 @@ title: Running Spark on Mesos
 
 To run on a cluster, Spark uses the [Apache Mesos](http://incubator.apache.org/mesos/) resource manager. Follow the steps below to install Mesos and Spark:
 
-### For Spark 0.5:
-
 1. Download and build Spark using the instructions [here]({{ HOME_DIR }}Home).
 2. Download Mesos 0.9.0 from a [mirror](http://www.apache.org/dyn/closer.cgi/incubator/mesos/mesos-0.9.0-incubating/).
 3. Configure Mesos using the `configure` script, passing the location of your `JAVA_HOME` using `--with-java-home`. Mesos comes with "template" configure scripts for different platforms, such as `configure.macosx`, that you can run. See the README file in Mesos for other options. **Note:** If you want to run Mesos without installing it into the default paths on your system (e.g. if you don't have administrative privileges to install it), you should also pass the `--prefix` option to `configure` to tell it where to install. For example, pass `--prefix=/home/user/mesos`. By default the prefix is `/usr/local`.
@@ -26,39 +24,9 @@ To run on a cluster, Spark uses the [Apache Mesos](http://incubator.apache.org/m
 new SparkContext("HOST:5050", "My Job Name", "/home/user/spark", List("my-job.jar"))
 {% endhighlight %}
 
-### For Spark versions before 0.5:
-
-1. Download and build Spark using the instructions [here]({{ HOME_DIR }}Home).
-2. Download either revision 1205738  of Mesos if you're using the master branch of Spark, or the pre-protobuf branch of Mesos if you're using Spark 0.3 or earlier (note that for new users, _we recommend the master branch instead of 0.3_). For revision 1205738 of Mesos, use:
-
-{% highlight bash %}
-svn checkout -r 1205738 http://svn.apache.org/repos/asf/incubator/mesos/trunk mesos
-{% endhighlight %}
-
-For the pre-protobuf branch (for Spark 0.3 and earlier), use:
-{% highlight bash %}
-git clone git://github.com/mesos/mesos
-cd mesos
-git checkout --track origin/pre-protobuf
-{% endhighlight %}
-
-3. Configure Mesos using the `configure` script, passing the location of your `JAVA_HOME` using `--with-java-home`. Mesos comes with "template" configure scripts for different platforms, such as `configure.template.macosx`, so you can just run the one on your platform if it exists. See the [Mesos wiki](https://github.com/mesos/mesos/wiki) for other configuration options.
-4. Build Mesos using `make`.
-5. In Spark's `conf/spark-env.sh` file, add `export MESOS_HOME=<path to Mesos directory>`. If you don't have a `spark-env.sh`, copy `conf/spark-env.sh.template`. You should also set `SCALA_HOME` there if it's not on your system's default path.
-6. Copy Spark and Mesos to the _same_ path on all the nodes in the cluster.
-7. Configure Mesos for deployment:
-   * On your master node, edit `MESOS_HOME/conf/masters` to list your master and `MESOS_HOME/conf/slaves` to list the slaves. Also, edit `MESOS_HOME/conf/mesos.conf` and add the line `failover_timeout=1` to change a timeout parameter that is too high by default. 
-   * Run `MESOS_HOME/deploy/start-mesos` to start it up. If all goes well, you should see Mesos's web UI on port 8080 of the master machine.
-   * See Mesos's [deploy instructions](https://github.com/mesos/mesos/wiki/Deploy-Scripts) for more information on deploying it.
-8. To run a Spark job against the cluster, when you create your `SparkContext`, pass the string `master@HOST:5050` as the first parameter, where `HOST` is the machine running your Mesos master. In addition, pass the location of Spark on your nodes as the third parameter, and a list of JAR files containing your JAR's code as the fourth (these will automatically get copied to the workers). For example:
-
-{% highlight scala %}
-new SparkContext("master@HOST:5050", "My Job Name", "/home/user/spark", List("my-job.jar"))
-{% endhighlight %}
-
 ## Running on Amazon EC2
 
-If you want to run Spark on Amazon EC2, there's an easy way to launch a cluster with Mesos, Spark, and HDFS pre-configured: the [EC2 launch scripts]({{HOME_PATH}}running-on-amazon-ec2.html). This will get you a cluster in about five minutes without any configuration on your part.
+If you want to run Spark on Amazon EC2, you can use the Spark [EC2 launch scripts]({{HOME_PATH}}ec2-scripts.html), which provide an easy way to launch a cluster with Mesos, Spark, and HDFS pre-configured. This will get you a cluster in about five minutes without any configuration on your part.
 
 ## Running Alongside Hadoop
 

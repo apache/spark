@@ -3,7 +3,11 @@ layout: global
 title: Spark Overview
 ---
 
-Spark is a MapReduce-like cluster computing framework designed to support low-latency iterative jobs and interactive use from an interpreter. It is written in [Scala](http://www.scala-lang.org), a high-level language for the JVM, and exposes a clean language-integrated syntax that makes it easy to write parallel jobs. Spark runs on top of the [Apache Mesos](http://incubator.apache.org/mesos/) cluster manager.
+{% comment %}
+TODO(andyk): Rewrite to make the Java API a first class part of the story.
+{% endcomment %}
+
+Spark is a MapReduce-like cluster computing framework designed to support low-latency iterative jobs and interactive use from an interpreter. It is written in [Scala](http://www.scala-lang.org), a high-level language for the JVM, and exposes a clean language-integrated syntax that makes it easy to write parallel jobs. Spark runs on top of the [Apache Mesos](http://incubator.apache.org/mesos/) cluster manager, Hadoop YARN, or without an independent resource manager (i.e., in "standalone mode"). 
 
 # Downloading
 
@@ -51,11 +55,11 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 # Where to Go from Here
 
 * [Spark Programming Guide]({{HOME_PATH}}programming-guide.html): how to get started using Spark, and details on the API
-* [Running Spark on Amazon EC2]({{HOME_PATH}}running-on-amazon-ec2.html): scripts that let you launch a cluster on EC2 in about 5 minutes
+* [Running Spark on Amazon EC2]({{HOME_PATH}}ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
 * [Running Spark on Mesos]({{HOME_PATH}}running-on-mesos.html): instructions on how to deploy to a private cluster
 * [Running Spark on YARN]({{HOME_PATH}}running-on-yarn.html): instructions on how to run Spark on top of a YARN cluster
 * [Spark Standalone Mode]({{HOME_PATH}}spark-standalone.html): instructions on running Spark without Mesos
-* [Configuration]({{HOME_PATH}}configuration.html)
+* [Configuration]({{HOME_PATH}}configuration.html): How to set up and customize Spark via its configuration system.
 * [Bagel Programming Guide]({{HOME_PATH}}bagel-programming-guide.html): implementation of Google's Pregel on Spark
 * [Spark Debugger]({{HOME_PATH}}spark-debugger.html): experimental work on a debugger for Spark jobs
 * [Contributing to Spark](contributing-to-spark.html)
@@ -63,7 +67,7 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 # Other Resources
 
 * [Spark Homepage](http://www.spark-project.org)
-* [AMPCamp](http://ampcamp.berkeley.edu/): All AMPCamp presentation videos are available online. Going through the videos and exercises is a great way to sharpen your Spark skills.
+* [AMP Camp](http://ampcamp.berkeley.edu/) - In 2012, the AMP Lab hosted the first AMP Camp which featured talks and hands-on exercises about Spark, Shark, Mesos, and more. [Videos, slides](http://ampcamp.berkeley.edu/agenda) and the [exercises](http://ampcamp.berkeley.edu/exercises) are all available online now. Going through the videos and exercises is a great way to sharpen your Spark skills.
 * [Paper describing the programming model](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
 * [Code Examples](http://spark-project.org/examples.html) (more also available in the [examples subfolder](https://github.com/mesos/spark/tree/master/examples/src/main/scala/spark/examples) of the Spark codebase)
 * [Mailing List](http://groups.google.com/group/spark-users)

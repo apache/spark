@@ -3,11 +3,18 @@ layout: global
 title: Spark Standalone Mode
 ---
 
-In addition to running on top of [Mesos](https://github.com/mesos/mesos), Spark also supports a standalone mode, consisting of one Spark master and several Spark worker processes. You can run the Spark standalone mode either locally or on a cluster. If you wish to run an Spark Amazon EC2 cluster using standalone mode we have provided a set of scripts that make it easy to do so.
+{% comment %}
+TODO(andyk):
+  - Add a table of contents
+  - Move configuration towards the end so that it doesn't come first
+  - Say the scripts will guess the resource amounts (i.e. # cores) automatically
+{% endcomment %}
+
+In addition to running on top of [Mesos](https://github.com/mesos/mesos), Spark also supports a standalone mode, consisting of one Spark master and several Spark worker processes. You can run the Spark standalone mode either locally or on a cluster. If you wish to run an Spark Amazon EC2 cluster using standalone mode we have provided [a set of scripts](ec2-scripts.html) that make it easy to do so.
 
 ## Getting Started
 
-Download and compile Spark as described in the [README](https://github.com/mesos/spark/wiki). You do not need to install mesos on your machine if you are using the standalone mode.
+Download and compile Spark as described in the [Getting Started Guide](index.html). You do not need to install mesos on your machine if you are using the standalone mode.
 
 ## Standalone Mode Configuration
 
@@ -53,13 +60,13 @@ The following options can be passed to the worker:
 
 Spark offers a web-based user interface in the standalone mode. The master and each worker has its own WebUI that shows cluster and job statistics. By default you can access the WebUI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
 
-Detailed log output for the jobs is by default written to the `work/` by default.
+Detailed log output for the jobs is written to the `work` drectory by default.
 
 ## Running on a Cluster
 
 In order to run a Spark standalone cluster there are two main points of configuration, the `conf/spark-env.sh` file (described above), and the `conf/slaves` file. the `conf/spark-env.sh` file lets you specify global settings for the master and slave instances, such as memory, or port numbers to bind to. We are assuming that all your machines share the same configuration parameters.
 
-The `conf/slaves` file contains a list of all machines where you would like to start a Spark slave (worker) instance when using then scripts below. The master machine must be able to access each of the slave machines via ssh. For testing purposes, you can have a single `localhost` entry in the slaves file.
+The `conf/slaves` file contains a list of all machines where you would like to start a Spark slave (worker) instance when using the scripts below. The master machine must be able to access each of the slave machines via ssh. For testing purposes, you can have a single `localhost` entry in the slaves file.
 
 In order to make starting master and slave instances easier, we have provided Hadoop-style shell scripts. The scripts can be found in the `bin` directory. A quick overview:
 
@@ -72,9 +79,8 @@ In order to make starting master and slave instances easier, we have provided Ha
 
 Note that the scripts must be executed on the machine you want to start the Spark master on, not your local machine.
 
+{% comment %}
 ## EC2 Scripts
 
 To save you from needing to set up a cluster of Spark machines yourself, we provide a set of scripts that launch Amazon EC2 instances with a preinstalled Spark distribution. These scripts are identical to the [EC2 Mesos Scripts](https://github.com/mesos/spark/wiki/EC2-Scripts), except that you need to execute `ec2/spark-ec2` with the following additional parameters: `--cluster-type standalone -a standalone`. Note that the Spark version on these machines may not reflect the latest changes, so it may be a good idea to ssh into the machines and merge the latest version from github.
-
-
-
+{% endcomment %}
