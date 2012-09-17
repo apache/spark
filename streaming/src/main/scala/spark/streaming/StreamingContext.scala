@@ -21,16 +21,13 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 
-class StreamingContext (
-    master: String,
-    frameworkName: String,
-    val sparkHome: String = null,
-    val jars: Seq[String] = Nil)
-  extends Logging {
-  
+class StreamingContext (@transient val sc: SparkContext) extends Logging {
+
+  def this(master: String, frameworkName: String, sparkHome: String = null, jars: Seq[String] = Nil) =
+    this(new SparkContext(master, frameworkName, sparkHome, jars))
+
   initLogging()
 
-  val sc = new SparkContext(master, frameworkName, sparkHome, jars)
   val env = SparkEnv.get
   
   val inputStreams = new ArrayBuffer[InputDStream[_]]()
