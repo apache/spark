@@ -26,7 +26,6 @@ extends Logging {
   val timer = new RecurringTimer(clock, ssc.batchDuration, generateRDDs(_))
   
   def start() {
-    
     val zeroTime = Time(timer.start())
     outputStreams.foreach(_.initialize(zeroTime))
     inputStreams.par.foreach(_.start())
@@ -40,6 +39,7 @@ extends Logging {
   }
   
   def generateRDDs (time: Time) {
+    SparkEnv.set(ssc.env)
     logInfo("\n-----------------------------------------------------\n")
     logInfo("Generating RDDs for time " + time)
     outputStreams.foreach(outputStream => {

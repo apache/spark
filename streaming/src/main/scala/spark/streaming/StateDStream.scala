@@ -8,7 +8,7 @@ import spark.SparkContext._
 import spark.storage.StorageLevel
 
 class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManifest](
-    parent: DStream[(K, V)],
+    @transient parent: DStream[(K, V)],
     updateFunc: (Iterator[(K, Seq[V], S)]) => Iterator[(K, S)],
     partitioner: Partitioner,
     rememberPartitioner: Boolean
@@ -26,14 +26,14 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
   override def getOrCompute(time: Time): Option[RDD[(K, S)]] = {
     generatedRDDs.get(time) match {
       case Some(oldRDD) => {
-        if (checkpointInterval != null && (time - zeroTime).isMultipleOf(checkpointInterval) && oldRDD.dependencies.size > 0) {
+        if (checkpointInterval != null && time > zeroTime && (time - zeroTime).isMultipleOf(checkpointInterval) && oldRDD.dependencies.size > 0) {
           val r = oldRDD
           val oldRDDBlockIds = oldRDD.splits.map(s => "rdd:" + r.id + ":" + s.index)
           val checkpointedRDD = new BlockRDD[(K, S)](ssc.sc, oldRDDBlockIds) {
             override val partitioner = oldRDD.partitioner
           }
           generatedRDDs.update(time, checkpointedRDD)
-          logInfo("Updated RDD of time " + time + " with its checkpointed version")
+          logInfo("Checkpointed RDD " + oldRDD.id + " of time " + time + " with its new RDD " + checkpointedRDD.id)
           Some(checkpointedRDD)
         } else {
           Some(oldRDD)
