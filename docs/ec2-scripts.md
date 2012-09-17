@@ -2,7 +2,9 @@
 layout: global
 title: Using the Spark EC2 Scripts
 ---
-The `spark-ec2` script located in the Spark's `ec2` directory allows you
+This guide describes how to get Spark running on an EC2 cluster, including how to launch clusters, how to run jobs on them, and how to shut them down. It assumes you have already signed up for Amazon EC2 account on the [Amazon Web Services site](http://aws.amazon.com/).
+
+The `spark-ec2` script, located in Spark's `ec2` directory, allows you
 to launch, manage and shut down Spark clusters on Amazon EC2. It builds
 on the [Mesos EC2 script](https://github.com/mesos/mesos/wiki/EC2-Scripts)
 in Apache Mesos.
@@ -19,11 +21,8 @@ for you based on the cluster name you request. You can also use them to
 identify machines belonging to each cluster in the EC2 Console or
 ElasticFox.
 
-This guide describes how to get set up to run clusters, how to launch
-clusters, how to run jobs on them, and how to shut them down.
 
-Before You Start
-================
+# Before You Start
 
 -   Create an Amazon EC2 key pair for yourself. This can be done by
     logging into your Amazon Web Services account through the [AWS
@@ -37,8 +36,7 @@ Before You Start
     obtained from the [AWS homepage](http://aws.amazon.com/) by clicking
     Account \> Security Credentials \> Access Credentials.
 
-Launching a Cluster
-===================
+# Launching a Cluster
 
 -   Go into the `ec2` directory in the release of Spark you downloaded.
 -   Run
@@ -75,8 +73,7 @@ available.
 permissions on your private key file, you can run `launch` with the
 `--resume` option to restart the setup process on an existing cluster.
 
-Running Jobs
-============
+# Running Jobs
 
 -   Go into the `ec2` directory in the release of Spark you downloaded.
 -   Run `./spark-ec2 -k <keypair> -i <key-file> login <cluster-name>` to
@@ -102,8 +99,7 @@ Running Jobs
 -   Finally, if you get errors while running your jobs, look at the slave's logs
     for that job using the Mesos web UI (`http://<master-hostname>:8080`).
 
-Terminating a Cluster
-=====================
+# Terminating a Cluster
 
 ***Note that there is no way to recover data on EC2 nodes after shutting
 them down! Make sure you have copied everything important off the nodes
@@ -112,8 +108,7 @@ before stopping them.***
 -   Go into the `ec2` directory in the release of Spark you downloaded.
 -   Run `./spark-ec2 destroy <cluster-name>`.
 
-Pausing and Restarting Clusters
-===============================
+# Pausing and Restarting Clusters
 
 The `spark-ec2` script also supports pausing a cluster. In this case,
 the VMs are stopped but not terminated, so they
@@ -130,8 +125,7 @@ storage.
 `./spark-ec2 destroy <cluster-name>` as described in the previous
 section.
 
-Limitations
-===========
+# Limitations
 
 - `spark-ec2` currently only launches machines in the US-East region of EC2.
   It should not be hard to make it launch VMs in other zones, but you will need
@@ -144,3 +138,13 @@ Limitations
 
 If you have a patch or suggestion for one of these limitations, feel free to
 [contribute]({{HOME_PATH}}contributing-to-spark.html) it!
+
+# Using a Newer Spark Version
+
+The Spark EC2 machine images may not come with the latest version of Spark. To use a newer version, you can run `git pull` to pull in `/root/spark` to pull in the latest version of Spark from `git`, and build it using `sbt/sbt compile`. You will also need to copy it to all the other nodes in the cluster using `~/mesos-ec2/copy-dir /root/spark`.
+
+# Accessing Data in S3
+
+Spark's file interface allows it to process data in Amazon S3 using the same URI formats that are supported for Hadoop. You can specify a path in S3 as input through a URI of the form `s3n://<id>:<secret>@<bucket>/path`, where `<id>` is your Amazon access key ID and `<secret>` is your Amazon secret access key. Note that you should escape any `/` characters in the secret key as `%2F`. Full instructions can be found on the [Hadoop S3 page](http://wiki.apache.org/hadoop/AmazonS3).
+
+In addition to using a single input file, you can also use a directory of files as input by simply giving the path to the directory.
