@@ -9,9 +9,9 @@ package spark
   *                       known as map-side aggregations. When set to false, 
   *                       mergeCombiners function is not used.
   */
-class Aggregator[K, V, C] (
+case class Aggregator[K, V, C] (
     val createCombiner: V => C,
     val mergeValue: (C, V) => C,
     val mergeCombiners: (C, C) => C,
     val mapSideCombine: Boolean = true)
-  extends Serializable
+

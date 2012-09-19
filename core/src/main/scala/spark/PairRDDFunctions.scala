@@ -1,11 +1,10 @@
 package spark
 
 import java.io.EOFException
-import java.net.URL
 import java.io.ObjectInputStream
+import java.net.URL
+import java.util.{Date, HashMap => JHashMap}
 import java.util.concurrent.atomic.AtomicLong
-import java.util.{HashMap => JHashMap}
-import java.util.Date
 import java.text.SimpleDateFormat
 
 import scala.collection.Map
@@ -50,9 +49,18 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
-      partitioner: Partitioner): RDD[(K, C)] = {
-    val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    new ShuffledRDD(self, aggregator, partitioner)
+      partitioner: Partitioner,
+      mapSideCombine: Boolean = true): RDD[(K, C)] = {
+    val aggregator =
+      if (mapSideCombine) {
+        new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      } else {
+        // Don't apply map-side combiner.
+        // A sanity check to make sure mergeCombiners is not defined.
+        assert(mergeCombiners == null)
+        new Aggregator[K, V, C](createCombiner, mergeValue, null, false)
+      }
+    new ShuffledAggregatedRDD(self, aggregator, partitioner)
   }
 
   def combineByKey[C](createCombiner: V => C,
@@ -65,7 +73,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = {
     combineByKey[V]((v: V) => v, func, func, partitioner)
   }
-  
+
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = {
     def reducePartition(iter: Iterator[(K, V)]): Iterator[JHashMap[K, V]] = {
       val map = new JHashMap[K, V]
@@ -116,13 +124,24 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     groupByKey(new HashPartitioner(numSplits))
   }
 
-  def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
-    def createCombiner(v: V) = ArrayBuffer(v)
-    def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
-    def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
-    val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, mergeCombiners _, partitioner)
-    bufs.flatMapValues(buf => buf)
+  /**
+   * Repartition the RDD using the specified partitioner. If mapSideCombine is
+   * true, Spark will group values of the same key together on the map side
+   * before the repartitioning. If a large number of duplicated keys are
+   * expected, and the size of the keys are large, mapSideCombine should be set
+   * to true.
+   */
+  def partitionBy(partitioner: Partitioner, mapSideCombine: Boolean = false): RDD[(K, V)] = {
+    if (mapSideCombine) {
+      def createCombiner(v: V) = ArrayBuffer(v)
+      def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
+      def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
+      val bufs = combineByKey[ArrayBuffer[V]](
+        createCombiner _, mergeValue _, mergeCombiners _, partitioner)
+      bufs.flatMapValues(buf => buf)
+    } else {
+      new RepartitionShuffledRDD(self, partitioner)
+    }
   }
 
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
@@ -194,17 +213,17 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   }
 
   def collectAsMap(): Map[K, V] = HashMap(self.collect(): _*)
-  
+
   def mapValues[U](f: V => U): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new MappedValuesRDD(self, cleanF)
   }
-  
+
   def flatMapValues[U](f: V => TraversableOnce[U]): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new FlatMappedValuesRDD(self, cleanF)
   }
-  
+
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (Seq[V], Seq[W]))] = {
     val cg = new CoGroupedRDD[K](
         Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]),
@@ -215,12 +234,12 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
     }
   }
-  
+
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
     val cg = new CoGroupedRDD[K](
         Seq(self.asInstanceOf[RDD[(_, _)]],
-            other1.asInstanceOf[RDD[(_, _)]], 
+            other1.asInstanceOf[RDD[(_, _)]],
             other2.asInstanceOf[RDD[(_, _)]]),
         partitioner)
     val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
@@ -289,7 +308,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassManifest[F]) {
     saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
   }
-  
+
   def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassManifest[F]) {
     saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
   }
@@ -363,7 +382,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     FileOutputFormat.setOutputPath(conf, HadoopWriter.createPathFromString(path, conf))
     saveAsHadoopDataset(conf)
   }
-  
+
   def saveAsHadoopDataset(conf: JobConf) {
     val outputFormatClass = conf.getOutputFormat
     val keyClass = conf.getOutputKeyClass
@@ -377,7 +396,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     if (valueClass == null) {
       throw new SparkException("Output value class not set")
     }
-    
+
     logInfo("Saving as hadoop file of type (" + keyClass.getSimpleName+ ", " + valueClass.getSimpleName+ ")")
 
     val writer = new HadoopWriter(conf)
@@ -390,14 +409,14 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
       writer.setup(context.stageId, context.splitId, attemptNumber)
       writer.open()
-      
+
       var count = 0
       while(iter.hasNext) {
         val record = iter.next
         count += 1
         writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
       }
-    
+
       writer.close()
       writer.commit()
     }
@@ -413,28 +432,14 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
 class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
   self: RDD[(K, V)])
-  extends Logging 
+  extends Logging
   with Serializable {
 
   def sortByKey(ascending: Boolean = true): RDD[(K,V)] = {
-    val rangePartitionedRDD = self.partitionBy(new RangePartitioner(self.splits.size, self, ascending))
-    new SortedRDD(rangePartitionedRDD, ascending)
+    new ShuffledSortedRDD(self, ascending)
   }
 }
 
-class SortedRDD[K <% Ordered[K], V](prev: RDD[(K, V)], ascending: Boolean)
-  extends RDD[(K, V)](prev.context) {
-
-  override def splits = prev.splits
-  override val partitioner = prev.partitioner
-  override val dependencies = List(new OneToOneDependency(prev))
-
-  override def compute(split: Split) = {
-    prev.iterator(split).toArray
-      .sortWith((x, y) => if (ascending) x._1 < y._1 else x._1 > y._1).iterator
-  }
-} 
- 
 class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
@@ -444,7 +449,7 @@ class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)]
 
 class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U])
   extends RDD[(K, U)](prev.context) {
-  
+
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override val partitioner = prev.partitioner
