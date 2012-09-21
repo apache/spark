@@ -31,4 +31,13 @@ class JobInfo(val id: String, val desc: JobDescription, val submitDate: Date, va
   }
 
   def coresLeft: Int = desc.cores - coresGranted
+
+  private var _retryCount = 0
+
+  def retryCount = _retryCount
+
+  def incrementRetryCount = {
+    _retryCount += 1
+    _retryCount
+  }
 }
