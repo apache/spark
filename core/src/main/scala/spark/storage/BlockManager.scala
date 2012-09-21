@@ -614,10 +614,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   def dataDeserialize(bytes: ByteBuffer): Iterator[Any] = {
-    /*serializer.newInstance().deserializeMany(bytes)*/
-    val ser = serializer.newInstance()
     bytes.rewind()
-    return ser.deserializeStream(new ByteBufferInputStream(bytes)).toIterator
+    val ser = serializer.newInstance()
+    return ser.deserializeStream(new ByteBufferInputStream(bytes)).asIterator
   }
 
   def stop() {
