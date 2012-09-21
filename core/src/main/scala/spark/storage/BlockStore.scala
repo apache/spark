@@ -131,7 +131,7 @@ class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       return None 
     }
     if (entry.deserialized) {
-      return Some(entry.value.asInstanceOf[ArrayBuffer[Any]].toIterator)
+      return Some(entry.value.asInstanceOf[ArrayBuffer[Any]].iterator)
     } else {
       return Some(dataDeserialize(entry.value.asInstanceOf[ByteBuffer].duplicate())) 
     }
