@@ -20,7 +20,7 @@ class HttpFileServer extends Logging {
     fileDir.mkdir()
     jarDir.mkdir()
     logInfo("HTTP File server directory is " + baseDir)
-    httpServer = new HttpServer(fileDir)
+    httpServer = new HttpServer(baseDir)
     httpServer.start()
     serverUri = httpServer.uri
   }
@@ -30,11 +30,13 @@ class HttpFileServer extends Logging {
   }
   
   def addFile(file: File) : String = {
-    return addFileToDir(file, fileDir)
+    addFileToDir(file, fileDir)
+    return serverUri + "/files/" + file.getName
   }
   
   def addJar(file: File) : String = {
-    return addFileToDir(file, jarDir)
+    addFileToDir(file, jarDir)
+    return serverUri + "/jars/" + file.getName
   }
   
   def addFileToDir(file: File, dir: File) : String = {
