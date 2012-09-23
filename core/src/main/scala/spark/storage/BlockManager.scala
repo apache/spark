@@ -631,7 +631,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 object BlockManager {
 
   def getNumParallelFetchesFromSystemProperties(): Int = {
-    System.getProperty("spark.blockManager.parallelFetches", "8").toInt
+    System.getProperty("spark.blockManager.parallelFetches", "4").toInt
   }
 
   def getMaxMemoryFromSystemProperties(): Long = {
