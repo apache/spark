@@ -69,7 +69,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   
   def context = sc
 
-  def manifest: ClassManifest[T] = classManifest[T]
+  def elementClassManifest: ClassManifest[T] = classManifest[T]
   
   // Get a unique ID for this RDD
   val id = sc.newRddId()
