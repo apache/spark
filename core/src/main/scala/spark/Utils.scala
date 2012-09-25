@@ -163,6 +163,8 @@ object Utils extends Logging {
       logInfo("Untarring " + filename)
       Utils.execute(Seq("tar", "-xf", filename), targetDir)
     }
+    // Make the file executable - That's necessary for scripts
+    FileUtil.chmod(filename, "a+x")
   }
 
   /**

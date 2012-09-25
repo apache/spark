@@ -38,6 +38,10 @@ class Executor extends Logging {
       System.setProperty(key, value)
     }
 
+    // Create our ClassLoader and set it on this thread
+    urlClassLoader = createClassLoader()
+    Thread.currentThread.setContextClassLoader(urlClassLoader)
+
     // Initialize Spark environment (using system properties read above)
     env = SparkEnv.createFromSystemProperties(slaveHostname, 0, false, false)
     SparkEnv.set(env)
@@ -45,11 +49,6 @@ class Executor extends Logging {
     // Start worker thread pool
     threadPool = new ThreadPoolExecutor(
       1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
-
-    // Create our ClassLoader and set it on this thread
-    urlClassLoader = createClassLoader()
-    Thread.currentThread.setContextClassLoader(urlClassLoader)
-
   }
 
   def launchTask(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer) {

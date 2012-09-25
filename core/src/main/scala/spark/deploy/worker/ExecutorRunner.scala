@@ -75,7 +75,8 @@ class ExecutorRunner(
 
   def buildCommandSeq(): Seq[String] = {
     val command = jobDesc.command
-    val runScript = new File(sparkHome, "run").getCanonicalPath
+    val script = if (System.getProperty("os.name").startsWith("Windows")) "run.cmd" else "run";
+    val runScript = new File(sparkHome, script).getCanonicalPath
     Seq(runScript, command.mainClass) ++ command.arguments.map(substituteVariables)
   }
 

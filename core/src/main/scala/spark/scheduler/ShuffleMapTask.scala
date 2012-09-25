@@ -44,7 +44,8 @@ object ShuffleMapTask {
   }
 
   // Since both the JarSet and FileSet have the same format this is used for both.
-  def serializeFileSet(set : HashMap[String, Long], stageId: Int, cache : JHashMap[Int, Array[Byte]]) : Array[Byte] = {
+  def serializeFileSet(
+    set : HashMap[String, Long], stageId: Int, cache : JHashMap[Int, Array[Byte]]) : Array[Byte] = {
     val old = cache.get(stageId)
     if (old != null) {
       return old
@@ -58,7 +59,6 @@ object ShuffleMapTask {
       return bytes
     }
   }
-
 
   def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], ShuffleDependency[_,_,_]) = {
     synchronized {
@@ -113,7 +113,8 @@ class ShuffleMapTask(
     out.writeInt(bytes.length)
     out.write(bytes)
 
-    val fileSetBytes = ShuffleMapTask.serializeFileSet(fileSet, stageId, ShuffleMapTask.fileSetCache)
+    val fileSetBytes = ShuffleMapTask.serializeFileSet(
+      fileSet, stageId, ShuffleMapTask.fileSetCache)
     out.writeInt(fileSetBytes.length)
     out.write(fileSetBytes)
     val jarSetBytes = ShuffleMapTask.serializeFileSet(jarSet, stageId, ShuffleMapTask.jarSetCache)
@@ -172,7 +173,7 @@ class ShuffleMapTask(
         buckets.map(_.iterator)
       } else {
         // No combiners (no map-side aggregation). Simply partition the map output.
-        val buckets = Array.tabulate(numOutputSplits)(_ => new ArrayBuffer[(Any, Any)])
+        val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
         for (elem <- rdd.iterator(split)) {
           val pair = elem.asInstanceOf[(Any, Any)]
           val bucketId = partitioner.getPartition(pair._1)

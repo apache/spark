@@ -43,7 +43,7 @@ trait SerializerInstance {
   def deserializeMany(buffer: ByteBuffer): Iterator[Any] = {
     // Default implementation uses deserializeStream
     buffer.rewind()
-    deserializeStream(new ByteBufferInputStream(buffer)).toIterator
+    deserializeStream(new ByteBufferInputStream(buffer)).asIterator
   }
 }
 
@@ -74,7 +74,7 @@ trait DeserializationStream {
    * Read the elements of this stream through an iterator. This can only be called once, as
    * reading each element will consume data from the input source.
    */
-  def toIterator: Iterator[Any] = new Iterator[Any] {
+  def asIterator: Iterator[Any] = new Iterator[Any] {
     var gotNext = false
     var finished = false
     var nextValue: Any = null

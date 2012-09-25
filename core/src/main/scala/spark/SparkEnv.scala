@@ -40,6 +40,8 @@ class SparkEnv (
     blockManager.stop()
     blockManager.master.stop()
     actorSystem.shutdown()
+    // Akka's awaitTermination doesn't actually wait until the port is unbound, so sleep a bit
+    Thread.sleep(100)
     actorSystem.awaitTermination()
     // Akka's awaitTermination doesn't actually wait until the port is unbound, so sleep a bit
     Thread.sleep(100)

@@ -22,7 +22,7 @@ object SparkBuild extends Build {
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
     version := "0.6.0-SNAPSHOT",
-    scalaVersion := "2.9.1",
+    scalaVersion := "2.9.2",
     scalacOptions := Seq(/*"-deprecation",*/ "-unchecked", "-optimize"), // -deprecation is too noisy due to usage of old Hadoop API, enable it once that's no longer an issue
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
@@ -61,9 +61,9 @@ object SparkBuild extends Build {
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.9",
-      "com.typesafe.akka" % "akka-actor" % "2.0.2",
-      "com.typesafe.akka" % "akka-remote" % "2.0.2",
-      "com.typesafe.akka" % "akka-slf4j" % "2.0.2",
+      "com.typesafe.akka" % "akka-actor" % "2.0.3",
+      "com.typesafe.akka" % "akka-remote" % "2.0.3",
+      "com.typesafe.akka" % "akka-slf4j" % "2.0.3",
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
       "cc.spray" % "spray-can" % "1.0-M2.1",

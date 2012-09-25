@@ -18,7 +18,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
 
   val clusterUrl = "local-cluster[2,1,512]"
   
-  var sc: SparkContext = _
+  @transient var sc: SparkContext = _
   
   after {
     if (sc != null) {

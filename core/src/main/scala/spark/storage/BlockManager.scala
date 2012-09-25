@@ -614,10 +614,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   def dataDeserialize(bytes: ByteBuffer): Iterator[Any] = {
-    /*serializer.newInstance().deserializeMany(bytes)*/
-    val ser = serializer.newInstance()
     bytes.rewind()
-    return ser.deserializeStream(new ByteBufferInputStream(bytes)).toIterator
+    val ser = serializer.newInstance()
+    return ser.deserializeStream(new ByteBufferInputStream(bytes)).asIterator
   }
 
   def stop() {
@@ -632,7 +631,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 object BlockManager {
 
   def getNumParallelFetchesFromSystemProperties(): Int = {
-    System.getProperty("spark.blockManager.parallelFetches", "8").toInt
+    System.getProperty("spark.blockManager.parallelFetches", "4").toInt
   }
 
   def getMaxMemoryFromSystemProperties(): Long = {
