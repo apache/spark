@@ -1,2 +1,2 @@
 @echo off
-cmd /V /E /C call %~dp0run2.cmd %*
+cmd /V /E /C %~dp0run2.cmd %*
