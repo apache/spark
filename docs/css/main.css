@@ -10,8 +10,9 @@
 }
 
 .navbar-inner {
-  padding-top: 5px;
-  padding-bottom: 5px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 15px;
 }
 
 body #content {
@@ -35,7 +36,15 @@ h3 {
 }
 
 code {
-  color: #333;
+  font-family: "Menlo", "Lucida Console", monospace;
+  background: white;
+  border: none;
+  padding: 0;
+  color: #902000;
+}
+
+pre {
+  font-family: "Menlo", "Lucida Console", monospace;
 }
 
 .container {
