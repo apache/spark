@@ -36,49 +36,34 @@
                     <a class="brand" href="{{HOME_PATH}}index.html"></a>
                     <ul class="nav">
                         <!--TODO(andyk): Add class="active" attribute to li some how.-->
-                        <li><a href="{{HOME_PATH}}index.html">Getting Started</a></li>
+                        <li><a href="{{HOME_PATH}}index.html">Overview</a></li>
 
                         <li class="dropdown">
-                            <a href="#" class="dropdown-toggle" data-toggle="dropdown">Programming Guides<b class="caret"></b></a>
+                            <a href="#" class="dropdown-toggle" data-toggle="dropdown">Programming Guide<b class="caret"></b></a>
                             <ul class="dropdown-menu">
-                                <li><a href="{{HOME_PATH}}java-programming-guide.html">Java Programming Guide</a></li>
-                                <li><a href="{{HOME_PATH}}scala-programming-guide.html">Scala Programming Guide</a></li>
-                                <li><a href="{{HOME_PATH}}bagel-programming-guide.html">Bagel Programming Guide</a></li>
+                                <li><a href="{{HOME_PATH}}scala-programming-guide.html">Scala</a></li>
+                                <li><a href="{{HOME_PATH}}java-programming-guide.html">Java</a></li>
                             </ul>
                         </li>
+                        
+                        <li><a href="api/core/index.html">API (Scaladoc)</a></li>
 
                         <li class="dropdown">
                             <a href="#" class="dropdown-toggle" data-toggle="dropdown">Deploying<b class="caret"></b></a>
                             <ul class="dropdown-menu">
-                                <li><a href="{{HOME_PATH}}ec2-scripts.html">On Amazon EC2</a></li>
-                                <li><a href="{{HOME_PATH}}running-on-mesos.html">On Mesos</a></li>
-                                <li><a href="{{HOME_PATH}}running-on-yarn.html">On YARN</a></li>
+                                <li><a href="{{HOME_PATH}}ec2-scripts.html">Amazon EC2</a></li>
                                 <li><a href="{{HOME_PATH}}spark-standalone.html">Standalone Mode</a></li>
+                                <li><a href="{{HOME_PATH}}running-on-mesos.html">Mesos</a></li>
+                                <li><a href="{{HOME_PATH}}running-on-yarn.html">YARN</a></li>
                             </ul>
                         </li>
-
-                        <li class="dropdown">
-                            <a href="{{HOME_PATH}}api.html" class="dropdown-toggle" data-toggle="dropdown">API (Scaladoc)<b class="caret"></b></a>
-                            <ul class="dropdown-menu">
-                                <!--<li><a href="#">Something else here</a></li>
-                                <li class="divider"></li>
-                                <li class="nav-header">Nav header</li>
-                                <li><a href="#">Separated link</a></li>
-                                <li><a href="#">One more separated link</a></li>-->
-                                <li><a href="api/core/index.html">Core</a></li>
-                                <li><a href="api/examples/index.html">Examples</a></li>
-                                <li><a href="api/repl/index.html">REPL</a></li>
-                                <li><a href="api/bagel/index.html">Bagel</a></li>
-                            </ul>
-                        </li>
-
 
                         <li class="dropdown">
                             <a href="{{HOME_PATH}}api.html" class="dropdown-toggle" data-toggle="dropdown">More<b class="caret"></b></a>
                             <ul class="dropdown-menu">
                                 <li><a href="configuration.html">Configuration</a></li>
-                                <li><a href="spark-debugger.html">Debugger</a></li>
-                                <li><a href="contributing-to-spark.html">Contributing</a></li>
+                                <li><a href="bagel-programming-guide.html">Bagel (Pregel on Spark)</a></li>
+                                <li><a href="contributing-to-spark.html">Contributing to Spark</a></li>
                             </ul>
                         </li>
                     </ul>
