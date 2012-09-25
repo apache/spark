@@ -41,3 +41,16 @@ code {
 .container {
   max-width: 914px;
 }
+
+/**
+ * Make dropdown menus in nav bars show on hover instead of click
+ * using solution at http://stackoverflow.com/questions/8878033/how-
+ * to-make-twitter-bootstrap-menu-dropdown-on-hover-rather-than-click
+ **/
+ul.nav li.dropdown:hover ul.dropdown-menu{
+    display: block;
+}
+a.menu:after, .dropdown-toggle:after {
+  content: none;
+}
+
