@@ -71,7 +71,11 @@ class ShuffledSortedRDD[K <% Ordered[K]: ClassManifest, V](
     val buf = new ArrayBuffer[(K, V)]
     def addTupleToBuffer(k: K, v: V) = { buf += Tuple(k, v) }
     SparkEnv.get.shuffleFetcher.fetch[K, V](dep.shuffleId, split.index, addTupleToBuffer)
-    buf.sortWith((x, y) => if (ascending) x._1 < y._1 else x._1 > y._1).iterator
+    if (ascending) {
+      buf.sortWith((x, y) => x._1 < y._1).iterator
+    } else {
+      buf.sortWith((x, y) => x._1 > y._1).iterator
+    }
   }
 }
 

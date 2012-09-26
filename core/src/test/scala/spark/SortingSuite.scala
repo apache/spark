@@ -58,11 +58,11 @@ class SortingSuite extends FunSuite with BeforeAndAfter with ShouldMatchers with
     val sorted = sc.parallelize(pairArr, 4).sortByKey()
     assert(sorted.collect() === pairArr.sortBy(_._1))
     val partitions = sorted.collectPartitions()
-    logInfo("partition lengths: " + partitions.map(_.length).mkString(", "))
-    partitions(0).length should be > 200
-    partitions(1).length should be > 200
-    partitions(2).length should be > 200
-    partitions(3).length should be > 200
+    logInfo("Partition lengths: " + partitions.map(_.length).mkString(", "))
+    partitions(0).length should be > 180
+    partitions(1).length should be > 180
+    partitions(2).length should be > 180
+    partitions(3).length should be > 180
     partitions(0).last should be < partitions(1).head
     partitions(1).last should be < partitions(2).head
     partitions(2).last should be < partitions(3).head
@@ -75,10 +75,10 @@ class SortingSuite extends FunSuite with BeforeAndAfter with ShouldMatchers with
     assert(sorted.collect() === pairArr.sortBy(_._1).reverse)
     val partitions = sorted.collectPartitions()
     logInfo("partition lengths: " + partitions.map(_.length).mkString(", "))
-    partitions(0).length should be > 200
-    partitions(1).length should be > 200
-    partitions(2).length should be > 200
-    partitions(3).length should be > 200
+    partitions(0).length should be > 180
+    partitions(1).length should be > 180
+    partitions(2).length should be > 180
+    partitions(3).length should be > 180
     partitions(0).last should be > partitions(1).head
     partitions(1).last should be > partitions(2).head
     partitions(2).last should be > partitions(3).head
