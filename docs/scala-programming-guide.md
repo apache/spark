@@ -28,27 +28,33 @@ This is done through the following constructor:
 new SparkContext(master, jobName, [sparkHome], [jars])
 {% endhighlight %}
 
-The `master` parameter is a string specifying a [Mesos]({{HOME_PATH}}running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running on Mesos, as described later.
+The `master` parameter is a string specifying a [Mesos]({{HOME_PATH}}running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
 
 In the Spark interpreter, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, run `MASTER=local[4] ./spark-shell` to run locally with four cores.
 
-### Master Names
+### Master URLs
 
-The master name can be in one of three formats:
+The master URL passed to Spark can be in one of the following formats:
 
 <table class="table">
-<tr><th>Master Name</th><th>Meaning</th></tr>
+<tr><th>Master URL</th><th>Meaning</th></tr>
 <tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
-<tr><td> local[K] </td><td> Run Spark locally with K worker threads (which should be set to the number of cores on your machine). </td></tr>
-<tr><td> HOST:PORT </td><td> Connect Spark to the given (Mesos)({{HOME_PATH}}running-on-mesos.html) master to run on a cluster. The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, which is 5050 by default. 
-<br /><br />
-<strong>NOTE:</strong> In earlier versions of Mesos (the <code>old-mesos</code> branch of Spark), you need to use master@HOST:PORT.
+<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). 
+</td></tr>
+<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="{{HOME_PATH}}spark-standalone.html">Spark standalone 
+        cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default. 
+</td></tr>
+<tr><td> mesos://HOST:PORT </td><td> Connect Spark to the given <a href="{{HOME_PATH}}running-on-mesos.html">Mesos</a> cluster. 
+        The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, 
+        which is 5050 by default. 
 </td></tr>
 </table>
 
-### Deploying to a Cluster
+For running on YARN, Spark launches an instance of the standalone deploy cluster within YARN; see [running on YARN]({{HOME_PATH}}running-on-yarn.html) for details.
 
-If you want to run your job on a cluster, you will need to specify the two optional parameters:
+### Running on a Cluster
+
+If you want to run your job on a cluster, you will need to specify the two optional parameters to `SparkContext` to let it find your code:
 
 * `sparkHome`: The path at which Spark is installed on your worker machines (it should be the same on all of them).
 * `jars`: A list of JAR files on the local machine containing your job's code and any dependencies, which Spark will deploy to all the worker nodes. You'll need to package your job into a set of JARs using your build system. For example, if you're using SBT, the [sbt-assembly](https://github.com/sbt/sbt-assembly) plugin is a good way to make a single JAR with your code and dependencies.

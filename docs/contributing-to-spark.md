@@ -12,5 +12,12 @@ The Spark team welcomes contributions in the form of GitHub pull requests. Here 
   * Always import packages using absolute paths (e.g. `scala.collection.Map` instead of `collection.Map`).
   * No "infix" syntax for methods other than operators. For example, don't write `table containsKey myKey`; replace it with `table.containsKey(myKey)`.
 - Add unit tests to your new code. We use [ScalaTest](http://www.scalatest.org/) for testing. Just add a new Suite in `core/src/test`, or methods to an existing Suite.
+- If you'd like to report a bug but don't have time to fix it, you can still post it to our [issues page](https://github.com/mesos/spark/issues), or email the [mailing list](http://www.spark-project.org/mailing-lists.html).
 
-If you'd like to report a bug but don't have time to fix it, you can still post it to our [issues page](https://github.com/mesos/spark/issues). Also, feel free to email the [mailing list](http://www.spark-project.org/mailing-lists.html).
+# Licensing of Contributions
+
+Contributions via GitHub pull requests are gladly accepted from their original author. Along with any pull requests, please
+state that the contribution is your original work and that you license the work to the project under the project's open source 
+license. *Whether or not you state this explicitly, by submitting any copyrighted material via pull request, email, or other 
+means you agree to license the material under the project's open source license and warrant that you have the legal authority 
+to do so.*

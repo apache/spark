@@ -14,7 +14,7 @@ In addition to running on top of [Mesos](https://github.com/mesos/mesos), Spark 
 
 ## Getting Started
 
-Download and compile Spark as described in the [Getting Started Guide](index.html). You do not need to install mesos on your machine if you are using the standalone mode.
+Download and compile Spark as described in the [Getting Started Guide](index.html). You do not need to install Mesos on your machine if you are using the standalone mode.
 
 ## Standalone Mode Configuration
 
@@ -22,7 +22,7 @@ The `conf/spark_env.sh` file contains several configuration parameters for the s
 
 - SPARK\_MASTER\_IP - Use this to bind the master to a particular ip address, for example a public one. (Default: local ip address)
 - SPARK\_MASTER\_PORT - Start the spark master on a different port (Default: 7077)
-- SPARK\_MASTER\_WEBUI\_POR -  Specify a different port for the Master WebUI (Default: 8080)
+- SPARK\_MASTER\_WEBUI\_PORT -  Specify a different port for the Master WebUI (Default: 8080)
 - SPARK\_WORKER\_PORT - Start the spark worker on a specific port (Default: random)
 - SPARK\_WORKER\_CORES - Specify the number of cores to use (Default: all available cores)
 - SPARK\_WORKER\_MEMORY - Specify how much memory to use, e.g. 1000M, 2G (Default: MAX(Available - 1024MB, 512MB))
