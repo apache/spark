@@ -145,8 +145,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     var initialCount = count()
     var maxSelected = 0
     
-    if (initialCount > Integer.MAX_VALUE) {
-      maxSelected = Integer.MAX_VALUE
+    if (initialCount > Integer.MAX_VALUE - 1) {
+      maxSelected = Integer.MAX_VALUE - 1
     } else {
       maxSelected = initialCount.toInt
     }
@@ -161,15 +161,14 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
       total = num
     }
   
-    var samples = this.sample(withReplacement, fraction, seed).collect()
+    val rand = new Random(seed)
+    var samples = this.sample(withReplacement, fraction, rand.nextInt).collect()
   
     while (samples.length < total) {
-      samples = this.sample(withReplacement, fraction, seed).collect()
+      samples = this.sample(withReplacement, fraction, rand.nextInt).collect()
     }
   
-    val arr = samples.take(total)
-  
-    return arr
+    Utils.randomizeInPlace(samples, rand).take(total)
   }
 
   def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))

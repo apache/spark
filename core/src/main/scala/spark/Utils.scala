@@ -2,12 +2,11 @@ package spark
 
 import java.io._
 import java.net.{InetAddress, URL, URI}
-import java.util.{Locale, UUID}
+import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
 import scala.io.Source
 
 /**
@@ -172,17 +171,22 @@ object Utils extends Logging {
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T](seq: TraversableOnce[T]): Seq[T] = {
-    val buf = new ArrayBuffer[T]()
-    buf ++= seq
-    val rand = new Random()
-    for (i <- (buf.size - 1) to 1 by -1) {
+  def randomize[T: ClassManifest](seq: TraversableOnce[T]): Seq[T] = {
+    randomizeInPlace(seq.toArray)
+  }
+
+  /**
+   * Shuffle the elements of an array into a random order, modifying the
+   * original array. Returns the original array.
+   */
+  def randomizeInPlace[T](arr: Array[T], rand: Random = new Random): Array[T] = {
+    for (i <- (arr.length - 1) to 1 by -1) {
       val j = rand.nextInt(i)
-      val tmp = buf(j)
-      buf(j) = buf(i)
-      buf(i) = tmp
+      val tmp = arr(j)
+      arr(j) = arr(i)
+      arr(i) = tmp
     }
-    buf
+    arr
   }
 
   /**
