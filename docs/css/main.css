@@ -48,6 +48,10 @@ code {
   color: #902000;
 }
 
+a code {
+  color: #0088cc;
+}
+
 pre {
   font-family: "Menlo", "Lucida Console", monospace;
 }

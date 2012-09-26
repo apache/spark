@@ -206,6 +206,10 @@ The following tables list the transformations and actions currently supported (s
   <td> Write the elements of the dataset as a Hadoop SequenceFile in a given path in the local filesystem, HDFS or any other Hadoop-supported file system. This is only available on RDDs of key-value pairs that either implement Hadoop's Writable interface or are implicitly convertible to Writable (Spark includes conversions for basic types like Int, Double, String, etc). </td>
 </tr>
 <tr>
+  <td> <b>countByKey</b>() </td>
+  <td> Only available on RDDs of type (K, V). Returns a `Map` of (K, Int) pairs with the count of each key. </td>
+</tr>
+<tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
   <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an accumulator variable (see below) or interacting with external storage systems. </td>
 </tr>
@@ -273,6 +277,7 @@ In addition, each RDD can be stored using a different *storage level*, allowing 
 
 As you can see, Spark supports a variety of storage levels that give different tradeoffs between memory usage
 and CPU efficiency. We recommend going through the following process to select one:
+
 * If your RDDs fit comfortably with the default storage level (`MEMORY_ONLY_DESER`), leave them that way. This is the most
   CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
 * If not, try using `MEMORY_ONLY` and [selecting a fast serialization library]({{HOME_PATH}}tuning.html) to make the objects
@@ -329,4 +334,4 @@ res2: Int = 10
 
 You can see some [example Spark programs](http://www.spark-project.org/examples.html) on the Spark website.
 
-In addition, Spark includes several sample jobs in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `run` script included in Spark -- for example, `./run spark.examples.SparkPi`. Each example program prints usage help when run without any arguments.
+In addition, Spark includes several sample programs in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `run` script included in Spark -- for example, `./run spark.examples.SparkPi`. Each example program prints usage help when run without any arguments.
