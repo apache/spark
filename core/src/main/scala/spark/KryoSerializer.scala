@@ -212,7 +212,8 @@ class KryoSerializer extends Serializer with Logging {
     val regCls = System.getProperty("spark.kryo.registrator")
     if (regCls != null) {
       logInfo("Running user registrator: " + regCls)
-      val reg = Class.forName(regCls).newInstance().asInstanceOf[KryoRegistrator]
+      val classLoader = Thread.currentThread.getContextClassLoader
+      val reg = Class.forName(regCls, true, classLoader).newInstance().asInstanceOf[KryoRegistrator]
       reg.registerClasses(kryo)
     }
     kryo
