@@ -55,10 +55,12 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 # Where to Go from Here
 
 **Programming guides:**
+
 * [Spark Programming Guide]({{HOME_PATH}}scala-programming-guide.html): how to get started using Spark, and details on the Scala API
 * [Java Programming Guide]({{HOME_PATH}}java-programming-guide.html): using Spark from Java
 
 **Deployment guides:**
+
 * [Running Spark on Amazon EC2]({{HOME_PATH}}ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
 * [Standalone Deploy Mode]({{HOME_PATH}}spark-standalone.html): launch a standalone cluster quickly without Mesos
 * [Running Spark on Mesos]({{HOME_PATH}}running-on-mesos.html): deploy a private cluster using
@@ -66,12 +68,14 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 * [Running Spark on YARN]({{HOME_PATH}}running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
 
 **Other documents:**
+
 * [Configuration]({{HOME_PATH}}configuration.html): customize Spark via its configuration system
 * [API docs (Scaladoc)]({{HOME_PATH}}api/core/index.html)
 * [Bagel]({{HOME_PATH}}bagel-programming-guide.html): an implementation of Google's Pregel on Spark
 * [Contributing to Spark](contributing-to-spark.html)
 
 **External resources:**
+
 * [Spark Homepage](http://www.spark-project.org)
 * [AMP Camp](http://ampcamp.berkeley.edu/): a two-day training camp at UC Berkeley that featured talks and exercises 
   about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012), 

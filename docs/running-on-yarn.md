@@ -16,23 +16,23 @@ If you want to test out the YARN deployment mode, you can use the current spark 
 
 The command to launch the YARN Client is as follows:
 
-    SPARK_JAR=<SPARK_YAR_FILE> ./run spark.deploy.yarn.Client 
-    --jar <YOUR_APP_JAR_FILE> 
-    --class <APP_MAIN_CLASS> 
-    --args <APP_MAIN_ARGUMENTS> 
-    --num-workers <NUMBER_OF_WORKER_MACHINES> 
-    --worker-memory <MEMORY_PER_WORKER> 
-    --worker-cores <CORES_PER_WORKER>
+    SPARK_JAR=<SPARK_YAR_FILE> ./run spark.deploy.yarn.Client \
+      --jar <YOUR_APP_JAR_FILE> \
+      --class <APP_MAIN_CLASS> \
+      --args <APP_MAIN_ARGUMENTS> \
+      --num-workers <NUMBER_OF_WORKER_MACHINES> \
+      --worker-memory <MEMORY_PER_WORKER> \
+      --worker-cores <CORES_PER_WORKER>
 
 For example:
 
-    SPARK_JAR=./core/target/spark-core-assembly-0.6.0-SNAPSHOT.jar ./run spark.deploy.yarn.Client 
-    --jar examples/target/scala-2.9.1/spark-examples_2.9.1-0.6.0-SNAPSHOT.jar
-    --class spark.examples.SparkPi
-    --args standalone
-    --num-workers 3
-    --worker-memory 2g
-    --worker-cores 2
+    SPARK_JAR=./core/target/spark-core-assembly-0.6.0-SNAPSHOT.jar ./run spark.deploy.yarn.Client \
+      --jar examples/target/scala-2.9.1/spark-examples_2.9.1-0.6.0-SNAPSHOT.jar \
+      --class spark.examples.SparkPi \
+      --args standalone \
+      --num-workers 3 \
+      --worker-memory 2g \
+      --worker-cores 2
 
 The above starts a YARN Client programs which periodically polls the Application Master for status updates and displays them in the console. The client will exit once your application has finished running.
 
