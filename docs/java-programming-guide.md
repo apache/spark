@@ -6,7 +6,7 @@ title: Java Programming Guide
 The Spark Java API
 ([spark.api.java]({{HOME_PATH}}api/core/index.html#spark.api.java.package)) defines
 [`JavaSparkContext`]({{HOME_PATH}}api/core/index.html#spark.api.java.JavaSparkContext) and
-[`JavaRDD`]({{HOME_PATH}}api/core/index.html#spark.api.java.JavaRDD) clases,
+[`JavaRDD`]({{HOME_PATH}}api/core/index.html#spark.api.java.JavaRDD) classes,
 which support
 the same methods as their Scala counterparts but take Java functions and return
 Java data and collection types.

@@ -7,7 +7,11 @@ title: Spark Overview
 TODO(andyk): Rewrite to make the Java API a first class part of the story.
 {% endcomment %}
 
-Spark is a MapReduce-like cluster computing framework designed for low-latency iterative jobs and interactive use from an interpreter. It provides clean, language-integrated APIs in Scala and Java, with a rich array of parallel operators. Spark can run on top of the [Apache Mesos](http://incubator.apache.org/mesos/) cluster manager, Hadoop YARN, Amazon EC2, or without an independent resource manager ("standalone mode"). 
+Spark is a MapReduce-like cluster computing framework designed for low-latency iterative jobs and interactive use from an 
+interpreter. It provides clean, language-integrated APIs in Scala and Java, with a rich array of parallel operators. Spark can 
+run on top of the [Apache Mesos](http://incubator.apache.org/mesos/) cluster manager, 
+[Hadoop YARN](http://hadoop.apache.org/docs/r2.0.1-alpha/hadoop-yarn/hadoop-yarn-site/YARN.html),
+Amazon EC2, or without an independent resource manager ("standalone mode"). 
 
 # Downloading
 
@@ -33,7 +37,7 @@ For example, `./run spark.examples.SparkPi` will run a sample program that estim
 examples prints usage help if no params are given.
 
 Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
-to connect to. This can be a [URL for a distributed cluster]({{HOME_PATH}}scala-programming-guide.html#master_urls),
+to connect to. This can be a [URL for a distributed cluster]({{HOME_PATH}}scala-programming-guide.html#master-urls),
 or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing.
 
