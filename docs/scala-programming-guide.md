@@ -59,14 +59,14 @@ The master URL passed to Spark can be in one of the following formats:
 
 For running on YARN, Spark launches an instance of the standalone deploy cluster within YARN; see [running on YARN]({{HOME_PATH}}running-on-yarn.html) for details.
 
-### Running on a Cluster
+### Deploying Code on a Cluster
 
 If you want to run your job on a cluster, you will need to specify the two optional parameters to `SparkContext` to let it find your code:
 
 * `sparkHome`: The path at which Spark is installed on your worker machines (it should be the same on all of them).
 * `jars`: A list of JAR files on the local machine containing your job's code and any dependencies, which Spark will deploy to all the worker nodes. You'll need to package your job into a set of JARs using your build system. For example, if you're using SBT, the [sbt-assembly](https://github.com/sbt/sbt-assembly) plugin is a good way to make a single JAR with your code and dependencies.
 
-If some classes will be shared across _all_ your jobs, it's also possible to copy them to the workers manually and set the `SPARK_CLASSPATH` environment variable in `conf/spark-env.sh` to point to them; see [Configuration]({{HOME_PATH}}configuration.html) for details.
+If you run `spark-shell` on a cluster, any classes you define in the shell will automatically be distributed.
 
 
 # Resilient Distributed Datasets (RDDs)
