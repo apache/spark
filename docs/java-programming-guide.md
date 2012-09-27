@@ -33,7 +33,7 @@ There are a few key differences between the Java and Scala APIs:
 * RDD methods like `collect()` and `countByKey()` return Java collections types,
   such as `java.util.List` and `java.util.Map`.
 * Key-value pairs, which are simply written as `(key, value)` in Scala, are represented
-  by the `scala.Tuple2` class, and need to be created using `new Tuple2<K, V>(key, value)`
+  by the `scala.Tuple2` class, and need to be created using `new Tuple2<K, V>(key, value)`.
 
 ## RDD Classes
 
