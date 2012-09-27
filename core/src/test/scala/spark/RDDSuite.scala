@@ -29,6 +29,11 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     assert(nums.glom().map(_.toList).collect().toList === List(List(1, 2), List(3, 4)))
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
     assert(partitionSums.collect().toList === List(3, 7))
+
+    val partitionSumsWithSplit = nums.mapPartitionsWithSplit {
+      case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
+    }
+    assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))
   }
 
   test("SparkContext.union") {
