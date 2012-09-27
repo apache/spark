@@ -143,6 +143,7 @@ Apart from these, the following properties are also available, and may be useful
     large as the largest single object you'll serialize). Increase this if you get a "buffer limit
     exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each worker.
   </td>
+</tr>
 <tr>
   <td>spark.broadcast.factory</td>
   <td>spark.broadcast. HttpBroadcastFactory</td>
@@ -174,7 +175,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 </table>
-
 
 # Configuring Logging
 
