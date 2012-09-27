@@ -51,7 +51,7 @@ The master URL passed to Spark can be in one of the following formats:
 <tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="{{HOME_PATH}}spark-standalone.html">Spark standalone 
         cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default. 
 </td></tr>
-<tr><td> mesos://HOST:PORT </td><td> Connect Spark to the given <a href="{{HOME_PATH}}running-on-mesos.html">Mesos</a> cluster. 
+<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="{{HOME_PATH}}running-on-mesos.html">Mesos</a> cluster. 
         The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, 
         which is 5050 by default. 
 </td></tr>

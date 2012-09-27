@@ -80,9 +80,9 @@ there are at least four properties that you will commonly want to control:
   <td>spark.cores.max</td>
   <td>(infinite)</td>
   <td>
-    When running on a <a href="{{BASE_PATH}}spark-standalone.html">standalone deploy cluster</a> or a
-    <a href="{{BASE_PATH}}running-on-mesos.html">Mesos cluster in "coarse-grained" sharing mode</a>,
-    how many CPU cores to request at most. The default will use all available cores.
+    When running on a <a href="{{HOME_PATH}}spark-standalone.html">standalone deploy cluster</a> or a
+    <a href="{{HOME_PATH}}running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
+    sharing mode</a>, how many CPU cores to request at most. The default will use all available cores.
   </td>
 </tr>
 </table>
@@ -97,7 +97,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     If set to "true", runs over Mesos clusters in
-    <a href="{{BASE_PATH}}running-on-mesos.html">"coarse-grained" sharing mode</a>,
+    <a href="{{HOME_PATH}}running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
     where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
     This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
     duration of the Spark job.

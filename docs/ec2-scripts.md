@@ -1,13 +1,13 @@
 ---
 layout: global
-title: Using the Spark EC2 Scripts
+title: Running Spark on EC2
 ---
-This guide describes how to get Spark running on an EC2 cluster, including how to launch clusters, how to run jobs on them, and how to shut them down. It assumes you have already signed up for Amazon EC2 account on the [Amazon Web Services site](http://aws.amazon.com/).
 
 The `spark-ec2` script, located in Spark's `ec2` directory, allows you
-to launch, manage and shut down Spark clusters on Amazon EC2. It builds
-on the [Mesos EC2 script](https://github.com/mesos/mesos/wiki/EC2-Scripts)
-in Apache Mesos.
+to launch, manage and shut down Spark clusters on Amazon EC2. It automatically sets up Mesos, Spark and HDFS
+on the cluster for you.
+This guide describes how to use `spark-ec2` to launch clusters, how to run jobs on them, and how to shut them down.
+It assumes you've already signed up for an EC2 account on the [Amazon Web Services site](http://aws.amazon.com/).
 
 `spark-ec2` is designed to manage multiple named clusters. You can
 launch a new cluster (telling the script its size and giving it a name),
@@ -18,8 +18,7 @@ are derived from the name of the cluster. For example, a cluster named
 `test-master`, and a number of slave nodes in a security group called
 `test-slaves`. The `spark-ec2` script will create these security groups
 for you based on the cluster name you request. You can also use them to
-identify machines belonging to each cluster in the EC2 Console or
-ElasticFox.
+identify machines belonging to each cluster in the Amazon EC2 Console.
 
 
 # Before You Start

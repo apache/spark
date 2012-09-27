@@ -16,7 +16,14 @@ import spark.deploy.RegisterWorkerFailed
 import akka.actor.Terminated
 import java.io.File
 
-class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, masterUrl: String)
+class Worker(
+    ip: String,
+    port: Int,
+    webUiPort: Int,
+    cores: Int,
+    memory: Int,
+    masterUrl: String,
+    workDirPath: String = null)
   extends Actor with Logging {
 
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
@@ -37,7 +44,11 @@ class Worker(ip: String, port: Int, webUiPort: Int, cores: Int, memory: Int, mas
   def memoryFree: Int = memory - memoryUsed
 
   def createWorkDir() {
-    workDir = new File(sparkHome, "work")
+    workDir = if (workDirPath != null) {
+      new File(workDirPath)
+    } else {
+      new File(sparkHome, "work")
+    }
     try {
       if (!workDir.exists() && !workDir.mkdirs()) {
         logError("Failed to create work directory " + workDir)
@@ -164,7 +175,8 @@ object Worker {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", args.ip, args.port)
     val actor = actorSystem.actorOf(
-      Props(new Worker(args.ip, boundPort, args.webUiPort, args.cores, args.memory, args.master)),
+      Props(new Worker(args.ip, boundPort, args.webUiPort, args.cores, args.memory,
+        args.master, args.workDir)),
       name = "Worker")
     actorSystem.awaitTermination()
   }

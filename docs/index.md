@@ -70,8 +70,8 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 **Other documents:**
 
 * [Configuration]({{HOME_PATH}}configuration.html): customize Spark via its configuration system
-* [Tuning guide]({{HOME_PATH}}tuning.html): best practices to optimize performance and memory use
-* [API docs (Scaladoc)]({{HOME_PATH}}api/core/index.html)
+* [Tuning Guide]({{HOME_PATH}}tuning.html): best practices to optimize performance and memory use
+* [API Docs (Scaladoc)]({{HOME_PATH}}api/core/index.html)
 * [Bagel]({{HOME_PATH}}bagel-programming-guide.html): an implementation of Google's Pregel on Spark
 * [Contributing to Spark](contributing-to-spark.html)
 

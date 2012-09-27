@@ -10,77 +10,143 @@ TODO(andyk):
   - Say the scripts will guess the resource amounts (i.e. # cores) automatically
 {% endcomment %}
 
-In addition to running on top of [Mesos](https://github.com/mesos/mesos), Spark also supports a standalone mode, consisting of one Spark master and several Spark worker processes. You can run the Spark standalone mode either locally or on a cluster. If you wish to run an Spark Amazon EC2 cluster using standalone mode we have provided [a set of scripts](ec2-scripts.html) that make it easy to do so.
+In addition to running on top of [Mesos](https://github.com/mesos/mesos), Spark also supports a standalone mode, consisting of one Spark master and several Spark worker processes. You can run the Spark standalone mode either locally (for testing) or on a cluster. If you wish to run on a cluster, we have provided [a set of deploy scripts](#cluster-launch-scripts) to launch a whole cluster.
 
-## Getting Started
+# Getting Started
 
-Download and compile Spark as described in the [Getting Started Guide](index.html). You do not need to install Mesos on your machine if you are using the standalone mode.
+Compile Spark with `sbt package` as described in the [Getting Started Guide](index.html). You do not need to install Mesos on your machine if you are using the standalone mode.
 
-## Standalone Mode Configuration
-
-The `conf/spark_env.sh` file contains several configuration parameters for the standalone mode. Here is a quick overview:
-
-- SPARK\_MASTER\_IP - Use this to bind the master to a particular ip address, for example a public one. (Default: local ip address)
-- SPARK\_MASTER\_PORT - Start the spark master on a different port (Default: 7077)
-- SPARK\_MASTER\_WEBUI\_PORT -  Specify a different port for the Master WebUI (Default: 8080)
-- SPARK\_WORKER\_PORT - Start the spark worker on a specific port (Default: random)
-- SPARK\_WORKER\_CORES - Specify the number of cores to use (Default: all available cores)
-- SPARK\_WORKER\_MEMORY - Specify how much memory to use, e.g. 1000M, 2G (Default: MAX(Available - 1024MB, 512MB))
-- SPARK\_WORKER\_WEBUI\_PORT - Specify a different port for the Worker WebUI (Default: 8081)
-
-## Starting the standalone Master
+# Starting a Cluster Manually
 
 You can start a standalone master server by executing:
 
     ./run spark.deploy.master.Master
 
-The program takes additional arguments that will overwrite the configuration values:
+Once started, the master will print out a `spark://IP:PORT` URL for itself, which you can use to connect workers to it,
+or pass as the "master" argument to `SparkContext` to connect a job to the cluster. You can also find this URL on
+the master's web UI, which is [http://localhost:8080](http://localhost:8080) by default.
 
-    -i IP, --ip IP         IP address or DNS name to listen on
-    -p PORT, --port PORT   Port to listen on (default: 7077)
-    --webui-port PORT      Port for web UI (default: 8080)
+Similarly, you can start one or more workers and connect them to the master via:
 
-The master process should print out the Master's URL of the form `spark://IP:PORT` which you can use to create a `SparkContext` in your applications. 
+    ./run spark.deploy.worker.Worker spark://IP:PORT
 
-## Starting standalone Workers
+Once you have started a worker, look at the master's web UI ([http://localhost:8080](http://localhost:8080) by default).
+You should see the new node listed there, along with its number of CPUs and memory (minus one gigabyte left for the OS).
 
-Similar to the master, you can start one or more standalone workers via:
+Finally, the following configuration options can be passed to the master and worker: 
 
-`./run spark.deploy.worker.Worker spark://IP:PORT`
+<table class="table">
+  <tr><th style="width:21%">Argument</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>-i IP</code>, <code>--ip IP</code></td>
+    <td>IP address or DNS name to listen on</td>
+  </tr>
+  <tr>
+    <td><code>-p PORT</code>, <code>--port PORT</code></td>
+    <td>IP address or DNS name to listen on (default: 7077 for master, random for worker)</td>
+  </tr>
+  <tr>
+    <td><code>--webui-port PORT</code></td>
+    <td>Port for web UI (default: 8080 for master, 8081 for worker)</td>
+  </tr>
+  <tr>
+    <td><code>-c CORES</code>, <code>--cores CORES</code></td>
+    <td>Number of CPU cores to use (default: all available); only on worker</td>
+  </tr>
+  <tr>
+    <td><code>-m MEM</code>, <code>--memory MEM</code></td>
+    <td>Amount of memory to use, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GB); only on worker</td>
+  </tr>
+  <tr>
+    <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
+    <td>Directory to use for scratch space and job output logs (default: SPARK_HOME/work); only on worker</td>
+  </tr>
+</table>
 
-The following options can be passed to the worker: 
 
-    -c CORES, --cores CORES  Number of cores to use
-    -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)
-    -i IP, --ip IP           IP address or DNS name to listen on
-    -p PORT, --port PORT     Port to listen on (default: random)
-    --webui-port PORT        Port for web UI (default: 8081)
+# Cluster Launch Scripts
 
-## Debugging a standalone cluster
+To launch a Spark standalone cluster with the deploy scripts, you need to set up two files, `conf/spark-env.sh` and `conf/slaves`. The `conf/spark-env.sh` file lets you specify global settings for the master and slave instances, such as memory, or port numbers to bind to, while `conf/slaves` is a list of slave nodes. The system requires that all the slave machines have the same configuration files, so *copy these files to each machine*.
 
-Spark offers a web-based user interface in the standalone mode. The master and each worker has its own WebUI that shows cluster and job statistics. By default you can access the WebUI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
+In `conf/spark-env.sh`, you can set the following parameters, in addition to the [standard Spark configuration settongs]({{HOME_PATH}}configuration.html):
 
-Detailed log output for the jobs is written to the `work` drectory by default.
+<table class="table">
+  <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>SPARK_MASTER_IP</code></td>
+    <td>Bind the master to a specific IP address, for example a public one</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_MASTER_PORT</code></td>
+    <td>Start the master on a different port (default: 7077)</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_MASTER_WEBUI_PORT</code></td>
+    <td>Port for the master web UI (default: 8080)</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_WORKER_PORT</code></td>
+    <td>Start the Spark worker on a specific port (default: random)</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_WORKER_CORES</code></td>
+    <td>Number of cores to use (default: all available cores)</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_WORKER_MEMORY</code></td>
+    <td>How much memory to use, e.g. 1000M, 2G (default: total memory minus 1 GB)</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_WORKER_WEBUI_PORT</code></td>
+    <td>Port for the worker web UI (default: 8081)</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_WORKER_DIR</code></td>
+    <td>Directory to run jobs in, which will include both logs and scratch space (default: SPARK_HOME/work)</td>
+  </tr>
+</table>
 
-## Running on a Cluster
+In `conf/slaves`, include a list of all machines where you would like to start a Spark worker, one per line. The master machine must be able to access each of the slave machines via password-less `ssh` (using a private key). For testing purposes, you can have a single `localhost` entry in the slaves file.
 
-In order to run a Spark standalone cluster there are two main points of configuration, the `conf/spark-env.sh` file (described above), and the `conf/slaves` file. the `conf/spark-env.sh` file lets you specify global settings for the master and slave instances, such as memory, or port numbers to bind to. We are assuming that all your machines share the same configuration parameters.
+Once you've set up these configuration files, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/bin`:
 
-The `conf/slaves` file contains a list of all machines where you would like to start a Spark slave (worker) instance when using the scripts below. The master machine must be able to access each of the slave machines via ssh. For testing purposes, you can have a single `localhost` entry in the slaves file.
+- `bin/start-master.sh` - Starts a master instance on the machine the script is executed on.
+- `bin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
+- `bin/start-all.sh` - Starts both a master and a number of slaves as described above.
+- `bin/stop-master.sh` - Stops the master that was started via the `bin/start-master.sh` script.
+- `bin/stop-slaves.sh` - Stops the slave instances that were started via `bin/start-slaves.sh`.
+- `bin/stop-all.sh` - Stops both the master and the slaves as described above.
 
-In order to make starting master and slave instances easier, we have provided Hadoop-style shell scripts. The scripts can be found in the `bin` directory. A quick overview:
+Note that the scripts must be executed on the machine you want to run the Spark master on, not your local machine.
 
-- `bin/start_master` - Starts a master instance on the machine the script is executed on.
-- `bin/start_slaves` - Starts a slave instance on each machine specified in the `conf/slaves` file.
-- `bin/start_all` - Starts both a master and a number of slaves as described above.
-- `bin/stop_master` - Stops the master that was started via the `bin/start_master` script.
-- `bin/stop_slaves` - Stops the slave intances that were started via the `bin/start_slaves` script.
-- `bin/stop_all` - Stops both the master and the slaves as described above.
 
-Note that the scripts must be executed on the machine you want to start the Spark master on, not your local machine.
+# Connecting a Job to the Cluster
 
-{% comment %}
-## EC2 Scripts
+To run a job on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
+constructor]({{HOME_PATH}}scala-programming-guide.html#initializing-spark).
 
-To save you from needing to set up a cluster of Spark machines yourself, we provide a set of scripts that launch Amazon EC2 instances with a preinstalled Spark distribution. These scripts are identical to the [EC2 Mesos Scripts](https://github.com/mesos/spark/wiki/EC2-Scripts), except that you need to execute `ec2/spark-ec2` with the following additional parameters: `--cluster-type standalone -a standalone`. Note that the Spark version on these machines may not reflect the latest changes, so it may be a good idea to ssh into the machines and merge the latest version from github.
-{% endcomment %}
+To run an interactive Spark shell against the cluster, run the following command:
+
+    MASTER=spark://IP:PORT ./spark-shell
+
+
+# Job Scheduling
+
+The standalone cluster mode currently only supports a simple FIFO scheduler across jobs.
+However, to allow multiple concurrent jobs, you can control the maximum number of resources each Spark job will acquire.
+By default, it will acquire *all* the cores in the cluster, which only makes sense if you run just a single
+job at a time. You can cap the number of cores using `System.setProperty("spark.cores.max", "10")` (for example).
+This value must be set *before* initializing your SparkContext.
+
+
+# Monitoring and Logging
+
+Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
+
+In addition, detailed log output for each job is also written to the work directory of each slave node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
+
+
+# Running Alongside Hadoop
+
+You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the machines. To access Hadoop data from Spark, just use a hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
+

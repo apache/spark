@@ -51,7 +51,7 @@ class MasterArguments(args: Array[String]) {
    */
   def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "Usage: spark-master [options]\n" +
+      "Usage: Master [options]\n" +
       "\n" +
       "Options:\n" +
       "  -i IP, --ip IP         IP address or DNS name to listen on\n" +
