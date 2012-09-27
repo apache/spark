@@ -435,8 +435,8 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
   extends Logging
   with Serializable {
 
-  def sortByKey(ascending: Boolean = true): RDD[(K,V)] = {
-    new ShuffledSortedRDD(self, ascending)
+  def sortByKey(ascending: Boolean = true, numSplits: Int = self.splits.size): RDD[(K,V)] = {
+    new ShuffledSortedRDD(self, ascending, numSplits)
   }
 }
 

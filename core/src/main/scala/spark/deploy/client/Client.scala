@@ -42,7 +42,6 @@ class Client(
       val akkaUrl = "akka://spark@%s:%s/user/Master".format(masterHost, masterPort)
       try {
         master = context.actorFor(akkaUrl)
-        //master ! RegisterWorker(ip, port, cores, memory)
         master ! RegisterJob(jobDescription)
         context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
         context.watch(master)  // Doesn't work with remote actors, but useful for testing

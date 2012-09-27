@@ -16,7 +16,7 @@ class ShuffledRDDSplit(val idx: Int) extends Split {
 abstract class ShuffledRDD[K, V, C](
     @transient parent: RDD[(K, V)],
     aggregator: Aggregator[K, V, C],
-    part : Partitioner)
+    part: Partitioner)
   extends RDD[(K, C)](parent.context) {
 
   override val partitioner = Some(part)
@@ -38,7 +38,7 @@ abstract class ShuffledRDD[K, V, C](
  */
 class RepartitionShuffledRDD[K, V](
     @transient parent: RDD[(K, V)],
-    part : Partitioner)
+    part: Partitioner)
   extends ShuffledRDD[K, V, V](
     parent,
     Aggregator[K, V, V](null, null, null, false),
@@ -60,10 +60,11 @@ class RepartitionShuffledRDD[K, V](
  */
 class ShuffledSortedRDD[K <% Ordered[K]: ClassManifest, V](
     @transient parent: RDD[(K, V)],
-    ascending: Boolean)
+    ascending: Boolean,
+    numSplits: Int)
   extends RepartitionShuffledRDD[K, V](
     parent,
-    new RangePartitioner(parent.splits.size, parent, ascending)) {
+    new RangePartitioner(numSplits, parent, ascending)) {
 
   override def compute(split: Split): Iterator[(K, V)] = {
     // By separating this from RepartitionShuffledRDD, we avoided a
