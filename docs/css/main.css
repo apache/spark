@@ -30,14 +30,21 @@ body #content {
 
 h1 {
   font-size: 28px;
+  margin-top: 12px;
 }
 
 h2 {
   font-size: 24px;
+  margin-top: 12px;
 }
 
 h3 {
   font-size: 21px;
+  margin-top: 10px;
+}
+
+pre {
+  font-family: "Menlo", "Lucida Console", monospace;
 }
 
 code {
@@ -45,15 +52,16 @@ code {
   background: white;
   border: none;
   padding: 0;
-  color: #902000;
+  color: #444444;
 }
 
 a code {
   color: #0088cc;
 }
 
-pre {
-  font-family: "Menlo", "Lucida Console", monospace;
+a:hover code {
+  color: #005580;
+  text-decoration: underline;
 }
 
 .container {

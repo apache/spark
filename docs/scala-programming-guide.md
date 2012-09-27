@@ -132,7 +132,13 @@ The following tables list the transformations and actions currently supported (s
 </tr>
 <tr>
   <td> <b>flatMap</b>(<i>func</i>) </td>
-  <td> Similar to map, but each input item can be mapped to 0 or more output items (so <i>func</i> should return a Seq rather than a single item). </td></tr>
+  <td> Similar to map, but each input item can be mapped to 0 or more output items (so <i>func</i> should return a Seq rather than a single item). </td>
+</tr>
+<tr>
+  <td> <b>mapPartitions</b>(<i>func</i>) </td>
+  <td> Similar to map, but runs separately on each partition (block) of the RDD, so <i>func</i> must be of type
+    Iterator[T] => Iterator[U] when running on an RDD of type T. </td>
+</tr>
 <tr>
   <td> <b>sample</b>(<i>withReplacement</i>, <i>fraction</i>, <i>seed</i>) </td>
   <td> Sample a fraction <i>fraction</i> of the data, with or without replacement, using a given random number generator seed. </td>
@@ -143,13 +149,17 @@ The following tables list the transformations and actions currently supported (s
 </tr>
 <tr>
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
-  <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Seq[V]) pairs. 
+  <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Seq[V]) pairs. <br />
 <b>Note:</b> By default, this uses only 8 parallel tasks to do the grouping. You can pass an optional <code>numTasks</code> argument to set a different number of tasks.
 </td>
 </tr>
 <tr>
   <td> <b>reduceByKey</b>(<i>func</i>, [<i>numTasks</i>]) </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, V) pairs where the values for each key are aggregated using the given reduce function. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
+</tr>
+<tr>
+  <td> <b>sortByKey</b>([<i>ascending</i>], [<i>numTasks</i>]) </td>
+  <td> When called on a dataset of (K, V) pairs where K implements Ordered, returns a dataset of (K, V) pairs sorted by keys in ascending or descending order, as specified in the boolean <code>ascending</code> argument.</td>
 </tr>
 <tr>
   <td> <b>join</b>(<i>otherDataset</i>, [<i>numTasks</i>]) </td>
@@ -163,11 +173,9 @@ The following tables list the transformations and actions currently supported (s
   <td> <b>cartesian</b>(<i>otherDataset</i>) </td>
   <td> When called on datasets of types T and U, returns a dataset of (T, U) pairs (all pairs of elements). </td>
 </tr>
-<tr>
-  <td> <b>sortByKey</b>([<i>ascending</i>]) </td>
-  <td> When called on a dataset of (K, V) pairs where K implements Ordered, returns a dataset of (K, V) pairs sorted by keys in ascending or descending order, as specified in the boolean <code>ascending</code> argument.</td>
-</tr>
 </table>
+
+A complete list of transformations is available in the [RDD API doc]({{HOME_PATH}}api/core/index.html#spark.RDD).
 
 ### Actions
 
@@ -215,6 +223,8 @@ The following tables list the transformations and actions currently supported (s
 </tr>
 </table>
 
+A complete list of actions is available in the [RDD API doc]({{HOME_PATH}}api/core/index.html#spark.RDD).
+
 ## RDD Persistence
 
 One of the most important capabilities in Spark is *persisting* (or *caching*) a dataset in memory across operations. When you persist an RDD, each node stores any slices of it that it computes in memory and reuses them in other actions on that dataset (or datasets derived from it). This allows future actions to be much faster (often by more than 10x). Caching is a key tool for building iterative algorithms with Spark and for interactive use from the interpreter.
@@ -224,22 +234,22 @@ You can mark an RDD to be persisted using the `persist()` or `cache()` methods o
 In addition, each RDD can be stored using a different *storage level*, allowing you, for example, to persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space), or even replicate it across nodes. These levels are chosen by passing a [`spark.storage.StorageLevel`]({{HOME_PATH}}api/core/index.html#spark.storage.StorageLevel) object to `persist()`. The `cache()` method is a shorthand for using the default storage level, which is `StorageLevel.MEMORY_ONLY_DESER` (store deserialized objects in memory). The complete set of available storage levels is:
 
 <table class="table">
-<tr><th>Storage Level</th><th>Meaning</th></tr>
+<tr><th style="width:30%">Storage Level</th><th>Meaning</th></tr>
 <tr>
   <td> MEMORY_ONLY_DESER </td>
-  <td> Store RDD as deserialized Java objects in the JVM. If the entire RDD does not fit in memory, some partitions will
+  <td> Store RDD as deserialized Java objects in the JVM. If the RDD does not fit in memory, some partitions will
     not be cached and will be recomputed on the fly each time they're needed. This is the default level. </td>
 </tr>
 <tr>
   <td> DISK_AND_MEMORY_DESER </td>
-  <td> Store RDD as deserialized Java objects in the JVM. If the entire RDD does not fit in memory, store the
-    partitions that don't fit on disk, and read them from there the next time they're needed. </td>
+  <td> Store RDD as deserialized Java objects in the JVM. If the RDD does not fit in memory, store the
+    partitions that don't fit on disk, and read them from there when they're needed. </td>
 </tr>
 <tr>
   <td> MEMORY_ONLY </td>
-  <td> Store RDD as <i>serialized</i> Java objects (that is, one large byte array per partition).
+  <td> Store RDD as <i>serialized</i> Java objects (that is, one byte array per partition).
     This is generally more space-efficient than deserialized objects, especially when using a
-    [fast serializer]({{HOME_PATH}}tuning.html), but more CPU-intensive to read.
+    <a href="{{HOME_PATH}}tuning.html">fast serializer</a>, but more CPU-intensive to read.
   </td>
 </tr>
 <tr>
@@ -252,31 +262,15 @@ In addition, each RDD can be stored using a different *storage level*, allowing 
   <td> Store the RDD partitions only on disk. </td>
 </tr>
 <tr>
-  <td> MEMORY_ONLY_DESER_2 </td>
-  <td> Same as MEMORY_ONLY_DESER, but replicate to two nodes. </td>
-</tr>
-<tr>
-  <td> DISK_AND_MEMORY_DESER_2 </td>
-  <td> Same as DISK_AND_MEMORY_DESER, but replicate to two nodes. </td>
-</tr>
-<tr>
-  <td> MEMORY_ONLY_2 </td>
-  <td> Same as MEMORY_ONLY, but replicate to two nodes. </td>
-</tr>
-<tr>
-  <td> DISK_AND_MEMORY_2 </td>
-  <td> Same as DISK_AND_MEMORY, but replicate to two nodes. </td>
-</tr>
-<tr>
-  <td> DISK_ONLY_2 </td>
-  <td> Same as DISK_ONLY, but replicate to two nodes. </td>
+  <td> MEMORY_ONLY_DESER_2 / DISK_AND_MEMORY_DESER_2 / MEMORY_ONLY_2 / DISK_ONLY_2 / DISK_AND_MEMORY_2  </td>
+  <td> Same as the levels above, but replicate each partition on two nodes. </td>
 </tr>
 </table>
 
 ### Which Storage Level to Choose?
 
-As you can see, Spark supports a variety of storage levels that give different tradeoffs between memory usage
-and CPU efficiency. We recommend going through the following process to select one:
+Spark's storage levels are meant to provide different tradeoffs between memory usage and CPU efficiency.
+We recommend going through the following process to select one:
 
 * If your RDDs fit comfortably with the default storage level (`MEMORY_ONLY_DESER`), leave them that way. This is the most
   CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
@@ -333,5 +327,8 @@ res2: Int = 10
 # Where to Go from Here
 
 You can see some [example Spark programs](http://www.spark-project.org/examples.html) on the Spark website.
-
 In addition, Spark includes several sample programs in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `run` script included in Spark -- for example, `./run spark.examples.SparkPi`. Each example program prints usage help when run without any arguments.
+
+For help on optimizing your program, the [configuration]({{HOME_PATH}}configuration.html) and
+[tuning]({{HOME_PATH}}tuning.html) guides provide information on best practices. They are especially important for
+making sure that your data is stored in memory in an efficient format.
