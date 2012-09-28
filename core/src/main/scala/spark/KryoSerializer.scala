@@ -192,8 +192,8 @@ class KryoSerializer extends Serializer with Logging {
       (1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1, 1),
       None,
       ByteBuffer.allocate(1),
-      StorageLevel.MEMORY_ONLY_DESER,
-      PutBlock("1", ByteBuffer.allocate(1), StorageLevel.MEMORY_ONLY_DESER),
+      StorageLevel.MEMORY_ONLY,
+      PutBlock("1", ByteBuffer.allocate(1), StorageLevel.MEMORY_ONLY),
       GotBlock("1", ByteBuffer.allocate(1)),
       GetBlock("1")
     )

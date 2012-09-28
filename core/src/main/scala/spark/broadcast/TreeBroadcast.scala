@@ -17,7 +17,7 @@ extends Broadcast[T] with Logging with Serializable {
 
   MultiTracker.synchronized {
     SparkEnv.get.blockManager.putSingle(
-      uuid.toString, value_, StorageLevel.MEMORY_ONLY_DESER, false)
+      uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -112,7 +112,7 @@ extends Broadcast[T] with Logging with Serializable {
           if (receptionSucceeded) {
             value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
             SparkEnv.get.blockManager.putSingle(
-              uuid.toString, value_, StorageLevel.MEMORY_ONLY_DESER, false)
+              uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
           }  else {
             logError("Reading Broadcasted variable " + uuid + " failed")
           }

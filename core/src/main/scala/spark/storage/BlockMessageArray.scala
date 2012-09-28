@@ -99,7 +99,7 @@ object BlockMessageArray {
         if (i % 2 == 0) {
           val buffer =  ByteBuffer.allocate(100)
           buffer.clear
-          BlockMessage.fromPutBlock(PutBlock(i.toString, buffer, StorageLevel.MEMORY_ONLY))
+          BlockMessage.fromPutBlock(PutBlock(i.toString, buffer, StorageLevel.MEMORY_ONLY_SER))
         } else {
           BlockMessage.fromGetBlock(GetBlock(i.toString))
         }

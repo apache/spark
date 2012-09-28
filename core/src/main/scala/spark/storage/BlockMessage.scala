@@ -196,7 +196,7 @@ object BlockMessage {
 
   def main(args: Array[String]) {
     val B = new BlockMessage()
-    B.set(new PutBlock("ABC", ByteBuffer.allocate(10), StorageLevel.DISK_AND_MEMORY_2))
+    B.set(new PutBlock("ABC", ByteBuffer.allocate(10), StorageLevel.MEMORY_AND_DISK_SER_2))
     val bMsg = B.toBufferMessage
     val C = new BlockMessage()
     C.set(bMsg)
