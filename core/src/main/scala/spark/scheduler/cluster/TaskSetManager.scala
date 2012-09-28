@@ -214,7 +214,8 @@ class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = System.currentTimeMillis
-          val serializedTask = ser.serialize(task)
+          val serializedTask = Task.serializeWithDependencies(
+            task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           val timeTaken = System.currentTimeMillis - startTime
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))

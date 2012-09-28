@@ -72,12 +72,13 @@ class KryoSerializationStream(kryo: Kryo, threadBuffer: ByteBuffer, out: OutputS
 extends SerializationStream {
   val channel = Channels.newChannel(out)
 
-  def writeObject[T](t: T) {
+  def writeObject[T](t: T): SerializationStream = {
     kryo.writeClassAndObject(threadBuffer, t)
     ZigZag.writeInt(threadBuffer.position(), out)
     threadBuffer.flip()
     channel.write(threadBuffer)
     threadBuffer.clear()
+    this
   }
 
   def flush() { out.flush() }
@@ -161,6 +162,8 @@ trait KryoRegistrator {
 }
 
 class KryoSerializer extends Serializer with Logging {
+  // Make this lazy so that it only gets called once we receive our first task on each executor,
+  // so we can pull out any custom Kryo registrator from the user's JARs.
   lazy val kryo = createKryo()
 
   val bufferSize = System.getProperty("spark.kryoserializer.buffer.mb", "32").toInt * 1024 * 1024 

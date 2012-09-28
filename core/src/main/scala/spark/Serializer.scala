@@ -51,7 +51,7 @@ trait SerializerInstance {
  * A stream for writing serialized objects.
  */
 trait SerializationStream {
-  def writeObject[T](t: T): Unit
+  def writeObject[T](t: T): SerializationStream
   def flush(): Unit
   def close(): Unit
 

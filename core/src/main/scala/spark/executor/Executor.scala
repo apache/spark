@@ -20,10 +20,11 @@ class Executor extends Logging {
   var urlClassLoader : ExecutorURLClassLoader = null
   var threadPool: ExecutorService = null
   var env: SparkEnv = null
-  
-  val fileSet: HashMap[String, Long] = new HashMap[String, Long]()
-  val jarSet: HashMap[String, Long] = new HashMap[String, Long]()
-  
+
+  // Application dependencies (added through SparkContext) that we've fetched so far on this node.
+  // Each map holds the master's timestamp for the version of that file or JAR we got.
+  val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
+  val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
   val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
@@ -67,9 +68,9 @@ class Executor extends Logging {
       try {
         SparkEnv.set(env)
         Accumulators.clear()
-        val task = ser.deserialize[Task[Any]](serializedTask, urlClassLoader)
-        task.downloadDependencies(fileSet, jarSet)
-        updateClassLoader()
+        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        updateDependencies(taskFiles, taskJars)
+        val task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
         logInfo("Its generation is " + task.generation)
         env.mapOutputTracker.updateGeneration(task.generation)
         val value = task.run(taskId.toInt)
@@ -104,12 +105,11 @@ class Executor extends Logging {
    * created by the interpreter to the search path
    */
   private def createClassLoader(): ExecutorURLClassLoader = {
-
-    var loader = this.getClass().getClassLoader()
+    var loader = this.getClass.getClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
-    val urls = jarSet.keySet.map { uri => 
+    val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
     loader = new URLClassLoader(urls, loader)
@@ -134,22 +134,28 @@ class Executor extends Logging {
     return new ExecutorURLClassLoader(Array(), loader)
   }
 
-  def updateClassLoader() {
-    val currentURLs = urlClassLoader.getURLs()
-    val urlSet = jarSet.keySet.map { x => new File(x.split("/").last).toURI.toURL }
-    urlSet.filterNot(currentURLs.contains(_)).foreach {  url =>
-      logInfo("Adding " + url + " to the class loader.")
-      urlClassLoader.addURL(url)
+  /**
+   * Download any missing dependencies if we receive a new set of files and JARs from the
+   * SparkContext. Also adds any new JARs we fetched to the class loader.
+   */
+  private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
+    // Fetch missing dependencies
+    for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+      logInfo("Fetching " + name)
+      Utils.fetchFile(name, new File("."))
+      currentFiles(name) = timestamp
     }
-
-  }
-
-  // The addURL method in URLClassLoader is protected. We subclass it to make it accessible.
-  class ExecutorURLClassLoader(urls : Array[URL], parent : ClassLoader) 
-    extends URLClassLoader(urls, parent) {
-    override def addURL(url: URL) {
-      super.addURL(url)
+    for ((name, timestamp) <- newJars if currentFiles.getOrElse(name, -1L) < timestamp) {
+      logInfo("Fetching " + name)
+      Utils.fetchFile(name, new File("."))
+      currentJars(name) = timestamp
+      // Add it to our class loader
+      val localName = name.split("/").last
+      val url = new File(".", localName).toURI.toURL
+      if (!urlClassLoader.getURLs.contains(url)) {
+        logInfo("Adding " + url + " to class loader")
+        urlClassLoader.addURL(url)
+      }
     }
   }
-
 }

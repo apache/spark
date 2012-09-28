@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicLong
  * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
  * start(), then submit task sets through the runTasks method.
  */
-class ClusterScheduler(sc: SparkContext)
+class ClusterScheduler(val sc: SparkContext)
   extends TaskScheduler
   with Logging {
 
@@ -87,10 +87,6 @@ class ClusterScheduler(sc: SparkContext)
 
   def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
-    tasks.foreach { task => 
-      task.fileSet ++= sc.addedFiles
-      task.jarSet ++= sc.addedJars
-    }
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet)

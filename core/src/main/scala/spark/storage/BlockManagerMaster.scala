@@ -395,10 +395,12 @@ class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: B
   }
 
   def mustRegisterBlockManager(msg: RegisterBlockManager) {
+    logInfo("Trying to register BlockManager")
     while (! syncRegisterBlockManager(msg)) {
       logWarning("Failed to register " + msg)
       Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
     }
+    logInfo("Done registering BlockManager")
   }
 
   def syncRegisterBlockManager(msg: RegisterBlockManager): Boolean = {

@@ -21,8 +21,6 @@ object ShuffleMapTask {
   // Served as a cache for task serialization because serialization can be
   // expensive on the master node if it needs to launch thousands of tasks.
   val serializedInfoCache = new JHashMap[Int, Array[Byte]]
-  val fileSetCache = new JHashMap[Int, Array[Byte]]
-  val jarSetCache = new JHashMap[Int, Array[Byte]]
 
   def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_]): Array[Byte] = {
     synchronized {
@@ -40,23 +38,6 @@ object ShuffleMapTask {
         serializedInfoCache.put(stageId, bytes)
         return bytes
       }
-    }
-  }
-
-  // Since both the JarSet and FileSet have the same format this is used for both.
-  def serializeFileSet(
-    set : HashMap[String, Long], stageId: Int, cache : JHashMap[Int, Array[Byte]]) : Array[Byte] = {
-    val old = cache.get(stageId)
-    if (old != null) {
-      return old
-    } else {
-      val out = new ByteArrayOutputStream
-      val objOut = new ObjectOutputStream(new GZIPOutputStream(out))
-      objOut.writeObject(set.toArray)
-      objOut.close()
-      val bytes = out.toByteArray
-      cache.put(stageId, bytes)
-      return bytes
     }
   }
 
@@ -83,8 +64,6 @@ object ShuffleMapTask {
   def clearCache() {
     synchronized {
       serializedInfoCache.clear()
-      fileSetCache.clear()
-      jarSetCache.clear()
     }
   }
 }
@@ -112,15 +91,6 @@ class ShuffleMapTask(
     val bytes = ShuffleMapTask.serializeInfo(stageId, rdd, dep)
     out.writeInt(bytes.length)
     out.write(bytes)
-
-    val fileSetBytes = ShuffleMapTask.serializeFileSet(
-      fileSet, stageId, ShuffleMapTask.fileSetCache)
-    out.writeInt(fileSetBytes.length)
-    out.write(fileSetBytes)
-    val jarSetBytes = ShuffleMapTask.serializeFileSet(jarSet, stageId, ShuffleMapTask.jarSetCache)
-    out.writeInt(jarSetBytes.length)
-    out.write(jarSetBytes)
-
     out.writeInt(partition)
     out.writeLong(generation)
     out.writeObject(split)
@@ -134,17 +104,6 @@ class ShuffleMapTask(
     val (rdd_, dep_) = ShuffleMapTask.deserializeInfo(stageId, bytes)
     rdd = rdd_
     dep = dep_
-    
-    val fileSetNumBytes = in.readInt()
-    val fileSetBytes = new Array[Byte](fileSetNumBytes)
-    in.readFully(fileSetBytes)
-    fileSet = ShuffleMapTask.deserializeFileSet(fileSetBytes)
-
-    val jarSetNumBytes = in.readInt()
-    val jarSetBytes = new Array[Byte](jarSetNumBytes)
-    in.readFully(jarSetBytes)
-    jarSet = ShuffleMapTask.deserializeFileSet(jarSetBytes)
-
     partition = in.readInt()
     generation = in.readLong()
     split = in.readObject().asInstanceOf[Split]

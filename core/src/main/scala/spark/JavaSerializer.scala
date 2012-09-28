@@ -7,7 +7,7 @@ import spark.util.ByteBufferInputStream
 
 class JavaSerializationStream(out: OutputStream) extends SerializationStream {
   val objOut = new ObjectOutputStream(out)
-  def writeObject[T](t: T) { objOut.writeObject(t) }
+  def writeObject[T](t: T): SerializationStream = { objOut.writeObject(t); this }
   def flush() { objOut.flush() }
   def close() { objOut.close() }
 }

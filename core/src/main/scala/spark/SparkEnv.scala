@@ -74,11 +74,18 @@ object SparkEnv {
       System.setProperty("spark.master.port", boundPort.toString)
     }
 
-    val serializerClass = System.getProperty("spark.serializer", "spark.JavaSerializer")
-    val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
+    val classLoader = Thread.currentThread.getContextClassLoader
+
+    // Create an instance of the class named by the given Java system property, or by
+    // defaultClassName if the property is not set, and return it as a T
+    def instantiateClass[T](propertyName: String, defaultClassName: String): T = {
+      val name = System.getProperty(propertyName, defaultClassName)
+      Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
+    }
+
+    val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
     
     val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
-
     val blockManager = new BlockManager(blockManagerMaster, serializer)
     
     val connectionManager = blockManager.connectionManager 
@@ -87,45 +94,22 @@ object SparkEnv {
 
     val broadcastManager = new BroadcastManager(isMaster)
 
-    val closureSerializerClass =
-      System.getProperty("spark.closure.serializer", "spark.JavaSerializer")
-    val closureSerializer =
-      Class.forName(closureSerializerClass).newInstance().asInstanceOf[Serializer]
-    val cacheClass = System.getProperty("spark.cache.class", "spark.BoundedMemoryCache")
-    val cache = Class.forName(cacheClass).newInstance().asInstanceOf[Cache]
+    val closureSerializer = instantiateClass[Serializer](
+      "spark.closure.serializer", "spark.JavaSerializer")
+
+    val cache = instantiateClass[Cache]("spark.cache.class", "spark.BoundedMemoryCache")
 
     val cacheTracker = new CacheTracker(actorSystem, isMaster, blockManager)
     blockManager.cacheTracker = cacheTracker
 
     val mapOutputTracker = new MapOutputTracker(actorSystem, isMaster)
 
-    val shuffleFetcherClass = 
-      System.getProperty("spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
-    val shuffleFetcher = 
-      Class.forName(shuffleFetcherClass).newInstance().asInstanceOf[ShuffleFetcher]
+    val shuffleFetcher = instantiateClass[ShuffleFetcher](
+      "spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
     
     val httpFileServer = new HttpFileServer()
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
-    
-    /*
-    if (System.getProperty("spark.stream.distributed", "false") == "true") {
-      val blockManagerClass = classOf[spark.storage.BlockManager].asInstanceOf[Class[_]] 
-      if (isLocal || !isMaster) { 
-        (new Thread() {
-          override def run() {
-            println("Wait started") 
-            Thread.sleep(60000)
-            println("Wait ended")
-            val receiverClass = Class.forName("spark.stream.TestStreamReceiver4")
-            val constructor = receiverClass.getConstructor(blockManagerClass)
-            val receiver = constructor.newInstance(blockManager)
-            receiver.asInstanceOf[Thread].start()
-          }
-        }).start()
-      }
-    }
-    */
 
     new SparkEnv(
       actorSystem,
