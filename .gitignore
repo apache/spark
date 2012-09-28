@@ -14,6 +14,8 @@ third_party/libmesos.dylib
 conf/java-opts
 conf/spark-env.sh
 conf/log4j.properties
+docs/_site
+docs/api
 target/
 reports/
 .project

@@ -23,8 +23,8 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector) ex
   var onExceptionCallback: (Connection, Exception) => Unit = null
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
 
-  lazy val remoteAddress = getRemoteAddress() 
-  lazy val remoteConnectionManagerId = ConnectionManagerId.fromSocketAddress(remoteAddress) 
+  val remoteAddress = getRemoteAddress()
+  val remoteConnectionManagerId = ConnectionManagerId.fromSocketAddress(remoteAddress)
 
   def key() = channel.keyFor(selector)
 
@@ -39,7 +39,10 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector) ex
   }
 
   def close() {
-    key.cancel()
+    val k = key()
+    if (k != null) {
+      k.cancel()
+    }
     channel.close()
     callOnCloseCallback()
   }
@@ -111,7 +114,7 @@ extends Connection(SocketChannel.open, selector_) {
       messages.synchronized{ 
         /*messages += message*/
         messages.enqueue(message)
-        logInfo("Added [" + message + "] to outbox for sending to [" + remoteConnectionManagerId + "]")
+        logDebug("Added [" + message + "] to outbox for sending to [" + remoteConnectionManagerId + "]")
       }
     }
 
@@ -136,7 +139,7 @@ extends Connection(SocketChannel.open, selector_) {
             return chunk 
           }
           /*logInfo("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "]")*/
-          logInfo("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "] in "  + message.timeTaken )
+          logDebug("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "] in "  + message.timeTaken )
         }
       }
       None

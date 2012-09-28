@@ -20,6 +20,8 @@ class TaskInfo(val taskId: Long, val index: Int, val launchTime: Long, val host:
 
   def successful: Boolean = finished && !failed
 
+  def running: Boolean = !finished
+
   def duration: Long = {
     if (!finished) {
       throw new UnsupportedOperationException("duration() called on unfinished tasks")

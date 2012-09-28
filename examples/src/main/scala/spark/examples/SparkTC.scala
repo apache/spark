@@ -26,7 +26,7 @@ object SparkTC {
 
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: SparkTC <host> [<slices>]")
+      System.err.println("Usage: SparkTC <master> [<slices>]")
       System.exit(1)
     }
     val spark = new SparkContext(args(0), "SparkTC")

@@ -13,4 +13,7 @@ trait TaskSchedulerListener {
 
   // A node was lost from the cluster.
   def hostLost(host: String): Unit
+
+  // The TaskScheduler wants to abort an entire task set.
+  def taskSetFailed(taskSet: TaskSet, reason: String): Unit
 }

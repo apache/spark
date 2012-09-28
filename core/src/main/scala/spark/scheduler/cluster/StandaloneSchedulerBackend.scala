@@ -2,13 +2,14 @@ package spark.scheduler.cluster
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import akka.actor.{Props, Actor, ActorRef, ActorSystem}
+import akka.actor._
 import akka.util.duration._
 import akka.pattern.ask
 
 import spark.{SparkException, Logging, TaskState}
 import akka.dispatch.Await
 import java.util.concurrent.atomic.AtomicInteger
+import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
 
 /**
  * A standalone scheduler backend, which waits for standalone executors to connect to it through
@@ -23,8 +24,16 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
   class MasterActor(sparkProperties: Seq[(String, String)]) extends Actor {
     val slaveActor = new HashMap[String, ActorRef]
+    val slaveAddress = new HashMap[String, Address]
     val slaveHost = new HashMap[String, String]
     val freeCores = new HashMap[String, Int]
+    val actorToSlaveId = new HashMap[ActorRef, String]
+    val addressToSlaveId = new HashMap[Address, String]
+
+    override def preStart() {
+      // Listen for remote client disconnection events, since they don't go through Akka's watch()
+      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+    }
 
     def receive = {
       case RegisterSlave(slaveId, host, cores) =>
@@ -33,9 +42,13 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         } else {
           logInfo("Registered slave: " + sender + " with ID " + slaveId)
           sender ! RegisteredSlave(sparkProperties)
+          context.watch(sender)
           slaveActor(slaveId) = sender
           slaveHost(slaveId) = host
           freeCores(slaveId) = cores
+          slaveAddress(slaveId) = sender.path.address
+          actorToSlaveId(sender) = slaveId
+          addressToSlaveId(sender.path.address) = slaveId
           totalCoreCount.addAndGet(cores)
           makeOffers()
         }
@@ -54,7 +67,14 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         sender ! true
         context.stop(self)
 
-      // TODO: Deal with nodes disconnecting too! (Including decreasing totalCoreCount)
+      case Terminated(actor) =>
+        actorToSlaveId.get(actor).foreach(removeSlave)
+
+      case RemoteClientDisconnected(transport, address) =>
+        addressToSlaveId.get(address).foreach(removeSlave)
+
+      case RemoteClientShutdown(transport, address) =>
+        addressToSlaveId.get(address).foreach(removeSlave)
     }
 
     // Make fake resource offers on all slaves
@@ -75,6 +95,20 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         freeCores(task.slaveId) -= 1
         slaveActor(task.slaveId) ! LaunchTask(task)
       }
+    }
+
+    // Remove a disconnected slave from the cluster
+    def removeSlave(slaveId: String) {
+      logInfo("Slave " + slaveId + " disconnected, so removing it")
+      val numCores = freeCores(slaveId)
+      actorToSlaveId -= slaveActor(slaveId)
+      addressToSlaveId -= slaveAddress(slaveId)
+      slaveActor -= slaveId
+      slaveHost -= slaveId
+      freeCores -= slaveId
+      slaveHost -= slaveId
+      totalCoreCount.addAndGet(-numCores)
+      scheduler.slaveLost(slaveId)
     }
   }
 

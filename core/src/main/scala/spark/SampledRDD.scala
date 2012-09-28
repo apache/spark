@@ -1,6 +1,8 @@
 package spark
 
 import java.util.Random
+import cern.jet.random.Poisson
+import cern.jet.random.engine.DRand
 
 class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Serializable {
   override val index: Int = prev.index
@@ -28,19 +30,21 @@ class SampledRDD[T: ClassManifest](
 
   override def compute(splitIn: Split) = {
     val split = splitIn.asInstanceOf[SampledRDDSplit]
-    val rg = new Random(split.seed)
-    // Sampling with replacement (TODO: use reservoir sampling to make this more efficient?)
     if (withReplacement) {
-      val oldData = prev.iterator(split.prev).toArray
-      val sampleSize = (oldData.size * frac).ceil.toInt
-      val sampledData = { 
-        // all of oldData's indices are candidates, even if sampleSize < oldData.size
-        for (i <- 1 to sampleSize)
-          yield oldData(rg.nextInt(oldData.size)) 
+      // For large datasets, the expected number of occurrences of each element in a sample with
+      // replacement is Poisson(frac). We use that to get a count for each element.
+      val poisson = new Poisson(frac, new DRand(split.seed))
+      prev.iterator(split.prev).flatMap { element =>
+        val count = poisson.nextInt()
+        if (count == 0) {
+          Iterator.empty  // Avoid object allocation when we return 0 items, which is quite often
+        } else {
+          Iterator.fill(count)(element)
+        }
       }
-      sampledData.iterator
     } else { // Sampling without replacement
-      prev.iterator(split.prev).filter(x => (rg.nextDouble <= frac))
+      val rand = new Random(split.seed)
+      prev.iterator(split.prev).filter(x => (rand.nextDouble <= frac))
     }
   }
 }

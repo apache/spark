@@ -59,7 +59,9 @@ def parse_args():
            "WARNING: must be 64-bit; small instances won't work")
   parser.add_option("-m", "--master-instance-type", default="",
       help="Master instance type (leave empty for same as instance-type)")
-  parser.add_option("-z", "--zone", default="us-east-1b",
+  parser.add_option("-r", "--region", default="us-east-1",
+      help="EC2 region zone to launch instances in")
+  parser.add_option("-z", "--zone", default="",
       help="Availability zone to launch instances in")
   parser.add_option("-a", "--ami", default="latest",
       help="Amazon Machine Image ID to use, or 'latest' to use latest " +
@@ -470,7 +472,7 @@ def ssh(host, opts, command):
 
 def main():
   (opts, action, cluster_name) = parse_args()
-  conn = boto.connect_ec2()
+  conn = boto.ec2.connect_to_region(opts.region)
 
   # Select an AZ at random if it was not specified.
   if opts.zone == "":

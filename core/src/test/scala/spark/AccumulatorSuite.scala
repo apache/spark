@@ -56,7 +56,6 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     }
   }
 
-
   implicit object SetAccum extends AccumulableParam[mutable.Set[Any], Any] {
     def addInPlace(t1: mutable.Set[Any], t2: mutable.Set[Any]) : mutable.Set[Any] = {
       t1 ++= t2
@@ -70,7 +69,6 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       new mutable.HashSet[Any]()
     }
   }
-
 
   test ("value not readable in tasks") {
     import SetAccum._
@@ -89,4 +87,29 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     }
   }
 
+  test ("collection accumulators") {
+    val maxI = 1000
+    for (nThreads <- List(1, 10)) {
+      // test single & multi-threaded
+      val sc = new SparkContext("local[" + nThreads + "]", "test")
+      val setAcc = sc.accumulableCollection(mutable.HashSet[Int]())
+      val bufferAcc = sc.accumulableCollection(mutable.ArrayBuffer[Int]())
+      val mapAcc = sc.accumulableCollection(mutable.HashMap[Int,String]())
+      val d = sc.parallelize((1 to maxI) ++ (1 to maxI))
+      d.foreach {
+        x => {setAcc += x; bufferAcc += x; mapAcc += (x -> x.toString)}
+      }
+
+      // Note that this is typed correctly -- no casts necessary
+      setAcc.value.size should be (maxI)
+      bufferAcc.value.size should be (2 * maxI)
+      mapAcc.value.size should be (maxI)
+      for (i <- 1 to maxI) {
+        setAcc.value should contain(i)
+        bufferAcc.value should contain(i)
+        mapAcc.value should contain (i -> i.toString)
+      }
+      sc.stop()
+    }
+  }
 }

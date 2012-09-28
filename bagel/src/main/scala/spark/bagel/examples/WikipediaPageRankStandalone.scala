@@ -142,7 +142,7 @@ class WPRSerializerInstance extends SerializerInstance {
 class WPRSerializationStream(os: OutputStream) extends SerializationStream {
   val dos = new DataOutputStream(os)
 
-  def writeObject[T](t: T): Unit = t match {
+  def writeObject[T](t: T): SerializationStream = t match {
     case (id: String, wrapper: ArrayBuffer[_]) => wrapper(0) match {
       case links: Array[String] => {
         dos.writeInt(0) // links
@@ -151,17 +151,20 @@ class WPRSerializationStream(os: OutputStream) extends SerializationStream {
         for (link <- links) {
           dos.writeUTF(link)
         }
+        this
       }
       case rank: Double => {
         dos.writeInt(1) // rank
         dos.writeUTF(id)
         dos.writeDouble(rank)
+        this
       }
     }
     case (id: String, rank: Double) => {
       dos.writeInt(2) // rank without wrapper
       dos.writeUTF(id)
       dos.writeDouble(rank)
+      this
     }
   }
 

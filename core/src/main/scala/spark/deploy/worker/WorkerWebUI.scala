@@ -21,7 +21,7 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Direct
         completeWith{
           val future = worker ? RequestWorkerState
           future.map { workerState =>
-            workerui.html.index(workerState.asInstanceOf[WorkerState])
+            spark.deploy.worker.html.index(workerState.asInstanceOf[WorkerState])
           }
         }
       } ~

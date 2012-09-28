@@ -32,35 +32,29 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
         (address, splits.map(i => "shuffleid_%d_%d_%d".format(shuffleId, i, reduceId)))
     }
 
-    try {
-      for ((blockId, blockOption) <- blockManager.getMultiple(blocksByAddress)) {
-        blockOption match {
-          case Some(block) => {
-            val values = block
-            for(value <- values) {
-              val v = value.asInstanceOf[(K, V)]
-              func(v._1, v._2)
-            }
-          }
-          case None => {
-            throw new BlockException(blockId, "Did not get block " + blockId)         
+    for ((blockId, blockOption) <- blockManager.getMultiple(blocksByAddress)) {
+      blockOption match {
+        case Some(block) => {
+          val values = block
+          for(value <- values) {
+            val v = value.asInstanceOf[(K, V)]
+            func(v._1, v._2)
           }
         }
-      }
-    } catch {
-      case be: BlockException => {
-        val regex = "shuffledid_([0-9]*)_([0-9]*)_([0-9]]*)".r
-        be.blockId match {
-          case regex(sId, mId, rId) => { 
-            val address = addresses(mId.toInt)
-            throw new FetchFailedException(address, sId.toInt, mId.toInt, rId.toInt, be)
-          }
-          case _ => {
-            throw be
+        case None => {
+          val regex = "shuffleid_([0-9]*)_([0-9]*)_([0-9]*)".r
+          blockId match {
+            case regex(shufId, mapId, reduceId) =>
+              val addr = addresses(mapId.toInt)
+              throw new FetchFailedException(addr, shufId.toInt, mapId.toInt, reduceId.toInt, null)
+            case _ =>
+              throw new SparkException(
+                "Failed to get block " + blockId + ", which is not a shuffle block")
           }
         }
       }
     }
+
     logDebug("Fetching and merging outputs of shuffle %d, reduce %d took %d ms".format(
       shuffleId, reduceId, System.currentTimeMillis - startTime))
   }

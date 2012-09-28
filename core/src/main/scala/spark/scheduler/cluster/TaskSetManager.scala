@@ -88,6 +88,7 @@ class TaskSetManager(
 
   // Figure out the current map output tracker generation and set it on all tasks
   val generation = sched.mapOutputTracker.getGeneration
+  logDebug("Generation for " + taskSet.id + ": " + generation)
   for (t <- tasks) {
     t.generation = generation
   }
@@ -213,7 +214,8 @@ class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = System.currentTimeMillis
-          val serializedTask = ser.serialize(task)
+          val serializedTask = Task.serializeWithDependencies(
+            task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           val timeTaken = System.currentTimeMillis - startTime
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
@@ -242,6 +244,11 @@ class TaskSetManager(
 
   def taskFinished(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     val info = taskInfos(tid)
+    if (info.failed) {
+      // We might get two task-lost messages for the same task in coarse-grained Mesos mode,
+      // or even from Mesos itself when acks get delayed.
+      return
+    }
     val index = info.index
     info.markSuccessful()
     if (!finished(index)) {
@@ -264,6 +271,11 @@ class TaskSetManager(
 
   def taskLost(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     val info = taskInfos(tid)
+    if (info.failed) {
+      // We might get two task-lost messages for the same task in coarse-grained Mesos mode,
+      // or even from Mesos itself when acks get delayed.
+      return
+    }
     val index = info.index
     info.markFailed()
     if (!finished(index)) {
@@ -336,11 +348,12 @@ class TaskSetManager(
     failed = true
     causeOfFailure = message
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
+    sched.listener.taskSetFailed(taskSet, message)
     sched.taskSetFinished(this)
   }
 
   def hostLost(hostname: String) {
-    logInfo("Re-queueing tasks for " + hostname)
+    logInfo("Re-queueing tasks for " + hostname + " from TaskSet " + taskSet.id)
     // If some task has preferred locations only on hostname, put it in the no-prefs list
     // to avoid the wait from delay scheduling
     for (index <- getPendingTasksForHost(hostname)) {
@@ -349,7 +362,7 @@ class TaskSetManager(
         pendingTasksWithNoPrefs += index
       }
     }
-    // Also re-enqueue any tasks that ran on the failed host if this is a shuffle map stage
+    // Re-enqueue any tasks that ran on the failed host if this is a shuffle map stage
     if (tasks(0).isInstanceOf[ShuffleMapTask]) {
       for ((tid, info) <- taskInfos if info.host == hostname) {
         val index = taskInfos(tid).index
@@ -363,6 +376,10 @@ class TaskSetManager(
           sched.listener.taskEnded(tasks(index), Resubmitted, null, null)
         }
       }
+    }
+    // Also re-enqueue any tasks that were running on the node
+    for ((tid, info) <- taskInfos if info.running && info.host == hostname) {
+      taskLost(tid, TaskState.KILLED, null)
     }
   }
 

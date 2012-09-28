@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# This Spark deploy script is a modified version of the Apache Hadoop deploy
+# script, available under the Apache 2 license:
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.

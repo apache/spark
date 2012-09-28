@@ -31,4 +31,6 @@ class ByteBufferInputStream(buffer: ByteBuffer) extends InputStream {
     buffer.position(buffer.position + amountToSkip)
     return amountToSkip
   }
+
+  def position: Int = buffer.position
 }

@@ -1,18 +1,18 @@
 package spark
 
 import java.io._
-import java.net.InetAddress
+import java.net.{InetAddress, URL, URI}
+import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
-
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
-import java.util.{Locale, UUID}
 import scala.io.Source
 
 /**
  * Various utility methods used by Spark.
  */
-object Utils {
+object Utils extends Logging {
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -115,23 +115,78 @@ object Utils {
     val out = new FileOutputStream(dest)
     copyStream(in, out, true)
   }
+  
+  
+  
+  /* Download a file from a given URL to the local filesystem */
+  def downloadFile(url: URL, localPath: String) {
+    val in = url.openStream()
+    val out = new FileOutputStream(localPath)
+    Utils.copyStream(in, out, true)
+  }
+  
+  /**
+   * Download a file requested by the executor. Supports fetching the file in a variety of ways,
+   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   */
+  def fetchFile(url: String, targetDir: File) {
+    val filename = url.split("/").last
+    val targetFile = new File(targetDir, filename)
+    val uri = new URI(url)
+    uri.getScheme match {
+      case "http" | "https" | "ftp" =>
+        logInfo("Fetching " + url + " to " + targetFile)
+        val in = new URL(url).openStream()
+        val out = new FileOutputStream(targetFile)
+        Utils.copyStream(in, out, true)
+      case "file" | null =>
+        // Remove the file if it already exists
+        targetFile.delete()
+        // Symlink the file locally
+        logInfo("Symlinking " + url + " to " + targetFile)
+        FileUtil.symLink(url, targetFile.toString)
+      case _ =>
+        // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
+        val uri = new URI(url)
+        val conf = new Configuration()
+        val fs = FileSystem.get(uri, conf)
+        val in = fs.open(new Path(uri))
+        val out = new FileOutputStream(targetFile)
+        Utils.copyStream(in, out, true)
+    }
+    // Decompress the file if it's a .tar or .tar.gz
+    if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
+      logInfo("Untarring " + filename)
+      Utils.execute(Seq("tar", "-xzf", filename), targetDir)
+    } else if (filename.endsWith(".tar")) {
+      logInfo("Untarring " + filename)
+      Utils.execute(Seq("tar", "-xf", filename), targetDir)
+    }
+    // Make the file executable - That's necessary for scripts
+    FileUtil.chmod(filename, "a+x")
+  }
 
   /**
    * Shuffle the elements of a collection into a random order, returning the
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T](seq: TraversableOnce[T]): Seq[T] = {
-    val buf = new ArrayBuffer[T]()
-    buf ++= seq
-    val rand = new Random()
-    for (i <- (buf.size - 1) to 1 by -1) {
+  def randomize[T: ClassManifest](seq: TraversableOnce[T]): Seq[T] = {
+    randomizeInPlace(seq.toArray)
+  }
+
+  /**
+   * Shuffle the elements of an array into a random order, modifying the
+   * original array. Returns the original array.
+   */
+  def randomizeInPlace[T](arr: Array[T], rand: Random = new Random): Array[T] = {
+    for (i <- (arr.length - 1) to 1 by -1) {
       val j = rand.nextInt(i)
-      val tmp = buf(j)
-      buf(j) = buf(i)
-      buf(i) = tmp
+      val tmp = arr(j)
+      arr(j) = arr(i)
+      arr(i) = tmp
     }
-    buf
+    arr
   }
 
   /**

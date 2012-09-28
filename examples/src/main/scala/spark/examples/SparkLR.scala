@@ -25,7 +25,7 @@ object SparkLR {
 
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: SparkLR <host> [<slices>]")
+      System.err.println("Usage: SparkLR <master> [<slices>]")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SparkLR")

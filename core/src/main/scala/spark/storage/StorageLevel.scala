@@ -1,6 +1,6 @@
 package spark.storage
 
-import java.io._
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 class StorageLevel(
     var useDisk: Boolean, 
@@ -66,12 +66,13 @@ class StorageLevel(
 object StorageLevel {
   val NONE = new StorageLevel(false, false, false)
   val DISK_ONLY = new StorageLevel(true, false, false)
-  val MEMORY_ONLY = new StorageLevel(false, true, false)
-  val MEMORY_ONLY_2 = new StorageLevel(false, true, false, 2)
-  val MEMORY_ONLY_DESER = new StorageLevel(false, true, true)
-  val MEMORY_ONLY_DESER_2 = new StorageLevel(false, true, true, 2)
-  val DISK_AND_MEMORY = new StorageLevel(true, true, false)
-  val DISK_AND_MEMORY_2 = new StorageLevel(true, true, false, 2)
-  val DISK_AND_MEMORY_DESER = new StorageLevel(true, true, true)
-  val DISK_AND_MEMORY_DESER_2 = new StorageLevel(true, true, true, 2)
+  val DISK_ONLY_2 = new StorageLevel(true, false, false, 2)
+  val MEMORY_ONLY = new StorageLevel(false, true, true)
+  val MEMORY_ONLY_2 = new StorageLevel(false, true, true, 2)
+  val MEMORY_ONLY_SER = new StorageLevel(false, true, false)
+  val MEMORY_ONLY_SER_2 = new StorageLevel(false, true, false, 2)
+  val MEMORY_AND_DISK = new StorageLevel(true, true, true)
+  val MEMORY_AND_DISK_2 = new StorageLevel(true, true, true, 2)
+  val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false)
+  val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, 2)
 }

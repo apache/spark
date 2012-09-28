@@ -7,7 +7,7 @@ import java.util.Random
 object GroupByTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: GroupByTest <host> [numMappers] [numKVPairs] [KeySize] [numReducers]")
+      System.err.println("Usage: GroupByTest <master> [numMappers] [numKVPairs] [KeySize] [numReducers]")
       System.exit(1)
     }  
     

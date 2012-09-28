@@ -80,6 +80,8 @@ class CoarseMesosSchedulerBackend(
         "property, the SPARK_HOME environment variable or the SparkContext constructor")
   }
 
+  val extraCoresPerSlave = System.getProperty("spark.mesos.extra.cores", "0").toInt
+
   var nextMesosTaskId = 0
 
   def newMesosTaskId(): Int = {
@@ -177,7 +179,7 @@ class CoarseMesosSchedulerBackend(
           val task = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
-            .setCommand(createCommand(offer, cpusToUse))
+            .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave))
             .setName("Task " + taskId)
             .addResources(createResource("cpus", cpusToUse))
             .addResources(createResource("mem", executorMemory))

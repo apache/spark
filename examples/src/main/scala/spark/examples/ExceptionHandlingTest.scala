@@ -5,7 +5,7 @@ import spark.SparkContext
 object ExceptionHandlingTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: ExceptionHandlingTest <host>")
+      System.err.println("Usage: ExceptionHandlingTest <master>")
       System.exit(1)
     }
 

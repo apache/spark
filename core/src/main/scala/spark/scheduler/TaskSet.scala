@@ -6,4 +6,6 @@ package spark.scheduler
  */
 class TaskSet(val tasks: Array[Task[_]], val stageId: Int, val attempt: Int, val priority: Int) {
   val id: String = stageId + "." + attempt
+
+  override def toString: String = "TaskSet " + id
 }
