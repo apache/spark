@@ -69,7 +69,7 @@ class SparkContext(
     System.setProperty("spark.master.port", "0")
   }
 
-  private val isLocal = (master == "local" || master.startsWith("local\\["))
+  private val isLocal = (master == "local" || master.startsWith("local["))
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   val env = SparkEnv.createFromSystemProperties(
