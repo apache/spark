@@ -112,6 +112,23 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.blockManager.compress</td>
+  <td>false</td>
+  <td>
+    Set to "true" to have Spark compress map output files, RDDs that get cached on disk,
+    and RDDs that get cached in serialized form. Generally a good idea when dealing with
+    large datasets, but might add some CPU overhead.
+  </td>
+</tr>
+<tr>
+  <td>spark.broadcast.compress</td>
+  <td>false</td>
+  <td>
+    Set to "true" to have Spark compress broadcast variables before sending them.
+    Generally a good idea when broadcasting large values.
+  </td>
+</tr>
+<tr>
   <td>spark.storage.memoryFraction</td>
   <td>0.66</td>
   <td>

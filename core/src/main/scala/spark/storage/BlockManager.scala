@@ -5,7 +5,7 @@ import akka.util.Duration
 
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{InputStream, OutputStream, Externalizable, ObjectInput, ObjectOutput}
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
@@ -15,6 +15,7 @@ import scala.collection.JavaConversions._
 import spark.{CacheTracker, Logging, Serializer, SizeEstimator, SparkException, Utils}
 import spark.network._
 import spark.util.ByteBufferInputStream
+import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 
 class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
@@ -76,7 +77,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   // TODO: This will be removed after cacheTracker is removed from the code base.
   var cacheTracker: CacheTracker = null
 
-  val numParallelFetches = BlockManager.getNumParallelFetchesFromSystemProperties()
+  val numParallelFetches = BlockManager.getNumParallelFetchesFromSystemProperties
+
+  val compress = System.getProperty("spark.blockManager.compress", "false").toBoolean
 
   initLogging()
 
@@ -605,10 +608,21 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
   }
 
+  /** Wrap an output stream for compression if block compression is enabled */
+  def wrapForCompression(s: OutputStream): OutputStream = {
+    if (compress) new LZFOutputStream(s) else s
+  }
+
+  /** Wrap an input stream for compression if block compression is enabled */
+  def wrapForCompression(s: InputStream): InputStream = {
+    if (compress) new LZFInputStream(s) else s
+  }
+
   def dataSerialize(values: Iterator[Any]): ByteBuffer = {
     /*serializer.newInstance().serializeMany(values)*/
     val byteStream = new FastByteArrayOutputStream(4096)
-    serializer.newInstance().serializeStream(byteStream).writeAll(values).close()
+    val ser = serializer.newInstance()
+    ser.serializeStream(wrapForCompression(byteStream)).writeAll(values).close()
     byteStream.trim()
     ByteBuffer.wrap(byteStream.array)
   }
@@ -616,7 +630,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   def dataDeserialize(bytes: ByteBuffer): Iterator[Any] = {
     bytes.rewind()
     val ser = serializer.newInstance()
-    return ser.deserializeStream(new ByteBufferInputStream(bytes)).asIterator
+    return ser.deserializeStream(wrapForCompression(new ByteBufferInputStream(bytes))).asIterator
   }
 
   def stop() {
@@ -630,11 +644,11 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
 object BlockManager {
 
-  def getNumParallelFetchesFromSystemProperties(): Int = {
+  def getNumParallelFetchesFromSystemProperties: Int = {
     System.getProperty("spark.blockManager.parallelFetches", "4").toInt
   }
 
-  def getMaxMemoryFromSystemProperties(): Long = {
+  def getMaxMemoryFromSystemProperties: Long = {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
     (Runtime.getRuntime.maxMemory * memoryFraction).toLong
   }

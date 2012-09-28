@@ -233,7 +233,8 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
 
     logDebug("Attempting to write values for block " + blockId)
     val file = createFile(blockId)
-    val fileOut = new FastBufferedOutputStream(new FileOutputStream(file))
+    val fileOut = blockManager.wrapForCompression(
+      new FastBufferedOutputStream(new FileOutputStream(file)))
     val objOut = blockManager.serializer.newInstance().serializeStream(fileOut)
     objOut.writeAll(values)
     objOut.close()

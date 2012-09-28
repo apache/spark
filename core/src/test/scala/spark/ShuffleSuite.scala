@@ -69,6 +69,22 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
     assert(valuesFor2.toList.sorted === List(1))
   }
 
+  test("groupByKey with compression") {
+    try {
+      System.setProperty("spark.blockManager.compress", "true")
+      sc = new SparkContext("local", "test")
+      val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
+      val groups = pairs.groupByKey(4).collect()
+      assert(groups.size === 2)
+      val valuesFor1 = groups.find(_._1 == 1).get._2
+      assert(valuesFor1.toList.sorted === List(1, 2, 3))
+      val valuesFor2 = groups.find(_._1 == 2).get._2
+      assert(valuesFor2.toList.sorted === List(1))
+    } finally {
+      System.setProperty("spark.blockManager.compress", "false")
+    }
+  }
+
   test("reduceByKey") {
     sc = new SparkContext("local", "test")
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))

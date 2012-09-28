@@ -65,7 +65,7 @@ private object HttpBroadcast extends Logging {
     synchronized {
       if (!initialized) {
         bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-        compress = System.getProperty("spark.compress", "false").toBoolean
+        compress = System.getProperty("spark.broadcast.compress", "true").toBoolean
         if (isMaster) {
           createServer()
         }
