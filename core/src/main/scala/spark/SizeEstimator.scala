@@ -83,16 +83,12 @@ object SizeEstimator extends Logging {
         hotSpotMBeanName, classOf[HotSpotDiagnosticMXBean]);
       return bean.getVMOption("UseCompressedOops").getValue.toBoolean
     } catch {
-      case e: IllegalArgumentException => {
-        logWarning("Exception while trying to check if compressed oops is enabled", e)
-        // Fall back to checking if maxMemory < 32GB
-        return Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
-      }
-
-      case e: SecurityException => {
-        logWarning("No permission to create MBeanServer", e)
-        // Fall back to checking if maxMemory < 32GB
-        return Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+      case e: Exception => {
+        // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
+        val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+        val guessInWords = if (guess) "yes" else "not"
+        logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
+        return guess
       }
     }
   }

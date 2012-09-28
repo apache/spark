@@ -161,7 +161,7 @@ trait KryoRegistrator {
 }
 
 class KryoSerializer extends Serializer with Logging {
-  val kryo = createKryo()
+  lazy val kryo = createKryo()
 
   val bufferSize = System.getProperty("spark.kryoserializer.buffer.mb", "32").toInt * 1024 * 1024 
 

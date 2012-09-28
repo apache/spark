@@ -24,14 +24,14 @@ abstract class Task[T](val stageId: Int) extends Serializable {
 
     // Fetch missing file dependencies
     fileSet.filter { case(k,v) => 
-      !currentFileSet.contains(k) || currentFileSet(k) <= v 
+      !currentFileSet.contains(k) || currentFileSet(k) < v
     }.foreach { case (k,v) => 
       Utils.fetchFile(k, new File(System.getProperty("user.dir")))
       currentFileSet(k) = v
     }
     // Fetch missing jar dependencies
     jarSet.filter { case(k,v) => 
-      !currentJarSet.contains(k) || currentJarSet(k) <= v 
+      !currentJarSet.contains(k) || currentJarSet(k) < v
     }.foreach { case (k,v) => 
       Utils.fetchFile(k, new File(System.getProperty("user.dir")))
       currentJarSet(k) = v
