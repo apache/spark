@@ -337,7 +337,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       val missing = getMissingParentStages(stage).sortBy(_.id)
       logDebug("missing: " + missing)
       if (missing == Nil) {
-        logInfo("Submitting " + stage + ", which has no missing parents")
+        logInfo("Submitting " + stage + " from " + stage.rdd.origin +
+          ", which has no missing parents")
         submitMissingTasks(stage)
         running += stage
       } else {
@@ -452,6 +453,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
                 waiting --= newlyRunnable
                 running ++= newlyRunnable
                 for (stage <- newlyRunnable.sortBy(_.id)) {
+                  logInfo("Submitting " + stage + " from " + stage.rdd.origin +
+                    " which is now runnable")
                   submitMissingTasks(stage)
                 }
               }
