@@ -145,15 +145,15 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     
     for (el <- trace) {
       if (!finished) {
-	    if (el.getClassName().contains("spark") && !el.getClassName().startsWith("spark.examples")) {
-	      lastSparkMethod = el.getMethodName()
-	    }
-	    else {
-	      firstUserMethod = el.getMethodName()
-	      firstUserLine = el.getLineNumber()
-	      firstUserFile = el.getFileName()
-	      finished = true
-	    }
+        if (el.getClassName().contains("spark") && !el.getClassName().startsWith("spark.examples")) {
+          lastSparkMethod = el.getMethodName()
+        }
+        else {
+          firstUserMethod = el.getMethodName()
+          firstUserLine = el.getLineNumber()
+          firstUserFile = el.getFileName()
+          finished = true
+        }
       }
     }
     "%s at: %s (%s:%s)".format(lastSparkMethod, firstUserMethod, firstUserFile, firstUserLine)
