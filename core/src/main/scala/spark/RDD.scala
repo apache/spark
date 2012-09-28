@@ -12,7 +12,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions.mapAsScalaMap
-import scala.util.control.Breaks._
 
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.NullWritable
@@ -142,21 +141,22 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     var firstUserMethod = "<not_found>"
     var firstUserFile = "<not_found>"
     var firstUserLine = -1
-
-    breakable {
-      for (el <- trace) {
-        if (el.getClassName().contains("spark") && !el.getClassName().contains("spark.examples")) {
-          lastSparkMethod = el.getMethodName()
-        }
-        else {
-          firstUserMethod = el.getMethodName()
-          firstUserLine = el.getLineNumber()
-          firstUserFile = el.getFileName()
-          break
-        }
+    var finished = false
+    
+    for (el <- trace) {
+      if (!finished) {
+	    if (el.getClassName().contains("spark") && !el.getClassName().startsWith("spark.examples")) {
+	      lastSparkMethod = el.getMethodName()
+	    }
+	    else {
+	      firstUserMethod = el.getMethodName()
+	      firstUserLine = el.getLineNumber()
+	      firstUserFile = el.getFileName()
+	      finished = true
+	    }
       }
     }
-    "%s called in %s (%s:%s)".format(lastSparkMethod, firstUserMethod, firstUserFile, firstUserLine)
+    "%s at: %s (%s:%s)".format(lastSparkMethod, firstUserMethod, firstUserFile, firstUserLine)
   }
   
   // Transformations (return a new RDD)
