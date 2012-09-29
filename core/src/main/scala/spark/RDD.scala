@@ -169,7 +169,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
   def distinct(numSplits: Int = splits.size): RDD[T] =
-    map(x => (x, "")).reduceByKey((x, y) => x, numSplits).map(_._1)
+    map(x => (x, null)).reduceByKey((x, y) => x, numSplits).map(_._1)
 
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
     new SampledRDD(this, withReplacement, fraction, seed)
