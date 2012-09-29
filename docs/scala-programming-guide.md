@@ -140,6 +140,12 @@ The following tables list the transformations and actions currently supported (s
     Iterator[T] => Iterator[U] when running on an RDD of type T. </td>
 </tr>
 <tr>
+  <td> <b>mapPartitionsWithSplit</b>(<i>func</i>) </td>
+  <td> Similar to mapPartitions, but also provides <i>func</i> with an integer value representing the index of
+  the split, so <i>func</i> must be of type (Int, Iterator[T]) => Iterator[U] when running on an RDD of type T.
+  </td>
+</tr>
+<tr>
   <td> <b>sample</b>(<i>withReplacement</i>, <i>fraction</i>, <i>seed</i>) </td>
   <td> Sample a fraction <i>fraction</i> of the data, with or without replacement, using a given random number generator seed. </td>
 </tr>
