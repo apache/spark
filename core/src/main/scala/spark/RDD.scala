@@ -62,7 +62,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   @transient val dependencies: List[Dependency[_]]
   
   // Record user function generating this RDD
-  val origin = getOriginDescription
+  val origin = Utils.getSparkCallSite
   
   // Optionally overridden by subclasses to specify how they are partitioned
   val partitioner: Option[Partitioner] = None
@@ -125,38 +125,6 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     } else {
       compute(split)
     }
-  }
-  
-  // Describe which spark and user functions generated this RDD. Only works if called from
-  // constructor.
-  def getOriginDescription : String = {
-    val trace = Thread.currentThread().getStackTrace().filter( el =>
-        (!el.getMethodName().contains("getStackTrace")))
-
-    // Keep crawling up the stack trace until we find the first function not inside of the spark
-    // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
-    // transformation, a SparkContext function (such as parallelize), or anything else that leads
-    // to instantiation of an RDD. We also track the first (deepest) user method, file, and line.
-    var lastSparkMethod = "<not_found>"
-    var firstUserMethod = "<not_found>"
-    var firstUserFile = "<not_found>"
-    var firstUserLine = -1
-    var finished = false
-    
-    for (el <- trace) {
-      if (!finished) {
-        if (el.getClassName().contains("spark") && !el.getClassName().startsWith("spark.examples")) {
-          lastSparkMethod = el.getMethodName()
-        }
-        else {
-          firstUserMethod = el.getMethodName()
-          firstUserLine = el.getLineNumber()
-          firstUserFile = el.getFileName()
-          finished = true
-        }
-      }
-    }
-    "%s at: %s (%s:%s)".format(lastSparkMethod, firstUserMethod, firstUserFile, firstUserLine)
   }
   
   // Transformations (return a new RDD)

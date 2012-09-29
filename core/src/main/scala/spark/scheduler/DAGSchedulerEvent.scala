@@ -17,6 +17,7 @@ case class JobSubmitted(
     func: (TaskContext, Iterator[_]) => _,
     partitions: Array[Int],
     allowLocal: Boolean,
+    callSite: String,
     listener: JobListener)
   extends DAGSchedulerEvent
 

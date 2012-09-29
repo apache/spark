@@ -80,6 +80,8 @@ class Stage(
     return id
   }
 
+  def origin: String = rdd.origin
+
   override def toString = "Stage " + id // + ": [RDD = " + rdd.id + ", isShuffle = " + isShuffleMap + "]"
 
   override def hashCode(): Int = id
