@@ -148,6 +148,10 @@ The following tables list the transformations and actions currently supported (s
   <td> Return a new dataset that contains the union of the elements in the source dataset and the argument. </td>
 </tr>
 <tr>
+  <td> <b>distinct</b>([<i>numTasks</i>])) </td>
+  <td> Return a new dataset that contains the distinct elements of the source dataset.</td>
+</tr>
+<tr>
   <td> <b>groupByKey</b>([<i>numTasks</i>]) </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Seq[V]) pairs. <br />
 <b>Note:</b> By default, this uses only 8 parallel tasks to do the grouping. You can pass an optional <code>numTasks</code> argument to set a different number of tasks.
