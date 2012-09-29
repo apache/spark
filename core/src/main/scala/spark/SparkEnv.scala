@@ -10,6 +10,13 @@ import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
 import spark.util.AkkaUtils
 
+/**
+ * Holds all the runtime environment objects for a running Spark instance (either master or worker),
+ * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
+ * Spark code finds the SparkEnv through a thread-local variable, so each thread that accesses these
+ * objects needs to have the right SparkEnv set. You can get the current environment with
+ * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
+ */
 class SparkEnv (
     val actorSystem: ActorSystem,
     val cache: Cache,
@@ -18,7 +25,6 @@ class SparkEnv (
     val cacheTracker: CacheTracker,
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
-    val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
@@ -27,7 +33,7 @@ class SparkEnv (
 
   /** No-parameter constructor for unit tests. */
   def this() = {
-    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null, null)
+    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
   }
 
   def stop() {
@@ -35,7 +41,6 @@ class SparkEnv (
     mapOutputTracker.stop()
     cacheTracker.stop()
     shuffleFetcher.stop()
-    shuffleManager.stop()
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
@@ -88,9 +93,7 @@ object SparkEnv {
     val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
     val blockManager = new BlockManager(blockManagerMaster, serializer)
     
-    val connectionManager = blockManager.connectionManager 
-    
-    val shuffleManager = new ShuffleManager()
+    val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isMaster)
 
@@ -119,7 +122,6 @@ object SparkEnv {
       cacheTracker,
       mapOutputTracker,
       shuffleFetcher,
-      shuffleManager,
       broadcastManager,
       blockManager,
       connectionManager,

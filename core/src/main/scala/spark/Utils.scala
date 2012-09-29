@@ -355,8 +355,8 @@ private object Utils extends Logging {
    * This is used, for example, to tell users where in their code each RDD got created.
    */
   def getSparkCallSite: String = {
-    val trace = Thread.currentThread().getStackTrace().filter( el =>
-      (!el.getMethodName().contains("getStackTrace")))
+    val trace = Thread.currentThread.getStackTrace().filter( el =>
+      (!el.getMethodName.contains("getStackTrace")))
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -369,12 +369,12 @@ private object Utils extends Logging {
 
     for (el <- trace) {
       if (!finished) {
-        if (el.getClassName().contains("spark") && !el.getClassName().startsWith("spark.examples")) {
-          lastSparkMethod = el.getMethodName()
+        if (el.getClassName.contains("spark") && !el.getClassName.startsWith("spark.examples")) {
+          lastSparkMethod = el.getMethodName
         }
         else {
-          firstUserLine = el.getLineNumber()
-          firstUserFile = el.getFileName()
+          firstUserLine = el.getLineNumber
+          firstUserFile = el.getFileName
           finished = true
         }
       }
