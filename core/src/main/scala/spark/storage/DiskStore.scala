@@ -14,13 +14,13 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
   extends BlockStore(blockManager) {
 
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
-  val SUBDIRS_PER_LOCAL_DIR = 128
+  val subDirsPerLocalDir = System.getProperty("spark.diskStore.subdirs", "64").toInt
 
   // Create one local directory for each path mentioned in spark.local.dir; then, inside this
   // directory, create multiple subdirectories that we will hash files into, in order to avoid
   // having really large inodes at the top level.
   val localDirs = createLocalDirs()
-  val subDirs = Array.fill(localDirs.length)(new Array[File](SUBDIRS_PER_LOCAL_DIR))
+  val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
   addShutdownHook()
 
@@ -92,18 +92,21 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = math.abs(blockId.hashCode)
     val dirId = hash % localDirs.length
-    val subDirId = (hash / localDirs.length) % SUBDIRS_PER_LOCAL_DIR
+    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
 
     // Create the subdirectory if it doesn't already exist
-    val subDir = subDirs(dirId).synchronized {
-      val old = subDirs(dirId)(subDirId)
-      if (old != null) {
-        old
-      } else {
-        val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        newDir.mkdir()
-        subDirs(dirId)(subDirId) = newDir
-        newDir
+    var subDir = subDirs(dirId)(subDirId)
+    if (subDir == null) {
+        subDir = subDirs(dirId).synchronized {
+        val old = subDirs(dirId)(subDirId)
+        if (old != null) {
+          old
+        } else {
+          val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
+          newDir.mkdir()
+          subDirs(dirId)(subDirId) = newDir
+          newDir
+        }
       }
     }
 
