@@ -139,7 +139,6 @@ class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: Bl
         logInfo("Registering RDD ID " + rddId + " with cache")
         registeredRddIds += rddId
         communicate(RegisterRDD(rddId, numPartitions))
-        logInfo(RegisterRDD(rddId, numPartitions) + " successful")
       }
     }
   }

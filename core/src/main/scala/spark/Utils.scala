@@ -369,8 +369,13 @@ private object Utils extends Logging {
 
     for (el <- trace) {
       if (!finished) {
-        if (el.getClassName.contains("spark") && !el.getClassName.startsWith("spark.examples")) {
-          lastSparkMethod = el.getMethodName
+        if (el.getClassName.startsWith("spark.") && !el.getClassName.startsWith("spark.examples.")) {
+          lastSparkMethod = if (el.getMethodName == "<init>") {
+            // Spark method is a constructor; get its class name
+            el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
+          } else {
+            el.getMethodName
+          }
         }
         else {
           firstUserLine = el.getLineNumber

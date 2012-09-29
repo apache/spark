@@ -409,10 +409,11 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean
       ): Array[U] = {
-    logInfo("Starting job...")
+    val callSite = Utils.getSparkCallSite
+    logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, allowLocal)
-    logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal)
+    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
 
@@ -445,10 +446,11 @@ class SparkContext(
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long
       ): PartialResult[R] = {
-    logInfo("Starting job...")
+    val callSite = Utils.getSparkCallSite
+    logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, timeout)
-    logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
+    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout)
+    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
 

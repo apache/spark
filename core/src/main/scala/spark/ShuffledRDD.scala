@@ -70,7 +70,7 @@ class ShuffledSortedRDD[K <% Ordered[K]: ClassManifest, V](
     // By separating this from RepartitionShuffledRDD, we avoided a
     // buf.iterator.toArray call, thus avoiding building up the buffer twice.
     val buf = new ArrayBuffer[(K, V)]
-    def addTupleToBuffer(k: K, v: V) = { buf += Tuple(k, v) }
+    def addTupleToBuffer(k: K, v: V) { buf += ((k, v)) }
     SparkEnv.get.shuffleFetcher.fetch[K, V](dep.shuffleId, split.index, addTupleToBuffer)
     if (ascending) {
       buf.sortWith((x, y) => x._1 < y._1).iterator

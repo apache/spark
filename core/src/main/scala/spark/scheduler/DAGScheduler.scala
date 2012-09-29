@@ -188,23 +188,22 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     missing.toList
   }
 
-  def runJob[T, U](
+  def runJob[T, U: ClassManifest](
       finalRdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
+      callSite: String,
       allowLocal: Boolean)
-      (implicit m: ClassManifest[U]): Array[U] =
+    : Array[U] =
   {
     if (partitions.size == 0) {
       return new Array[U](0)
     }
     val waiter = new JobWaiter(partitions.size)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val callSite = Utils.getSparkCallSite
     eventQueue.put(JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter))
     waiter.getResult() match {
       case JobSucceeded(results: Seq[_]) =>
-        logInfo("Finished " + callSite)
         return results.asInstanceOf[Seq[U]].toArray
       case JobFailed(exception: Exception) =>
         logInfo("Failed to run " + callSite)
@@ -216,13 +215,14 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
-      timeout: Long
-      ): PartialResult[R] =
+      callSite: String,
+      timeout: Long)
+    : PartialResult[R] =
   {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.splits.size).toArray
-    eventQueue.put(JobSubmitted(rdd, func2, partitions, false, Utils.getSparkCallSite, listener))
+    eventQueue.put(JobSubmitted(rdd, func2, partitions, false, callSite, listener))
     return listener.getResult()    // Will throw an exception if the job fails
   }
 
