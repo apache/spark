@@ -14,7 +14,7 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
   extends BlockStore(blockManager) {
 
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
-  val subDirsPerLocalDir = System.getProperty("spark.diskStore.subdirs", "64").toInt
+  val subDirsPerLocalDir = System.getProperty("spark.diskStore.subDirectories", "64").toInt
 
   // Create one local directory for each path mentioned in spark.local.dir; then, inside this
   // directory, create multiple subdirectories that we will hash files into, in order to avoid
