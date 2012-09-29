@@ -19,7 +19,6 @@ import spark.util.AkkaUtils
  */
 class SparkEnv (
     val actorSystem: ActorSystem,
-    val cache: Cache,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheTracker: CacheTracker,
@@ -33,7 +32,7 @@ class SparkEnv (
 
   /** No-parameter constructor for unit tests. */
   def this() = {
-    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
+    this(null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
   }
 
   def stop() {
@@ -100,8 +99,6 @@ object SparkEnv {
     val closureSerializer = instantiateClass[Serializer](
       "spark.closure.serializer", "spark.JavaSerializer")
 
-    val cache = instantiateClass[Cache]("spark.cache.class", "spark.BoundedMemoryCache")
-
     val cacheTracker = new CacheTracker(actorSystem, isMaster, blockManager)
     blockManager.cacheTracker = cacheTracker
 
@@ -116,7 +113,6 @@ object SparkEnv {
 
     new SparkEnv(
       actorSystem,
-      cache,
       serializer,
       closureSerializer,
       cacheTracker,
