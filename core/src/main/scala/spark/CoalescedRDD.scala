@@ -11,8 +11,7 @@ private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) exten
  * or to avoid having a large number of small tasks when processing a directory with many files.
  */
 class CoalescedRDD[T: ClassManifest](prev: RDD[T], maxPartitions: Int)
-  extends RDD[T](prev.context)
-  with Logging {
+  extends RDD[T](prev.context) {
 
   @transient val splits_ : Array[Split] = {
     val prevSplits = prev.splits
