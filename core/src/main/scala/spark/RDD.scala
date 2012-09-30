@@ -97,32 +97,31 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     var multiplier = 3.0
     var initialCount = count()
     var maxSelected = 0
-    
-    if (initialCount > Integer.MAX_VALUE) {
-      maxSelected = Integer.MAX_VALUE
+
+    if (initialCount > Integer.MAX_VALUE - 1) {
+      maxSelected = Integer.MAX_VALUE - 1
     } else {
       maxSelected = initialCount.toInt
     }
-    
+
     if (num > initialCount) {
       total = maxSelected
-      fraction = Math.min(multiplier * (maxSelected + 1) / initialCount, 1.0)
+      fraction = math.min(multiplier * (maxSelected + 1) / initialCount, 1.0)
     } else if (num < 0) {
       throw(new IllegalArgumentException("Negative number of elements requested"))
     } else {
-      fraction = Math.min(multiplier * (num + 1) / initialCount, 1.0)
-      total = num.toInt
+      fraction = math.min(multiplier * (num + 1) / initialCount, 1.0)
+      total = num
     }
-  
-    var samples = this.sample(withReplacement, fraction, seed).collect()
-  
+
+    val rand = new Random(seed)
+    var samples = this.sample(withReplacement, fraction, rand.nextInt).collect()
+
     while (samples.length < total) {
-      samples = this.sample(withReplacement, fraction, seed).collect()
+      samples = this.sample(withReplacement, fraction, rand.nextInt).collect()
     }
-  
-    val arr = samples.take(total)
-  
-    return arr
+
+    Utils.randomizeInPlace(samples, rand).take(total)
   }
 
   def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))

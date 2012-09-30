@@ -58,7 +58,8 @@ object SparkBuild extends Build {
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.9",
       "org.jboss.netty" % "netty" % "3.2.6.Final",
-      "it.unimi.dsi" % "fastutil" % "6.4.2"
+      "it.unimi.dsi" % "fastutil" % "6.4.2",
+      "colt" % "colt" % "1.2.0"
     )
   ) ++ assemblySettings ++ Seq(test in assembly := {})
 
@@ -68,8 +69,7 @@ object SparkBuild extends Build {
   ) ++ assemblySettings ++ Seq(test in assembly := {})
 
   def examplesSettings = sharedSettings ++ Seq(
-    name := "spark-examples",
-    libraryDependencies += "colt" % "colt" % "1.2.0"
+    name := "spark-examples"
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
