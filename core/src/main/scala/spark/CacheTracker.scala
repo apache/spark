@@ -158,7 +158,6 @@ class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: Bl
   // For BlockManager.scala only
   def notifyTheCacheTrackerFromBlockManager(t: AddedToCache) {
     communicate(t)
-    logInfo("notifyTheCacheTrackerFromBlockManager successful")
   }
   
   // Get a snapshot of the currently known locations

@@ -6,7 +6,7 @@ import akka.util.Duration
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
 import java.io.{InputStream, OutputStream, Externalizable, ObjectInput, ObjectOutput}
-import java.nio.ByteBuffer
+import java.nio.{MappedByteBuffer, ByteBuffer}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
@@ -16,6 +16,7 @@ import spark.{CacheTracker, Logging, Serializer, SizeEstimator, SparkException, 
 import spark.network._
 import spark.util.ByteBufferInputStream
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+import sun.nio.ch.DirectBuffer
 
 
 class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
@@ -179,12 +180,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * Get block from local block manager.
    */
   def getLocal(blockId: String): Option[Iterator[Any]] = {
-    if (blockId == null) {
-      throw new IllegalArgumentException("Block Id is null")
-    }
     logDebug("Getting local block " + blockId)
     locker.getLock(blockId).synchronized {
-    
       // Check storage level of block 
       val level = getLevel(blockId)
       if (level != null) {
@@ -202,11 +199,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
               logDebug("Block " + blockId + " not found in memory")
             }
           }
-        } else {
-          logDebug("Not getting block " + blockId + " from memory")
         }
 
-        // Look for block in disk 
+        // Look for block on disk
         if (level.useDisk) {
           logDebug("Getting block " + blockId + " from disk")
           diskStore.getValues(blockId) match {
@@ -215,19 +210,62 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
               return Some(iterator)
             }
             case None => {
-              throw new Exception("Block " + blockId + " not found in disk")
+              throw new Exception("Block " + blockId + " not found on disk, though it should be")
               return None
             }
           }
-        } else {
-          logDebug("Not getting block " + blockId + " from disk")
         }
-
       } else {
-        logDebug("Level for block " + blockId + " not found")
+        logDebug("Block " + blockId + " not registered locally")
       }
     } 
     return None 
+  }
+
+  /**
+   * Get block from the local block manager as serialized bytes.
+   */
+  def getLocalBytes(blockId: String): Option[ByteBuffer] = {
+    logDebug("Getting local block " + blockId + " as bytes")
+    locker.getLock(blockId).synchronized {
+      // Check storage level of block
+      val level = getLevel(blockId)
+      if (level != null) {
+        logDebug("Level for block " + blockId + " is " + level + " on local machine")
+
+        // Look for the block in memory
+        if (level.useMemory) {
+          logDebug("Getting block " + blockId + " from memory")
+          memoryStore.getBytes(blockId) match {
+            case Some(bytes) => {
+              logDebug("Block " + blockId + " found in memory")
+              return Some(bytes)
+            }
+            case None => {
+              logDebug("Block " + blockId + " not found in memory")
+            }
+          }
+        }
+
+        // Look for block on disk
+        if (level.useDisk) {
+          logDebug("Getting block " + blockId + " from disk")
+          diskStore.getBytes(blockId) match {
+            case Some(bytes) => {
+              logDebug("Block " + blockId + " found in disk")
+              return Some(bytes)
+            }
+            case None => {
+              throw new Exception("Block " + blockId + " not found on disk, though it should be")
+              return None
+            }
+          }
+        }
+      } else {
+        logDebug("Block " + blockId + " not registered locally")
+      }
+    }
+    return None
   }
 
   /**
@@ -416,9 +454,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
       if (level.useMemory && level.useDisk) {
         // If saving to both memory and disk, then serialize only once 
-        memoryStore.putValues(blockId, values, level) match {
+        memoryStore.putValues(blockId, values, level, true) match {
           case Left(newValues) => 
-            diskStore.putValues(blockId, newValues, level) match {
+            diskStore.putValues(blockId, newValues, level, true) match {
               case Right(newBytes) => bytes = newBytes
               case _ => throw new Exception("Unexpected return value")
             }
@@ -428,15 +466,16 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
         }
       } else if (level.useMemory) {
         // If only save to memory 
-        memoryStore.putValues(blockId, values, level) match {
+        memoryStore.putValues(blockId, values, level, true) match {
           case Right(newBytes) => bytes = newBytes
           case Left(newIterator) => valuesAfterPut = newIterator
         }
       } else {
         // If only save to disk
-        diskStore.putValues(blockId, values, level) match {
+        val askForBytes = level.replication > 1 // Don't get back the bytes unless we replicate them
+        diskStore.putValues(blockId, values, level, askForBytes) match {
           case Right(newBytes) => bytes = newBytes
-          case _ => throw new Exception("Unexpected return value")
+          case _ =>
         }
       }
 
@@ -457,6 +496,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
       replicate(blockId, bytes, level) 
     }
+
+    BlockManager.dispose(bytes)
 
     // TODO: This code will be removed when CacheTracker is gone.
     if (blockId.startsWith("rdd")) {
@@ -527,7 +568,6 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       Await.ready(replicationFuture, Duration.Inf)
     }
 
-    val finishTime = System.currentTimeMillis
     if (level.replication > 1) {
       logDebug("PutBytes for block " + blockId + " with replication took " + 
         Utils.getUsedTimeMs(startTimeMs))
@@ -540,17 +580,14 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   /**
    * Replicate block to another node.
    */
-
-  var firstTime = true
-  var peers : Seq[BlockManagerId] = null
+  var cachedPeers: Seq[BlockManagerId] = null
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
-    if (firstTime) {
-      peers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
-      firstTime = false;
+    if (cachedPeers == null) {
+      cachedPeers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
     } 
-    for (peer: BlockManagerId <- peers) {
+    for (peer: BlockManagerId <- cachedPeers) {
       val start = System.nanoTime
       data.rewind()
       logDebug("Try to replicate BlockId " + blockId + " once; The size of the data is "
@@ -570,7 +607,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     val rddInfo = key.split(":")
     val rddId: Int = rddInfo(1).toInt
     val splitIndex: Int = rddInfo(2).toInt
-    val host = System.getProperty("spark.hostname", Utils.localHostName)
+    val host = System.getProperty("spark.hostname", Utils.localHostName())
     cacheTracker.notifyTheCacheTrackerFromBlockManager(spark.AddedToCache(rddId, splitIndex, host))
   }
 
@@ -578,7 +615,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * Read a block consisting of a single object.
    */
   def getSingle(blockId: String): Option[Any] = {
-    get(blockId).map(_.next)
+    get(blockId).map(_.next())
   }
 
   /**
@@ -608,18 +645,21 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
   }
 
-  /** Wrap an output stream for compression if block compression is enabled */
+  /**
+   * Wrap an output stream for compression if block compression is enabled
+   */
   def wrapForCompression(s: OutputStream): OutputStream = {
     if (compress) new LZFOutputStream(s) else s
   }
 
-  /** Wrap an input stream for compression if block compression is enabled */
+  /**
+   * Wrap an input stream for compression if block compression is enabled
+   */
   def wrapForCompression(s: InputStream): InputStream = {
     if (compress) new LZFInputStream(s) else s
   }
 
   def dataSerialize(values: Iterator[Any]): ByteBuffer = {
-    /*serializer.newInstance().serializeMany(values)*/
     val byteStream = new FastByteArrayOutputStream(4096)
     val ser = serializer.newInstance()
     ser.serializeStream(wrapForCompression(byteStream)).writeAll(values).close()
@@ -627,10 +667,14 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     ByteBuffer.wrap(byteStream.array)
   }
 
+  /**
+   * Deserializes a ByteBuffer into an iterator of values and disposes of it when the end of
+   * the iterator is reached.
+   */
   def dataDeserialize(bytes: ByteBuffer): Iterator[Any] = {
     bytes.rewind()
     val ser = serializer.newInstance()
-    return ser.deserializeStream(wrapForCompression(new ByteBufferInputStream(bytes))).asIterator
+    ser.deserializeStream(wrapForCompression(new ByteBufferInputStream(bytes, true))).asIterator
   }
 
   def stop() {
@@ -642,8 +686,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 }
 
-object BlockManager {
-
+private[spark]
+object BlockManager extends Logging {
   def getNumParallelFetchesFromSystemProperties: Int = {
     System.getProperty("spark.blockManager.parallelFetches", "4").toInt
   }
@@ -651,5 +695,18 @@ object BlockManager {
   def getMaxMemoryFromSystemProperties: Long = {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
     (Runtime.getRuntime.maxMemory * memoryFraction).toLong
+  }
+
+  /**
+   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
+   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
+   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
+   * unfortunately no standard API to do this.
+   */
+  def dispose(buffer: ByteBuffer) {
+    if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
+      logDebug("Unmapping " + buffer)
+      buffer.asInstanceOf[DirectBuffer].cleaner().clean()
+    }
   }
 }

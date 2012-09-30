@@ -6,11 +6,12 @@ import java.nio.channels.FileChannel.MapMode
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 import java.util.UUID
 import spark.Utils
+import java.nio.channels.FileChannel
 
 /**
  * Stores BlockManager blocks on disk.
  */
-class DiskStore(blockManager: BlockManager, rootDirs: String)
+private class DiskStore(blockManager: BlockManager, rootDirs: String)
   extends BlockStore(blockManager) {
 
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
@@ -33,15 +34,20 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
     val startTime = System.currentTimeMillis
     val file = createFile(blockId)
     val channel = new RandomAccessFile(file, "rw").getChannel()
-    val buffer = channel.map(MapMode.READ_WRITE, 0, bytes.limit)
-    buffer.put(bytes)
+    while (bytes.remaining > 0) {
+      channel.write(bytes)
+    }
     channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored to file of %d bytes to disk in %d ms".format(
       blockId, bytes.limit, (finishTime - startTime)))
   }
 
-  override def putValues(blockId: String, values: Iterator[Any], level: StorageLevel)
+  override def putValues(
+      blockId: String,
+      values: Iterator[Any],
+      level: StorageLevel,
+      returnValues: Boolean)
     : Either[Iterator[Any], ByteBuffer] = {
 
     logDebug("Attempting to write values for block " + blockId)
@@ -52,30 +58,35 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
     objOut.writeAll(values)
     objOut.close()
 
-    // Return a byte buffer for the contents of the file
-    val channel = new RandomAccessFile(file, "rw").getChannel()
-    Right(channel.map(MapMode.READ_WRITE, 0, channel.size()))
+    if (returnValues) {
+      // Return a byte buffer for the contents of the file
+      val channel = new RandomAccessFile(file, "r").getChannel()
+      val buffer = channel.map(MapMode.READ_ONLY, 0, channel.size())
+      channel.close()
+      Right(buffer)
+    } else {
+      null
+    }
   }
 
   override def getBytes(blockId: String): Option[ByteBuffer] = {
     val file = getFile(blockId)
     val length = file.length().toInt
     val channel = new RandomAccessFile(file, "r").getChannel()
-    Some(channel.map(MapMode.READ_WRITE, 0, length))
+    val bytes = channel.map(MapMode.READ_ONLY, 0, length)
+    channel.close()
+    Some(bytes)
   }
 
   override def getValues(blockId: String): Option[Iterator[Any]] = {
-    val file = getFile(blockId)
-    val length = file.length().toInt
-    val channel = new RandomAccessFile(file, "r").getChannel()
-    val bytes = channel.map(MapMode.READ_ONLY, 0, length)
-    val buffer = dataDeserialize(bytes)
-    channel.close()
-    Some(buffer)
+    getBytes(blockId).map(blockManager.dataDeserialize(_))
   }
 
   override def remove(blockId: String) {
-    throw new UnsupportedOperationException("Not implemented")
+    val file = getFile(blockId)
+    if (file.exists()) {
+      file.delete()
+    }
   }
 
   private def createFile(blockId: String): File = {
@@ -97,7 +108,7 @@ class DiskStore(blockManager: BlockManager, rootDirs: String)
     // Create the subdirectory if it doesn't already exist
     var subDir = subDirs(dirId)(subDirId)
     if (subDir == null) {
-        subDir = subDirs(dirId).synchronized {
+      subDir = subDirs(dirId).synchronized {
         val old = subDirs(dirId)(subDirId)
         if (old != null) {
           old
