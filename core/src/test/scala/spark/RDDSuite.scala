@@ -79,7 +79,7 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     val coalesced1 = new CoalescedRDD(data, 2)
     assert(coalesced1.collect().toList === (1 to 10).toList)
     assert(coalesced1.glom().collect().map(_.toList).toList ===
-           List(List(1, 2, 3, 4, 5), List(6, 7, 8, 9, 10)))
+      List(List(1, 2, 3, 4, 5), List(6, 7, 8, 9, 10)))
 
     // Check that the narrow dependency is also specified correctly
     assert(coalesced1.dependencies.head.getParents(0).toList === List(0, 1, 2, 3, 4))

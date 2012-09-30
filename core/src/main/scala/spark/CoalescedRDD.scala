@@ -4,7 +4,7 @@ private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) exten
 
 /**
  * Coalesce the partitions of a parent RDD (`prev`) into fewer partitions, so that each partition of
- * this RDD computes zero or more of the parent ones. Will produce exactly `maxPartitions` if the
+ * this RDD computes one or more of the parent ones. Will produce exactly `maxPartitions` if the
  * parent had more than this many partitions, or fewer if the parent had fewer.
  *
  * This transformation is useful when an RDD with many partitions gets filtered into a smaller one,
