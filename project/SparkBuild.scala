@@ -1,4 +1,5 @@
 import sbt._
+import sbt.Classpaths.publishTask
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
@@ -19,6 +20,10 @@ object SparkBuild extends Build {
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
 
+  // A configuration to set an alternative publishLocalConfiguration
+  lazy val MavenCompile = config("m2r") extend(Compile)
+  lazy val publishLocalBoth = TaskKey[Unit]("pl", "publish local for m2 and ivy")
+
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
     version := "0.6.0-SNAPSHOT",
@@ -38,7 +43,15 @@ object SparkBuild extends Build {
     parallelExecution := false,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
-      const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) }
+      const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) },
+
+    otherResolvers := Seq(Resolver.file("dotM2", file(Path.userHome + "/.m2/repository"))),
+    publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
+      (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
+    },
+    publishMavenStyle in MavenCompile := true,
+    publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
+    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
   )
 
   val slf4jVersion = "1.6.1"
@@ -83,11 +96,11 @@ object SparkBuild extends Build {
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
-    mergeStrategy in assembly := { 
-      case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard 
+    mergeStrategy in assembly := {
+      case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }
-  ) 
+  )
 
 }
