@@ -72,6 +72,14 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     assert(rdd.collect().toList === List(1, 1, 2, 1, 2, 3, 1, 2, 3, 4))
   }
 
+  test("basic caching") {
+    sc = new SparkContext("local", "test")
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
+    assert(rdd.collect().toList === List(1, 2, 3, 4))
+    assert(rdd.collect().toList === List(1, 2, 3, 4))
+    assert(rdd.collect().toList === List(1, 2, 3, 4))
+  }
+
   test("coalesced RDDs") {
     sc = new SparkContext("local", "test")
     val data = sc.parallelize(1 to 10, 10)

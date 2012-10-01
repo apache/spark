@@ -18,7 +18,7 @@ extends Broadcast[T] with Logging with Serializable {
 
   MultiTracker.synchronized {
     SparkEnv.get.blockManager.putSingle(
-      uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+      uuid.toString, value_, StorageLevel.MEMORY_AND_DISK, false)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -53,7 +53,7 @@ extends Broadcast[T] with Logging with Serializable {
 
   // Must call this after all the variables have been created/initialized
   if (!isLocal) {
-    sendBroadcast
+    sendBroadcast()
   }
 
   def sendBroadcast() {
@@ -119,7 +119,7 @@ extends Broadcast[T] with Logging with Serializable {
           logInfo("Started reading broadcast variable " + uuid)
           // Initializing everything because Master will only send null/0 values
           // Only the 1st worker in a node can be here. Others will get from cache
-          initializeWorkerVariables
+          initializeWorkerVariables()
 
           logInfo("Local host address: " + hostAddress)
 
@@ -135,7 +135,7 @@ extends Broadcast[T] with Logging with Serializable {
           if (receptionSucceeded) {
             value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
             SparkEnv.get.blockManager.putSingle(
-              uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+              uuid.toString, value_, StorageLevel.MEMORY_AND_DISK, false)
           }  else {
             logError("Reading Broadcasted variable " + uuid + " failed")
           }

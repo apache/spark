@@ -545,9 +545,11 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
 
       if (level.useMemory) {
+        bytes.rewind()
         memoryStore.putBytes(blockId, bytes, level)
       }
       if (level.useDisk) {
+        bytes.rewind()
         diskStore.putBytes(blockId, bytes, level)
       }
 
@@ -639,7 +641,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
         logWarning("Block " + blockId + " cannot be removed from memory as it is not in memory")
         return
       }
-      memoryStore.remove(blockId)  
+      memoryStore.remove(blockId)
       val newLevel = new StorageLevel(level.useDisk, false, level.deserialized, level.replication)
       setLevelAndTellMaster(blockId, newLevel)
     }

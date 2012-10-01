@@ -77,10 +77,10 @@ object SizeEstimator extends Logging {
       return System.getProperty("spark.test.useCompressedOops").toBoolean 
     }
     try {
-      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic";
-      val server = ManagementFactory.getPlatformMBeanServer();
+      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic"
+      val server = ManagementFactory.getPlatformMBeanServer()
       val bean = ManagementFactory.newPlatformMXBeanProxy(server, 
-        hotSpotMBeanName, classOf[HotSpotDiagnosticMXBean]);
+        hotSpotMBeanName, classOf[HotSpotDiagnosticMXBean])
       return bean.getVMOption("UseCompressedOops").getValue.toBoolean
     } catch {
       case e: Exception => {
@@ -142,6 +142,10 @@ object SizeEstimator extends Logging {
     val cls = obj.getClass
     if (cls.isArray) {
       visitArray(obj, cls, state)
+    } else if (classOf[ClassLoader].isAssignableFrom(cls) || classOf[Class].isAssignableFrom(cls)) {
+      // Hadoop JobConfs created in the interpreter have a ClassLoader, which greatly confuses
+      // the size estimator since it references the whole REPL. Do nothing in this case. In
+      // general all ClassLoaders and Classes will be shared between objects anyway.
     } else {
       val classInfo = getClassInfo(cls)
       state.size += classInfo.shellSize

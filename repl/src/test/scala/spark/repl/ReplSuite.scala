@@ -7,6 +7,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
 import org.scalatest.FunSuite
+import com.google.common.io.Files
 
 class ReplSuite extends FunSuite {
   def runInterpreter(master: String, input: String): String = {
@@ -118,7 +119,27 @@ class ReplSuite extends FunSuite {
     assertContains("res0: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
-  
+
+  test ("interacting with files") {
+    val tempDir = Files.createTempDir()
+    val out = new FileWriter(tempDir + "/input")
+    out.write("Hello world!\n")
+    out.write("What's up?\n")
+    out.write("Goodbye\n")
+    out.close()
+    val output = runInterpreter("local", """
+      var file = sc.textFile("%s/input").cache()
+      file.count()
+      file.count()
+      file.count()
+      """.format(tempDir.getAbsolutePath))
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("res0: Long = 3", output)
+    assertContains("res1: Long = 3", output)
+    assertContains("res2: Long = 3", output)
+  }
+
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
     test ("running on Mesos") {
       val output = runInterpreter("localquiet", """

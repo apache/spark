@@ -19,7 +19,7 @@ extends Broadcast[T] with Logging with Serializable {
 
   HttpBroadcast.synchronized {
     SparkEnv.get.blockManager.putSingle(
-      uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+      uuid.toString, value_, StorageLevel.MEMORY_AND_DISK, false)
   }
 
   if (!isLocal) { 
@@ -37,7 +37,7 @@ extends Broadcast[T] with Logging with Serializable {
           val start = System.nanoTime
           value_ = HttpBroadcast.read[T](uuid)
           SparkEnv.get.blockManager.putSingle(
-            uuid.toString, value_, StorageLevel.MEMORY_ONLY, false)
+            uuid.toString, value_, StorageLevel.MEMORY_AND_DISK, false)
           val time = (System.nanoTime - start) / 1e9
           logInfo("Reading broadcast variable " + uuid + " took " + time + " s")
         }
@@ -80,8 +80,8 @@ private object HttpBroadcast extends Logging {
       if (server != null) {
         server.stop()
         server = null
-        initialized = false
       }
+      initialized = false
     }
   }
 
