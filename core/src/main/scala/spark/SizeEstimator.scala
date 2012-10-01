@@ -142,7 +142,7 @@ object SizeEstimator extends Logging {
     val cls = obj.getClass
     if (cls.isArray) {
       visitArray(obj, cls, state)
-    } else if (classOf[ClassLoader].isAssignableFrom(cls) || classOf[Class].isAssignableFrom(cls)) {
+    } else if (obj.isInstanceOf[ClassLoader] || obj.isInstanceOf[Class[_]]) {
       // Hadoop JobConfs created in the interpreter have a ClassLoader, which greatly confuses
       // the size estimator since it references the whole REPL. Do nothing in this case. In
       // general all ClassLoaders and Classes will be shared between objects anyway.
