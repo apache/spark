@@ -22,7 +22,7 @@ object SparkBuild extends Build {
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
-  lazy val publishLocalBoth = TaskKey[Unit]("pl", "publish local for m2 and ivy")
+  lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
