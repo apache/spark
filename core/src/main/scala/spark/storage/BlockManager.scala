@@ -99,7 +99,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    */
   private def initialize() {
     master.mustRegisterBlockManager(
-      RegisterBlockManager(blockManagerId, maxMemory, maxMemory))
+      RegisterBlockManager(blockManagerId, maxMemory))
     BlockManagerWorker.startBlockManagerWorker(this)
   }
 

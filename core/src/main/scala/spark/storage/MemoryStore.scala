@@ -56,15 +56,15 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val entry = new Entry(elements, sizeEstimate, true)
       entries.synchronized { entries.put(blockId, entry) }
       currentMemory += sizeEstimate
-      logInfo("Block %s stored as values to memory (estimated size %d, free %d)".format(
-        blockId, sizeEstimate, freeMemory))
+      logInfo("Block %s stored as values to memory (estimated size %s, free %s)".format(
+        blockId, Utils.memoryBytesToString(sizeEstimate), Utils.memoryBytesToString(freeMemory)))
     } else {
       val entry = new Entry(bytes, bytes.limit, false)
       ensureFreeSpace(bytes.limit)
       entries.synchronized { entries.put(blockId, entry) }
       currentMemory += bytes.limit
-      logInfo("Block %s stored as %d bytes to memory (free %d)".format(
-        blockId, bytes.limit, freeMemory))
+      logInfo("Block %s stored as serialized bytes to memory (size %s, free %s)".format(
+        blockId, Utils.memoryBytesToString(bytes.limit), Utils.memoryBytesToString(freeMemory)))
     }
   }
 
@@ -83,8 +83,8 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val entry = new Entry(elements, sizeEstimate, true)
       entries.synchronized { entries.put(blockId, entry) }
       currentMemory += sizeEstimate
-      logInfo("Block %s stored as values to memory (estimated size %d, free %d)".format(
-        blockId, sizeEstimate, freeMemory))
+      logInfo("Block %s stored as values to memory (estimated size %s, free %s)".format(
+        blockId, Utils.memoryBytesToString(sizeEstimate), Utils.memoryBytesToString(freeMemory)))
       Left(elements.iterator)
     } else {
       val bytes = blockManager.dataSerialize(values)
@@ -92,8 +92,8 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val entry = new Entry(bytes, bytes.limit, false)
       entries.synchronized { entries.put(blockId, entry) }
       currentMemory += bytes.limit
-      logInfo("Block %s stored as %d bytes to memory (free %d)".format(
-        blockId, bytes.limit, freeMemory))
+      logInfo("Block %s stored as serialized bytes to memory (size %s, free %s)".format(
+        blockId, Utils.memoryBytesToString(bytes.limit), Utils.memoryBytesToString(freeMemory)))
       Right(bytes)
     }
   }

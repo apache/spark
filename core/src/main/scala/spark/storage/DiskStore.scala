@@ -39,8 +39,8 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     }
     channel.close()
     val finishTime = System.currentTimeMillis
-    logDebug("Block %s stored to file of %d bytes to disk in %d ms".format(
-      blockId, bytes.limit, (finishTime - startTime)))
+    logDebug("Block %s stored as %s file on disk in %d ms".format(
+      blockId, Utils.memoryBytesToString(bytes.limit), (finishTime - startTime)))
   }
 
   override def putValues(
@@ -51,12 +51,16 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     : Either[Iterator[Any], ByteBuffer] = {
 
     logDebug("Attempting to write values for block " + blockId)
+    val startTime = System.currentTimeMillis
     val file = createFile(blockId)
     val fileOut = blockManager.wrapForCompression(
       new FastBufferedOutputStream(new FileOutputStream(file)))
     val objOut = blockManager.serializer.newInstance().serializeStream(fileOut)
     objOut.writeAll(values)
     objOut.close()
+    val finishTime = System.currentTimeMillis
+    logDebug("Block %s stored as %s file on disk in %d ms".format(
+      blockId, Utils.memoryBytesToString(file.length()), (finishTime - startTime)))
 
     if (returnValues) {
       // Return a byte buffer for the contents of the file
