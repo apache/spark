@@ -65,8 +65,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   private val locker = new BlockLocker(NUM_LOCKS)
 
   private val blockInfo = new ConcurrentHashMap[String, BlockInfo]()
-  private val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
-  private val diskStore: BlockStore = new DiskStore(this, 
+  private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
+  private[storage] val diskStore: BlockStore = new DiskStore(this,
     System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
   
   val connectionManager = new ConnectionManager(0)

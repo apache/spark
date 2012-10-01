@@ -128,9 +128,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.DISK_ONLY)
     store.putSingle("a2", a2, StorageLevel.DISK_ONLY)
     store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
-    assert(store.getSingle("a2") != None, "a2 was not in store")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
-    assert(store.getSingle("a1") != None, "a1 was not in store")
+    assert(store.getSingle("a2") != None, "a2 was in store")
+    assert(store.getSingle("a3") != None, "a3 was in store")
+    assert(store.getSingle("a1") != None, "a1 was in store")
   }
 
   test("disk and memory storage") {
@@ -144,7 +144,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     Thread.sleep(100)
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") != None, "a3 was not in store")
+    assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
     assert(store.getSingle("a1") != None, "a1 was not in store")
+    assert(store.memoryStore.getValues("a1") != None, "a1 was not in memory store")
   }
 
   test("disk and memory storage with serialization") {
@@ -158,7 +160,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     Thread.sleep(100)
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") != None, "a3 was not in store")
+    assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
     assert(store.getSingle("a1") != None, "a1 was not in store")
+    assert(store.memoryStore.getValues("a1") != None, "a1 was not in memory store")
   }
 
   test("LRU with mixed storage levels") {
