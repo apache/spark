@@ -167,7 +167,7 @@ class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: Bl
   
   // Gets or computes an RDD split
   def getOrCompute[T](rdd: RDD[T], split: Split, storageLevel: StorageLevel): Iterator[T] = {
-    val key = "rdd:%d:%d".format(rdd.id, split.index)
+    val key = "rdd_%d_%d".format(rdd.id, split.index)
     logInfo("Cache key is " + key)
     blockManager.get(key) match {
       case Some(cachedValues) =>

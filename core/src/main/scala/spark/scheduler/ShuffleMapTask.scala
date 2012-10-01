@@ -144,7 +144,7 @@ class ShuffleMapTask(
     val ser = SparkEnv.get.serializer.newInstance()
     val blockManager = SparkEnv.get.blockManager
     for (i <- 0 until numOutputSplits) {
-      val blockId = "shuffleid_" + dep.shuffleId + "_" + partition + "_" + i
+      val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
       // Get a scala iterator from java map
       val iter: Iterator[(Any, Any)] = bucketIterators(i)
       // TODO: This should probably be DISK_ONLY

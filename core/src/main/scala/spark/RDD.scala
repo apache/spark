@@ -106,7 +106,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     
     // This is a hack. Ideally this should re-use the code used by the CacheTracker
     // to generate the key.
-    def getSplitKey(split: Split) = "rdd:%d:%d".format(this.id, split.index)
+    def getSplitKey(split: Split) = "rdd_%d_%d".format(this.id, split.index)
     
     persist(level)
     sc.runJob(this, (iter: Iterator[T]) => {} )

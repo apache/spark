@@ -606,7 +606,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
   // TODO: This code will be removed when CacheTracker is gone.
   private def notifyTheCacheTracker(key: String) {
-    val rddInfo = key.split(":")
+    val rddInfo = key.split("_")
     val rddId: Int = rddInfo(1).toInt
     val splitIndex: Int = rddInfo(2).toInt
     val host = System.getProperty("spark.hostname", Utils.localHostName())
