@@ -4,9 +4,9 @@ import java.nio.ByteBuffer
 import java.io.{File, FileOutputStream, RandomAccessFile}
 import java.nio.channels.FileChannel.MapMode
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-import java.util.UUID
+import java.util.{Random, Date}
 import spark.Utils
-import java.nio.channels.FileChannel
+import java.text.SimpleDateFormat
 
 /**
  * Stores BlockManager blocks on disk.
@@ -130,16 +130,18 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   private def createLocalDirs(): Array[File] = {
     logDebug("Creating local directories at root dirs '" + rootDirs + "'")
+    val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
     rootDirs.split(",").map(rootDir => {
       var foundLocalDir: Boolean = false
       var localDir: File = null
-      var localDirUuid: UUID = null
+      var localDirId: String = null
       var tries = 0
+      val rand = new Random()
       while (!foundLocalDir && tries < MAX_DIR_CREATION_ATTEMPTS) {
         tries += 1
         try {
-          localDirUuid = UUID.randomUUID()
-          localDir = new File(rootDir, "spark-local-" + localDirUuid)
+          localDirId = "%s-%04x".format(dateFormat.format(new Date), rand.nextInt(65536))
+          localDir = new File(rootDir, "spark-local-" + localDirId)
           if (!localDir.exists) {
             localDir.mkdirs()
             foundLocalDir = true
