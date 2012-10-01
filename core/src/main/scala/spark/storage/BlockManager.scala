@@ -82,8 +82,6 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
   val compress = System.getProperty("spark.blockManager.compress", "false").toBoolean
 
-  initLogging()
-
   initialize()
 
   /**

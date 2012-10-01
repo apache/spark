@@ -147,6 +147,8 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     logInfo("MemoryStore cleared")
   }
 
+  // TODO: This should be able to return false if the space is larger than our total memory,
+  // or if adding this block would require evicting another one from the same RDD
   private def ensureFreeSpace(space: Long) {
     logInfo("ensureFreeSpace(%d) called with curMem=%d, maxMem=%d".format(
       space, currentMemory, maxMemory))

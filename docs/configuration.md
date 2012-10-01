@@ -73,7 +73,8 @@ there are at least four properties that you will commonly want to control:
   <td>/tmp</td>
   <td>
     Directory to use for "scratch" space in Spark, including map output files and RDDs that get stored
-    on disk. This should be on a fast, local disk in your system.
+    on disk. This should be on a fast, local disk in your system. It can also be a comma-separated
+    list of multiple directories.
   </td>
 </tr>
 <tr>

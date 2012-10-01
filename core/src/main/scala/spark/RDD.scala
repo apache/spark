@@ -99,7 +99,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
   def getStorageLevel = storageLevel
   
-  def checkpoint(level: StorageLevel = StorageLevel.MEMORY_AND_DISK_2): RDD[T] = {
+  private[spark] def checkpoint(level: StorageLevel = StorageLevel.MEMORY_AND_DISK_2): RDD[T] = {
     if (!level.useDisk && level.replication < 2) {
       throw new Exception("Cannot checkpoint without using disk or replication (level requested was " + level + ")")
     } 
