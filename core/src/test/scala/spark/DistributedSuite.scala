@@ -18,14 +18,30 @@ import storage.StorageLevel
 class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
 
   val clusterUrl = "local-cluster[2,1,512]"
-  
+
   @transient var sc: SparkContext = _
-  
+
   after {
     if (sc != null) {
       sc.stop()
       sc = null
     }
+  }
+
+  test("local-cluster format") {
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    assert(sc.parallelize(1 to 2, 2).count == 2)
+    sc.stop()
+    sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
+    assert(sc.parallelize(1 to 2, 2).count == 2)
+    sc.stop()
+    sc = new SparkContext("local-cluster[2, 1, 512]", "test")
+    assert(sc.parallelize(1 to 2, 2).count == 2)
+    sc.stop()
+    sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
+    assert(sc.parallelize(1 to 2, 2).count == 2)
+    sc.stop()
+    sc = null
   }
 
   test("simple groupByKey") {
@@ -38,7 +54,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
   }
- 
+
   test("accumulators") {
     sc = new SparkContext(clusterUrl, "test")
     val accum = sc.accumulator(0)
