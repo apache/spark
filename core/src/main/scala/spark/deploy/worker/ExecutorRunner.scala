@@ -65,38 +65,6 @@ class ExecutorRunner(
     }
   }
 
-  /**
-   * Download a file requested by the executor. Supports fetching the file in a variety of ways,
-   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
-   */
-  def fetchFile(url: String, targetDir: File) {
-    val filename = url.split("/").last
-    val targetFile = new File(targetDir, filename)
-    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ftp://")) {
-      // Use the java.net library to fetch it
-      logInfo("Fetching " + url + " to " + targetFile)
-      val in = new URL(url).openStream()
-      val out = new FileOutputStream(targetFile)
-      Utils.copyStream(in, out, true)
-    } else {
-      // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-      val uri = new URI(url)
-      val conf = new Configuration()
-      val fs = FileSystem.get(uri, conf)
-      val in = fs.open(new Path(uri))
-      val out = new FileOutputStream(targetFile)
-      Utils.copyStream(in, out, true)
-    }
-    // Decompress the file if it's a .tar or .tar.gz
-    if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xzf", filename), targetDir)
-    } else if (filename.endsWith(".tar")) {
-      logInfo("Untarring " + filename)
-      Utils.execute(Seq("tar", "-xf", filename), targetDir)
-    }
-  }
-
   /** Replace variables such as {{SLAVEID}} and {{CORES}} in a command argument passed to us */
   def substituteVariables(argument: String): String = argument match {
     case "{{SLAVEID}}" => workerId
@@ -107,7 +75,8 @@ class ExecutorRunner(
 
   def buildCommandSeq(): Seq[String] = {
     val command = jobDesc.command
-    val runScript = new File(sparkHome, "run").getCanonicalPath
+    val script = if (System.getProperty("os.name").startsWith("Windows")) "run.cmd" else "run";
+    val runScript = new File(sparkHome, script).getCanonicalPath
     Seq(runScript, command.mainClass) ++ command.arguments.map(substituteVariables)
   }
 

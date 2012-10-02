@@ -3,6 +3,7 @@ package spark
 import org.scalatest.FunSuite
 import org.scalatest.PrivateMethodTester
 
+// TODO: Replace this with a test of MemoryStore
 class BoundedMemoryCacheSuite extends FunSuite with PrivateMethodTester {
   test("constructor test") {
     val cache = new BoundedMemoryCache(60)

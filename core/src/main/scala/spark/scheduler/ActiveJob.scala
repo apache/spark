@@ -10,6 +10,7 @@ class ActiveJob(
     val finalStage: Stage,
     val func: (TaskContext, Iterator[_]) => _,
     val partitions: Array[Int],
+    val callSite: String,
     val listener: JobListener) {
 
   val numPartitions = partitions.length

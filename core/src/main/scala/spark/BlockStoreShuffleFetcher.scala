@@ -29,7 +29,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
 
     val blocksByAddress: Seq[(BlockManagerId, Seq[String])] = splitsByAddress.toSeq.map {
       case (address, splits) =>
-        (address, splits.map(i => "shuffleid_%d_%d_%d".format(shuffleId, i, reduceId)))
+        (address, splits.map(i => "shuffle_%d_%d_%d".format(shuffleId, i, reduceId)))
     }
 
     for ((blockId, blockOption) <- blockManager.getMultiple(blocksByAddress)) {
@@ -42,7 +42,7 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
           }
         }
         case None => {
-          val regex = "shuffleid_([0-9]*)_([0-9]*)_([0-9]*)".r
+          val regex = "shuffle_([0-9]*)_([0-9]*)_([0-9]*)".r
           blockId match {
             case regex(shufId, mapId, reduceId) =>
               val addr = addresses(mapId.toInt)

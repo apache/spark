@@ -22,7 +22,6 @@ class PipedRDDSuite extends FunSuite with BeforeAndAfter {
     val piped = nums.pipe(Seq("cat"))
 
     val c = piped.collect()
-    println(c.toSeq)
     assert(c.size === 4)
     assert(c(0) === "1")
     assert(c(1) === "2")

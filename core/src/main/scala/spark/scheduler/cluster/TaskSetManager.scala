@@ -214,7 +214,8 @@ class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = System.currentTimeMillis
-          val serializedTask = ser.serialize(task)
+          val serializedTask = Task.serializeWithDependencies(
+            task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           val timeTaken = System.currentTimeMillis - startTime
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
@@ -243,6 +244,11 @@ class TaskSetManager(
 
   def taskFinished(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     val info = taskInfos(tid)
+    if (info.failed) {
+      // We might get two task-lost messages for the same task in coarse-grained Mesos mode,
+      // or even from Mesos itself when acks get delayed.
+      return
+    }
     val index = info.index
     info.markSuccessful()
     if (!finished(index)) {

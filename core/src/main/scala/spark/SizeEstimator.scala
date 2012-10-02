@@ -77,22 +77,18 @@ object SizeEstimator extends Logging {
       return System.getProperty("spark.test.useCompressedOops").toBoolean 
     }
     try {
-      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic";
-      val server = ManagementFactory.getPlatformMBeanServer();
+      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic"
+      val server = ManagementFactory.getPlatformMBeanServer()
       val bean = ManagementFactory.newPlatformMXBeanProxy(server, 
-        hotSpotMBeanName, classOf[HotSpotDiagnosticMXBean]);
+        hotSpotMBeanName, classOf[HotSpotDiagnosticMXBean])
       return bean.getVMOption("UseCompressedOops").getValue.toBoolean
     } catch {
-      case e: IllegalArgumentException => {
-        logWarning("Exception while trying to check if compressed oops is enabled", e)
-        // Fall back to checking if maxMemory < 32GB
-        return Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
-      }
-
-      case e: SecurityException => {
-        logWarning("No permission to create MBeanServer", e)
-        // Fall back to checking if maxMemory < 32GB
-        return Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+      case e: Exception => {
+        // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
+        val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+        val guessInWords = if (guess) "yes" else "not"
+        logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
+        return guess
       }
     }
   }
@@ -146,6 +142,10 @@ object SizeEstimator extends Logging {
     val cls = obj.getClass
     if (cls.isArray) {
       visitArray(obj, cls, state)
+    } else if (obj.isInstanceOf[ClassLoader] || obj.isInstanceOf[Class[_]]) {
+      // Hadoop JobConfs created in the interpreter have a ClassLoader, which greatly confuses
+      // the size estimator since it references the whole REPL. Do nothing in this case. In
+      // general all ClassLoaders and Classes will be shared between objects anyway.
     } else {
       val classInfo = getClassInfo(cls)
       state.size += classInfo.shellSize

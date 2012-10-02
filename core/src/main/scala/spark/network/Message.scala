@@ -7,6 +7,7 @@ import scala.collection.mutable.ArrayBuffer
 import java.nio.ByteBuffer
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import storage.BlockManager
 
 class MessageChunkHeader(
     val typ: Long,
@@ -64,7 +65,7 @@ abstract class Message(val typ: Long, val id: Int) {
  
   def timeTaken(): String = (finishTime - startTime).toString + " ms"
 
-  override def toString = "" + this.getClass.getSimpleName + "(id = " + id + ", size = " + size + ")"
+  override def toString = this.getClass.getSimpleName + "(id = " + id + ", size = " + size + ")"
 }
 
 class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: Int) 
@@ -97,10 +98,11 @@ extends Message(Message.BUFFER_MESSAGE, id_) {
     while(!buffers.isEmpty) {
       val buffer = buffers(0)
       if (buffer.remaining == 0) {
+        BlockManager.dispose(buffer)
         buffers -= buffer
       } else {
         val newBuffer = if (buffer.remaining <= maxChunkSize) {
-          buffer.duplicate
+          buffer.duplicate()
         } else {
           buffer.slice().limit(maxChunkSize).asInstanceOf[ByteBuffer]
         }
@@ -147,7 +149,6 @@ extends Message(Message.BUFFER_MESSAGE, id_) {
     } else {
       "BufferMessage(id = " + id + ", size = " + size + ")"
     }
-
   }
 }
 

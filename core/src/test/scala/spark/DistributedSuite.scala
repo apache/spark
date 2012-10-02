@@ -13,12 +13,13 @@ import com.google.common.io.Files
 import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
+import storage.StorageLevel
 
 class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
 
   val clusterUrl = "local-cluster[2,1,512]"
   
-  var sc: SparkContext = _
+  @transient var sc: SparkContext = _
   
   after {
     if (sc != null) {
@@ -26,7 +27,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       sc = null
     }
   }
-  
+
   test("simple groupByKey") {
     sc = new SparkContext(clusterUrl, "test")
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 5)
@@ -64,5 +65,60 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.contains("more than 4 times"))
   }
-}
 
+  test("caching") {
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(1 to 1000, 10).cache()
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+  }
+
+  test("caching on disk") {
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.DISK_ONLY)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+  }
+
+  test("caching in memory, replicated") {
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_ONLY_2)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+  }
+
+  test("caching in memory, serialized, replicated") {
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_ONLY_SER_2)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+  }
+
+  test("caching on disk, replicated") {
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.DISK_ONLY_2)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+  }
+
+  test("caching in memory and disk, replicated") {
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_AND_DISK_2)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+  }
+
+  test("caching in memory and disk, serialized, replicated") {
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_AND_DISK_SER_2)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+    assert(data.count() === 1000)
+  }
+}

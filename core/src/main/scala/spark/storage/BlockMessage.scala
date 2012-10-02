@@ -12,7 +12,7 @@ case class GetBlock(id: String)
 case class GotBlock(id: String, data: ByteBuffer)
 case class PutBlock(id: String, data: ByteBuffer, level: StorageLevel) 
 
-class BlockMessage() extends Logging{
+class BlockMessage() {
   // Un-initialized: typ = 0
   // GetBlock: typ = 1
   // GotBlock: typ = 2
@@ -22,8 +22,6 @@ class BlockMessage() extends Logging{
   private var data: ByteBuffer = null
   private var level: StorageLevel = null
  
-  initLogging()
-
   def set(getBlock: GetBlock) {
     typ = BlockMessage.TYPE_GET_BLOCK
     id = getBlock.id
@@ -62,8 +60,6 @@ class BlockMessage() extends Logging{
     }
     id = idBuilder.toString()
     
-    logDebug("Set from buffer Result: " + typ + " " + id)
-    logDebug("Buffer position is " + buffer.position)
     if (typ == BlockMessage.TYPE_PUT_BLOCK) {
 
       val booleanInt = buffer.getInt()
@@ -77,23 +73,18 @@ class BlockMessage() extends Logging{
       }
       data.put(buffer)
       data.flip()
-      logDebug("Set from buffer Result 2: " + level + " " + data)
     } else if (typ == BlockMessage.TYPE_GOT_BLOCK) {
 
       val dataLength = buffer.getInt()
-      logDebug("Data length is "+ dataLength)
-      logDebug("Buffer position is " + buffer.position)
       data = ByteBuffer.allocate(dataLength)
       if (dataLength != buffer.remaining) {
         throw new Exception("Error parsing buffer")
       }
       data.put(buffer)
       data.flip()
-      logDebug("Set from buffer Result 3: " + data)
     }
 
     val finishTime = System.currentTimeMillis
-    logDebug("Converted " + id + " from bytebuffer in " + (finishTime - startTime) / 1000.0  + " s")
   }
 
   def set(bufferMsg: BufferMessage) {
@@ -145,8 +136,6 @@ class BlockMessage() extends Logging{
       buffers += data
     }
     
-    logDebug("Start to log buffers.")
-    buffers.foreach((x: ByteBuffer) => logDebug("" + x))
     /*
     println()
     println("BlockMessage: ")
@@ -160,7 +149,6 @@ class BlockMessage() extends Logging{
     println()
     */
     val finishTime = System.currentTimeMillis
-    logDebug("Converted " + id + " to buffer message in " + (finishTime - startTime) / 1000.0  + " s")
     return Message.createBufferMessage(buffers)
   }
 
@@ -208,7 +196,7 @@ object BlockMessage {
 
   def main(args: Array[String]) {
     val B = new BlockMessage()
-    B.set(new PutBlock("ABC", ByteBuffer.allocate(10), StorageLevel.DISK_AND_MEMORY_2))
+    B.set(new PutBlock("ABC", ByteBuffer.allocate(10), StorageLevel.MEMORY_AND_DISK_SER_2))
     val bMsg = B.toBufferMessage
     val C = new BlockMessage()
     C.set(bMsg)

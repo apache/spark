@@ -10,14 +10,15 @@ import scala.math
 import spark._
 import spark.storage.StorageLevel
 
-class TreeBroadcast[T](@transient var value_ : T, isLocal: Boolean)
-extends Broadcast[T] with Logging with Serializable {
+class TreeBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+extends Broadcast[T](id) with Logging with Serializable {
 
   def value = value_
 
+  def blockId = "broadcast_" + id
+
   MultiTracker.synchronized {
-    SparkEnv.get.blockManager.putSingle(
-      uuid.toString, value_, StorageLevel.MEMORY_ONLY_DESER, false)
+    SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -35,7 +36,7 @@ extends Broadcast[T] with Logging with Serializable {
   @transient var serveMR: ServeMultipleRequests = null
   @transient var guideMR: GuideMultipleRequests = null
 
-  @transient var hostAddress = Utils.localIpAddress
+  @transient var hostAddress = Utils.localIpAddress()
   @transient var listenPort = -1
   @transient var guidePort = -1
 
@@ -43,7 +44,7 @@ extends Broadcast[T] with Logging with Serializable {
 
   // Must call this after all the variables have been created/initialized
   if (!isLocal) {
-    sendBroadcast
+    sendBroadcast()
   }
 
   def sendBroadcast() {
@@ -84,20 +85,22 @@ extends Broadcast[T] with Logging with Serializable {
     listOfSources += masterSource
 
     // Register with the Tracker
-    MultiTracker.registerBroadcast(uuid,
+    MultiTracker.registerBroadcast(id,
       SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes))
   }
 
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     MultiTracker.synchronized {
-      SparkEnv.get.blockManager.getSingle(uuid.toString) match {
-        case Some(x) => x.asInstanceOf[T]
-        case None => {
-          logInfo("Started reading broadcast variable " + uuid)
+      SparkEnv.get.blockManager.getSingle(blockId) match {
+        case Some(x) =>
+          value_ = x.asInstanceOf[T]
+
+        case None =>
+          logInfo("Started reading broadcast variable " + id)
           // Initializing everything because Master will only send null/0 values
           // Only the 1st worker in a node can be here. Others will get from cache
-          initializeWorkerVariables
+          initializeWorkerVariables()
 
           logInfo("Local host address: " + hostAddress)
 
@@ -108,18 +111,17 @@ extends Broadcast[T] with Logging with Serializable {
 
           val start = System.nanoTime
 
-          val receptionSucceeded = receiveBroadcast(uuid)
+          val receptionSucceeded = receiveBroadcast(id)
           if (receptionSucceeded) {
             value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
             SparkEnv.get.blockManager.putSingle(
-              uuid.toString, value_, StorageLevel.MEMORY_ONLY_DESER, false)
+              blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
           }  else {
-            logError("Reading Broadcasted variable " + uuid + " failed")
+            logError("Reading broadcast variable " + id + " failed")
           }
 
           val time = (System.nanoTime - start) / 1e9
-          logInfo("Reading Broadcasted variable " + uuid + " took " + time + " s")
-        }
+          logInfo("Reading broadcast variable " + id + " took " + time + " s")
       }
     }
   }
@@ -136,14 +138,14 @@ extends Broadcast[T] with Logging with Serializable {
 
     serveMR =  null
 
-    hostAddress = Utils.localIpAddress
+    hostAddress = Utils.localIpAddress()
     listenPort = -1
 
     stopBroadcast = false
   }
 
-  def receiveBroadcast(variableUUID: UUID): Boolean = {
-    val gInfo = MultiTracker.getGuideInfo(variableUUID)
+  def receiveBroadcast(variableID: Long): Boolean = {
+    val gInfo = MultiTracker.getGuideInfo(variableID)
     
     if (gInfo.listenPort == SourceInfo.TxOverGoToDefault) {
       return false
@@ -316,7 +318,7 @@ extends Broadcast[T] with Logging with Serializable {
         logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
 
-        MultiTracker.unregisterBroadcast(uuid)
+        MultiTracker.unregisterBroadcast(id)
       } finally {
         if (serverSocket != null) {
           logInfo("GuideMultipleRequests now stopping...")
@@ -572,7 +574,10 @@ extends Broadcast[T] with Logging with Serializable {
 
 class TreeBroadcastFactory
 extends BroadcastFactory {
-  def initialize(isMaster: Boolean) = MultiTracker.initialize(isMaster)
-  def newBroadcast[T](value_ : T, isLocal: Boolean) = new TreeBroadcast[T](value_, isLocal)
-  def stop() = MultiTracker.stop
+  def initialize(isMaster: Boolean) { MultiTracker.initialize(isMaster) }
+
+  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
+    new TreeBroadcast[T](value_, isLocal, id)
+
+  def stop() { MultiTracker.stop() }
 }

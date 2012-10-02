@@ -139,7 +139,6 @@ class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: Bl
         logInfo("Registering RDD ID " + rddId + " with cache")
         registeredRddIds += rddId
         communicate(RegisterRDD(rddId, numPartitions))
-        logInfo(RegisterRDD(rddId, numPartitions) + " successful")
       }
     }
   }
@@ -159,7 +158,6 @@ class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: Bl
   // For BlockManager.scala only
   def notifyTheCacheTrackerFromBlockManager(t: AddedToCache) {
     communicate(t)
-    logInfo("notifyTheCacheTrackerFromBlockManager successful")
   }
   
   // Get a snapshot of the currently known locations
@@ -169,7 +167,7 @@ class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: Bl
   
   // Gets or computes an RDD split
   def getOrCompute[T](rdd: RDD[T], split: Split, storageLevel: StorageLevel): Iterator[T] = {
-    val key = "rdd:%d:%d".format(rdd.id, split.index)
+    val key = "rdd_%d_%d".format(rdd.id, split.index)
     logInfo("Cache key is " + key)
     blockManager.get(key) match {
       case Some(cachedValues) =>

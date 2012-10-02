@@ -6,8 +6,8 @@ Lightning-Fast Cluster Computing - <http://www.spark-project.org/>
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the project wiki at <http://github.com/mesos/spark/wiki>. This
-file only contains basic setup instructions.
+guide, on the project webpage at <http://spark-project.org/documentation.html>.
+This README file only contains basic setup instructions.
 
 
 ## Building

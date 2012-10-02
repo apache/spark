@@ -5,7 +5,7 @@ import spark.SparkContext
 object MultiBroadcastTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: BroadcastTest <host> [<slices>] [numElem]")
+      System.err.println("Usage: BroadcastTest <master> [<slices>] [numElem]")
       System.exit(1)
     }
     

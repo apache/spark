@@ -2,8 +2,7 @@ package spark.broadcast
 
 import java.io._
 import java.net._
-import java.util.{UUID, Random}
-import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
+import java.util.Random
 
 import scala.collection.mutable.Map
 
@@ -18,7 +17,7 @@ extends Logging {
   val FIND_BROADCAST_TRACKER = 2
 
   // Map to keep track of guides of ongoing broadcasts
-  var valueToGuideMap = Map[UUID, SourceInfo]()
+  var valueToGuideMap = Map[Long, SourceInfo]()
 
   // Random number generator
   var ranGen = new Random
@@ -154,44 +153,44 @@ extends Logging {
                     val messageType = ois.readObject.asInstanceOf[Int]
 
                     if (messageType == REGISTER_BROADCAST_TRACKER) {
-                      // Receive UUID
-                      val uuid = ois.readObject.asInstanceOf[UUID]
+                      // Receive Long
+                      val id = ois.readObject.asInstanceOf[Long]
                       // Receive hostAddress and listenPort
                       val gInfo = ois.readObject.asInstanceOf[SourceInfo]
 
                       // Add to the map
                       valueToGuideMap.synchronized {
-                        valueToGuideMap += (uuid -> gInfo)
+                        valueToGuideMap += (id -> gInfo)
                       }
 
-                      logInfo ("New broadcast " + uuid + " registered with TrackMultipleValues. Ongoing ones: " + valueToGuideMap)
+                      logInfo ("New broadcast " + id + " registered with TrackMultipleValues. Ongoing ones: " + valueToGuideMap)
 
                       // Send dummy ACK
                       oos.writeObject(-1)
                       oos.flush()
                     } else if (messageType == UNREGISTER_BROADCAST_TRACKER) {
-                      // Receive UUID
-                      val uuid = ois.readObject.asInstanceOf[UUID]
+                      // Receive Long
+                      val id = ois.readObject.asInstanceOf[Long]
 
                       // Remove from the map
                       valueToGuideMap.synchronized {
-                        valueToGuideMap(uuid) = SourceInfo("", SourceInfo.TxOverGoToDefault)
+                        valueToGuideMap(id) = SourceInfo("", SourceInfo.TxOverGoToDefault)
                       }
 
-                      logInfo ("Broadcast " + uuid + " unregistered from TrackMultipleValues. Ongoing ones: " + valueToGuideMap)
+                      logInfo ("Broadcast " + id + " unregistered from TrackMultipleValues. Ongoing ones: " + valueToGuideMap)
 
                       // Send dummy ACK
                       oos.writeObject(-1)
                       oos.flush()
                     } else if (messageType == FIND_BROADCAST_TRACKER) {
-                      // Receive UUID
-                      val uuid = ois.readObject.asInstanceOf[UUID]
+                      // Receive Long
+                      val id = ois.readObject.asInstanceOf[Long]
 
                       var gInfo =
-                        if (valueToGuideMap.contains(uuid)) valueToGuideMap(uuid)
+                        if (valueToGuideMap.contains(id)) valueToGuideMap(id)
                         else SourceInfo("", SourceInfo.TxNotStartedRetry)
 
-                      logDebug("Got new request: " + clientSocket + " for " + uuid + " : " + gInfo.listenPort)
+                      logDebug("Got new request: " + clientSocket + " for " + id + " : " + gInfo.listenPort)
 
                       // Send reply back
                       oos.writeObject(gInfo)
@@ -224,7 +223,7 @@ extends Logging {
     }
   }
   
-  def getGuideInfo(variableUUID: UUID): SourceInfo = {
+  def getGuideInfo(variableLong: Long): SourceInfo = {
     var clientSocketToTracker: Socket = null
     var oosTracker: ObjectOutputStream = null
     var oisTracker: ObjectInputStream = null
@@ -247,8 +246,8 @@ extends Logging {
         oosTracker.writeObject(MultiTracker.FIND_BROADCAST_TRACKER)
         oosTracker.flush()
 
-        // Send UUID and receive GuideInfo
-        oosTracker.writeObject(variableUUID)
+        // Send Long and receive GuideInfo
+        oosTracker.writeObject(variableLong)
         oosTracker.flush()
         gInfo = oisTracker.readObject.asInstanceOf[SourceInfo]
       } catch {
@@ -276,7 +275,7 @@ extends Logging {
     return gInfo
   }
   
-  def registerBroadcast(uuid: UUID, gInfo: SourceInfo) {
+  def registerBroadcast(id: Long, gInfo: SourceInfo) {
     val socket = new Socket(MultiTracker.MasterHostAddress, MasterTrackerPort)
     val oosST = new ObjectOutputStream(socket.getOutputStream)
     oosST.flush()
@@ -286,8 +285,8 @@ extends Logging {
     oosST.writeObject(REGISTER_BROADCAST_TRACKER)
     oosST.flush()
 
-    // Send UUID of this broadcast
-    oosST.writeObject(uuid)
+    // Send Long of this broadcast
+    oosST.writeObject(id)
     oosST.flush()
 
     // Send this tracker's information
@@ -303,7 +302,7 @@ extends Logging {
     socket.close()
   }
 
-  def unregisterBroadcast(uuid: UUID) {
+  def unregisterBroadcast(id: Long) {
     val socket = new Socket(MultiTracker.MasterHostAddress, MasterTrackerPort)
     val oosST = new ObjectOutputStream(socket.getOutputStream)
     oosST.flush()
@@ -313,8 +312,8 @@ extends Logging {
     oosST.writeObject(UNREGISTER_BROADCAST_TRACKER)
     oosST.flush()
 
-    // Send UUID of this broadcast
-    oosST.writeObject(uuid)
+    // Send Long of this broadcast
+    oosST.writeObject(id)
     oosST.flush()
 
     // Receive ACK and throw it away

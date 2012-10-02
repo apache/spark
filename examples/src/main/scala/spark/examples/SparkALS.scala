@@ -107,7 +107,7 @@ object SparkALS {
         host = host_
       }
       case _ => {
-        System.err.println("Usage: SparkALS <M> <U> <F> <iters> <slices> <host>")
+        System.err.println("Usage: SparkALS <M> <U> <F> <iters> <slices> <master>")
         System.exit(1)
       }
     }

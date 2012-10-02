@@ -20,8 +20,7 @@ sealed trait ToBlockManagerMaster
 
 case class RegisterBlockManager(
     blockManagerId: BlockManagerId,
-    maxMemSize: Long,
-    maxDiskSize: Long)
+    maxMemSize: Long)
   extends ToBlockManagerMaster
 
 class HeartBeat(
@@ -85,22 +84,20 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   class BlockManagerInfo(
       val blockManagerId: BlockManagerId,
       timeMs: Long,
-      val maxMem: Long,
-      val maxDisk: Long) {
+      val maxMem: Long) {
     private var lastSeenMs = timeMs
-    private var remainedMem = maxMem
-    private var remainedDisk = maxDisk
+    private var remainingMem = maxMem
     private val blocks = new JHashMap[String, StorageLevel]
 
-    logInfo("Registering block manager (%s:%d, ram: %d, disk: %d)".format(
-      blockManagerId.ip, blockManagerId.port, maxMem, maxDisk))
+    logInfo("Registering block manager %s:%d with %s RAM".format(
+      blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(maxMem)))
     
     def updateLastSeenMs() {
       lastSeenMs = System.currentTimeMillis() / 1000
     }
     
-    def updateBlockInfo(
-      blockId: String, storageLevel: StorageLevel, memSize: Long, diskSize: Long) = synchronized {
+    def updateBlockInfo(blockId: String, storageLevel: StorageLevel, memSize: Long, diskSize: Long)
+      : Unit = synchronized {
 
       updateLastSeenMs()
       
@@ -109,10 +106,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
         val originalLevel: StorageLevel = blocks.get(blockId)
         
         if (originalLevel.useMemory) {
-          remainedMem += memSize
-        }
-        if (originalLevel.useDisk) {
-          remainedDisk += diskSize
+          remainingMem += memSize
         }
       }
       
@@ -120,26 +114,28 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
         // isValid means it is either stored in-memory or on-disk.
         blocks.put(blockId, storageLevel)
         if (storageLevel.useMemory) {
-          remainedMem -= memSize
-          logInfo("Added %s in memory on %s:%d (size: %d, free: %d)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, memSize, remainedMem))
+          remainingMem -= memSize
+          logInfo("Added %s in memory on %s:%d (size: %s, free: %s)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
+            Utils.memoryBytesToString(remainingMem)))
         }
         if (storageLevel.useDisk) {
-          remainedDisk -= diskSize
-          logInfo("Added %s on disk on %s:%d (size: %d, free: %d)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, diskSize, remainedDisk))
+          logInfo("Added %s on disk on %s:%d (size: %s)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
         }
       } else if (blocks.containsKey(blockId)) {
         // If isValid is not true, drop the block.
         val originalLevel: StorageLevel = blocks.get(blockId)
         blocks.remove(blockId)
         if (originalLevel.useMemory) {
-          logInfo("Removed %s on %s:%d in memory (size: %d, free: %d)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, memSize, remainedDisk))
+          remainingMem += memSize
+          logInfo("Removed %s on %s:%d in memory (size: %s, free: %s)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
+            Utils.memoryBytesToString(remainingMem)))
         }
         if (originalLevel.useDisk) {
-          logInfo("Removed %s on %s:%d on disk (size: %d, free: %d)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, diskSize, remainedDisk))
+          logInfo("Removed %s on %s:%d on disk (size: %s)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
         }
       }
     }
@@ -149,15 +145,11 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     }
     
     def getRemainedMem: Long = {
-      return remainedMem
-    }
-    
-    def getRemainedDisk: Long = {
-      return remainedDisk
+      return remainingMem
     }
 
     override def toString: String = {
-      return "BlockManagerInfo " + timeMs + " " + remainedMem + " " + remainedDisk  
+      return "BlockManagerInfo " + timeMs + " " + remainingMem
     }
 
     def clear() {
@@ -181,8 +173,8 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   }
 
   def receive = {
-    case RegisterBlockManager(blockManagerId, maxMemSize, maxDiskSize) =>
-      register(blockManagerId, maxMemSize, maxDiskSize)
+    case RegisterBlockManager(blockManagerId, maxMemSize) =>
+      register(blockManagerId, maxMemSize)
 
     case HeartBeat(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
       heartBeat(blockManagerId, blockId, storageLevel, deserializedSize, size)
@@ -210,7 +202,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       logInfo("Got unknown message: " + other)
   }
   
-  private def register(blockManagerId: BlockManagerId, maxMemSize: Long, maxDiskSize: Long) {
+  private def register(blockManagerId: BlockManagerId, maxMemSize: Long) {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " "
     logDebug("Got in register 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
@@ -218,7 +210,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       logInfo("Got Register Msg from master node, don't register it")
     } else {
       blockManagerInfo += (blockManagerId -> new BlockManagerInfo(
-        blockManagerId, System.currentTimeMillis() / 1000, maxMemSize, maxDiskSize))
+        blockManagerId, System.currentTimeMillis() / 1000, maxMemSize))
     }
     logDebug("Got in register 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
     sender ! true
@@ -395,10 +387,12 @@ class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: B
   }
 
   def mustRegisterBlockManager(msg: RegisterBlockManager) {
+    logInfo("Trying to register BlockManager")
     while (! syncRegisterBlockManager(msg)) {
       logWarning("Failed to register " + msg)
       Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
     }
+    logInfo("Done registering BlockManager")
   }
 
   def syncRegisterBlockManager(msg: RegisterBlockManager): Boolean = {
