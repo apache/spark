@@ -18,29 +18,12 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   private val entries = new LinkedHashMap[String, Entry](32, 0.75f, true)
   private var currentMemory = 0L
 
-  //private val blockDropper = Executors.newSingleThreadExecutor()
-  private val blocksToDrop = new ArrayBlockingQueue[String](10000, true)
-  private val blockDropper = new Thread("memory store - block dropper") {
-    override def run() {
-      try {
-        while (true) {
-          val blockId = blocksToDrop.take()
-          logDebug("Block " + blockId + " ready to be dropped")
-          blockManager.dropFromMemory(blockId)
-        }
-      } catch {
-        case ie: InterruptedException =>
-          logInfo("Shutting down block dropper")
-      }
-    }
-  }
-  blockDropper.start()
   logInfo("MemoryStore started with capacity %s.".format(Utils.memoryBytesToString(maxMemory)))
 
   def freeMemory: Long = maxMemory - currentMemory
 
   override def getSize(blockId: String): Long = {
-    entries.synchronized {
+    synchronized {
       entries.get(blockId).size
     }
   }
@@ -52,19 +35,12 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val elements = new ArrayBuffer[Any]
       elements ++= values
       val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
-      ensureFreeSpace(sizeEstimate)
-      val entry = new Entry(elements, sizeEstimate, true)
-      entries.synchronized { entries.put(blockId, entry) }
-      currentMemory += sizeEstimate
-      logInfo("Block %s stored as values to memory (estimated size %s, free %s)".format(
-        blockId, Utils.memoryBytesToString(sizeEstimate), Utils.memoryBytesToString(freeMemory)))
+      tryToPut(blockId, elements, sizeEstimate, true)
     } else {
       val entry = new Entry(bytes, bytes.limit, false)
-      ensureFreeSpace(bytes.limit)
-      entries.synchronized { entries.put(blockId, entry) }
-      currentMemory += bytes.limit
-      logInfo("Block %s stored as serialized bytes to memory (size %s, free %s)".format(
-        blockId, Utils.memoryBytesToString(bytes.limit), Utils.memoryBytesToString(freeMemory)))
+      ensureFreeSpace(blockId, bytes.limit)
+      synchronized { entries.put(blockId, entry) }
+      tryToPut(blockId, bytes, bytes.limit, false)
     }
   }
 
@@ -79,27 +55,17 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val elements = new ArrayBuffer[Any]
       elements ++= values
       val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
-      ensureFreeSpace(sizeEstimate)
-      val entry = new Entry(elements, sizeEstimate, true)
-      entries.synchronized { entries.put(blockId, entry) }
-      currentMemory += sizeEstimate
-      logInfo("Block %s stored as values to memory (estimated size %s, free %s)".format(
-        blockId, Utils.memoryBytesToString(sizeEstimate), Utils.memoryBytesToString(freeMemory)))
+      tryToPut(blockId, elements, sizeEstimate, true)
       Left(elements.iterator)
     } else {
       val bytes = blockManager.dataSerialize(values)
-      ensureFreeSpace(bytes.limit)
-      val entry = new Entry(bytes, bytes.limit, false)
-      entries.synchronized { entries.put(blockId, entry) }
-      currentMemory += bytes.limit
-      logInfo("Block %s stored as serialized bytes to memory (size %s, free %s)".format(
-        blockId, Utils.memoryBytesToString(bytes.limit), Utils.memoryBytesToString(freeMemory)))
+      tryToPut(blockId, bytes, bytes.limit, false)
       Right(bytes)
     }
   }
 
   override def getBytes(blockId: String): Option[ByteBuffer] = {
-    val entry = entries.synchronized {
+    val entry = synchronized {
       entries.get(blockId)
     }
     if (entry == null) {
@@ -112,7 +78,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   override def getValues(blockId: String): Option[Iterator[Any]] = {
-    val entry = entries.synchronized {
+    val entry = synchronized {
       entries.get(blockId)
     }
     if (entry == null) {
@@ -126,7 +92,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   override def remove(blockId: String) {
-    entries.synchronized {
+    synchronized {
       val entry = entries.get(blockId)
       if (entry != null) {
         entries.remove(blockId)
@@ -134,54 +100,118 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         logInfo("Block %s of size %d dropped from memory (free %d)".format(
           blockId, entry.size, freeMemory))
       } else {
-        logWarning("Block " + blockId + " could not be removed as it doesnt exist")
+        logWarning("Block " + blockId + " could not be removed as it does not exist")
       }
     }
   }
 
   override def clear() {
-    entries.synchronized {
+    synchronized {
       entries.clear()
     }
-    blockDropper.interrupt()
     logInfo("MemoryStore cleared")
   }
 
-  // TODO: This should be able to return false if the space is larger than our total memory,
-  // or if adding this block would require evicting another one from the same RDD
-  private def ensureFreeSpace(space: Long) {
+  /**
+   * Return the RDD ID that a given block ID is from, or null if it is not an RDD block.
+   */
+  private def getRddId(blockId: String): String = {
+    if (blockId.startsWith("rdd_")) {
+      blockId.split('_')(1)
+    } else {
+      null
+    }
+  }
+
+  /**
+   * Try to put in a set of values, if we can free up enough space. The value should either be
+   * an ArrayBuffer if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated)
+   * size must also be passed by the caller.
+   */
+  private def tryToPut(blockId: String, value: Any, size: Long, deserialized: Boolean): Boolean = {
+    synchronized {
+      if (ensureFreeSpace(blockId, size)) {
+        val entry = new Entry(value, size, deserialized)
+        entries.put(blockId, entry)
+        currentMemory += size
+        if (deserialized) {
+          logInfo("Block %s stored as values to memory (estimated size %s, free %s)".format(
+            blockId, Utils.memoryBytesToString(size), Utils.memoryBytesToString(freeMemory)))
+        } else {
+          logInfo("Block %s stored as bytes to memory (size %s, free %s)".format(
+            blockId, Utils.memoryBytesToString(size), Utils.memoryBytesToString(freeMemory)))
+        }
+        true
+      } else {
+        // Tell the block manager that we couldn't put it in memory so that it can drop it to
+        // disk if the block allows disk storage.
+        val data = if (deserialized) {
+          Left(value.asInstanceOf[ArrayBuffer[Any]].iterator)
+        } else {
+          Right(value.asInstanceOf[ByteBuffer].duplicate())
+        }
+        blockManager.dropFromMemory(blockId, data)
+        false
+      }
+    }
+  }
+
+  /**
+   * Tries to free up a given amount of space to store a particular block, but can fail and return
+   * false if either the block is bigger than our memory or it would require replacing another
+   * block from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
+   * don't fit into memory that we want to avoid).
+   *
+   * Assumes that a lock on entries is held by the caller.
+   */
+  private def ensureFreeSpace(blockIdToAdd: String, space: Long): Boolean = {
     logInfo("ensureFreeSpace(%d) called with curMem=%d, maxMem=%d".format(
       space, currentMemory, maxMemory))
 
+    if (space > maxMemory) {
+      logInfo("Will not store " + blockIdToAdd + " as it is larger than our memory limit")
+      return false
+    }
+    
     if (maxMemory - currentMemory < space) {
-
+      val rddToAdd = getRddId(blockIdToAdd)
       val selectedBlocks = new ArrayBuffer[String]()
       var selectedMemory = 0L
 
-      entries.synchronized {
-        val iter = entries.entrySet().iterator()
-        while (maxMemory - (currentMemory - selectedMemory) < space && iter.hasNext) {
-          val pair = iter.next()
-          val blockId = pair.getKey
-          val entry = pair.getValue
-          if (!entry.dropPending) {
-            selectedBlocks += blockId
-            entry.dropPending = true
-          }
-          selectedMemory += pair.getValue.size
-          logInfo("Block " + blockId + " selected for dropping")
+      val iterator = entries.entrySet().iterator()
+      while (maxMemory - (currentMemory - selectedMemory) < space && iterator.hasNext) {
+        val pair = iterator.next()
+        val blockId = pair.getKey
+        if (rddToAdd != null && rddToAdd == getRddId(blockId)) {
+          logInfo("Will not store " + blockIdToAdd + " as it would require dropping another " +
+            "block from the same RDD")
+          return false
         }
+        selectedBlocks += blockId
+        selectedMemory += pair.getValue.size
       }
 
-      logInfo("" + selectedBlocks.size + " new blocks selected for dropping, " +
-        blocksToDrop.size + " blocks pending")
-      var i = 0
-      while (i < selectedBlocks.size) {
-        blocksToDrop.add(selectedBlocks(i))
-        i += 1
+      if (maxMemory - (currentMemory - selectedMemory) >= space) {
+        logInfo(selectedBlocks.size + " blocks selected for dropping")
+        for (blockId <- selectedBlocks) {
+          val entry = entries.get(blockId)
+          val data = if (entry.deserialized) {
+            Left(entry.value.asInstanceOf[ArrayBuffer[Any]].iterator)
+          } else {
+            Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
+          }
+          blockManager.dropFromMemory(blockId, data)
+        }
+        return true
+      } else {
+        return false
       }
-      selectedBlocks.clear()
     }
+    return true
+  }
+
+  override def contains(blockId: String): Boolean = {
+    synchronized { entries.containsKey(blockId) }
   }
 }
 
