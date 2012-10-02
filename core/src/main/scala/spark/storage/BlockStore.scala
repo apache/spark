@@ -31,7 +31,5 @@ abstract class BlockStore(val blockManager: BlockManager) extends Logging {
 
   def remove(blockId: String)
 
-  def contains(blockId: String): Boolean
-
   def clear() { }
 }
