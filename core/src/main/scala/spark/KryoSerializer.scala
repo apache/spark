@@ -68,7 +68,8 @@ private[spark] object ZigZag {
   }
 }
 
-private[spark] class KryoSerializationStream(kryo: Kryo, threadBuffer: ByteBuffer, out: OutputStream)
+private[spark] 
+class KryoSerializationStream(kryo: Kryo, threadBuffer: ByteBuffer, out: OutputStream)
 extends SerializationStream {
   val channel = Channels.newChannel(out)
 
@@ -85,7 +86,8 @@ extends SerializationStream {
   def close() { out.close() }
 }
 
-private[spark] class KryoDeserializationStream(objectBuffer: ObjectBuffer, in: InputStream)
+private[spark] 
+class KryoDeserializationStream(objectBuffer: ObjectBuffer, in: InputStream)
 extends DeserializationStream {
   def readObject[T](): T = {
     val len = ZigZag.readInt(in)

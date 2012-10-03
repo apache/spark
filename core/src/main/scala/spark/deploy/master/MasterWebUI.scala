@@ -10,7 +10,8 @@ import cc.spray.directives._
 import cc.spray.typeconversion.TwirlSupport._
 import spark.deploy._
 
-private[spark] class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Directives {
+private[spark]
+class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/master/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
   

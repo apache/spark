@@ -9,7 +9,8 @@ import spark.{Logging, Utils}
 
 import scala.collection.mutable.ArrayBuffer
 
-private[spark] class LocalSparkCluster(numSlaves: Int, coresPerSlave: Int, memoryPerSlave: Int) extends Logging {
+private[spark]
+class LocalSparkCluster(numSlaves: Int, coresPerSlave: Int, memoryPerSlave: Int) extends Logging {
   
   val localIpAddress = Utils.localIpAddress
   

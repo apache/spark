@@ -11,7 +11,8 @@ import java.nio.channels.spi._
 import java.net._
 
 
-private[spark] abstract class Connection(val channel: SocketChannel, val selector: Selector) extends Logging {
+private[spark]
+abstract class Connection(val channel: SocketChannel, val selector: Selector) extends Logging {
 
   channel.configureBlocking(false)
   channel.socket.setTcpNoDelay(true)

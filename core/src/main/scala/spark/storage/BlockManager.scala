@@ -43,7 +43,8 @@ private[spark] class BlockManagerId(var ip: String, var port: Int) extends Exter
 }
 
 
-private[spark] case class BlockException(blockId: String, message: String, ex: Exception = null)
+private[spark] 
+case class BlockException(blockId: String, message: String, ex: Exception = null)
 extends Exception(message)
 
 
@@ -56,7 +57,8 @@ private[spark] class BlockLocker(numLockers: Int) {
 }
 
 
-private[spark] class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
+private[spark]
+class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
   extends Logging {
 
   case class BlockInfo(level: StorageLevel, tellMaster: Boolean)

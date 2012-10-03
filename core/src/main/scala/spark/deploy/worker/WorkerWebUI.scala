@@ -9,7 +9,8 @@ import cc.spray.Directives
 import cc.spray.typeconversion.TwirlSupport._
 import spark.deploy.{WorkerState, RequestWorkerState}
 
-private[spark] class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Directives {
+private[spark]
+class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/worker/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
   

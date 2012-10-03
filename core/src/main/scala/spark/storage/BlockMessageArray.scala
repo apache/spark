@@ -8,7 +8,8 @@ import scala.collection.mutable.ArrayBuffer
 import spark._
 import spark.network._
 
-private[spark] class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockMessage] with Logging {
+private[spark]
+class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockMessage] with Logging {
   
   def this(bm: BlockMessage) = this(Array(bm))
 

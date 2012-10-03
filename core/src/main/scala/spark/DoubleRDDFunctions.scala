@@ -10,7 +10,7 @@ import spark.util.StatCounter
 /**
  * Extra functions available on RDDs of Doubles through an implicit conversion.
  */
-private[spark] class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
+class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   def sum(): Double = {
     self.reduce(_ + _)
   }

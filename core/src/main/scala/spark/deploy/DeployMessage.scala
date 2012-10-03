@@ -11,10 +11,12 @@ private[spark] sealed trait DeployMessage extends Serializable
 
 // Worker to Master
 
-private[spark] case class RegisterWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int)
+private[spark] 
+case class RegisterWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int)
   extends DeployMessage
 
-private[spark] case class ExecutorStateChanged(
+private[spark] 
+case class ExecutorStateChanged(
     jobId: String,
     execId: Int,
     state: ExecutorState,
@@ -42,10 +44,17 @@ private[spark] case class RegisterJob(jobDescription: JobDescription) extends De
 
 // Master to Client
 
-private[spark] case class RegisteredJob(jobId: String) extends DeployMessage
-private[spark] case class ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int)
-private[spark] case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String])
-private[spark] case class JobKilled(message: String)
+private[spark] 
+case class RegisteredJob(jobId: String) extends DeployMessage
+
+private[spark] 
+case class ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int)
+
+private[spark]
+case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String])
+
+private[spark]
+case class JobKilled(message: String)
 
 // Internal message in Client
 
@@ -57,7 +66,8 @@ private[spark] case object RequestMasterState
 
 // Master to MasterWebUI
 
-private[spark] case class MasterState(uri : String, workers: List[WorkerInfo], activeJobs: List[JobInfo], 
+private[spark] 
+case class MasterState(uri : String, workers: List[WorkerInfo], activeJobs: List[JobInfo], 
   completedJobs: List[JobInfo])
 
 //  WorkerWebUI to Worker
@@ -65,6 +75,7 @@ private[spark] case object RequestWorkerState
 
 // Worker to WorkerWebUI
 
-private[spark] case class WorkerState(uri: String, workerId: String, executors: List[ExecutorRunner], 
+private[spark]
+case class WorkerState(uri: String, workerId: String, executors: List[ExecutorRunner], 
   finishedExecutors: List[ExecutorRunner], masterUrl: String, cores: Int, memory: Int, 
   coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String)
