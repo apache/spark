@@ -7,14 +7,19 @@ Because of the in-memory nature of most Spark computations, Spark programs can b
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
-[storing RDDs in serialized form]({{HOME_PATH}}scala-programming-guide#rdd-persistence), to
+[storing RDDs in serialized form]({{HOME_PATH}}/scala-programming-guide.html#rdd-persistence), to
 make the memory usage smaller.
 This guide will cover two main topics: data serialization, which is crucial for good network
 performance, and memory tuning. We also sketch several smaller topics.
 
-# Data Serialization
+This document assumes that you have familiarity with the Spark API and have already read the [Scala]({{HOME_PATH}}/scala-programming-guide.html) or [Java]({{HOME_PATH}}/java-programming-guide.html) programming guides. After reading this guide, do not hesitate to reach out to the [Spark mailing list](http://groups.google.com/group/spark-users) with performance related concerns.
 
-One of the most important concerns in any distributed program is the format of data sent across
+# The Spark Storage Model
+Spark's key abstraction is a distributed dataset, or RDD. RDD's consist of partitions. RDD partitions are stored either in memory or on disk, with replication or without replication, depending on the chosen [persistence options]({{HOME_PATH}}/scala-programming-guide.html#rdd-persistence). When RDD's are stored in memory, they can be stored as deserialized Java objects, or in a serialized form, again depending on the persistence option chosen. When RDD's are transferred over the network, or spilled to disk, they are always serialized. Spark can use different serializers, configurable with the `spark.serializer` option.
+
+# Serialization Options
+
+Serialization plays an important role in the performance of Spark applications, especially those which are network-bound. The format of data sent across
 the network -- formats that are slow to serialize objects into, or consume a large number of
 bytes, will greatly slow down the computation.
 Often, this will be the first thing you should tune to optimize a Spark application.
@@ -70,8 +75,11 @@ full class name with each object, which is wasteful.
 # Memory Tuning
 
 There are three considerations in tuning memory usage: the *amount* of memory used by your objects
-(you likely want your entire dataset to fit in memory), the *cost* of accessing those objects, and the
+(you may want your entire dataset to fit in memory), the *cost* of accessing those objects, and the
 overhead of *garbage collection* (if you have high turnover in terms of objects).
+
+## Determining memory consumption
+The best way to size the amount of memory consumption your dataset will require is to create an RDD, put it into cache, and look at the master logs. The logs will tell you how much memory each partition is consuming, which you can aggregate to get the total size of the RDD. Depending on the object complexity in your dataset, and whether you are storing serialized data, memory overhead can range from 1X (e.g. no overhead vs on-disk storage) to 5X. This guide covers ways to keep memory overhead low, in cases where memory is a contended resource.
 
 ## Efficient Data Structures
 
@@ -100,9 +108,6 @@ There are several ways to reduce this cost and still make Java objects efficient
    four bytes instead of eight. Also, on Java 7 or later, try `-XX:+UseCompressedStrings` to store
    ASCII strings as just 8 bits per character. You can add these options in
    [`spark-env.sh`]({{HOME_PATH}}configuration.html#environment-variables-in-spark-envsh).
-
-You can get a sense of the memory usage of each object by looking at the logs of your Spark worker
-nodes -- they will print the size of each RDD partition cached.
 
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
