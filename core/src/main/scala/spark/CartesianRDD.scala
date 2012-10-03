@@ -5,6 +5,7 @@ class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with 
   override val index: Int = idx
 }
 
+private[spark]
 class CartesianRDD[T: ClassManifest, U:ClassManifest](
     sc: SparkContext,
     rdd1: RDD[T],

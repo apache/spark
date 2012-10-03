@@ -383,6 +383,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 }
 
+private[spark]
 class MappedRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
     f: T => U)
@@ -393,6 +394,7 @@ class MappedRDD[U: ClassManifest, T: ClassManifest](
   override def compute(split: Split) = prev.iterator(split).map(f)
 }
 
+private[spark]
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
     f: T => TraversableOnce[U])
@@ -403,18 +405,21 @@ class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
   override def compute(split: Split) = prev.iterator(split).flatMap(f)
 }
 
+private[spark]
 class FilteredRDD[T: ClassManifest](prev: RDD[T], f: T => Boolean) extends RDD[T](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = prev.iterator(split).filter(f)
 }
 
+private[spark]
 class GlommedRDD[T: ClassManifest](prev: RDD[T]) extends RDD[Array[T]](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = Array(prev.iterator(split).toArray).iterator
 }
 
+private[spark]
 class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
     f: Iterator[T] => Iterator[U])
@@ -430,6 +435,7 @@ class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
  * closure. This can be used to generate or collect partition specific
  * information such as the number of tuples in a partition.
  */
+private[spark]
 class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
     f: (Int, Iterator[T]) => Iterator[U])
