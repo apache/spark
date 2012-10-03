@@ -9,10 +9,10 @@ import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 import spark.util.ByteBufferInputStream
 
 /**
- * A serializer. Because some serialization libraries are not thread safe, this class is used to 
+ * A serializer. Because some serialization libraries are not thread safe, this class is used to
  * create SerializerInstances that do the actual serialization.
  */
-private[spark] trait Serializer {
+trait Serializer {
   def newInstance(): SerializerInstance
 }
 
@@ -88,7 +88,7 @@ private[spark] trait DeserializationStream {
       }
       gotNext = true
     }
-    
+
     override def hasNext: Boolean = {
       if (!gotNext) {
         getNext()

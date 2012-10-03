@@ -57,6 +57,6 @@ private[spark] class JavaSerializerInstance extends SerializerInstance {
   }
 }
 
-private[spark] class JavaSerializer extends Serializer {
+class JavaSerializer extends Serializer {
   def newInstance(): SerializerInstance = new JavaSerializerInstance
 }
