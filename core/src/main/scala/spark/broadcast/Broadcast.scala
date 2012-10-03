@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import spark._
 
-abstract class Broadcast[T](id: Long) extends Serializable {
+private[spark] abstract class Broadcast[T](id: Long) extends Serializable {
   def value: T
 
   // We cannot have an abstract readObject here due to some weird issues with
@@ -14,7 +14,7 @@ abstract class Broadcast[T](id: Long) extends Serializable {
   override def toString = "spark.Broadcast(" + id + ")"
 }
 
-class BroadcastManager(val isMaster_ : Boolean) extends Logging with Serializable {
+private[spark] class BroadcastManager(val isMaster_ : Boolean) extends Logging with Serializable {
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null

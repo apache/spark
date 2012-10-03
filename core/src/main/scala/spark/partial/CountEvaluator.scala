@@ -8,7 +8,7 @@ import cern.jet.stat.Probability
  * TODO: There's currently a lot of shared code between this and GroupedCountEvaluator. It might
  * be best to make this a special case of GroupedCountEvaluator with one group.
  */
-class CountEvaluator(totalOutputs: Int, confidence: Double)
+private[spark] class CountEvaluator(totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[Long, BoundedDouble] {
 
   var outputsMerged = 0

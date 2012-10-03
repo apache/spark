@@ -11,7 +11,7 @@ import scala.math
 import spark._
 import spark.storage.StorageLevel
 
-class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id)
   with Logging
   with Serializable {
@@ -1027,7 +1027,7 @@ class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Lo
   }
 }
 
-class BitTorrentBroadcastFactory
+private[spark] class BitTorrentBroadcastFactory
 extends BroadcastFactory {
   def initialize(isMaster: Boolean) { MultiTracker.initialize(isMaster) }
 

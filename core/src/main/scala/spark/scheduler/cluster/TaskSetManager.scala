@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
 /**
  * Schedules the tasks within a single TaskSet in the ClusterScheduler.
  */
-class TaskSetManager(
+private[spark] class TaskSetManager(
   sched: ClusterScheduler,
   val taskSet: TaskSet)
   extends Logging {

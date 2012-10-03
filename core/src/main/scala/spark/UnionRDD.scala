@@ -2,7 +2,7 @@ package spark
 
 import scala.collection.mutable.ArrayBuffer
 
-class UnionSplit[T: ClassManifest](
+private[spark] class UnionSplit[T: ClassManifest](
     idx: Int, 
     rdd: RDD[T],
     split: Split)

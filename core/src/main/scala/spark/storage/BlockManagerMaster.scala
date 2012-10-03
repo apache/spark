@@ -16,14 +16,14 @@ import akka.util.duration._
 import spark.{Logging, SparkException, Utils}
 
 
-sealed trait ToBlockManagerMaster
+private[spark] sealed trait ToBlockManagerMaster
 
-case class RegisterBlockManager(
+private[spark] case class RegisterBlockManager(
     blockManagerId: BlockManagerId,
     maxMemSize: Long)
   extends ToBlockManagerMaster
 
-class HeartBeat(
+private[spark] class HeartBeat(
     var blockManagerId: BlockManagerId,
     var blockId: String,
     var storageLevel: StorageLevel,
@@ -53,7 +53,7 @@ class HeartBeat(
   }
 }
 
-object HeartBeat {
+private[spark] object HeartBeat {
   def apply(blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
@@ -68,18 +68,18 @@ object HeartBeat {
   }
 }
   
-case class GetLocations(blockId: String) extends ToBlockManagerMaster
+private[spark] case class GetLocations(blockId: String) extends ToBlockManagerMaster
 
-case class GetLocationsMultipleBlockIds(blockIds: Array[String]) extends ToBlockManagerMaster
+private[spark] case class GetLocationsMultipleBlockIds(blockIds: Array[String]) extends ToBlockManagerMaster
   
-case class GetPeers(blockManagerId: BlockManagerId, size: Int) extends ToBlockManagerMaster
+private[spark] case class GetPeers(blockManagerId: BlockManagerId, size: Int) extends ToBlockManagerMaster
   
-case class RemoveHost(host: String) extends ToBlockManagerMaster
+private[spark] case class RemoveHost(host: String) extends ToBlockManagerMaster
 
-case object StopBlockManagerMaster extends ToBlockManagerMaster
+private[spark] case object StopBlockManagerMaster extends ToBlockManagerMaster
 
 
-class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
+private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   
   class BlockManagerInfo(
       val blockManagerId: BlockManagerId,
@@ -330,7 +330,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   }
 }
 
-class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean)
+private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean)
   extends Logging {
 
   val AKKA_ACTOR_NAME: String = "BlockMasterManager"

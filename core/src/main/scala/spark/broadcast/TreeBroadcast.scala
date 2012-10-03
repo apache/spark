@@ -10,7 +10,7 @@ import scala.math
 import spark._
 import spark.storage.StorageLevel
 
-class TreeBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+private[spark] class TreeBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
 extends Broadcast[T](id) with Logging with Serializable {
 
   def value = value_
@@ -572,7 +572,7 @@ extends Broadcast[T](id) with Logging with Serializable {
   }
 }
 
-class TreeBroadcastFactory
+private[spark] class TreeBroadcastFactory
 extends BroadcastFactory {
   def initialize(isMaster: Boolean) { MultiTracker.initialize(isMaster) }
 

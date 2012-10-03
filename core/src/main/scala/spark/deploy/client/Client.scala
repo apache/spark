@@ -16,7 +16,7 @@ import akka.dispatch.Await
  * The main class used to talk to a Spark deploy cluster. Takes a master URL, a job description,
  * and a listener for job events, and calls back the listener when various events occur.
  */
-class Client(
+private[spark] class Client(
     actorSystem: ActorSystem,
     masterUrl: String,
     jobDescription: JobDescription,

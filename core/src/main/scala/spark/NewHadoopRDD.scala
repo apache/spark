@@ -13,7 +13,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptID
 import java.util.Date
 import java.text.SimpleDateFormat
 
-class NewHadoopSplit(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
+private[spark] class NewHadoopSplit(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
   extends Split {
   
   val serializableHadoopSplit = new SerializableWritable(rawSplit)

@@ -9,7 +9,7 @@ import org.objectweb.asm.{ClassReader, MethodVisitor, Type}
 import org.objectweb.asm.commons.EmptyVisitor
 import org.objectweb.asm.Opcodes._
 
-object ClosureCleaner extends Logging {
+private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
   private def getClassReader(cls: Class[_]): ClassReader = {
     new ClassReader(cls.getResourceAsStream(
@@ -154,7 +154,7 @@ object ClosureCleaner extends Logging {
   }
 }
 
-class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends EmptyVisitor {
+private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends EmptyVisitor {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     return new EmptyVisitor {
@@ -180,7 +180,7 @@ class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends EmptyVisitor
   }
 }
 
-class InnerClosureFinder(output: Set[Class[_]]) extends EmptyVisitor {
+private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends EmptyVisitor {
   var myName: String = null
   
   override def visit(version: Int, access: Int, name: String, sig: String,

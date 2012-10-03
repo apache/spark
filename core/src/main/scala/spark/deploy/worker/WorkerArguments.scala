@@ -8,7 +8,7 @@ import java.lang.management.ManagementFactory
 /**
  * Command-line parser for the master.
  */
-class WorkerArguments(args: Array[String]) {
+private[spark] class WorkerArguments(args: Array[String]) {
   var ip = Utils.localIpAddress()
   var port = 0
   var webUiPort = 8081

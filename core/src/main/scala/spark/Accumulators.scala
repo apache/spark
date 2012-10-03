@@ -18,7 +18,7 @@ import scala.collection.generic.Growable
  * @tparam R the full accumulated data
  * @tparam T partial data that can be added in
  */
-class Accumulable[R, T] (
+private[spark] class Accumulable[R, T] (
     @transient initialValue: R,
     param: AccumulableParam[R, T])
   extends Serializable {
@@ -73,7 +73,7 @@ class Accumulable[R, T] (
  * @tparam R the full accumulated data
  * @tparam T partial data that can be added in
  */
-trait AccumulableParam[R, T] extends Serializable {
+private[spark] trait AccumulableParam[R, T] extends Serializable {
   /**
    * Add additional data to the accumulator value.
    * @param r the current value of the accumulator
@@ -93,7 +93,7 @@ trait AccumulableParam[R, T] extends Serializable {
   def zero(initialValue: R): R
 }
 
-class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable, T]
+private[spark] class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable, T]
   extends AccumulableParam[R,T] {
 
   def addAccumulator(growable: R, elem: T) : R = {
@@ -124,7 +124,7 @@ class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Ser
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](
+private[spark] class Accumulator[T](
   @transient initialValue: T,
   param: AccumulatorParam[T]) extends Accumulable[T,T](initialValue, param)
 
@@ -133,7 +133,7 @@ class Accumulator[T](
  * as the accumulated value
  * @tparam T type of value to accumulate
  */
-trait AccumulatorParam[T] extends AccumulableParam[T, T] {
+private[spark] trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   def addAccumulator(t1: T, t2: T) : T = {
     addInPlace(t1, t2)
   }

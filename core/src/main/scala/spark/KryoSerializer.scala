@@ -20,7 +20,7 @@ import spark.storage._
  * Zig-zag encoder used to write object sizes to serialization streams.
  * Based on Kryo's integer encoder.
  */
-object ZigZag {
+private[spark] object ZigZag {
   def writeInt(n: Int, out: OutputStream) {
     var value = n
     if ((value & ~0x7F) == 0) {
@@ -68,7 +68,7 @@ object ZigZag {
   }
 }
 
-class KryoSerializationStream(kryo: Kryo, threadBuffer: ByteBuffer, out: OutputStream)
+private[spark] class KryoSerializationStream(kryo: Kryo, threadBuffer: ByteBuffer, out: OutputStream)
 extends SerializationStream {
   val channel = Channels.newChannel(out)
 
@@ -85,7 +85,7 @@ extends SerializationStream {
   def close() { out.close() }
 }
 
-class KryoDeserializationStream(objectBuffer: ObjectBuffer, in: InputStream)
+private[spark] class KryoDeserializationStream(objectBuffer: ObjectBuffer, in: InputStream)
 extends DeserializationStream {
   def readObject[T](): T = {
     val len = ZigZag.readInt(in)
@@ -95,7 +95,7 @@ extends DeserializationStream {
   def close() { in.close() }
 }
 
-class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
+private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
   val kryo = ks.kryo
   val threadBuffer = ks.threadBuffer.get()
   val objectBuffer = ks.objectBuffer.get()

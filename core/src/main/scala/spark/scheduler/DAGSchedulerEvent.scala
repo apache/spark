@@ -10,9 +10,9 @@ import spark._
  * submitted) but there is a single "logic" thread that reads these events and takes decisions.
  * This greatly simplifies synchronization.
  */
-sealed trait DAGSchedulerEvent
+private[spark] sealed trait DAGSchedulerEvent
 
-case class JobSubmitted(
+private[spark] case class JobSubmitted(
     finalRDD: RDD[_],
     func: (TaskContext, Iterator[_]) => _,
     partitions: Array[Int],
@@ -21,15 +21,15 @@ case class JobSubmitted(
     listener: JobListener)
   extends DAGSchedulerEvent
 
-case class CompletionEvent(
+private[spark] case class CompletionEvent(
     task: Task[_],
     reason: TaskEndReason,
     result: Any,
     accumUpdates: Map[Long, Any])
   extends DAGSchedulerEvent
 
-case class HostLost(host: String) extends DAGSchedulerEvent
+private[spark] case class HostLost(host: String) extends DAGSchedulerEvent
 
-case class TaskSetFailed(taskSet: TaskSet, reason: String) extends DAGSchedulerEvent
+private[spark] case class TaskSetFailed(taskSet: TaskSet, reason: String) extends DAGSchedulerEvent
 
-case object StopDAGScheduler extends DAGSchedulerEvent
+private[spark] case object StopDAGScheduler extends DAGSchedulerEvent

@@ -11,7 +11,7 @@ import java.nio.channels.spi._
 import java.net._
 
 
-abstract class Connection(val channel: SocketChannel, val selector: Selector) extends Logging {
+private[spark] abstract class Connection(val channel: SocketChannel, val selector: Selector) extends Logging {
 
   channel.configureBlocking(false)
   channel.socket.setTcpNoDelay(true)
@@ -102,7 +102,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector) ex
 }
 
 
-class SendingConnection(val address: InetSocketAddress, selector_ : Selector) 
+private[spark] class SendingConnection(val address: InetSocketAddress, selector_ : Selector) 
 extends Connection(SocketChannel.open, selector_) {
 
   class Outbox(fair: Int = 0) {
@@ -259,7 +259,7 @@ extends Connection(SocketChannel.open, selector_) {
 }
 
 
-class ReceivingConnection(channel_ : SocketChannel, selector_ : Selector) 
+private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : Selector) 
 extends Connection(channel_, selector_) {
   
   class Inbox() {

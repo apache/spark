@@ -17,7 +17,7 @@ import spark.network._
  *
  * TODO: Use event model.
  */
-class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
+private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   initLogging()
   
   blockManager.connectionManager.onReceiveMessage(onBlockMessageReceive)
@@ -87,7 +87,7 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   }
 }
 
-object BlockManagerWorker extends Logging {
+private[spark] object BlockManagerWorker extends Logging {
   private var blockManagerWorker: BlockManagerWorker = null
   private val DATA_TRANSFER_TIME_OUT_MS: Long = 500
   private val REQUEST_RETRY_INTERVAL_MS: Long = 1000

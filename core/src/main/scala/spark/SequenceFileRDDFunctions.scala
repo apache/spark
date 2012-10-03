@@ -30,7 +30,7 @@ import SparkContext._
  * through an implicit conversion. Note that this can't be part of PairRDDFunctions because
  * we need more implicit parameters to convert our keys and values to Writable.
  */
-class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : ClassManifest](
+private[spark] class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : ClassManifest](
     self: RDD[(K, V)])
   extends Logging
   with Serializable {

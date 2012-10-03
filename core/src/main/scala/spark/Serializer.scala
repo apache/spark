@@ -12,14 +12,14 @@ import spark.util.ByteBufferInputStream
  * A serializer. Because some serialization libraries are not thread safe, this class is used to 
  * create SerializerInstances that do the actual serialization.
  */
-trait Serializer {
+private[spark] trait Serializer {
   def newInstance(): SerializerInstance
 }
 
 /**
  * An instance of the serializer, for use by one thread at a time.
  */
-trait SerializerInstance {
+private[spark] trait SerializerInstance {
   def serialize[T](t: T): ByteBuffer
 
   def deserialize[T](bytes: ByteBuffer): T
@@ -50,7 +50,7 @@ trait SerializerInstance {
 /**
  * A stream for writing serialized objects.
  */
-trait SerializationStream {
+private[spark] trait SerializationStream {
   def writeObject[T](t: T): SerializationStream
   def flush(): Unit
   def close(): Unit
@@ -66,7 +66,7 @@ trait SerializationStream {
 /**
  * A stream for reading serialized objects.
  */
-trait DeserializationStream {
+private[spark] trait DeserializationStream {
   def readObject[T](): T
   def close(): Unit
 

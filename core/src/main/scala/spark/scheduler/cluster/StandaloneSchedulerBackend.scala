@@ -16,7 +16,7 @@ import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClient
  * Akka. These may be executed in a variety of ways, such as Mesos tasks for the coarse-grained
  * Mesos mode or standalone processes for Spark's standalone deploy mode (spark.deploy.*).
  */
-class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: ActorSystem)
+private[spark] class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: ActorSystem)
   extends SchedulerBackend with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -149,6 +149,6 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
   def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
 }
 
-object StandaloneSchedulerBackend {
+private[spark] object StandaloneSchedulerBackend {
   val ACTOR_NAME = "StandaloneScheduler"
 }

@@ -4,7 +4,7 @@ import java.util.Random
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
-class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Serializable {
+private[spark] class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Serializable {
   override val index: Int = prev.index
 }
 

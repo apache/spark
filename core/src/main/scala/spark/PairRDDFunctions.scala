@@ -41,7 +41,7 @@ import spark.partial.PartialResult
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  */
-class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
+private[spark] class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     self: RDD[(K, V)])
   extends Logging
   with Serializable {
@@ -430,7 +430,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   def getValueClass() = implicitly[ClassManifest[V]].erasure
 }
 
-class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
+private[spark] class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
   self: RDD[(K, V)])
   extends Logging
   with Serializable {
@@ -459,6 +459,6 @@ class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U]
   }
 }
 
-object Manifests {
+private[spark] object Manifests {
   val seqSeqManifest = classManifest[Seq[Seq[_]]]
 }

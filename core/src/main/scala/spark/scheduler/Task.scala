@@ -11,7 +11,7 @@ import scala.collection.mutable.HashMap
 /**
  * A task to execute on a worker node.
  */
-abstract class Task[T](val stageId: Int) extends Serializable {
+private[spark] abstract class Task[T](val stageId: Int) extends Serializable {
   def run(attemptId: Long): T
   def preferredLocations: Seq[String] = Nil
 
@@ -25,7 +25,7 @@ abstract class Task[T](val stageId: Int) extends Serializable {
  * the task might depend on one of the JARs. Thus we serialize each task as multiple objects, by
  * first writing out its dependencies.
  */
-object Task {
+private[spark] object Task {
   /**
    * Serialize a task and the current app dependencies (files and JARs added to the SparkContext)
    */

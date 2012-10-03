@@ -24,7 +24,7 @@ import spark.TaskState
  * Unfortunately this has a bit of duplication from MesosSchedulerBackend, but it seems hard to
  * remove this.
  */
-class CoarseMesosSchedulerBackend(
+private[spark] class CoarseMesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,

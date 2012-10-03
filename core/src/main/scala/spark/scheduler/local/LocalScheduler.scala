@@ -15,7 +15,7 @@ import spark.scheduler._
  * the scheduler also allows each task to fail up to maxFailures times, which is useful for
  * testing fault recovery.
  */
-class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkContext)
+private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkContext)
   extends TaskScheduler
   with Logging {
 

@@ -15,19 +15,20 @@ import scala.collection.mutable.HashSet
 import spark.storage.BlockManager
 import spark.storage.StorageLevel
 
-sealed trait CacheTrackerMessage
-case class AddedToCache(rddId: Int, partition: Int, host: String, size: Long = 0L)
-  extends CacheTrackerMessage
-case class DroppedFromCache(rddId: Int, partition: Int, host: String, size: Long = 0L)
-  extends CacheTrackerMessage
-case class MemoryCacheLost(host: String) extends CacheTrackerMessage
-case class RegisterRDD(rddId: Int, numPartitions: Int) extends CacheTrackerMessage
-case class SlaveCacheStarted(host: String, size: Long) extends CacheTrackerMessage
-case object GetCacheStatus extends CacheTrackerMessage
-case object GetCacheLocations extends CacheTrackerMessage
-case object StopCacheTracker extends CacheTrackerMessage
+private[spark] sealed trait CacheTrackerMessage
 
-class CacheTrackerActor extends Actor with Logging {
+private[spark] case class AddedToCache(rddId: Int, partition: Int, host: String, size: Long = 0L)
+  extends CacheTrackerMessage
+private[spark] case class DroppedFromCache(rddId: Int, partition: Int, host: String, size: Long = 0L)
+  extends CacheTrackerMessage
+private[spark] case class MemoryCacheLost(host: String) extends CacheTrackerMessage
+private[spark] case class RegisterRDD(rddId: Int, numPartitions: Int) extends CacheTrackerMessage
+private[spark] case class SlaveCacheStarted(host: String, size: Long) extends CacheTrackerMessage
+private[spark] case object GetCacheStatus extends CacheTrackerMessage
+private[spark] case object GetCacheLocations extends CacheTrackerMessage
+private[spark] case object StopCacheTracker extends CacheTrackerMessage
+
+private[spark] class CacheTrackerActor extends Actor with Logging {
   // TODO: Should probably store (String, CacheType) tuples
   private val locs = new HashMap[Int, Array[List[String]]]
 
@@ -89,7 +90,7 @@ class CacheTrackerActor extends Actor with Logging {
   }
 }
 
-class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: BlockManager)
+private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: BlockManager)
   extends Logging {
  
   // Tracker actor on the master, or remote reference to it on workers

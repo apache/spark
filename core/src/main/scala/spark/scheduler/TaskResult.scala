@@ -7,7 +7,7 @@ import scala.collection.mutable.Map
 // Task result. Also contains updates to accumulator variables.
 // TODO: Use of distributed cache to return result is a hack to get around
 // what seems to be a bug with messages over 60KB in libprocess; fix it
-class TaskResult[T](var value: T, var accumUpdates: Map[Long, Any]) extends Externalizable {
+private[spark] class TaskResult[T](var value: T, var accumUpdates: Map[Long, Any]) extends Externalizable {
   def this() = this(null.asInstanceOf[T], null)
 
   override def writeExternal(out: ObjectOutput) {
