@@ -14,6 +14,7 @@ abstract class Broadcast[T](id: Long) extends Serializable {
   override def toString = "spark.Broadcast(" + id + ")"
 }
 
+private[spark] 
 class BroadcastManager(val isMaster_ : Boolean) extends Logging with Serializable {
 
   private var initialized = false

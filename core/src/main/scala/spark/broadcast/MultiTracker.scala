@@ -382,10 +382,10 @@ extends Logging {
   }
 }
 
-case class BroadcastBlock(blockID: Int, byteArray: Array[Byte]) 
+private[spark] case class BroadcastBlock(blockID: Int, byteArray: Array[Byte]) 
 extends Serializable
 
-case class VariableInfo(@transient arrayOfBlocks : Array[BroadcastBlock],
+private[spark] case class VariableInfo(@transient arrayOfBlocks : Array[BroadcastBlock],
                         totalBlocks: Int, 
                         totalBytes: Int) 
 extends Serializable {

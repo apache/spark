@@ -7,7 +7,7 @@ import cern.jet.stat.Probability
  * and various sample sizes. This is used by the MeanEvaluator to efficiently calculate
  * confidence intervals for many keys.
  */
-class StudentTCacher(confidence: Double) {
+private[spark] class StudentTCacher(confidence: Double) {
   val NORMAL_APPROX_SAMPLE_SIZE = 100  // For samples bigger than this, use Gaussian approximation
   val normalApprox = Probability.normalInverse(1 - (1 - confidence) / 2)
   val cache = Array.fill[Double](NORMAL_APPROX_SAMPLE_SIZE)(-1.0)

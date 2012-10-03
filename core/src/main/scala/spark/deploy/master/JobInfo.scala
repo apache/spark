@@ -5,6 +5,7 @@ import java.util.Date
 import akka.actor.ActorRef
 import scala.collection.mutable
 
+private[spark]
 class JobInfo(val id: String, val desc: JobDescription, val submitDate: Date, val actor: ActorRef) {
   var state = JobState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]

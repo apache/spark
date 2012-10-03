@@ -459,6 +459,6 @@ class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U]
   }
 }
 
-object Manifests {
+private[spark] object Manifests {
   val seqSeqManifest = classManifest[Seq[Seq[_]]]
 }

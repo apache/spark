@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicLong
  * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
  * start(), then submit task sets through the runTasks method.
  */
-class ClusterScheduler(val sc: SparkContext)
+private[spark] class ClusterScheduler(val sc: SparkContext)
   extends TaskScheduler
   with Logging {
 

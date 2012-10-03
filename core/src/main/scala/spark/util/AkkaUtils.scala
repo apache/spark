@@ -17,7 +17,7 @@ import java.util.concurrent.TimeoutException
 /**
  * Various utility classes for working with Akka.
  */
-object AkkaUtils {
+private[spark] object AkkaUtils {
   /**
    * Creates an ActorSystem ready for remoting, with various Spark features. Returns both the
    * ActorSystem itself and its port (which is hard to get from Akka).

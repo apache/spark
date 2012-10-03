@@ -19,7 +19,7 @@ import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import sun.nio.ch.DirectBuffer
 
 
-class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
+private[spark] class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
   def this() = this(null, 0)
 
   override def writeExternal(out: ObjectOutput) {
@@ -43,11 +43,12 @@ class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
 }
 
 
+private[spark] 
 case class BlockException(blockId: String, message: String, ex: Exception = null)
 extends Exception(message)
 
 
-class BlockLocker(numLockers: Int) {
+private[spark] class BlockLocker(numLockers: Int) {
   private val hashLocker = Array.fill(numLockers)(new Object())
 
   def getLock(blockId: String): Object = {
@@ -56,6 +57,7 @@ class BlockLocker(numLockers: Int) {
 }
 
 
+private[spark]
 class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
   extends Logging {
 

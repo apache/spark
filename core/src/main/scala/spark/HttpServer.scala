@@ -12,14 +12,14 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool
 /**
  * Exception type thrown by HttpServer when it is in the wrong state for an operation.
  */
-class ServerStateException(message: String) extends Exception(message)
+private[spark] class ServerStateException(message: String) extends Exception(message)
 
 /**
  * An HTTP server for static content used to allow worker nodes to access JARs added to SparkContext
  * as well as classes created by the interpreter when the user types in code. This is just a wrapper
  * around a Jetty server.
  */
-class HttpServer(resourceBase: File) extends Logging {
+private[spark] class HttpServer(resourceBase: File) extends Logging {
   private var server: Server = null
   private var port: Int = -1
 

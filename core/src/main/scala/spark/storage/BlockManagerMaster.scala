@@ -16,13 +16,16 @@ import akka.util.duration._
 import spark.{Logging, SparkException, Utils}
 
 
+private[spark]
 sealed trait ToBlockManagerMaster
 
+private[spark]
 case class RegisterBlockManager(
     blockManagerId: BlockManagerId,
     maxMemSize: Long)
   extends ToBlockManagerMaster
 
+private[spark]
 class HeartBeat(
     var blockManagerId: BlockManagerId,
     var blockId: String,
@@ -53,6 +56,7 @@ class HeartBeat(
   }
 }
 
+private[spark]
 object HeartBeat {
   def apply(blockManagerId: BlockManagerId,
       blockId: String,
@@ -68,18 +72,23 @@ object HeartBeat {
   }
 }
   
+private[spark]
 case class GetLocations(blockId: String) extends ToBlockManagerMaster
 
+private[spark]
 case class GetLocationsMultipleBlockIds(blockIds: Array[String]) extends ToBlockManagerMaster
   
+private[spark]
 case class GetPeers(blockManagerId: BlockManagerId, size: Int) extends ToBlockManagerMaster
   
+private[spark]
 case class RemoveHost(host: String) extends ToBlockManagerMaster
 
+private[spark]
 case object StopBlockManagerMaster extends ToBlockManagerMaster
 
 
-class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
+private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   
   class BlockManagerInfo(
       val blockManagerId: BlockManagerId,
@@ -330,7 +339,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   }
 }
 
-class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean)
+private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean)
   extends Logging {
 
   val AKKA_ACTOR_NAME: String = "BlockMasterManager"

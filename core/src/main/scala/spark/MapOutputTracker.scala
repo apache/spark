@@ -16,11 +16,11 @@ import scala.collection.mutable.HashSet
 
 import spark.storage.BlockManagerId
 
-sealed trait MapOutputTrackerMessage
-case class GetMapOutputLocations(shuffleId: Int) extends MapOutputTrackerMessage 
-case object StopMapOutputTracker extends MapOutputTrackerMessage
+private[spark] sealed trait MapOutputTrackerMessage
+private[spark] case class GetMapOutputLocations(shuffleId: Int) extends MapOutputTrackerMessage 
+private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-class MapOutputTrackerActor(tracker: MapOutputTracker) extends Actor with Logging {
+private[spark] class MapOutputTrackerActor(tracker: MapOutputTracker) extends Actor with Logging {
   def receive = {
     case GetMapOutputLocations(shuffleId: Int) =>
       logInfo("Asked to get map output locations for shuffle " + shuffleId)
@@ -33,7 +33,7 @@ class MapOutputTrackerActor(tracker: MapOutputTracker) extends Actor with Loggin
   }
 }
 
-class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logging {
+private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logging {
   val ip: String = System.getProperty("spark.master.host", "localhost")
   val port: Int = System.getProperty("spark.master.port", "7077").toInt
   val actorName: String = "MapOutputTracker"

@@ -4,7 +4,7 @@ import scala.collection.mutable.ArrayBuffer
 import java.util.{HashMap => JHashMap}
 
 
-class ShuffledRDDSplit(val idx: Int) extends Split {
+private[spark] class ShuffledRDDSplit(val idx: Int) extends Split {
   override val index = idx
   override def hashCode(): Int = idx
 }

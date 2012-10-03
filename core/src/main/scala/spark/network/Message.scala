@@ -9,7 +9,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import storage.BlockManager
 
-class MessageChunkHeader(
+private[spark] class MessageChunkHeader(
     val typ: Long,
     val id: Int,
     val totalSize: Int,
@@ -37,7 +37,7 @@ class MessageChunkHeader(
       " and sizes " + totalSize + " / " + chunkSize + " bytes"
 }
 
-class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
+private[spark] class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
   val size = if (buffer == null) 0 else buffer.remaining
   lazy val buffers = {
     val ab = new ArrayBuffer[ByteBuffer]()
@@ -51,7 +51,7 @@ class MessageChunk(val header: MessageChunkHeader, val buffer: ByteBuffer) {
   override def toString = "" + this.getClass.getSimpleName + " (id = " + header.id + ", size = " + size + ")"
 }
 
-abstract class Message(val typ: Long, val id: Int) {
+private[spark] abstract class Message(val typ: Long, val id: Int) {
   var senderAddress: InetSocketAddress = null
   var started = false
   var startTime = -1L
@@ -68,7 +68,7 @@ abstract class Message(val typ: Long, val id: Int) {
   override def toString = this.getClass.getSimpleName + "(id = " + id + ", size = " + size + ")"
 }
 
-class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: Int) 
+private[spark] class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: Int) 
 extends Message(Message.BUFFER_MESSAGE, id_) {
   
   val initialSize = currentSize() 
@@ -152,7 +152,7 @@ extends Message(Message.BUFFER_MESSAGE, id_) {
   }
 }
 
-object MessageChunkHeader {
+private[spark] object MessageChunkHeader {
   val HEADER_SIZE = 40 
   
   def create(buffer: ByteBuffer): MessageChunkHeader = {
@@ -173,7 +173,7 @@ object MessageChunkHeader {
   }
 }
 
-object Message {
+private[spark] object Message {
   val BUFFER_MESSAGE = 1111111111L
 
   var lastId = 1

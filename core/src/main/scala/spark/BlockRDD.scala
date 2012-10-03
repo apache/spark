@@ -2,7 +2,7 @@ package spark
 
 import scala.collection.mutable.HashMap
 
-class BlockRDDSplit(val blockId: String, idx: Int) extends Split {
+private[spark] class BlockRDDSplit(val blockId: String, idx: Int) extends Split {
   val index = idx
 }
 

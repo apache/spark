@@ -18,7 +18,7 @@ import org.apache.hadoop.util.ReflectionUtils
 /** 
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
-class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
+private[spark] class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
   extends Split
   with Serializable {
   

@@ -15,7 +15,7 @@ import com.ning.compress.lzf.LZFOutputStream
 import spark._
 import spark.storage._
 
-object ShuffleMapTask {
+private[spark] object ShuffleMapTask {
 
   // A simple map between the stage id to the serialized byte array of a task.
   // Served as a cache for task serialization because serialization can be
@@ -68,7 +68,7 @@ object ShuffleMapTask {
   }
 }
 
-class ShuffleMapTask(
+private[spark] class ShuffleMapTask(
     stageId: Int,
     var rdd: RDD[_], 
     var dep: ShuffleDependency[_,_,_],

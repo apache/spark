@@ -3,7 +3,7 @@ package spark.scheduler.cluster
 import java.nio.ByteBuffer
 import spark.util.SerializableBuffer
 
-class TaskDescription(
+private[spark] class TaskDescription(
     val taskId: Long,
     val slaveId: String,
     val name: String,

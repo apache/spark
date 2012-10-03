@@ -2,7 +2,7 @@ package spark.deploy.master
 
 import spark.deploy.ExecutorState
 
-class ExecutorInfo(
+private[spark] class ExecutorInfo(
     val id: Int,
     val job: JobInfo,
     val worker: WorkerInfo,

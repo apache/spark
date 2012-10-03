@@ -11,7 +11,7 @@ import java.net.InetAddress
 import akka.dispatch.Await
 import akka.util.duration._
 
-object ConnectionManagerTest extends Logging{
+private[spark] object ConnectionManagerTest extends Logging{
   def main(args: Array[String]) {
     if (args.length < 2) {
       println("Usage: ConnectionManagerTest <mesos cluster> <slaves file>")

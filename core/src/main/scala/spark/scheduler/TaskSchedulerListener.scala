@@ -7,7 +7,7 @@ import spark.TaskEndReason
 /**
  * Interface for getting events back from the TaskScheduler.
  */
-trait TaskSchedulerListener {
+private[spark] trait TaskSchedulerListener {
   // A task has finished or failed.
   def taskEnded(task: Task[_], reason: TaskEndReason, result: Any, accumUpdates: Map[Long, Any]): Unit
 

@@ -2,7 +2,7 @@ package spark
 
 import spark.storage.BlockManagerId
 
-class FetchFailedException(
+private[spark] class FetchFailedException(
     val bmAddress: BlockManagerId,
     val shuffleId: Int,
     val mapId: Int,

@@ -21,6 +21,7 @@ import spark.storage.BlockManagerId
  * schedule to run the job. Subclasses only need to implement the code to send a task to the cluster
  * and to report fetch failures (the submitTasks method, and code to add CompletionEvents).
  */
+private[spark]
 class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with Logging {
   taskSched.setListener(this)
 
