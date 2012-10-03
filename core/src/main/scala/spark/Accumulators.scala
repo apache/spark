@@ -133,7 +133,7 @@ class Accumulator[T](
  * as the accumulated value
  * @tparam T type of value to accumulate
  */
-AccumulatorParam[T] extends AccumulableParam[T, T] {
+trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   def addAccumulator(t1: T, t2: T) : T = {
     addInPlace(t1, t2)
   }
