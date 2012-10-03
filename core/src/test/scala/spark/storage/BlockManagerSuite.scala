@@ -341,4 +341,13 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(stream.read() === -1, "end of stream not signalled")
     assert(stream.read(temp, 0, temp.length) === -1, "end of stream not signalled")
   }
+
+  test("overly large block") {
+    val store = new BlockManager(master, new KryoSerializer, 500)
+    store.putSingle("a1", new Array[Byte](1000), StorageLevel.MEMORY_ONLY)
+    assert(store.getSingle("a1") === None, "a1 was in store")
+    store.putSingle("a2", new Array[Byte](1000), StorageLevel.MEMORY_AND_DISK)
+    assert(store.memoryStore.getValues("a2") === None, "a2 was in memory store")
+    assert(store.getSingle("a2") != None, "a2 was not in store")
+  }
 }
