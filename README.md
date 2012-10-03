@@ -6,16 +6,14 @@ Lightning-Fast Cluster Computing - <http://www.spark-project.org/>
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the project wiki at <http://github.com/mesos/spark/wiki>. This
-file only contains basic setup instructions.
+guide, on the project webpage at <http://spark-project.org/documentation.html>.
+This README file only contains basic setup instructions.
 
 
 ## Building
 
-Spark requires Scala 2.9.1. This version has been tested with 2.9.1.final.
-
-The project is built using Simple Build Tool (SBT), which is packaged with it.
-To build Spark and its example programs, run:
+Spark requires Scala 2.9.2. The project is built using Simple Build Tool (SBT),
+which is packaged with it. To build Spark and its example programs, run:
 
     sbt/sbt compile
 

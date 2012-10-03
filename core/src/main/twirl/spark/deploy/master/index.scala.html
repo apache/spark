@@ -1,13 +1,13 @@
 @(state: spark.deploy.MasterState)
 @import spark.deploy.master._
 
-@common.html.layout(title = "Spark Master on " + state.uri) {
+@spark.deploy.common.html.layout(title = "Spark Master on " + state.uri) {
       
   <!-- Cluster Details -->
   <div class="row">
     <div class="span12">
       <ul class="unstyled">
-        <li><strong>URI:</strong> spark://@(state.uri)</li>
+        <li><strong>URL:</strong> spark://@(state.uri)</li>
         <li><strong>Number of Workers:</strong> @state.workers.size </li>
         <li><strong>Cores:</strong> @state.workers.map(_.cores).sum Total, @state.workers.map(_.coresUsed).sum Used</li>
         <li><strong>Memory:</strong> @state.workers.map(_.memory).sum Total,  @state.workers.map(_.memoryUsed).sum Used</li>

@@ -18,7 +18,7 @@ import org.apache.hadoop.util.ReflectionUtils
 /** 
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
-class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
+private[spark] class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
   extends Split
   with Serializable {
   
@@ -42,7 +42,8 @@ class HadoopRDD[K, V](
     minSplits: Int)
   extends RDD[(K, V)](sc) {
   
-  val serializableConf = new SerializableWritable(conf)
+  // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it
+  val confBroadcast = sc.broadcast(new SerializableWritable(conf))
   
   @transient
   val splits_ : Array[Split] = {
@@ -66,7 +67,7 @@ class HadoopRDD[K, V](
     val split = theSplit.asInstanceOf[HadoopSplit]
     var reader: RecordReader[K, V] = null
 
-    val conf = serializableConf.value
+    val conf = confBroadcast.value.value
     val fmt = createInputFormat(conf)
     reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 

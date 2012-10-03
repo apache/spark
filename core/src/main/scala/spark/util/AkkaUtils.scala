@@ -17,7 +17,7 @@ import java.util.concurrent.TimeoutException
 /**
  * Various utility classes for working with Akka.
  */
-object AkkaUtils {
+private[spark] object AkkaUtils {
   /**
    * Creates an ActorSystem ready for remoting, with various Spark features. Returns both the
    * ActorSystem itself and its port (which is hard to get from Akka).
@@ -31,6 +31,8 @@ object AkkaUtils {
       akka.remote.netty.hostname = "%s"
       akka.remote.netty.port = %d
       akka.remote.netty.connection-timeout = 1s
+      akka.remote.netty.execution-pool-size = 8
+      akka.actor.default-dispatcher.throughput = 30
       """.format(host, port))
 
     val actorSystem = ActorSystem("spark", akkaConf, getClass.getClassLoader)

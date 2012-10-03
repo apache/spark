@@ -61,6 +61,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   def compute(split: Split): Iterator[T]
   @transient val dependencies: List[Dependency[_]]
   
+  // Record user function generating this RDD
+  val origin = Utils.getSparkCallSite
+  
   // Optionally overridden by subclasses to specify how they are partitioned
   val partitioner: Option[Partitioner] = None
 
@@ -68,6 +71,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   def preferredLocations(split: Split): Seq[String] = Nil
   
   def context = sc
+
+  def elementClassManifest: ClassManifest[T] = classManifest[T]
   
   // Get a unique ID for this RDD
   val id = sc.newRddId()
@@ -87,21 +92,21 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   // Turn on the default caching level for this RDD
-  def persist(): RDD[T] = persist(StorageLevel.MEMORY_ONLY_DESER)
+  def persist(): RDD[T] = persist(StorageLevel.MEMORY_ONLY)
   
   // Turn on the default caching level for this RDD
   def cache(): RDD[T] = persist()
 
   def getStorageLevel = storageLevel
   
-  def checkpoint(level: StorageLevel = StorageLevel.DISK_AND_MEMORY_DESER): RDD[T] = {
+  private[spark] def checkpoint(level: StorageLevel = StorageLevel.MEMORY_AND_DISK_2): RDD[T] = {
     if (!level.useDisk && level.replication < 2) {
       throw new Exception("Cannot checkpoint without using disk or replication (level requested was " + level + ")")
     } 
     
     // This is a hack. Ideally this should re-use the code used by the CacheTracker
     // to generate the key.
-    def getSplitKey(split: Split) = "rdd:%d:%d".format(this.id, split.index)
+    def getSplitKey(split: Split) = "rdd_%d_%d".format(this.id, split.index)
     
     persist(level)
     sc.runJob(this, (iter: Iterator[T]) => {} )
@@ -131,7 +136,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
-  def distinct(): RDD[T] = map(x => (x, "")).reduceByKey((x, y) => x).map(_._1)
+  def distinct(numSplits: Int = splits.size): RDD[T] =
+    map(x => (x, null)).reduceByKey((x, y) => x, numSplits).map(_._1)
 
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
     new SampledRDD(this, withReplacement, fraction, seed)
@@ -143,8 +149,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     var initialCount = count()
     var maxSelected = 0
     
-    if (initialCount > Integer.MAX_VALUE) {
-      maxSelected = Integer.MAX_VALUE
+    if (initialCount > Integer.MAX_VALUE - 1) {
+      maxSelected = Integer.MAX_VALUE - 1
     } else {
       maxSelected = initialCount.toInt
     }
@@ -159,15 +165,14 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
       total = num
     }
   
-    var samples = this.sample(withReplacement, fraction, seed).collect()
+    val rand = new Random(seed)
+    var samples = this.sample(withReplacement, fraction, rand.nextInt).collect()
   
     while (samples.length < total) {
-      samples = this.sample(withReplacement, fraction, seed).collect()
+      samples = this.sample(withReplacement, fraction, rand.nextInt).collect()
     }
   
-    val arr = samples.take(total)
-  
-    return arr
+    Utils.randomizeInPlace(samples, rand).take(total)
   }
 
   def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
@@ -194,6 +199,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
   def mapPartitions[U: ClassManifest](f: Iterator[T] => Iterator[U]): RDD[U] =
     new MapPartitionsRDD(this, sc.clean(f))
+
+  def mapPartitionsWithSplit[U: ClassManifest](f: (Int, Iterator[T]) => Iterator[U]): RDD[U] =
+    new MapPartitionsWithSplitRDD(this, sc.clean(f))
 
   // Actions (launch a job to return a value to the user program)
   
@@ -415,4 +423,19 @@ class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override def compute(split: Split) = f(prev.iterator(split))
+}
+
+/**
+ * A variant of the MapPartitionsRDD that passes the split index into the
+ * closure. This can be used to generate or collect partition specific
+ * information such as the number of tuples in a partition.
+ */
+class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
+    prev: RDD[T],
+    f: (Int, Iterator[T]) => Iterator[U])
+  extends RDD[U](prev.context) {
+
+  override def splits = prev.splits
+  override val dependencies = List(new OneToOneDependency(prev))
+  override def compute(split: Split) = f(split.index, prev.iterator(split))
 }

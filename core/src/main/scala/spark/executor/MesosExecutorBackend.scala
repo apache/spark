@@ -8,7 +8,7 @@ import com.google.protobuf.ByteString
 import spark.{Utils, Logging}
 import spark.TaskState
 
-class MesosExecutorBackend(executor: Executor)
+private[spark] class MesosExecutorBackend(executor: Executor)
   extends MesosExecutor
   with ExecutorBackend
   with Logging {
@@ -59,7 +59,7 @@ class MesosExecutorBackend(executor: Executor)
 /**
  * Entry point for Mesos executor.
  */
-object MesosExecutorBackend {
+private[spark] object MesosExecutorBackend {
   def main(args: Array[String]) {
     MesosNativeLibrary.load()
     // Create a new Executor and start it running

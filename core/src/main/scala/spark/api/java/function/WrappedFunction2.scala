@@ -7,7 +7,7 @@ import scala.runtime.AbstractFunction2
  * apply() method as call() and declare that it can throw Exception (since AbstractFunction2.apply
  * isn't marked to allow that).
  */
-abstract class WrappedFunction2[T1, T2, R] extends AbstractFunction2[T1, T2, R] {
+private[spark] abstract class WrappedFunction2[T1, T2, R] extends AbstractFunction2[T1, T2, R] {
   @throws(classOf[Exception])
   def call(t1: T1, t2: T2): R
 

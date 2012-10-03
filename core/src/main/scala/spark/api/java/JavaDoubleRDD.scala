@@ -33,6 +33,8 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
 
   def distinct(): JavaDoubleRDD = fromRDD(srdd.distinct())
 
+  def distinct(numSplits: Int): JavaDoubleRDD = fromRDD(srdd.distinct(numSplits))
+
   def filter(f: JFunction[Double, java.lang.Boolean]): JavaDoubleRDD =
     fromRDD(srdd.filter(x => f(x).booleanValue()))
 

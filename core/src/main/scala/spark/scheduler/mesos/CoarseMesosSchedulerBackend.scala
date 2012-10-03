@@ -24,7 +24,7 @@ import spark.TaskState
  * Unfortunately this has a bit of duplication from MesosSchedulerBackend, but it seems hard to
  * remove this.
  */
-class CoarseMesosSchedulerBackend(
+private[spark] class CoarseMesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
@@ -79,6 +79,8 @@ class CoarseMesosSchedulerBackend(
       throw new SparkException("Spark home is not set; set it through the spark.home system " +
         "property, the SPARK_HOME environment variable or the SparkContext constructor")
   }
+
+  val extraCoresPerSlave = System.getProperty("spark.mesos.extra.cores", "0").toInt
 
   var nextMesosTaskId = 0
 
@@ -177,7 +179,7 @@ class CoarseMesosSchedulerBackend(
           val task = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
-            .setCommand(createCommand(offer, cpusToUse))
+            .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave))
             .setName("Task " + taskId)
             .addResources(createResource("cpus", cpusToUse))
             .addResources(createResource("mem", executorMemory))

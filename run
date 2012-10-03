@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCALA_VERSION=2.9.1
+SCALA_VERSION=2.9.2
 
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
@@ -52,6 +52,7 @@ CLASSPATH="$SPARK_CLASSPATH"
 CLASSPATH+=":$MESOS_CLASSPATH"
 CLASSPATH+=":$FWDIR/conf"
 CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/test-classes"
 CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"

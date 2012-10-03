@@ -2,12 +2,13 @@ package spark
 
 import scala.collection.mutable.HashMap
 
-class BlockRDDSplit(val blockId: String, idx: Int) extends Split {
+private[spark] class BlockRDDSplit(val blockId: String, idx: Int) extends Split {
   val index = idx
 }
 
 
-class BlockRDD[T: ClassManifest](sc: SparkContext, blockIds: Array[String]) extends RDD[T](sc) {
+class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[String])
+  extends RDD[T](sc) {
 
   @transient
   val splits_ = (0 until blockIds.size).map(i => {

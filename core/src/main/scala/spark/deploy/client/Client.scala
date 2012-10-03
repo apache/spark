@@ -16,7 +16,7 @@ import akka.dispatch.Await
  * The main class used to talk to a Spark deploy cluster. Takes a master URL, a job description,
  * and a listener for job events, and calls back the listener when various events occur.
  */
-class Client(
+private[spark] class Client(
     actorSystem: ActorSystem,
     masterUrl: String,
     jobDescription: JobDescription,
@@ -42,7 +42,6 @@ class Client(
       val akkaUrl = "akka://spark@%s:%s/user/Master".format(masterHost, masterPort)
       try {
         master = context.actorFor(akkaUrl)
-        //master ! RegisterWorker(ip, port, cores, memory)
         master ! RegisterJob(jobDescription)
         context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
         context.watch(master)  // Doesn't work with remote actors, but useful for testing

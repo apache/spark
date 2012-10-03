@@ -5,14 +5,14 @@ import java.nio.ByteBuffer
 
 import spark.util.ByteBufferInputStream
 
-class JavaSerializationStream(out: OutputStream) extends SerializationStream {
+private[spark] class JavaSerializationStream(out: OutputStream) extends SerializationStream {
   val objOut = new ObjectOutputStream(out)
-  def writeObject[T](t: T) { objOut.writeObject(t) }
+  def writeObject[T](t: T): SerializationStream = { objOut.writeObject(t); this }
   def flush() { objOut.flush() }
   def close() { objOut.close() }
 }
 
-class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
+private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
 extends DeserializationStream {
   val objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass) =
@@ -23,7 +23,7 @@ extends DeserializationStream {
   def close() { objIn.close() }
 }
 
-class JavaSerializerInstance extends SerializerInstance {
+private[spark] class JavaSerializerInstance extends SerializerInstance {
   def serialize[T](t: T): ByteBuffer = {
     val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)
@@ -57,6 +57,6 @@ class JavaSerializerInstance extends SerializerInstance {
   }
 }
 
-class JavaSerializer extends Serializer {
+private[spark] class JavaSerializer extends Serializer {
   def newInstance(): SerializerInstance = new JavaSerializerInstance
 }

@@ -1,25 +1,23 @@
 package spark.storage
 
-import java.nio._
+import java.nio.ByteBuffer
 
 import scala.actors._
 import scala.actors.Actor._
 import scala.actors.remote._
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
-import spark.Logging
-import spark.Utils
-import spark.SparkEnv
+import spark.{Logging, Utils, SparkEnv}
 import spark.network._
 
 /**
- * This should be changed to use event model late. 
+ * A network interface for BlockManager. Each slave should have one
+ * BlockManagerWorker.
+ *
+ * TODO: Use event model.
  */
-class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
+private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   initLogging()
   
   blockManager.connectionManager.onReceiveMessage(onBlockMessageReceive)
@@ -32,11 +30,11 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
           logDebug("Handling as a buffer message " + bufferMessage)
           val blockMessages = BlockMessageArray.fromBufferMessage(bufferMessage)
           logDebug("Parsed as a block message array")
-          val responseMessages = blockMessages.map(processBlockMessage _).filter(_ != None).map(_.get)
+          val responseMessages = blockMessages.map(processBlockMessage).filter(_ != None).map(_.get)
           /*logDebug("Processed block messages")*/
           return Some(new BlockMessageArray(responseMessages).toBufferMessage)
         } catch {
-          case e: Exception => logError("Exception handling buffer message: " + e.getMessage)
+          case e: Exception => logError("Exception handling buffer message", e)
           return None
         }
       }
@@ -73,22 +71,15 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
     logDebug("PutBlock " + id + " started from " + startTimeMs + " with data: " + bytes)
     blockManager.putBytes(id, bytes, level)
     logDebug("PutBlock " + id + " used " + Utils.getUsedTimeMs(startTimeMs)
-        + " with data size: " + bytes.array().length)
+        + " with data size: " + bytes.limit)
   }
 
   private def getBlock(id: String): ByteBuffer = {
     val startTimeMs = System.currentTimeMillis()
-    logDebug("Getblock " + id + " started from " + startTimeMs)
-    val block = blockManager.getLocal(id)
-    val buffer = block match {
-      case Some(tValues) => {
-        val values = tValues
-        val buffer = blockManager.dataSerialize(values)
-        buffer
-      }
-      case None => { 
-        null
-      }
+    logDebug("GetBlock " + id + " started from " + startTimeMs)
+    val buffer = blockManager.getLocalBytes(id) match {
+      case Some(bytes) => bytes
+      case None => null
     }
     logDebug("GetBlock " + id + " used " + Utils.getUsedTimeMs(startTimeMs)
         + " and got buffer " + buffer)
@@ -96,7 +87,7 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   }
 }
 
-object BlockManagerWorker extends Logging {
+private[spark] object BlockManagerWorker extends Logging {
   private var blockManagerWorker: BlockManagerWorker = null
   private val DATA_TRANSFER_TIME_OUT_MS: Long = 500
   private val REQUEST_RETRY_INTERVAL_MS: Long = 1000

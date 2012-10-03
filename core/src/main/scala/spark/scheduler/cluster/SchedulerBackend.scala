@@ -5,7 +5,7 @@ package spark.scheduler.cluster
  * ClusterScheduler. We assume a Mesos-like model where the application gets resource offers as
  * machines become available and can launch tasks on them.
  */
-trait SchedulerBackend {
+private[spark] trait SchedulerBackend {
   def start(): Unit
   def stop(): Unit
   def reviveOffers(): Unit

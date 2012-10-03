@@ -16,18 +16,19 @@ import scala.collection.mutable.ArrayBuffer
 
 import akka.dispatch.{Await, Promise, ExecutionContext, Future}
 import akka.util.Duration
+import akka.util.duration._
 
-case class ConnectionManagerId(host: String, port: Int) {
+private[spark] case class ConnectionManagerId(host: String, port: Int) {
   def toSocketAddress() = new InetSocketAddress(host, port)
 }
 
-object ConnectionManagerId {
+private[spark] object ConnectionManagerId {
   def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
     new ConnectionManagerId(socketAddress.getHostName(), socketAddress.getPort())
   }
 }
   
-class ConnectionManager(port: Int) extends Logging {
+private[spark] class ConnectionManager(port: Int) extends Logging {
 
   class MessageStatus(
       val message: Message,
@@ -348,7 +349,7 @@ class ConnectionManager(port: Int) extends Logging {
 }
 
 
-object ConnectionManager {
+private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
   
@@ -403,7 +404,10 @@ object ConnectionManager {
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
       manager.sendMessageReliably(manager.id, bufferMessage)
-    }).foreach(f => {if (!f().isDefined) println("Failed")})
+    }).foreach(f => {
+      val g = Await.result(f, 1 second)
+      if (!g.isDefined) println("Failed")
+    })
     val finishTime = System.currentTimeMillis
     
     val mb = size * count / 1024.0 / 1024.0
@@ -430,7 +434,10 @@ object ConnectionManager {
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffers(count - 1 - i).duplicate)
       manager.sendMessageReliably(manager.id, bufferMessage)
-    }).foreach(f => {if (!f().isDefined) println("Failed")})
+    }).foreach(f => {
+      val g = Await.result(f, 1 second)
+      if (!g.isDefined) println("Failed")
+    })
     val finishTime = System.currentTimeMillis
     
     val ms = finishTime - startTime
@@ -457,7 +464,10 @@ object ConnectionManager {
       (0 until count).map(i => {
           val bufferMessage = Message.createBufferMessage(buffer.duplicate)
           manager.sendMessageReliably(manager.id, bufferMessage)
-        }).foreach(f => {if (!f().isDefined) println("Failed")})
+        }).foreach(f => {
+          val g = Await.result(f, 1 second)
+          if (!g.isDefined) println("Failed")
+        })
       val finishTime = System.currentTimeMillis
       Thread.sleep(1000)
       val mb = size * count / 1024.0 / 1024.0

@@ -10,15 +10,17 @@ import scala.collection.mutable
 import com.esotericsoftware.kryo._
 import com.esotericsoftware.kryo.{Serializer => KSerializer}
 import com.esotericsoftware.kryo.serialize.ClassSerializer
+import com.esotericsoftware.kryo.serialize.SerializableSerializer
 import de.javakaffee.kryoserializers.KryoReflectionFactorySupport
 
+import spark.broadcast._
 import spark.storage._
 
 /**
  * Zig-zag encoder used to write object sizes to serialization streams.
  * Based on Kryo's integer encoder.
  */
-object ZigZag {
+private[spark] object ZigZag {
   def writeInt(n: Int, out: OutputStream) {
     var value = n
     if ((value & ~0x7F) == 0) {
@@ -66,22 +68,25 @@ object ZigZag {
   }
 }
 
+private[spark] 
 class KryoSerializationStream(kryo: Kryo, threadBuffer: ByteBuffer, out: OutputStream)
 extends SerializationStream {
   val channel = Channels.newChannel(out)
 
-  def writeObject[T](t: T) {
+  def writeObject[T](t: T): SerializationStream = {
     kryo.writeClassAndObject(threadBuffer, t)
     ZigZag.writeInt(threadBuffer.position(), out)
     threadBuffer.flip()
     channel.write(threadBuffer)
     threadBuffer.clear()
+    this
   }
 
   def flush() { out.flush() }
   def close() { out.close() }
 }
 
+private[spark] 
 class KryoDeserializationStream(objectBuffer: ObjectBuffer, in: InputStream)
 extends DeserializationStream {
   def readObject[T](): T = {
@@ -92,7 +97,7 @@ extends DeserializationStream {
   def close() { in.close() }
 }
 
-class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
+private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
   val kryo = ks.kryo
   val threadBuffer = ks.threadBuffer.get()
   val objectBuffer = ks.objectBuffer.get()
@@ -159,7 +164,9 @@ trait KryoRegistrator {
 }
 
 class KryoSerializer extends Serializer with Logging {
-  val kryo = createKryo()
+  // Make this lazy so that it only gets called once we receive our first task on each executor,
+  // so we can pull out any custom Kryo registrator from the user's JARs.
+  lazy val kryo = createKryo()
 
   val bufferSize = System.getProperty("spark.kryoserializer.buffer.mb", "32").toInt * 1024 * 1024 
 
@@ -190,8 +197,8 @@ class KryoSerializer extends Serializer with Logging {
       (1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1, 1),
       None,
       ByteBuffer.allocate(1),
-      StorageLevel.MEMORY_ONLY_DESER,
-      PutBlock("1", ByteBuffer.allocate(1), StorageLevel.MEMORY_ONLY_DESER),
+      StorageLevel.MEMORY_ONLY,
+      PutBlock("1", ByteBuffer.allocate(1), StorageLevel.MEMORY_ONLY),
       GotBlock("1", ByteBuffer.allocate(1)),
       GetBlock("1")
     )
@@ -202,6 +209,10 @@ class KryoSerializer extends Serializer with Logging {
     // Register the following classes for passing closures.
     kryo.register(classOf[Class[_]], new ClassSerializer(kryo))
     kryo.setRegistrationOptional(true)
+
+    // Allow sending SerializableWritable
+    kryo.register(classOf[SerializableWritable[_]], new SerializableSerializer())
+    kryo.register(classOf[HttpBroadcast[_]], new SerializableSerializer())
 
     // Register some commonly used Scala singleton objects. Because these
     // are singletons, we must return the exact same local object when we
@@ -250,7 +261,8 @@ class KryoSerializer extends Serializer with Logging {
     val regCls = System.getProperty("spark.kryo.registrator")
     if (regCls != null) {
       logInfo("Running user registrator: " + regCls)
-      val reg = Class.forName(regCls).newInstance().asInstanceOf[KryoRegistrator]
+      val classLoader = Thread.currentThread.getContextClassLoader
+      val reg = Class.forName(regCls, true, classLoader).newInstance().asInstanceOf[KryoRegistrator]
       reg.registerClasses(kryo)
     }
     kryo

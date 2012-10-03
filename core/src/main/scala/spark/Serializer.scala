@@ -12,14 +12,14 @@ import spark.util.ByteBufferInputStream
  * A serializer. Because some serialization libraries are not thread safe, this class is used to 
  * create SerializerInstances that do the actual serialization.
  */
-trait Serializer {
+private[spark] trait Serializer {
   def newInstance(): SerializerInstance
 }
 
 /**
  * An instance of the serializer, for use by one thread at a time.
  */
-trait SerializerInstance {
+private[spark] trait SerializerInstance {
   def serialize[T](t: T): ByteBuffer
 
   def deserialize[T](bytes: ByteBuffer): T
@@ -43,15 +43,15 @@ trait SerializerInstance {
   def deserializeMany(buffer: ByteBuffer): Iterator[Any] = {
     // Default implementation uses deserializeStream
     buffer.rewind()
-    deserializeStream(new ByteBufferInputStream(buffer)).toIterator
+    deserializeStream(new ByteBufferInputStream(buffer)).asIterator
   }
 }
 
 /**
  * A stream for writing serialized objects.
  */
-trait SerializationStream {
-  def writeObject[T](t: T): Unit
+private[spark] trait SerializationStream {
+  def writeObject[T](t: T): SerializationStream
   def flush(): Unit
   def close(): Unit
 
@@ -66,7 +66,7 @@ trait SerializationStream {
 /**
  * A stream for reading serialized objects.
  */
-trait DeserializationStream {
+private[spark] trait DeserializationStream {
   def readObject[T](): T
   def close(): Unit
 
@@ -74,7 +74,7 @@ trait DeserializationStream {
    * Read the elements of this stream through an iterator. This can only be called once, as
    * reading each element will consume data from the input source.
    */
-  def toIterator: Iterator[Any] = new Iterator[Any] {
+  def asIterator: Iterator[Any] = new Iterator[Any] {
     var gotNext = false
     var finished = false
     var nextValue: Any = null

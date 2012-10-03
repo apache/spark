@@ -1,21 +1,20 @@
 package spark.deploy.master
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-
 import akka.actor._
-import spark.{Logging, Utils}
-import spark.util.AkkaUtils
+import akka.actor.Terminated
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
+
 import java.text.SimpleDateFormat
 import java.util.Date
-import akka.remote.RemoteClientLifeCycleEvent
-import spark.deploy._
-import akka.remote.RemoteClientShutdown
-import akka.remote.RemoteClientDisconnected
-import spark.deploy.RegisterWorker
-import spark.deploy.RegisterWorkerFailed
-import akka.actor.Terminated
 
-class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+
+import spark.deploy._
+import spark.{Logging, SparkException, Utils}
+import spark.util.AkkaUtils
+
+
+private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For job IDs
 
   var nextJobNumber = 0
@@ -81,12 +80,22 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
           exec.state = state
           exec.job.actor ! ExecutorUpdated(execId, state, message)
           if (ExecutorState.isFinished(state)) {
+            val jobInfo = idToJob(jobId)
             // Remove this executor from the worker and job
             logInfo("Removing executor " + exec.fullId + " because it is " + state)
-            idToJob(jobId).removeExecutor(exec)
+            jobInfo.removeExecutor(exec)
             exec.worker.removeExecutor(exec)
-            // TODO: the worker would probably want to restart the executor a few times
-            schedule()
+
+            // Only retry certain number of times so we don't go into an infinite loop.
+            if (jobInfo.incrementRetryCount <= JobState.MAX_NUM_RETRY) {
+              schedule()
+            } else {
+              val e = new SparkException("Job %s wth ID %s failed %d times.".format(
+                jobInfo.desc.name, jobInfo.id, jobInfo.retryCount))
+              logError(e.getMessage, e)
+              throw e
+              //System.exit(1)
+            }
           }
         }
         case None =>
@@ -112,7 +121,7 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
       addressToWorker.get(address).foreach(removeWorker)
       addressToJob.get(address).foreach(removeJob)
     }
-    
+
     case RequestMasterState => {
       sender ! MasterState(ip + ":" + port, workers.toList, jobs.toList, completedJobs.toList)
     }
@@ -203,7 +212,7 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   }
 }
 
-object Master {
+private[spark] object Master {
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", args.ip, args.port)

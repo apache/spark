@@ -2,13 +2,15 @@ package spark
 
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
+import java.net.{URI, URLClassLoader}
 
 import akka.actor.Actor
 import akka.actor.Actor._
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.generic.Growable
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileUtil, Path}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.SequenceFileInputFormat
@@ -34,6 +36,8 @@ import org.apache.mesos.{Scheduler, MesosNativeLibrary}
 
 import spark.broadcast._
 
+import spark.deploy.LocalSparkCluster
+
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 
@@ -51,7 +55,7 @@ class SparkContext(
     val sparkHome: String,
     val jars: Seq[String])
   extends Logging {
-  
+
   def this(master: String, frameworkName: String) = this(master, frameworkName, null, Nil)
 
   // Ensure logging is initialized before we spawn any threads
@@ -75,29 +79,60 @@ class SparkContext(
     isLocal)
   SparkEnv.set(env)
 
+  // Used to store a URL for each static file/jar together with the file's local timestamp
+  val addedFiles = HashMap[String, Long]()
+  val addedJars = HashMap[String, Long]()
+
+  // Add each JAR given through the constructor
+  jars.foreach { addJar(_) }
+
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
-    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+),([0-9]+)\]""".r
+    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+)\s*,\s*([0-9]+)\]""".r
+    // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
+    val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """(spark://.*)""".r
 
     master match {
-      case "local" => 
-        new LocalScheduler(1, 0)
+      case "local" =>
+        new LocalScheduler(1, 0, this)
 
-      case LOCAL_N_REGEX(threads) => 
-        new LocalScheduler(threads.toInt, 0)
+      case LOCAL_N_REGEX(threads) =>
+        new LocalScheduler(threads.toInt, 0, this)
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
-        new LocalScheduler(threads.toInt, maxFailures.toInt)
+        new LocalScheduler(threads.toInt, maxFailures.toInt, this)
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
         scheduler.initialize(backend)
+        scheduler
+
+      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
+        // Check to make sure SPARK_MEM <= memoryPerSlave. Otherwise Spark will just hang.
+        val memoryPerSlaveInt = memoryPerSlave.toInt
+        val sparkMemEnv = System.getenv("SPARK_MEM")
+        val sparkMemEnvInt = if (sparkMemEnv != null) Utils.memoryStringToMb(sparkMemEnv) else 512
+        if (sparkMemEnvInt > memoryPerSlaveInt) {
+          throw new SparkException(
+            "Slave memory (%d MB) cannot be smaller than SPARK_MEM (%d MB)".format(
+              memoryPerSlaveInt, sparkMemEnvInt))
+        }
+
+        val scheduler = new ClusterScheduler(this)
+        val localCluster = new LocalSparkCluster(
+          numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
+        val sparkUrl = localCluster.start()
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, frameworkName)
+        scheduler.initialize(backend)
+        backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
+          localCluster.stop()
+        }
         scheduler
 
       case _ =>
@@ -122,7 +157,7 @@ class SparkContext(
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism ): RDD[T] = {
     new ParallelCollection[T](this, seq, numSlices)
   }
-    
+
   def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism ): RDD[T] = {
     parallelize(seq, numSlices)
   }
@@ -163,14 +198,14 @@ class SparkContext(
   }
 
   /**
-   * Smarter version of hadoopFile() that uses class manifests to figure out the classes of keys, 
+   * Smarter version of hadoopFile() that uses class manifests to figure out the classes of keys,
    * values and the InputFormat so that users don't need to pass them directly.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String, minSplits: Int)
       (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F])
       : RDD[(K, V)] = {
     hadoopFile(path,
-        fm.erasure.asInstanceOf[Class[F]], 
+        fm.erasure.asInstanceOf[Class[F]],
         km.erasure.asInstanceOf[Class[K]],
         vm.erasure.asInstanceOf[Class[V]],
         minSplits)
@@ -191,7 +226,7 @@ class SparkContext(
         new Configuration)
   }
 
-  /** 
+  /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    */
@@ -207,7 +242,7 @@ class SparkContext(
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf)
   }
 
-  /** 
+  /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    */
@@ -233,14 +268,14 @@ class SparkContext(
     sequenceFile(path, keyClass, valueClass, defaultMinSplits)
 
   /**
-   * Version of sequenceFile() for types implicitly convertible to Writables through a 
+   * Version of sequenceFile() for types implicitly convertible to Writables through a
    * WritableConverter.
    *
    * WritableConverters are provided in a somewhat strange way (by an implicit function) to support
-   * both subclasses of Writable and types for which we define a converter (e.g. Int to 
+   * both subclasses of Writable and types for which we define a converter (e.g. Int to
    * IntWritable). The most natural thing would've been to have implicit objects for the
    * converters, but then we couldn't have an object for every subclass of Writable (you can't
-   * have a parameterized singleton object). We use functions instead to create a new converter 
+   * have a parameterized singleton object). We use functions instead to create a new converter
    * for the appropriate type. In addition, we pass the converter a ClassManifest of its type to
    * allow it to figure out the Writable class to use in the subclass case.
    */
@@ -265,7 +300,7 @@ class SparkContext(
    * that there's very little effort required to save arbitrary objects.
    */
   def objectFile[T: ClassManifest](
-      path: String, 
+      path: String,
       minSplits: Int = defaultMinSplits
       ): RDD[T] = {
     sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minSplits)
@@ -292,9 +327,56 @@ class SparkContext(
   def accumulable[T,R](initialValue: T)(implicit param: AccumulableParam[T,R]) =
     new Accumulable(initialValue, param)
 
+  /**
+   * Create an accumulator from a "mutable collection" type.
+   *
+   * Growable and TraversableOnce are the standard APIs that guarantee += and ++=, implemented by
+   * standard mutable collections. So you can use this with mutable Map, Set, etc.
+   */
+  def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable, T](initialValue: R) = {
+    val param = new GrowableAccumulableParam[R,T]
+    new Accumulable(initialValue, param)
+  }
 
   // Keep around a weak hash map of values to Cached versions?
   def broadcast[T](value: T) = SparkEnv.get.broadcastManager.newBroadcast[T] (value, isLocal)
+
+  // Adds a file dependency to all Tasks executed in the future.
+  def addFile(path: String) {
+    val uri = new URI(path)
+    val key = uri.getScheme match {
+      case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
+      case _ => path
+    }
+    addedFiles(key) = System.currentTimeMillis
+
+    // Fetch the file locally in case the task is executed locally
+    val filename = new File(path.split("/").last)
+    Utils.fetchFile(path, new File("."))
+
+    logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
+  }
+
+  def clearFiles() {
+    addedFiles.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
+    addedFiles.clear()
+  }
+
+  // Adds a jar dependency to all Tasks executed in the future.
+  def addJar(path: String) {
+    val uri = new URI(path)
+    val key = uri.getScheme match {
+      case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
+      case _ => path
+    }
+    addedJars(key) = System.currentTimeMillis
+    logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+  }
+
+  def clearJars() {
+    addedJars.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
+    addedJars.clear()
+  }
 
   // Stop the SparkContext
   def stop() {
@@ -303,6 +385,9 @@ class SparkContext(
     taskScheduler = null
     // TODO: Cache.stop()?
     env.stop()
+    // Clean up locally linked files
+    clearFiles()
+    clearJars()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
     logInfo("Successfully stopped SparkContext")
@@ -326,7 +411,7 @@ class SparkContext(
   /**
    * Run a function on a given set of partitions in an RDD and return the results. This is the main
    * entry point to the scheduler, by which all actions get launched. The allowLocal flag specifies
-   * whether the scheduler can run the computation on the master rather than shipping it out to the 
+   * whether the scheduler can run the computation on the master rather than shipping it out to the
    * cluster, for short actions like first().
    */
   def runJob[T, U: ClassManifest](
@@ -335,22 +420,23 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean
       ): Array[U] = {
-    logInfo("Starting job...")
+    val callSite = Utils.getSparkCallSite
+    logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, allowLocal)
-    logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal)
+    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
 
   def runJob[T, U: ClassManifest](
       rdd: RDD[T],
-      func: Iterator[T] => U, 
+      func: Iterator[T] => U,
       partitions: Seq[Int],
       allowLocal: Boolean
       ): Array[U] = {
     runJob(rdd, (context: TaskContext, iter: Iterator[T]) => func(iter), partitions, allowLocal)
   }
-  
+
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
@@ -371,10 +457,11 @@ class SparkContext(
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long
       ): PartialResult[R] = {
-    logInfo("Starting job...")
+    val callSite = Utils.getSparkCallSite
+    logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, timeout)
-    logInfo("Job finished in " + (System.nanoTime - start) / 1e9 + " s")
+    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout)
+    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
 
@@ -396,7 +483,7 @@ class SparkContext(
   private[spark] def newShuffleId(): Int = {
     nextShuffleId.getAndIncrement()
   }
-  
+
   private var nextRddId = new AtomicInteger(0)
 
   // Register a new RDD, returning its RDD ID
@@ -424,7 +511,7 @@ object SparkContext {
 
   implicit def rddToPairRDDFunctions[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
     new PairRDDFunctions(rdd)
-  
+
   implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable: ClassManifest](
       rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
@@ -445,7 +532,7 @@ object SparkContext {
   implicit def longToLongWritable(l: Long) = new LongWritable(l)
 
   implicit def floatToFloatWritable(f: Float) = new FloatWritable(f)
-  
+
   implicit def doubleToDoubleWritable(d: Double) = new DoubleWritable(d)
 
   implicit def boolToBoolWritable (b: Boolean) = new BooleanWritable(b)
@@ -456,7 +543,7 @@ object SparkContext {
 
   private implicit def arrayToArrayWritable[T <% Writable: ClassManifest](arr: Traversable[T]): ArrayWritable = {
     def anyToWritable[U <% Writable](u: U): Writable = u
-    
+
     new ArrayWritable(classManifest[T].erasure.asInstanceOf[Class[Writable]],
         arr.map(x => anyToWritable(x)).toArray)
   }
@@ -500,7 +587,7 @@ object SparkContext {
       Nil
     }
   }
- 
+
   // Find the JAR that contains the class of a particular object
   def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
 }
@@ -513,7 +600,7 @@ object SparkContext {
  * that doesn't know the type of T when it is created. This sounds strange but is necessary to
  * support converting subclasses of Writable to themselves (writableWritableConverter).
  */
-class WritableConverter[T](
+private[spark] class WritableConverter[T](
     val writableClass: ClassManifest[T] => Class[_ <: Writable],
     val convert: Writable => T)
   extends Serializable

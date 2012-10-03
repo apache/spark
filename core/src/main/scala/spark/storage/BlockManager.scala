@@ -1,33 +1,25 @@
 package spark.storage
 
-import java.io._
-import java.nio._
-import java.nio.channels.FileChannel.MapMode
-import java.util.{HashMap => JHashMap}
-import java.util.LinkedHashMap
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.Collections
-
 import akka.dispatch.{Await, Future}
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions._
-
-import it.unimi.dsi.fastutil.io._
-
-import spark.CacheTracker
-import spark.Logging
-import spark.Serializer
-import spark.SizeEstimator
-import spark.SparkEnv
-import spark.SparkException
-import spark.Utils
-import spark.util.ByteBufferInputStream
-import spark.network._
 import akka.util.Duration
 
-class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
+import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
+import java.io.{InputStream, OutputStream, Externalizable, ObjectInput, ObjectOutput}
+import java.nio.{MappedByteBuffer, ByteBuffer}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.collection.JavaConversions._
+
+import spark.{CacheTracker, Logging, Serializer, SizeEstimator, SparkException, Utils}
+import spark.network._
+import spark.util.ByteBufferInputStream
+import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+import sun.nio.ch.DirectBuffer
+
+
+private[spark] class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
   def this() = this(null, 0)
 
   override def writeExternal(out: ObjectOutput) {
@@ -51,41 +43,61 @@ class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
 }
 
 
-case class BlockException(blockId: String, message: String, ex: Exception = null) extends Exception(message)
+private[spark] 
+case class BlockException(blockId: String, message: String, ex: Exception = null)
+extends Exception(message)
 
 
-class BlockLocker(numLockers: Int) {
+private[spark] class BlockLocker(numLockers: Int) {
   private val hashLocker = Array.fill(numLockers)(new Object())
-  
+
   def getLock(blockId: String): Object = {
     return hashLocker(math.abs(blockId.hashCode % numLockers))
   }
 }
 
 
+private[spark]
 class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
   extends Logging {
 
-  case class BlockInfo(level: StorageLevel, tellMaster: Boolean)
+  class BlockInfo(val level: StorageLevel, val tellMaster: Boolean, var pending: Boolean = true) {
+    def waitForReady() {
+      if (pending) {
+        synchronized {
+          while (pending) this.wait()
+        }
+      }
+    }
+
+    def markReady() {
+      pending = false
+      synchronized {
+        this.notifyAll()
+      }
+    }
+  }
 
   private val NUM_LOCKS = 337
   private val locker = new BlockLocker(NUM_LOCKS)
 
   private val blockInfo = new ConcurrentHashMap[String, BlockInfo]()
-  private val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
-  private val diskStore: BlockStore = new DiskStore(this, 
-    System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
-  
+
+  private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
+  private[storage] val diskStore: BlockStore =
+    new DiskStore(this, System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
+
   val connectionManager = new ConnectionManager(0)
   implicit val futureExecContext = connectionManager.futureExecContext
-  
+
   val connectionManagerId = connectionManager.id
   val blockManagerId = new BlockManagerId(connectionManagerId.host, connectionManagerId.port)
-  
+
   // TODO: This will be removed after cacheTracker is removed from the code base.
   var cacheTracker: CacheTracker = null
 
-  initLogging()
+  val numParallelFetches = BlockManager.getNumParallelFetchesFromSystemProperties
+  val compress = System.getProperty("spark.blockManager.compress", "false").toBoolean
 
   initialize()
 
@@ -102,7 +114,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    */
   private def initialize() {
     master.mustRegisterBlockManager(
-      RegisterBlockManager(blockManagerId, maxMemory, maxMemory))
+      RegisterBlockManager(blockManagerId, maxMemory))
     BlockManagerWorker.startBlockManagerWorker(this)
   }
 
@@ -115,36 +127,32 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   /**
-   * Change storage level for a local block and tell master is necesary. 
-   * If new level is invalid, then block info (if it exists) will be silently removed.
+   * Tell the master about the current storage status of a block. This will send a heartbeat
+   * message reflecting the current status, *not* the desired storage level in its block info.
+   * For example, a block with MEMORY_AND_DISK set might have fallen out to be only on disk.
    */
-  def setLevel(blockId: String, level: StorageLevel, tellMaster: Boolean = true) {
-    if (level == null) {
-      throw new IllegalArgumentException("Storage level is null")
-    }
-    
-    // If there was earlier info about the block, then use earlier tellMaster
-    val oldInfo = blockInfo.get(blockId)
-    val newTellMaster = if (oldInfo != null) oldInfo.tellMaster else tellMaster
-    if (oldInfo != null && oldInfo.tellMaster != tellMaster) {
-      logWarning("Ignoring tellMaster setting as it is different from earlier setting")
-    }
-
-    // If level is valid, store the block info, else remove the block info
-    if (level.isValid) {
-      blockInfo.put(blockId, new BlockInfo(level, newTellMaster))
-      logDebug("Info for block " + blockId + " updated with new level as " + level) 
-    } else {
-      blockInfo.remove(blockId)
-      logDebug("Info for block " + blockId + " removed as new level is null or invalid") 
-    }
-   
-    // Tell master if necessary
-    if (newTellMaster) {
+  def reportBlockStatus(blockId: String) {
+    locker.getLock(blockId).synchronized {
+      val curLevel = blockInfo.get(blockId) match {
+        case null =>
+          StorageLevel.NONE
+        case info =>
+          info.level match {
+            case null =>
+              StorageLevel.NONE
+            case level =>
+              val inMem = level.useMemory && memoryStore.contains(blockId)
+              val onDisk = level.useDisk && diskStore.contains(blockId)
+              new StorageLevel(onDisk, inMem, level.deserialized, level.replication)
+          }
+      }
+      master.mustHeartBeat(HeartBeat(
+        blockManagerId,
+        blockId,
+        curLevel,
+        if (curLevel.useMemory) memoryStore.getSize(blockId) else 0L,
+        if (curLevel.useDisk) diskStore.getSize(blockId) else 0L))
       logDebug("Told master about block " + blockId)
-      notifyMaster(HeartBeat(blockManagerId, blockId, level, 0, 0)) 
-    } else {
-      logDebug("Did not tell master about block " + blockId)
     }
   }
 
@@ -174,55 +182,122 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * Get block from local block manager.
    */
   def getLocal(blockId: String): Option[Iterator[Any]] = {
-    if (blockId == null) {
-      throw new IllegalArgumentException("Block Id is null")
-    }
     logDebug("Getting local block " + blockId)
     locker.getLock(blockId).synchronized {
-    
-      // Check storage level of block 
-      val level = getLevel(blockId)
-      if (level != null) {
-        logDebug("Level for block " + blockId + " is " + level + " on local machine")
-        
+      val info = blockInfo.get(blockId)
+      if (info != null) {
+        info.waitForReady() // In case the block is still being put() by another thread
+        val level = info.level
+        logDebug("Level for block " + blockId + " is " + level)
+
         // Look for the block in memory
         if (level.useMemory) {
           logDebug("Getting block " + blockId + " from memory")
           memoryStore.getValues(blockId) match {
-            case Some(iterator) => {
-              logDebug("Block " + blockId + " found in memory")
+            case Some(iterator) =>
               return Some(iterator)
-            }
-            case None => {
+            case None =>
               logDebug("Block " + blockId + " not found in memory")
-            }
           }
-        } else {
-          logDebug("Not getting block " + blockId + " from memory")
         }
 
-        // Look for block in disk 
+        // Look for block on disk, potentially loading it back into memory if required
         if (level.useDisk) {
           logDebug("Getting block " + blockId + " from disk")
-          diskStore.getValues(blockId) match {
-            case Some(iterator) => {
-              logDebug("Block " + blockId + " found in disk")
-              return Some(iterator)
+          if (level.useMemory && level.deserialized) {
+            diskStore.getValues(blockId) match {
+              case Some(iterator) =>
+                // Put the block back in memory before returning it
+                memoryStore.putValues(blockId, iterator, level, true) match {
+                  case Left(iterator2) =>
+                    return Some(iterator2)
+                  case _ =>
+                    throw new Exception("Memory store did not return back an iterator")
+                }
+              case None =>
+                throw new Exception("Block " + blockId + " not found on disk, though it should be")
             }
-            case None => {
-              throw new Exception("Block " + blockId + " not found in disk")
-              return None
+          } else if (level.useMemory && !level.deserialized) {
+            // Read it as a byte buffer into memory first, then return it
+            diskStore.getBytes(blockId) match {
+              case Some(bytes) =>
+                // Put a copy of the block back in memory before returning it. Note that we can't
+                // put the ByteBuffer returned by the disk store as that's a memory-mapped file.
+                val copyForMemory = ByteBuffer.allocate(bytes.limit)
+                copyForMemory.put(bytes)
+                memoryStore.putBytes(blockId, copyForMemory, level)
+                bytes.rewind()
+                return Some(dataDeserialize(bytes))
+              case None =>
+                throw new Exception("Block " + blockId + " not found on disk, though it should be")
+            }
+          } else {
+            diskStore.getValues(blockId) match {
+              case Some(iterator) =>
+                return Some(iterator)
+              case None =>
+                throw new Exception("Block " + blockId + " not found on disk, though it should be")
             }
           }
-        } else {
-          logDebug("Not getting block " + blockId + " from disk")
+        }
+      } else {
+        logDebug("Block " + blockId + " not registered locally")
+      }
+    }
+    return None
+  }
+
+  /**
+   * Get block from the local block manager as serialized bytes.
+   */
+  def getLocalBytes(blockId: String): Option[ByteBuffer] = {
+    // TODO: This whole thing is very similar to getLocal; we need to refactor it somehow
+    logDebug("Getting local block " + blockId + " as bytes")
+    locker.getLock(blockId).synchronized {
+      val info = blockInfo.get(blockId)
+      if (info != null) {
+        info.waitForReady() // In case the block is still being put() by another thread
+        val level = info.level
+        logDebug("Level for block " + blockId + " is " + level)
+
+        // Look for the block in memory
+        if (level.useMemory) {
+          logDebug("Getting block " + blockId + " from memory")
+          memoryStore.getBytes(blockId) match {
+            case Some(bytes) =>
+              return Some(bytes)
+            case None =>
+              logDebug("Block " + blockId + " not found in memory")
+          }
         }
 
+        // Look for block on disk
+        if (level.useDisk) {
+          // Read it as a byte buffer into memory first, then return it
+          diskStore.getBytes(blockId) match {
+            case Some(bytes) =>
+              if (level.useMemory) {
+                if (level.deserialized) {
+                  memoryStore.putBytes(blockId, bytes, level)
+                } else {
+                  // The memory store will hang onto the ByteBuffer, so give it a copy instead of
+                  // the memory-mapped file buffer we got from the disk store
+                  val copyForMemory = ByteBuffer.allocate(bytes.limit)
+                  copyForMemory.put(bytes)
+                  memoryStore.putBytes(blockId, copyForMemory, level)
+                }
+              }
+              bytes.rewind()
+              return Some(bytes)
+            case None =>
+              throw new Exception("Block " + blockId + " not found on disk, though it should be")
+          }
+        }
       } else {
-        logDebug("Level for block " + blockId + " not found")
+        logDebug("Block " + blockId + " not registered locally")
       }
-    } 
-    return None 
+    }
+    return None
   }
 
   /**
@@ -272,70 +347,93 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     val totalBlocks = blocksByAddress.map(_._2.size).sum
     logDebug("Getting " + totalBlocks + " blocks")
     var startTime = System.currentTimeMillis
-    val results = new LinkedBlockingQueue[(String, Option[Iterator[Any]])]
     val localBlockIds = new ArrayBuffer[String]()
-    val remoteBlockIds = new ArrayBuffer[String]()
-    val remoteBlockIdsPerLocation = new HashMap[BlockManagerId, Seq[String]]()
+    val remoteBlockIds = new HashSet[String]()
 
-    // Split local and remote blocks
-    for ((address, blockIds) <- blocksByAddress) {
-      if (address == blockManagerId) {
-        localBlockIds ++= blockIds
-      } else {
-        remoteBlockIds ++= blockIds
-        remoteBlockIdsPerLocation(address) = blockIds
-      }
-    }
-    
-    // Start getting remote blocks
-    for ((bmId, bIds) <- remoteBlockIdsPerLocation) {
-      val cmId = ConnectionManagerId(bmId.ip, bmId.port)
-      val blockMessages = bIds.map(bId => BlockMessage.fromGetBlock(GetBlock(bId)))
+    // A queue to hold our results. Because we want all the deserializing the happen in the
+    // caller's thread, this will actually hold functions to produce the Iterator for each block.
+    // For local blocks we'll have an iterator already, while for remote ones we'll deserialize.
+    val results = new LinkedBlockingQueue[(String, Option[() => Iterator[Any]])]
+
+    // Bound the number and memory usage of fetched remote blocks.
+    val blocksToRequest = new Queue[(BlockManagerId, BlockMessage)]
+
+    def sendRequest(bmId: BlockManagerId, blockMessages: Seq[BlockMessage]) {
+      val cmId = new ConnectionManagerId(bmId.ip, bmId.port)
       val blockMessageArray = new BlockMessageArray(blockMessages)
       val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
       future.onSuccess {
         case Some(message) => {
           val bufferMessage = message.asInstanceOf[BufferMessage]
           val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
-          blockMessageArray.foreach(blockMessage => {
+          for (blockMessage <- blockMessageArray) {
             if (blockMessage.getType != BlockMessage.TYPE_GOT_BLOCK) {
               throw new SparkException(
                 "Unexpected message " + blockMessage.getType + " received from " + cmId)
             }
-            val buffer = blockMessage.getData
             val blockId = blockMessage.getId
-            val block = dataDeserialize(buffer)
-            results.put((blockId, Some(block)))
+            results.put((blockId, Some(() => dataDeserialize(blockMessage.getData))))
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
-          })
+          }
         }
         case None => {
-          logError("Could not get blocks from " + cmId)
-          for (blockId <- bIds) {
-            results.put((blockId, None))
+          logError("Could not get block(s) from " + cmId)
+          for (blockMessage <- blockMessages) {
+            results.put((blockMessage.getId, None))
           }
         }
       }
     }
-    logDebug("Started remote gets for " + remoteBlockIds.size + " blocks in " + 
+
+    // Split local and remote blocks. Remote blocks are further split into ones that will
+    // be requested initially and ones that will be added to a queue of blocks to request.
+    val initialRequestBlocks = new HashMap[BlockManagerId, ArrayBuffer[BlockMessage]]()
+    var initialRequests = 0
+    val blocksToGetLater = new ArrayBuffer[(BlockManagerId, BlockMessage)]
+    for ((address, blockIds) <- Utils.randomize(blocksByAddress)) {
+      if (address == blockManagerId) {
+        localBlockIds ++= blockIds
+      } else {
+        remoteBlockIds ++= blockIds
+        for (blockId <- blockIds) {
+          val blockMessage = BlockMessage.fromGetBlock(GetBlock(blockId))
+          if (initialRequests < numParallelFetches) {
+            initialRequestBlocks.getOrElseUpdate(address, new ArrayBuffer[BlockMessage])
+              .append(blockMessage)
+            initialRequests += 1
+          } else {
+            blocksToGetLater.append((address, blockMessage))
+          }
+        }
+      }
+    }
+    // Add the remaining blocks into a queue to pull later in a random order
+    blocksToRequest ++= Utils.randomize(blocksToGetLater)
+
+    // Send out initial request(s) for 'numParallelFetches' blocks.
+    for ((bmId, blockMessages) <- initialRequestBlocks) {
+      sendRequest(bmId, blockMessages)
+    }
+
+    logDebug("Started remote gets for " + numParallelFetches + " blocks in " +
       Utils.getUsedTimeMs(startTime) + " ms")
 
-    // Get the local blocks while remote blocks are being fetched
+    // Get the local blocks while remote blocks are being fetched.
     startTime = System.currentTimeMillis
-    localBlockIds.foreach(id => {
-      get(id) match {
+    for (id <- localBlockIds) {
+      getLocal(id) match {
         case Some(block) => {
-          results.put((id, Some(block)))
+          results.put((id, Some(() => block)))
           logDebug("Got local block " + id)
         }
         case None => {
           throw new BlockException(id, "Could not get block " + id + " from local machine")
         }
       }
-    }) 
+    }
     logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
 
-    // Return an iterator that will read fetched blocks off the queue as they arrive
+    // Return an iterator that will read fetched blocks off the queue as they arrive.
     return new Iterator[(String, Option[Iterator[Any]])] {
       var resultsGotten = 0
 
@@ -343,7 +441,12 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
       def next(): (String, Option[Iterator[Any]]) = {
         resultsGotten += 1
-        results.take()
+        val (blockId, functionOption) = results.take()
+        if (remoteBlockIds.contains(blockId) && !blocksToRequest.isEmpty) {
+          val (bmId, blockMessage) = blocksToRequest.dequeue()
+          sendRequest(bmId, Seq(blockMessage))
+        }
+        (blockId, functionOption.map(_.apply()))
       }
     }
   }
@@ -362,7 +465,18 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
 
-    val startTimeMs = System.currentTimeMillis 
+    if (blockInfo.containsKey(blockId)) {
+      logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
+      return
+    }
+
+    // Remember the block's storage level so that we can correctly drop it to disk if it needs
+    // to be dropped right after it got put into memory. Note, however, that other threads will
+    // not be able to get() this block until we call markReady on its BlockInfo.
+    val myInfo = new BlockInfo(level, tellMaster)
+    blockInfo.put(blockId, myInfo)
+
+    val startTimeMs = System.currentTimeMillis
     var bytes: ByteBuffer = null
 
     // If we need to replicate the data, we'll want access to the values, but because our
@@ -370,49 +484,37 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     // the put serializes data, we'll remember the bytes, above; but for the case where
     // it doesn't, such as MEMORY_ONLY_DESER, let's rely on the put returning an Iterator.
     var valuesAfterPut: Iterator[Any] = null
-    
+
     locker.getLock(blockId).synchronized {
       logDebug("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
         + " to get into synchronized block")
-      
-      // Check and warn if block with same id already exists 
-      if (getLevel(blockId) != null) {
-        logWarning("Block " + blockId + " already exists in local machine")
-        return
-      }
 
-      if (level.useMemory && level.useDisk) {
-        // If saving to both memory and disk, then serialize only once 
-        memoryStore.putValues(blockId, values, level) match {
-          case Left(newValues) => 
-            diskStore.putValues(blockId, newValues, level) match {
-              case Right(newBytes) => bytes = newBytes
-              case _ => throw new Exception("Unexpected return value")
-            }
-          case Right(newBytes) =>
-            bytes = newBytes
-            diskStore.putBytes(blockId, newBytes, level)
-        }
-      } else if (level.useMemory) {
-        // If only save to memory 
-        memoryStore.putValues(blockId, values, level) match {
+      if (level.useMemory) {
+        // Save it just to memory first, even if it also has useDisk set to true; we will later
+        // drop it to disk if the memory store can't hold it.
+        memoryStore.putValues(blockId, values, level, true) match {
           case Right(newBytes) => bytes = newBytes
           case Left(newIterator) => valuesAfterPut = newIterator
         }
       } else {
-        // If only save to disk
-        diskStore.putValues(blockId, values, level) match {
+        // Save directly to disk.
+        val askForBytes = level.replication > 1 // Don't get back the bytes unless we replicate them
+        diskStore.putValues(blockId, values, level, askForBytes) match {
           case Right(newBytes) => bytes = newBytes
-          case _ => throw new Exception("Unexpected return value")
+          case _ =>
         }
       }
-        
-      // Store the storage level
-      setLevel(blockId, level, tellMaster)
+
+      // Now that the block is in either the memory or disk store, let other threads read it,
+      // and tell the master about it.
+      myInfo.markReady()
+      if (tellMaster) {
+        reportBlockStatus(blockId)
+      }
     }
     logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))
 
-    // Replicate block if required 
+    // Replicate block if required
     if (level.replication > 1) {
       // Serialize the block if not already done
       if (bytes == null) {
@@ -422,8 +524,10 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
         }
         bytes = dataSerialize(valuesAfterPut)
       }
-      replicate(blockId, bytes, level) 
+      replicate(blockId, bytes, level)
     }
+
+    BlockManager.dispose(bytes)
 
     // TODO: This code will be removed when CacheTracker is gone.
     if (blockId.startsWith("rdd")) {
@@ -436,7 +540,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   /**
    * Put a new block of serialized bytes to the block manager.
    */
-  def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel, tellMaster: Boolean = true) {
+  def putBytes(
+    blockId: String, bytes: ByteBuffer, level: StorageLevel, tellMaster: Boolean = true) {
+
     if (blockId == null) {
       throw new IllegalArgumentException("Block Id is null")
     }
@@ -446,14 +552,26 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     if (level == null || !level.isValid) {
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
-    
-    val startTimeMs = System.currentTimeMillis 
-    
-    // Initiate the replication before storing it locally. This is faster as 
+
+    if (blockInfo.containsKey(blockId)) {
+      logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
+      return
+    }
+
+    // Remember the block's storage level so that we can correctly drop it to disk if it needs
+    // to be dropped right after it got put into memory. Note, however, that other threads will
+    // not be able to get() this block until we call markReady on its BlockInfo.
+    val myInfo = new BlockInfo(level, tellMaster)
+    blockInfo.put(blockId, myInfo)
+
+    val startTimeMs = System.currentTimeMillis
+
+    // Initiate the replication before storing it locally. This is faster as
     // data is already serialized and ready for sending
     val replicationFuture = if (level.replication > 1) {
+      val bufferView = bytes.duplicate() // Doesn't copy the bytes, just creates a wrapper
       Future {
-        replicate(blockId, bytes, level)
+        replicate(blockId, bufferView, level)
       }
     } else {
       null
@@ -462,27 +580,29 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     locker.getLock(blockId).synchronized {
       logDebug("PutBytes for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
         + " to get into synchronized block")
-      if (getLevel(blockId) != null) {
-        logWarning("Block " + blockId + " already exists")
-        return
-      }
 
       if (level.useMemory) {
+        // Store it only in memory at first, even if useDisk is also set to true
+        bytes.rewind()
         memoryStore.putBytes(blockId, bytes, level)
-      }
-      if (level.useDisk) {
+      } else {
+        bytes.rewind()
         diskStore.putBytes(blockId, bytes, level)
       }
 
-      // Store the storage level
-      setLevel(blockId, level, tellMaster)
+      // Now that the block is in either the memory or disk store, let other threads read it,
+      // and tell the master about it.
+      myInfo.markReady()
+      if (tellMaster) {
+        reportBlockStatus(blockId)
+      }
     }
 
     // TODO: This code will be removed when CacheTracker is gone.
     if (blockId.startsWith("rdd")) {
       notifyTheCacheTracker(blockId)
     }
-   
+
     // If replication had started, then wait for it to finish
     if (level.replication > 1) {
       if (replicationFuture == null) {
@@ -491,12 +611,11 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       Await.ready(replicationFuture, Duration.Inf)
     }
 
-    val finishTime = System.currentTimeMillis
     if (level.replication > 1) {
-      logDebug("PutBytes for block " + blockId + " with replication took " + 
+      logDebug("PutBytes for block " + blockId + " with replication took " +
         Utils.getUsedTimeMs(startTimeMs))
     } else {
-      logDebug("PutBytes for block " + blockId + " without replication took " + 
+      logDebug("PutBytes for block " + blockId + " without replication took " +
         Utils.getUsedTimeMs(startTimeMs))
     }
   }
@@ -504,39 +623,44 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   /**
    * Replicate block to another node.
    */
-
+  var cachedPeers: Seq[BlockManagerId] = null
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
-    var peers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
-    for (peer: BlockManagerId <- peers) {
+    if (cachedPeers == null) {
+      cachedPeers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
+    }
+    for (peer: BlockManagerId <- cachedPeers) {
       val start = System.nanoTime
+      data.rewind()
       logDebug("Try to replicate BlockId " + blockId + " once; The size of the data is "
-        + data.array().length + " Bytes. To node: " + peer)
+        + data.limit() + " Bytes. To node: " + peer)
       if (!BlockManagerWorker.syncPutBlock(PutBlock(blockId, data, tLevel),
         new ConnectionManagerId(peer.ip, peer.port))) {
         logError("Failed to call syncPutBlock to " + peer)
       }
       logDebug("Replicated BlockId " + blockId + " once used " +
         (System.nanoTime - start) / 1e6 + " s; The size of the data is " +
-        data.array().length + " bytes.")
+        data.limit() + " bytes.")
     }
   }
 
   // TODO: This code will be removed when CacheTracker is gone.
   private def notifyTheCacheTracker(key: String) {
-    val rddInfo = key.split(":")
-    val rddId: Int = rddInfo(1).toInt
-    val splitIndex: Int = rddInfo(2).toInt
-    val host = System.getProperty("spark.hostname", Utils.localHostName)
-    cacheTracker.notifyTheCacheTrackerFromBlockManager(spark.AddedToCache(rddId, splitIndex, host))
+    if (cacheTracker != null) {
+      val rddInfo = key.split("_")
+      val rddId: Int = rddInfo(1).toInt
+      val partition: Int = rddInfo(2).toInt
+      val host = System.getProperty("spark.hostname", Utils.localHostName())
+      cacheTracker.notifyTheCacheTrackerFromBlockManager(spark.AddedToCache(rddId, partition, host))
+    }
   }
 
   /**
    * Read a block consisting of a single object.
    */
   def getSingle(blockId: String): Option[Any] = {
-    get(blockId).map(_.next)
+    get(blockId).map(_.next())
   }
 
   /**
@@ -547,42 +671,64 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   /**
-   * Drop block from memory (called when memory store has reached it limit)
+   * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
+   * store reaches its limit and needs to free up space.
    */
-  def dropFromMemory(blockId: String) {
+  def dropFromMemory(blockId: String, data: Either[Iterator[_], ByteBuffer]) {
+    logInfo("Dropping block " + blockId + " from memory")
     locker.getLock(blockId).synchronized {
-      val level = getLevel(blockId)
-      if (level == null) {
-        logWarning("Block " + blockId + " cannot be removed from memory as it does not exist")
-        return
+      val info = blockInfo.get(blockId)
+      val level = info.level
+      if (level.useDisk && !diskStore.contains(blockId)) {
+        logInfo("Writing block " + blockId + " to disk")
+        data match {
+          case Left(iterator) =>
+            diskStore.putValues(blockId, iterator, level, false)
+          case Right(bytes) =>
+            diskStore.putBytes(blockId, bytes, level)
+        }
       }
-      if (!level.useMemory) {
-        logWarning("Block " + blockId + " cannot be removed from memory as it is not in memory")
-        return
+      memoryStore.remove(blockId)
+      if (info.tellMaster) {
+        reportBlockStatus(blockId)
       }
-      memoryStore.remove(blockId)  
-      val newLevel = new StorageLevel(level.useDisk, false, level.deserialized, level.replication)
-      setLevel(blockId, newLevel)
+      if (!level.useDisk) {
+        // The block is completely gone from this node; forget it so we can put() it again later.
+        blockInfo.remove(blockId)
+      }
     }
   }
 
+  /**
+   * Wrap an output stream for compression if block compression is enabled
+   */
+  def wrapForCompression(s: OutputStream): OutputStream = {
+    if (compress) new LZFOutputStream(s) else s
+  }
+
+  /**
+   * Wrap an input stream for compression if block compression is enabled
+   */
+  def wrapForCompression(s: InputStream): InputStream = {
+    if (compress) new LZFInputStream(s) else s
+  }
+
   def dataSerialize(values: Iterator[Any]): ByteBuffer = {
-    /*serializer.newInstance().serializeMany(values)*/
     val byteStream = new FastByteArrayOutputStream(4096)
-    serializer.newInstance().serializeStream(byteStream).writeAll(values).close()
+    val ser = serializer.newInstance()
+    ser.serializeStream(wrapForCompression(byteStream)).writeAll(values).close()
     byteStream.trim()
     ByteBuffer.wrap(byteStream.array)
   }
 
+  /**
+   * Deserializes a ByteBuffer into an iterator of values and disposes of it when the end of
+   * the iterator is reached.
+   */
   def dataDeserialize(bytes: ByteBuffer): Iterator[Any] = {
-    /*serializer.newInstance().deserializeMany(bytes)*/
-    val ser = serializer.newInstance()
     bytes.rewind()
-    return ser.deserializeStream(new ByteBufferInputStream(bytes)).toIterator
-  }
-
-  private def notifyMaster(heartBeat: HeartBeat) {
-    master.mustHeartBeat(heartBeat)
+    val ser = serializer.newInstance()
+    ser.deserializeStream(wrapForCompression(new ByteBufferInputStream(bytes, true))).asIterator
   }
 
   def stop() {
@@ -594,9 +740,29 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 }
 
-object BlockManager {
-  def getMaxMemoryFromSystemProperties(): Long = {
+private[spark]
+object BlockManager extends Logging {
+  def getNumParallelFetchesFromSystemProperties: Int = {
+    System.getProperty("spark.blockManager.parallelFetches", "4").toInt
+  }
+
+  def getMaxMemoryFromSystemProperties: Long = {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
     (Runtime.getRuntime.maxMemory * memoryFraction).toLong
+  }
+
+  /**
+   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
+   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
+   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
+   * unfortunately no standard API to do this.
+   */
+  def dispose(buffer: ByteBuffer) {
+    if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
+      logDebug("Unmapping " + buffer)
+      if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
+        buffer.asInstanceOf[DirectBuffer].cleaner().clean()
+      }
+    }
   }
 }

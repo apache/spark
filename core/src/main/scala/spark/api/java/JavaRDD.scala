@@ -19,6 +19,8 @@ JavaRDDLike[T, JavaRDD[T]] {
 
   def distinct(): JavaRDD[T] = wrapRDD(rdd.distinct())
 
+  def distinct(numSplits: Int): JavaRDD[T] = wrapRDD(rdd.distinct(numSplits))
+
   def filter(f: JFunction[T, java.lang.Boolean]): JavaRDD[T] =
     wrapRDD(rdd.filter((x => f(x).booleanValue())))
 

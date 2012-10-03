@@ -1,10 +1,10 @@
 package spark.scheduler
 
 import java.io._
-import java.util.HashMap
+import java.util.{HashMap => JHashMap}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConversions._
 
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
@@ -15,12 +15,12 @@ import com.ning.compress.lzf.LZFOutputStream
 import spark._
 import spark.storage._
 
-object ShuffleMapTask {
+private[spark] object ShuffleMapTask {
 
   // A simple map between the stage id to the serialized byte array of a task.
   // Served as a cache for task serialization because serialization can be
   // expensive on the master node if it needs to launch thousands of tasks.
-  val serializedInfoCache = new HashMap[Int, Array[Byte]]
+  val serializedInfoCache = new JHashMap[Int, Array[Byte]]
 
   def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_]): Array[Byte] = {
     synchronized {
@@ -29,7 +29,8 @@ object ShuffleMapTask {
         return old
       } else {
         val out = new ByteArrayOutputStream
-        val objOut = new ObjectOutputStream(new GZIPOutputStream(out))
+        val ser = SparkEnv.get.closureSerializer.newInstance
+        val objOut = ser.serializeStream(new GZIPOutputStream(out))
         objOut.writeObject(rdd)
         objOut.writeObject(dep)
         objOut.close()
@@ -44,14 +45,20 @@ object ShuffleMapTask {
     synchronized {
       val loader = Thread.currentThread.getContextClassLoader
       val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
-      val objIn = new ObjectInputStream(in) {
-        override def resolveClass(desc: ObjectStreamClass) =
-          Class.forName(desc.getName, false, loader)
-      }
+      val ser = SparkEnv.get.closureSerializer.newInstance
+      val objIn = ser.deserializeStream(in)
       val rdd = objIn.readObject().asInstanceOf[RDD[_]]
       val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_,_,_]]
       return (rdd, dep)
     }
+  }
+
+  // Since both the JarSet and FileSet have the same format this is used for both.
+  def deserializeFileSet(bytes: Array[Byte]) : HashMap[String, Long] = {
+    val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
+    val objIn = new ObjectInputStream(in)
+    val set = objIn.readObject().asInstanceOf[Array[(String, Long)]].toMap
+    return (HashMap(set.toSeq: _*))
   }
 
   def clearCache() {
@@ -61,7 +68,7 @@ object ShuffleMapTask {
   }
 }
 
-class ShuffleMapTask(
+private[spark] class ShuffleMapTask(
     stageId: Int,
     var rdd: RDD[_], 
     var dep: ShuffleDependency[_,_,_],
@@ -110,7 +117,7 @@ class ShuffleMapTask(
     val bucketIterators =
       if (aggregator.mapSideCombine) {
         // Apply combiners (map-side aggregation) to the map output.
-        val buckets = Array.tabulate(numOutputSplits)(_ => new HashMap[Any, Any])
+        val buckets = Array.tabulate(numOutputSplits)(_ => new JHashMap[Any, Any])
         for (elem <- rdd.iterator(split)) {
           val (k, v) = elem.asInstanceOf[(Any, Any)]
           val bucketId = partitioner.getPartition(k)
@@ -125,7 +132,7 @@ class ShuffleMapTask(
         buckets.map(_.iterator)
       } else {
         // No combiners (no map-side aggregation). Simply partition the map output.
-        val buckets = Array.tabulate(numOutputSplits)(_ => new ArrayBuffer[(Any, Any)])
+        val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
         for (elem <- rdd.iterator(split)) {
           val pair = elem.asInstanceOf[(Any, Any)]
           val bucketId = partitioner.getPartition(pair._1)
@@ -137,11 +144,11 @@ class ShuffleMapTask(
     val ser = SparkEnv.get.serializer.newInstance()
     val blockManager = SparkEnv.get.blockManager
     for (i <- 0 until numOutputSplits) {
-      val blockId = "shuffleid_" + dep.shuffleId + "_" + partition + "_" + i
+      val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
       // Get a scala iterator from java map
       val iter: Iterator[(Any, Any)] = bucketIterators(i)
       // TODO: This should probably be DISK_ONLY
-      blockManager.put(blockId, iter, StorageLevel.MEMORY_ONLY, false)
+      blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
     }
 
     return SparkEnv.get.blockManager.blockManagerId
