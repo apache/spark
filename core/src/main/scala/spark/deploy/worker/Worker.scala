@@ -16,7 +16,7 @@ import spark.deploy.RegisterWorkerFailed
 import akka.actor.Terminated
 import java.io.File
 
-class Worker(
+private[spark] class Worker(
     ip: String,
     port: Int,
     webUiPort: Int,
@@ -170,7 +170,7 @@ class Worker(
   }
 }
 
-object Worker {
+private[spark] object Worker {
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", args.ip, args.port)

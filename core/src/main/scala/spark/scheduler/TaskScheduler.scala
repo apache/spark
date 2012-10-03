@@ -7,7 +7,7 @@ package spark.scheduler
  * are failures, and mitigating stragglers. They return events to the DAGScheduler through
  * the TaskSchedulerListener interface.
  */
-trait TaskScheduler {
+private[spark] trait TaskScheduler {
   def start(): Unit
 
   // Disconnect from the cluster.

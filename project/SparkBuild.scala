@@ -61,8 +61,8 @@ object SparkBuild extends Build {
     resolvers ++= Seq(
       "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/",
-      "Spray Repository" at "http://repo.spray.cc/"
+      "Spray Repository" at "http://repo.spray.cc/",
+      "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "11.0.1",
@@ -87,7 +87,7 @@ object SparkBuild extends Build {
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples"

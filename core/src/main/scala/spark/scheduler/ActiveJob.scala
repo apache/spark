@@ -5,7 +5,7 @@ import spark.TaskContext
 /**
  * Tracks information about an active job in the DAGScheduler.
  */
-class ActiveJob(
+private[spark] class ActiveJob(
     val runId: Int,
     val finalStage: Stage,
     val func: (TaskContext, Iterator[_]) => _,

@@ -5,7 +5,7 @@ import spark.deploy.client.{Client, ClientListener}
 import spark.deploy.{Command, JobDescription}
 import scala.collection.mutable.HashMap
 
-class SparkDeploySchedulerBackend(
+private[spark] class SparkDeploySchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,

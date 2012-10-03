@@ -19,7 +19,7 @@ import spark.storage.BlockManagerId
  * Each Stage also has a priority, which is (by default) based on the job it was submitted in.
  * This allows Stages from earlier jobs to be computed first or recovered faster on failure.
  */
-class Stage(
+private[spark] class Stage(
     val id: Int,
     val rdd: RDD[_],
     val shuffleDep: Option[ShuffleDependency[_,_,_]],  // Output shuffle if stage is a map stage

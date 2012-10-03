@@ -12,7 +12,7 @@ import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 import spark._
 import spark.storage.StorageLevel
 
-class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
 extends Broadcast[T](id) with Logging with Serializable {
   
   def value = value_
@@ -46,7 +46,7 @@ extends Broadcast[T](id) with Logging with Serializable {
   }
 }
 
-class HttpBroadcastFactory extends BroadcastFactory {
+private[spark] class HttpBroadcastFactory extends BroadcastFactory {
   def initialize(isMaster: Boolean) { HttpBroadcast.initialize(isMaster) }
 
   def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =

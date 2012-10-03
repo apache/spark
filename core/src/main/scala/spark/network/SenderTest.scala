@@ -3,7 +3,7 @@ package spark.network
 import java.nio.ByteBuffer
 import java.net.InetAddress
 
-object SenderTest {
+private[spark] object SenderTest {
 
   def main(args: Array[String]) {
     

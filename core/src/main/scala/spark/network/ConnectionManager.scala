@@ -18,17 +18,17 @@ import akka.dispatch.{Await, Promise, ExecutionContext, Future}
 import akka.util.Duration
 import akka.util.duration._
 
-case class ConnectionManagerId(host: String, port: Int) {
+private[spark] case class ConnectionManagerId(host: String, port: Int) {
   def toSocketAddress() = new InetSocketAddress(host, port)
 }
 
-object ConnectionManagerId {
+private[spark] object ConnectionManagerId {
   def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
     new ConnectionManagerId(socketAddress.getHostName(), socketAddress.getPort())
   }
 }
   
-class ConnectionManager(port: Int) extends Logging {
+private[spark] class ConnectionManager(port: Int) extends Logging {
 
   class MessageStatus(
       val message: Message,
@@ -349,7 +349,7 @@ class ConnectionManager(port: Int) extends Logging {
 }
 
 
-object ConnectionManager {
+private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
   

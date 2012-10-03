@@ -4,7 +4,7 @@ import spark.util.AkkaUtils
 import spark.{Logging, Utils}
 import spark.deploy.{Command, JobDescription}
 
-object TestClient {
+private[spark] object TestClient {
 
   class TestListener extends ClientListener with Logging {
     def connected(id: String) {
