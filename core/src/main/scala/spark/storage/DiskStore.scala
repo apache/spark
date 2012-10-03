@@ -26,7 +26,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   addShutdownHook()
 
   override def getSize(blockId: String): Long = {
-    getFile(blockId).length
+    getFile(blockId).length()
   }
 
   override def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel) {
@@ -91,6 +91,10 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     if (file.exists()) {
       file.delete()
     }
+  }
+
+  override def contains(blockId: String): Boolean = {
+    getFile(blockId).exists()
   }
 
   private def createFile(blockId: String): File = {
