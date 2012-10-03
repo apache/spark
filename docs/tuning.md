@@ -67,12 +67,13 @@ object you will serialize.
 Finally, if you don't register your classes, Kryo will still work, but it will have to store the
 full class name with each object, which is wasteful.
 
-
 # Memory Tuning
 
 There are three considerations in tuning memory usage: the *amount* of memory used by your objects
 (you likely want your entire dataset to fit in memory), the *cost* of accessing those objects, and the
 overhead of *garbage collection* (if you have high turnover in terms of objects).
+
+## Efficient Data Structures
 
 By default, Java objects are fast to access, but can easily consume a factor of 2-5x more space
 than the "raw" data inside their fields. This is due to several reasons:
@@ -119,10 +120,67 @@ need to trace through all your Java objects and find the unused ones. The main p
 that *the cost of garbage collection is proportional to the number of Java objects*, so using data
 structures with fewer objects (e.g. an array of `Int`s instead of a `LinkedList`) greatly reduces
 this cost. An even better method is to persist objects in serialized form, as described above: now
-there will be only *one* object (a byte array) per RDD partition. There is a lot of
-[detailed information on GC tuning](http://www.oracle.com/technetwork/java/javase/gc-tuning-6-140523.html)
-available online, but at a high level, the first thing to try if GC is a problem is to use serialized caching.
+there will be only *one* object (a byte array) per RDD partition. Before trying other advanced
+techniques, the first thing to try if GC is a problem is to use serialized caching.
 
+
+## Cache Size Tuning
+
+One of the important configuration parameters passed to Spark is the amount of memory that should be used for 
+caching RDDs. By default, Spark uses 66% of the configured memory (`SPARK_MEM`) to cache RDDs. This means that 
+around 33% of memory is available for any objects created during task execution.
+
+In case your tasks slow down and you find that your JVM is using almost all of its allocated memory, lowering 
+this value will help reducing the memory consumption. To change this to say 50%, you can call 
+`System.setProperty("spark.storage.memoryFraction", "0.5")`. Combined with the use of serialized caching, 
+using a smaller cache should be sufficient to mitigate most of the garbage collection problems. 
+In case you are interested in further tuning the Java GC, continue reading below. 
+
+## GC Tuning
+ 
+The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of 
+time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to 
+`SPARK_JAVA_OPTS` environment variable. Next time your Spark job is run, you will see messages printed on the 
+console whenever a JVM garbage collection takes place. Note that garabage collections that occur at the executor can be
+found in the executor logs and not on the `spark-shell`.
+
+Some basic information about memory management in the JVM:
+
+* Java Heap space is divided in to two regions Young and Old. The Young generation is meant to hold short-lived objects
+  while the Old generation is intended for objects with longer lifetimes.
+
+* The Young generation is further divided into three regions [Eden, Survivor1, Survivor2]. 
+
+* A simplified description of the garbage collection procedure: When Eden is full, a minor GC is run on Eden and objects 
+  that are alive from Eden and Survivor1 are copied to Survivor2. The Survivor regions are swapped. If an object is old
+  enough or Survivor2 is full, it is moved to Old. Finally when Old is close to full, a full GC is invoked.
+
+The goal of GC-tuning in Spark is to ensure that only long-lived RDDs are stored in the Old generation and that
+the Young generation is sufficiently sized to store short-lived objects. This will help avoid full GCs to collect
+temporary objects created during task execution. Some steps which may be useful are:
+
+* Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times for
+  before a task completes, it means that there isn't enough memory available for executing tasks.
+
+* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of memory used for caching.
+  This can be done using the `spark.storage.memoryFraction` property. It is better to cache fewer objects than to slow 
+  down task execution !
+
+* If there are too many minor collections but not too many major GCs, allocating more memory for Eden would help. You
+ can approximate the size of the Eden to be an over-estimate of how much memory each task will need. If the size of Eden
+is determined to be `E`, then you can set the size of the Young generation using the option `-Xmn=4/3*E`. (The scaling
+up by 4/3 is to account for space used by survivor regions as well)
+
+* As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
+  the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the 
+  size of the block. So if we wish to have 3 or 4 tasks worth of working space, and the HDFS block size is 64 MB, 
+  we can estimate size of Eden to be `4*3*64MB`.
+
+* Monitor how the frequency and time taken by garbage collection changes with the new settings.
+
+Our experience suggests that the effect of GC tuning depends on your application and the amount of memory available.
+There are [many more tuning options](http://www.oracle.com/technetwork/java/javase/gc-tuning-6-140523.html) described online,
+but at a high level, managing how frequently full GC takes place can help in reducing the overhead.
 
 # Other Considerations
 
