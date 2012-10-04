@@ -30,6 +30,7 @@ class HttpServer(resourceBase: File) extends Logging {
       server = new Server(0)
       val threadPool = new QueuedThreadPool
       threadPool.setDaemon(true)
+      threadPool.setMinThreads(System.getProperty("spark.http.minThreads", "8").toInt)
       server.setThreadPool(threadPool)
       val resHandler = new ResourceHandler
       resHandler.setResourceBase(resourceBase.getAbsolutePath)

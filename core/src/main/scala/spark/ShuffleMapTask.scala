@@ -39,6 +39,7 @@ class ShuffleMapTask(
     for (i <- 0 until numOutputSplits) {
       val file = SparkEnv.get.shuffleManager.getOutputFile(dep.shuffleId, partition, i)
       val out = ser.outputStream(new FastBufferedOutputStream(new FileOutputStream(file)))
+      out.writeObject(buckets(i).size)
       val iter = buckets(i).entrySet().iterator()
       while (iter.hasNext()) {
         val entry = iter.next()
