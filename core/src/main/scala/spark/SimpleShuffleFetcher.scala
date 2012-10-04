@@ -19,6 +19,7 @@ class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
     }
     for ((serverUri, inputIds) <- Utils.randomize(splitsByUri)) {
       for (i <- inputIds) {
+        var numRecords = 0
         try {
           val url = "%s/shuffle/%d/%d/%d".format(serverUri, shuffleId, i, reduceId)
           // TODO: multithreaded fetch
@@ -29,12 +30,16 @@ class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
             while (true) {
               val pair = inputStream.readObject().asInstanceOf[(K, V)]
               func(pair._1, pair._2)
+              numRecords += 1
             }
           } finally {
             inputStream.close()
           }
         } catch {
-          case e: EOFException => {} // We currently assume EOF means we read the whole thing
+          case e: EOFException => {
+            // We currently assume EOF means we read the whole thing
+            logInfo("Reduce %s got %s records from map %s".format(reduceId, numRecords, i))
+          }
           case other: Exception => {
             logError("Fetch failed", other)
             throw new FetchFailedException(serverUri, shuffleId, i, reduceId, other)
