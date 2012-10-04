@@ -1,8 +1,8 @@
 package spark
 
-abstract class Dependency[T](val rdd: RDD[T], val isShuffle: Boolean) extends Serializable
+abstract class Dependency[T](val rdd: RDD[T]) extends Serializable
 
-abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd, false) {
+abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
   def getParents(outputPartition: Int): Seq[Int]
 }
 
@@ -11,7 +11,7 @@ class ShuffleDependency[K, V, C](
     @transient rdd: RDD[(K, V)],
     val aggregator: Aggregator[K, V, C],
     val partitioner: Partitioner)
-  extends Dependency(rdd, true)
+  extends Dependency(rdd)
 
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
   override def getParents(partitionId: Int) = List(partitionId)
