@@ -56,9 +56,6 @@ CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/test-classes"
 CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
-for jar in `find $CORE_DIR/lib -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
 for jar in `find $FWDIR/lib_managed/jars -name '*jar'`; do
   CLASSPATH+=":$jar"
 done
