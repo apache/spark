@@ -3,6 +3,7 @@ package spark
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.PrivateMethodTester
+import org.scalatest.matchers.ShouldMatchers
 
 class DummyClass1 {}
 
@@ -19,7 +20,8 @@ class DummyClass4(val d: DummyClass3) {
   val x: Int = 0
 }
 
-class SizeEstimatorSuite extends FunSuite with BeforeAndAfterAll with PrivateMethodTester {
+class SizeEstimatorSuite extends FunSuite
+    with BeforeAndAfterAll with PrivateMethodTester with ShouldMatchers {
   var oldArch: String = _
   var oldOops: String = _
 
@@ -42,11 +44,15 @@ class SizeEstimatorSuite extends FunSuite with BeforeAndAfterAll with PrivateMet
     expect(48)(SizeEstimator.estimate(new DummyClass4(new DummyClass3)))
   }
 
+  // NOTE: The String class definition changed in JDK 7 to exclude the int fields count and length.
+  // This means that the size of strings will be lesser by 8 bytes in JDK 7 compared to JDK 6.
+  // http://mail.openjdk.java.net/pipermail/core-libs-dev/2012-May/010257.html
+  // Work around to check for either.
   test("strings") {
-    expect(48)(SizeEstimator.estimate(""))
-    expect(56)(SizeEstimator.estimate("a"))
-    expect(56)(SizeEstimator.estimate("ab"))
-    expect(64)(SizeEstimator.estimate("abcdefgh"))
+    SizeEstimator.estimate("") should (equal (48) or equal (40))
+    SizeEstimator.estimate("a") should (equal (56) or equal (48))
+    SizeEstimator.estimate("ab") should (equal (56) or equal (48))
+    SizeEstimator.estimate("abcdefgh") should (equal(64) or equal(56))
   }
 
   test("primitive arrays") {
@@ -106,6 +112,10 @@ class SizeEstimatorSuite extends FunSuite with BeforeAndAfterAll with PrivateMet
     resetOrClear("os.arch", arch)
   }
 
+  // NOTE: The String class definition changed in JDK 7 to exclude the int fields count and length.
+  // This means that the size of strings will be lesser by 8 bytes in JDK 7 compared to JDK 6.
+  // http://mail.openjdk.java.net/pipermail/core-libs-dev/2012-May/010257.html
+  // Work around to check for either.
   test("64-bit arch with no compressed oops") {
     val arch = System.setProperty("os.arch", "amd64")
     val oops = System.setProperty("spark.test.useCompressedOops", "false")
@@ -113,10 +123,10 @@ class SizeEstimatorSuite extends FunSuite with BeforeAndAfterAll with PrivateMet
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
-    expect(64)(SizeEstimator.estimate(""))
-    expect(72)(SizeEstimator.estimate("a"))
-    expect(72)(SizeEstimator.estimate("ab"))
-    expect(80)(SizeEstimator.estimate("abcdefgh"))
+    SizeEstimator.estimate("") should (equal (64) or equal (56))
+    SizeEstimator.estimate("a") should (equal (72) or equal (64))
+    SizeEstimator.estimate("ab") should (equal (72) or equal (64))
+    SizeEstimator.estimate("abcdefgh") should (equal (80) or equal (72))
 
     resetOrClear("os.arch", arch)
     resetOrClear("spark.test.useCompressedOops", oops)
