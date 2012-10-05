@@ -37,50 +37,69 @@ import SparkContext._
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable, 
- * partitioned collection of elements that can be operated on in parallel.
+ * partitioned collection of elements that can be operated on in parallel. This class contains the
+ * basic operations available on all RDDs, such as `map`, `filter`, and `persist`. In addition,
+ * [[spark.PairRDDFunctions]] contains operations available only on RDDs of key-value pairs, such
+ * as `groupByKey` and `join`; [[spark.DoubleRDDFunctions]] contains operations available only on
+ * RDDs of Doubles; and [[spark.SequenceFileRDDFunctions]] contains operations available on RDDs
+ * that can be saved as SequenceFiles. These operations are automatically available on any RDD of
+ * the right type (e.g. RDD[(Int, Int)] through implicit conversions when you
+ * `import spark.SparkContext._`.
  *
- * Each RDD is characterized by five main properties:
- * - A list of splits (partitions)
- * - A function for computing each split
- * - A list of dependencies on other RDDs
- * - Optionally, a Partitioner for key-value RDDs (e.g. to say that the RDD is hash-partitioned)
- * - Optionally, a list of preferred locations to compute each split on (e.g. block locations for
- *   HDFS)
+ * Internally, each RDD is characterized by five main properties:
  *
- * All the scheduling and execution in Spark is done based on these methods, allowing each RDD to 
- * implement its own way of computing itself.
+ *  - A list of splits (partitions)
+ *  - A function for computing each split
+ *  - A list of dependencies on other RDDs
+ *  - Optionally, a Partitioner for key-value RDDs (e.g. to say that the RDD is hash-partitioned)
+ *  - Optionally, a list of preferred locations to compute each split on (e.g. block locations for
+ *    an HDFS file)
  *
- * This class also contains transformation methods available on all RDDs (e.g. map and filter). In 
- * addition, PairRDDFunctions contains extra methods available on RDDs of key-value pairs, and 
- * SequenceFileRDDFunctions contains extra methods for saving RDDs to Hadoop SequenceFiles.
+ * All of the scheduling and execution in Spark is done based on these methods, allowing each RDD
+ * to implement its own way of computing itself. Indeed, users can implement custom RDDs (e.g. for
+ * reading data from a new storage system) by overriding these functions. Please refer to the
+ * [[http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
+ * on RDD internals.
  */
 abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serializable {
 
-  // Methods that must be implemented by subclasses
+  // Methods that must be implemented by subclasses:
+
+  /** Set of partitions in this RDD. */
   def splits: Array[Split]
+
+  /** Function for computing a given partition. */
   def compute(split: Split): Iterator[T]
+
+  /** How this RDD depends on any parent RDDs. */
   @transient val dependencies: List[Dependency[_]]
+
+  // Methods available on all RDDs:
   
-  // Record user function generating this RDD
-  val origin = Utils.getSparkCallSite
+  /** Record user function generating this RDD. */
+  private[spark] val origin = Utils.getSparkCallSite
   
-  // Optionally overridden by subclasses to specify how they are partitioned
+  /** Optionally overridden by subclasses to specify how they are partitioned. */
   val partitioner: Option[Partitioner] = None
 
-  // Optionally overridden by subclasses to specify placement preferences
+  /** Optionally overridden by subclasses to specify placement preferences. */
   def preferredLocations(split: Split): Seq[String] = Nil
   
+  /** The [[spark.SparkContext]] that this RDD was created on. */
   def context = sc
 
-  def elementClassManifest: ClassManifest[T] = classManifest[T]
+  private[spark] def elementClassManifest: ClassManifest[T] = classManifest[T]
   
-  // Get a unique ID for this RDD
+  /** A unique ID for this RDD (within its SparkContext). */
   val id = sc.newRddId()
   
   // Variables relating to persistence
   private var storageLevel: StorageLevel = StorageLevel.NONE
   
-  // Change this RDD's storage level
+  /** 
+   * Set this RDD's storage level to persist its values across operations after the first time
+   * it is computed. Can only be called once on each RDD.
+   */
   def persist(newLevel: StorageLevel): RDD[T] = {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel) {
@@ -91,12 +110,13 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     this
   }
 
-  // Turn on the default caching level for this RDD
+  /** Persist this RDD with the default storage level (MEMORY_ONLY). */
   def persist(): RDD[T] = persist(StorageLevel.MEMORY_ONLY)
   
-  // Turn on the default caching level for this RDD
+  /** Persist this RDD with the default storage level (MEMORY_ONLY). */
   def cache(): RDD[T] = persist()
 
+  /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel = storageLevel
   
   private[spark] def checkpoint(level: StorageLevel = StorageLevel.MEMORY_AND_DISK_2): RDD[T] = {
@@ -118,7 +138,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     }
   }
   
-  // Read this RDD; will read from cache if applicable, or otherwise compute
+  /**
+   * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
+   * This should ''not'' be called by users directly, but is available for implementors of custom
+   * subclasses of RDD.
+   */
   final def iterator(split: Split): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheTracker.getOrCompute[T](this, split, storageLevel)
@@ -175,8 +199,16 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     Utils.randomizeInPlace(samples, rand).take(total)
   }
 
+  /**
+   * Return the union of this RDD and another one. Any identical elements will appear multiple
+   * times (use `.distinct()` to eliminate them).
+   */
   def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
 
+  /**
+   * Return the union of this RDD and another one. Any identical elements will appear multiple
+   * times (use `.distinct()` to eliminate them).
+   */
   def ++(other: RDD[T]): RDD[T] = this.union(other)
 
   def glom(): RDD[Array[T]] = new GlommedRDD(this)

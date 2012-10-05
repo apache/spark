@@ -15,7 +15,7 @@ trait Logging {
   private var log_ : Logger = null
 
   // Method to get or create the logger for this object
-  def log: Logger = {
+  protected def log: Logger = {
     if (log_ == null) {
       var className = this.getClass.getName
       // Ignore trailing $'s in the class names for Scala objects
@@ -28,48 +28,48 @@ trait Logging {
   }
 
   // Log methods that take only a String
-  def logInfo(msg: => String) {
+  protected def logInfo(msg: => String) {
     if (log.isInfoEnabled) log.info(msg)
   }
 
-  def logDebug(msg: => String) {
+  protected def logDebug(msg: => String) {
     if (log.isDebugEnabled) log.debug(msg)
   }
   
-  def logTrace(msg: => String) {
+  protected def logTrace(msg: => String) {
     if (log.isTraceEnabled) log.trace(msg)
   }
 
-  def logWarning(msg: => String) {
+  protected def logWarning(msg: => String) {
     if (log.isWarnEnabled) log.warn(msg)
   }
 
-  def logError(msg: => String) {
+  protected def logError(msg: => String) {
     if (log.isErrorEnabled) log.error(msg)
   }
 
   // Log methods that take Throwables (Exceptions/Errors) too
-  def logInfo(msg: => String, throwable: Throwable) {
+  protected def logInfo(msg: => String, throwable: Throwable) {
     if (log.isInfoEnabled) log.info(msg, throwable)
   }
 
-  def logDebug(msg: => String, throwable: Throwable) {
+  protected def logDebug(msg: => String, throwable: Throwable) {
     if (log.isDebugEnabled) log.debug(msg, throwable)
   }
 
-  def logTrace(msg: => String, throwable: Throwable) {
+  protected def logTrace(msg: => String, throwable: Throwable) {
     if (log.isTraceEnabled) log.trace(msg, throwable)
   }
 
-  def logWarning(msg: => String, throwable: Throwable) {
+  protected def logWarning(msg: => String, throwable: Throwable) {
     if (log.isWarnEnabled) log.warn(msg, throwable)
   }
 
-  def logError(msg: => String, throwable: Throwable) {
+  protected def logError(msg: => String, throwable: Throwable) {
     if (log.isErrorEnabled) log.error(msg, throwable)
   }
 
   // Method for ensuring that logging is initialized, to avoid having multiple
   // threads do it concurrently (as SLF4J initialization is not thread safe).
-  def initLogging() { log }
+  protected def initLogging() { log }
 }
