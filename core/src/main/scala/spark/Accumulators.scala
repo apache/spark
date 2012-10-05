@@ -49,7 +49,16 @@ class Accumulable[R, T] (
     else throw new UnsupportedOperationException("Can't read accumulator value in task")
   }
 
-  private[spark] def localValue = value_
+  /**
+   * Get the current value of this accumulator from within a task.
+   *
+   * This is NOT the global value of the accumulator.  To get the global value after a
+   * completed operation on the dataset, call `value`.
+   *
+   * The typical use of this method is to directly mutate the local value, eg., to add
+   * an element to a Set.
+   */
+  def localValue = value_
 
   def value_= (r: R) {
     if (!deserialized) value_ = r
