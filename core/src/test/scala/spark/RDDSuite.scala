@@ -3,6 +3,8 @@ package spark
 import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
+
+import spark.rdd.CoalescedRDD
 import SparkContext._
 
 class RDDSuite extends FunSuite with BeforeAndAfter {

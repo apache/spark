@@ -18,6 +18,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       sc.stop()
       sc = null
     }
+    System.clearProperty("spark.master.port")
   }
 
   test ("basic accumulation"){
@@ -91,7 +92,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     val maxI = 1000
     for (nThreads <- List(1, 10)) {
       // test single & multi-threaded
-      val sc = new SparkContext("local[" + nThreads + "]", "test")
+      sc = new SparkContext("local[" + nThreads + "]", "test")
       val setAcc = sc.accumulableCollection(mutable.HashSet[Int]())
       val bufferAcc = sc.accumulableCollection(mutable.ArrayBuffer[Int]())
       val mapAcc = sc.accumulableCollection(mutable.HashMap[Int,String]())
@@ -110,6 +111,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
         mapAcc.value should contain (i -> i.toString)
       }
       sc.stop()
+      sc = null      
     }
   }
 
@@ -117,7 +119,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     import SetAccum._
     val maxI = 1000
     for (nThreads <- List(1, 10)) { //test single & multi-threaded
-    val sc = new SparkContext("local[" + nThreads + "]", "test")
+	  sc = new SparkContext("local[" + nThreads + "]", "test")
       val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
       val groupedInts = (1 to (maxI/20)).map {x => (20 * (x - 1) to 20 * x).toSet}
       val d = sc.parallelize(groupedInts)
@@ -125,6 +127,8 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
         x => acc.localValue ++= x
       }
       acc.value should be ( (0 to maxI).toSet)
+      sc.stop()
+      sc = null      
     }
   }
 

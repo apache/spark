@@ -4,12 +4,11 @@ import java.io._
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.{URI, URLClassLoader}
 
-import akka.actor.Actor
-import akka.actor.Actor._
-
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.generic.Growable
 
+import akka.actor.Actor
+import akka.actor.Actor._
 import org.apache.hadoop.fs.{FileUtil, Path}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.InputFormat
@@ -27,20 +26,22 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.FileInputFormat
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.TextInputFormat
-
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
-
 import org.apache.mesos.{Scheduler, MesosNativeLibrary}
 
 import spark.broadcast._
-
 import spark.deploy.LocalSparkCluster
-
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-
+import spark.rdd.DoubleRDDFunctions
+import spark.rdd.HadoopRDD
+import spark.rdd.NewHadoopRDD
+import spark.rdd.OrderedRDDFunctions
+import spark.rdd.PairRDDFunctions
+import spark.rdd.SequenceFileRDDFunctions
+import spark.rdd.UnionRDD
 import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
 import spark.scheduler.TaskScheduler

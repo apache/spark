@@ -1,5 +1,7 @@
 package spark
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.ShouldMatchers
@@ -10,8 +12,7 @@ import org.scalacheck.Prop._
 
 import com.google.common.io.Files
 
-import scala.collection.mutable.ArrayBuffer
-
+import spark.rdd.ShuffledAggregatedRDD
 import SparkContext._
 
 class ShuffleSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {

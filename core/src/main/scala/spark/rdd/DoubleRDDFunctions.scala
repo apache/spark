@@ -1,10 +1,13 @@
-package spark
+package spark.rdd
 
 import spark.partial.BoundedDouble
 import spark.partial.MeanEvaluator
 import spark.partial.PartialResult
 import spark.partial.SumEvaluator
 
+import spark.Logging
+import spark.RDD
+import spark.TaskContext
 import spark.util.StatCounter
 
 /**
