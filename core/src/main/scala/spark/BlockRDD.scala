@@ -1,6 +1,12 @@
-package spark
+package spark.rdd
 
 import scala.collection.mutable.HashMap
+
+import spark.Dependency
+import spark.RDD
+import spark.SparkContext
+import spark.SparkEnv
+import spark.Split
 
 private[spark] class BlockRDDSplit(val blockId: String, idx: Int) extends Split {
   val index = idx

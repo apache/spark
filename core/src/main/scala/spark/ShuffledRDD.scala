@@ -1,8 +1,15 @@
-package spark
+package spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
 import java.util.{HashMap => JHashMap}
 
+import spark.Aggregator
+import spark.Partitioner
+import spark.RangePartitioner
+import spark.RDD
+import spark.ShuffleDependency
+import spark.SparkEnv
+import spark.Split
 
 private[spark] class ShuffledRDDSplit(val idx: Int) extends Split {
   override val index = idx

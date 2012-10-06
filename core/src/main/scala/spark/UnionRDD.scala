@@ -1,6 +1,12 @@
-package spark
+package spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
+
+import spark.Dependency
+import spark.RangeDependency
+import spark.RDD
+import spark.SparkContext
+import spark.Split
 
 private[spark] class UnionSplit[T: ClassManifest](
     idx: Int, 

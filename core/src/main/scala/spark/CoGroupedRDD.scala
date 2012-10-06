@@ -1,10 +1,21 @@
-package spark
+package spark.rdd
 
 import java.net.URL
 import java.io.EOFException
 import java.io.ObjectInputStream
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
+
+import spark.Aggregator
+import spark.Dependency
+import spark.Logging
+import spark.OneToOneDependency
+import spark.Partitioner
+import spark.RDD
+import spark.ShuffleDependency
+import spark.SparkEnv
+import spark.Split
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
 private[spark] case class NarrowCoGroupSplitDep(rdd: RDD[_], split: Split) extends CoGroupSplitDep
