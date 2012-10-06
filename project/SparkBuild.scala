@@ -4,13 +4,15 @@ import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
 import twirl.sbt.TwirlPlugin._
+// For Sonatype publishing 
+// import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
   // "1.0.1" for Apache releases, or "0.20.2-cdh3u3" for Cloudera Hadoop.
   val HADOOP_VERSION = "0.20.205.0"
 
-  lazy val root = Project("root", file("."), settings = sharedSettings) aggregate(core, repl, examples, bagel)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -33,7 +35,51 @@ object SparkBuild extends Build {
     retrieveManaged := true,
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
-    publishTo <<= baseDirectory { base => Some(Resolver.file("Local", base / "target" / "maven" asFile)(Patterns(true, Resolver.mavenStyleBasePattern))) },
+
+    /* For Sonatype publishing
+    resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
+      "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
+
+    publishMavenStyle := true,
+
+    useGpg in Global := true,
+
+    pomExtra := (
+      <url>http://spark-project.org/</url>
+      <licenses>
+	<license>
+	  <name>BSD License</name>
+	  <url>https://github.com/mesos/spark/blob/master/LICENSE</url>
+	  <distribution>repo</distribution>
+	</license>
+      </licenses>
+      <scm>
+	<connection>scm:git:git@github.com:mesos/spark.git</connection>
+	<url>scm:git:git@github.com:mesos/spark.git</url>
+      </scm>
+      <developers>
+	<developer>
+	  <id>matei</id>
+	  <name>Matei Zaharia</name>
+	  <email>matei.zaharia@gmail.com</email>
+	  <url>http://www.cs.berkeley.edu/~matei</url>
+	  <organization>U.C. Berkeley Computer Science</organization>
+	  <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
+	</developer>
+      </developers>
+    ),
+  
+    publishTo <<= version { (v: String) =>
+      val nexus = "https://oss.sonatype.org/"
+      if (v.trim.endsWith("SNAPSHOT")) 
+	Some("sonatype-snapshots" at nexus + "content/repositories/snapshots") 
+      else
+	Some("sonatype-staging"  at nexus + "service/local/staging/deploy/maven2")
+    },
+
+    credentials += Credentials(Path.userHome / ".sbt" / "sonatype.credentials"),
+    */
+
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
       "org.scalatest" %% "scalatest" % "1.6.1" % "test",
@@ -64,6 +110,7 @@ object SparkBuild extends Build {
       "Spray Repository" at "http://repo.spray.cc/",
       "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
+
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "11.0.1",
       "log4j" % "log4j" % "1.2.16",
@@ -85,6 +132,10 @@ object SparkBuild extends Build {
     )
   ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
 
+  def rootSettings = sharedSettings ++ Seq(
+    publish := {}
+  )
+
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
@@ -103,5 +154,4 @@ object SparkBuild extends Build {
       case _ => MergeStrategy.first
     }
   )
-
 }
