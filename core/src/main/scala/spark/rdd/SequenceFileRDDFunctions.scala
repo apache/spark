@@ -1,4 +1,4 @@
-package spark
+package spark.rdd
 
 import java.io.EOFException
 import java.net.URL
@@ -23,7 +23,9 @@ import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.Text
 
-import SparkContext._
+import spark.Logging
+import spark.RDD
+import spark.SparkContext._
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,
