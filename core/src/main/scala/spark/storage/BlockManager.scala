@@ -98,6 +98,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
   val numParallelFetches = BlockManager.getNumParallelFetchesFromSystemProperties
   val compress = System.getProperty("spark.blockManager.compress", "false").toBoolean
+  val host = System.getProperty("spark.hostname", Utils.localHostName())
 
   initialize()
 
@@ -651,8 +652,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       val rddInfo = key.split("_")
       val rddId: Int = rddInfo(1).toInt
       val partition: Int = rddInfo(2).toInt
-      val host = System.getProperty("spark.hostname", Utils.localHostName())
-      cacheTracker.notifyTheCacheTrackerFromBlockManager(spark.AddedToCache(rddId, partition, host))
+      cacheTracker.notifyFromBlockManager(spark.AddedToCache(rddId, partition, host))
     }
   }
 
