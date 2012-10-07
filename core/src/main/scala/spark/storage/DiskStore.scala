@@ -58,19 +58,18 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     val objOut = blockManager.serializer.newInstance().serializeStream(fileOut)
     objOut.writeAll(values)
     objOut.close()
-    val finishTime = System.currentTimeMillis
+    val length = file.length()
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      blockId, Utils.memoryBytesToString(file.length()), (finishTime - startTime)))
+      blockId, Utils.memoryBytesToString(length), (System.currentTimeMillis - startTime)))
 
     if (returnValues) {
       // Return a byte buffer for the contents of the file
       val channel = new RandomAccessFile(file, "r").getChannel()
-      val length = channel.size()
       val buffer = channel.map(MapMode.READ_ONLY, 0, length)
       channel.close()
       PutResult(length, Right(buffer))
     } else {
-      null
+      PutResult(length, null)
     }
   }
 

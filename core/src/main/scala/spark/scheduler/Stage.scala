@@ -29,29 +29,29 @@ private[spark] class Stage(
   
   val isShuffleMap = shuffleDep != None
   val numPartitions = rdd.splits.size
-  val outputLocs = Array.fill[List[BlockManagerId]](numPartitions)(Nil)
+  val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
 
   private var nextAttemptId = 0
 
   def isAvailable: Boolean = {
-    if (/*parents.size == 0 &&*/ !isShuffleMap) {
+    if (!isShuffleMap) {
       true
     } else {
       numAvailableOutputs == numPartitions
     }
   }
 
-  def addOutputLoc(partition: Int, bmAddress: BlockManagerId) {
+  def addOutputLoc(partition: Int, status: MapStatus) {
     val prevList = outputLocs(partition)
-    outputLocs(partition) = bmAddress :: prevList
+    outputLocs(partition) = status :: prevList
     if (prevList == Nil)
       numAvailableOutputs += 1
   }
 
   def removeOutputLoc(partition: Int, bmAddress: BlockManagerId) {
     val prevList = outputLocs(partition)
-    val newList = prevList.filterNot(_ == bmAddress)
+    val newList = prevList.filterNot(_.address == bmAddress)
     outputLocs(partition) = newList
     if (prevList != Nil && newList == Nil) {
       numAvailableOutputs -= 1
@@ -62,7 +62,7 @@ private[spark] class Stage(
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {
       val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.ip == host)
+      val newList = prevList.filterNot(_.address.ip == host)
       outputLocs(partition) = newList
       if (prevList != Nil && newList == Nil) {
         becameUnavailable = true

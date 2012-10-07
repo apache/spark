@@ -20,7 +20,9 @@ import sun.nio.ch.DirectBuffer
 
 
 private[spark] class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
-  def this() = this(null, 0)
+  def this() = this(null, 0)  // For deserialization only
+
+  def this(in: ObjectInput) = this(in.readUTF(), in.readInt())
 
   override def writeExternal(out: ObjectOutput) {
     out.writeUTF(ip)

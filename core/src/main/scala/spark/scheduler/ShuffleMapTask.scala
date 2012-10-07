@@ -74,7 +74,7 @@ private[spark] class ShuffleMapTask(
     var dep: ShuffleDependency[_,_,_],
     var partition: Int, 
     @transient var locs: Seq[String])
-  extends Task[BlockManagerId](stageId)
+  extends Task[MapStatus](stageId)
   with Externalizable
   with Logging {
 
@@ -109,7 +109,7 @@ private[spark] class ShuffleMapTask(
     split = in.readObject().asInstanceOf[Split]
   }
 
-  override def run(attemptId: Long): BlockManagerId = {
+  override def run(attemptId: Long): MapStatus = {
     val numOutputSplits = dep.partitioner.numPartitions
     val aggregator = dep.aggregator.asInstanceOf[Aggregator[Any, Any, Any]]
     val partitioner = dep.partitioner
@@ -141,15 +141,18 @@ private[spark] class ShuffleMapTask(
         buckets.map(_.iterator)
       }
 
+    val compressedSizes = new Array[Byte](numOutputSplits)
+
     val blockManager = SparkEnv.get.blockManager
     for (i <- 0 until numOutputSplits) {
       val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
       // Get a Scala iterator from Java map
       val iter: Iterator[(Any, Any)] = bucketIterators(i)
-      blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
+      val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
+      compressedSizes(i) = MapOutputTracker.compressSize(size)
     }
 
-    return SparkEnv.get.blockManager.blockManagerId
+    return new MapStatus(blockManager.blockManagerId, compressedSizes)
   }
 
   override def preferredLocations: Seq[String] = locs
