@@ -145,7 +145,7 @@ private object Utils extends Logging {
           // url is absolute, i.e. it starts with "file:///". Extract the source
           // file's absolute path from the url.
           val sourceFile = new File(uri)
-          println("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
+          logInfo("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
           FileUtil.symLink(sourceFile.getAbsolutePath, targetFile.getAbsolutePath)
         } else {
           // url is not absolute, i.e. itself is the path to the source file.
