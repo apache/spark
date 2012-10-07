@@ -48,7 +48,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean)
-    : Either[Iterator[Any], ByteBuffer] = {
+    : PutResult = {
 
     logDebug("Attempting to write values for block " + blockId)
     val startTime = System.currentTimeMillis
@@ -65,9 +65,10 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     if (returnValues) {
       // Return a byte buffer for the contents of the file
       val channel = new RandomAccessFile(file, "r").getChannel()
-      val buffer = channel.map(MapMode.READ_ONLY, 0, channel.size())
+      val length = channel.size()
+      val buffer = channel.map(MapMode.READ_ONLY, 0, length)
       channel.close()
-      Right(buffer)
+      PutResult(length, Right(buffer))
     } else {
       null
     }

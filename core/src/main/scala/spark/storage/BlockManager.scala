@@ -61,7 +61,11 @@ private[spark]
 class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
   extends Logging {
 
-  class BlockInfo(val level: StorageLevel, val tellMaster: Boolean, var pending: Boolean = true) {
+  class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
+    var pending: Boolean = true
+    var size: Long = -1L
+
+    /** Wait for this BlockInfo to be marked as ready (i.e. block is finished writing) */
     def waitForReady() {
       if (pending) {
         synchronized {
@@ -70,8 +74,10 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
     }
 
-    def markReady() {
+    /** Mark this BlockInfo as ready (i.e. block is finished writing) */
+    def markReady(sizeInBytes: Long) {
       pending = false
+      size = sizeInBytes
       synchronized {
         this.notifyAll()
       }
@@ -209,7 +215,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
             diskStore.getValues(blockId) match {
               case Some(iterator) =>
                 // Put the block back in memory before returning it
-                memoryStore.putValues(blockId, iterator, level, true) match {
+                memoryStore.putValues(blockId, iterator, level, true).data match {
                   case Left(iterator2) =>
                     return Some(iterator2)
                   case _ =>
@@ -453,9 +459,11 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   /**
-   * Put a new block of values to the block manager.
+   * Put a new block of values to the block manager. Returns its (estimated) size in bytes.
    */
-  def put(blockId: String, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean = true) {
+  def put(blockId: String, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean = true)
+    : Long = {
+
     if (blockId == null) {
       throw new IllegalArgumentException("Block Id is null")
     }
@@ -466,9 +474,11 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
 
-    if (blockInfo.containsKey(blockId)) {
+    val oldBlock = blockInfo.get(blockId)
+    if (oldBlock != null) {
       logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
-      return
+      oldBlock.waitForReady()
+      return oldBlock.size
     }
 
     // Remember the block's storage level so that we can correctly drop it to disk if it needs
@@ -478,13 +488,18 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     blockInfo.put(blockId, myInfo)
 
     val startTimeMs = System.currentTimeMillis
-    var bytes: ByteBuffer = null
 
     // If we need to replicate the data, we'll want access to the values, but because our
     // put will read the whole iterator, there will be no values left. For the case where
-    // the put serializes data, we'll remember the bytes, above; but for the case where
-    // it doesn't, such as MEMORY_ONLY_DESER, let's rely on the put returning an Iterator.
+    // the put serializes data, we'll remember the bytes, above; but for the case where it
+    // doesn't, such as deserialized storage, let's rely on the put returning an Iterator.
     var valuesAfterPut: Iterator[Any] = null
+
+    // Ditto for the bytes after the put
+    var bytesAfterPut: ByteBuffer = null
+
+    // Size of the block in bytes (to return to caller)
+    var size = 0L
 
     locker.getLock(blockId).synchronized {
       logDebug("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
@@ -493,22 +508,26 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       if (level.useMemory) {
         // Save it just to memory first, even if it also has useDisk set to true; we will later
         // drop it to disk if the memory store can't hold it.
-        memoryStore.putValues(blockId, values, level, true) match {
-          case Right(newBytes) => bytes = newBytes
+        val res = memoryStore.putValues(blockId, values, level, true)
+        size = res.size
+        res.data match {
+          case Right(newBytes) => bytesAfterPut = newBytes
           case Left(newIterator) => valuesAfterPut = newIterator
         }
       } else {
         // Save directly to disk.
         val askForBytes = level.replication > 1 // Don't get back the bytes unless we replicate them
-        diskStore.putValues(blockId, values, level, askForBytes) match {
-          case Right(newBytes) => bytes = newBytes
+        val res = diskStore.putValues(blockId, values, level, askForBytes)
+        size = res.size
+        res.data match {
+          case Right(newBytes) => bytesAfterPut = newBytes
           case _ =>
         }
       }
 
       // Now that the block is in either the memory or disk store, let other threads read it,
       // and tell the master about it.
-      myInfo.markReady()
+      myInfo.markReady(size)
       if (tellMaster) {
         reportBlockStatus(blockId)
       }
@@ -518,23 +537,25 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     // Replicate block if required
     if (level.replication > 1) {
       // Serialize the block if not already done
-      if (bytes == null) {
+      if (bytesAfterPut == null) {
         if (valuesAfterPut == null) {
           throw new SparkException(
             "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
         }
-        bytes = dataSerialize(valuesAfterPut)
+        bytesAfterPut = dataSerialize(valuesAfterPut)
       }
-      replicate(blockId, bytes, level)
+      replicate(blockId, bytesAfterPut, level)
     }
 
-    BlockManager.dispose(bytes)
+    BlockManager.dispose(bytesAfterPut)
 
     // TODO: This code will be removed when CacheTracker is gone.
     if (blockId.startsWith("rdd")) {
-      notifyTheCacheTracker(blockId)
+      notifyCacheTracker(blockId)
     }
     logDebug("Put block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs))
+
+    return size
   }
 
 
@@ -593,7 +614,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
       // Now that the block is in either the memory or disk store, let other threads read it,
       // and tell the master about it.
-      myInfo.markReady()
+      myInfo.markReady(bytes.limit)
       if (tellMaster) {
         reportBlockStatus(blockId)
       }
@@ -601,7 +622,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
     // TODO: This code will be removed when CacheTracker is gone.
     if (blockId.startsWith("rdd")) {
-      notifyTheCacheTracker(blockId)
+      notifyCacheTracker(blockId)
     }
 
     // If replication had started, then wait for it to finish
@@ -647,7 +668,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   // TODO: This code will be removed when CacheTracker is gone.
-  private def notifyTheCacheTracker(key: String) {
+  private def notifyCacheTracker(key: String) {
     if (cacheTracker != null) {
       val rddInfo = key.split("_")
       val rddId: Int = rddInfo(1).toInt

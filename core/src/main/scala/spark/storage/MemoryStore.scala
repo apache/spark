@@ -49,18 +49,18 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean)
-    : Either[Iterator[Any], ByteBuffer] = {
+    : PutResult = {
 
     if (level.deserialized) {
       val elements = new ArrayBuffer[Any]
       elements ++= values
       val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
       tryToPut(blockId, elements, sizeEstimate, true)
-      Left(elements.iterator)
+      PutResult(sizeEstimate, Left(elements.iterator))
     } else {
       val bytes = blockManager.dataSerialize(values)
       tryToPut(blockId, bytes, bytes.limit, false)
-      Right(bytes)
+      PutResult(bytes.limit(), Right(bytes))
     }
   }
 
@@ -162,7 +162,8 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * block from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
    * don't fit into memory that we want to avoid).
    *
-   * Assumes that a lock on entries is held by the caller.
+   * Assumes that a lock on the MemoryStore is held by the caller. (Otherwise, the freed space
+   * might fill up before the caller puts in their new value.)
    */
   private def ensureFreeSpace(blockIdToAdd: String, space: Long): Boolean = {
     logInfo("ensureFreeSpace(%d) called with curMem=%d, maxMem=%d".format(
@@ -172,7 +173,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       logInfo("Will not store " + blockIdToAdd + " as it is larger than our memory limit")
       return false
     }
-    
+
+    // TODO: This should relinquish the lock on the MemoryStore while flushing out old blocks
+    // in order to allow parallelism in writing to disk
     if (maxMemory - currentMemory < space) {
       val rddToAdd = getRddId(blockIdToAdd)
       val selectedBlocks = new ArrayBuffer[String]()

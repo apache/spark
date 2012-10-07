@@ -141,11 +141,10 @@ private[spark] class ShuffleMapTask(
         buckets.map(_.iterator)
       }
 
-    val ser = SparkEnv.get.serializer.newInstance()
     val blockManager = SparkEnv.get.blockManager
     for (i <- 0 until numOutputSplits) {
       val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
-      // Get a scala iterator from java map
+      // Get a Scala iterator from Java map
       val iter: Iterator[(Any, Any)] = bucketIterators(i)
       blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
     }
