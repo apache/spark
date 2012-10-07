@@ -59,7 +59,7 @@ object SparkBuild extends Build {
         <developer>
           <id>matei</id>
           <name>Matei Zaharia</name>
-          <email>matei.zaharia@gmail.com</email>
+          <email>matei@eecs.berkeley.edu</email>
           <url>http://www.cs.berkeley.edu/~matei</url>
           <organization>U.C. Berkeley Computer Science</organization>
           <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>

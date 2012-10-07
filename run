@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCALA_VERSION=2.9.1
+SCALA_VERSION=2.9.2
 
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
@@ -48,9 +48,6 @@ CLASSPATH+=":$FWDIR/conf"
 CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
-for jar in `find $CORE_DIR/lib -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
 for jar in `find $FWDIR/lib_managed/jars -name '*jar'`; do
   CLASSPATH+=":$jar"
 done
