@@ -37,7 +37,7 @@ class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
                 new FastBufferedInputStream(new URL(url).openStream()))
             try {
               totalRecords = inputStream.readObject().asInstanceOf[Int]
-              logInfo("Total records to read from " + url + ": " + totalRecords)
+              logDebug("Total records to read from " + url + ": " + totalRecords)
               while (true) {
                 val pair = inputStream.readObject().asInstanceOf[(K, V)]
                 if (recordsRead <= recordsProcessed) {
@@ -51,10 +51,11 @@ class SimpleShuffleFetcher extends ShuffleFetcher with Logging {
             }
           } catch {
             case e: EOFException => {
-              logInfo("Reduce %s got %s records from map %s before EOF".format(
+              logDebug("Reduce %s got %s records from map %s before EOF".format(
                 reduceId, recordsRead, i))
               if (recordsRead < totalRecords) {
-                logInfo("Retrying because we needed " + totalRecords + " in total!")
+                logInfo("Reduce %s only got %s/%s records from map %s before EOF; retrying".format(
+                  reduceId, recordsRead, totalRecords, i))
               }
             }
             case other: Exception => {
