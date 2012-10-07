@@ -31,6 +31,8 @@ class FileServerSuite extends FunSuite with BeforeAndAfter {
     if (tmpFile.exists) {
       tmpFile.delete()
     }
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
   
   test("Distributing files locally") {

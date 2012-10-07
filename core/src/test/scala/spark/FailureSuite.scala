@@ -32,6 +32,8 @@ class FailureSuite extends FunSuite with BeforeAndAfter {
       sc.stop()
       sc = null
     }
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
   
   // Run a 3-task map job in which task 1 deterministically fails once, and check

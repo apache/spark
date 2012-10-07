@@ -18,6 +18,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       sc.stop()
       sc = null
     }
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.master.port")
   }
 
@@ -54,6 +55,8 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       }
       sc.stop()
       sc = null
+      // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+      System.clearProperty("spark.master.port")
     }
   }
 
@@ -85,6 +88,8 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       } should produce [SparkException]
       sc.stop()
       sc = null
+      // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+      System.clearProperty("spark.master.port")
     }
   }
 
@@ -111,7 +116,9 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
         mapAcc.value should contain (i -> i.toString)
       }
       sc.stop()
-      sc = null      
+      sc = null
+      // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+      System.clearProperty("spark.master.port")
     }
   }
 

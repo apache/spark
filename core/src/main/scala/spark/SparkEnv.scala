@@ -44,11 +44,9 @@ class SparkEnv (
     blockManager.stop()
     blockManager.master.stop()
     actorSystem.shutdown()
-    // Akka's awaitTermination doesn't actually wait until the port is unbound, so sleep a bit
-    Thread.sleep(100)
+    // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
+    // down, but let's call it anyway in case it gets fixed in a later release
     actorSystem.awaitTermination()
-    // Akka's awaitTermination doesn't actually wait until the port is unbound, so sleep a bit
-    Thread.sleep(100)
   }
 }
 

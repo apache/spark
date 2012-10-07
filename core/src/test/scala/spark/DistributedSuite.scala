@@ -27,21 +27,27 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       sc = null
     }
     System.clearProperty("spark.reducer.maxMbInFlight")
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
 
   test("local-cluster format") {
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     sc.stop()
+    System.clearProperty("spark.master.port")
     sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     sc.stop()
+    System.clearProperty("spark.master.port")
     sc = new SparkContext("local-cluster[2, 1, 512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     sc.stop()
+    System.clearProperty("spark.master.port")
     sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
     sc.stop()
+    System.clearProperty("spark.master.port")
     sc = null
   }
 

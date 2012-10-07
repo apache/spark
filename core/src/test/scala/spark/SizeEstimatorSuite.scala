@@ -20,8 +20,9 @@ class DummyClass4(val d: DummyClass3) {
   val x: Int = 0
 }
 
-class SizeEstimatorSuite extends FunSuite
-    with BeforeAndAfterAll with PrivateMethodTester with ShouldMatchers {
+class SizeEstimatorSuite
+  extends FunSuite with BeforeAndAfterAll with PrivateMethodTester with ShouldMatchers {
+
   var oldArch: String = _
   var oldOops: String = _
 
