@@ -22,7 +22,7 @@ private[spark] class ShuffledRDDSplit(val idx: Int) extends Split {
  */
 abstract class ShuffledRDD[K, V, C](
     @transient parent: RDD[(K, V)],
-    aggregator: Aggregator[K, V, C],
+    aggregator: Option[Aggregator[K, V, C]],
     part: Partitioner)
   extends RDD[(K, C)](parent.context) {
 
@@ -48,7 +48,7 @@ class RepartitionShuffledRDD[K, V](
     part: Partitioner)
   extends ShuffledRDD[K, V, V](
     parent,
-    Aggregator[K, V, V](null, null, null, false),
+    None,
     part) {
 
   override def compute(split: Split): Iterator[(K, V)] = {
@@ -95,7 +95,7 @@ class ShuffledAggregatedRDD[K, V, C](
     @transient parent: RDD[(K, V)],
     aggregator: Aggregator[K, V, C],
     part : Partitioner)
-  extends ShuffledRDD[K, V, C](parent, aggregator, part) {
+  extends ShuffledRDD[K, V, C](parent, Some(aggregator), part) {
 
   override def compute(split: Split): Iterator[(K, C)] = {
     val combiners = new JHashMap[K, C]
