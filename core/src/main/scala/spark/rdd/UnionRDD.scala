@@ -43,7 +43,7 @@ class UnionRDD[T: ClassManifest](
   override val dependencies = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
-    for ((rdd, index) <- rdds.zipWithIndex) {
+    for (rdd <- rdds) {
       deps += new RangeDependency(rdd, 0, pos, rdd.splits.size) 
       pos += rdd.splits.size
     }

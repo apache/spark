@@ -111,11 +111,11 @@ private[spark] class ShuffleMapTask(
 
   override def run(attemptId: Long): MapStatus = {
     val numOutputSplits = dep.partitioner.numPartitions
-    val aggregator = dep.aggregator.asInstanceOf[Aggregator[Any, Any, Any]]
     val partitioner = dep.partitioner
 
     val bucketIterators =
-      if (aggregator.mapSideCombine) {
+      if (dep.aggregator.isDefined && dep.aggregator.get.mapSideCombine) {
+        val aggregator = dep.aggregator.get.asInstanceOf[Aggregator[Any, Any, Any]]
         // Apply combiners (map-side aggregation) to the map output.
         val buckets = Array.tabulate(numOutputSplits)(_ => new JHashMap[Any, Any])
         for (elem <- rdd.iterator(split)) {
