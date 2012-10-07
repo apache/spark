@@ -26,7 +26,7 @@ private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 private[spark] class MapOutputTrackerActor(tracker: MapOutputTracker) extends Actor with Logging {
   def receive = {
     case GetMapOutputStatuses(shuffleId: Int, requester: String) =>
-      logInfo("Asked to get map output locations for shuffle " + shuffleId + " for " + requester)
+      logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + requester)
       sender ! tracker.getSerializedLocations(shuffleId)
 
     case StopMapOutputTracker =>
