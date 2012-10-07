@@ -7,11 +7,11 @@ import java.io.{File, PrintWriter, FileReader, BufferedReader}
 import SparkContext._
 
 class FileServerSuite extends FunSuite with BeforeAndAfter {
-  
+
   @transient var sc: SparkContext = _
   @transient var tmpFile : File = _
   @transient var testJarFile : File = _
-  
+
   before {
     // Create a sample text file
     val tmpdir = new File(Files.createTempDir(), "test")
@@ -21,7 +21,7 @@ class FileServerSuite extends FunSuite with BeforeAndAfter {
     pw.println("100")
     pw.close()
   }
-  
+
   after {
     if (sc != null) {
       sc.stop()
@@ -34,7 +34,7 @@ class FileServerSuite extends FunSuite with BeforeAndAfter {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.master.port")
   }
-  
+
   test("Distributing files locally") {
     sc = new SparkContext("local[4]", "test")
     sc.addFile(tmpFile.toString)
@@ -45,16 +45,29 @@ class FileServerSuite extends FunSuite with BeforeAndAfter {
       in.close()
       _ * fileVal + _ * fileVal
     }.collect
-    println(result)
+    assert(result.toSet === Set((1,200), (2,300), (3,500)))
+  }
+
+  test("Distributing files locally using URL as input") {
+    // addFile("file:///....")
+    sc = new SparkContext("local[4]", "test")
+    sc.addFile((new File(tmpFile.toString)).toURL.toString)
+    val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
+    val result = sc.parallelize(testData).reduceByKey {
+      val in  = new BufferedReader(new FileReader("FileServerSuite.txt"))
+      val fileVal = in.readLine().toInt
+      in.close()
+      _ * fileVal + _ * fileVal
+    }.collect
     assert(result.toSet === Set((1,200), (2,300), (3,500)))
   }
 
   test ("Dynamically adding JARS locally") {
     sc = new SparkContext("local[4]", "test")
-    val sampleJarFile = getClass().getClassLoader().getResource("uncommons-maths-1.2.2.jar").getFile()
+    val sampleJarFile = getClass.getClassLoader.getResource("uncommons-maths-1.2.2.jar").getFile()
     sc.addJar(sampleJarFile)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,3), (3,0))
-    val result = sc.parallelize(testData).reduceByKey { (x,y) => 
+    val result = sc.parallelize(testData).reduceByKey { (x,y) =>
       val fac = Thread.currentThread.getContextClassLoader()
                                     .loadClass("org.uncommons.maths.Maths")
                                     .getDeclaredMethod("factorial", classOf[Int])
@@ -81,10 +94,10 @@ class FileServerSuite extends FunSuite with BeforeAndAfter {
 
   test ("Dynamically adding JARS on a standalone cluster") {
     sc = new SparkContext("local-cluster[1,1,512]", "test")
-    val sampleJarFile = getClass().getClassLoader().getResource("uncommons-maths-1.2.2.jar").getFile()
+    val sampleJarFile = getClass.getClassLoader.getResource("uncommons-maths-1.2.2.jar").getFile()
     sc.addJar(sampleJarFile)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,3), (3,0))
-    val result = sc.parallelize(testData).reduceByKey { (x,y) => 
+    val result = sc.parallelize(testData).reduceByKey { (x,y) =>
       val fac = Thread.currentThread.getContextClassLoader()
                                     .loadClass("org.uncommons.maths.Maths")
                                     .getDeclaredMethod("factorial", classOf[Int])

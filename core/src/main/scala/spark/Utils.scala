@@ -71,7 +71,7 @@ private object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory after " + maxAttempts + 
+        throw new IOException("Failed to create a temp directory after " + maxAttempts +
             " attempts!")
       }
       try {
@@ -122,7 +122,7 @@ private object Utils extends Logging {
     val out = new FileOutputStream(localPath)
     Utils.copyStream(in, out, true)
   }
-  
+
   /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
@@ -140,9 +140,18 @@ private object Utils extends Logging {
       case "file" | null =>
         // Remove the file if it already exists
         targetFile.delete()
-        // Symlink the file locally
-        logInfo("Symlinking " + url + " to " + targetFile)
-        FileUtil.symLink(url, targetFile.toString)
+        // Symlink the file locally.
+        if (uri.isAbsolute) {
+          // url is absolute, i.e. it starts with "file:///". Extract the source
+          // file's absolute path from the url.
+          val sourceFile = new File(uri)
+          println("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
+          FileUtil.symLink(sourceFile.getAbsolutePath, targetFile.getAbsolutePath)
+        } else {
+          // url is not absolute, i.e. itself is the path to the source file.
+          logInfo("Symlinking " + url + " to " + targetFile.getAbsolutePath)
+          FileUtil.symLink(url, targetFile.getAbsolutePath)
+        }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val uri = new URI(url)
@@ -208,7 +217,7 @@ private object Utils extends Logging {
   def localHostName(): String = {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
   }
-  
+
   /**
    * Returns a standard ThreadFactory except all threads are daemons.
    */
@@ -232,10 +241,10 @@ private object Utils extends Logging {
 
     return threadPool
   }
-  
+
   /**
-   * Return the string to tell how long has passed in seconds. The passing parameter should be in 
-   * millisecond. 
+   * Return the string to tell how long has passed in seconds. The passing parameter should be in
+   * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
     return " " + (System.currentTimeMillis - startTimeMs) + " ms "
