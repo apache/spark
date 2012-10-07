@@ -38,7 +38,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     "SPARK_MEM",
     "SPARK_CLASSPATH",
     "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS"
+    "SPARK_JAVA_OPTS",
+    "SPARK_TESTING"
   )
 
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
