@@ -10,6 +10,8 @@ class MapOutputTrackerSuite extends FunSuite {
     assert(MapOutputTracker.compressSize(10L) === 25)
     assert((MapOutputTracker.compressSize(1000000L) & 0xFF) === 145)
     assert((MapOutputTracker.compressSize(1000000000L) & 0xFF) === 218)
+    // This last size is bigger than we can encode in a byte, so check that we just return 255
+    assert((MapOutputTracker.compressSize(1000000000000000000L) & 0xFF) === 255)
   }
 
   test("decompressSize") {

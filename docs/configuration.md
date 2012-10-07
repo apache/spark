@@ -139,10 +139,12 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.blockManager.parallelFetches</td>
-  <td>4</td>
+  <td>spark.reducer.maxMbInFlight</td>
+  <td>48</td>
   <td>
-    Number of map output files to fetch concurrently from each reduce task.
+    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
+    each output requires us to create a buffer to receive it, this represents a fixed memory overhead
+    per reduce task, so keep it small unless you have a large amount of memory.
   </td>
 </tr>
 <tr>

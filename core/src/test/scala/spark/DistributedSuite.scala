@@ -26,20 +26,21 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       sc.stop()
       sc = null
     }
+    System.clearProperty("spark.reducer.maxMbInFlight")
   }
 
   test("local-cluster format") {
     sc = new SparkContext("local-cluster[2,1,512]", "test")
-    assert(sc.parallelize(1 to 2, 2).count == 2)
+    assert(sc.parallelize(1 to 2, 2).count() == 2)
     sc.stop()
     sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
-    assert(sc.parallelize(1 to 2, 2).count == 2)
+    assert(sc.parallelize(1 to 2, 2).count() == 2)
     sc.stop()
     sc = new SparkContext("local-cluster[2, 1, 512]", "test")
-    assert(sc.parallelize(1 to 2, 2).count == 2)
+    assert(sc.parallelize(1 to 2, 2).count() == 2)
     sc.stop()
     sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
-    assert(sc.parallelize(1 to 2, 2).count == 2)
+    assert(sc.parallelize(1 to 2, 2).count() == 2)
     sc.stop()
     sc = null
   }
@@ -53,6 +54,18 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
+  }
+
+  test("groupByKey where map output sizes exceed maxMbInFlight") {
+    System.setProperty("spark.reducer.maxMbInFlight", "1")
+    sc = new SparkContext(clusterUrl, "test")
+    // This data should be around 20 MB, so even with 4 mappers and 2 reducers, each map output
+    // file should be about 2.5 MB
+    val pairs = sc.parallelize(1 to 2000, 4).map(x => (x % 16, new Array[Byte](10000)))
+    val groups = pairs.groupByKey(2).map(x => (x._1, x._2.size)).collect()
+    assert(groups.length === 16)
+    assert(groups.map(_._2).sum === 2000)
+    // Note that spark.reducer.maxMbInFlight will be cleared in the test suite's after{} block
   }
 
   test("accumulators") {
