@@ -52,7 +52,7 @@ class SparkEnv (
   }
 }
 
-object SparkEnv {
+object SparkEnv extends Logging {
   private val env = new ThreadLocal[SparkEnv]
 
   def set(e: SparkEnv) {
@@ -110,6 +110,12 @@ object SparkEnv {
     val httpFileServer = new HttpFileServer()
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
+
+    // Warn about deprecated spark.cache.class property
+    if (System.getProperty("spark.cache.class") != null) {
+      logWarning("The spark.cache.class property is no longer being used! Specify storage " +
+        "levels using the RDD.persist() method instead.")
+    }
 
     new SparkEnv(
       actorSystem,
