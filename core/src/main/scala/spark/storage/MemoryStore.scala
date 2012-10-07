@@ -31,7 +31,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   override def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel) {
     if (level.deserialized) {
       bytes.rewind()
-      val values = blockManager.dataDeserialize(bytes)
+      val values = blockManager.dataDeserialize(blockId, bytes)
       val elements = new ArrayBuffer[Any]
       elements ++= values
       val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
@@ -58,7 +58,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       tryToPut(blockId, elements, sizeEstimate, true)
       PutResult(sizeEstimate, Left(elements.iterator))
     } else {
-      val bytes = blockManager.dataSerialize(values)
+      val bytes = blockManager.dataSerialize(blockId, values)
       tryToPut(blockId, bytes, bytes.limit, false)
       PutResult(bytes.limit(), Right(bytes))
     }
@@ -71,7 +71,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     if (entry == null) {
       None
     } else if (entry.deserialized) {
-      Some(blockManager.dataSerialize(entry.value.asInstanceOf[ArrayBuffer[Any]].iterator))
+      Some(blockManager.dataSerialize(blockId, entry.value.asInstanceOf[ArrayBuffer[Any]].iterator))
     } else {
       Some(entry.value.asInstanceOf[ByteBuffer].duplicate())   // Doesn't actually copy the data
     }
@@ -87,7 +87,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       Some(entry.value.asInstanceOf[ArrayBuffer[Any]].iterator)
     } else {
       val buffer = entry.value.asInstanceOf[ByteBuffer].duplicate() // Doesn't actually copy data
-      Some(blockManager.dataDeserialize(buffer))
+      Some(blockManager.dataDeserialize(blockId, buffer))
     }
   }
 

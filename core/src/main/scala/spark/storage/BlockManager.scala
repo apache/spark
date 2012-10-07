@@ -109,7 +109,11 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   val maxBytesInFlight =
     System.getProperty("spark.reducer.maxMbInFlight", "48").toLong * 1024 * 1024
 
-  val compress = System.getProperty("spark.blockManager.compress", "false").toBoolean
+  val compressBroadcast = System.getProperty("spark.broadcast.compress", "true").toBoolean
+  val compressShuffle = System.getProperty("spark.shuffle.compress", "true").toBoolean
+  // Whether to compress RDD partitions that are stored serialized
+  val compressRdds = System.getProperty("spark.rdd.compress", "false").toBoolean
+
   val host = System.getProperty("spark.hostname", Utils.localHostName())
 
   initialize()
@@ -252,7 +256,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
                 copyForMemory.put(bytes)
                 memoryStore.putBytes(blockId, copyForMemory, level)
                 bytes.rewind()
-                return Some(dataDeserialize(bytes))
+                return Some(dataDeserialize(blockId, bytes))
               case None =>
                 throw new Exception("Block " + blockId + " not found on disk, though it should be")
             }
@@ -355,7 +359,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
           GetBlock(blockId), ConnectionManagerId(loc.ip, loc.port))
       if (data != null) {
         logDebug("Data is not null: " + data)
-        return Some(dataDeserialize(data))
+        return Some(dataDeserialize(blockId, data))
       }
       logDebug("Data is null")
     }
@@ -431,7 +435,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
             }
             val blockId = blockMessage.getId
             results.put(new FetchResult(
-              blockId, sizeMap(blockId), () => dataDeserialize(blockMessage.getData)))
+              blockId, sizeMap(blockId), () => dataDeserialize(blockId, blockMessage.getData)))
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           }
         }
@@ -609,7 +613,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
           throw new SparkException(
             "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
         }
-        bytesAfterPut = dataSerialize(valuesAfterPut)
+        bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
       }
       replicate(blockId, bytesAfterPut, level)
     }
@@ -787,24 +791,36 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
   }
 
-  /**
-   * Wrap an output stream for compression if block compression is enabled
-   */
-  def wrapForCompression(s: OutputStream): OutputStream = {
-    if (compress) new LZFOutputStream(s) else s
+  def shouldCompress(blockId: String): Boolean = {
+    if (blockId.startsWith("shuffle_")) {
+      compressShuffle
+    } else if (blockId.startsWith("broadcast_")) {
+      compressBroadcast
+    } else if (blockId.startsWith("rdd_")) {
+      compressRdds
+    } else {
+      false    // Won't happen in a real cluster, but it can in tests
+    }
   }
 
   /**
-   * Wrap an input stream for compression if block compression is enabled
+   * Wrap an output stream for compression if block compression is enabled for its block type
    */
-  def wrapForCompression(s: InputStream): InputStream = {
-    if (compress) new LZFInputStream(s) else s
+  def wrapForCompression(blockId: String, s: OutputStream): OutputStream = {
+    if (shouldCompress(blockId)) new LZFOutputStream(s) else s
   }
 
-  def dataSerialize(values: Iterator[Any]): ByteBuffer = {
+  /**
+   * Wrap an input stream for compression if block compression is enabled for its block type
+   */
+  def wrapForCompression(blockId: String, s: InputStream): InputStream = {
+    if (shouldCompress(blockId)) new LZFInputStream(s) else s
+  }
+
+  def dataSerialize(blockId: String, values: Iterator[Any]): ByteBuffer = {
     val byteStream = new FastByteArrayOutputStream(4096)
     val ser = serializer.newInstance()
-    ser.serializeStream(wrapForCompression(byteStream)).writeAll(values).close()
+    ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
     byteStream.trim()
     ByteBuffer.wrap(byteStream.array)
   }
@@ -813,10 +829,10 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * Deserializes a ByteBuffer into an iterator of values and disposes of it when the end of
    * the iterator is reached.
    */
-  def dataDeserialize(bytes: ByteBuffer): Iterator[Any] = {
+  def dataDeserialize(blockId: String, bytes: ByteBuffer): Iterator[Any] = {
     bytes.rewind()
-    val ser = serializer.newInstance()
-    ser.deserializeStream(wrapForCompression(new ByteBufferInputStream(bytes, true))).asIterator
+    val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
+    serializer.newInstance().deserializeStream(stream).asIterator
   }
 
   def stop() {

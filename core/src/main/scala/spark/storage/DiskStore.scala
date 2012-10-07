@@ -53,7 +53,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     logDebug("Attempting to write values for block " + blockId)
     val startTime = System.currentTimeMillis
     val file = createFile(blockId)
-    val fileOut = blockManager.wrapForCompression(
+    val fileOut = blockManager.wrapForCompression(blockId,
       new FastBufferedOutputStream(new FileOutputStream(file)))
     val objOut = blockManager.serializer.newInstance().serializeStream(fileOut)
     objOut.writeAll(values)
@@ -83,7 +83,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   }
 
   override def getValues(blockId: String): Option[Iterator[Any]] = {
-    getBytes(blockId).map(blockManager.dataDeserialize(_))
+    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes))
   }
 
   override def remove(blockId: String) {

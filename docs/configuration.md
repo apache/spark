@@ -113,29 +113,34 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.blockManager.compress</td>
-  <td>false</td>
-  <td>
-    Set to "true" to have Spark compress map output files, RDDs that get cached on disk,
-    and RDDs that get cached in serialized form. Generally a good idea when dealing with
-    large datasets, but might add some CPU overhead.
-  </td>
-</tr>
-<tr>
-  <td>spark.broadcast.compress</td>
-  <td>false</td>
-  <td>
-    Set to "true" to have Spark compress broadcast variables before sending them.
-    Generally a good idea when broadcasting large values.
-  </td>
-</tr>
-<tr>
   <td>spark.storage.memoryFraction</td>
   <td>0.66</td>
   <td>
     Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
     generation of objects in the JVM, which by default is given 2/3 of the heap, but you can increase
     it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.compress</td>
+  <td>true</td>
+  <td>
+    Whether to compress map output files. Generally a good idea.
+  </td>
+</tr>
+<tr>
+  <td>spark.broadcast.compress</td>
+  <td>true</td>
+  <td>
+    Whether to compress broadcast variables before sending them. Generally a good idea.
+  </td>
+</tr>
+<tr>
+  <td>spark.rdd.compress</td>
+  <td>false</td>
+  <td>
+    Whether to compress serialized RDD partitions (e.g. for <code>StorageLevel.MEMORY_ONLY_SER</code>).
+    Can save substantial space at the cost of some extra CPU time.
   </td>
 </tr>
 <tr>
@@ -181,10 +186,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.akka.threads</td>
+  <td>4</td>
+  <td>
+    Number of actor threads to use for communication. Can be useful to increase on large clusters
+    when the master has a lot of CPU cores.
+  </td>
+</tr>
+<tr>
   <td>spark.master.host</td>
   <td>(local hostname)</td>
   <td>
-    Hostname for the master to listen on (it will bind to this hostname's IP address).
+    Hostname or IP address for the master to listen on.
   </td>
 </tr>
 <tr>
