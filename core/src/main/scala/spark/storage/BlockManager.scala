@@ -459,7 +459,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       sendRequest(fetchRequests.dequeue())
     }
 
-    logDebug("Started remote gets in " + Utils.getUsedTimeMs(startTime) + " ms")
+    val numGets = remoteBlockIds.size - fetchRequests.size
+    logInfo("Started " + numGets + " remote gets in " + Utils.getUsedTimeMs(startTime))
 
     // Get the local blocks while remote blocks are being fetched. Note that it's okay to do
     // these all at once because they will just memory-map some files, so they won't consume
