@@ -80,7 +80,8 @@ object SparkBuild extends Build {
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
       "cc.spray" % "spray-can" % "1.0-M2.1",
-      "cc.spray" % "spray-server" % "1.0-M2.1"
+      "cc.spray" % "spray-server" % "1.0-M2.1",
+      "org.apache.mesos" % "mesos" % "0.9.0-incubating"
     )
   ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
 

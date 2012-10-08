@@ -422,11 +422,11 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
           case smt: ShuffleMapTask =>
             val stage = idToStage(smt.stageId)
-            val bmAddress = event.result.asInstanceOf[BlockManagerId]
-            val host = bmAddress.ip
+            val status = event.result.asInstanceOf[MapStatus]
+            val host = status.address.ip
             logInfo("ShuffleMapTask finished with host " + host)
             if (!deadHosts.contains(host)) {   // TODO: Make sure hostnames are consistent with Mesos
-              stage.addOutputLoc(smt.partition, bmAddress)
+              stage.addOutputLoc(smt.partition, status)
             }
             if (running.contains(stage) && pendingTasks(stage).isEmpty) {
               logInfo(stage + " (" + stage.origin + ") finished; looking for newly runnable stages")

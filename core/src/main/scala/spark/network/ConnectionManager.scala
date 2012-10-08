@@ -113,7 +113,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
         val selectedKeysCount = selector.select()
         if (selectedKeysCount == 0) {
-          logInfo("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
+          logDebug("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
         }
         if (selectorThread.isInterrupted) {
           logInfo("Selector thread was interrupted!")
@@ -167,7 +167,6 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   }
 
   def removeConnection(connection: Connection) {
-    /*logInfo("Removing connection")*/
     connectionsByKey -= connection.key
     if (connection.isInstanceOf[SendingConnection]) {
       val sendingConnection = connection.asInstanceOf[SendingConnection]
@@ -235,7 +234,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
   def receiveMessage(connection: Connection, message: Message) {
     val connectionManagerId = ConnectionManagerId.fromSocketAddress(message.senderAddress)
-    logInfo("Received [" + message + "] from [" + connectionManagerId + "]") 
+    logDebug("Received [" + message + "] from [" + connectionManagerId + "]") 
     val runnable = new Runnable() {
       val creationTime = System.currentTimeMillis
       def run() {
@@ -276,15 +275,15 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
             logDebug("Calling back")
             onReceiveCallback(bufferMessage, connectionManagerId)
           } else {
-            logWarning("Not calling back as callback is null")
+            logDebug("Not calling back as callback is null")
             None
           }
           
           if (ackMessage.isDefined) {
             if (!ackMessage.get.isInstanceOf[BufferMessage]) {
-              logWarning("Response to " + bufferMessage + " is not a buffer message, it is of type " + ackMessage.get.getClass())
+              logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type " + ackMessage.get.getClass())
             } else if (!ackMessage.get.asInstanceOf[BufferMessage].hasAckId) {
-              logWarning("Response to " + bufferMessage + " does not have ack id set")
+              logDebug("Response to " + bufferMessage + " does not have ack id set")
               ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id
             }
           }

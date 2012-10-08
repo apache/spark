@@ -13,10 +13,14 @@ import spark.SizeEstimator
 import spark.util.ByteBufferInputStream
 
 class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
+  var store: BlockManager = null
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
-  var oldArch: String = _
-  var oldOops: String = _
+  var oldArch: String = null
+  var oldOops: String = null
+  
+  // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test 
+  val serializer = new KryoSerializer
 
   before {
     actorSystem = ActorSystem("test")
@@ -30,6 +34,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   after {
+    if (store != null) {
+      store.stop()
+    }
     actorSystem.shutdown()
     actorSystem.awaitTermination()
     actorSystem = null
@@ -49,7 +56,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("manager-master interaction") {
-    val store = new BlockManager(master, new KryoSerializer, 2000)
+    store = new BlockManager(master, serializer, 2000)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -79,7 +86,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("in-memory LRU storage") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -88,47 +95,42 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY)
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") != None, "a3 was not in store")
-    Thread.sleep(100)
     assert(store.getSingle("a1") === None, "a1 was in store")
     assert(store.getSingle("a2") != None, "a2 was not in store")
     // At this point a2 was gotten last, so LRU will getSingle rid of a3
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
     assert(store.getSingle("a1") != None, "a1 was not in store")
     assert(store.getSingle("a2") != None, "a2 was not in store")
-    Thread.sleep(100)
     assert(store.getSingle("a3") === None, "a3 was in store")
   }
   
   test("in-memory LRU storage with serialization") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY_SER)
-    Thread.sleep(100)
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") != None, "a3 was not in store")
     assert(store.getSingle("a1") === None, "a1 was in store")
     assert(store.getSingle("a2") != None, "a2 was not in store")
     // At this point a2 was gotten last, so LRU will getSingle rid of a3
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_SER)
-    Thread.sleep(100)
     assert(store.getSingle("a1") != None, "a1 was not in store")
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") === None, "a3 was in store")
   }
 
   test("in-memory LRU for partitions of same RDD") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
     store.putSingle("rdd_0_1", a1, StorageLevel.MEMORY_ONLY)
     store.putSingle("rdd_0_2", a2, StorageLevel.MEMORY_ONLY)
     store.putSingle("rdd_0_3", a3, StorageLevel.MEMORY_ONLY)
-    Thread.sleep(100)
     // Even though we accessed rdd_0_3 last, it should not have replaced partitiosn 1 and 2
     // from the same RDD
     assert(store.getSingle("rdd_0_3") === None, "rdd_0_3 was in store")
@@ -141,11 +143,10 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("in-memory LRU for partitions of multiple RDDs") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     store.putSingle("rdd_0_1", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     store.putSingle("rdd_0_2", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     store.putSingle("rdd_1_1", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
-    Thread.sleep(100)
     // At this point rdd_1_1 should've replaced rdd_0_1
     assert(store.memoryStore.contains("rdd_1_1"), "rdd_1_1 was not in store")
     assert(!store.memoryStore.contains("rdd_0_1"), "rdd_0_1 was in store")
@@ -155,7 +156,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     // Put in more partitions from RDD 0; they should replace rdd_1_1
     store.putSingle("rdd_0_3", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     store.putSingle("rdd_0_4", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
-    Thread.sleep(100)
     // Now rdd_1_1 should be dropped to add rdd_0_3, but then rdd_0_2 should *not* be dropped
     // when we try to add rdd_0_4.
     assert(!store.memoryStore.contains("rdd_1_1"), "rdd_1_1 was in store")
@@ -166,7 +166,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("on-disk storage") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -179,14 +179,13 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("disk and memory storage") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK)
-    Thread.sleep(100)
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") != None, "a3 was not in store")
     assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
@@ -195,14 +194,13 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("disk and memory storage with getLocalBytes") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK)
-    Thread.sleep(100)
     assert(store.getLocalBytes("a2") != None, "a2 was not in store")
     assert(store.getLocalBytes("a3") != None, "a3 was not in store")
     assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
@@ -211,14 +209,13 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("disk and memory storage with serialization") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK_SER)
-    Thread.sleep(100)
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") != None, "a3 was not in store")
     assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
@@ -227,14 +224,13 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("disk and memory storage with serialization and getLocalBytes") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK_SER)
-    Thread.sleep(100)
     assert(store.getLocalBytes("a2") != None, "a2 was not in store")
     assert(store.getLocalBytes("a3") != None, "a3 was not in store")
     assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
@@ -243,7 +239,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("LRU with mixed storage levels") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -261,7 +257,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.getSingle("a3") != None, "a1 was not in store")
     // Now let's add in a4, which uses both disk and memory; a1 should drop out
     store.putSingle("a4", a4, StorageLevel.MEMORY_AND_DISK_SER)
-    Thread.sleep(100)
     assert(store.getSingle("a1") == None, "a1 was in store")
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") != None, "a3 was not in store")
@@ -269,14 +264,13 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("in-memory LRU with streams") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY)
     store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY)
     store.put("list3", list3.iterator, StorageLevel.MEMORY_ONLY)
-    Thread.sleep(100)
     assert(store.get("list2") != None, "list2 was not in store")
     assert(store.get("list2").get.size == 2)
     assert(store.get("list3") != None, "list3 was not in store")
@@ -286,7 +280,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.get("list2").get.size == 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY)
-    Thread.sleep(100)
     assert(store.get("list1") != None, "list1 was not in store")
     assert(store.get("list1").get.size == 2)
     assert(store.get("list2") != None, "list2 was not in store")
@@ -295,7 +288,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("LRU with mixed storage levels and streams") {
-    val store = new BlockManager(master, new KryoSerializer, 1200)
+    store = new BlockManager(master, serializer, 1200)
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
@@ -304,7 +297,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER)
     store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER)
     store.put("list3", list3.iterator, StorageLevel.DISK_ONLY)
-    Thread.sleep(100)
     // At this point LRU should not kick in because list3 is only on disk
     assert(store.get("list1") != None, "list2 was not in store")
     assert(store.get("list1").get.size === 2)
@@ -320,7 +312,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.get("list3").get.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
     store.put("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER)
-    Thread.sleep(100)
     assert(store.get("list1") === None, "list1 was in store")
     assert(store.get("list2") != None, "list3 was not in store")
     assert(store.get("list2").get.size === 2)
@@ -343,11 +334,68 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("overly large block") {
-    val store = new BlockManager(master, new KryoSerializer, 500)
+    store = new BlockManager(master, serializer, 500)
     store.putSingle("a1", new Array[Byte](1000), StorageLevel.MEMORY_ONLY)
     assert(store.getSingle("a1") === None, "a1 was in store")
     store.putSingle("a2", new Array[Byte](1000), StorageLevel.MEMORY_AND_DISK)
     assert(store.memoryStore.getValues("a2") === None, "a2 was in memory store")
     assert(store.getSingle("a2") != None, "a2 was not in store")
+  }
+
+  test("block compression") {
+    try {
+      System.setProperty("spark.shuffle.compress", "true")
+      store = new BlockManager(master, serializer, 2000)
+      store.putSingle("shuffle_0_0_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize("shuffle_0_0_0") <= 100, "shuffle_0_0_0 was not compressed")
+      store.stop()
+      store = null
+
+      System.setProperty("spark.shuffle.compress", "false")
+      store = new BlockManager(master, serializer, 2000)
+      store.putSingle("shuffle_0_0_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize("shuffle_0_0_0") >= 1000, "shuffle_0_0_0 was compressed")
+      store.stop()
+      store = null
+
+      System.setProperty("spark.broadcast.compress", "true")
+      store = new BlockManager(master, serializer, 2000)
+      store.putSingle("broadcast_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize("broadcast_0") <= 100, "broadcast_0 was not compressed")
+      store.stop()
+      store = null
+
+      System.setProperty("spark.broadcast.compress", "false")
+      store = new BlockManager(master, serializer, 2000)
+      store.putSingle("broadcast_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize("broadcast_0") >= 1000, "broadcast_0 was compressed")
+      store.stop()
+      store = null
+
+      System.setProperty("spark.rdd.compress", "true")
+      store = new BlockManager(master, serializer, 2000)
+      store.putSingle("rdd_0_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize("rdd_0_0") <= 100, "rdd_0_0 was not compressed")
+      store.stop()
+      store = null
+
+      System.setProperty("spark.rdd.compress", "false")
+      store = new BlockManager(master, serializer, 2000)
+      store.putSingle("rdd_0_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize("rdd_0_0") >= 1000, "rdd_0_0 was compressed")
+      store.stop()
+      store = null
+
+      // Check that any other block types are also kept uncompressed
+      store = new BlockManager(master, serializer, 2000)
+      store.putSingle("other_block", new Array[Byte](1000), StorageLevel.MEMORY_ONLY)
+      assert(store.memoryStore.getSize("other_block") >= 1000, "other_block was compressed")
+      store.stop()
+      store = null
+    } finally {
+      System.clearProperty("spark.shuffle.compress")
+      System.clearProperty("spark.broadcast.compress")
+      System.clearProperty("spark.rdd.compress")
+    }
   }
 }

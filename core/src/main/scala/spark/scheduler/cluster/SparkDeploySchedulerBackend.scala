@@ -25,7 +25,8 @@ private[spark] class SparkDeploySchedulerBackend(
     "SPARK_MEM",
     "SPARK_CLASSPATH",
     "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS"
+    "SPARK_JAVA_OPTS",
+    "SPARK_TESTING"
   )
 
   // Memory used by each executor (in megabytes)

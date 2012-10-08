@@ -44,15 +44,13 @@ class SparkEnv (
     blockManager.stop()
     blockManager.master.stop()
     actorSystem.shutdown()
-    // Akka's awaitTermination doesn't actually wait until the port is unbound, so sleep a bit
-    Thread.sleep(100)
+    // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
+    // down, but let's call it anyway in case it gets fixed in a later release
     actorSystem.awaitTermination()
-    // Akka's awaitTermination doesn't actually wait until the port is unbound, so sleep a bit
-    Thread.sleep(100)
   }
 }
 
-object SparkEnv {
+object SparkEnv extends Logging {
   private val env = new ThreadLocal[SparkEnv]
 
   def set(e: SparkEnv) {
@@ -110,6 +108,12 @@ object SparkEnv {
     val httpFileServer = new HttpFileServer()
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
+
+    // Warn about deprecated spark.cache.class property
+    if (System.getProperty("spark.cache.class") != null) {
+      logWarning("The spark.cache.class property is no longer being used! Specify storage " +
+        "levels using the RDD.persist() method instead.")
+    }
 
     new SparkEnv(
       actorSystem,

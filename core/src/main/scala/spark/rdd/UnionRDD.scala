@@ -1,6 +1,12 @@
-package spark
+package spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
+
+import spark.Dependency
+import spark.RangeDependency
+import spark.RDD
+import spark.SparkContext
+import spark.Split
 
 private[spark] class UnionSplit[T: ClassManifest](
     idx: Int, 
@@ -37,7 +43,7 @@ class UnionRDD[T: ClassManifest](
   override val dependencies = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
-    for ((rdd, index) <- rdds.zipWithIndex) {
+    for (rdd <- rdds) {
       deps += new RangeDependency(rdd, 0, pos, rdd.splits.size) 
       pos += rdd.splits.size
     }

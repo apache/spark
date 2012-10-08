@@ -1,4 +1,8 @@
-package spark
+package spark.rdd
+
+import spark.NarrowDependency
+import spark.RDD
+import spark.Split
 
 private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) extends Split
 

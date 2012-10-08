@@ -31,7 +31,6 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
           val blockMessages = BlockMessageArray.fromBufferMessage(bufferMessage)
           logDebug("Parsed as a block message array")
           val responseMessages = blockMessages.map(processBlockMessage).filter(_ != None).map(_.get)
-          /*logDebug("Processed block messages")*/
           return Some(new BlockMessageArray(responseMessages).toBufferMessage)
         } catch {
           case e: Exception => logError("Exception handling buffer message", e)
@@ -49,13 +48,13 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
     blockMessage.getType match {
       case BlockMessage.TYPE_PUT_BLOCK => {
         val pB = PutBlock(blockMessage.getId, blockMessage.getData, blockMessage.getLevel)
-        logInfo("Received [" + pB + "]")
+        logDebug("Received [" + pB + "]")
         putBlock(pB.id, pB.data, pB.level)
         return None
       } 
       case BlockMessage.TYPE_GET_BLOCK => {
         val gB = new GetBlock(blockMessage.getId)
-        logInfo("Received [" + gB + "]")
+        logDebug("Received [" + gB + "]")
         val buffer = getBlock(gB.id)
         if (buffer == null) {
           return None
