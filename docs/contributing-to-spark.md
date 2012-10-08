@@ -12,7 +12,7 @@ The Spark team welcomes contributions in the form of GitHub pull requests. Here 
   * Always import packages using absolute paths (e.g. `scala.collection.Map` instead of `collection.Map`).
   * No "infix" syntax for methods other than operators. For example, don't write `table containsKey myKey`; replace it with `table.containsKey(myKey)`.
 - Make sure that your code passes the unit tests. You can run the tests with `sbt/sbt test` in the root directory of Spark.
-  But first, make sure that you have [configured a spark-env.sh]({{HOME_PATH}}configuration.html) with at least
+  But first, make sure that you have [configured a spark-env.sh](configuration.html) with at least
   `SCALA_HOME`, as some of the tests try to spawn subprocesses using this.
 - Add new unit tests for your code. We use [ScalaTest](http://www.scalatest.org/) for testing. Just add a new Suite in `core/src/test`, or methods to an existing Suite.
 - If you'd like to report a bug but don't have time to fix it, you can still post it to our [issues page](https://github.com/mesos/spark/issues), or email the [mailing list](http://www.spark-project.org/mailing-lists.html).

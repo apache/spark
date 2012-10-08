@@ -7,15 +7,15 @@ Because of the in-memory nature of most Spark computations, Spark programs can b
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
-[storing RDDs in serialized form]({{HOME_PATH}}/scala-programming-guide.html#rdd-persistence), to
+[storing RDDs in serialized form](scala-programming-guide.html#rdd-persistence), to
 make the memory usage smaller.
 This guide will cover two main topics: data serialization, which is crucial for good network
 performance, and memory tuning. We also sketch several smaller topics.
 
-This document assumes that you have familiarity with the Spark API and have already read the [Scala]({{HOME_PATH}}/scala-programming-guide.html) or [Java]({{HOME_PATH}}/java-programming-guide.html) programming guides. After reading this guide, do not hesitate to reach out to the [Spark mailing list](http://groups.google.com/group/spark-users) with performance related concerns.
+This document assumes that you have familiarity with the Spark API and have already read the [Scala](scala-programming-guide.html) or [Java](java-programming-guide.html) programming guides. After reading this guide, do not hesitate to reach out to the [Spark mailing list](http://groups.google.com/group/spark-users) with performance related concerns.
 
 # The Spark Storage Model
-Spark's key abstraction is a distributed dataset, or RDD. RDD's consist of partitions. RDD partitions are stored either in memory or on disk, with replication or without replication, depending on the chosen [persistence options]({{HOME_PATH}}/scala-programming-guide.html#rdd-persistence). When RDD's are stored in memory, they can be stored as deserialized Java objects, or in a serialized form, again depending on the persistence option chosen. When RDD's are transferred over the network, or spilled to disk, they are always serialized. Spark can use different serializers, configurable with the `spark.serializer` option.
+Spark's key abstraction is a distributed dataset, or RDD. RDD's consist of partitions. RDD partitions are stored either in memory or on disk, with replication or without replication, depending on the chosen [persistence options](scala-programming-guide.html#rdd-persistence). When RDD's are stored in memory, they can be stored as deserialized Java objects, or in a serialized form, again depending on the persistence option chosen. When RDD's are transferred over the network, or spilled to disk, they are always serialized. Spark can use different serializers, configurable with the `spark.serializer` option.
 
 # Serialization Options
 
@@ -45,7 +45,7 @@ You can switch to using Kryo by calling `System.setProperty("spark.serializer", 
 registration requirement, but we recommend trying it in any network-intensive application.
 
 Finally, to register your classes with Kryo, create a public class that extends
-[`spark.KryoRegistrator`]({{HOME_PATH}}api/core/index.html#spark.KryoRegistrator) and set the
+[`spark.KryoRegistrator`](api/core/index.html#spark.KryoRegistrator) and set the
 `spark.kryo.registrator` system property to point to it, as follows:
 
 {% highlight scala %}
@@ -107,11 +107,11 @@ There are several ways to reduce this cost and still make Java objects efficient
 3. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
    four bytes instead of eight. Also, on Java 7 or later, try `-XX:+UseCompressedStrings` to store
    ASCII strings as just 8 bits per character. You can add these options in
-   [`spark-env.sh`]({{HOME_PATH}}configuration.html#environment-variables-in-spark-envsh).
+   [`spark-env.sh`](configuration.html#environment-variables-in-spark-envsh).
 
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
-the [RDD persistence API]({{HOME_PATH}}scala-programming-guide#rdd-persistence).
+the [RDD persistence API](scala-programming-guide#rdd-persistence).
 Spark will then store each RDD partition as one large byte array.
 The only downside of storing data in serialized form is slower access times, due to having to
 deserialize each object on the fly.
@@ -196,7 +196,7 @@ enough. Spark automatically sets the number of "map" tasks to run on each file a
 (though you can control it through optional parameters to `SparkContext.textFile`, etc), but for
 distributed "reduce" operations, such as `groupByKey` and `reduceByKey`, it uses a default value of 8.
 You can pass the level of parallelism as a second argument (see the
-[`spark.PairRDDFunctions`]({{HOME_PATH}}api/core/index.html#spark.PairRDDFunctions) documentation),
+[`spark.PairRDDFunctions`](api/core/index.html#spark.PairRDDFunctions) documentation),
 or set the system property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
 
@@ -213,7 +213,7 @@ number of cores in your clusters.
 
 ## Broadcasting Large Variables
 
-Using the [broadcast functionality]({{HOME_PATH}}scala-programming-guide#broadcast-variables)
+Using the [broadcast functionality](scala-programming-guide#broadcast-variables)
 available in `SparkContext` can greatly reduce the size of each serialized task, and the cost
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.

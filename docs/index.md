@@ -37,7 +37,7 @@ For example, `./run spark.examples.SparkPi` will run a sample program that estim
 examples prints usage help if no params are given.
 
 Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
-to connect to. This can be a [URL for a distributed cluster]({{HOME_PATH}}scala-programming-guide.html#master-urls),
+to connect to. This can be a [URL for a distributed cluster](scala-programming-guide.html#master-urls),
 or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing.
 
@@ -56,27 +56,27 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 **Quick start:**
 
-* [Spark Quick Start]({{HOME_PATH}}quick-start.html): a quick intro to the Spark API
+* [Spark Quick Start](quick-start.html): a quick intro to the Spark API
 
 **Programming guides:**
 
-* [Spark Programming Guide]({{HOME_PATH}}scala-programming-guide.html): how to get started using Spark, and details on the Scala API
-* [Java Programming Guide]({{HOME_PATH}}java-programming-guide.html): using Spark from Java
+* [Spark Programming Guide](scala-programming-guide.html): how to get started using Spark, and details on the Scala API
+* [Java Programming Guide](java-programming-guide.html): using Spark from Java
 
 **Deployment guides:**
 
-* [Running Spark on Amazon EC2]({{HOME_PATH}}ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
-* [Standalone Deploy Mode]({{HOME_PATH}}spark-standalone.html): launch a standalone cluster quickly without Mesos
-* [Running Spark on Mesos]({{HOME_PATH}}running-on-mesos.html): deploy a private cluster using
+* [Running Spark on Amazon EC2](ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
+* [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without Mesos
+* [Running Spark on Mesos](running-on-mesos.html): deploy a private cluster using
     [Apache Mesos](http://incubator.apache.org/mesos)
-* [Running Spark on YARN]({{HOME_PATH}}running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
+* [Running Spark on YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
 
 **Other documents:**
 
-* [Configuration]({{HOME_PATH}}configuration.html): customize Spark via its configuration system
-* [Tuning Guide]({{HOME_PATH}}tuning.html): best practices to optimize performance and memory use
-* [API Docs (Scaladoc)]({{HOME_PATH}}api/core/index.html)
-* [Bagel]({{HOME_PATH}}bagel-programming-guide.html): an implementation of Google's Pregel on Spark
+* [Configuration](configuration.html): customize Spark via its configuration system
+* [Tuning Guide](tuning.html): best practices to optimize performance and memory use
+* [API Docs (Scaladoc)](api/core/index.html)
+* [Bagel](bagel-programming-guide.html): an implementation of Google's Pregel on Spark
 * [Contributing to Spark](contributing-to-spark.html)
 
 **External resources:**
@@ -96,4 +96,4 @@ To get help using Spark or keep up with Spark development, sign up for the [spar
 
 If you're in the San Francisco Bay Area, there's a regular [Spark meetup](http://www.meetup.com/spark-users/) every few weeks. Come by to meet the developers and other users.
 
-Finally, if you'd like to contribute code to Spark, read [how to contribute]({{HOME_PATH}}contributing-to-spark.html).
+Finally, if you'd like to contribute code to Spark, read [how to contribute](contributing-to-spark.html).
