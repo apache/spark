@@ -107,7 +107,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf : Configuration) 
       .getMethod("main", classOf[Array[String]])
     val t = new Thread {
       override def run() {
-        mainMethod.invoke(null, Array[String]("standalone"))
+        mainMethod.invoke(null, Array[String]("yarn-standalone"))
       }
     }
     t.start()

@@ -124,6 +124,12 @@ class SparkContext(
         }
         scheduler
 
+      case "yarn-standalone" =>
+        val scheduler = new ClusterScheduler(this)
+        val backend = new StandaloneSchedulerBackend(scheduler, this.env.actorSystem)
+        scheduler.initialize(backend)
+        scheduler
+
       case _ =>
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)

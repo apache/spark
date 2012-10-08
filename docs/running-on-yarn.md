@@ -37,7 +37,7 @@ For example:
     SPARK_JAR=./core/target/spark-core-assembly-0.6.0-SNAPSHOT.jar ./run spark.deploy.yarn.Client \
       --jar examples/target/scala-2.9.2/spark-examples_2.9.2-0.6.0-SNAPSHOT.jar \
       --class spark.examples.SparkPi \
-      --args standalone \
+      --args yarn-standalone \
       --num-workers 3 \
       --worker-memory 2g \
       --worker-cores 2
@@ -46,5 +46,5 @@ The above starts a YARN Client programs which periodically polls the Application
 
 # Important Notes
 
-- When your application instantiates a Spark context it must use a special "standalone" master url. This starts the scheduler without forcing it to connect to a cluster. A good way to handle this is to pass "standalone" as an argument to your program, as shown in the example above.
+- When your application instantiates a Spark context it must use a special "yarn-standalone" master url. This starts the scheduler without forcing it to connect to a cluster. A good way to handle this is to pass "yarn-standalone" as an argument to your program, as shown in the example above.
 - YARN does not support requesting container resources based on the number of cores. Thus the numbers of cores given via command line arguments cannot be guaranteed.
