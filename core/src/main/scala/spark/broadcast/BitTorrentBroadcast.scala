@@ -311,9 +311,11 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
       var threadPool = Utils.newDaemonFixedThreadPool(MultiTracker.MaxChatSlots)
 
       while (hasBlocks.get < totalBlocks) {
-        var numThreadsToCreate =
-          math.min(listOfSources.size, MultiTracker.MaxChatSlots) -
+        var numThreadsToCreate = 0
+        listOfSources.synchronized {
+          numThreadsToCreate = math.min(listOfSources.size, MultiTracker.MaxChatSlots) -
           threadPool.getActiveCount
+        }
 
         while (hasBlocks.get < totalBlocks && numThreadsToCreate > 0) {
           var peerToTalkTo = pickPeerToTalkToRandom
@@ -726,7 +728,6 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
       guidePortLock.synchronized { guidePortLock.notifyAll() }
 
       try {
-        // Don't stop until there is a copy in HDFS
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
@@ -734,14 +735,17 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
-              logError("GuideMultipleRequests Timeout.")
-
               // Stop broadcast if at least one worker has connected and
               // everyone connected so far are done. Comparing with
               // listOfSources.size - 1, because it includes the Guide itself
-              if (listOfSources.size > 1 &&
-                setOfCompletedSources.size == listOfSources.size - 1) {
-                stopBroadcast = true
+              listOfSources.synchronized {
+                setOfCompletedSources.synchronized {
+                  if (listOfSources.size > 1 &&
+                    setOfCompletedSources.size == listOfSources.size - 1) {
+                    stopBroadcast = true
+                    logInfo("GuideMultipleRequests Timeout. stopBroadcast == true.")
+                  }
+                }
               }
             }
           }
@@ -922,9 +926,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
             serverSocket.setSoTimeout(MultiTracker.ServerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
-            case e: Exception => {
-              logError("ServeMultipleRequests Timeout.")
-            }
+            case e: Exception => { }
           }
           if (clientSocket != null) {
             logDebug("Serve: Accepted new client connection:" + clientSocket)
