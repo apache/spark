@@ -8,7 +8,7 @@ title: Spark Quick Start
 
 # Introduction
 
-This document provides a quick-and-dirty look at Spark's API. See the [programming guide]({{HOME_PATH}}/scala-programming-guide.html) for a complete reference. To follow along with this guide, you only need to have successfully [built spark]({{HOME_PATH}}) on one machine. Building Spark is as simple as running
+This document provides a quick-and-dirty look at Spark's API. See the [programming guide]({{HOME_PATH}}/scala-programming-guide.html) for a complete reference. To follow along with this guide, you only need to have successfully built Spark on one machine. Building Spark is as simple as running
 
 {% highlight bash %}
 $ sbt/sbt package
