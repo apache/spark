@@ -68,7 +68,7 @@ Finally, the following configuration options can be passed to the master and wor
 
 To launch a Spark standalone cluster with the deploy scripts, you need to set up two files, `conf/spark-env.sh` and `conf/slaves`. The `conf/spark-env.sh` file lets you specify global settings for the master and slave instances, such as memory, or port numbers to bind to, while `conf/slaves` is a list of slave nodes. The system requires that all the slave machines have the same configuration files, so *copy these files to each machine*.
 
-In `conf/spark-env.sh`, you can set the following parameters, in addition to the [standard Spark configuration settongs]({{HOME_PATH}}configuration.html):
+In `conf/spark-env.sh`, you can set the following parameters, in addition to the [standard Spark configuration settongs](configuration.html):
 
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
@@ -123,7 +123,7 @@ Note that the scripts must be executed on the machine you want to run the Spark 
 # Connecting a Job to the Cluster
 
 To run a job on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
-constructor]({{HOME_PATH}}scala-programming-guide.html#initializing-spark).
+constructor](scala-programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
