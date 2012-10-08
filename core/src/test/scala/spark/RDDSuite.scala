@@ -3,6 +3,8 @@ package spark
 import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
+
+import spark.rdd.CoalescedRDD
 import SparkContext._
 
 class RDDSuite extends FunSuite with BeforeAndAfter {
@@ -14,6 +16,8 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
       sc.stop()
       sc = null
     }
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
   
   test("basic operations") {

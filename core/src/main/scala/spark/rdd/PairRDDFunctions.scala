@@ -1,4 +1,4 @@
-package spark
+package spark.rdd
 
 import java.io.EOFException
 import java.io.ObjectInputStream
@@ -34,9 +34,20 @@ import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
 import org.apache.hadoop.mapreduce.TaskAttemptID
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import spark.SparkContext._
 import spark.partial.BoundedDouble
 import spark.partial.PartialResult
+import spark.Aggregator
+import spark.HashPartitioner
+import spark.Logging
+import spark.OneToOneDependency
+import spark.Partitioner
+import spark.RangePartitioner
+import spark.RDD
+import spark.SerializableWritable
+import spark.SparkContext._
+import spark.SparkException
+import spark.Split
+import spark.TaskContext
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.

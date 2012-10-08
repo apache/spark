@@ -73,8 +73,13 @@ a:hover code {
  * using solution at http://stackoverflow.com/questions/8878033/how-
  * to-make-twitter-bootstrap-menu-dropdown-on-hover-rather-than-click
  **/
+.dropdown-menu {
+  /* Remove the default 2px top margin which causes a small
+    gap between the hover trigger area and the popup menu */
+  margin-top: 0;
+}
 ul.nav li.dropdown:hover ul.dropdown-menu{
-    display: block;
+  display: block;
 }
 a.menu:after, .dropdown-toggle:after {
   content: none;

@@ -1,6 +1,6 @@
 package spark.partial
 
-private[spark] class PartialResult[R](initialVal: R, isFinal: Boolean) {
+class PartialResult[R](initialVal: R, isFinal: Boolean) {
   private var finalValue: Option[R] = if (isFinal) Some(initialVal) else None
   private var failure: Option[Exception] = None
   private var completionHandler: Option[R => Unit] = None

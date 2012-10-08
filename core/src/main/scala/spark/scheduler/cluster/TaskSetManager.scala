@@ -341,7 +341,7 @@ private[spark] class TaskSetManager(
 
   def error(message: String) {
     // Save the error message
-    abort("Mesos error: " + message)
+    abort("Error: " + message)
   }
 
   def abort(message: String) {

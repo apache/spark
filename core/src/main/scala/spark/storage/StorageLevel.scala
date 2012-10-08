@@ -2,7 +2,7 @@ package spark.storage
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
-private[spark] class StorageLevel(
+class StorageLevel(
     var useDisk: Boolean, 
     var useMemory: Boolean,
     var deserialized: Boolean,
@@ -63,7 +63,7 @@ private[spark] class StorageLevel(
     "StorageLevel(%b, %b, %b, %d)".format(useDisk, useMemory, deserialized, replication)
 }
 
-private[spark] object StorageLevel {
+object StorageLevel {
   val NONE = new StorageLevel(false, false, false)
   val DISK_ONLY = new StorageLevel(true, false, false)
   val DISK_ONLY_2 = new StorageLevel(true, false, false, 2)

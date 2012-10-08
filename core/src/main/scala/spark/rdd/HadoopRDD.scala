@@ -1,4 +1,4 @@
-package spark
+package spark.rdd
 
 import java.io.EOFException
 import java.util.NoSuchElementException
@@ -14,6 +14,12 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
+
+import spark.Dependency
+import spark.RDD
+import spark.SerializableWritable
+import spark.SparkContext
+import spark.Split
 
 /** 
  * A Spark split class that wraps around a Hadoop InputSplit.

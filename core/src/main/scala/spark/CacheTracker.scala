@@ -157,7 +157,7 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
   }
   
   // For BlockManager.scala only
-  def notifyTheCacheTrackerFromBlockManager(t: AddedToCache) {
+  def notifyFromBlockManager(t: AddedToCache) {
     communicate(t)
   }
   

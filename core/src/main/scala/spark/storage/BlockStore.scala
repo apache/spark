@@ -15,13 +15,14 @@ abstract class BlockStore(val blockManager: BlockManager) extends Logging {
    * Put in a block and, possibly, also return its content as either bytes or another Iterator.
    * This is used to efficiently write the values to multiple locations (e.g. for replication).
    *
-   * @return the values put if returnValues is true, or null otherwise
+   * @return a PutResult that contains the size of the data, as well as the values put if
+   *         returnValues is true (if not, the result's data field can be null)
    */
   def putValues(blockId: String, values: Iterator[Any], level: StorageLevel, returnValues: Boolean)
-    : Either[Iterator[Any], ByteBuffer]
+    : PutResult
 
   /**
-   * Return the size of a block.
+   * Return the size of a block in bytes.
    */
   def getSize(blockId: String): Long
 
