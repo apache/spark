@@ -2,7 +2,7 @@ package spark.scheduler
 
 import spark._
 
-class ResultTask[T, U](
+private[spark] class ResultTask[T, U](
     stageId: Int,
     rdd: RDD[T],
     func: (TaskContext, Iterator[T]) => U,

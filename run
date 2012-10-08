@@ -21,7 +21,7 @@ fi
 
 # If the user specifies a Mesos JAR, put it before our included one on the classpath
 MESOS_CLASSPATH=""
-if [ -z "$MESOS_JAR" ] ; then
+if [ -n "$MESOS_JAR" ] ; then
   MESOS_CLASSPATH="$MESOS_JAR"
 fi
 
@@ -52,13 +52,12 @@ CLASSPATH="$SPARK_CLASSPATH"
 CLASSPATH+=":$MESOS_CLASSPATH"
 CLASSPATH+=":$FWDIR/conf"
 CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
-CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/test-classes"
+if [ -n "$SPARK_TESTING" ] ; then
+  CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/test-classes"
+fi
 CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
-for jar in `find $CORE_DIR/lib -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
 for jar in `find $FWDIR/lib_managed/jars -name '*jar'`; do
   CLASSPATH+=":$jar"
 done

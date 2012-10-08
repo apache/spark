@@ -1,21 +1,33 @@
-package spark
+package spark.rdd
 
 import java.net.URL
 import java.io.EOFException
 import java.io.ObjectInputStream
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-sealed trait CoGroupSplitDep extends Serializable
-case class NarrowCoGroupSplitDep(rdd: RDD[_], split: Split) extends CoGroupSplitDep
-case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
+import spark.Aggregator
+import spark.Dependency
+import spark.Logging
+import spark.OneToOneDependency
+import spark.Partitioner
+import spark.RDD
+import spark.ShuffleDependency
+import spark.SparkEnv
+import spark.Split
 
+private[spark] sealed trait CoGroupSplitDep extends Serializable
+private[spark] case class NarrowCoGroupSplitDep(rdd: RDD[_], split: Split) extends CoGroupSplitDep
+private[spark] case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
+
+private[spark] 
 class CoGroupSplit(idx: Int, val deps: Seq[CoGroupSplitDep]) extends Split with Serializable {
   override val index: Int = idx
   override def hashCode(): Int = idx
 }
 
-class CoGroupAggregator
+private[spark] class CoGroupAggregator
   extends Aggregator[Any, Any, ArrayBuffer[Any]](
     { x => ArrayBuffer(x) },
     { (b, x) => b += x },
@@ -37,7 +49,7 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
       } else {
         logInfo("Adding shuffle dependency with " + rdd)
         deps += new ShuffleDependency[Any, Any, ArrayBuffer[Any]](
-            context.newShuffleId, rdd, aggr, part)
+            context.newShuffleId, rdd, Some(aggr), part)
       }
     }
     deps.toList

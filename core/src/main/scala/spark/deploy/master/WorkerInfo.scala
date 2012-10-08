@@ -3,7 +3,7 @@ package spark.deploy.master
 import akka.actor.ActorRef
 import scala.collection.mutable
 
-class WorkerInfo(
+private[spark] class WorkerInfo(
   val id: String,
   val host: String,
   val port: Int,

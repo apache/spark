@@ -1,10 +1,17 @@
-package spark
+package spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
 import java.util.{HashMap => JHashMap}
 
+import spark.Aggregator
+import spark.Partitioner
+import spark.RangePartitioner
+import spark.RDD
+import spark.ShuffleDependency
+import spark.SparkEnv
+import spark.Split
 
-class ShuffledRDDSplit(val idx: Int) extends Split {
+private[spark] class ShuffledRDDSplit(val idx: Int) extends Split {
   override val index = idx
   override def hashCode(): Int = idx
 }
@@ -15,7 +22,7 @@ class ShuffledRDDSplit(val idx: Int) extends Split {
  */
 abstract class ShuffledRDD[K, V, C](
     @transient parent: RDD[(K, V)],
-    aggregator: Aggregator[K, V, C],
+    aggregator: Option[Aggregator[K, V, C]],
     part: Partitioner)
   extends RDD[(K, C)](parent.context) {
 
@@ -41,7 +48,7 @@ class RepartitionShuffledRDD[K, V](
     part: Partitioner)
   extends ShuffledRDD[K, V, V](
     parent,
-    Aggregator[K, V, V](null, null, null, false),
+    None,
     part) {
 
   override def compute(split: Split): Iterator[(K, V)] = {
@@ -70,7 +77,7 @@ class ShuffledSortedRDD[K <% Ordered[K]: ClassManifest, V](
     // By separating this from RepartitionShuffledRDD, we avoided a
     // buf.iterator.toArray call, thus avoiding building up the buffer twice.
     val buf = new ArrayBuffer[(K, V)]
-    def addTupleToBuffer(k: K, v: V) = { buf += Tuple(k, v) }
+    def addTupleToBuffer(k: K, v: V) { buf += ((k, v)) }
     SparkEnv.get.shuffleFetcher.fetch[K, V](dep.shuffleId, split.index, addTupleToBuffer)
     if (ascending) {
       buf.sortWith((x, y) => x._1 < y._1).iterator
@@ -88,7 +95,7 @@ class ShuffledAggregatedRDD[K, V, C](
     @transient parent: RDD[(K, V)],
     aggregator: Aggregator[K, V, C],
     part : Partitioner)
-  extends ShuffledRDD[K, V, C](parent, aggregator, part) {
+  extends ShuffledRDD[K, V, C](parent, Some(aggregator), part) {
 
   override def compute(split: Split): Iterator[(K, C)] = {
     val combiners = new JHashMap[K, C]

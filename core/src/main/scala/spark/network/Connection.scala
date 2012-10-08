@@ -11,6 +11,7 @@ import java.nio.channels.spi._
 import java.net._
 
 
+private[spark]
 abstract class Connection(val channel: SocketChannel, val selector: Selector) extends Logging {
 
   channel.configureBlocking(false)
@@ -102,7 +103,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector) ex
 }
 
 
-class SendingConnection(val address: InetSocketAddress, selector_ : Selector) 
+private[spark] class SendingConnection(val address: InetSocketAddress, selector_ : Selector) 
 extends Connection(SocketChannel.open, selector_) {
 
   class Outbox(fair: Int = 0) {
@@ -137,9 +138,12 @@ extends Connection(SocketChannel.open, selector_) {
             if (!message.started) logDebug("Starting to send [" + message + "]")
             message.started = true
             return chunk 
+          } else {
+            /*logInfo("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "]")*/
+            message.finishTime = System.currentTimeMillis
+            logDebug("Finished sending [" + message + "] to [" + remoteConnectionManagerId +
+              "] in "  + message.timeTaken )
           }
-          /*logInfo("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "]")*/
-          logDebug("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "] in "  + message.timeTaken )
         }
       }
       None
@@ -162,10 +166,11 @@ extends Connection(SocketChannel.open, selector_) {
             }
             logTrace("Sending chunk from [" + message+ "] to [" + remoteConnectionManagerId + "]")
             return chunk 
-          } 
-          /*messages -= message*/
-          message.finishTime = System.currentTimeMillis
-          logDebug("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "] in "  + message.timeTaken )
+          } else {
+            message.finishTime = System.currentTimeMillis
+            logDebug("Finished sending [" + message + "] to [" + remoteConnectionManagerId +
+              "] in "  + message.timeTaken )
+          }
         }
       }
       None
@@ -219,7 +224,7 @@ extends Connection(SocketChannel.open, selector_) {
       while(true) {
         if (currentBuffers.size == 0) {
           outbox.synchronized {
-            outbox.getChunk match {
+            outbox.getChunk() match {
               case Some(chunk) => {
                 currentBuffers ++= chunk.buffers 
               }
@@ -255,7 +260,7 @@ extends Connection(SocketChannel.open, selector_) {
 }
 
 
-class ReceivingConnection(channel_ : SocketChannel, selector_ : Selector) 
+private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : Selector) 
 extends Connection(channel_, selector_) {
   
   class Inbox() {

@@ -12,7 +12,7 @@ import scala.io.Source
 /**
  * Various utility methods used by Spark.
  */
-object Utils extends Logging {
+private object Utils extends Logging {
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -71,7 +71,7 @@ object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory after " + maxAttempts + 
+        throw new IOException("Failed to create a temp directory after " + maxAttempts +
             " attempts!")
       }
       try {
@@ -115,16 +115,14 @@ object Utils extends Logging {
     val out = new FileOutputStream(dest)
     copyStream(in, out, true)
   }
-  
-  
-  
-  /* Download a file from a given URL to the local filesystem */
+
+  /** Download a file from a given URL to the local filesystem */
   def downloadFile(url: URL, localPath: String) {
     val in = url.openStream()
     val out = new FileOutputStream(localPath)
     Utils.copyStream(in, out, true)
   }
-  
+
   /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
@@ -142,9 +140,18 @@ object Utils extends Logging {
       case "file" | null =>
         // Remove the file if it already exists
         targetFile.delete()
-        // Symlink the file locally
-        logInfo("Symlinking " + url + " to " + targetFile)
-        FileUtil.symLink(url, targetFile.toString)
+        // Symlink the file locally.
+        if (uri.isAbsolute) {
+          // url is absolute, i.e. it starts with "file:///". Extract the source
+          // file's absolute path from the url.
+          val sourceFile = new File(uri)
+          logInfo("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
+          FileUtil.symLink(sourceFile.getAbsolutePath, targetFile.getAbsolutePath)
+        } else {
+          // url is not absolute, i.e. itself is the path to the source file.
+          logInfo("Symlinking " + url + " to " + targetFile.getAbsolutePath)
+          FileUtil.symLink(url, targetFile.getAbsolutePath)
+        }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val uri = new URI(url)
@@ -210,7 +217,7 @@ object Utils extends Logging {
   def localHostName(): String = {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
   }
-  
+
   /**
    * Returns a standard ThreadFactory except all threads are daemons.
    */
@@ -234,10 +241,10 @@ object Utils extends Logging {
 
     return threadPool
   }
-  
+
   /**
-   * Return the string to tell how long has passed in seconds. The passing parameter should be in 
-   * millisecond. 
+   * Return the string to tell how long has passed in seconds. The passing parameter should be in
+   * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
     return " " + (System.currentTimeMillis - startTimeMs) + " ms "
@@ -348,5 +355,44 @@ object Utils extends Logging {
    */
   def execute(command: Seq[String]) {
     execute(command, new File("."))
+  }
+
+
+  /**
+   * When called inside a class in the spark package, returns the name of the user code class
+   * (outside the spark package) that called into Spark, as well as which Spark method they called.
+   * This is used, for example, to tell users where in their code each RDD got created.
+   */
+  def getSparkCallSite: String = {
+    val trace = Thread.currentThread.getStackTrace().filter( el =>
+      (!el.getMethodName.contains("getStackTrace")))
+
+    // Keep crawling up the stack trace until we find the first function not inside of the spark
+    // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
+    // transformation, a SparkContext function (such as parallelize), or anything else that leads
+    // to instantiation of an RDD. We also track the first (deepest) user method, file, and line.
+    var lastSparkMethod = "<unknown>"
+    var firstUserFile = "<unknown>"
+    var firstUserLine = 0
+    var finished = false
+
+    for (el <- trace) {
+      if (!finished) {
+        if (el.getClassName.startsWith("spark.") && !el.getClassName.startsWith("spark.examples.")) {
+          lastSparkMethod = if (el.getMethodName == "<init>") {
+            // Spark method is a constructor; get its class name
+            el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
+          } else {
+            el.getMethodName
+          }
+        }
+        else {
+          firstUserLine = el.getLineNumber
+          firstUserFile = el.getFileName
+          finished = true
+        }
+      }
+    }
+    "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
   }
 }

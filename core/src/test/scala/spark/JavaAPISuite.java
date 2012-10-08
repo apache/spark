@@ -112,15 +112,19 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
   }
 
+  static int foreachCalls = 0;
+
   @Test
   public void foreach() {
+    foreachCalls = 0;
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(new VoidFunction<String>() {
       @Override
       public void call(String s) {
-        System.out.println(s);
+        foreachCalls++;
       }
     });
+    Assert.assertEquals(2, foreachCalls);
   }
 
   @Test

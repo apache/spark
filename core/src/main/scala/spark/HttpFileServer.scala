@@ -5,7 +5,7 @@ import java.net.URL
 import scala.collection.mutable.HashMap
 import org.apache.hadoop.fs.FileUtil
 
-class HttpFileServer extends Logging {
+private[spark] class HttpFileServer extends Logging {
   
   var baseDir : File = null
   var fileDir : File = null

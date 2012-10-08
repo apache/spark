@@ -14,7 +14,7 @@ import spark.{Logging, SparkException, Utils}
 import spark.util.AkkaUtils
 
 
-class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
+private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For job IDs
 
   var nextJobNumber = 0
@@ -212,7 +212,7 @@ class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   }
 }
 
-object Master {
+private[spark] object Master {
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", args.ip, args.port)

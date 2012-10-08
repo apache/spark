@@ -31,53 +31,86 @@ import spark.partial.BoundedDouble
 import spark.partial.CountEvaluator
 import spark.partial.GroupedCountEvaluator
 import spark.partial.PartialResult
+import spark.rdd.BlockRDD
+import spark.rdd.CartesianRDD
+import spark.rdd.FilteredRDD
+import spark.rdd.FlatMappedRDD
+import spark.rdd.GlommedRDD
+import spark.rdd.MappedRDD
+import spark.rdd.MapPartitionsRDD
+import spark.rdd.MapPartitionsWithSplitRDD
+import spark.rdd.PipedRDD
+import spark.rdd.SampledRDD
+import spark.rdd.UnionRDD
 import spark.storage.StorageLevel
 
 import SparkContext._
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable, 
- * partitioned collection of elements that can be operated on in parallel.
+ * partitioned collection of elements that can be operated on in parallel. This class contains the
+ * basic operations available on all RDDs, such as `map`, `filter`, and `persist`. In addition,
+ * [[spark.PairRDDFunctions]] contains operations available only on RDDs of key-value pairs, such
+ * as `groupByKey` and `join`; [[spark.DoubleRDDFunctions]] contains operations available only on
+ * RDDs of Doubles; and [[spark.SequenceFileRDDFunctions]] contains operations available on RDDs
+ * that can be saved as SequenceFiles. These operations are automatically available on any RDD of
+ * the right type (e.g. RDD[(Int, Int)] through implicit conversions when you
+ * `import spark.SparkContext._`.
  *
- * Each RDD is characterized by five main properties:
- * - A list of splits (partitions)
- * - A function for computing each split
- * - A list of dependencies on other RDDs
- * - Optionally, a Partitioner for key-value RDDs (e.g. to say that the RDD is hash-partitioned)
- * - Optionally, a list of preferred locations to compute each split on (e.g. block locations for
- *   HDFS)
+ * Internally, each RDD is characterized by five main properties:
  *
- * All the scheduling and execution in Spark is done based on these methods, allowing each RDD to 
- * implement its own way of computing itself.
+ *  - A list of splits (partitions)
+ *  - A function for computing each split
+ *  - A list of dependencies on other RDDs
+ *  - Optionally, a Partitioner for key-value RDDs (e.g. to say that the RDD is hash-partitioned)
+ *  - Optionally, a list of preferred locations to compute each split on (e.g. block locations for
+ *    an HDFS file)
  *
- * This class also contains transformation methods available on all RDDs (e.g. map and filter). In 
- * addition, PairRDDFunctions contains extra methods available on RDDs of key-value pairs, and 
- * SequenceFileRDDFunctions contains extra methods for saving RDDs to Hadoop SequenceFiles.
+ * All of the scheduling and execution in Spark is done based on these methods, allowing each RDD
+ * to implement its own way of computing itself. Indeed, users can implement custom RDDs (e.g. for
+ * reading data from a new storage system) by overriding these functions. Please refer to the
+ * [[http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
+ * on RDD internals.
  */
 abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serializable {
 
-  // Methods that must be implemented by subclasses
+  // Methods that must be implemented by subclasses:
+
+  /** Set of partitions in this RDD. */
   def splits: Array[Split]
+
+  /** Function for computing a given partition. */
   def compute(split: Split): Iterator[T]
+
+  /** How this RDD depends on any parent RDDs. */
   @transient val dependencies: List[Dependency[_]]
+
+  // Methods available on all RDDs:
   
-  // Optionally overridden by subclasses to specify how they are partitioned
+  /** Record user function generating this RDD. */
+  private[spark] val origin = Utils.getSparkCallSite
+  
+  /** Optionally overridden by subclasses to specify how they are partitioned. */
   val partitioner: Option[Partitioner] = None
 
-  // Optionally overridden by subclasses to specify placement preferences
+  /** Optionally overridden by subclasses to specify placement preferences. */
   def preferredLocations(split: Split): Seq[String] = Nil
   
+  /** The [[spark.SparkContext]] that this RDD was created on. */
   def context = sc
 
-  def elementClassManifest: ClassManifest[T] = classManifest[T]
+  private[spark] def elementClassManifest: ClassManifest[T] = classManifest[T]
   
-  // Get a unique ID for this RDD
+  /** A unique ID for this RDD (within its SparkContext). */
   val id = sc.newRddId()
   
   // Variables relating to persistence
   private var storageLevel: StorageLevel = StorageLevel.NONE
   
-  // Change this RDD's storage level
+  /** 
+   * Set this RDD's storage level to persist its values across operations after the first time
+   * it is computed. Can only be called once on each RDD.
+   */
   def persist(newLevel: StorageLevel): RDD[T] = {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel) {
@@ -88,22 +121,23 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     this
   }
 
-  // Turn on the default caching level for this RDD
+  /** Persist this RDD with the default storage level (MEMORY_ONLY). */
   def persist(): RDD[T] = persist(StorageLevel.MEMORY_ONLY)
   
-  // Turn on the default caching level for this RDD
+  /** Persist this RDD with the default storage level (MEMORY_ONLY). */
   def cache(): RDD[T] = persist()
 
+  /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel = storageLevel
   
-  def checkpoint(level: StorageLevel = StorageLevel.MEMORY_AND_DISK_2): RDD[T] = {
+  private[spark] def checkpoint(level: StorageLevel = StorageLevel.MEMORY_AND_DISK_2): RDD[T] = {
     if (!level.useDisk && level.replication < 2) {
       throw new Exception("Cannot checkpoint without using disk or replication (level requested was " + level + ")")
     } 
     
     // This is a hack. Ideally this should re-use the code used by the CacheTracker
     // to generate the key.
-    def getSplitKey(split: Split) = "rdd:%d:%d".format(this.id, split.index)
+    def getSplitKey(split: Split) = "rdd_%d_%d".format(this.id, split.index)
     
     persist(level)
     sc.runJob(this, (iter: Iterator[T]) => {} )
@@ -115,7 +149,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     }
   }
   
-  // Read this RDD; will read from cache if applicable, or otherwise compute
+  /**
+   * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
+   * This should ''not'' be called by users directly, but is available for implementors of custom
+   * subclasses of RDD.
+   */
   final def iterator(split: Split): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheTracker.getOrCompute[T](this, split, storageLevel)
@@ -133,7 +171,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
-  def distinct(): RDD[T] = map(x => (x, "")).reduceByKey((x, y) => x).map(_._1)
+  def distinct(numSplits: Int = splits.size): RDD[T] =
+    map(x => (x, null)).reduceByKey((x, y) => x, numSplits).map(_._1)
 
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
     new SampledRDD(this, withReplacement, fraction, seed)
@@ -171,8 +210,16 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     Utils.randomizeInPlace(samples, rand).take(total)
   }
 
+  /**
+   * Return the union of this RDD and another one. Any identical elements will appear multiple
+   * times (use `.distinct()` to eliminate them).
+   */
   def union(other: RDD[T]): RDD[T] = new UnionRDD(sc, Array(this, other))
 
+  /**
+   * Return the union of this RDD and another one. Any identical elements will appear multiple
+   * times (use `.distinct()` to eliminate them).
+   */
   def ++(other: RDD[T]): RDD[T] = this.union(other)
 
   def glom(): RDD[Array[T]] = new GlommedRDD(this)
@@ -368,7 +415,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   def saveAsObjectFile(path: String) {
-    this.glom
+    this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
       .saveAsSequenceFile(path)
   }
@@ -377,61 +424,4 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   private[spark] def collectPartitions(): Array[Array[T]] = {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
-}
-
-class MappedRDD[U: ClassManifest, T: ClassManifest](
-    prev: RDD[T],
-    f: T => U)
-  extends RDD[U](prev.context) {
-  
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = prev.iterator(split).map(f)
-}
-
-class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
-    prev: RDD[T],
-    f: T => TraversableOnce[U])
-  extends RDD[U](prev.context) {
-  
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = prev.iterator(split).flatMap(f)
-}
-
-class FilteredRDD[T: ClassManifest](prev: RDD[T], f: T => Boolean) extends RDD[T](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = prev.iterator(split).filter(f)
-}
-
-class GlommedRDD[T: ClassManifest](prev: RDD[T]) extends RDD[Array[T]](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = Array(prev.iterator(split).toArray).iterator
-}
-
-class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
-    prev: RDD[T],
-    f: Iterator[T] => Iterator[U])
-  extends RDD[U](prev.context) {
-  
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = f(prev.iterator(split))
-}
-
-/**
- * A variant of the MapPartitionsRDD that passes the split index into the
- * closure. This can be used to generate or collect partition specific
- * information such as the number of tuples in a partition.
- */
-class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
-    prev: RDD[T],
-    f: (Int, Iterator[T]) => Iterator[U])
-  extends RDD[U](prev.context) {
-
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = f(split.index, prev.iterator(split))
 }

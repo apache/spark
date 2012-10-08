@@ -5,7 +5,7 @@ import scala.collection.mutable.ArrayBuffer
 /**
  * An object that waits for a DAGScheduler job to complete.
  */
-class JobWaiter(totalTasks: Int) extends JobListener {
+private[spark] class JobWaiter(totalTasks: Int) extends JobListener {
   private val taskResults = ArrayBuffer.fill[Any](totalTasks)(null)
   private var finishedTasks = 0
 

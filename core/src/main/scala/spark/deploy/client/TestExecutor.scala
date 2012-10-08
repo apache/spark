@@ -1,6 +1,6 @@
 package spark.deploy.client
 
-object TestExecutor {
+private[spark] object TestExecutor {
   def main(args: Array[String]) {
     println("Hello world!")
     while (true) {

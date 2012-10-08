@@ -16,7 +16,7 @@ import java.nio.ByteBuffer
 /**
  * The Mesos executor for Spark.
  */
-class Executor extends Logging {
+private[spark] class Executor extends Logging {
   var urlClassLoader : ExecutorURLClassLoader = null
   var threadPool: ExecutorService = null
   var env: SparkEnv = null

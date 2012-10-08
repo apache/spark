@@ -3,6 +3,8 @@ package spark
 import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
+
+import spark.rdd.CoalescedRDD
 import SparkContext._
 
 class RDDSuite extends FunSuite with BeforeAndAfter {
@@ -14,6 +16,8 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
       sc.stop()
       sc = null
     }
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
   
   test("basic operations") {
@@ -70,5 +74,44 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     sc = new SparkContext("local", "test")
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).flatMap(x => 1 to x).checkpoint()
     assert(rdd.collect().toList === List(1, 1, 2, 1, 2, 3, 1, 2, 3, 4))
+  }
+
+  test("basic caching") {
+    sc = new SparkContext("local", "test")
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
+    assert(rdd.collect().toList === List(1, 2, 3, 4))
+    assert(rdd.collect().toList === List(1, 2, 3, 4))
+    assert(rdd.collect().toList === List(1, 2, 3, 4))
+  }
+
+  test("coalesced RDDs") {
+    sc = new SparkContext("local", "test")
+    val data = sc.parallelize(1 to 10, 10)
+
+    val coalesced1 = new CoalescedRDD(data, 2)
+    assert(coalesced1.collect().toList === (1 to 10).toList)
+    assert(coalesced1.glom().collect().map(_.toList).toList ===
+      List(List(1, 2, 3, 4, 5), List(6, 7, 8, 9, 10)))
+
+    // Check that the narrow dependency is also specified correctly
+    assert(coalesced1.dependencies.head.getParents(0).toList === List(0, 1, 2, 3, 4))
+    assert(coalesced1.dependencies.head.getParents(1).toList === List(5, 6, 7, 8, 9))
+
+    val coalesced2 = new CoalescedRDD(data, 3)
+    assert(coalesced2.collect().toList === (1 to 10).toList)
+    assert(coalesced2.glom().collect().map(_.toList).toList ===
+      List(List(1, 2, 3), List(4, 5, 6), List(7, 8, 9, 10)))
+
+    val coalesced3 = new CoalescedRDD(data, 10)
+    assert(coalesced3.collect().toList === (1 to 10).toList)
+    assert(coalesced3.glom().collect().map(_.toList).toList ===
+      (1 to 10).map(x => List(x)).toList)
+
+    // If we try to coalesce into more partitions than the original RDD, it should just
+    // keep the original number of partitions.
+    val coalesced4 = new CoalescedRDD(data, 20)
+    assert(coalesced4.collect().toList === (1 to 10).toList)
+    assert(coalesced4.glom().collect().map(_.toList).toList ===
+      (1 to 10).map(x => List(x)).toList)
   }
 }

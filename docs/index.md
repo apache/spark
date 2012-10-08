@@ -54,6 +54,10 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 # Where to Go from Here
 
+**Quick start:**
+
+* [Spark Quick Start]({{HOME_PATH}}quick-start.html): a quick intro to the Spark API
+
 **Programming guides:**
 
 * [Spark Programming Guide]({{HOME_PATH}}scala-programming-guide.html): how to get started using Spark, and details on the Scala API

@@ -8,11 +8,11 @@ import scala.collection.mutable.ArrayBuffer
 import spark._
 import spark.network._
 
-case class GetBlock(id: String)
-case class GotBlock(id: String, data: ByteBuffer)
-case class PutBlock(id: String, data: ByteBuffer, level: StorageLevel) 
+private[spark] case class GetBlock(id: String)
+private[spark] case class GotBlock(id: String, data: ByteBuffer)
+private[spark] case class PutBlock(id: String, data: ByteBuffer, level: StorageLevel) 
 
-class BlockMessage() {
+private[spark] class BlockMessage() {
   // Un-initialized: typ = 0
   // GetBlock: typ = 1
   // GotBlock: typ = 2
@@ -158,7 +158,7 @@ class BlockMessage() {
   }
 }
 
-object BlockMessage {
+private[spark] object BlockMessage {
   val TYPE_NON_INITIALIZED: Int = 0
   val TYPE_GET_BLOCK: Int = 1
   val TYPE_GOT_BLOCK: Int = 2

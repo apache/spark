@@ -4,6 +4,7 @@ import spark.deploy._
 import akka.actor._
 import akka.pattern.ask
 import akka.util.duration._
+import akka.pattern.AskTimeoutException
 import spark.{SparkException, Logging}
 import akka.remote.RemoteClientLifeCycleEvent
 import akka.remote.RemoteClientShutdown
@@ -16,7 +17,7 @@ import akka.dispatch.Await
  * The main class used to talk to a Spark deploy cluster. Takes a master URL, a job description,
  * and a listener for job events, and calls back the listener when various events occur.
  */
-class Client(
+private[spark] class Client(
     actorSystem: ActorSystem,
     masterUrl: String,
     jobDescription: JobDescription,
@@ -100,9 +101,13 @@ class Client(
 
   def stop() {
     if (actor != null) {
-      val timeout = 1.seconds
-      val future = actor.ask(StopClient)(timeout)
-      Await.result(future, timeout)
+      try {
+        val timeout = 1.seconds
+        val future = actor.ask(StopClient)(timeout)
+        Await.result(future, timeout)
+      } catch {
+        case e: AskTimeoutException =>  // Ignore it, maybe master went away
+      }
       actor = null
     }
   }
