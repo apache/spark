@@ -14,7 +14,7 @@ import spark.scheduler.cluster.RegisterSlaveFailed
 import spark.scheduler.cluster.RegisterSlave
 
 
-class StandaloneExecutorBackend(
+private[spark] class StandaloneExecutorBackend(
     executor: Executor,
     masterUrl: String,
     slaveId: String,
@@ -62,7 +62,7 @@ class StandaloneExecutorBackend(
   }
 }
 
-object StandaloneExecutorBackend {
+private[spark] object StandaloneExecutorBackend {
   def run(masterUrl: String, slaveId: String, hostname: String, cores: Int) {
     // Create a new ActorSystem to run the backend, because we can't create a SparkEnv / Executor
     // before getting started with all our system properties, etc

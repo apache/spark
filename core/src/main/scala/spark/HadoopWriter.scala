@@ -42,7 +42,7 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializabl
     setConfParams()
     
     val jCtxt = getJobContext() 
-    getOutputCommitter().setupJob(jCtxt) 		
+    getOutputCommitter().setupJob(jCtxt)
   }
 
 

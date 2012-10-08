@@ -14,7 +14,7 @@ import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 /**
  * An ApproximateEvaluator for counts by key. Returns a map of key to confidence interval.
  */
-class GroupedCountEvaluator[T](totalOutputs: Int, confidence: Double)
+private[spark] class GroupedCountEvaluator[T](totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[OLMap[T], Map[T, BoundedDouble]] {
 
   var outputsMerged = 0

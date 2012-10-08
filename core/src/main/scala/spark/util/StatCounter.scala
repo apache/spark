@@ -5,6 +5,7 @@ package spark.util
  * numerically robust way. Includes support for merging two StatCounters. Based on Welford and
  * Chan's algorithms described at http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance.
  */
+private[spark]
 class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   private var n: Long = 0     // Running count of our values
   private var mu: Double = 0  // Running mean of our values
@@ -82,7 +83,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   }
 }
 
-object StatCounter {
+private[spark] object StatCounter {
   def apply(values: TraversableOnce[Double]) = new StatCounter(values)
 
   def apply(values: Double*) = new StatCounter(values)

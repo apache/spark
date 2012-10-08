@@ -9,7 +9,7 @@ import java.util.LinkedHashMap
  * some cache entries have pointers to a shared object. Nonetheless, this Cache should work well
  * when most of the space is used by arrays of primitives or of simple classes.
  */
-class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
+private[spark] class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
   logInfo("BoundedMemoryCache.maxBytes = " + maxBytes)
 
   def this() {
@@ -104,9 +104,9 @@ class BoundedMemoryCache(maxBytes: Long) extends Cache with Logging {
 }
 
 // An entry in our map; stores a cached object and its size in bytes
-case class Entry(value: Any, size: Long)
+private[spark] case class Entry(value: Any, size: Long)
 
-object BoundedMemoryCache {
+private[spark] object BoundedMemoryCache {
   /**
    * Get maximum cache capacity from system configuration
    */

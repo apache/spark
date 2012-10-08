@@ -13,7 +13,7 @@ import spark.deploy.ExecutorStateChanged
 /**
  * Manages the execution of one executor process.
  */
-class ExecutorRunner(
+private[spark] class ExecutorRunner(
     val jobId: String,
     val execId: Int,
     val jobDesc: JobDescription,

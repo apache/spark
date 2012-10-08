@@ -3,7 +3,7 @@ package spark.network
 import java.nio.ByteBuffer
 import java.net.InetAddress
 
-object ReceiverTest {
+private[spark] object ReceiverTest {
 
   def main(args: Array[String]) {
     val manager = new ConnectionManager(9999)

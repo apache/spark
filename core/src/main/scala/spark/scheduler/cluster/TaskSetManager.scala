@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
 /**
  * Schedules the tasks within a single TaskSet in the ClusterScheduler.
  */
-class TaskSetManager(
+private[spark] class TaskSetManager(
   sched: ClusterScheduler,
   val taskSet: TaskSet)
   extends Logging {
@@ -341,7 +341,7 @@ class TaskSetManager(
 
   def error(message: String) {
     // Save the error message
-    abort("Mesos error: " + message)
+    abort("Error: " + message)
   }
 
   def abort(message: String) {

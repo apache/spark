@@ -7,7 +7,7 @@ import spark._
 /**
  * Used to keep and pass around information of peers involved in a broadcast
  */
-case class SourceInfo (hostAddress: String,
+private[spark] case class SourceInfo (hostAddress: String,
                        listenPort: Int,
                        totalBlocks: Int = SourceInfo.UnusedParam,
                        totalBytes: Int = SourceInfo.UnusedParam)
@@ -26,7 +26,7 @@ extends Comparable[SourceInfo] with Logging {
 /**
  * Helper Object of SourceInfo for its constants
  */
-object SourceInfo {
+private[spark] object SourceInfo {
   // Constants for special values of listenPort
   val TxNotStartedRetry = -1
   val TxOverGoToDefault = 0

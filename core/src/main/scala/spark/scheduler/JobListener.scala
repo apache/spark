@@ -5,7 +5,7 @@ package spark.scheduler
  * DAGScheduler. The listener is notified each time a task succeeds, as well as if the whole
  * job fails (and no further taskSucceeded events will happen).
  */
-trait JobListener {
+private[spark] trait JobListener {
   def taskSucceeded(index: Int, result: Any)
   def jobFailed(exception: Exception)
 }

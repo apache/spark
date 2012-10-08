@@ -17,7 +17,7 @@ import spark.network._
  *
  * TODO: Use event model.
  */
-class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
+private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   initLogging()
   
   blockManager.connectionManager.onReceiveMessage(onBlockMessageReceive)
@@ -31,7 +31,6 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
           val blockMessages = BlockMessageArray.fromBufferMessage(bufferMessage)
           logDebug("Parsed as a block message array")
           val responseMessages = blockMessages.map(processBlockMessage).filter(_ != None).map(_.get)
-          /*logDebug("Processed block messages")*/
           return Some(new BlockMessageArray(responseMessages).toBufferMessage)
         } catch {
           case e: Exception => logError("Exception handling buffer message", e)
@@ -49,13 +48,13 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
     blockMessage.getType match {
       case BlockMessage.TYPE_PUT_BLOCK => {
         val pB = PutBlock(blockMessage.getId, blockMessage.getData, blockMessage.getLevel)
-        logInfo("Received [" + pB + "]")
+        logDebug("Received [" + pB + "]")
         putBlock(pB.id, pB.data, pB.level)
         return None
       } 
       case BlockMessage.TYPE_GET_BLOCK => {
         val gB = new GetBlock(blockMessage.getId)
-        logInfo("Received [" + gB + "]")
+        logDebug("Received [" + gB + "]")
         val buffer = getBlock(gB.id)
         if (buffer == null) {
           return None
@@ -76,17 +75,10 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
 
   private def getBlock(id: String): ByteBuffer = {
     val startTimeMs = System.currentTimeMillis()
-    logDebug("Getblock " + id + " started from " + startTimeMs)
-    val block = blockManager.getLocal(id)
-    val buffer = block match {
-      case Some(tValues) => {
-        val values = tValues
-        val buffer = blockManager.dataSerialize(values)
-        buffer
-      }
-      case None => { 
-        null
-      }
+    logDebug("GetBlock " + id + " started from " + startTimeMs)
+    val buffer = blockManager.getLocalBytes(id) match {
+      case Some(bytes) => bytes
+      case None => null
     }
     logDebug("GetBlock " + id + " used " + Utils.getUsedTimeMs(startTimeMs)
         + " and got buffer " + buffer)
@@ -94,7 +86,7 @@ class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   }
 }
 
-object BlockManagerWorker extends Logging {
+private[spark] object BlockManagerWorker extends Logging {
   private var blockManagerWorker: BlockManagerWorker = null
   private val DATA_TRANSFER_TIME_OUT_MS: Long = 500
   private val REQUEST_RETRY_INTERVAL_MS: Long = 1000

@@ -3,7 +3,7 @@ package spark
 import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
 
-class ParallelCollectionSplit[T: ClassManifest](
+private[spark] class ParallelCollectionSplit[T: ClassManifest](
     val rddId: Long,
     val slice: Int,
     values: Seq[T])

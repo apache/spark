@@ -20,7 +20,7 @@ import spark.TaskState
  * separate Mesos task, allowing multiple applications to share cluster nodes both in space (tasks
  * from multiple apps can run on different cores) and in time (a core can switch ownership).
  */
-class MesosSchedulerBackend(
+private[spark] class MesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
@@ -34,7 +34,8 @@ class MesosSchedulerBackend(
     "SPARK_MEM",
     "SPARK_CLASSPATH",
     "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS"
+    "SPARK_JAVA_OPTS",
+    "SPARK_TESTING"
   )
 
   // Memory used by each executor (in megabytes)

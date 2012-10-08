@@ -1,25 +1,20 @@
 package spark.broadcast
 
 import java.io._
-import java.net._
-import java.util.{BitSet, UUID}
-import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
-
-import scala.collection.mutable.Map
+import java.util.concurrent.atomic.AtomicLong
 
 import spark._
 
-trait Broadcast[T] extends Serializable {
-  val uuid = UUID.randomUUID
-
+abstract class Broadcast[T](id: Long) extends Serializable {
   def value: T
 
   // We cannot have an abstract readObject here due to some weird issues with
   // readObject having to be 'private' in sub-classes.
 
-  override def toString = "spark.Broadcast(" + uuid + ")"
+  override def toString = "spark.Broadcast(" + id + ")"
 }
 
+private[spark] 
 class BroadcastManager(val isMaster_ : Boolean) extends Logging with Serializable {
 
   private var initialized = false
@@ -49,14 +44,10 @@ class BroadcastManager(val isMaster_ : Boolean) extends Logging with Serializabl
     broadcastFactory.stop()
   }
 
-  private def getBroadcastFactory: BroadcastFactory = {
-    if (broadcastFactory == null) {
-      throw new SparkException ("Broadcast.getBroadcastFactory called before initialize")
-    }
-    broadcastFactory
-  }
+  private val nextBroadcastId = new AtomicLong(0)
 
-  def newBroadcast[T](value_ : T, isLocal: Boolean) = broadcastFactory.newBroadcast[T](value_, isLocal)
+  def newBroadcast[T](value_ : T, isLocal: Boolean) =
+    broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
 
   def isMaster = isMaster_
 }

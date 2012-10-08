@@ -5,7 +5,7 @@ import spark.deploy.client.{Client, ClientListener}
 import spark.deploy.{Command, JobDescription}
 import scala.collection.mutable.HashMap
 
-class SparkDeploySchedulerBackend(
+private[spark] class SparkDeploySchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
@@ -25,7 +25,8 @@ class SparkDeploySchedulerBackend(
     "SPARK_MEM",
     "SPARK_CLASSPATH",
     "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS"
+    "SPARK_JAVA_OPTS",
+    "SPARK_TESTING"
   )
 
   // Memory used by each executor (in megabytes)
