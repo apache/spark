@@ -114,7 +114,7 @@ private[spark] class ShuffleMapTask(
     val partitioner = dep.partitioner
 
     val bucketIterators =
-      if (dep.aggregator.isDefined && dep.aggregator.get.mapSideCombine) {
+      if (dep.aggregator.isDefined) {
         val aggregator = dep.aggregator.get.asInstanceOf[Aggregator[Any, Any, Any]]
         // Apply combiners (map-side aggregation) to the map output.
         val buckets = Array.tabulate(numOutputSplits)(_ => new JHashMap[Any, Any])

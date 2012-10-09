@@ -14,6 +14,13 @@ private[spark] class ShuffledRDDSplit(val idx: Int) extends Split {
 
 /**
  * The resulting RDD from a shuffle (e.g. repartitioning of data).
+ * @param parent the parent RDD.
+ * @param aggregator if provided, this aggregator will be used to perform map-side combining.
+ * @param part the partitioner used to partition the RDD
+ * @tparam K the key class.
+ * @tparam V the value class.
+ * @tparam C if map side combiners are used, then this is the combiner type; otherwise,
+ *           this is the same as V.
  */
 class ShuffledRDD[K, V, C](
     @transient parent: RDD[(K, V)],

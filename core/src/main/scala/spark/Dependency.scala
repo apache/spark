@@ -22,7 +22,7 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
  * Represents a dependency on the output of a shuffle stage.
  * @param shuffleId the shuffle id
  * @param rdd the parent RDD
- * @param aggregator optional aggregator; this allows for map-side combining
+ * @param aggregator optional aggregator; if provided, map-side combining will be performed
  * @param partitioner partitioner used to partition the shuffle output
  */
 class ShuffleDependency[K, V, C](
