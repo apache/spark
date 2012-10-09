@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Java Programming Guide
+title: Spark Java Programming Guide
 ---
 
 The Spark Java API exposes all the Spark features available in the Scala version to Java.

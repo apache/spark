@@ -19,7 +19,7 @@ Get Spark by visiting the [downloads page](http://spark-project.org/downloads.ht
 
 # Building
 
-Spark requires [Scala 2.9.2](http://www.scala-lang.org/). You will need to have Scala's `bin` directory in your `PATH`,
+Spark requires [Scala {{site.SCALA_VERSION}}](http://www.scala-lang.org/). You will need to have Scala's `bin` directory in your `PATH`,
 or you will need to set the `SCALA_HOME` environment variable to point
 to where you've installed Scala. Scala must also be accessible through one
 of these methods on slave nodes on your cluster.

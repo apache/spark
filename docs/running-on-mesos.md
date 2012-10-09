@@ -6,7 +6,7 @@ title: Running Spark on Mesos
 Spark can run on private clusters managed by the [Apache Mesos](http://incubator.apache.org/mesos/) resource manager. Follow the steps below to install Mesos and Spark:
 
 1. Download and build Spark using the instructions [here](index.html).
-2. Download Mesos 0.9.0 from a [mirror](http://www.apache.org/dyn/closer.cgi/incubator/mesos/mesos-0.9.0-incubating/).
+2. Download Mesos {{site.MESOS_VERSION}} from a [mirror](http://www.apache.org/dyn/closer.cgi/incubator/mesos/mesos-{{site.MESOS_VERSION}}/).
 3. Configure Mesos using the `configure` script, passing the location of your `JAVA_HOME` using `--with-java-home`. Mesos comes with "template" configure scripts for different platforms, such as `configure.macosx`, that you can run. See the README file in Mesos for other options. **Note:** If you want to run Mesos without installing it into the default paths on your system (e.g. if you don't have administrative privileges to install it), you should also pass the `--prefix` option to `configure` to tell it where to install. For example, pass `--prefix=/home/user/mesos`. By default the prefix is `/usr/local`.
 4. Build Mesos using `make`, and then install it using `make install`.
 5. Create a file called `spark-env.sh` in Spark's `conf` directory, by copying `conf/spark-env.sh.template`, and add the following lines in it:

@@ -20,6 +20,17 @@
   font-size: 15px;
 }
 
+.navbar .divider-vertical {
+  border-right-color: lightgray;
+}
+
+.navbar-text .version-text {
+  border: solid thin lightgray;
+  border-radius: 6px;
+  padding: 5px;
+  margin-left: 10px;
+}
+
 body #content {
   line-height: 1.6; /* Inspired by Github's wiki style */
 }
