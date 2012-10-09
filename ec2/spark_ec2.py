@@ -371,6 +371,7 @@ def get_num_disks(instance_type):
   # From http://docs.amazonwebservices.com/AWSEC2/latest/UserGuide/index.html?InstanceStorage.html
   disks_by_instance = {
     "m1.small":    1,
+    "m1.medium":   1,
     "m1.large":    2,
     "m1.xlarge":   4,
     "t1.micro":    1,
