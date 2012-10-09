@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Programming Guide
+title: Spark Scala Programming Guide
 ---
 
 * This will become a table of contents (this text will be scraped).

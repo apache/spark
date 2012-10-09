@@ -119,7 +119,7 @@ import SparkContext._
 object SimpleJob extends Application {
   val logFile = "/var/log/syslog" // Should be some log file on your system
   val sc = new SparkContext("local", "Simple Job", "$YOUR_SPARK_HOME", 
-    "target/scala-2.9.2/simple-project_2.9.2-1.0.jar")
+    "target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar")
   val logData = sc.textFile(logFile, 2).cache()
   val numAs = logData.filter(line => line.contains("a")).count()
   val numBs = logData.filter(line => line.contains("b")).count()
@@ -136,9 +136,9 @@ name := "Simple Project"
 
 version := "1.0"
 
-scalaVersion := "2.9.2"
+scalaVersion := "{{site.SCALA_VERSION}}"
 
-libraryDependencies += "org.spark-project" %% "spark-core" % "0.6.0-SNAPSHOT"
+libraryDependencies += "org.spark-project" %% "spark-core" % "{{site.SPARK_VERSION}}"
 {% endhighlight %}
 
 Of course, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a jar package containing the job's code, then use `sbt run` to execute our example job. 
@@ -209,8 +209,8 @@ Our Maven `pom.xml` file will list Spark as a dependency. Note that Spark artifa
   <dependencies>
     <dependency> <!-- Spark dependency -->
       <groupId>org.spark-project</groupId>
-      <artifactId>spark-core_2.9.2</artifactId>
-      <version>0.6.0-SNAPSHOT</version>
+      <artifactId>spark-core_{{site.SCALA_VERSION}}</artifactId>
+      <version>{{site.SPARK_VERSION}}</version>
     </dependency>
   </dependencies>
 </project>
