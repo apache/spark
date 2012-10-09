@@ -15,7 +15,7 @@ Amazon EC2, or without an independent resource manager ("standalone mode").
 
 # Downloading
 
-Get Spark by checking out the master branch of the Git repository, using `git clone git://github.com/mesos/spark.git`.
+Get Spark by visiting the [downloads page](http://spark-project.org/downloads.html) of the Spark website. This documentation corresponds to Spark {{site.SPARK_VERSION}}.
 
 # Building
 
