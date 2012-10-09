@@ -12,8 +12,8 @@ import org.scalacheck.Prop._
 
 import com.google.common.io.Files
 
-import spark.rdd.ShuffledAggregatedRDD
-import SparkContext._
+import spark.rdd.ShuffledRDD
+import spark.SparkContext._
 
 class ShuffleSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
 
@@ -225,30 +225,34 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
     val sums = pairs.reduceByKey(_+_).collect()
     assert(sums.toSet === Set((1, 8), (2, 1)))
 
-    // Turn off map-side combine and test the results.
     val aggregator = new Aggregator[Int, Int, Int](
       (v: Int) => v,
       _+_,
       _+_,
       false)
-    val shuffledRdd = new ShuffledAggregatedRDD(
-      pairs, aggregator, new HashPartitioner(2))
-    assert(shuffledRdd.collect().toSet === Set((1, 8), (2, 1)))
+
+    // Turn off map-side combine and test the results.
+    var shuffledRdd : RDD[(Int, Int)] =
+      new ShuffledRDD[Int, Int, Int](pairs, None, new HashPartitioner(2))
+    shuffledRdd = shuffledRdd.mapPartitions(aggregator.combineValuesByKey(_))
+    assert(shuffledRdd.collect().toSet === Set((1,8), (2, 1)))
 
     // Turn map-side combine off and pass a wrong mergeCombine function. Should
     // not see an exception because mergeCombine should not have been called.
     val aggregatorWithException = new Aggregator[Int, Int, Int](
       (v: Int) => v, _+_, ShuffleSuite.mergeCombineException, false)
-    val shuffledRdd1 = new ShuffledAggregatedRDD(
-      pairs, aggregatorWithException, new HashPartitioner(2))
+    var shuffledRdd1 : RDD[(Int, Int)] =
+      new ShuffledRDD[Int, Int, Int](pairs, Some(aggregatorWithException), new HashPartitioner(2))
+    shuffledRdd1 = shuffledRdd1.mapPartitions(aggregatorWithException.combineValuesByKey(_))
     assert(shuffledRdd1.collect().toSet === Set((1, 8), (2, 1)))
 
     // Now run the same mergeCombine function with map-side combine on. We
     // expect to see an exception thrown.
     val aggregatorWithException1 = new Aggregator[Int, Int, Int](
       (v: Int) => v, _+_, ShuffleSuite.mergeCombineException)
-    val shuffledRdd2 = new ShuffledAggregatedRDD(
-      pairs, aggregatorWithException1, new HashPartitioner(2))
+    var shuffledRdd2 : RDD[(Int, Int)] =
+      new ShuffledRDD[Int, Int, Int](pairs, Some(aggregatorWithException1), new HashPartitioner(2))
+    shuffledRdd2 = shuffledRdd2.mapPartitions(aggregatorWithException1.combineCombinersByKey(_))
     evaluating { shuffledRdd2.collect() } should produce [SparkException]
   }
 }

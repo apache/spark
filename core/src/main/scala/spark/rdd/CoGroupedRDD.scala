@@ -94,13 +94,13 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
-        def mergePair(k: K, vs: Seq[Any]) {
-          val mySeq = getSeq(k)
-          for (v <- vs)
+        def mergePair(pair: (K, Seq[Any])) {
+          val mySeq = getSeq(pair._1)
+          for (v <- pair._2)
             mySeq(depNum) += v
         }
         val fetcher = SparkEnv.get.shuffleFetcher
-        fetcher.fetch[K, Seq[Any]](shuffleId, split.index, mergePair)
+        fetcher.fetch[K, Seq[Any]](shuffleId, split.index).foreach(mergePair)
       }
     }
     map.iterator

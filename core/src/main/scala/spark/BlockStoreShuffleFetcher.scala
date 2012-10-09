@@ -1,18 +1,12 @@
 package spark
 
-import java.io.EOFException
-import java.net.URL
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import spark.storage.BlockException
 import spark.storage.BlockManagerId
 
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
-
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
-  def fetch[K, V](shuffleId: Int, reduceId: Int, func: (K, V) => Unit) {
+  override def fetch[K, V](shuffleId: Int, reduceId: Int) = {
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
     val blockManager = SparkEnv.get.blockManager
     
@@ -31,14 +25,12 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
         (address, splits.map(s => ("shuffle_%d_%d_%d".format(shuffleId, s._1, reduceId), s._2)))
     }
 
-    for ((blockId, blockOption) <- blockManager.getMultiple(blocksByAddress)) {
+    def unpackBlock(blockPair: (String, Option[Iterator[Any]])) : Iterator[(K, V)] = {
+      val blockId = blockPair._1
+      val blockOption = blockPair._2
       blockOption match {
         case Some(block) => {
-          val values = block
-          for(value <- values) {
-            val v = value.asInstanceOf[(K, V)]
-            func(v._1, v._2)
-          }
+          block.asInstanceOf[Iterator[(K, V)]]
         }
         case None => {
           val regex = "shuffle_([0-9]*)_([0-9]*)_([0-9]*)".r
@@ -53,8 +45,6 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
         }
       }
     }
-
-    logDebug("Fetching and merging outputs of shuffle %d, reduce %d took %d ms".format(
-      shuffleId, reduceId, System.currentTimeMillis - startTime))
+    blockManager.getMultiple(blocksByAddress).flatMap(unpackBlock)
   }
 }

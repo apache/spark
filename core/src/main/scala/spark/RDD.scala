@@ -282,8 +282,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   /**
    * Return a new RDD by applying a function to each partition of this RDD.
    */
-  def mapPartitions[U: ClassManifest](f: Iterator[T] => Iterator[U]): RDD[U] =
-    new MapPartitionsRDD(this, sc.clean(f))
+  def mapPartitions[U: ClassManifest](f: Iterator[T] => Iterator[U],
+    preservesPartitioning: Boolean = false): RDD[U] =
+    new MapPartitionsRDD(this, sc.clean(f), preservesPartitioning)
 
    /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
