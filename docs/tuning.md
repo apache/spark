@@ -3,24 +3,22 @@ layout: global
 title: Tuning Spark
 ---
 
+* This will become a table of contents (this text will be scraped).
+{:toc}
+
 Because of the in-memory nature of most Spark computations, Spark programs can be bottlenecked
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
 [storing RDDs in serialized form](scala-programming-guide.html#rdd-persistence), to
-make the memory usage smaller.
+decrease memory usage.
 This guide will cover two main topics: data serialization, which is crucial for good network
-performance, and memory tuning. We also sketch several smaller topics.
+performance and can also reduce memory use, and memory tuning. We also sketch several smaller topics.
 
-This document assumes that you have familiarity with the Spark API and have already read the [Scala](scala-programming-guide.html) or [Java](java-programming-guide.html) programming guides. After reading this guide, do not hesitate to reach out to the [Spark mailing list](http://groups.google.com/group/spark-users) with performance related concerns.
+# Data Serialization
 
-# The Spark Storage Model
-Spark's key abstraction is a distributed dataset, or RDD. RDD's consist of partitions. RDD partitions are stored either in memory or on disk, with replication or without replication, depending on the chosen [persistence options](scala-programming-guide.html#rdd-persistence). When RDD's are stored in memory, they can be stored as deserialized Java objects, or in a serialized form, again depending on the persistence option chosen. When RDD's are transferred over the network, or spilled to disk, they are always serialized. Spark can use different serializers, configurable with the `spark.serializer` option.
-
-# Serialization Options
-
-Serialization plays an important role in the performance of Spark applications, especially those which are network-bound. The format of data sent across
-the network -- formats that are slow to serialize objects into, or consume a large number of
+Serialization plays an important role in the performance of any distributed application.
+Formats that are slow to serialize objects into, or consume a large number of
 bytes, will greatly slow down the computation.
 Often, this will be the first thing you should tune to optimize a Spark application.
 Spark aims to strike a balance between convenience (allowing you to work with any Java type
@@ -78,11 +76,6 @@ There are three considerations in tuning memory usage: the *amount* of memory us
 (you may want your entire dataset to fit in memory), the *cost* of accessing those objects, and the
 overhead of *garbage collection* (if you have high turnover in terms of objects).
 
-## Determining memory consumption
-The best way to size the amount of memory consumption your dataset will require is to create an RDD, put it into cache, and look at the master logs. The logs will tell you how much memory each partition is consuming, which you can aggregate to get the total size of the RDD. Depending on the object complexity in your dataset, and whether you are storing serialized data, memory overhead can range from 1X (e.g. no overhead vs on-disk storage) to 5X. This guide covers ways to keep memory overhead low, in cases where memory is a contended resource.
-
-## Efficient Data Structures
-
 By default, Java objects are fast to access, but can easily consume a factor of 2-5x more space
 than the "raw" data inside their fields. This is due to several reasons:
 
@@ -97,59 +90,84 @@ than the "raw" data inside their fields. This is due to several reasons:
   but also pointers (typically 8 bytes each) to the next object in the list.
 * Collections of primitive types often store them as "boxed" objects such as `java.lang.Integer`.
 
-There are several ways to reduce this cost and still make Java objects efficient to work with:
+This section will discuss how to determine the memory usage of your objects, and how to improve
+it -- either by changing your data structures, or by storing data in a serialized format.
+We will then cover tuning Spark's cache size and the Java garbage collector.
+
+## Determining Memory Consumption
+
+The best way to size the amount of memory consumption your dataset will require is to create an RDD, put it into cache, and look at the SparkContext logs on your driver program. The logs will tell you how much memory each partition is consuming, which you can aggregate to get the total size of the RDD. You will see messages like this:
+
+    INFO BlockManagerMasterActor: Added rdd_0_1 in memory on mbk.local:50311 (size: 717.5 KB, free: 332.3 MB)
+
+This means that partition 1 of RDD 0 consumed 717.5 KB.
+
+## Tuning Data Structures
+
+The first way to reduce memory consumption is to avoid the Java features that add overhead, such as
+pointer-based data structures and wrapper objects. There are several ways to do this:
 
 1. Design your data structures to prefer arrays of objects, and primitive types, instead of the
    standard Java or Scala collection classes (e.g. `HashMap`). The [fastutil](http://fastutil.di.unimi.it)
    library provides convenient collection classes for primitive types that are compatible with the
    Java standard library.
 2. Avoid nested structures with a lot of small objects and pointers when possible.
-3. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
+3. Consider using numeric IDs or enumeration objects instead of strings for keys.
+4. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
    four bytes instead of eight. Also, on Java 7 or later, try `-XX:+UseCompressedStrings` to store
    ASCII strings as just 8 bits per character. You can add these options in
    [`spark-env.sh`](configuration.html#environment-variables-in-spark-envsh).
 
+## Serialized RDD Storage
+
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
-the [RDD persistence API](scala-programming-guide#rdd-persistence).
+the [RDD persistence API](scala-programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
 Spark will then store each RDD partition as one large byte array.
 The only downside of storing data in serialized form is slower access times, due to having to
 deserialize each object on the fly.
 We highly recommend [using Kryo](#data-serialization) if you want to cache data in serialized form, as
 it leads to much smaller sizes than Java serialization (and certainly than raw Java objects).
 
-Finally, JVM garbage collection can be a problem when you have large "churn" in terms of the RDDs
-stored by your program. (It is generally not a problem in programs that just read an RDD once
+## Garbage Collection Tuning
+
+JVM garbage collection can be a problem when you have large "churn" in terms of the RDDs
+stored by your program. (It is usually not a problem in programs that just read an RDD once
 and then run many operations on it.) When Java needs to evict old objects to make room for new ones, it will
 need to trace through all your Java objects and find the unused ones. The main point to remember here is
 that *the cost of garbage collection is proportional to the number of Java objects*, so using data
-structures with fewer objects (e.g. an array of `Int`s instead of a `LinkedList`) greatly reduces
+structures with fewer objects (e.g. an array of `Int`s instead of a `LinkedList`) greatly lowers
 this cost. An even better method is to persist objects in serialized form, as described above: now
-there will be only *one* object (a byte array) per RDD partition. Before trying other advanced
-techniques, the first thing to try if GC is a problem is to use serialized caching.
+there will be only *one* object (a byte array) per RDD partition. Before trying other
+techniques, the first thing to try if GC is a problem is to use [serialized caching](#serialized-rdd-storage).
 
+GC can also be a problem due to interference between your tasks' working memory (the
+amount of space needed to run the task) and the RDDs cached on your nodes. We will discuss how to control
+the space allocated to the RDD cache to mitigate this.
 
-## Cache Size Tuning
+**Measuring the Impact of GC**
 
-One of the important configuration parameters passed to Spark is the amount of memory that should be used for 
+The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of 
+time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to your
+`SPARK_JAVA_OPTS` environment variable. Next time your Spark job is run, you will see messages printed in the worker's logs
+each time a garbage collection occurs. Note these logs will be on your cluster's worker nodes (in the `stdout` files in
+their work directories), *not* on your driver program.
+
+**Cache Size Tuning**
+
+One important configuration parameter for GC is the amount of memory that should be used for 
 caching RDDs. By default, Spark uses 66% of the configured memory (`SPARK_MEM`) to cache RDDs. This means that 
-around 33% of memory is available for any objects created during task execution.
+ 33% of memory is available for any objects created during task execution.
 
-In case your tasks slow down and you find that your JVM is using almost all of its allocated memory, lowering 
-this value will help reducing the memory consumption. To change this to say 50%, you can call 
+In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
+memory, lowering this value will help reduce the memory consumption. To change this to say 50%, you can call 
 `System.setProperty("spark.storage.memoryFraction", "0.5")`. Combined with the use of serialized caching, 
 using a smaller cache should be sufficient to mitigate most of the garbage collection problems. 
 In case you are interested in further tuning the Java GC, continue reading below. 
 
-## GC Tuning
- 
-The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of 
-time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to 
-`SPARK_JAVA_OPTS` environment variable. Next time your Spark job is run, you will see messages printed on the 
-console whenever a JVM garbage collection takes place. Note that garabage collections that occur at the executor can be
-found in the executor logs and not on the `spark-shell`.
+**Advanced GC Tuning**
 
-Some basic information about memory management in the JVM:
+To further tune garbage collection, we first need to understand some basic information about memory management in the JVM:
 
 * Java Heap space is divided in to two regions Young and Old. The Young generation is meant to hold short-lived objects
   while the Old generation is intended for objects with longer lifetimes.
@@ -160,7 +178,7 @@ Some basic information about memory management in the JVM:
   that are alive from Eden and Survivor1 are copied to Survivor2. The Survivor regions are swapped. If an object is old
   enough or Survivor2 is full, it is moved to Old. Finally when Old is close to full, a full GC is invoked.
 
-The goal of GC-tuning in Spark is to ensure that only long-lived RDDs are stored in the Old generation and that
+The goal of GC tuning in Spark is to ensure that only long-lived RDDs are stored in the Old generation and that
 the Young generation is sufficiently sized to store short-lived objects. This will help avoid full GCs to collect
 temporary objects created during task execution. Some steps which may be useful are:
 
@@ -169,12 +187,12 @@ temporary objects created during task execution. Some steps which may be useful 
 
 * In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of memory used for caching.
   This can be done using the `spark.storage.memoryFraction` property. It is better to cache fewer objects than to slow 
-  down task execution !
+  down task execution!
 
-* If there are too many minor collections but not too many major GCs, allocating more memory for Eden would help. You
- can approximate the size of the Eden to be an over-estimate of how much memory each task will need. If the size of Eden
-is determined to be `E`, then you can set the size of the Young generation using the option `-Xmn=4/3*E`. (The scaling
-up by 4/3 is to account for space used by survivor regions as well)
+* If there are too many minor collections but not many major GCs, allocating more memory for Eden would help. You
+  can set the size of the Eden to be an over-estimate of how much memory each task will need. If the size of Eden
+  is determined to be `E`, then you can set the size of the Young generation using the option `-Xmn=4/3*E`. (The scaling
+  up by 4/3 is to account for space used by survivor regions as well.)
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the 
@@ -221,10 +239,9 @@ Spark prints the serialized size of each task on the master, so you can look at 
 decide whether your tasks are too large; in general tasks larger than about 20 KB are probably
 worth optimizing.
 
-
 # Summary
 
-This has been a quick guide to point out the main concerns you should know about when tuning a
+This has been a short guide to point out the main concerns you should know about when tuning a
 Spark application -- most importantly, data serialization and memory tuning. For most programs,
 switching to Kryo serialization and persisting data in serialized form will solve most common
 performance issues. Feel free to ask on the

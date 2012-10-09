@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Scala Programming Guide
+title: Scala Programming Guide
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -37,7 +37,11 @@ new SparkContext(master, jobName, [sparkHome], [jars])
 
 The `master` parameter is a string specifying a [Mesos](running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
 
-In the Spark interpreter, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, run `MASTER=local[4] ./spark-shell` to run locally with four cores.
+In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, to run on four cores, use
+
+{% highlight bash %}
+$ MASTER=local[4] ./spark-shell
+{% endhighlight %}
 
 ### Master URLs
 

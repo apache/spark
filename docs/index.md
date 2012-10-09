@@ -15,7 +15,7 @@ Amazon EC2, or without an independent resource manager ("standalone mode").
 
 # Downloading
 
-Get Spark by visiting the [downloads page](http://spark-project.org/downloads.html) of the Spark website. This documentation corresponds to Spark {{site.SPARK_VERSION}}.
+Get Spark by visiting the [downloads page](http://spark-project.org/downloads.html) of the Spark website. This documentation is for Spark version {{site.SPARK_VERSION}}.
 
 # Building
 
@@ -54,19 +54,16 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 # Where to Go from Here
 
-**Quick start:**
-
-* [Spark Quick Start](quick-start.html): a quick intro to the Spark API
-
 **Programming guides:**
 
-* [Spark Programming Guide](scala-programming-guide.html): how to get started using Spark, and details on the Scala API
+* [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
+* [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts, and details on the Scala API
 * [Java Programming Guide](java-programming-guide.html): using Spark from Java
 
 **Deployment guides:**
 
 * [Running Spark on Amazon EC2](ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
-* [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without Mesos
+* [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without a third-party cluster manager
 * [Running Spark on Mesos](running-on-mesos.html): deploy a private cluster using
     [Apache Mesos](http://incubator.apache.org/mesos)
 * [Running Spark on YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)

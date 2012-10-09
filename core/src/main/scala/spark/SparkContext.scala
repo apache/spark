@@ -61,7 +61,7 @@ import spark.storage.BlockManagerMaster
  * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
  *             system or HDFS, HTTP, HTTPS, or FTP URLs.
  */
-class SparkContext(master: String, jobName: String, val sparkHome: String, val jars: Seq[String])
+class SparkContext(master: String, jobName: String, val sparkHome: String, jars: Seq[String])
   extends Logging {
 
   /**

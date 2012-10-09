@@ -25,8 +25,7 @@
 }
 
 .navbar-text .version-text {
-  border: solid thin lightgray;
-  border-radius: 6px;
+  color: #555555;
   padding: 5px;
   margin-left: 10px;
 }
