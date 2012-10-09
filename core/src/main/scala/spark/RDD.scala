@@ -165,12 +165,22 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   // Transformations (return a new RDD)
   
   def map[U: ClassManifest](f: T => U): RDD[U] = new MappedRDD(this, sc.clean(f))
-  
+
+  /**
+   *  Return a new RDD by first applying a function to all elements of this
+   *  RDD, and then flattening the results.
+   */
   def flatMap[U: ClassManifest](f: T => TraversableOnce[U]): RDD[U] =
     new FlatMappedRDD(this, sc.clean(f))
-  
+
+  /**
+   * Return a new RDD containing only the elements that satisfy a predicate.
+   */
   def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
 
+  /**
+   * Return a new RDD containing the distinct elements in this RDD.
+   */
   def distinct(numSplits: Int = splits.size): RDD[T] =
     map(x => (x, null)).reduceByKey((x, y) => x, numSplits).map(_._1)
 
@@ -247,12 +257,18 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     new MapPartitionsWithSplitRDD(this, sc.clean(f))
 
   // Actions (launch a job to return a value to the user program)
-  
+
+  /**
+   * Applies a function f to all elements of this RDD.
+   */
   def foreach(f: T => Unit) {
     val cleanF = sc.clean(f)
     sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
   }
 
+  /**
+   * Return an array that contains all of the elements in this RDD.
+   */
   def collect(): Array[T] = {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
     Array.concat(results: _*)
@@ -308,7 +324,10 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
         (iter: Iterator[T]) => iter.aggregate(zeroValue)(cleanSeqOp, cleanCombOp))
     return results.fold(zeroValue)(cleanCombOp)
   }
-  
+
+  /**
+   * Return the number of elements in the RDD.
+   */
   def count(): Long = {
     sc.runJob(this, (iter: Iterator[T]) => {
       var result = 0L
@@ -337,8 +356,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   /**
-   * Count elements equal to each value, returning a map of (value, count) pairs. The final combine
-   * step happens locally on the master, equivalent to running a single reduce task.
+   * Return the count of each unique value in this RDD as a map of
+   * (value, count) pairs. The final combine step happens locally on the
+   * master, equivalent to running a single reduce task.
    *
    * TODO: This should perhaps be distributed by default.
    */
@@ -404,6 +424,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     return buf.toArray
   }
 
+  /*
+   * Return the first element in this RDD.
+   */
   def first(): T = take(1) match {
     case Array(t) => t
     case _ => throw new UnsupportedOperationException("empty collection")
