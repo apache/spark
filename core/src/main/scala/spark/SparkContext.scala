@@ -54,15 +54,21 @@ import spark.storage.BlockManagerMaster
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
+ * @constructor Returns a new SparkContext.
  * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
  * @param jobName A name for your job, to display on the cluster web UI
- * @param sparkHome Location where Spark is instaled on cluster nodes
+ * @param sparkHome Location where Spark is installed on cluster nodes
  * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
  *             system or HDFS, HTTP, HTTPS, or FTP URLs.
  */
 class SparkContext(master: String, jobName: String, val sparkHome: String, val jars: Seq[String])
   extends Logging {
 
+  /**
+   * @constructor Returns a new SparkContext.
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param jobName A name for your job, to display on the cluster web UI
+   */
   def this(master: String, jobName: String) = this(master, jobName, null, Nil)
 
   // Ensure logging is initialized before we spawn any threads
