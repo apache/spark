@@ -188,7 +188,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     map(x => (x, null)).reduceByKey((x, y) => x, numSplits).map(_._1)
 
   /**
-   * Return a sampled subset of this RDD.  
+   * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
     new SampledRDD(this, withReplacement, fraction, seed)
@@ -305,7 +305,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
     Array.concat(results: _*)
   }
-  
+
   /**
    * Return an array that contains all of the elements in this RDD.
    */
@@ -471,7 +471,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   /**
-   * Save this RDD as a text file, using string representations of elements. 
+   * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String) {
     this.map(x => (NullWritable.get(), new Text(x.toString)))
@@ -479,7 +479,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   /**
-   * Save this RDD as a SequenceFile of serialized objects. 
+   * Save this RDD as a SequenceFile of serialized objects.
    */
   def saveAsObjectFile(path: String) {
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
