@@ -35,12 +35,8 @@ import spark.broadcast._
 import spark.deploy.LocalSparkCluster
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.rdd.DoubleRDDFunctions
 import spark.rdd.HadoopRDD
 import spark.rdd.NewHadoopRDD
-import spark.rdd.OrderedRDDFunctions
-import spark.rdd.PairRDDFunctions
-import spark.rdd.SequenceFileRDDFunctions
 import spark.rdd.UnionRDD
 import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler

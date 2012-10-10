@@ -15,7 +15,7 @@ import spark.api.java.function.{Function2 => JFunction2}
 import spark.api.java.function.{Function => JFunction}
 import spark.partial.BoundedDouble
 import spark.partial.PartialResult
-import spark.rdd.OrderedRDDFunctions
+import spark.OrderedRDDFunctions
 import spark.storage.StorageLevel
 import spark.HashPartitioner
 import spark.Partitioner

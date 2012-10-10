@@ -378,7 +378,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   /**
-   * Approximate version of count() that returns a potentially incomplete result after a timeout.
+   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * within a timeout, even if not all tasks have finished.
    */
   def countApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val countElements: (TaskContext, Iterator[T]) => Long = { (ctx, iter) =>
@@ -394,13 +395,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   /**
-   * Return the count of each unique value in this RDD as a map of
-   * (value, count) pairs. The final combine step happens locally on the
-   * master, equivalent to running a single reduce task.
-   *
-   * TODO: This should perhaps be distributed by default.
+   * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
+   * combine step happens locally on the master, equivalent to running a single reduce task.
    */
   def countByValue(): Map[T, Long] = {
+    // TODO: This should perhaps be distributed by default.
     def countPartition(iter: Iterator[T]): Iterator[OLMap[T]] = {
       val map = new OLMap[T]
       while (iter.hasNext) {
@@ -422,7 +421,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   /**
-   * Approximate version of countByValue().
+   * (Experimental) Approximate version of countByValue().
    */
   def countByValueApprox(
       timeout: Long,

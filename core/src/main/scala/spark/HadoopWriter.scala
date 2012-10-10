@@ -16,9 +16,12 @@ import spark.Logging
 import spark.SerializableWritable
 
 /**
- * Saves an RDD using a Hadoop OutputFormat as specified by a JobConf. The JobConf should also 
- * contain an output key class, an output value class, a filename to write to, etc exactly like in 
- * a Hadoop job.
+ * An internal helper class that saves an RDD using a Hadoop OutputFormat. This is only public
+ * because we need to access this class from the `spark` package to use some package-private Hadoop
+ * functions, but this class should not be used directly by users.
+ *
+ * Saves the RDD using a JobConf, which should contain an output key class, an output value class,
+ * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
 class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializable {
   
