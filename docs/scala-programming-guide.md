@@ -17,7 +17,13 @@ This guide shows each of these features and walks through some samples. It assum
 
 # Linking with Spark
 
-To write a Spark application, you will need to add both Spark and its dependencies to your CLASSPATH. The easiest way to do this is to run `sbt/sbt assembly` to build both Spark and its dependencies into one JAR (`core/target/spark-core-assembly-0.6.0.jar`), then add this to your CLASSPATH. Alternatively, you can publish Spark to the Maven cache on your machine using `sbt/sbt publish-local`. It will be an artifact called `spark-core` under the organization `org.spark-project`.
+To write a Spark application, you will need to add both Spark and its dependencies to your CLASSPATH. If you use sbt or Maven, Spark is available through Maven Central at:
+
+    groupId = org.spark_project
+    artifactId = spark-core_{{site.SCALA_VERSION}}
+    version = {{site.SPARK_VERSION}} 
+
+For other build systems or environments, you can run `sbt/sbt assembly` to build both Spark and its dependencies into one JAR (`core/target/spark-core-assembly-0.6.0.jar`), then add this to your CLASSPATH.
 
 In addition, you'll need to import some Spark classes and implicit conversions. Add the following lines at the top of your program:
 
