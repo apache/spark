@@ -109,12 +109,12 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
     // Fetch missing dependencies
     for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name)
+      logInfo("Fetching " + name + " with timestamp " + timestamp)
       Utils.fetchFile(name, new File("."))
       currentFiles(name) = timestamp
     }
-    for ((name, timestamp) <- newJars if currentFiles.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name)
+    for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
+      logInfo("Fetching " + name + " with timestamp " + timestamp)
       Utils.fetchFile(name, new File("."))
       currentJars(name) = timestamp
       // Add it to our class loader
