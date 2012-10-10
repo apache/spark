@@ -101,13 +101,9 @@ res9: Long = 15
 It may seem silly to use a Spark to explore and cache a 30-line text file. The interesting part is that these same functions can be used on very large data sets, even when they are striped across tens or hundreds of nodes. You can also do this interactively by connecting `spark-shell` to a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
 
 # A Standalone Job in Scala
-Now say we wanted to write a standalone job using the Spark API. We will walk through a simple job in both Scala (with sbt) and Java (with maven). If you using other build systems, please reference the Spark assembly JAR in the developer guide. The first step is to publish Spark to our local Ivy/Maven repositories. From the Spark directory:
+Now say we wanted to write a standalone job using the Spark API. We will walk through a simple job in both Scala (with sbt) and Java (with maven). If you using other build systems, consider using the Spark assembly JAR described in the developer guide. 
 
-{% highlight bash %}
-$ sbt/sbt publish-local
-{% endhighlight %}
-
-Next, we'll create a very simple Spark job in Scala. So simple, in fact, that it's named `SimpleJob.scala`:
+We'll create a very simple Spark job in Scala. So simple, in fact, that it's named `SimpleJob.scala`:
 
 {% highlight scala %}
 /*** SimpleJob.scala ***/
@@ -159,12 +155,9 @@ Lines with a: 8422, Lines with b: 1836
 This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
 
 # A Standalone Job In Java
-Now say we wanted to write a standalone job using the Java API. We will walk through doing this with Maven. If you using other build systems, please reference the Spark assembly JAR in the developer guide. The first step is to publish Spark to our local Ivy/Maven repositories. From the Spark directory:
+Now say we wanted to write a standalone job using the Java API. We will walk through doing this with Maven. If you using other build systems, consider using the Spark assembly JAR described in the developer guide.
 
-{% highlight bash %}
-$ sbt/sbt publish-local
-{% endhighlight %}
-Next, we'll create a very simple Spark job, `SimpleJob.java`:
+We'll create a very simple Spark job, `SimpleJob.java`:
 
 {% highlight java %}
 /*** SimpleJob.java ***/
