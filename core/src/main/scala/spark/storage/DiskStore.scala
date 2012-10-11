@@ -3,10 +3,14 @@ package spark.storage
 import java.nio.ByteBuffer
 import java.io.{File, FileOutputStream, RandomAccessFile}
 import java.nio.channels.FileChannel.MapMode
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 import java.util.{Random, Date}
-import spark.Utils
 import java.text.SimpleDateFormat
+
+import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
+
+import scala.collection.mutable.ArrayBuffer
+
+import spark.Utils
 
 /**
  * Stores BlockManager blocks on disk.
@@ -45,7 +49,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   override def putValues(
       blockId: String,
-      values: Iterator[Any],
+      values: ArrayBuffer[Any],
       level: StorageLevel,
       returnValues: Boolean)
     : PutResult = {
@@ -56,7 +60,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     val fileOut = blockManager.wrapForCompression(blockId,
       new FastBufferedOutputStream(new FileOutputStream(file)))
     val objOut = blockManager.serializer.newInstance().serializeStream(fileOut)
-    objOut.writeAll(values)
+    objOut.writeAll(values.iterator)
     objOut.close()
     val length = file.length()
     logDebug("Block %s stored as %s file on disk in %d ms".format(

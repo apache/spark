@@ -22,7 +22,7 @@ class CacheTrackerSuite extends FunSuite {
     } catch {
       case e: Exception =>
         throw new SparkException("Error communicating with actor", e)
-    } 
+    }
   }
 
   test("CacheTrackerActor slave initialization & cache status") {
