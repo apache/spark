@@ -461,7 +461,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     return buf.toArray
   }
 
-  /*
+  /**
    * Return the first element in this RDD.
    */
   def first(): T = take(1) match {
