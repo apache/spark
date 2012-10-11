@@ -18,26 +18,47 @@ import scala.collection.JavaConversions
 
 class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWorkaround {
 
+  /**
+   * @constructor Returns a new SparkContext.
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param frameworkName A name for your job, to display on the cluster web UI
+   */
   def this(master: String, frameworkName: String) = this(new SparkContext(master, frameworkName))
 
+  /**
+   * @constructor Returns a new SparkContext.
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param frameworkName A name for your job, to display on the cluster web UI
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jarFile A path to a local jar file containing this job
+   */
   def this(master: String, frameworkName: String, sparkHome: String, jarFile: String) =
     this(new SparkContext(master, frameworkName, sparkHome, Seq(jarFile)))
 
+  /**
+   * @constructor Returns a new SparkContext.
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param frameworkName A name for your job, to display on the cluster web UI
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jars A set of jar files relating to this job
+   */
   def this(master: String, frameworkName: String, sparkHome: String, jars: Array[String]) =
     this(new SparkContext(master, frameworkName, sparkHome, jars.toSeq))
 
   val env = sc.env
 
+  /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
     implicit val cm: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
     sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices)
   }
 
+  /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T]): JavaRDD[T] =
     parallelize(list, sc.defaultParallelism)
 
-
+  /** Distribute a local Scala collection to form an RDD. */
   def parallelizePairs[K, V](list: java.util.List[Tuple2[K, V]], numSlices: Int)
   : JavaPairRDD[K, V] = {
     implicit val kcm: ClassManifest[K] =
@@ -47,21 +68,32 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     JavaPairRDD.fromRDD(sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices))
   }
 
+  /** Distribute a local Scala collection to form an RDD. */
   def parallelizePairs[K, V](list: java.util.List[Tuple2[K, V]]): JavaPairRDD[K, V] =
     parallelizePairs(list, sc.defaultParallelism)
 
+  /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double], numSlices: Int): JavaDoubleRDD =
     JavaDoubleRDD.fromRDD(sc.parallelize(JavaConversions.asScalaBuffer(list).map(_.doubleValue()),
       numSlices))
 
+  /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double]): JavaDoubleRDD =
     parallelizeDoubles(list, sc.defaultParallelism)
 
+  /** 
+   * Read a text file from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   */
   def textFile(path: String): JavaRDD[String] = sc.textFile(path)
 
+  /** 
+   * Read a text file from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   */
   def textFile(path: String, minSplits: Int): JavaRDD[String] = sc.textFile(path, minSplits)
 
-  /**Get an RDD for a Hadoop SequenceFile with given key and value types */
+  /**Get an RDD for a Hadoop SequenceFile with given key and value types. */
   def sequenceFile[K, V](path: String,
     keyClass: Class[K],
     valueClass: Class[V],
@@ -72,6 +104,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minSplits))
   }
 
+  /**Get an RDD for a Hadoop SequenceFile. */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]):
   JavaPairRDD[K, V] = {
     implicit val kcm = ClassManifest.fromClass(keyClass)
@@ -92,6 +125,13 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.objectFile(path, minSplits)(cm)
   }
 
+  /**
+   * Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys and
+   * BytesWritable values that contain a serialized partition. This is still an experimental storage
+   * format and may not be supported exactly as is in future Spark releases. It will also be pretty
+   * slow if you use the default serializer (Java serialization), though the nice thing about it is
+   * that there's very little effort required to save arbitrary objects.
+   */
   def objectFile[T](path: String): JavaRDD[T] = {
     implicit val cm: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
@@ -180,12 +220,14 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.newAPIHadoopRDD(conf, fClass, kClass, vClass))
   }
 
+  /** Build the union of two or more RDDs. */
   override def union[T](first: JavaRDD[T], rest: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
     val rdds: Seq[RDD[T]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
     implicit val cm: ClassManifest[T] = first.classManifest
     sc.union(rdds)(cm)
   }
 
+  /** Build the union of two or more RDDs. */
   override def union[K, V](first: JavaPairRDD[K, V], rest: java.util.List[JavaPairRDD[K, V]])
       : JavaPairRDD[K, V] = {
     val rdds: Seq[RDD[(K, V)]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
@@ -195,26 +237,49 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.union(rdds)(cm))(kcm, vcm)
   }
 
+  /** Build the union of two or more RDDs. */
   override def union(first: JavaDoubleRDD, rest: java.util.List[JavaDoubleRDD]): JavaDoubleRDD = {
     val rdds: Seq[RDD[Double]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.srdd)
     new JavaDoubleRDD(sc.union(rdds))
   }
 
+  /**
+   * Create an [[spark.Accumulator]] integer variable, which tasks can "add" values
+   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   */
   def intAccumulator(initialValue: Int): Accumulator[Int] =
     sc.accumulator(initialValue)(IntAccumulatorParam)
 
+  /**
+   * Create an [[spark.Accumulator]] double variable, which tasks can "add" values
+   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   */
   def doubleAccumulator(initialValue: Double): Accumulator[Double] =
     sc.accumulator(initialValue)(DoubleAccumulatorParam)
 
+  /**
+   * Create an [[spark.Accumulator]] variable of a given type, which tasks can "add" values
+   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   */
   def accumulator[T](initialValue: T, accumulatorParam: AccumulatorParam[T]): Accumulator[T] =
     sc.accumulator(initialValue)(accumulatorParam)
 
+  /** 
+   * Broadcast a read-only variable to the cluster, returning a [[spark.Broadcast]] object for
+   * reading it in distributed functions. The variable will be sent to each cluster only once.
+   */
   def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)
 
+  /** Shut down the SparkContext. */
   def stop() {
     sc.stop()
   }
 
+  /**
+   * Get Spark's home location from either a value set through the constructor,
+   * or the spark.home Java property, or the SPARK_HOME environment variable
+   * (in that order of preference). If neither of these is set, return None.
+   */
   def getSparkHome(): Option[String] = sc.getSparkHome()
 }
 
