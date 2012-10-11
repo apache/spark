@@ -47,34 +47,34 @@ object SparkBuild extends Build {
     pomExtra := (
       <url>http://spark-project.org/</url>
       <licenses>
-	<license>
-	  <name>BSD License</name>
-	  <url>https://github.com/mesos/spark/blob/master/LICENSE</url>
-	  <distribution>repo</distribution>
-	</license>
+        <license>
+          <name>BSD License</name>
+          <url>https://github.com/mesos/spark/blob/master/LICENSE</url>
+          <distribution>repo</distribution>
+        </license>
       </licenses>
       <scm>
-	<connection>scm:git:git@github.com:mesos/spark.git</connection>
-	<url>scm:git:git@github.com:mesos/spark.git</url>
+        <connection>scm:git:git@github.com:mesos/spark.git</connection>
+        <url>scm:git:git@github.com:mesos/spark.git</url>
       </scm>
       <developers>
-	<developer>
-	  <id>matei</id>
-	  <name>Matei Zaharia</name>
-	  <email>matei.zaharia@gmail.com</email>
-	  <url>http://www.cs.berkeley.edu/~matei</url>
-	  <organization>U.C. Berkeley Computer Science</organization>
-	  <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
-	</developer>
+        <developer>
+          <id>matei</id>
+          <name>Matei Zaharia</name>
+          <email>matei.zaharia@gmail.com</email>
+          <url>http://www.cs.berkeley.edu/~matei</url>
+          <organization>U.C. Berkeley Computer Science</organization>
+          <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
+        </developer>
       </developers>
     ),
   
     publishTo <<= version { (v: String) =>
       val nexus = "https://oss.sonatype.org/"
       if (v.trim.endsWith("SNAPSHOT")) 
-	Some("sonatype-snapshots" at nexus + "content/repositories/snapshots") 
+        Some("sonatype-snapshots" at nexus + "content/repositories/snapshots") 
       else
-	Some("sonatype-staging"  at nexus + "service/local/staging/deploy/maven2")
+        Some("sonatype-staging"  at nexus + "service/local/staging/deploy/maven2")
     },
 
     credentials += Credentials(Path.userHome / ".sbt" / "sonatype.credentials"),
