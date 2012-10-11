@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
-import com.jsuereth.pgp.sbtplugin.PgpKeys._
+//import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
@@ -38,6 +38,7 @@ object SparkBuild extends Build {
     parallelExecution := false,
 
     /* Sonatype publishing settings */
+    /*
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
     publishMavenStyle := true,
@@ -76,6 +77,7 @@ object SparkBuild extends Build {
     },
 
     credentials += Credentials(Path.userHome / ".sbt" / "sonatype.credentials"),
+    */
 
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
