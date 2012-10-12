@@ -123,6 +123,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def glom(): JavaRDD[JList[T]] =
     new JavaRDD(rdd.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
 
+  /**
+   * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
+   * elements (a, b) where a is in `this` and b is in `other`.
+   */
   def cartesian[U](other: JavaRDDLike[U, _]): JavaPairRDD[T, U] =
     JavaPairRDD.fromRDD(rdd.cartesian(other.rdd)(other.classManifest))(classManifest,
       other.classManifest)

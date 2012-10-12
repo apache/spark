@@ -243,6 +243,10 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
    */
   def glom(): RDD[Array[T]] = new GlommedRDD(this)
 
+  /**
+   * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
+   * elements (a, b) where a is in `this` and b is in `other`.
+   */
   def cartesian[U: ClassManifest](other: RDD[U]): RDD[(T, U)] = new CartesianRDD(sc, this, other)
 
   /**
