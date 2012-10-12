@@ -1,6 +1,7 @@
 package spark.storage
 
 import java.nio.ByteBuffer
+import scala.collection.mutable.ArrayBuffer
 
 import spark.Logging
 
@@ -18,8 +19,8 @@ abstract class BlockStore(val blockManager: BlockManager) extends Logging {
    * @return a PutResult that contains the size of the data, as well as the values put if
    *         returnValues is true (if not, the result's data field can be null)
    */
-  def putValues(blockId: String, values: Iterator[Any], level: StorageLevel, returnValues: Boolean)
-    : PutResult
+  def putValues(blockId: String, values: ArrayBuffer[Any], level: StorageLevel, 
+    returnValues: Boolean) : PutResult
 
   /**
    * Return the size of a block in bytes.

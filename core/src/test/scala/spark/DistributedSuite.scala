@@ -27,6 +27,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       sc = null
     }
     System.clearProperty("spark.reducer.maxMbInFlight")
+    System.clearProperty("spark.storage.memoryFraction")
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.master.port")
   }
@@ -155,5 +156,14 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     assert(data.count() === 1000)
     assert(data.count() === 1000)
     assert(data.count() === 1000)
+  }
+
+  test("compute without caching with low memory") {
+    System.setProperty("spark.storage.memoryFraction", "0.0001")
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(1 to 4000000, 2).persist(StorageLevel.MEMORY_ONLY)
+    assert(data.count() === 4000000)
+    assert(data.count() === 4000000)
+    assert(data.count() === 4000000)
   }
 }
