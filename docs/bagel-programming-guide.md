@@ -14,8 +14,9 @@ This guide shows the programming model and features of Bagel by walking through 
 To write a Bagel application, you will need to add Spark, its dependencies, and Bagel to your CLASSPATH:
 
 1. Run `sbt/sbt update` to fetch Spark's dependencies, if you haven't already done so.
-2. Run `sbt/sbt assembly` to build Spark and its dependencies into one JAR (`core/target/scala_2.8.1/Spark Core-assembly-0.3-SNAPSHOT.jar`) and Bagel into a second JAR (`bagel/target/scala_2.8.1/Bagel-assembly-0.3-SNAPSHOT.jar`).
-3. Add these two JARs to your CLASSPATH.
+2. Run `sbt/sbt assembly` to build Spark and its dependencies into one JAR (`core/target/spark-core-assembly-{{site.SPARK_VERSION}}.jar`) 
+3. Run `sbt/sbt package` build the Bagel JAR (`bagel/target/scala_{{site.SCALA_VERSION}}/spark-bagel_{{site.SCALA_VERSION}}-{{site.SPARK_VERSION}}.jar`).
+4. Add these two JARs to your CLASSPATH.
 
 ## Programming Model
 

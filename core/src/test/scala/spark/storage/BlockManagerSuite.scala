@@ -268,9 +268,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY)
-    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY)
-    store.put("list3", list3.iterator, StorageLevel.MEMORY_ONLY)
+    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, true)
+    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY, true)
+    store.put("list3", list3.iterator, StorageLevel.MEMORY_ONLY, true)
     assert(store.get("list2") != None, "list2 was not in store")
     assert(store.get("list2").get.size == 2)
     assert(store.get("list3") != None, "list3 was not in store")
@@ -279,7 +279,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.get("list2") != None, "list2 was not in store")
     assert(store.get("list2").get.size == 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY)
+    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, true)
     assert(store.get("list1") != None, "list1 was not in store")
     assert(store.get("list1").get.size == 2)
     assert(store.get("list2") != None, "list2 was not in store")
@@ -294,9 +294,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
     val list4 = List(new Array[Byte](200), new Array[Byte](200))
     // First store list1 and list2, both in memory, and list3, on disk only
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER)
-    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER)
-    store.put("list3", list3.iterator, StorageLevel.DISK_ONLY)
+    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER, true)
+    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, true)
+    store.put("list3", list3.iterator, StorageLevel.DISK_ONLY, true)
     // At this point LRU should not kick in because list3 is only on disk
     assert(store.get("list1") != None, "list2 was not in store")
     assert(store.get("list1").get.size === 2)
@@ -311,7 +311,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.get("list3") != None, "list1 was not in store")
     assert(store.get("list3").get.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
-    store.put("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER)
+    store.put("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, true)
     assert(store.get("list1") === None, "list1 was in store")
     assert(store.get("list2") != None, "list3 was not in store")
     assert(store.get("list2").get.size === 2)
