@@ -5,7 +5,7 @@ title: Java Programming Guide
 
 The Spark Java API exposes all the Spark features available in the Scala version to Java.
 To learn the basics of Spark, we recommend reading through the
-[Scala Programming Guide](scala-programming-guide.html) first; it should be
+[Scala programming guide](scala-programming-guide.html) first; it should be
 easy to follow even if you don't know Scala.
 This guide will show how to use the Spark features described there in Java.
 
