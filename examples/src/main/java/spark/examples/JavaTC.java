@@ -1,7 +1,6 @@
 package spark.examples;
 
 import scala.Tuple2;
-import scala.util.Random;
 import spark.api.java.JavaPairRDD;
 import spark.api.java.JavaSparkContext;
 import spark.api.java.function.PairFunction;
@@ -9,6 +8,7 @@ import spark.api.java.function.PairFunction;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 
 /**

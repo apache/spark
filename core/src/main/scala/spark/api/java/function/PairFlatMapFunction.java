@@ -7,6 +7,10 @@ import scala.runtime.AbstractFunction1;
 
 import java.io.Serializable;
 
+/**
+ * A function that returns zero or more key-value pair records from each input record. The
+ * key-value pairs are represented as scala.Tuple2 objects.
+ */
 // PairFlatMapFunction does not extend FlatMapFunction because flatMap is
 // overloaded for both FlatMapFunction and PairFlatMapFunction.
 public abstract class PairFlatMapFunction<T, K, V>

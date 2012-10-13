@@ -72,6 +72,11 @@ class has a single abstract method, `call()`, that must be implemented.
 <tr><td>Function2&lt;T1, T2, R&gt;</td><td>T1, T2 =&gt; R (function of two arguments)</td></tr>
 </table>
 
+## Storage Levels
+
+RDD [storage level](scala-programming-guide.html#rdd-persistence) constants, such as `MEMORY_AND_DISK`, are
+declared in the [spark.api.java.StorageLevels](api/core/index.html#spark.api.java.StorageLevels) class.
+
 
 # Other Features
 

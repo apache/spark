@@ -6,16 +6,17 @@ import scala.collection.mutable.Map
 import scala.collection.generic.Growable
 
 /**
- * A datatype that can be accumulated, i.e. has an commutative and associative +.
+ * A datatype that can be accumulated, i.e. has an commutative and associative "add" operation,
+ * but where the result type, `R`, may be different from the element type being added, `T`.
  *
- * You must define how to add data, and how to merge two of these together.  For some datatypes, these might be
- * the same operation (eg., a counter).  In that case, you might want to use [[spark.AccumulatorParam]].  They won't
- * always be the same, though -- eg., imagine you are accumulating a set.  You will add items to the set, and you
- * will union two sets together.
+ * You must define how to add data, and how to merge two of these together.  For some datatypes,
+ * such as a counter, these might be the same operation. In that case, you can use the simpler
+ * [[spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
+ * accumulating a set. You will add items to the set, and you will union two sets together.
  *
  * @param initialValue initial value of accumulator
- * @param param helper object defining how to add elements of type `T`
- * @tparam R the full accumulated data
+ * @param param helper object defining how to add elements of type `R` and `T`
+ * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] (
@@ -44,6 +45,10 @@ class Accumulable[R, T] (
    * @param term the other Accumulable that will get merged with this
    */
   def ++= (term: R) { value_ = param.addInPlace(value_, term)}
+
+  /**
+   * Access the accumulator's current value; only allowed on master.
+   */
   def value = {
     if (!deserialized) value_
     else throw new UnsupportedOperationException("Can't read accumulator value in task")
@@ -60,6 +65,9 @@ class Accumulable[R, T] (
    */
   def localValue = value_
 
+  /**
+   * Set the accumulator's value; only allowed on master.
+   */
   def value_= (r: R) {
     if (!deserialized) value_ = r
     else throw new UnsupportedOperationException("Can't assign accumulator value in task")
@@ -77,28 +85,37 @@ class Accumulable[R, T] (
 }
 
 /**
- * Helper object defining how to accumulate values of a particular type.
+ * Helper object defining how to accumulate values of a particular type. An implicit
+ * AccumulableParam needs to be available when you create Accumulables of a specific type.
  *
- * @tparam R the full accumulated data
+ * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
 trait AccumulableParam[R, T] extends Serializable {
   /**
-   * Add additional data to the accumulator value.
+   * Add additional data to the accumulator value. Is allowed to modify and return `r`
+   * for efficiency (to avoid allocating objects).
+   *
    * @param r the current value of the accumulator
    * @param t the data to be added to the accumulator
    * @return the new value of the accumulator
    */
-  def addAccumulator(r: R, t: T) : R
+  def addAccumulator(r: R, t: T): R
 
   /**
-   * Merge two accumulated values together
+   * Merge two accumulated values together. Is allowed to modify and return the first value
+   * for efficiency (to avoid allocating objects).
+   *
    * @param r1 one set of accumulated data
    * @param r2 another set of accumulated data
    * @return both data sets merged together
    */
   def addInPlace(r1: R, r2: R): R
 
+  /**
+   * Return the "zero" (identity) value for an accumulator type, given its initial value. For
+   * example, if R was a vector of N dimensions, this would return a vector of N zeroes.
+   */
   def zero(initialValue: R): R
 }
 
@@ -106,12 +123,12 @@ private[spark]
 class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable, T]
   extends AccumulableParam[R,T] {
 
-  def addAccumulator(growable: R, elem: T) : R = {
+  def addAccumulator(growable: R, elem: T): R = {
     growable += elem
     growable
   }
 
-  def addInPlace(t1: R, t2: R) : R = {
+  def addInPlace(t1: R, t2: R): R = {
     t1 ++= t2
     t1
   }
@@ -134,17 +151,18 @@ class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Ser
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](
-  @transient initialValue: T,
-  param: AccumulatorParam[T]) extends Accumulable[T,T](initialValue, param)
+class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T])
+  extends Accumulable[T,T](initialValue, param)
 
 /**
  * A simpler version of [[spark.AccumulableParam]] where the only datatype you can add in is the same type
- * as the accumulated value
+ * as the accumulated value. An implicit AccumulatorParam object needs to be available when you create
+ * Accumulators of a specific type.
+ *
  * @tparam T type of value to accumulate
  */
 trait AccumulatorParam[T] extends AccumulableParam[T, T] {
-  def addAccumulator(t1: T, t2: T) : T = {
+  def addAccumulator(t1: T, t2: T): T = {
     addInPlace(t1, t2)
   }
 }

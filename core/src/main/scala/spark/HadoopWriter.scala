@@ -16,7 +16,7 @@ import spark.Logging
 import spark.SerializableWritable
 
 /**
- * An internal helper class that saves an RDD using a Hadoop OutputFormat. This is only public
+ * Internal helper class that saves an RDD using a Hadoop OutputFormat. This is only public
  * because we need to access this class from the `spark` package to use some package-private Hadoop
  * functions, but this class should not be used directly by users.
  *
