@@ -4,13 +4,13 @@ import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
 import twirl.sbt.TwirlPlugin._
-// For Sonatype publishing 
-// import com.jsuereth.pgp.sbtplugin.PgpKeys._
+// For Sonatype publishing
+import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
-  // "1.0.1" for Apache releases, or "0.20.2-cdh3u3" for Cloudera Hadoop.
-  val HADOOP_VERSION = "0.20.205.0"
+  // "1.0.3" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
+  val HADOOP_VERSION = "1.0.3"
 
   lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel)
 
@@ -28,7 +28,7 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
-    version := "0.6.0-SNAPSHOT",
+    version := "0.6.0",
     scalaVersion := "2.9.2",
     scalacOptions := Seq(/*"-deprecation",*/ "-unchecked", "-optimize"), // -deprecation is too noisy due to usage of old Hadoop API, enable it once that's no longer an issue
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
@@ -36,7 +36,7 @@ object SparkBuild extends Build {
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
 
-    /* For Sonatype publishing
+    // For Sonatype publishing
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
 
@@ -68,17 +68,16 @@ object SparkBuild extends Build {
         </developer>
       </developers>
     ),
-  
+
     publishTo <<= version { (v: String) =>
       val nexus = "https://oss.sonatype.org/"
-      if (v.trim.endsWith("SNAPSHOT")) 
-        Some("sonatype-snapshots" at nexus + "content/repositories/snapshots") 
+      if (v.trim.endsWith("SNAPSHOT"))
+        Some("sonatype-snapshots" at nexus + "content/repositories/snapshots")
       else
         Some("sonatype-staging"  at nexus + "service/local/staging/deploy/maven2")
     },
 
     credentials += Credentials(Path.userHome / ".sbt" / "sonatype.credentials"),
-    */
 
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
