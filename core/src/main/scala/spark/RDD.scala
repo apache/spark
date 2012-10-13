@@ -121,10 +121,10 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
     this
   }
 
-  /** Persist this RDD with the default storage level (MEMORY_ONLY). */
+  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def persist(): RDD[T] = persist(StorageLevel.MEMORY_ONLY)
   
-  /** Persist this RDD with the default storage level (MEMORY_ONLY). */
+  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): RDD[T] = persist()
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */

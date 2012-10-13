@@ -22,7 +22,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
 
   import JavaDoubleRDD.fromRDD
 
-  /** Persist this RDD with the default storage level (MEMORY_ONLY). */
+  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): JavaDoubleRDD = fromRDD(srdd.cache())
 
   /** 
