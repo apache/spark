@@ -1,9 +1,5 @@
 package spark.rdd
 
-import java.net.URL
-import java.io.EOFException
-import java.io.ObjectInputStream
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
@@ -43,13 +39,14 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
   override val dependencies = {
     val deps = new ArrayBuffer[Dependency[_]]
     for ((rdd, index) <- rdds.zipWithIndex) {
-      if (rdd.partitioner == Some(part)) {
-        logInfo("Adding one-to-one dependency with " + rdd)
-        deps += new OneToOneDependency(rdd)
+      val mapSideCombinedRDD = rdd.mapPartitions(aggr.combineValuesByKey(_), true)
+      if (mapSideCombinedRDD.partitioner == Some(part)) {
+        logInfo("Adding one-to-one dependency with " + mapSideCombinedRDD)
+        deps += new OneToOneDependency(mapSideCombinedRDD)
       } else {
         logInfo("Adding shuffle dependency with " + rdd)
-        deps += new ShuffleDependency[Any, Any, ArrayBuffer[Any]](
-            context.newShuffleId, rdd, Some(aggr), part)
+        deps += new ShuffleDependency[Any, ArrayBuffer[Any]](
+            context.newShuffleId, mapSideCombinedRDD, part)
       }
     }
     deps.toList
@@ -62,7 +59,7 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
     for (i <- 0 until array.size) {
       array(i) = new CoGroupSplit(i, rdds.zipWithIndex.map { case (r, j) =>
         dependencies(j) match {
-          case s: ShuffleDependency[_, _, _] =>
+          case s: ShuffleDependency[_, _] =>
             new ShuffleCoGroupSplitDep(s.shuffleId): CoGroupSplitDep
           case _ =>
             new NarrowCoGroupSplitDep(r, r.splits(i)): CoGroupSplitDep

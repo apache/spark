@@ -58,13 +58,14 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     val aggregator =
       new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (mapSideCombine) {
-      val combiners = new ShuffledRDD[K, V, C](self, Some(aggregator), partitioner)
-      combiners.mapPartitions(aggregator.combineCombinersByKey(_), true)
+      val mapSideCombined = self.mapPartitions(aggregator.combineValuesByKey(_), true)
+      val partitioned = new ShuffledRDD[K, C](mapSideCombined, partitioner)
+      partitioned.mapPartitions(aggregator.combineCombinersByKey(_), true)
     } else {
       // Don't apply map-side combiner.
       // A sanity check to make sure mergeCombiners is not defined.
       assert(mergeCombiners == null)
-      val values = new ShuffledRDD[K, V, V](self, None, partitioner)
+      val values = new ShuffledRDD[K, V](self, partitioner)
       values.mapPartitions(aggregator.combineValuesByKey(_), true)
     }
   }
@@ -175,7 +176,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         createCombiner _, mergeValue _, mergeCombiners _, partitioner)
       bufs.flatMapValues(buf => buf)
     } else {
-      new ShuffledRDD[K, V, V](self, None, partitioner)
+      new ShuffledRDD[K, V](self, partitioner)
     }
   }
 
@@ -613,7 +614,7 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
    */
   def sortByKey(ascending: Boolean = true, numSplits: Int = self.splits.size): RDD[(K,V)] = {
     val shuffled =
-      new ShuffledRDD[K, V, V](self, None, new RangePartitioner(numSplits, self, ascending))
+      new ShuffledRDD[K, V](self, new RangePartitioner(numSplits, self, ascending))
     shuffled.mapPartitions(iter => {
       val buf = iter.toArray
       if (ascending) {

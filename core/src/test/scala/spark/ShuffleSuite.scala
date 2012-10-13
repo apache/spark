@@ -216,35 +216,6 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
     // Test that a shuffle on the file works, because this used to be a bug
     assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
   }
-
-  test("map-side combine") {
-    sc = new SparkContext("local", "test")
-    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1), (1, 1)), 2)
-
-    // Test with map-side combine on.
-    val sums = pairs.reduceByKey(_+_).collect()
-    assert(sums.toSet === Set((1, 8), (2, 1)))
-
-    val aggregator = new Aggregator[Int, Int, Int](
-      (v: Int) => v,
-      _+_,
-      _+_)
-
-    // Turn off map-side combine and test the results.
-    var shuffledRdd : RDD[(Int, Int)] =
-      new ShuffledRDD[Int, Int, Int](pairs, None, new HashPartitioner(2))
-    shuffledRdd = shuffledRdd.mapPartitions(aggregator.combineValuesByKey(_))
-    assert(shuffledRdd.collect().toSet === Set((1,8), (2, 1)))
-
-    // Run a wrong mergeCombine function with map-side combine on.
-    // We expect to see an exception thrown.
-    val aggregatorWithException = new Aggregator[Int, Int, Int](
-      (v: Int) => v, _+_, ShuffleSuite.mergeCombineException)
-    var shuffledRdd2 : RDD[(Int, Int)] =
-      new ShuffledRDD[Int, Int, Int](pairs, Some(aggregatorWithException), new HashPartitioner(2))
-    shuffledRdd2 = shuffledRdd2.mapPartitions(aggregatorWithException.combineCombinersByKey(_))
-    evaluating { shuffledRdd2.collect() } should produce [SparkException]
-  }
 }
 
 object ShuffleSuite {

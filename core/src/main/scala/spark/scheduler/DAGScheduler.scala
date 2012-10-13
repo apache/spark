@@ -104,7 +104,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * The priority value passed in will be used if the stage doesn't already exist with
    * a lower priority (we assume that priorities always increase across jobs for now).
    */
-  def getShuffleMapStage(shuffleDep: ShuffleDependency[_,_,_], priority: Int): Stage = {
+  def getShuffleMapStage(shuffleDep: ShuffleDependency[_,_], priority: Int): Stage = {
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
@@ -119,7 +119,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * as a result stage for the final RDD used directly in an action. The stage will also be given
    * the provided priority.
    */
-  def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_,_]], priority: Int): Stage = {
+  def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_]], priority: Int): Stage = {
     // Kind of ugly: need to register RDDs with the cache and map output tracker here
     // since we can't do it in the RDD constructor because # of splits is unknown
     logInfo("Registering RDD " + rdd.id + " (" + rdd.origin + ")")
@@ -149,7 +149,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         cacheTracker.registerRDD(r.id, r.splits.size)
         for (dep <- r.dependencies) {
           dep match {
-            case shufDep: ShuffleDependency[_,_,_] =>
+            case shufDep: ShuffleDependency[_,_] =>
               parents += getShuffleMapStage(shufDep, priority)
             case _ =>
               visit(dep.rdd)
@@ -172,7 +172,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
           if (locs(p) == Nil) {
             for (dep <- rdd.dependencies) {
               dep match {
-                case shufDep: ShuffleDependency[_,_,_] =>
+                case shufDep: ShuffleDependency[_,_] =>
                   val mapStage = getShuffleMapStage(shufDep, stage.priority)
                   if (!mapStage.isAvailable) {
                     missing += mapStage
@@ -549,7 +549,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         visitedRdds += rdd
         for (dep <- rdd.dependencies) {
           dep match {
-            case shufDep: ShuffleDependency[_,_,_] =>
+            case shufDep: ShuffleDependency[_,_] =>
               val mapStage = getShuffleMapStage(shufDep, stage.priority)
               if (!mapStage.isAvailable) {
                 visitedStages += mapStage

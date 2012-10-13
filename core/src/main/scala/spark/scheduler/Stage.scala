@@ -22,7 +22,7 @@ import spark.storage.BlockManagerId
 private[spark] class Stage(
     val id: Int,
     val rdd: RDD[_],
-    val shuffleDep: Option[ShuffleDependency[_,_,_]],  // Output shuffle if stage is a map stage
+    val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
     val priority: Int)
   extends Logging {
