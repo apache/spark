@@ -114,15 +114,11 @@ private[spark] class CoarseMesosSchedulerBackend(
     val command = "\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
       runScript, masterUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
     val environment = Environment.newBuilder()
-    sc.executorEnvs.foreach { case(key, value) =>
-      if (value == null) {
-        logInfo("Environment variable not set: " + key)
-      } else {
-        environment.addVariables(Environment.Variable.newBuilder()
-          .setName(key)
-          .setValue(value)
-          .build())
-      }   
+    sc.executorEnvs.foreach { case (key, value) =>
+      environment.addVariables(Environment.Variable.newBuilder()
+        .setName(key)
+        .setValue(value)
+        .build())
     }
     return CommandInfo.newBuilder().setValue(command).setEnvironment(environment).build()
   }

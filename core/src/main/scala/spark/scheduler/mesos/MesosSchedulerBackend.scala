@@ -85,15 +85,11 @@ private[spark] class MesosSchedulerBackend(
     }
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val environment = Environment.newBuilder()
-    sc.executorEnvs.foreach { case(key, value) =>
-      if (value == null) {
-        logInfo("Environment variable not set: " + key)
-      } else {
-        environment.addVariables(Environment.Variable.newBuilder()
-          .setName(key)
-          .setValue(value)
-          .build())
-      }   
+    sc.executorEnvs.foreach { case (key, value) =>
+      environment.addVariables(Environment.Variable.newBuilder()
+        .setName(key)
+        .setValue(value)
+        .build())
     }
     val memory = Resource.newBuilder()
       .setName("mem")

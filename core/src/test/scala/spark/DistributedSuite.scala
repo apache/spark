@@ -182,4 +182,10 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     assert(data.count() === 4000000)
     System.clearProperty("spark.storage.memoryFraction")
   }
+
+  test("passing environment variables to cluster") {
+    sc = new SparkContext(clusterUrl, "test", null, Nil, Map("TEST_VAR" -> "TEST_VALUE"))
+    val values = sc.parallelize(1 to 2, 2).map(x => System.getenv("TEST_VAR")).collect()
+    assert(values.toSeq === Seq("TEST_VALUE", "TEST_VALUE"))
+  }
 }

@@ -1,51 +1,65 @@
 package spark.api.java
 
-import spark.{Accumulator, AccumulatorParam, RDD, SparkContext}
-import spark.SparkContext.IntAccumulatorParam
-import spark.SparkContext.DoubleAccumulatorParam
-import spark.broadcast.Broadcast
+import java.util.{Map => JMap}
 
+import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.JobConf
-
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
+import spark.{Accumulator, AccumulatorParam, RDD, SparkContext}
+import spark.SparkContext.IntAccumulatorParam
+import spark.SparkContext.DoubleAccumulatorParam
+import spark.broadcast.Broadcast
 
-import scala.collection.JavaConversions
-
+/**
+ * A Java-friendly version of [[spark.SparkContext]] that returns [[spark.api.java.JavaRDD]]s and
+ * works with Java collections instead of Scala ones.
+ */
 class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWorkaround {
 
   /**
-   * @constructor Returns a new SparkContext.
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param frameworkName A name for your job, to display on the cluster web UI
+   * @param jobName A name for your job, to display on the cluster web UI
    */
-  def this(master: String, frameworkName: String) = this(new SparkContext(master, frameworkName))
+  def this(master: String, jobName: String) = this(new SparkContext(master, jobName))
 
   /**
-   * @constructor Returns a new SparkContext.
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param frameworkName A name for your job, to display on the cluster web UI
+   * @param jobName A name for your job, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the slave nodes
-   * @param jarFile A path to a local jar file containing this job
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
-  def this(master: String, frameworkName: String, sparkHome: String, jarFile: String) =
-    this(new SparkContext(master, frameworkName, sparkHome, Seq(jarFile)))
+  def this(master: String, jobName: String, sparkHome: String, jarFile: String) =
+    this(new SparkContext(master, jobName, sparkHome, Seq(jarFile)))
 
   /**
-   * @constructor Returns a new SparkContext.
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param frameworkName A name for your job, to display on the cluster web UI
+   * @param jobName A name for your job, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the slave nodes
-   * @param jars A set of jar files relating to this job
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
-  def this(master: String, frameworkName: String, sparkHome: String, jars: Array[String]) =
-    this(new SparkContext(master, frameworkName, sparkHome, jars.toSeq))
+  def this(master: String, jobName: String, sparkHome: String, jars: Array[String]) =
+    this(new SparkContext(master, jobName, sparkHome, jars.toSeq))
 
-  val env = sc.env
+  /**
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param jobName A name for your job, to display on the cluster web UI
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   * @param environment Environment variables to set on worker nodes
+   */
+  def this(master: String, jobName: String, sparkHome: String, jars: Array[String],
+      environment: JMap[String, String]) =
+    this(new SparkContext(master, jobName, sparkHome, jars.toSeq, environment))
+
+  private[spark] val env = sc.env
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
@@ -81,13 +95,13 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def parallelizeDoubles(list: java.util.List[java.lang.Double]): JavaDoubleRDD =
     parallelizeDoubles(list, sc.defaultParallelism)
 
-  /** 
+  /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
   def textFile(path: String): JavaRDD[String] = sc.textFile(path)
 
-  /** 
+  /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
@@ -155,6 +169,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minSplits))
   }
 
+  /**
+   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+   * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
+   * etc).
+   */
   def hadoopRDD[K, V, F <: InputFormat[K, V]](
     conf: JobConf,
     inputFormatClass: Class[F],
@@ -166,7 +185,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass))
   }
 
-  /**Get an RDD for a Hadoop file with an arbitrary InputFormat */
+  /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
     path: String,
     inputFormatClass: Class[F],
@@ -179,6 +198,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits))
   }
 
+  /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
     path: String,
     inputFormatClass: Class[F],
@@ -264,7 +284,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def accumulator[T](initialValue: T, accumulatorParam: AccumulatorParam[T]): Accumulator[T] =
     sc.accumulator(initialValue)(accumulatorParam)
 
-  /** 
+  /**
    * Broadcast a read-only variable to the cluster, returning a [[spark.Broadcast]] object for
    * reading it in distributed functions. The variable will be sent to each cluster only once.
    */

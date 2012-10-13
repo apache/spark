@@ -14,7 +14,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 
   merge(values)
 
-  /** @constructor Initialize the StatCounter with no values. */
+  /** Initialize the StatCounter with no values. */
   def this() = this(Nil)
 
   /** Add a value into this StatCounter, updating the internal statistics. */
