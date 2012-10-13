@@ -19,12 +19,6 @@ if [ -z "$SCALA_HOME" ]; then
   exit 1
 fi
 
-# If the user specifies a Mesos JAR, put it before our included one on the classpath
-MESOS_CLASSPATH=""
-if [ -n "$MESOS_JAR" ] ; then
-  MESOS_CLASSPATH="$MESOS_JAR"
-fi
-
 # Figure out how much memory to use per executor and set it as an environment
 # variable so that our process sees it and can report it to Mesos
 if [ -z "$SPARK_MEM" ] ; then
@@ -49,7 +43,6 @@ BAGEL_DIR="$FWDIR/bagel"
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH"
-CLASSPATH+=":$MESOS_CLASSPATH"
 CLASSPATH+=":$FWDIR/conf"
 CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
 if [ -n "$SPARK_TESTING" ] ; then

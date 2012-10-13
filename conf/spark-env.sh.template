@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
 
-# Set Spark environment variables for your site in this file. Some useful
-# variables to set are:
+# This file contains environment variables required to run Spark. Copy it as
+# spark-env.sh and edit that to configure Spark for your site. At a minimum,
+# the following two variables should be set:
 # - MESOS_NATIVE_LIBRARY, to point to your Mesos native library (libmesos.so)
 # - SCALA_HOME, to point to your Scala installation
+#
+# If using the standalone deploy mode, you can also set variables for it:
+# - SPARK_MASTER_IP, to bind the master to a different IP address
+# - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports
+# - SPARK_WORKER_CORES, to set the number of cores to use on this machine
+# - SPARK_WORKER_MEMORY, to set how much memory to use (e.g. 1000m, 2g)
+# - SPARK_WORKER_PORT / SPARK_WORKER_WEBUI_PORT
+#
+# Finally, Spark also relies on the following variables, but these can be set
+# on just the *master* (i.e. in your driver program), and will automatically
+# be propagated to workers:
+# - SPARK_MEM, to change the amount of memory used per node (this should
+#   be in the same format as the JVM's -Xmx option, e.g. 300m or 1g)
 # - SPARK_CLASSPATH, to add elements to Spark's classpath
 # - SPARK_JAVA_OPTS, to add JVM options
-# - SPARK_MEM, to change the amount of memory used per node (this should
-#   be in the same format as the JVM's -Xmx option, e.g. 300m or 1g).
 # - SPARK_LIBRARY_PATH, to add extra search paths for native libraries.
 
-# Settings used by the scripts in the bin/ directory, apply to standalone mode only.
-# Note that the same worker settings apply to all of the workers.
-# - SPARK_MASTER_IP, to bind the master to a different ip address, for example a public one (Default: local ip address)
-# - SPARK_MASTER_PORT, to start the spark master on a different port (Default: 7077)
-# - SPARK_MASTER_WEBUI_PORT, to specify a different port for the Master WebUI (Default: 8080)
-# - SPARK_WORKER_PORT, to start the spark worker on a specific port (Default: random)
-# - SPARK_WORKER_CORES, to specify the number of cores to use (Default: all available cores)
-# - SPARK_WORKER_MEMORY, to specify how much memory to use, e.g. 1000M, 2G (Default: MAX(Available - 1024MB, 512MB))
-# - SPARK_WORKER_WEBUI_PORT, to specify a different port for the Worker WebUI (Default: 8081)

@@ -5,33 +5,45 @@ title: Spark Configuration
 
 Spark provides three main locations to configure the system:
 
-* The [`conf/spark-env.sh` script](#environment-variables-in-spark-envsh), in which you can set environment variables
-  that affect how the JVM is launched, such as, most notably, the amount of memory per JVM.
+* [Environment variables](#environment-variables) for launching Spark workers, which can
+  be set either in your driver program or in the `conf/spark-env.sh` script.
 * [Java system properties](#system-properties), which control internal configuration parameters and can be set either
   programmatically (by calling `System.setProperty` *before* creating a `SparkContext`) or through the
   `SPARK_JAVA_OPTS` environment variable in `spark-env.sh`.
 * [Logging configuration](#configuring-logging), which is done through `log4j.properties`.
 
 
-# Environment Variables in spark-env.sh
+# Environment Variables
 
 Spark determines how to initialize the JVM on worker nodes, or even on the local node when you run `spark-shell`,
 by running the `conf/spark-env.sh` script in the directory where it is installed. This script does not exist by default
 in the Git repository, but but you can create it by copying `conf/spark-env.sh.template`. Make sure that you make
 the copy executable.
 
-Inside `spark-env.sh`, you can set the following environment variables:
+Inside `spark-env.sh`, you *must* set at least the following two environment variables:
 
 * `SCALA_HOME` to point to your Scala installation.
 * `MESOS_NATIVE_LIBRARY` if you are [running on a Mesos cluster](running-on-mesos.html).
-* `SPARK_MEM` to set the amount of memory used per node (this should be in the same format as the JVM's -Xmx option, e.g. `300m` or `1g`)
+
+In addition, there are four other variables that control execution. These can be set *either in `spark-env.sh`
+or in each job's driver program*, because they will automatically be propagated to workers from the driver.
+For a multi-user environment, we recommend setting the in the driver program instead of `spark-env.sh`, so
+that different user jobs can use different amounts of memory, JVM options, etc.
+
+* `SPARK_MEM` to set the amount of memory used per node (this should be in the same format as the 
+   JVM's -Xmx option, e.g. `300m` or `1g`)
 * `SPARK_JAVA_OPTS` to add JVM options. This includes any system properties that you'd like to pass with `-D`.
 * `SPARK_CLASSPATH` to add elements to Spark's classpath.
 * `SPARK_LIBRARY_PATH` to add search directories for native libraries.
 
-The most important things to set first will be `SCALA_HOME`, without which `spark-shell` cannot run, and `MESOS_NATIVE_LIBRARY`
-if running on Mesos. The next setting will probably be the memory (`SPARK_MEM`). Make sure you set it high enough to be able to run your job but lower than the total memory on the machines (leave at least 1 GB for the operating system).
+Note that if you do set these in `spark-env.sh`, they will override the values set by user programs, which
+is undesirable; you can choose to have `spark-env.sh` set them only if the user program hasn't, as follows:
 
+{% highlight bash %}
+if [ -z "$SPARK_MEM" ] ; then
+  SPARK_MEM="1g"
+fi
+{% endhighlight %}
 
 # System Properties
 
