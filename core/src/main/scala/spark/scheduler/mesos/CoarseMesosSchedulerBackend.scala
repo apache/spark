@@ -33,15 +33,6 @@ private[spark] class CoarseMesosSchedulerBackend(
   with MScheduler
   with Logging {
 
-  // Environment variables to pass to our executors
-  val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
-    "SPARK_MEM",
-    "SPARK_CLASSPATH",
-    "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS",
-    "SPARK_TESTING"
-  )
-
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
 
   // Memory used by each executor (in megabytes)
@@ -123,13 +114,15 @@ private[spark] class CoarseMesosSchedulerBackend(
     val command = "\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
       runScript, masterUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
     val environment = Environment.newBuilder()
-    for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
-      if (System.getenv(key) != null) {
+    sc.executorEnvs.foreach { case(key, value) =>
+      if (value == null) {
+        logInfo("Environment variable not set: " + key)
+      } else {
         environment.addVariables(Environment.Variable.newBuilder()
           .setName(key)
-          .setValue(System.getenv(key))
+          .setValue(value)
           .build())
-      }
+      }   
     }
     return CommandInfo.newBuilder().setValue(command).setEnvironment(environment).build()
   }

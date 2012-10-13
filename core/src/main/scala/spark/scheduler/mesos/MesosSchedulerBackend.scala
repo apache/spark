@@ -29,15 +29,6 @@ private[spark] class MesosSchedulerBackend(
   with MScheduler
   with Logging {
 
-  // Environment variables to pass to our executors
-  val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
-    "SPARK_MEM",
-    "SPARK_CLASSPATH",
-    "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS",
-    "SPARK_TESTING"
-  )
-
   // Memory used by each executor (in megabytes)
   val EXECUTOR_MEMORY = {
     if (System.getenv("SPARK_MEM") != null) {
@@ -94,13 +85,15 @@ private[spark] class MesosSchedulerBackend(
     }
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val environment = Environment.newBuilder()
-    for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
-      if (System.getenv(key) != null) {
+    sc.executorEnvs.foreach { case(key, value) =>
+      if (value == null) {
+        logInfo("Environment variable not set: " + key)
+      } else {
         environment.addVariables(Environment.Variable.newBuilder()
           .setName(key)
-          .setValue(System.getenv(key))
+          .setValue(value)
           .build())
-      }
+      }   
     }
     val memory = Resource.newBuilder()
       .setName("mem")

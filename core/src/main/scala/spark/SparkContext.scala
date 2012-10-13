@@ -92,6 +92,12 @@ class SparkContext(master: String, jobName: String, val sparkHome: String, jars:
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
 
+  // Environment variables to pass to our executors
+  private[spark] val executorEnvs = HashMap[String, String]()
+  Seq("SPARK_MEM", "SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", 
+    "SPARK_JAVA_OPTS", "SPARK_TESTING").foreach { key => executorEnvs.put(key, System.getenv(key)) }
+
+
   // Add each JAR given through the constructor
   jars.foreach { addJar(_) }
 
@@ -431,6 +437,12 @@ class SparkContext(master: String, jobName: String, val sparkHome: String, jars:
   def clearJars() {
     addedJars.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
     addedJars.clear()
+  }
+
+  /* Sets an environment variable that will be passed to the executors */
+  def putExecutorEnv(key: String, value: String) {
+    logInfo("Setting executor environment variable " + key + "=" + value)
+    executorEnvs.put(key,value)
   }
 
   /** Shut down the SparkContext. */
