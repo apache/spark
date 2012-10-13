@@ -88,7 +88,7 @@ private[spark] class MesosSchedulerBackend(
     sc.executorEnvs.foreach { case(k,v) => 
       environment.addVariables(Environment.Variable.newBuilder()
           .setName(k)
-          .setValue(System.getenv(v))
+          .setValue(v)
           .build())
     }
     val memory = Resource.newBuilder()

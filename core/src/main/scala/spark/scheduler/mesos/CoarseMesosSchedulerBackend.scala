@@ -117,7 +117,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     sc.executorEnvs.foreach { case(k,v) => 
       environment.addVariables(Environment.Variable.newBuilder()
           .setName(k)
-          .setValue(System.getenv(v))
+          .setValue(v)
           .build())
     }
     return CommandInfo.newBuilder().setValue(command).setEnvironment(environment).build()
