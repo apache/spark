@@ -20,21 +20,21 @@ by running the `conf/spark-env.sh` script in the directory where it is installed
 in the Git repository, but but you can create it by copying `conf/spark-env.sh.template`. Make sure that you make
 the copy executable.
 
-Inside `spark-env.sh`, you *must* set at least the following two environment variables:
+Inside `spark-env.sh`, you *must* set at least the following two variables:
 
-* `SCALA_HOME` to point to your Scala installation.
-* `MESOS_NATIVE_LIBRARY` if you are [running on a Mesos cluster](running-on-mesos.html).
+* `SCALA_HOME`, to point to your Scala installation.
+* `MESOS_NATIVE_LIBRARY`, if you are [running on a Mesos cluster](running-on-mesos.html).
 
 In addition, there are four other variables that control execution. These can be set *either in `spark-env.sh`
 or in each job's driver program*, because they will automatically be propagated to workers from the driver.
 For a multi-user environment, we recommend setting the in the driver program instead of `spark-env.sh`, so
 that different user jobs can use different amounts of memory, JVM options, etc.
 
-* `SPARK_MEM` to set the amount of memory used per node (this should be in the same format as the 
+* `SPARK_MEM`, to set the amount of memory used per node (this should be in the same format as the 
    JVM's -Xmx option, e.g. `300m` or `1g`)
-* `SPARK_JAVA_OPTS` to add JVM options. This includes any system properties that you'd like to pass with `-D`.
-* `SPARK_CLASSPATH` to add elements to Spark's classpath.
-* `SPARK_LIBRARY_PATH` to add search directories for native libraries.
+* `SPARK_JAVA_OPTS`, to add JVM options. This includes any system properties that you'd like to pass with `-D`.
+* `SPARK_CLASSPATH`, to add elements to Spark's classpath.
+* `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
 
 Note that if you do set these in `spark-env.sh`, they will override the values set by user programs, which
 is undesirable; you can choose to have `spark-env.sh` set them only if the user program hasn't, as follows:
