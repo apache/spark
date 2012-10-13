@@ -20,15 +20,6 @@ private[spark] class SparkDeploySchedulerBackend(
 
   val maxCores = System.getProperty("spark.cores.max", Int.MaxValue.toString).toInt
 
-  // Environment variables to pass to our executors
-  val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
-    "SPARK_MEM",
-    "SPARK_CLASSPATH",
-    "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS",
-    "SPARK_TESTING"
-  )
-
   // Memory used by each executor (in megabytes)
   val executorMemory = {
     if (System.getenv("SPARK_MEM") != null) {
@@ -42,17 +33,11 @@ private[spark] class SparkDeploySchedulerBackend(
   override def start() {
     super.start()
 
-    val environment = new HashMap[String, String]
-    for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
-      if (System.getenv(key) != null) {
-        environment(key) = System.getenv(key)
-      }
-    }
     val masterUrl = "akka://spark@%s:%s/user/%s".format(
       System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
       StandaloneSchedulerBackend.ACTOR_NAME)
     val args = Seq(masterUrl, "{{SLAVEID}}", "{{HOSTNAME}}", "{{CORES}}")
-    val command = Command("spark.executor.StandaloneExecutorBackend", args, environment)
+    val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command)
 
     client = new Client(sc.env.actorSystem, master, jobDesc, this)

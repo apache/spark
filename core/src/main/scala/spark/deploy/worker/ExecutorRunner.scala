@@ -118,8 +118,6 @@ private[spark] class ExecutorRunner(
       for ((key, value) <- jobDesc.command.environment) {
         env.put(key, value)
       }
-      env.put("SPARK_CORES", cores.toString)
-      env.put("SPARK_MEMORY", memory.toString)
       // In case we are running this from within the Spark Shell
       // so we are not creating a parent process.
       env.put("SPARK_LAUNCH_WITH_SCALA", "0")
