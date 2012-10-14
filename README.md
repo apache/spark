@@ -30,8 +30,8 @@ will run the Logistic Regression example locally on 2 CPUs.
 
 Each of the example programs prints usage help if no params are given.
 
-All of the Spark samples take a `<host>` parameter that is the Mesos master
-to connect to. This can be a Mesos or Spark cluster URL, or "local" to run
+All of the Spark samples take a `<host>` parameter that is the cluster URL
+to connect to. This can be a mesos:// or spark:// URL, or "local" to run
 locally with one thread, or "local[N]" to run locally with N threads.
 
 
