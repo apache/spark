@@ -79,13 +79,13 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 **External resources:**
 
 * [Spark Homepage](http://www.spark-project.org)
-* [AMP Camp](http://ampcamp.berkeley.edu/): a two-day training camp at UC Berkeley that featured talks and exercises 
-  about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012), 
+* [Mailing List](http://groups.google.com/group/spark-users): ask questions about Spark here
+* [AMP Camp](http://ampcamp.berkeley.edu/): a two-day training camp at UC Berkeley that featured talks and exercises
+  about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012),
   [slides](http://ampcamp.berkeley.edu/agenda-2012) and [exercises](http://ampcamp.berkeley.edu/exercises-2012) are
   available online for free.
 * [Code Examples](http://spark-project.org/examples.html): more are also available in the [examples subfolder](https://github.com/mesos/spark/tree/master/examples/src/main/scala/spark/examples) of Spark
-* [Paper describing the Spark system](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
-* [Mailing List](http://groups.google.com/group/spark-users)
+* [Paper Describing the Spark System](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
 
 # Community
 
