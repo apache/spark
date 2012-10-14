@@ -35,7 +35,7 @@ abstract class ShuffledRDD[K, V, C](
 
   override def preferredLocations(split: Split) = Nil
 
-  val dep = new ShuffleDependency(context.newShuffleId, parent, aggregator, part)
+  val dep = new ShuffleDependency(parent, aggregator, part)
   override val dependencies = List(dep)
 }
 
