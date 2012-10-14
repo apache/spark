@@ -39,22 +39,28 @@ class DStreamBasicSuite extends DStreamSuiteBase {
   test("stateful operations") {
     val inputData =
       Seq(
+        Seq("a"),
+        Seq("a", "b"),
         Seq("a", "b", "c"),
-        Seq("a", "b", "c"),
-        Seq("a", "b", "c")
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
       )
 
     val outputData =
       Seq(
-        Seq(("a", 1), ("b", 1), ("c", 1)),
-        Seq(("a", 2), ("b", 2), ("c", 2)),
-        Seq(("a", 3), ("b", 3), ("c", 3))
+        Seq(("a", 1)),
+        Seq(("a", 2), ("b", 1)),
+        Seq(("a", 3), ("b", 2), ("c", 1)),
+        Seq(("a", 4), ("b", 3), ("c", 1)),
+        Seq(("a", 5), ("b", 3), ("c", 1)),
+        Seq(("a", 5), ("b", 3), ("c", 1))
       )
 
     val updateStateOp = (s: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: RichInt) => {
         var newState = 0
-        if (values != null) newState += values.reduce(_ + _)
+        if (values != null && values.size > 0) newState += values.reduce(_ + _)
         if (state != null) newState += state.self
         //println("values = " + values + ", state = " + state + ", " + " new state = " + newState)
         new RichInt(newState)

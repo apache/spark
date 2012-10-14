@@ -45,13 +45,18 @@ trait DStreamSuiteBase extends FunSuite with Logging {
 
       val clock = ssc.scheduler.clock
       if (clock.isInstanceOf[ManualClock]) {
-        clock.asInstanceOf[ManualClock].addToTime(input.size * batchDuration.milliseconds)
+        clock.asInstanceOf[ManualClock].addToTime((input.size - 1) * batchDuration.milliseconds)
       }
 
       val startTime = System.currentTimeMillis()
       while (output.size < expectedOutput.size && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
+        println("output.size = " + output.size + ", expectedOutput.size = " + expectedOutput.size)
         Thread.sleep(500)
       }
+
+      println("output.size = " + output.size)
+      println("output")
+      output.foreach(x => println("[" + x.mkString(",") + "]"))
 
       assert(output.size === expectedOutput.size)
       for (i <- 0 until output.size) {
