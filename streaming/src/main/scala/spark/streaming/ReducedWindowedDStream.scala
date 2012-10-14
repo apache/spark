@@ -10,9 +10,10 @@ import spark.SparkContext._
 import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
+import collection.SeqProxy
 
 class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
-    @transient parent: DStream[(K, V)],
+    parent: DStream[(K, V)],
     reduceFunc: (V, V) => V,
     invReduceFunc: (V, V) => V, 
     _windowTime: Time,
@@ -46,6 +47,8 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
   }
 
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
+    val reduceF = reduceFunc
+    val invReduceF = invReduceFunc
 
     val currentTime = validTime
     val currentWindow = Interval(currentTime - windowTime + parent.slideTime, currentTime)
@@ -84,54 +87,47 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
 
     // Cogroup the reduced RDDs and merge the reduced values
     val cogroupedRDD = new CoGroupedRDD[K](allRDDs.toSeq.asInstanceOf[Seq[RDD[(_, _)]]], partitioner)
-    val mergeValuesFunc = mergeValues(oldRDDs.size, newRDDs.size) _
-    val mergedValuesRDD = cogroupedRDD.asInstanceOf[RDD[(K,Seq[Seq[V]])]].mapValues(mergeValuesFunc)
+    //val mergeValuesFunc = mergeValues(oldRDDs.size, newRDDs.size) _
+
+    val numOldValues = oldRDDs.size
+    val numNewValues = newRDDs.size
+
+    val mergeValues = (seqOfValues: Seq[Seq[V]]) => {
+      if (seqOfValues.size != 1 + numOldValues + numNewValues) {
+        throw new Exception("Unexpected number of sequences of reduced values")
+      }
+      // Getting reduced values "old time steps" that will be removed from current window
+      val oldValues = (1 to numOldValues).map(i => seqOfValues(i)).filter(!_.isEmpty).map(_.head)
+      // Getting reduced values "new time steps"
+      val newValues = (1 to numNewValues).map(i => seqOfValues(numOldValues + i)).filter(!_.isEmpty).map(_.head)
+      if (seqOfValues(0).isEmpty) {
+        // If previous window's reduce value does not exist, then at least new values should exist
+        if (newValues.isEmpty) {
+          throw new Exception("Neither previous window has value for key, nor new values found")
+        }
+        // Reduce the new values
+        newValues.reduce(reduceF) // return
+      } else {
+        // Get the previous window's reduced value
+        var tempValue = seqOfValues(0).head
+        // If old values exists, then inverse reduce then from previous value
+        if (!oldValues.isEmpty) {
+          tempValue = invReduceF(tempValue, oldValues.reduce(reduceF))
+        }
+        // If new values exists, then reduce them with previous value
+        if (!newValues.isEmpty) {
+          tempValue = reduceF(tempValue, newValues.reduce(reduceF))
+        }
+        tempValue // return
+      }
+    }
+
+    val mergedValuesRDD = cogroupedRDD.asInstanceOf[RDD[(K,Seq[Seq[V]])]].mapValues(mergeValues)
 
     Some(mergedValuesRDD)
   }
 
-  def mergeValues(numOldValues: Int, numNewValues: Int)(seqOfValues: Seq[Seq[V]]): V = {
 
-    if (seqOfValues.size != 1 + numOldValues + numNewValues) {
-      throw new Exception("Unexpected number of sequences of reduced values")
-    }
-
-    // Getting reduced values "old time steps" that will be removed from current window
-    val oldValues = (1 to numOldValues).map(i => seqOfValues(i)).filter(!_.isEmpty).map(_.head)
-
-    // Getting reduced values "new time steps"
-    val newValues = (1 to numNewValues).map(i => seqOfValues(numOldValues + i)).filter(!_.isEmpty).map(_.head)
-
-    if (seqOfValues(0).isEmpty) {
-
-      // If previous window's reduce value does not exist, then at least new values should exist
-      if (newValues.isEmpty) {
-        throw new Exception("Neither previous window has value for key, nor new values found")
-      }
-
-      // Reduce the new values
-      // println("new values = " + newValues.map(_.toString).reduce(_ + " " + _))
-      return newValues.reduce(reduceFunc)
-    } else {
-
-      // Get the previous window's reduced value
-      var tempValue = seqOfValues(0).head
-
-      // If old values exists, then inverse reduce then from previous value
-      if (!oldValues.isEmpty) {
-        // println("old values = " + oldValues.map(_.toString).reduce(_ + " " + _))
-        tempValue = invReduceFunc(tempValue, oldValues.reduce(reduceFunc))
-      }
-
-      // If new values exists, then reduce them with previous value
-      if (!newValues.isEmpty) {
-        // println("new values = " + newValues.map(_.toString).reduce(_ + " " + _))
-        tempValue = reduceFunc(tempValue, newValues.reduce(reduceFunc))
-      }
-      // println("final value = " + tempValue)
-      return tempValue
-    }
-  }
 }
 
 

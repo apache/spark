@@ -93,7 +93,7 @@ object WordCount2 {
     println("Data count: " + data.count())
     
     val sentences = new ConstantInputDStream(ssc, data)
-    ssc.inputStreams += sentences
+    ssc.registerInputStream(sentences)
 
     import WordCount2_ExtraFunctions._
 

@@ -17,11 +17,22 @@ class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) =>
   }
   
   var nextTime = 0L   
-  
-  def start(): Long = {
-    nextTime = (math.floor(clock.currentTime / period) + 1).toLong * period
-    thread.start() 
+
+  def start(startTime: Long): Long = {
+    nextTime = startTime
+    thread.start()
     nextTime
+  }
+
+  def start(): Long = {
+    val startTime = math.ceil(clock.currentTime / period).toLong * period
+    start(startTime)
+  }
+
+  def restart(originalStartTime: Long): Long = {
+    val gap = clock.currentTime - originalStartTime
+    val newStartTime = math.ceil(gap / period).toLong * period + originalStartTime
+    start(newStartTime)
   }
   
   def stop() { 

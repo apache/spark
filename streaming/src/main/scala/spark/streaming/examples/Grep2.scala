@@ -50,7 +50,7 @@ object Grep2 {
     println("Data count: " + data.count())
     
     val sentences = new ConstantInputDStream(ssc, data)
-    ssc.inputStreams += sentences
+    ssc.registerInputStream(sentences)
 
     sentences.filter(_.contains("Culpepper")).count().foreachRDD(r =>
       println("Grep count: " + r.collect().mkString))

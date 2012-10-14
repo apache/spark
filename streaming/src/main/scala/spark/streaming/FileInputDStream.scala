@@ -1,33 +1,45 @@
 package spark.streaming
 
-import spark.SparkContext
 import spark.RDD
-import spark.BlockRDD
 import spark.UnionRDD
-import spark.storage.StorageLevel
-import spark.streaming._
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-
-import java.net.InetSocketAddress
-
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.fs.PathFilter
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
+import java.io.{ObjectInputStream, IOException}
 
 
 class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] : ClassManifest](
-    ssc: StreamingContext,
-    directory: Path,
+    @transient ssc_ : StreamingContext,
+    directory: String,
     filter: PathFilter = FileInputDStream.defaultPathFilter,
     newFilesOnly: Boolean = true) 
-  extends InputDStream[(K, V)](ssc) {
-  
-  val fs = directory.getFileSystem(new Configuration()) 
+  extends InputDStream[(K, V)](ssc_) {
+
+  @transient private var path_ : Path = null
+  @transient private var fs_ : FileSystem = null
+
+  /*
+  @transient @noinline lazy val path = {
+    //if (directory == null) throw new Exception("directory is null")
+    //println(directory)
+    new Path(directory)
+  }
+  @transient lazy val fs = path.getFileSystem(new Configuration())
+  */
+
   var lastModTime: Long = 0
-  
+
+  def path(): Path = {
+    if (path_ == null) path_ = new Path(directory)
+    path_
+  }
+
+  def fs(): FileSystem = {
+    if (fs_ == null) fs_ = path.getFileSystem(new Configuration())
+    fs_
+  }
+
   override def start() {
     if (newFilesOnly) {
       lastModTime = System.currentTimeMillis()
@@ -58,7 +70,7 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
       }
     }
     
-    val newFiles = fs.listStatus(directory, newFilter)
+    val newFiles = fs.listStatus(path, newFilter)
     logInfo("New files: " + newFiles.map(_.getPath).mkString(", "))
     if (newFiles.length > 0) {
       lastModTime = newFilter.latestModTime
@@ -67,10 +79,19 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
       file => ssc.sc.newAPIHadoopFile[K, V, F](file.getPath.toString)))
     Some(newRDD)
   }
+  /*
+  @throws(classOf[IOException])
+  private def readObject(ois: ObjectInputStream) {
+    println(this.getClass().getSimpleName + ".readObject used")
+    ois.defaultReadObject()
+    println("HERE HERE" + this.directory)
+  }
+  */
+
 }
 
 object FileInputDStream {
-  val defaultPathFilter = new PathFilter {
+  val defaultPathFilter = new PathFilter with Serializable {
     def accept(path: Path): Boolean = {
       val file = path.getName()
       if (file.startsWith(".") || file.endsWith("_tmp")) {

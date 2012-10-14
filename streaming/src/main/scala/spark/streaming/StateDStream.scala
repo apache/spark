@@ -7,17 +7,18 @@ import spark.MapPartitionsRDD
 import spark.SparkContext._
 import spark.storage.StorageLevel
 
+
+class StateRDD[U: ClassManifest, T: ClassManifest](prev: RDD[T], f: Iterator[T] => Iterator[U], rememberPartitioner: Boolean)
+  extends MapPartitionsRDD[U, T](prev, f) {
+  override val partitioner = if (rememberPartitioner) prev.partitioner else None
+}
+
 class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManifest](
     @transient parent: DStream[(K, V)],
     updateFunc: (Iterator[(K, Seq[V], S)]) => Iterator[(K, S)],
     partitioner: Partitioner,
     rememberPartitioner: Boolean
   ) extends DStream[(K, S)](parent.ssc) {
-
-  class SpecialMapPartitionsRDD[U: ClassManifest, T: ClassManifest](prev: RDD[T], f: Iterator[T] => Iterator[U])
-    extends MapPartitionsRDD(prev, f) {
-    override val partitioner = if (rememberPartitioner) prev.partitioner else None
-  }
 
   override def dependencies = List(parent)
 
@@ -79,19 +80,18 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
             // first map the cogrouped tuple to tuples of required type,
             // and then apply the update function
             val updateFuncLocal = updateFunc
-            val mapPartitionFunc = (iterator: Iterator[(K, (Seq[V], Seq[S]))]) => {
+            val finalFunc = (iterator: Iterator[(K, (Seq[V], Seq[S]))]) => {
               val i = iterator.map(t => {
                 (t._1, t._2._1, t._2._2.headOption.getOrElse(null.asInstanceOf[S]))
               })
               updateFuncLocal(i)
             }
             val cogroupedRDD = parentRDD.cogroup(prevStateRDD, partitioner)
-            val stateRDD = new SpecialMapPartitionsRDD(cogroupedRDD, mapPartitionFunc)
+            val stateRDD = new StateRDD(cogroupedRDD, finalFunc, rememberPartitioner)
             //logDebug("Generating state RDD for time " + validTime)
             return Some(stateRDD)
           }
           case None => {    // If parent RDD does not exist, then return old state RDD
-            //logDebug("Generating state RDD for time " + validTime + " (no change)")
             return Some(prevStateRDD)
           }
         }
@@ -107,12 +107,12 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
             // first map the grouped tuple to tuples of required type,
             // and then apply the update function
             val updateFuncLocal = updateFunc
-            val mapPartitionFunc = (iterator: Iterator[(K, Seq[V])]) => {
+            val finalFunc = (iterator: Iterator[(K, Seq[V])]) => {
                 updateFuncLocal(iterator.map(tuple => (tuple._1, tuple._2, null.asInstanceOf[S])))
             }
 
             val groupedRDD = parentRDD.groupByKey(partitioner)
-            val sessionRDD = new SpecialMapPartitionsRDD(groupedRDD, mapPartitionFunc)
+            val sessionRDD = new StateRDD(groupedRDD, finalFunc, rememberPartitioner)
             //logDebug("Generating state RDD for time " + validTime + " (first)")
             return Some(sessionRDD)
           }

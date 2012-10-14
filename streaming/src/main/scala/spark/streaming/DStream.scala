@@ -2,20 +2,19 @@ package spark.streaming
 
 import spark.streaming.StreamingContext._
 
-import spark.RDD
-import spark.UnionRDD
-import spark.Logging
+import spark._
 import spark.SparkContext._
 import spark.storage.StorageLevel
-import spark.Partitioner
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
 import java.util.concurrent.ArrayBlockingQueue
+import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
+import scala.Some
 
-abstract class DStream[T: ClassManifest] (@transient val ssc: StreamingContext)
-extends Logging with Serializable {
+abstract class DStream[T: ClassManifest] (@transient var ssc: StreamingContext)
+extends Serializable with Logging {
 
   initLogging()
 
@@ -41,10 +40,10 @@ extends Logging with Serializable {
    */
 
   // Variable to store the RDDs generated earlier in time
-  @transient protected val generatedRDDs = new HashMap[Time, RDD[T]] ()
+  protected val generatedRDDs = new HashMap[Time, RDD[T]] ()
   
   // Variable to be set to the first time seen by the DStream (effective time zero)
-  protected[streaming] var zeroTime: Time = null
+  protected var zeroTime: Time = null
 
   // Variable to specify storage level
   protected var storageLevel: StorageLevel = StorageLevel.NONE
@@ -52,6 +51,9 @@ extends Logging with Serializable {
   // Checkpoint level and checkpoint interval
   protected var checkpointLevel: StorageLevel = StorageLevel.NONE  // NONE means don't checkpoint
   protected var checkpointInterval: Time = null
+
+  // Reference to whole DStream graph, so that checkpointing process can lock it
+  protected var graph: DStreamGraph = null
 
   // Change this RDD's storage level
   def persist(
@@ -77,7 +79,7 @@ extends Logging with Serializable {
   // Turn on the default caching level for this RDD
   def cache(): DStream[T] = persist()
 
-  def isInitialized = (zeroTime != null)
+  def isInitialized() = (zeroTime != null)
 
   /**
    * This method initializes the DStream by setting the "zero" time, based on which
@@ -85,15 +87,33 @@ extends Logging with Serializable {
    * its parent DStreams.
    */
   protected[streaming] def initialize(time: Time) {
-    if (zeroTime == null) {
-      zeroTime = time
+    if (zeroTime != null) {
+      throw new Exception("ZeroTime is already initialized, cannot initialize it again")
     }
+    zeroTime = time
     logInfo(this + " initialized")
     dependencies.foreach(_.initialize(zeroTime))
   }
 
+  protected[streaming] def setContext(s: StreamingContext) {
+    if (ssc != null && ssc != s) {
+      throw new Exception("Context is already set, cannot set it again")
+    }
+    ssc = s
+    logInfo("Set context for " + this.getClass.getSimpleName)
+    dependencies.foreach(_.setContext(ssc))
+  }
+
+  protected[streaming] def setGraph(g: DStreamGraph) {
+    if (graph != null && graph != g) {
+      throw new Exception("Graph is already set, cannot set it again")
+    }
+    graph = g
+    dependencies.foreach(_.setGraph(graph))
+  }
+
   /** This method checks whether the 'time' is valid wrt slideTime for generating RDD */
-  protected def isTimeValid (time: Time): Boolean = {
+  protected def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
       throw new Exception (this.toString + " has not been initialized")
     } else if (time < zeroTime || ! (time - zeroTime).isMultipleOf(slideTime)) {
@@ -158,13 +178,42 @@ extends Logging with Serializable {
     }
   }
 
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    println(this.getClass().getSimpleName + ".writeObject used")
+    if (graph != null) {
+      graph.synchronized {
+        if (graph.checkpointInProgress) {
+          oos.defaultWriteObject()
+        } else {
+          val msg = "Object of " + this.getClass.getName + " is being serialized " +
+            " possibly as a part of closure of an RDD operation. This is because " +
+            " the DStream object is being referred to from within the closure. " +
+            " Please rewrite the RDD operation inside this DStream to avoid this. " +
+            " This has been enforced to avoid bloating of Spark tasks " +
+            " with unnecessary objects."
+          throw new java.io.NotSerializableException(msg)
+        }
+      }
+    } else {
+      throw new java.io.NotSerializableException("Graph is unexpectedly null when DStream is being serialized.")
+    }
+  }
+
+  @throws(classOf[IOException])
+  private def readObject(ois: ObjectInputStream) {
+    println(this.getClass().getSimpleName + ".readObject used")
+    ois.defaultReadObject()
+  }
+
   /** 
    * --------------
    * DStream operations
    * -------------- 
    */
-  
-  def map[U: ClassManifest](mapFunc: T => U) = new MappedDStream(this, ssc.sc.clean(mapFunc))
+  def map[U: ClassManifest](mapFunc: T => U) = {
+    new MappedDStream(this, ssc.sc.clean(mapFunc))
+  }
 
   def flatMap[U: ClassManifest](flatMapFunc: T => Traversable[U]) = {
     new FlatMappedDStream(this, ssc.sc.clean(flatMapFunc))
@@ -262,19 +311,15 @@ extends Logging with Serializable {
 
   // Get all the RDDs between fromTime to toTime (both included)
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = {
-
     val rdds = new ArrayBuffer[RDD[T]]()
     var time = toTime.floor(slideTime)
-
-
     while (time >= zeroTime && time >= fromTime) {
       getOrCompute(time) match {
         case Some(rdd) => rdds += rdd
-        case None => throw new Exception("Could not get old reduced RDD for time " + time)
+        case None => //throw new Exception("Could not get RDD for time " + time)
       }
       time -= slideTime
     }
-
     rdds.toSeq
   }
 
@@ -284,12 +329,16 @@ extends Logging with Serializable {
 }
 
 
-abstract class InputDStream[T: ClassManifest] (@transient ssc: StreamingContext)
-  extends DStream[T](ssc) {
+abstract class InputDStream[T: ClassManifest] (@transient ssc_ : StreamingContext)
+  extends DStream[T](ssc_) {
   
   override def dependencies = List()
 
-  override def slideTime = ssc.batchDuration 
+  override def slideTime = {
+    if (ssc == null) throw new Exception("ssc is null")
+    if (ssc.batchDuration == null) throw new Exception("ssc.batchDuration is null")
+    ssc.batchDuration
+  }
   
   def start()  
   
@@ -302,7 +351,7 @@ abstract class InputDStream[T: ClassManifest] (@transient ssc: StreamingContext)
  */
 
 class MappedDStream[T: ClassManifest, U: ClassManifest] (
-    @transient parent: DStream[T],
+    parent: DStream[T],
     mapFunc: T => U
   ) extends DStream[U](parent.ssc) {
   
@@ -321,7 +370,7 @@ class MappedDStream[T: ClassManifest, U: ClassManifest] (
  */
 
 class FlatMappedDStream[T: ClassManifest, U: ClassManifest](
-    @transient parent: DStream[T],
+    parent: DStream[T],
     flatMapFunc: T => Traversable[U]
   ) extends DStream[U](parent.ssc) {
   
@@ -340,7 +389,7 @@ class FlatMappedDStream[T: ClassManifest, U: ClassManifest](
  */
 
 class FilteredDStream[T: ClassManifest](
-    @transient parent: DStream[T], 
+    parent: DStream[T],
     filterFunc: T => Boolean
   ) extends DStream[T](parent.ssc) {
   
@@ -359,7 +408,7 @@ class FilteredDStream[T: ClassManifest](
  */
 
 class MapPartitionedDStream[T: ClassManifest, U: ClassManifest](
-    @transient parent: DStream[T],
+    parent: DStream[T],
     mapPartFunc: Iterator[T] => Iterator[U]
   ) extends DStream[U](parent.ssc) {
 
@@ -377,7 +426,7 @@ class MapPartitionedDStream[T: ClassManifest, U: ClassManifest](
  * TODO
  */
 
-class GlommedDStream[T: ClassManifest](@transient parent: DStream[T]) 
+class GlommedDStream[T: ClassManifest](parent: DStream[T])
   extends DStream[Array[T]](parent.ssc) {
 
   override def dependencies = List(parent)
@@ -395,7 +444,7 @@ class GlommedDStream[T: ClassManifest](@transient parent: DStream[T])
  */
 
 class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
-    @transient parent: DStream[(K,V)],
+    parent: DStream[(K,V)],
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
@@ -420,7 +469,7 @@ class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
  * TODO
  */
 
-class UnifiedDStream[T: ClassManifest](@transient parents: Array[DStream[T]])
+class UnifiedDStream[T: ClassManifest](parents: Array[DStream[T]])
   extends DStream[T](parents(0).ssc) {
 
   if (parents.length == 0) {
@@ -459,7 +508,7 @@ class UnifiedDStream[T: ClassManifest](@transient parents: Array[DStream[T]])
  */
 
 class PerElementForEachDStream[T: ClassManifest] (
-    @transient parent: DStream[T],
+    parent: DStream[T],
     foreachFunc: T => Unit
   ) extends DStream[Unit](parent.ssc) {
   
@@ -490,7 +539,7 @@ class PerElementForEachDStream[T: ClassManifest] (
  */
 
 class PerRDDForEachDStream[T: ClassManifest] (
-    @transient parent: DStream[T],
+    parent: DStream[T],
     foreachFunc: (RDD[T], Time) => Unit
   ) extends DStream[Unit](parent.ssc) {
 
@@ -518,15 +567,15 @@ class PerRDDForEachDStream[T: ClassManifest] (
  */
 
 class TransformedDStream[T: ClassManifest, U: ClassManifest] (
-    @transient parent: DStream[T],
+    parent: DStream[T],
     transformFunc: (RDD[T], Time) => RDD[U]
   ) extends DStream[U](parent.ssc) {
 
-    override def dependencies = List(parent)
+  override def dependencies = List(parent)
 
-    override def slideTime: Time = parent.slideTime
+  override def slideTime: Time = parent.slideTime
 
-    override def compute(validTime: Time): Option[RDD[U]] = {
-      parent.getOrCompute(validTime).map(transformFunc(_, validTime))
-    }
+  override def compute(validTime: Time): Option[RDD[U]] = {
+    parent.getOrCompute(validTime).map(transformFunc(_, validTime))
   }
+}

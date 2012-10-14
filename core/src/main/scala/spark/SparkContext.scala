@@ -46,8 +46,8 @@ import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend
 import spark.storage.BlockManagerMaster
 
 class SparkContext(
-    master: String,
-    frameworkName: String,
+    val master: String,
+    val frameworkName: String,
     val sparkHome: String,
     val jars: Seq[String])
   extends Logging {

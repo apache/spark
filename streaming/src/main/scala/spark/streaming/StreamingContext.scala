@@ -21,30 +21,69 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 
-class StreamingContext (@transient val sc: SparkContext) extends Logging {
+class StreamingContext (
+    sc_ : SparkContext,
+    cp_ : Checkpoint
+  ) extends Logging {
+
+  def this(sparkContext: SparkContext) = this(sparkContext, null)
 
   def this(master: String, frameworkName: String, sparkHome: String = null, jars: Seq[String] = Nil) =
-    this(new SparkContext(master, frameworkName, sparkHome, jars))
+    this(new SparkContext(master, frameworkName, sparkHome, jars), null)
+
+  def this(file: String) = this(null, Checkpoint.loadFromFile(file))
+
+  def this(cp_ : Checkpoint) = this(null, cp_)
 
   initLogging()
 
+  if (sc_ == null && cp_ == null) {
+    throw new Exception("Streaming Context cannot be initilalized with " +
+      "both SparkContext and checkpoint as null")
+  }
+
+  val isCheckpointPresent = (cp_ != null)
+
+  val sc: SparkContext = {
+    if (isCheckpointPresent) {
+      new SparkContext(cp_.master, cp_.frameworkName, cp_.sparkHome, cp_.jars)
+    } else {
+      sc_
+    }
+  }
+
   val env = SparkEnv.get
-  
-  val inputStreams = new ArrayBuffer[InputDStream[_]]()
-  val outputStreams = new ArrayBuffer[DStream[_]]()
+
+  val graph: DStreamGraph = {
+    if (isCheckpointPresent) {
+
+      cp_.graph.setContext(this)
+      cp_.graph
+    } else {
+      new DStreamGraph()
+    }
+  }
+
   val nextNetworkInputStreamId = new AtomicInteger(0)
   
-  var batchDuration: Time = null 
-  var scheduler: Scheduler = null
+  var batchDuration: Time = if (isCheckpointPresent) cp_.batchDuration else null
+  var checkpointFile: String = if (isCheckpointPresent) cp_.checkpointFile else null
+  var checkpointInterval: Time = if (isCheckpointPresent) cp_.checkpointInterval else null
   var networkInputTracker: NetworkInputTracker = null
-  var receiverJobThread: Thread = null 
-  
-  def setBatchDuration(duration: Long) {
-    setBatchDuration(Time(duration))
-  }
-  
+  var receiverJobThread: Thread = null
+  var scheduler: Scheduler = null
+
   def setBatchDuration(duration: Time) {
+    if (batchDuration != null) {
+      throw new Exception("Batch duration alread set as " + batchDuration +
+        ". cannot set it again.")
+    }
     batchDuration = duration
+  }
+
+  def setCheckpointDetails(file: String, interval: Time) {
+    checkpointFile = file
+    checkpointInterval = interval
   }
   
   private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
@@ -59,7 +98,7 @@ class StreamingContext (@transient val sc: SparkContext) extends Logging {
       converter: (InputStream) => Iterator[T]
     ): DStream[T] = {
     val inputStream = new ObjectInputDStream[T](this, hostname, port, converter)
-    inputStreams += inputStream
+    graph.addInputStream(inputStream)
     inputStream
   }
   
@@ -69,7 +108,7 @@ class StreamingContext (@transient val sc: SparkContext) extends Logging {
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_2
     ): DStream[T] = {
     val inputStream = new RawInputDStream[T](this, hostname, port, storageLevel)
-    inputStreams += inputStream
+    graph.addInputStream(inputStream)
     inputStream
   }
  
@@ -94,8 +133,8 @@ class StreamingContext (@transient val sc: SparkContext) extends Logging {
     V: ClassManifest, 
     F <: NewInputFormat[K, V]: ClassManifest
   ](directory: String): DStream[(K, V)] = {
-    val inputStream = new FileInputDStream[K, V, F](this, new Path(directory))
-    inputStreams += inputStream
+    val inputStream = new FileInputDStream[K, V, F](this, directory)
+    graph.addInputStream(inputStream)
     inputStream
   }
 
@@ -113,24 +152,31 @@ class StreamingContext (@transient val sc: SparkContext) extends Logging {
       defaultRDD: RDD[T] = null
     ): DStream[T] = {
     val inputStream = new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
-    inputStreams += inputStream
+    graph.addInputStream(inputStream)
     inputStream
   }
   
-  def createQueueStream[T: ClassManifest](iterator: Iterator[RDD[T]]): DStream[T] = {
+  def createQueueStream[T: ClassManifest](iterator: Array[RDD[T]]): DStream[T] = {
     val queue = new Queue[RDD[T]]
     val inputStream = createQueueStream(queue, true, null)
     queue ++= iterator
     inputStream
-  } 
+  }
 
-  
+  /**
+   * This function registers a InputDStream as an input stream that will be
+   * started (InputDStream.start() called) to get the input data streams.
+   */
+  def registerInputStream(inputStream: InputDStream[_]) {
+    graph.addInputStream(inputStream)
+  }
+
   /**
    * This function registers a DStream as an output stream that will be
    * computed every interval.
    */  
-  def registerOutputStream (outputStream: DStream[_]) {
-    outputStreams += outputStream
+  def registerOutputStream(outputStream: DStream[_]) {
+    graph.addOutputStream(outputStream)
   }
   
   /**
@@ -143,13 +189,9 @@ class StreamingContext (@transient val sc: SparkContext) extends Logging {
     if (batchDuration < Milliseconds(100)) {
       logWarning("Batch duration of " + batchDuration + " is very low")
     }
-    if (inputStreams.size == 0) {
-      throw new Exception("No input streams created, so nothing to take input from")
-    }
-    if (outputStreams.size == 0) {
+    if (graph.getOutputStreams().size == 0) {
       throw new Exception("No output streams registered, so nothing to execute")
     }
-    
   }
   
   /**
@@ -157,7 +199,7 @@ class StreamingContext (@transient val sc: SparkContext) extends Logging {
    */  
   def start() {
     verify()
-    val networkInputStreams = inputStreams.filter(s => s match {
+    val networkInputStreams = graph.getInputStreams().filter(s => s match {
         case n: NetworkInputDStream[_] => true 
         case _ => false
       }).map(_.asInstanceOf[NetworkInputDStream[_]]).toArray
@@ -169,8 +211,9 @@ class StreamingContext (@transient val sc: SparkContext) extends Logging {
     }
 
     Thread.sleep(1000)
-    // Start the scheduler 
-    scheduler = new Scheduler(this, inputStreams.toArray, outputStreams.toArray)
+
+    // Start the scheduler
+    scheduler = new Scheduler(this)
     scheduler.start()    
   }
   
@@ -188,6 +231,10 @@ class StreamingContext (@transient val sc: SparkContext) extends Logging {
     }
     
     logInfo("StreamingContext stopped")
+  }
+
+  def checkpoint() {
+    new Checkpoint(this).saveToFile(checkpointFile)
   }
 }
 
