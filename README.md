@@ -15,7 +15,7 @@ This README file only contains basic setup instructions.
 Spark requires Scala 2.9.2. The project is built using Simple Build Tool (SBT),
 which is packaged with it. To build Spark and its example programs, run:
 
-    sbt/sbt compile
+    sbt/sbt package
 
 To run Spark, you will need to have Scala's bin directory in your `PATH`, or
 you will need to set the `SCALA_HOME` environment variable to point to where
