@@ -123,7 +123,7 @@ object SimpleJob extends Application {
 
 This job simply counts the number of lines containing 'a' and the number containing 'b' in a system log file. Unlike the earlier examples with the Spark shell, which initializes its own SparkContext, we initialize a SparkContext as part of the job. We pass the SparkContext constructor four arguments, the type of scheduler we want to use (in this case, a local scheduler), a name for the job, the directory where Spark is installed, and a name for the jar file containing the job's sources. The final two arguments are needed in a distributed setting, where Spark is running across several nodes, so we include them for completeness. Spark will automatically ship the jar files you list to slave nodes.
 
-This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt` which explains that Spark is a dependency:
+This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt` which explains that Spark is a dependency. This file also adds two repositories which host Spark dependencies:
 
 {% highlight scala %}
 name := "Simple Project"
@@ -133,6 +133,10 @@ version := "1.0"
 scalaVersion := "{{site.SCALA_VERSION}}"
 
 libraryDependencies += "org.spark-project" %% "spark-core" % "{{site.SPARK_VERSION}}"
+
+resolvers ++= Seq(
+  "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
+  "Spray Repository" at "http://repo.spray.cc/")
 {% endhighlight %}
 
 Of course, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job. 
