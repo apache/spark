@@ -17,8 +17,8 @@ which is packaged with it. To build Spark and its example programs, run:
 
     sbt/sbt compile
 
-To run Spark, you will need to have Scala's bin in your `PATH`, or you
-will need to set the `SCALA_HOME` environment variable to point to where
+To run Spark, you will need to have Scala's bin directory in your `PATH`, or
+you will need to set the `SCALA_HOME` environment variable to point to where
 you've installed Scala. Scala must be accessible through one of these
 methods on your cluster's worker nodes as well as its master.
 
