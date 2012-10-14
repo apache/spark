@@ -10,7 +10,7 @@ import com.jsuereth.pgp.sbtplugin.PgpKeys._
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
   // "1.0.3" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
-  val HADOOP_VERSION = "1.0.3"
+  val HADOOP_VERSION = "0.20.205.0"
 
   lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel)
 
