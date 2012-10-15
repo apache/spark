@@ -61,9 +61,9 @@ trait DStreamSuiteBase extends FunSuite with Logging {
 
     // Setup the stream computation
     val inputStream = new TestInputStream(ssc, input)
-    ssc.registerInputStream(inputStream)
     val operatedStream = operation(inputStream)
     val outputStream = new TestOutputStream(operatedStream, new ArrayBuffer[Seq[V]] with SynchronizedBuffer[Seq[V]])
+    ssc.registerInputStream(inputStream)
     ssc.registerOutputStream(outputStream)
     ssc
   }

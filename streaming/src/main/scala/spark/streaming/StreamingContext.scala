@@ -184,25 +184,20 @@ class StreamingContext (
   }
   
   /**
-   * This function verify whether the stream computation is eligible to be executed.
+   * This function validate whether the stream computation is eligible to be executed.
    */
-  private def verify() {
-    if (batchDuration == null) {
-      throw new Exception("Batch duration has not been set")
-    }
-    if (batchDuration < Milliseconds(100)) {
-      logWarning("Batch duration of " + batchDuration + " is very low")
-    }
-    if (graph.getOutputStreams().size == 0) {
-      throw new Exception("No output streams registered, so nothing to execute")
-    }
+  private def validate() {
+    assert(batchDuration != null, "Batch duration has not been set")
+    assert(batchDuration > Milliseconds(100), "Batch duration of " + batchDuration + " is very low")
+    assert(graph != null, "Graph is null")
+    assert(graph.getOutputStreams().size > 0, "No output streams registered, so nothing to execute")
   }
   
   /**
    * This function starts the execution of the streams. 
    */  
   def start() {
-    verify()
+    validate()
     val networkInputStreams = graph.getInputStreams().filter(s => s match {
         case n: NetworkInputDStream[_] => true 
         case _ => false

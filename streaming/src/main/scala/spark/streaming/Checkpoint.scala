@@ -25,6 +25,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time) ext
     assert(framework != null, "Checkpoint.framework is null")
     assert(graph != null, "Checkpoint.graph is null")
     assert(batchDuration != null, "Checkpoint.batchDuration is null")
+    assert(checkpointTime != null, "Checkpoint.checkpointTime is null")
   }
 
   def saveToFile(file: String = checkpointFile) {
@@ -60,6 +61,11 @@ object Checkpoint {
         throw new Exception("Checkpoint file '" + file + "' does not exist")
       }
       val fis = fs.open(path)
+      // ObjectInputStream uses the last defined user-defined class loader in the stack
+      // to find classes, which maybe the wrong class loader. Hence, a inherited version
+      // of ObjectInputStream is used to explicitly use the current thread's default class
+      // loader to find and load classes. This is a well know Java issue and has popped up
+      // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
       val ois = new ObjectInputStreamWithLoader(fis, Thread.currentThread().getContextClassLoader)
       val cp = ois.readObject.asInstanceOf[Checkpoint]
       ois.close()
