@@ -17,7 +17,13 @@ This guide shows each of these features and walks through some samples. It assum
 
 # Linking with Spark
 
-To write a Spark application, you will need to add both Spark and its dependencies to your CLASSPATH. The easiest way to do this is to run `sbt/sbt assembly` to build both Spark and its dependencies into one JAR (`core/target/spark-core-assembly-0.6.0.jar`), then add this to your CLASSPATH. Alternatively, you can publish Spark to the Maven cache on your machine using `sbt/sbt publish-local`. It will be an artifact called `spark-core` under the organization `org.spark-project`.
+To write a Spark application, you will need to add both Spark and its dependencies to your CLASSPATH. If you use sbt or Maven, Spark is available through Maven Central at:
+
+    groupId = org.spark_project
+    artifactId = spark-core_{{site.SCALA_VERSION}}
+    version = {{site.SPARK_VERSION}} 
+
+For other build systems or environments, you can run `sbt/sbt assembly` to build both Spark and its dependencies into one JAR (`core/target/spark-core-assembly-0.6.0.jar`), then add this to your CLASSPATH.
 
 In addition, you'll need to import some Spark classes and implicit conversions. Add the following lines at the top of your program:
 
@@ -35,9 +41,13 @@ This is done through the following constructor:
 new SparkContext(master, jobName, [sparkHome], [jars])
 {% endhighlight %}
 
-The `master` parameter is a string specifying a [Mesos]({{HOME_PATH}}running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
+The `master` parameter is a string specifying a [Mesos](running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
 
-In the Spark interpreter, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, run `MASTER=local[4] ./spark-shell` to run locally with four cores.
+In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, to run on four cores, use
+
+{% highlight bash %}
+$ MASTER=local[4] ./spark-shell
+{% endhighlight %}
 
 ### Master URLs
 
@@ -48,16 +58,16 @@ The master URL passed to Spark can be in one of the following formats:
 <tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
 <tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). 
 </td></tr>
-<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="{{HOME_PATH}}spark-standalone.html">Spark standalone 
+<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone 
         cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default. 
 </td></tr>
-<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="{{HOME_PATH}}running-on-mesos.html">Mesos</a> cluster. 
+<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster. 
         The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, 
         which is 5050 by default. 
 </td></tr>
 </table>
 
-For running on YARN, Spark launches an instance of the standalone deploy cluster within YARN; see [running on YARN]({{HOME_PATH}}running-on-yarn.html) for details.
+For running on YARN, Spark launches an instance of the standalone deploy cluster within YARN; see [running on YARN](running-on-yarn.html) for details.
 
 ### Deploying Code on a Cluster
 
@@ -116,7 +126,7 @@ All transformations in Spark are <i>lazy</i>, in that they do not compute their 
 
 By default, each transformed RDD is recomputed each time you run an action on it. However, you may also *persist* an RDD in memory using the `persist` (or `cache`) method, in which case Spark will keep the elements around on the cluster for much faster access the next time you query it. There is also support for persisting datasets on disk, or replicated across the cluster. The next section in this document describes these options.
 
-The following tables list the transformations and actions currently supported (see also the [RDD API doc]({{HOME_PATH}}api/core/index.html#spark.RDD) for details):
+The following tables list the transformations and actions currently supported (see also the [RDD API doc](api/core/index.html#spark.RDD) for details):
 
 ### Transformations
 
@@ -185,7 +195,7 @@ The following tables list the transformations and actions currently supported (s
 </tr>
 </table>
 
-A complete list of transformations is available in the [RDD API doc]({{HOME_PATH}}api/core/index.html#spark.RDD).
+A complete list of transformations is available in the [RDD API doc](api/core/index.html#spark.RDD).
 
 ### Actions
 
@@ -233,7 +243,7 @@ A complete list of transformations is available in the [RDD API doc]({{HOME_PATH
 </tr>
 </table>
 
-A complete list of actions is available in the [RDD API doc]({{HOME_PATH}}api/core/index.html#spark.RDD).
+A complete list of actions is available in the [RDD API doc](api/core/index.html#spark.RDD).
 
 ## RDD Persistence
 
@@ -241,7 +251,7 @@ One of the most important capabilities in Spark is *persisting* (or *caching*) a
 
 You can mark an RDD to be persisted using the `persist()` or `cache()` methods on it. The first time it is computed in an action, it will be kept in memory on the nodes. The cache is fault-tolerant -- if any partition of an RDD is lost, it will automatically be recomputed using the transformations that originally created it.
 
-In addition, each RDD can be stored using a different *storage level*, allowing you, for example, to persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space), or even replicate it across nodes. These levels are chosen by passing a [`spark.storage.StorageLevel`]({{HOME_PATH}}api/core/index.html#spark.storage.StorageLevel) object to `persist()`. The `cache()` method is a shorthand for using the default storage level, which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The complete set of available storage levels is:
+In addition, each RDD can be stored using a different *storage level*, allowing you, for example, to persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space), or even replicate it across nodes. These levels are chosen by passing a [`spark.storage.StorageLevel`](api/core/index.html#spark.storage.StorageLevel) object to `persist()`. The `cache()` method is a shorthand for using the default storage level, which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The complete set of available storage levels is:
 
 <table class="table">
 <tr><th style="width:23%">Storage Level</th><th>Meaning</th></tr>
@@ -259,7 +269,7 @@ In addition, each RDD can be stored using a different *storage level*, allowing 
   <td> MEMORY_ONLY_SER </td>
   <td> Store RDD as <i>serialized</i> Java objects (one byte array per partition).
     This is generally more space-efficient than deserialized objects, especially when using a
-    <a href="{{HOME_PATH}}tuning.html">fast serializer</a>, but more CPU-intensive to read.
+    <a href="tuning.html">fast serializer</a>, but more CPU-intensive to read.
   </td>
 </tr>
 <tr>
@@ -284,7 +294,7 @@ We recommend going through the following process to select one:
 
 * If your RDDs fit comfortably with the default storage level (`MEMORY_ONLY`), leave them that way. This is the most
   CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
-* If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library]({{HOME_PATH}}tuning.html) to make the objects
+* If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to make the objects
   much more space-efficient, but still reasonably fast to access.
 * Don't spill to disk unless the functions that computed your datasets are expensive, or they filter a large
   amount of the data. Otherwise, recomputing a partition is about as fast as reading it from disk.
@@ -339,6 +349,6 @@ res2: Int = 10
 You can see some [example Spark programs](http://www.spark-project.org/examples.html) on the Spark website.
 In addition, Spark includes several sample programs in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `run` script included in Spark -- for example, `./run spark.examples.SparkPi`. Each example program prints usage help when run without any arguments.
 
-For help on optimizing your program, the [configuration]({{HOME_PATH}}configuration.html) and
-[tuning]({{HOME_PATH}}tuning.html) guides provide information on best practices. They are especially important for
+For help on optimizing your program, the [configuration](configuration.html) and
+[tuning](tuning.html) guides provide information on best practices. They are especially important for
 making sure that your data is stored in memory in an efficient format.

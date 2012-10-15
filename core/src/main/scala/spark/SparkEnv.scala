@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.actor.ActorSystemImpl
 import akka.remote.RemoteActorRefProvider
 
+import serializer.Serializer
 import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster

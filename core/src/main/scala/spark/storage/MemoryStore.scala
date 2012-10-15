@@ -46,19 +46,17 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   override def putValues(
       blockId: String,
-      values: Iterator[Any],
+      values: ArrayBuffer[Any],
       level: StorageLevel,
       returnValues: Boolean)
     : PutResult = {
 
     if (level.deserialized) {
-      val elements = new ArrayBuffer[Any]
-      elements ++= values
-      val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
-      tryToPut(blockId, elements, sizeEstimate, true)
-      PutResult(sizeEstimate, Left(elements.iterator))
+      val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
+      tryToPut(blockId, values, sizeEstimate, true)
+      PutResult(sizeEstimate, Left(values.iterator))
     } else {
-      val bytes = blockManager.dataSerialize(blockId, values)
+      val bytes = blockManager.dataSerialize(blockId, values.iterator)
       tryToPut(blockId, bytes, bytes.limit, false)
       PutResult(bytes.limit(), Right(bytes))
     }
@@ -146,7 +144,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         // Tell the block manager that we couldn't put it in memory so that it can drop it to
         // disk if the block allows disk storage.
         val data = if (deserialized) {
-          Left(value.asInstanceOf[ArrayBuffer[Any]].iterator)
+          Left(value.asInstanceOf[ArrayBuffer[Any]])
         } else {
           Right(value.asInstanceOf[ByteBuffer].duplicate())
         }
@@ -199,7 +197,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         for (blockId <- selectedBlocks) {
           val entry = entries.get(blockId)
           val data = if (entry.deserialized) {
-            Left(entry.value.asInstanceOf[ArrayBuffer[Any]].iterator)
+            Left(entry.value.asInstanceOf[ArrayBuffer[Any]])
           } else {
             Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
           }

@@ -27,9 +27,10 @@ extends Comparable[SourceInfo] with Logging {
  * Helper Object of SourceInfo for its constants
  */
 private[spark] object SourceInfo {
-  // Constants for special values of listenPort
+  // Broadcast has not started yet! Should never happen.
   val TxNotStartedRetry = -1
-  val TxOverGoToDefault = 0
+  // Broadcast has already finished. Try default mechanism.
+  val TxOverGoToDefault = -3
   // Other constants
   val StopBroadcast = -2
   val UnusedParam = 0

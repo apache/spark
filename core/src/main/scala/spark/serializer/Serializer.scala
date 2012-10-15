@@ -1,25 +1,23 @@
-package spark
+package spark.serializer
 
-import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
-import java.nio.channels.Channels
-
+import java.io.{EOFException, InputStream, OutputStream}
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
-
 import spark.util.ByteBufferInputStream
 
 /**
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
- * create SerializerInstances that do the actual serialization.
+ * create [[spark.serializer.SerializerInstance]] objects that do the actual serialization and are
+ * guaranteed to only be called from one thread at a time.
  */
 trait Serializer {
   def newInstance(): SerializerInstance
 }
 
 /**
- * An instance of the serializer, for use by one thread at a time.
+ * An instance of a serializer, for use by one thread at a time.
  */
-private[spark] trait SerializerInstance {
+trait SerializerInstance {
   def serialize[T](t: T): ByteBuffer
 
   def deserialize[T](bytes: ByteBuffer): T
@@ -50,7 +48,7 @@ private[spark] trait SerializerInstance {
 /**
  * A stream for writing serialized objects.
  */
-private[spark] trait SerializationStream {
+trait SerializationStream {
   def writeObject[T](t: T): SerializationStream
   def flush(): Unit
   def close(): Unit
@@ -66,7 +64,7 @@ private[spark] trait SerializationStream {
 /**
  * A stream for reading serialized objects.
  */
-private[spark] trait DeserializationStream {
+trait DeserializationStream {
   def readObject[T](): T
   def close(): Unit
 

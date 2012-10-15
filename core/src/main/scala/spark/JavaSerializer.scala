@@ -3,6 +3,7 @@ package spark
 import java.io._
 import java.nio.ByteBuffer
 
+import serializer.{Serializer, SerializerInstance, DeserializationStream, SerializationStream}
 import spark.util.ByteBufferInputStream
 
 private[spark] class JavaSerializationStream(out: OutputStream) extends SerializationStream {
@@ -57,6 +58,9 @@ private[spark] class JavaSerializerInstance extends SerializerInstance {
   }
 }
 
+/**
+ * A Spark serializer that uses Java's built-in serialization.
+ */
 class JavaSerializer extends Serializer {
   def newInstance(): SerializerInstance = new JavaSerializerInstance
 }

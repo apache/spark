@@ -14,12 +14,13 @@ This guide shows the programming model and features of Bagel by walking through 
 To write a Bagel application, you will need to add Spark, its dependencies, and Bagel to your CLASSPATH:
 
 1. Run `sbt/sbt update` to fetch Spark's dependencies, if you haven't already done so.
-2. Run `sbt/sbt assembly` to build Spark and its dependencies into one JAR (`core/target/scala_2.8.1/Spark Core-assembly-0.3-SNAPSHOT.jar`) and Bagel into a second JAR (`bagel/target/scala_2.8.1/Bagel-assembly-0.3-SNAPSHOT.jar`).
-3. Add these two JARs to your CLASSPATH.
+2. Run `sbt/sbt assembly` to build Spark and its dependencies into one JAR (`core/target/spark-core-assembly-{{site.SPARK_VERSION}}.jar`) 
+3. Run `sbt/sbt package` build the Bagel JAR (`bagel/target/scala_{{site.SCALA_VERSION}}/spark-bagel_{{site.SCALA_VERSION}}-{{site.SPARK_VERSION}}.jar`).
+4. Add these two JARs to your CLASSPATH.
 
 ## Programming Model
 
-Bagel operates on a graph represented as a [distributed dataset]({{HOME_PATH}}scala-programming-guide.html) of (K, V) pairs, where keys are vertex IDs and values are vertices plus their associated state. In each superstep, Bagel runs a user-specified compute function on each vertex that takes as input the current vertex state and a list of messages sent to that vertex during the previous superstep, and returns the new vertex state and a list of outgoing messages.
+Bagel operates on a graph represented as a [distributed dataset](scala-programming-guide.html) of (K, V) pairs, where keys are vertex IDs and values are vertices plus their associated state. In each superstep, Bagel runs a user-specified compute function on each vertex that takes as input the current vertex state and a list of messages sent to that vertex during the previous superstep, and returns the new vertex state and a list of outgoing messages.
 
 For example, we can use Bagel to implement PageRank. Here, vertices represent pages, edges represent links between pages, and messages represent shares of PageRank sent to the pages that a particular page links to. 
 
@@ -157,4 +158,4 @@ trait Message[K] {
 
 ## Where to Go from Here
 
-Two example jobs, PageRank and shortest path, are included in `bagel/src/main/scala/spark/bagel/examples`. You can run them by passing the class name to the `run` script included in Spark -- for example, `./run spark.bagel.examples.ShortestPath`. Each example program prints usage help when run without any arguments.
+Two example jobs, PageRank and shortest path, are included in `bagel/src/main/scala/spark/bagel/examples`. You can run them by passing the class name to the `run` script included in Spark -- for example, `./run spark.bagel.examples.WikipediaPageRank`. Each example program prints usage help when run without any arguments.

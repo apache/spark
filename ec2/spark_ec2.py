@@ -35,8 +35,7 @@ from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
 
 
 # A static URL from which to figure out the latest Mesos EC2 AMI
-LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.5"
-LATEST_STANDALONE_AMI_URL = "https://s3.amazonaws.com/spark-standalone-amis/latest-spark"
+LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.6"
 
 
 # Configure and parse our command-line arguments
@@ -65,8 +64,7 @@ def parse_args():
       help="Availability zone to launch instances in")
   parser.add_option("-a", "--ami", default="latest",
       help="Amazon Machine Image ID to use, or 'latest' to use latest " +
-           "availabe mesos AMI, 'standalone' for the latest available " +
-           "standalone AMI (default: latest)")
+           "available AMI (default: latest)")
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
             "the given local address (for use with login)")
@@ -193,19 +191,14 @@ def launch_cluster(conn, opts, cluster_name):
             "group %s, %s or %s" % (master_group.name, slave_group.name, zoo_group.name))
         sys.exit(1)
 
-  if opts.ami in ["latest", "standalone"]:
-    
-    # Figure out the latest AMI from our static URL
-    if opts.ami == "latest":
-      url = LATEST_AMI_URL
-    elif opts.ami == "standalone":
-      url = LATEST_STANDALONE_AMI_URL
-
+  # Figure out the latest AMI from our static URL
+  if opts.ami == "latest":
     try:
-      opts.ami = urllib2.urlopen(url).read().strip()
+      opts.ami = urllib2.urlopen(LATEST_AMI_URL).read().strip()
       print "Latest Spark AMI: " + opts.ami
     except:
-      print >> stderr, "Could not read " + url
+      print >> stderr, "Could not read " + LATEST_AMI_URL
+      sys.exit(1)
 
   print "Launching instances..."
 
@@ -371,6 +364,7 @@ def get_num_disks(instance_type):
   # From http://docs.amazonwebservices.com/AWSEC2/latest/UserGuide/index.html?InstanceStorage.html
   disks_by_instance = {
     "m1.small":    1,
+    "m1.medium":   1,
     "m1.large":    2,
     "m1.xlarge":   4,
     "t1.micro":    1,
@@ -402,10 +396,12 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes):
   num_disks = get_num_disks(opts.instance_type)
   hdfs_data_dirs = "/mnt/ephemeral-hdfs/data"
   mapred_local_dirs = "/mnt/hadoop/mrlocal"
+  spark_local_dirs = "/mnt/spark"
   if num_disks > 1:
     for i in range(2, num_disks + 1):
       hdfs_data_dirs += ",/mnt%d/ephemeral-hdfs/data" % i
       mapred_local_dirs += ",/mnt%d/hadoop/mrlocal" % i
+      spark_local_dirs += ",/mnt%d/spark" % i
 
   if zoo_nodes != []:
     zoo_list = '\n'.join([i.public_dns_name for i in zoo_nodes])
@@ -425,7 +421,8 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes):
     "zoo_list": zoo_list,
     "cluster_url": cluster_url,
     "hdfs_data_dirs": hdfs_data_dirs,
-    "mapred_local_dirs": mapred_local_dirs
+    "mapred_local_dirs": mapred_local_dirs,
+    "spark_local_dirs": spark_local_dirs
   }
 
   # Create a temp directory in which we will place all the files to be

@@ -3,11 +3,20 @@
    ========================================================================== */
 
 .navbar .brand {
-  background: url(../img/spark-logo-77x50px-hd.png) no-repeat left center;
   height: 50px;
-  width: 77px;
+  width: 110px;
   margin-left: 1px;
-  padding: 0 10px 0 0;
+  padding: 0;
+}
+
+.version {
+  line-height: 30px;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
 }
 
 .navbar-inner {
@@ -18,6 +27,16 @@
 .navbar-inner .nav {
   margin-top: 5px;
   font-size: 15px;
+}
+
+.navbar .divider-vertical {
+  border-right-color: lightgray;
+}
+
+.navbar-text .version-text {
+  color: #555555;
+  padding: 5px;
+  margin-left: 10px;
 }
 
 body #content {
@@ -73,8 +92,13 @@ a:hover code {
  * using solution at http://stackoverflow.com/questions/8878033/how-
  * to-make-twitter-bootstrap-menu-dropdown-on-hover-rather-than-click
  **/
+.dropdown-menu {
+  /* Remove the default 2px top margin which causes a small
+    gap between the hover trigger area and the popup menu */
+  margin-top: 0;
+}
 ul.nav li.dropdown:hover ul.dropdown-menu{
-    display: block;
+  display: block;
 }
 a.menu:after, .dropdown-toggle:after {
   content: none;

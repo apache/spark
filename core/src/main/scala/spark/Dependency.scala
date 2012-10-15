@@ -26,11 +26,13 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
  * @param partitioner partitioner used to partition the shuffle output
  */
 class ShuffleDependency[K, V, C](
-    val shuffleId: Int,
     @transient rdd: RDD[(K, V)],
     val aggregator: Option[Aggregator[K, V, C]],
     val partitioner: Partitioner)
-  extends Dependency(rdd)
+  extends Dependency(rdd) {
+
+  val shuffleId: Int = rdd.context.newShuffleId()
+}
 
 /**
  * Represents a one-to-one dependency between partitions of the parent and child RDDs.

@@ -13,6 +13,7 @@ import com.esotericsoftware.kryo.serialize.ClassSerializer
 import com.esotericsoftware.kryo.serialize.SerializableSerializer
 import de.javakaffee.kryoserializers.KryoReflectionFactorySupport
 
+import serializer.{SerializerInstance, DeserializationStream, SerializationStream}
 import spark.broadcast._
 import spark.storage._
 
@@ -158,12 +159,18 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   }
 }
 
-// Used by clients to register their own classes
+/**
+ * Interface implemented by clients to register their classes with Kryo when using Kryo
+ * serialization.
+ */
 trait KryoRegistrator {
   def registerClasses(kryo: Kryo): Unit
 }
 
-class KryoSerializer extends Serializer with Logging {
+/**
+ * A Spark serializer that uses the [[http://code.google.com/p/kryo/wiki/V1Documentation Kryo 1.x library]].
+ */
+class KryoSerializer extends spark.serializer.Serializer with Logging {
   // Make this lazy so that it only gets called once we receive our first task on each executor,
   // so we can pull out any custom Kryo registrator from the user's JARs.
   lazy val kryo = createKryo()

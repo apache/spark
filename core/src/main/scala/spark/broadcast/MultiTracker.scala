@@ -228,7 +228,7 @@ extends Logging {
     var oosTracker: ObjectOutputStream = null
     var oisTracker: ObjectInputStream = null
 
-    var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxOverGoToDefault)
+    var gInfo: SourceInfo = SourceInfo("", SourceInfo.TxNotStartedRetry)
 
     var retriesLeft = MultiTracker.MaxRetryCount
     do {

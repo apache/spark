@@ -27,6 +27,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       sc = null
     }
     System.clearProperty("spark.reducer.maxMbInFlight")
+    System.clearProperty("spark.storage.memoryFraction")
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.master.port")
   }
@@ -155,5 +156,36 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     assert(data.count() === 1000)
     assert(data.count() === 1000)
     assert(data.count() === 1000)
+  }
+
+  test("compute without caching when no partitions fit in memory") {
+    System.setProperty("spark.storage.memoryFraction", "0.0001")
+    sc = new SparkContext(clusterUrl, "test")
+    // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
+    // to only 50 KB (0.0001 of 512 MB), so no partitions should fit in memory
+    val data = sc.parallelize(1 to 4000000, 2).persist(StorageLevel.MEMORY_ONLY_SER)
+    assert(data.count() === 4000000)
+    assert(data.count() === 4000000)
+    assert(data.count() === 4000000)
+    System.clearProperty("spark.storage.memoryFraction")
+  }
+
+  test("compute when only some partitions fit in memory") {
+    System.setProperty("spark.storage.memoryFraction", "0.01")
+    sc = new SparkContext(clusterUrl, "test")
+    // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
+    // to only 5 MB (0.01 of 512 MB), so not all of it will fit in memory; we use 20 partitions
+    // to make sure that *some* of them do fit though
+    val data = sc.parallelize(1 to 4000000, 20).persist(StorageLevel.MEMORY_ONLY_SER)
+    assert(data.count() === 4000000)
+    assert(data.count() === 4000000)
+    assert(data.count() === 4000000)
+    System.clearProperty("spark.storage.memoryFraction")
+  }
+
+  test("passing environment variables to cluster") {
+    sc = new SparkContext(clusterUrl, "test", null, Nil, Map("TEST_VAR" -> "TEST_VALUE"))
+    val values = sc.parallelize(1 to 2, 2).map(x => System.getenv("TEST_VAR")).collect()
+    assert(values.toSeq === Seq("TEST_VALUE", "TEST_VALUE"))
   }
 }

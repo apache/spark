@@ -2,6 +2,13 @@ package spark.storage
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
+/**
+ * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
+ * whether to drop the RDD to disk if it falls out of memory, whether to keep the data in memory
+ * in a serialized format, and whether to replicate the RDD partitions on multiple nodes.
+ * The [[spark.storage.StorageLevel$]] singleton object contains some static constants for
+ * commonly useful storage levels.
+ */
 class StorageLevel(
     var useDisk: Boolean, 
     var useMemory: Boolean,

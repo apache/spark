@@ -4,8 +4,9 @@ import java.io._
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.{URI, URLClassLoader}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.Map
 import scala.collection.generic.Growable
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import akka.actor.Actor
 import akka.actor.Actor._
@@ -35,12 +36,8 @@ import spark.broadcast._
 import spark.deploy.LocalSparkCluster
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.rdd.DoubleRDDFunctions
 import spark.rdd.HadoopRDD
 import spark.rdd.NewHadoopRDD
-import spark.rdd.OrderedRDDFunctions
-import spark.rdd.PairRDDFunctions
-import spark.rdd.SequenceFileRDDFunctions
 import spark.rdd.UnionRDD
 import spark.scheduler.ShuffleMapTask
 import spark.scheduler.DAGScheduler
@@ -55,15 +52,35 @@ import spark.storage.BlockManagerMaster
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
  * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
- * @param jobName A name for your job, to display on the cluster web UI
- * @param sparkHome Location where Spark is instaled on cluster nodes
+ * @param jobName A name for your job, to display on the cluster web UI.
+ * @param sparkHome Location where Spark is installed on cluster nodes.
  * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
  *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+ * @param environment Environment variables to set on worker nodes.
  */
-class SparkContext(master: String, jobName: String, val sparkHome: String, val jars: Seq[String])
+class SparkContext(
+    master: String,
+    jobName: String,
+    val sparkHome: String,
+    jars: Seq[String],
+    environment: Map[String, String])
   extends Logging {
 
-  def this(master: String, jobName: String) = this(master, jobName, null, Nil)
+  /**
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param jobName A name for your job, to display on the cluster web UI
+   * @param sparkHome Location where Spark is installed on cluster nodes.
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   */
+  def this(master: String, jobName: String, sparkHome: String, jars: Seq[String]) =
+    this(master, jobName, sparkHome, jars, Map())
+
+  /**
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param jobName A name for your job, to display on the cluster web UI
+   */
+  def this(master: String, jobName: String) = this(master, jobName, null, Nil, Map())
 
   // Ensure logging is initialized before we spawn any threads
   initLogging()
@@ -92,6 +109,17 @@ class SparkContext(master: String, jobName: String, val sparkHome: String, val j
 
   // Add each JAR given through the constructor
   jars.foreach { addJar(_) }
+
+  // Environment variables to pass to our executors
+  private[spark] val executorEnvs = HashMap[String, String]()
+  for (key <- Seq("SPARK_MEM", "SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS",
+       "SPARK_TESTING")) {
+    val value = System.getenv(key)
+    if (value != null) {
+      executorEnvs(key) = value
+    }
+  }
+  executorEnvs ++= environment
 
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
@@ -550,16 +578,12 @@ class SparkContext(master: String, jobName: String, val sparkHome: String, val j
 
   private var nextShuffleId = new AtomicInteger(0)
 
-  private[spark] def newShuffleId(): Int = {
-    nextShuffleId.getAndIncrement()
-  }
+  private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement()
 
   private var nextRddId = new AtomicInteger(0)
 
   /** Register a new RDD, returning its RDD ID */
-  private[spark] def newRddId(): Int = {
-    nextRddId.getAndIncrement()
-  }
+  private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 }
 
 /**
@@ -641,8 +665,10 @@ object SparkContext {
   implicit def writableWritableConverter[T <: Writable]() =
     new WritableConverter[T](_.erasure.asInstanceOf[Class[T]], _.asInstanceOf[T])
 
-  // Find the JAR from which a given class was loaded, to make it easy for users to pass
-  // their JARs to SparkContext
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to SparkContext
+   */
   def jarOfClass(cls: Class[_]): Seq[String] = {
     val uri = cls.getResource("/" + cls.getName.replace('.', '/') + ".class")
     if (uri != null) {
@@ -658,7 +684,7 @@ object SparkContext {
     }
   }
 
-  // Find the JAR that contains the class of a particular object
+  /** Find the JAR that contains the class of a particular object */
   def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
 }
 

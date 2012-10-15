@@ -6,10 +6,10 @@
     <head>
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-        <title>{{ page.title }} - Spark 0.6.0 Documentation</title>
+        <title>{{ page.title }} - Spark {{site.SPARK_VERSION}} Documentation</title>
         <meta name="description" content="">
 
-        <link rel="stylesheet" href="{{HOME_PATH}}css/bootstrap.min.css">
+        <link rel="stylesheet" href="css/bootstrap.min.css">
         <style>
             body {
                 padding-top: 60px;
@@ -17,12 +17,12 @@
             }
         </style>
         <meta name="viewport" content="width=device-width">
-        <link rel="stylesheet" href="{{HOME_PATH}}css/bootstrap-responsive.min.css">
-        <link rel="stylesheet" href="{{HOME_PATH}}css/main.css">
+        <link rel="stylesheet" href="css/bootstrap-responsive.min.css">
+        <link rel="stylesheet" href="css/main.css">
 
-        <script src="{{HOME_PATH}}js/vendor/modernizr-2.6.1-respond-1.1.0.min.js"></script>
+        <script src="js/vendor/modernizr-2.6.1-respond-1.1.0.min.js"></script>
         
-        <link rel="stylesheet" href="{{HOME_PATH}}css/pygments-default.css">
+        <link rel="stylesheet" href="css/pygments-default.css">
     </head>
     <body>
         <!--[if lt IE 7]>
@@ -34,17 +34,19 @@
         <div class="navbar navbar-fixed-top" id="topbar">
             <div class="navbar-inner">
                 <div class="container">
-                    <a class="brand" href="{{HOME_PATH}}index.html"></a>
+                    <div class="brand"><a href="index.html">
+                      <img src="../img/spark-logo-77x50px-hd.png" /></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
+                    </div>
                     <ul class="nav">
                         <!--TODO(andyk): Add class="active" attribute to li some how.-->
-                        <li><a href="{{HOME_PATH}}index.html">Overview</a></li>
+                        <li><a href="index.html">Overview</a></li>
 
                         <li class="dropdown">
                             <a href="#" class="dropdown-toggle" data-toggle="dropdown">Programming Guides<b class="caret"></b></a>
                             <ul class="dropdown-menu">
-                                <li><a href="{{HOME_PATH}}quick-start.html">Quick Start</a></li>
-                                <li><a href="{{HOME_PATH}}scala-programming-guide.html">Scala</a></li>
-                                <li><a href="{{HOME_PATH}}java-programming-guide.html">Java</a></li>
+                                <li><a href="quick-start.html">Quick Start</a></li>
+                                <li><a href="scala-programming-guide.html">Scala</a></li>
+                                <li><a href="java-programming-guide.html">Java</a></li>
                             </ul>
                         </li>
                         
@@ -53,15 +55,15 @@
                         <li class="dropdown">
                             <a href="#" class="dropdown-toggle" data-toggle="dropdown">Deploying<b class="caret"></b></a>
                             <ul class="dropdown-menu">
-                                <li><a href="{{HOME_PATH}}ec2-scripts.html">Amazon EC2</a></li>
-                                <li><a href="{{HOME_PATH}}spark-standalone.html">Standalone Mode</a></li>
-                                <li><a href="{{HOME_PATH}}running-on-mesos.html">Mesos</a></li>
-                                <li><a href="{{HOME_PATH}}running-on-yarn.html">YARN</a></li>
+                                <li><a href="ec2-scripts.html">Amazon EC2</a></li>
+                                <li><a href="spark-standalone.html">Standalone Mode</a></li>
+                                <li><a href="running-on-mesos.html">Mesos</a></li>
+                                <li><a href="running-on-yarn.html">YARN</a></li>
                             </ul>
                         </li>
 
                         <li class="dropdown">
-                            <a href="{{HOME_PATH}}api.html" class="dropdown-toggle" data-toggle="dropdown">More<b class="caret"></b></a>
+                            <a href="api.html" class="dropdown-toggle" data-toggle="dropdown">More<b class="caret"></b></a>
                             <ul class="dropdown-menu">
                                 <li><a href="configuration.html">Configuration</a></li>
                                 <li><a href="tuning.html">Tuning Guide</a></li>
@@ -70,6 +72,7 @@
                             </ul>
                         </li>
                     </ul>
+                    <!--<p class="navbar-text pull-right"><span class="version-text">v{{site.SPARK_VERSION}}</span></p>-->
                 </div>
             </div>
         </div>

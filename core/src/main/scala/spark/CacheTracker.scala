@@ -208,23 +208,19 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
         // TODO: fetch any remote copy of the split that may be available
         // TODO: also register a listener for when it unloads
         logInfo("Computing partition " + split)
+        val elements = new ArrayBuffer[Any]
+        elements ++= rdd.compute(split)
         try {
-          // BlockManager will iterate over results from compute to create RDD
-          blockManager.put(key, rdd.compute(split), storageLevel, true)
+          // Try to put this block in the blockManager
+          blockManager.put(key, elements, storageLevel, true)
           //future.apply() // Wait for the reply from the cache tracker
-          blockManager.get(key) match {
-            case Some(values) => 
-              return values.asInstanceOf[Iterator[T]]
-            case None =>
-              logWarning("loading partition failed after computing it " + key) 
-              return null
-          }
         } finally {
           loading.synchronized {
             loading.remove(key)
             loading.notifyAll()
           }
         }
+        return elements.iterator.asInstanceOf[Iterator[T]]
     }
   }
 

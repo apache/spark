@@ -21,7 +21,7 @@ private[spark] class ParallelCollectionSplit[T: ClassManifest](
   override val index: Int = slice
 }
 
-class ParallelCollection[T: ClassManifest](
+private[spark] class ParallelCollection[T: ClassManifest](
     sc: SparkContext, 
     @transient data: Seq[T],
     numSlices: Int)

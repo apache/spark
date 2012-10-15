@@ -106,7 +106,7 @@ This file needs to be copied to **every machine** to reflect the change. The eas
 is to use a script we provide called `copy-dir`. First edit your `spark-env.sh` file on the master, 
 then run `~/mesos-ec2/copy-dir /root/spark/conf` to RSYNC it to all the workers.
 
-The [configuration guide]({{HOME_PATH}}configuration.html) describes the available configuration options.
+The [configuration guide](configuration.html) describes the available configuration options.
 
 # Terminating a Cluster
 
@@ -146,7 +146,7 @@ section.
 - Support for spot instances is limited.
 
 If you have a patch or suggestion for one of these limitations, feel free to
-[contribute]({{HOME_PATH}}contributing-to-spark.html) it!
+[contribute](contributing-to-spark.html) it!
 
 # Using a Newer Spark Version
 

@@ -12,8 +12,9 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConversions._
 
-import spark.{CacheTracker, Logging, Serializer, SizeEstimator, SparkException, Utils}
+import spark.{CacheTracker, Logging, SizeEstimator, SparkException, Utils}
 import spark.network._
+import spark.serializer.Serializer
 import spark.util.ByteBufferInputStream
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import sun.nio.ch.DirectBuffer
@@ -237,7 +238,10 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
             diskStore.getValues(blockId) match {
               case Some(iterator) =>
                 // Put the block back in memory before returning it
-                memoryStore.putValues(blockId, iterator, level, true).data match {
+                // TODO: Consider creating a putValues that also takes in a iterator ?
+                val elements = new ArrayBuffer[Any]
+                elements ++= iterator
+                memoryStore.putValues(blockId, elements, level, true).data match {
                   case Left(iterator2) =>
                     return Some(iterator2)
                   case _ =>
@@ -529,11 +533,18 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
   }
 
+  def put(blockId: String, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean)
+    : Long = {
+    val elements = new ArrayBuffer[Any]
+    elements ++= values
+    put(blockId, elements, level, tellMaster)
+  }
+
   /**
    * Put a new block of values to the block manager. Returns its (estimated) size in bytes.
    */
-  def put(blockId: String, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean = true)
-    : Long = {
+  def put(blockId: String, values: ArrayBuffer[Any], level: StorageLevel,
+    tellMaster: Boolean = true) : Long = {
 
     if (blockId == null) {
       throw new IllegalArgumentException("Block Id is null")
@@ -766,7 +777,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
    * store reaches its limit and needs to free up space.
    */
-  def dropFromMemory(blockId: String, data: Either[Iterator[_], ByteBuffer]) {
+  def dropFromMemory(blockId: String, data: Either[ArrayBuffer[Any], ByteBuffer]) {
     logInfo("Dropping block " + blockId + " from memory")
     locker.getLock(blockId).synchronized {
       val info = blockInfo.get(blockId)
@@ -774,8 +785,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       if (level.useDisk && !diskStore.contains(blockId)) {
         logInfo("Writing block " + blockId + " to disk")
         data match {
-          case Left(iterator) =>
-            diskStore.putValues(blockId, iterator, level, false)
+          case Left(elements) =>
+            diskStore.putValues(blockId, elements, level, false)
           case Right(bytes) =>
             diskStore.putBytes(blockId, bytes, level)
         }
