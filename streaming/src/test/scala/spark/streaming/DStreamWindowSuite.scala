@@ -4,6 +4,10 @@ import spark.streaming.StreamingContext._
 
 class DStreamWindowSuite extends DStreamSuiteBase {
 
+  override def framework() = "DStreamWindowSuite"
+
+  override def maxWaitTimeMillis() = 20000
+
   val largerSlideInput = Seq(
     Seq(("a", 1)),  // 1st window from here
     Seq(("a", 2)),
@@ -81,16 +85,15 @@ class DStreamWindowSuite extends DStreamSuiteBase {
     name: String,
     input: Seq[Seq[(String, Int)]],
     expectedOutput: Seq[Seq[(String, Int)]],
-    windowTime: Time = Seconds(2),
-    slideTime: Time = Seconds(1)
+    windowTime: Time = batchDuration * 2,
+    slideTime: Time = batchDuration
     ) {
     test("reduceByKeyAndWindow - " + name) {
-      testOperation(
-        input,
-        (s: DStream[(String, Int)]) => s.reduceByKeyAndWindow(_ + _, windowTime, slideTime).persist(),
-        expectedOutput,
-        true
-      )
+      val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
+      val operation = (s: DStream[(String, Int)]) => {
+        s.reduceByKeyAndWindow(_ + _, windowTime, slideTime).persist()
+      }
+      testOperation(input, operation, expectedOutput, numBatches, true)
     }
   }
 
@@ -98,16 +101,15 @@ class DStreamWindowSuite extends DStreamSuiteBase {
     name: String,
     input: Seq[Seq[(String, Int)]],
     expectedOutput: Seq[Seq[(String, Int)]],
-    windowTime: Time = Seconds(2),
-    slideTime: Time = Seconds(1)
+    windowTime: Time = batchDuration * 2,
+    slideTime: Time = batchDuration
   ) {
     test("reduceByKeyAndWindowInv - " + name) {
-      testOperation(
-        input,
-        (s: DStream[(String, Int)]) => s.reduceByKeyAndWindow(_ + _, _ - _, windowTime, slideTime).persist(),
-        expectedOutput,
-        true
-      )
+      val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
+      val operation = (s: DStream[(String, Int)]) => {
+        s.reduceByKeyAndWindow(_ + _, _ - _, windowTime, slideTime).persist()
+      }
+      testOperation(input, operation, expectedOutput, numBatches, true)
     }
   }
 
@@ -116,8 +118,8 @@ class DStreamWindowSuite extends DStreamSuiteBase {
 
   testReduceByKeyAndWindow(
     "basic reduction",
-    Seq(Seq(("a", 1), ("a", 3)) ),
-    Seq(Seq(("a", 4)) )
+    Seq( Seq(("a", 1), ("a", 3)) ),
+    Seq( Seq(("a", 4)) )
   )
 
   testReduceByKeyAndWindow(
@@ -125,7 +127,6 @@ class DStreamWindowSuite extends DStreamSuiteBase {
     Seq( Seq(("a", 1)), Seq(("a", 1)) ),
     Seq( Seq(("a", 1)), Seq(("a", 2)) )
   )
-
 
   testReduceByKeyAndWindow(
     "new key added into window",

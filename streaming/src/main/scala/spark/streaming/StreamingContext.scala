@@ -46,7 +46,7 @@ class StreamingContext (
 
   val sc: SparkContext = {
     if (isCheckpointPresent) {
-      new SparkContext(cp_.master, cp_.frameworkName, cp_.sparkHome, cp_.jars)
+      new SparkContext(cp_.master, cp_.framework, cp_.sparkHome, cp_.jars)
     } else {
       sc_
     }
@@ -85,9 +85,13 @@ class StreamingContext (
     checkpointFile = file
     checkpointInterval = interval
   }
-  
+
+  private[streaming] def getInitialCheckpoint(): Checkpoint = {
+    if (isCheckpointPresent) cp_ else null
+  }
+
   private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
-  
+
   def createNetworkTextStream(hostname: String, port: Int): DStream[String] = {
     createNetworkObjectStream[String](hostname, port, ObjectInputReceiver.bytesToLines)
   }
@@ -156,10 +160,10 @@ class StreamingContext (
     inputStream
   }
   
-  def createQueueStream[T: ClassManifest](iterator: Array[RDD[T]]): DStream[T] = {
+  def createQueueStream[T: ClassManifest](array: Array[RDD[T]]): DStream[T] = {
     val queue = new Queue[RDD[T]]
     val inputStream = createQueueStream(queue, true, null)
-    queue ++= iterator
+    queue ++= array
     inputStream
   }
 
@@ -233,8 +237,8 @@ class StreamingContext (
     logInfo("StreamingContext stopped")
   }
 
-  def checkpoint() {
-    new Checkpoint(this).saveToFile(checkpointFile)
+  def doCheckpoint(currentTime: Time) {
+    new Checkpoint(this, currentTime).saveToFile(checkpointFile)
   }
 }
 

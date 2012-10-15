@@ -2,8 +2,10 @@ package spark.streaming
 
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 import collection.mutable.ArrayBuffer
+import spark.Logging
 
-final class DStreamGraph extends Serializable {
+final class DStreamGraph extends Serializable with Logging {
+  initLogging()
 
   private val inputStreams = new ArrayBuffer[InputDStream[_]]()
   private val outputStreams = new ArrayBuffer[DStream[_]]()
@@ -11,18 +13,15 @@ final class DStreamGraph extends Serializable {
   private[streaming] var zeroTime: Time = null
   private[streaming] var checkpointInProgress = false;
 
-  def started() = (zeroTime != null)
-
   def start(time: Time) {
     this.synchronized {
-      if (started) {
+      if (zeroTime != null) {
         throw new Exception("DStream graph computation already started")
       }
       zeroTime = time
       outputStreams.foreach(_.initialize(zeroTime))
       inputStreams.par.foreach(_.start())
     }
-
   }
 
   def stop() {
@@ -60,21 +59,21 @@ final class DStreamGraph extends Serializable {
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
     this.synchronized {
+      logDebug("DStreamGraph.writeObject used")
       checkpointInProgress = true
       oos.defaultWriteObject()
       checkpointInProgress = false
     }
-    println("DStreamGraph.writeObject used")
   }
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream) {
     this.synchronized {
+      logDebug("DStreamGraph.readObject used")
       checkpointInProgress = true
       ois.defaultReadObject()
       checkpointInProgress = false
     }
-    println("DStreamGraph.readObject used")
   }
 }
 

@@ -180,7 +180,7 @@ extends Serializable with Logging {
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
-    println(this.getClass().getSimpleName + ".writeObject used")
+    logDebug(this.getClass().getSimpleName + ".writeObject used")
     if (graph != null) {
       graph.synchronized {
         if (graph.checkpointInProgress) {
@@ -202,7 +202,7 @@ extends Serializable with Logging {
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream) {
-    println(this.getClass().getSimpleName + ".readObject used")
+    logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
   }
 

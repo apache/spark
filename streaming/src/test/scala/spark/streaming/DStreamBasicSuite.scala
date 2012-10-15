@@ -22,9 +22,9 @@ class DStreamBasicSuite extends DStreamSuiteBase {
   test("shuffle-based operations") {
     // reduceByKey
     testOperation(
-      Seq(Seq("a", "a", "b"), Seq("", ""), Seq()),
+      Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
       (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _),
-      Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+      Seq( Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq() ),
       true
     )
 
@@ -62,7 +62,6 @@ class DStreamBasicSuite extends DStreamSuiteBase {
         var newState = 0
         if (values != null && values.size > 0) newState += values.reduce(_ + _)
         if (state != null) newState += state.self
-        //println("values = " + values + ", state = " + state + ", " + " new state = " + newState)
         new RichInt(newState)
       }
       s.map(x => (x, 1)).updateStateByKey[RichInt](updateFunc).map(t => (t._1, t._2.self))

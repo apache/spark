@@ -5,8 +5,8 @@ import spark.RDD
 /**
  * An input stream that always returns the same RDD on each timestep. Useful for testing.
  */
-class ConstantInputDStream[T: ClassManifest](ssc: StreamingContext, rdd: RDD[T])
-  extends InputDStream[T](ssc) {
+class ConstantInputDStream[T: ClassManifest](ssc_ : StreamingContext, rdd: RDD[T])
+  extends InputDStream[T](ssc_) {
 
   override def start() {}
 

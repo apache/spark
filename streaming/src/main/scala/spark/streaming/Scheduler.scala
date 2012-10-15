@@ -1,7 +1,6 @@
 package spark.streaming
 
-import spark.streaming.util.RecurringTimer
-import spark.streaming.util.Clock
+import util.{ManualClock, RecurringTimer, Clock}
 import spark.SparkEnv
 import spark.Logging
 
@@ -23,13 +22,24 @@ extends Logging {
   val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
   val timer = new RecurringTimer(clock, ssc.batchDuration, generateRDDs(_))
 
-
   def start() {
-    if (graph.started) {
+    // If context was started from checkpoint, then restart timer such that
+    // this timer's triggers occur at the same time as the original timer.
+    // Otherwise just start the timer from scratch, and initialize graph based
+    // on this first trigger time of the timer.
+    if (ssc.isCheckpointPresent) {
+      // If manual clock is being used for testing, then
+      // set manual clock to the last checkpointed time
+      if (clock.isInstanceOf[ManualClock]) {
+        val lastTime = ssc.getInitialCheckpoint.checkpointTime.milliseconds
+        clock.asInstanceOf[ManualClock].setTime(lastTime)
+      }
       timer.restart(graph.zeroTime.milliseconds)
+      logInfo("Scheduler's timer restarted")
     } else {
       val zeroTime = Time(timer.start())
       graph.start(zeroTime)
+      logInfo("Scheduler's timer started")
     }
     logInfo("Scheduler started")
   }
@@ -47,7 +57,7 @@ extends Logging {
     graph.generateRDDs(time).foreach(submitJob)
     logInfo("Generated RDDs for time " + time)
     if (ssc.checkpointInterval != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointInterval)) {
-      ssc.checkpoint()
+      ssc.doCheckpoint(time)
     }
   }
 

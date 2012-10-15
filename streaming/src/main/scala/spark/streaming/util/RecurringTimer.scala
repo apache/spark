@@ -25,13 +25,13 @@ class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) =>
   }
 
   def start(): Long = {
-    val startTime = math.ceil(clock.currentTime / period).toLong * period
+    val startTime = (math.floor(clock.currentTime.toDouble / period) + 1).toLong * period
     start(startTime)
   }
 
   def restart(originalStartTime: Long): Long = {
     val gap = clock.currentTime - originalStartTime
-    val newStartTime = math.ceil(gap / period).toLong * period + originalStartTime
+    val newStartTime = (math.floor(gap.toDouble / period).toLong + 1) * period + originalStartTime
     start(newStartTime)
   }
   
