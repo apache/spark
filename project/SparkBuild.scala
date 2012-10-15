@@ -108,7 +108,7 @@ object SparkBuild extends Build {
       "colt" % "colt" % "1.2.0",
       "org.apache.mesos" % "mesos" % "0.9.0-incubating"
     )
-  ) ++ assemblySettings ++ Seq(test in assembly := {})
+  ) ++ assemblySettings ++ extraAssemblySettings ++ Seq(test in assembly := {})
 
   def rootSettings = sharedSettings ++ Seq(
     publish := {}
@@ -117,11 +117,19 @@ object SparkBuild extends Build {
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  ) ++ assemblySettings ++ Seq(test in assembly := {})
+  )
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples"
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
+
+  def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
+    mergeStrategy in assembly := {
+      case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
+      case "reference.conf" => MergeStrategy.concat
+      case _ => MergeStrategy.first
+    }
+  )
 }
