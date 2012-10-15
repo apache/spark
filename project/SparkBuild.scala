@@ -78,7 +78,6 @@ object SparkBuild extends Build {
         Some("sonatype-staging"  at nexus + "service/local/staging/deploy/maven2")
     },
 
-    credentials += Credentials(Path.userHome / ".sbt" / "sonatype.credentials"),
 */
 
     libraryDependencies ++= Seq(
