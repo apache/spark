@@ -289,7 +289,7 @@ def launch_cluster(conn, opts, cluster_name):
 # Get the EC2 instances in an existing cluster if available.
 # Returns a tuple of lists of EC2 instance objects for the masters,
 # slaves and zookeeper nodes (in that order).
-def get_existing_cluster(conn, opts, cluster_name):
+def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
   print "Searching for existing cluster " + cluster_name + "..."
   reservations = conn.get_all_instances()
   master_nodes = []
@@ -305,9 +305,10 @@ def get_existing_cluster(conn, opts, cluster_name):
         slave_nodes += res.instances
       elif group_names == [cluster_name + "-zoo"]:
         zoo_nodes += res.instances
-  if master_nodes != [] and slave_nodes != []:
+  if any((master_nodes, slave_nodes, zoo_nodes)):
     print ("Found %d master(s), %d slaves, %d ZooKeeper nodes" %
            (len(master_nodes), len(slave_nodes), len(zoo_nodes)))
+  if (master_nodes != [] and slave_nodes != []) or not die_on_error:
     return (master_nodes, slave_nodes, zoo_nodes)
   else:
     if master_nodes == [] and slave_nodes != []:
@@ -491,7 +492,7 @@ def main():
         "Destroy cluster " + cluster_name + " (y/N): ")
     if response == "y":
       (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(
-          conn, opts, cluster_name)
+          conn, opts, cluster_name, die_on_error=False)
       print "Terminating master..."
       for inst in master_nodes:
         inst.terminate()
@@ -526,7 +527,7 @@ def main():
         "Stop cluster " + cluster_name + " (y/N): ")
     if response == "y":
       (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(
-          conn, opts, cluster_name)
+          conn, opts, cluster_name, die_on_error=False)
       print "Stopping master..."
       for inst in master_nodes:
         if inst.state not in ["shutting-down", "terminated"]:
