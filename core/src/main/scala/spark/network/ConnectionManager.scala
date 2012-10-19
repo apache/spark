@@ -14,19 +14,21 @@ import scala.collection.mutable.SynchronizedQueue
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
-import akka.dispatch.{Promise, ExecutionContext, Future}
+import akka.dispatch.{Await, Promise, ExecutionContext, Future}
+import akka.util.Duration
+import akka.util.duration._
 
-case class ConnectionManagerId(host: String, port: Int) {
+private[spark] case class ConnectionManagerId(host: String, port: Int) {
   def toSocketAddress() = new InetSocketAddress(host, port)
 }
 
-object ConnectionManagerId {
+private[spark] object ConnectionManagerId {
   def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
     new ConnectionManagerId(socketAddress.getHostName(), socketAddress.getPort())
   }
 }
   
-class ConnectionManager(port: Int) extends Logging {
+private[spark] class ConnectionManager(port: Int) extends Logging {
 
   class MessageStatus(
       val message: Message,
@@ -111,7 +113,7 @@ class ConnectionManager(port: Int) extends Logging {
 
         val selectedKeysCount = selector.select()
         if (selectedKeysCount == 0) {
-          logInfo("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
+          logDebug("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
         }
         if (selectorThread.isInterrupted) {
           logInfo("Selector thread was interrupted!")
@@ -165,7 +167,6 @@ class ConnectionManager(port: Int) extends Logging {
   }
 
   def removeConnection(connection: Connection) {
-    /*logInfo("Removing connection")*/
     connectionsByKey -= connection.key
     if (connection.isInstanceOf[SendingConnection]) {
       val sendingConnection = connection.asInstanceOf[SendingConnection]
@@ -233,7 +234,7 @@ class ConnectionManager(port: Int) extends Logging {
 
   def receiveMessage(connection: Connection, message: Message) {
     val connectionManagerId = ConnectionManagerId.fromSocketAddress(message.senderAddress)
-    logInfo("Received [" + message + "] from [" + connectionManagerId + "]") 
+    logDebug("Received [" + message + "] from [" + connectionManagerId + "]") 
     val runnable = new Runnable() {
       val creationTime = System.currentTimeMillis
       def run() {
@@ -247,7 +248,7 @@ class ConnectionManager(port: Int) extends Logging {
   }
 
   private def handleMessage(connectionManagerId: ConnectionManagerId, message: Message) {
-    logInfo("Handling [" + message + "] from [" + connectionManagerId + "]") 
+    logDebug("Handling [" + message + "] from [" + connectionManagerId + "]")
     message match {
       case bufferMessage: BufferMessage => {
         if (bufferMessage.hasAckId) {
@@ -274,15 +275,15 @@ class ConnectionManager(port: Int) extends Logging {
             logDebug("Calling back")
             onReceiveCallback(bufferMessage, connectionManagerId)
           } else {
-            logWarning("Not calling back as callback is null")
+            logDebug("Not calling back as callback is null")
             None
           }
           
           if (ackMessage.isDefined) {
             if (!ackMessage.get.isInstanceOf[BufferMessage]) {
-              logWarning("Response to " + bufferMessage + " is not a buffer message, it is of type " + ackMessage.get.getClass())
+              logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type " + ackMessage.get.getClass())
             } else if (!ackMessage.get.asInstanceOf[BufferMessage].hasAckId) {
-              logWarning("Response to " + bufferMessage + " does not have ack id set")
+              logDebug("Response to " + bufferMessage + " does not have ack id set")
               ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id
             }
           }
@@ -305,7 +306,7 @@ class ConnectionManager(port: Int) extends Logging {
     }
     val connection = connectionsById.getOrElse(connectionManagerId, startNewConnection())
     message.senderAddress = id.toSocketAddress()
-    logInfo("Sending [" + message + "] to [" + connectionManagerId + "]") 
+    logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")
     /*connection.send(message)*/
     sendMessageRequests.synchronized {
       sendMessageRequests += ((message, connection))
@@ -325,7 +326,7 @@ class ConnectionManager(port: Int) extends Logging {
   }
 
   def sendMessageReliablySync(connectionManagerId: ConnectionManagerId, message: Message): Option[Message] = {
-    sendMessageReliably(connectionManagerId, message)()
+    Await.result(sendMessageReliably(connectionManagerId, message), Duration.Inf)
   }
 
   def onReceiveMessage(callback: (Message, ConnectionManagerId) => Option[Message]) {
@@ -347,7 +348,7 @@ class ConnectionManager(port: Int) extends Logging {
 }
 
 
-object ConnectionManager {
+private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
   
@@ -402,7 +403,10 @@ object ConnectionManager {
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffer.duplicate)
       manager.sendMessageReliably(manager.id, bufferMessage)
-    }).foreach(f => {if (!f().isDefined) println("Failed")})
+    }).foreach(f => {
+      val g = Await.result(f, 1 second)
+      if (!g.isDefined) println("Failed")
+    })
     val finishTime = System.currentTimeMillis
     
     val mb = size * count / 1024.0 / 1024.0
@@ -429,7 +433,10 @@ object ConnectionManager {
     (0 until count).map(i => {
       val bufferMessage = Message.createBufferMessage(buffers(count - 1 - i).duplicate)
       manager.sendMessageReliably(manager.id, bufferMessage)
-    }).foreach(f => {if (!f().isDefined) println("Failed")})
+    }).foreach(f => {
+      val g = Await.result(f, 1 second)
+      if (!g.isDefined) println("Failed")
+    })
     val finishTime = System.currentTimeMillis
     
     val ms = finishTime - startTime
@@ -456,7 +463,10 @@ object ConnectionManager {
       (0 until count).map(i => {
           val bufferMessage = Message.createBufferMessage(buffer.duplicate)
           manager.sendMessageReliably(manager.id, bufferMessage)
-        }).foreach(f => {if (!f().isDefined) println("Failed")})
+        }).foreach(f => {
+          val g = Await.result(f, 1 second)
+          if (!g.isDefined) println("Failed")
+        })
       val finishTime = System.currentTimeMillis
       Thread.sleep(1000)
       val mb = size * count / 1024.0 / 1024.0

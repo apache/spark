@@ -1,10 +1,12 @@
 package spark.executor
 
 import java.io.{File, FileOutputStream}
-import java.net.{URL, URLClassLoader}
+import java.net.{URI, URL, URLClassLoader}
 import java.util.concurrent._
 
-import scala.collection.mutable.ArrayBuffer
+import org.apache.hadoop.fs.FileUtil
+
+import scala.collection.mutable.{ArrayBuffer, Map, HashMap}
 
 import spark.broadcast._
 import spark.scheduler._
@@ -14,10 +16,15 @@ import java.nio.ByteBuffer
 /**
  * The Mesos executor for Spark.
  */
-class Executor extends Logging {
-  var classLoader: ClassLoader = null
+private[spark] class Executor extends Logging {
+  var urlClassLoader : ExecutorURLClassLoader = null
   var threadPool: ExecutorService = null
   var env: SparkEnv = null
+
+  // Application dependencies (added through SparkContext) that we've fetched so far on this node.
+  // Each map holds the master's timestamp for the version of that file or JAR we got.
+  val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
+  val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
   val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
@@ -32,15 +39,13 @@ class Executor extends Logging {
       System.setProperty(key, value)
     }
 
+    // Create our ClassLoader and set it on this thread
+    urlClassLoader = createClassLoader()
+    Thread.currentThread.setContextClassLoader(urlClassLoader)
+
     // Initialize Spark environment (using system properties read above)
     env = SparkEnv.createFromSystemProperties(slaveHostname, 0, false, false)
     SparkEnv.set(env)
-    // Old stuff that isn't yet using env
-    Broadcast.initialize(false)
-
-    // Create our ClassLoader (using spark properties) and set it on this thread
-    classLoader = createClassLoader()
-    Thread.currentThread.setContextClassLoader(classLoader)
 
     // Start worker thread pool
     threadPool = new ThreadPoolExecutor(
@@ -56,15 +61,17 @@ class Executor extends Logging {
 
     override def run() {
       SparkEnv.set(env)
-      Thread.currentThread.setContextClassLoader(classLoader)
+      Thread.currentThread.setContextClassLoader(urlClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo("Running task ID " + taskId)
       context.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       try {
         SparkEnv.set(env)
-        Thread.currentThread.setContextClassLoader(classLoader)
         Accumulators.clear()
-        val task = ser.deserialize[Task[Any]](serializedTask, classLoader)
+        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        updateDependencies(taskFiles, taskJars)
+        val task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
+        logInfo("Its generation is " + task.generation)
         env.mapOutputTracker.updateGeneration(task.generation)
         val value = task.run(taskId.toInt)
         val accumUpdates = Accumulators.values
@@ -97,25 +104,15 @@ class Executor extends Logging {
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): ClassLoader = {
+  private def createClassLoader(): ExecutorURLClassLoader = {
     var loader = this.getClass.getClassLoader
 
-    // If any JAR URIs are given through spark.jar.uris, fetch them to the
-    // current directory and put them all on the classpath. We assume that
-    // each URL has a unique file name so that no local filenames will clash
-    // in this process. This is guaranteed by ClusterScheduler.
-    val uris = System.getProperty("spark.jar.uris", "")
-    val localFiles = ArrayBuffer[String]()
-    for (uri <- uris.split(",").filter(_.size > 0)) {
-      val url = new URL(uri)
-      val filename = url.getPath.split("/").last
-      downloadFile(url, filename)
-      localFiles += filename
-    }
-    if (localFiles.size > 0) {
-      val urls = localFiles.map(f => new File(f).toURI.toURL).toArray
-      loader = new URLClassLoader(urls, loader)
-    }
+    // For each of the jars in the jarSet, add them to the class loader.
+    // We assume each of the files has already been fetched.
+    val urls = currentJars.keySet.map { uri =>
+      new File(uri.split("/").last).toURI.toURL
+    }.toArray
+    loader = new URLClassLoader(urls, loader)
 
     // If the REPL is in use, add another ClassLoader that will read
     // new classes defined by the REPL as the user types code
@@ -134,13 +131,31 @@ class Executor extends Logging {
       }
     }
 
-    return loader
+    return new ExecutorURLClassLoader(Array(), loader)
   }
 
-  // Download a file from a given URL to the local filesystem
-  private def downloadFile(url: URL, localPath: String) {
-    val in = url.openStream()
-    val out = new FileOutputStream(localPath)
-    Utils.copyStream(in, out, true)
+  /**
+   * Download any missing dependencies if we receive a new set of files and JARs from the
+   * SparkContext. Also adds any new JARs we fetched to the class loader.
+   */
+  private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
+    // Fetch missing dependencies
+    for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+      logInfo("Fetching " + name + " with timestamp " + timestamp)
+      Utils.fetchFile(name, new File("."))
+      currentFiles(name) = timestamp
+    }
+    for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
+      logInfo("Fetching " + name + " with timestamp " + timestamp)
+      Utils.fetchFile(name, new File("."))
+      currentJars(name) = timestamp
+      // Add it to our class loader
+      val localName = name.split("/").last
+      val url = new File(".", localName).toURI.toURL
+      if (!urlClassLoader.getURLs.contains(url)) {
+        logInfo("Adding " + url + " to class loader")
+        urlClassLoader.addURL(url)
+      }
+    }
   }
 }

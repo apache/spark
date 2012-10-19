@@ -10,49 +10,52 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import spark._
+import spark.storage.StorageLevel
 
-class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean)
-extends Broadcast[T] with Logging with Serializable {
+private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+extends Broadcast[T](id) with Logging with Serializable {
   
   def value = value_
 
-  HttpBroadcast.synchronized { 
-    HttpBroadcast.values.put(uuid, 0, value_) 
+  def blockId: String = "broadcast_" + id
+
+  HttpBroadcast.synchronized {
+    SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
   }
 
   if (!isLocal) { 
-    HttpBroadcast.write(uuid, value_)
+    HttpBroadcast.write(id, value_)
   }
 
   // Called by JVM when deserializing an object
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
-      val cachedVal = HttpBroadcast.values.get(uuid, 0)
-      if (cachedVal != null) {
-        value_ = cachedVal.asInstanceOf[T]
-      } else {
-        logInfo("Started reading broadcast variable " + uuid)
-        val start = System.nanoTime
-        value_ = HttpBroadcast.read[T](uuid)
-        HttpBroadcast.values.put(uuid, 0, value_)
-        val time = (System.nanoTime - start) / 1e9
-        logInfo("Reading broadcast variable " + uuid + " took " + time + " s")
+      SparkEnv.get.blockManager.getSingle(blockId) match {
+        case Some(x) => value_ = x.asInstanceOf[T]
+        case None => {
+          logInfo("Started reading broadcast variable " + id)
+          val start = System.nanoTime
+          value_ = HttpBroadcast.read[T](id)
+          SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
+          val time = (System.nanoTime - start) / 1e9
+          logInfo("Reading broadcast variable " + id + " took " + time + " s")
+        }
       }
     }
   }
 }
 
-class HttpBroadcastFactory extends BroadcastFactory {
-  def initialize(isMaster: Boolean) {
-    HttpBroadcast.initialize(isMaster)
-  }
-  def newBroadcast[T](value_ : T, isLocal: Boolean) = new HttpBroadcast[T](value_, isLocal)
+private[spark] class HttpBroadcastFactory extends BroadcastFactory {
+  def initialize(isMaster: Boolean) { HttpBroadcast.initialize(isMaster) }
+
+  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
+    new HttpBroadcast[T](value_, isLocal, id)
+
+  def stop() { HttpBroadcast.stop() }
 }
 
 private object HttpBroadcast extends Logging {
-  val values = SparkEnv.get.cache.newKeySpace()
-
   private var initialized = false
 
   private var broadcastDir: File = null
@@ -65,13 +68,23 @@ private object HttpBroadcast extends Logging {
     synchronized {
       if (!initialized) {
         bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-        compress = System.getProperty("spark.compress", "false").toBoolean
+        compress = System.getProperty("spark.broadcast.compress", "true").toBoolean
         if (isMaster) {
           createServer()
         }
         serverUri = System.getProperty("spark.httpBroadcast.uri")
         initialized = true
       }
+    }
+  }
+  
+  def stop() {
+    synchronized {
+      if (server != null) {
+        server.stop()
+        server = null
+      }
+      initialized = false
     }
   }
 
@@ -84,8 +97,8 @@ private object HttpBroadcast extends Logging {
     logInfo("Broadcast server started at " + serverUri)
   }
 
-  def write(uuid: UUID, value: Any) {
-    val file = new File(broadcastDir, "broadcast-" + uuid)
+  def write(id: Long, value: Any) {
+    val file = new File(broadcastDir, "broadcast-" + id)
     val out: OutputStream = if (compress) {
       new LZFOutputStream(new FileOutputStream(file)) // Does its own buffering
     } else {
@@ -97,8 +110,8 @@ private object HttpBroadcast extends Logging {
     serOut.close()
   }
 
-  def read[T](uuid: UUID): T = {
-    val url = serverUri + "/broadcast-" + uuid
+  def read[T](id: Long): T = {
+    val url = serverUri + "/broadcast-" + id
     var in = if (compress) {
       new LZFInputStream(new URL(url).openStream()) // Does its own buffering
     } else {

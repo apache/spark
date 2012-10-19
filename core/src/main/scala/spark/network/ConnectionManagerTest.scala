@@ -8,7 +8,10 @@ import scala.io.Source
 import java.nio.ByteBuffer
 import java.net.InetAddress
 
-object ConnectionManagerTest extends Logging{
+import akka.dispatch.Await
+import akka.util.duration._
+
+private[spark] object ConnectionManagerTest extends Logging{
   def main(args: Array[String]) {
     if (args.length < 2) {
       println("Usage: ConnectionManagerTest <mesos cluster> <slaves file>")
@@ -53,7 +56,7 @@ object ConnectionManagerTest extends Logging{
           logInfo("Sending [" + bufferMessage + "] to [" + slaveConnManagerId + "]")
           connManager.sendMessageReliably(slaveConnManagerId, bufferMessage)
         })
-        val results = futures.map(f => f())
+        val results = futures.map(f => Await.result(f, 1.second))
         val finishTime = System.currentTimeMillis
         Thread.sleep(5000)
         

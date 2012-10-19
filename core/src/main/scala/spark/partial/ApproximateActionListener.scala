@@ -12,7 +12,7 @@ import spark.scheduler.JobListener
  * a result of type U for each partition, and that the action returns a partial or complete result
  * of type R. Note that the type R must *include* any error bars on it (e.g. see BoundedInt).
  */
-class ApproximateActionListener[T, U, R](
+private[spark] class ApproximateActionListener[T, U, R](
     rdd: RDD[T],
     func: (TaskContext, Iterator[T]) => U,
     evaluator: ApproximateEvaluator[U, R],

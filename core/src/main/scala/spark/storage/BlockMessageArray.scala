@@ -1,5 +1,6 @@
 package spark.storage
-import java.nio._
+
+import java.nio.ByteBuffer
 
 import scala.collection.mutable.StringBuilder
 import scala.collection.mutable.ArrayBuffer
@@ -7,6 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 import spark._
 import spark.network._
 
+private[spark]
 class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockMessage] with Logging {
   
   def this(bm: BlockMessage) = this(Array(bm))
@@ -84,7 +86,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
   }
 }
 
-object BlockMessageArray {
+private[spark] object BlockMessageArray {
  
   def fromBufferMessage(bufferMessage: BufferMessage): BlockMessageArray = {
     val newBlockMessageArray = new BlockMessageArray()
@@ -98,7 +100,7 @@ object BlockMessageArray {
         if (i % 2 == 0) {
           val buffer =  ByteBuffer.allocate(100)
           buffer.clear
-          BlockMessage.fromPutBlock(PutBlock(i.toString, buffer, StorageLevel.MEMORY_ONLY))
+          BlockMessage.fromPutBlock(PutBlock(i.toString, buffer, StorageLevel.MEMORY_ONLY_SER))
         } else {
           BlockMessage.fromGetBlock(GetBlock(i.toString))
         }

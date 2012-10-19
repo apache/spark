@@ -19,7 +19,7 @@ import spark.storage.BlockManagerId
  * Each Stage also has a priority, which is (by default) based on the job it was submitted in.
  * This allows Stages from earlier jobs to be computed first or recovered faster on failure.
  */
-class Stage(
+private[spark] class Stage(
     val id: Int,
     val rdd: RDD[_],
     val shuffleDep: Option[ShuffleDependency[_,_,_]],  // Output shuffle if stage is a map stage
@@ -29,29 +29,29 @@ class Stage(
   
   val isShuffleMap = shuffleDep != None
   val numPartitions = rdd.splits.size
-  val outputLocs = Array.fill[List[BlockManagerId]](numPartitions)(Nil)
+  val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
 
   private var nextAttemptId = 0
 
   def isAvailable: Boolean = {
-    if (/*parents.size == 0 &&*/ !isShuffleMap) {
+    if (!isShuffleMap) {
       true
     } else {
       numAvailableOutputs == numPartitions
     }
   }
 
-  def addOutputLoc(partition: Int, bmAddress: BlockManagerId) {
+  def addOutputLoc(partition: Int, status: MapStatus) {
     val prevList = outputLocs(partition)
-    outputLocs(partition) = bmAddress :: prevList
+    outputLocs(partition) = status :: prevList
     if (prevList == Nil)
       numAvailableOutputs += 1
   }
 
   def removeOutputLoc(partition: Int, bmAddress: BlockManagerId) {
     val prevList = outputLocs(partition)
-    val newList = prevList.filterNot(_ == bmAddress)
+    val newList = prevList.filterNot(_.address == bmAddress)
     outputLocs(partition) = newList
     if (prevList != Nil && newList == Nil) {
       numAvailableOutputs -= 1
@@ -62,7 +62,7 @@ class Stage(
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {
       val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.ip == host)
+      val newList = prevList.filterNot(_.address.ip == host)
       outputLocs(partition) = newList
       if (prevList != Nil && newList == Nil) {
         becameUnavailable = true
@@ -79,6 +79,8 @@ class Stage(
     nextAttemptId += 1
     return id
   }
+
+  def origin: String = rdd.origin
 
   override def toString = "Stage " + id // + ": [RDD = " + rdd.id + ", isShuffle = " + isShuffleMap + "]"
 

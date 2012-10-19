@@ -5,7 +5,7 @@ import spark.SparkContext
 object BroadcastTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: BroadcastTest <host> [<slices>] [numElem]")
+      System.err.println("Usage: BroadcastTest <master> [<slices>] [numElem]")
       System.exit(1)
     }  
     
@@ -17,9 +17,13 @@ object BroadcastTest {
     for (i <- 0 until arr1.length) 
       arr1(i) = i
     
-    val barr1 = spark.broadcast(arr1)
-    spark.parallelize(1 to 10, slices).foreach {
-      i => println(barr1.value.size)
+    for (i <- 0 until 2) {
+      println("Iteration " + i)
+      println("===========")
+      val barr1 = spark.broadcast(arr1)
+      spark.parallelize(1 to 10, slices).foreach {
+        i => println(barr1.value.size)
+      }
     }
 
     System.exit(0)

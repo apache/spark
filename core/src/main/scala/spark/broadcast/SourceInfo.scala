@@ -6,15 +6,11 @@ import spark._
 
 /**
  * Used to keep and pass around information of peers involved in a broadcast
- * 
- * CHANGED: Keep track of the blockSize for THIS broadcast variable.
- * Broadcast.BlockSize is expected to be updated across different broadcasts
  */
-case class SourceInfo (hostAddress: String,
+private[spark] case class SourceInfo (hostAddress: String,
                        listenPort: Int,
                        totalBlocks: Int = SourceInfo.UnusedParam,
-                       totalBytes: Int = SourceInfo.UnusedParam,
-                       blockSize: Int = Broadcast.BlockSize)
+                       totalBytes: Int = SourceInfo.UnusedParam)
 extends Comparable[SourceInfo] with Logging {
 
   var currentLeechers = 0
@@ -30,10 +26,11 @@ extends Comparable[SourceInfo] with Logging {
 /**
  * Helper Object of SourceInfo for its constants
  */
-object SourceInfo {
-  // Constants for special values of listenPort
+private[spark] object SourceInfo {
+  // Broadcast has not started yet! Should never happen.
   val TxNotStartedRetry = -1
-  val TxOverGoToHDFS = 0
+  // Broadcast has already finished. Try default mechanism.
+  val TxOverGoToDefault = -3
   // Other constants
   val StopBroadcast = -2
   val UnusedParam = 0

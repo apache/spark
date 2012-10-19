@@ -25,12 +25,12 @@ object SparkLR {
 
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: SparkLR <host> [<slices>]")
+      System.err.println("Usage: SparkLR <master> [<slices>]")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SparkLR")
     val numSlices = if (args.length > 1) args(1).toInt else 2
-    val data = generateData
+    val points = sc.parallelize(generateData, numSlices).cache()
 
     // Initialize w to a random value
     var w = Vector(D, _ => 2 * rand.nextDouble - 1)
@@ -38,7 +38,7 @@ object SparkLR {
 
     for (i <- 1 to ITERATIONS) {
       println("On iteration " + i)
-      val gradient = sc.parallelize(data, numSlices).map { p =>
+      val gradient = points.map { p =>
         (1 / (1 + exp(-p.y * (w dot p.x))) - 1) * p.y * p.x
       }.reduce(_ + _)
       w -= gradient

@@ -1,6 +1,6 @@
 package spark.deploy
 
-class JobDescription(
+private[spark] class JobDescription(
     val name: String,
     val cores: Int,
     val memoryPerSlave: Int,

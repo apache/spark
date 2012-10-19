@@ -1,10 +1,17 @@
 package spark
 
+/**
+ * An object that defines how the elements in a key-value pair RDD are partitioned by key.
+ * Maps each key to a partition ID, from 0 to `numPartitions - 1`.
+ */
 abstract class Partitioner extends Serializable {
   def numPartitions: Int
   def getPartition(key: Any): Int
 }
 
+/**
+ * A [[spark.Partitioner]] that implements hash-based partitioning using Java's `Object.hashCode`.
+ */
 class HashPartitioner(partitions: Int) extends Partitioner {
   def numPartitions = partitions
 
@@ -29,6 +36,10 @@ class HashPartitioner(partitions: Int) extends Partitioner {
   }
 }
 
+/**
+ * A [[spark.Partitioner]] that partitions sortable records by range into roughly equal ranges.
+ * Determines the ranges by sampling the RDD passed in.
+ */
 class RangePartitioner[K <% Ordered[K]: ClassManifest, V](
     partitions: Int,
     @transient rdd: RDD[(K,V)],
@@ -41,9 +52,9 @@ class RangePartitioner[K <% Ordered[K]: ClassManifest, V](
       Array()
     } else {
       val rddSize = rdd.count()
-      val maxSampleSize = partitions * 10.0
+      val maxSampleSize = partitions * 20.0
       val frac = math.min(maxSampleSize / math.max(rddSize, 1), 1.0)
-      val rddSample = rdd.sample(true, frac, 1).map(_._1).collect().sortWith(_ < _)
+      val rddSample = rdd.sample(false, frac, 1).map(_._1).collect().sortWith(_ < _)
       if (rddSample.length == 0) {
         Array()
       } else {

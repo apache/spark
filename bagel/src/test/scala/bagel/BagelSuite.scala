@@ -18,7 +18,12 @@ class BagelSuite extends FunSuite with Assertions with BeforeAndAfter {
   var sc: SparkContext = _
   
   after {
-    sc.stop()
+    if (sc != null) {
+      sc.stop()
+      sc = null
+    }
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
   
   test("halting by voting") {

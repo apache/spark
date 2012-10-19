@@ -1,0 +1,9 @@
+pygments: true
+markdown: kramdown
+
+# These allow the documentation to be updated with nerw releases
+# of Spark, Scala, and Mesos.
+SPARK_VERSION: 0.6.0
+SPARK_VERSION_SHORT: 0.6.0
+SCALA_VERSION: 2.9.2
+MESOS_VERSION: 0.9.0-incubating

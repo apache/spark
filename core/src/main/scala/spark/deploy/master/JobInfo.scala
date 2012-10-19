@@ -5,6 +5,7 @@ import java.util.Date
 import akka.actor.ActorRef
 import scala.collection.mutable
 
+private[spark]
 class JobInfo(val id: String, val desc: JobDescription, val submitDate: Date, val actor: ActorRef) {
   var state = JobState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]
@@ -31,4 +32,13 @@ class JobInfo(val id: String, val desc: JobDescription, val submitDate: Date, va
   }
 
   def coresLeft: Int = desc.cores - coresGranted
+
+  private var _retryCount = 0
+
+  def retryCount = _retryCount
+
+  def incrementRetryCount = {
+    _retryCount += 1
+    _retryCount
+  }
 }

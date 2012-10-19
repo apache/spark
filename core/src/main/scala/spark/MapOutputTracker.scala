@@ -1,5 +1,6 @@
 package spark
 
+import java.io._
 import java.util.concurrent.ConcurrentHashMap
 
 import akka.actor._
@@ -10,20 +11,23 @@ import akka.util.Duration
 import akka.util.Timeout
 import akka.util.duration._
 
+import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
+import scheduler.MapStatus
 import spark.storage.BlockManagerId
+import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-sealed trait MapOutputTrackerMessage
-case class GetMapOutputLocations(shuffleId: Int) extends MapOutputTrackerMessage 
-case object StopMapOutputTracker extends MapOutputTrackerMessage
+private[spark] sealed trait MapOutputTrackerMessage
+private[spark] case class GetMapOutputStatuses(shuffleId: Int, requester: String)
+  extends MapOutputTrackerMessage 
+private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-class MapOutputTrackerActor(bmAddresses: ConcurrentHashMap[Int, Array[BlockManagerId]]) 
-extends Actor with Logging {
+private[spark] class MapOutputTrackerActor(tracker: MapOutputTracker) extends Actor with Logging {
   def receive = {
-    case GetMapOutputLocations(shuffleId: Int) =>
-      logInfo("Asked to get map output locations for shuffle " + shuffleId)
-      sender ! bmAddresses.get(shuffleId)
+    case GetMapOutputStatuses(shuffleId: Int, requester: String) =>
+      logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + requester)
+      sender ! tracker.getSerializedLocations(shuffleId)
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerActor stopped!")
@@ -32,22 +36,26 @@ extends Actor with Logging {
   }
 }
 
-class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logging {
+private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logging {
   val ip: String = System.getProperty("spark.master.host", "localhost")
   val port: Int = System.getProperty("spark.master.port", "7077").toInt
   val actorName: String = "MapOutputTracker"
 
   val timeout = 10.seconds
 
-  private var bmAddresses = new ConcurrentHashMap[Int, Array[BlockManagerId]]
+  var mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]
 
   // Incremented every time a fetch fails so that client nodes know to clear
   // their cache of map output locations if this happens.
   private var generation: Long = 0
-  private var generationLock = new java.lang.Object
+  private val generationLock = new java.lang.Object
+
+  // Cache a serialized version of the output statuses for each shuffle to send them out faster
+  var cacheGeneration = generation
+  val cachedSerializedStatuses = new HashMap[Int, Array[Byte]]
 
   var trackerActor: ActorRef = if (isMaster) {
-    val actor = actorSystem.actorOf(Props(new MapOutputTrackerActor(bmAddresses)), name = actorName)
+    val actor = actorSystem.actorOf(Props(new MapOutputTrackerActor(this)), name = actorName)
     logInfo("Registered MapOutputTrackerActor actor")
     actor
   } else {
@@ -75,31 +83,34 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
   }
 
   def registerShuffle(shuffleId: Int, numMaps: Int) {
-    if (bmAddresses.get(shuffleId) != null) {
+    if (mapStatuses.get(shuffleId) != null) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
-    bmAddresses.put(shuffleId, new Array[BlockManagerId](numMaps))
+    mapStatuses.put(shuffleId, new Array[MapStatus](numMaps))
   }
   
-  def registerMapOutput(shuffleId: Int, mapId: Int, bmAddress: BlockManagerId) {
-    var array = bmAddresses.get(shuffleId)
+  def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) {
+    var array = mapStatuses.get(shuffleId)
     array.synchronized {
-      array(mapId) = bmAddress
+      array(mapId) = status
     }
   }
   
-  def registerMapOutputs(shuffleId: Int, locs: Array[BlockManagerId], changeGeneration: Boolean = false) {
-    bmAddresses.put(shuffleId, Array[BlockManagerId]() ++ locs)
+  def registerMapOutputs(
+      shuffleId: Int,
+      statuses: Array[MapStatus],
+      changeGeneration: Boolean = false) {
+    mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
     if (changeGeneration) {
       incrementGeneration()
     }
   }
 
   def unregisterMapOutput(shuffleId: Int, mapId: Int, bmAddress: BlockManagerId) {
-    var array = bmAddresses.get(shuffleId)
+    var array = mapStatuses.get(shuffleId)
     if (array != null) {
       array.synchronized {
-        if (array(mapId) == bmAddress) {
+        if (array(mapId).address == bmAddress) {
           array(mapId) = null
         }
       }
@@ -112,11 +123,11 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
   // Remembers which map output locations are currently being fetched on a worker
   val fetching = new HashSet[Int]
   
-  // Called on possibly remote nodes to get the server URIs for a given shuffle
-  def getServerAddresses(shuffleId: Int): Array[BlockManagerId] = {
-    val locs = bmAddresses.get(shuffleId)
-    if (locs == null) {
-      logInfo("Don't have map outputs for shuffe " + shuffleId + ", fetching them")
+  // Called on possibly remote nodes to get the server URIs and output sizes for a given shuffle
+  def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
+    val statuses = mapStatuses.get(shuffleId)
+    if (statuses == null) {
+      logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       fetching.synchronized {
         if (fetching.contains(shuffleId)) {
           // Someone else is fetching it; wait for them to be done
@@ -124,33 +135,38 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
             try {
               fetching.wait()
             } catch {
-              case _ =>
+              case e: InterruptedException =>
             }
           }
-          return bmAddresses.get(shuffleId)
+          return mapStatuses.get(shuffleId).map(status =>
+            (status.address, MapOutputTracker.decompressSize(status.compressedSizes(reduceId))))
         } else {
           fetching += shuffleId
         }
       }
       // We won the race to fetch the output locs; do so
       logInfo("Doing the fetch; tracker actor = " + trackerActor)
-      val fetched = askTracker(GetMapOutputLocations(shuffleId)).asInstanceOf[Array[BlockManagerId]]
+      val host = System.getProperty("spark.hostname", Utils.localHostName)
+      val fetchedBytes = askTracker(GetMapOutputStatuses(shuffleId, host)).asInstanceOf[Array[Byte]]
+      val fetchedStatuses = deserializeStatuses(fetchedBytes)
       
       logInfo("Got the output locations")
-      bmAddresses.put(shuffleId, fetched)
+      mapStatuses.put(shuffleId, fetchedStatuses)
       fetching.synchronized {
         fetching -= shuffleId
         fetching.notifyAll()
       }
-      return fetched
+      return fetchedStatuses.map(s =>
+        (s.address, MapOutputTracker.decompressSize(s.compressedSizes(reduceId))))
     } else {
-      return locs
+      return statuses.map(s =>
+        (s.address, MapOutputTracker.decompressSize(s.compressedSizes(reduceId))))
     }
   }
 
   def stop() {
     communicate(StopMapOutputTracker)
-    bmAddresses.clear()
+    mapStatuses.clear()
     trackerActor = null
   }
 
@@ -158,6 +174,7 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
   def incrementGeneration() {
     generationLock.synchronized {
       generation += 1
+      logDebug("Increasing generation to " + generation)
     }
   }
 
@@ -175,9 +192,83 @@ class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logg
     generationLock.synchronized {
       if (newGen > generation) {
         logInfo("Updating generation to " + newGen + " and clearing cache")
-        bmAddresses = new ConcurrentHashMap[Int, Array[BlockManagerId]]
+        mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]
         generation = newGen
       }
+    }
+  }
+
+  def getSerializedLocations(shuffleId: Int): Array[Byte] = {
+    var statuses: Array[MapStatus] = null
+    var generationGotten: Long = -1
+    generationLock.synchronized {
+      if (generation > cacheGeneration) {
+        cachedSerializedStatuses.clear()
+        cacheGeneration = generation
+      }
+      cachedSerializedStatuses.get(shuffleId) match {
+        case Some(bytes) =>
+          return bytes
+        case None =>
+          statuses = mapStatuses.get(shuffleId)
+          generationGotten = generation
+      }
+    }
+    // If we got here, we failed to find the serialized locations in the cache, so we pulled
+    // out a snapshot of the locations as "locs"; let's serialize and return that
+    val bytes = serializeStatuses(statuses)
+    logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, bytes.length))
+    // Add them into the table only if the generation hasn't changed while we were working
+    generationLock.synchronized {
+      if (generation == generationGotten) {
+        cachedSerializedStatuses(shuffleId) = bytes
+      }
+    }
+    return bytes
+  }
+
+  // Serialize an array of map output locations into an efficient byte format so that we can send
+  // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
+  // generally be pretty compressible because many map outputs will be on the same hostname.
+  def serializeStatuses(statuses: Array[MapStatus]): Array[Byte] = {
+    val out = new ByteArrayOutputStream
+    val objOut = new ObjectOutputStream(new GZIPOutputStream(out))
+    objOut.writeObject(statuses)
+    objOut.close()
+    out.toByteArray
+  }
+
+  // Opposite of serializeStatuses.
+  def deserializeStatuses(bytes: Array[Byte]): Array[MapStatus] = {
+    val objIn = new ObjectInputStream(new GZIPInputStream(new ByteArrayInputStream(bytes)))
+    objIn.readObject().asInstanceOf[Array[MapStatus]]
+  }
+}
+
+private[spark] object MapOutputTracker {
+  private val LOG_BASE = 1.1
+
+  /**
+   * Compress a size in bytes to 8 bits for efficient reporting of map output sizes.
+   * We do this by encoding the log base 1.1 of the size as an integer, which can support
+   * sizes up to 35 GB with at most 10% error.
+   */
+  def compressSize(size: Long): Byte = {
+    if (size <= 1L) {
+      0
+    } else {
+      math.min(255, math.ceil(math.log(size) / math.log(LOG_BASE)).toInt).toByte
+    }
+  }
+
+  /**
+   * Decompress an 8-bit encoded block size, using the reverse operation of compressSize.
+   */
+  def decompressSize(compressedSize: Byte): Long = {
+    if (compressedSize == 0) {
+      1
+    } else {
+      math.pow(LOG_BASE, (compressedSize & 0xFF)).toLong
     }
   }
 }

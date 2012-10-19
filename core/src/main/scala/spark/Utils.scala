@@ -1,18 +1,18 @@
 package spark
 
 import java.io._
-import java.net.InetAddress
+import java.net.{InetAddress, URL, URI}
+import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
-
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
-import java.util.{Locale, UUID}
 import scala.io.Source
 
 /**
  * Various utility methods used by Spark.
  */
-object Utils {
+private object Utils extends Logging {
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -71,7 +71,7 @@ object Utils {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory after " + maxAttempts + 
+        throw new IOException("Failed to create a temp directory after " + maxAttempts +
             " attempts!")
       }
       try {
@@ -116,22 +116,84 @@ object Utils {
     copyStream(in, out, true)
   }
 
+  /** Download a file from a given URL to the local filesystem */
+  def downloadFile(url: URL, localPath: String) {
+    val in = url.openStream()
+    val out = new FileOutputStream(localPath)
+    Utils.copyStream(in, out, true)
+  }
+
+  /**
+   * Download a file requested by the executor. Supports fetching the file in a variety of ways,
+   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   */
+  def fetchFile(url: String, targetDir: File) {
+    val filename = url.split("/").last
+    val targetFile = new File(targetDir, filename)
+    val uri = new URI(url)
+    uri.getScheme match {
+      case "http" | "https" | "ftp" =>
+        logInfo("Fetching " + url + " to " + targetFile)
+        val in = new URL(url).openStream()
+        val out = new FileOutputStream(targetFile)
+        Utils.copyStream(in, out, true)
+      case "file" | null =>
+        // Remove the file if it already exists
+        targetFile.delete()
+        // Symlink the file locally.
+        if (uri.isAbsolute) {
+          // url is absolute, i.e. it starts with "file:///". Extract the source
+          // file's absolute path from the url.
+          val sourceFile = new File(uri)
+          logInfo("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
+          FileUtil.symLink(sourceFile.getAbsolutePath, targetFile.getAbsolutePath)
+        } else {
+          // url is not absolute, i.e. itself is the path to the source file.
+          logInfo("Symlinking " + url + " to " + targetFile.getAbsolutePath)
+          FileUtil.symLink(url, targetFile.getAbsolutePath)
+        }
+      case _ =>
+        // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
+        val uri = new URI(url)
+        val conf = new Configuration()
+        val fs = FileSystem.get(uri, conf)
+        val in = fs.open(new Path(uri))
+        val out = new FileOutputStream(targetFile)
+        Utils.copyStream(in, out, true)
+    }
+    // Decompress the file if it's a .tar or .tar.gz
+    if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
+      logInfo("Untarring " + filename)
+      Utils.execute(Seq("tar", "-xzf", filename), targetDir)
+    } else if (filename.endsWith(".tar")) {
+      logInfo("Untarring " + filename)
+      Utils.execute(Seq("tar", "-xf", filename), targetDir)
+    }
+    // Make the file executable - That's necessary for scripts
+    FileUtil.chmod(filename, "a+x")
+  }
+
   /**
    * Shuffle the elements of a collection into a random order, returning the
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T](seq: TraversableOnce[T]): Seq[T] = {
-    val buf = new ArrayBuffer[T]()
-    buf ++= seq
-    val rand = new Random()
-    for (i <- (buf.size - 1) to 1 by -1) {
+  def randomize[T: ClassManifest](seq: TraversableOnce[T]): Seq[T] = {
+    randomizeInPlace(seq.toArray)
+  }
+
+  /**
+   * Shuffle the elements of an array into a random order, modifying the
+   * original array. Returns the original array.
+   */
+  def randomizeInPlace[T](arr: Array[T], rand: Random = new Random): Array[T] = {
+    for (i <- (arr.length - 1) to 1 by -1) {
       val j = rand.nextInt(i)
-      val tmp = buf(j)
-      buf(j) = buf(i)
-      buf(i) = tmp
+      val tmp = arr(j)
+      arr(j) = arr(i)
+      arr(i) = tmp
     }
-    buf
+    arr
   }
 
   /**
@@ -155,7 +217,7 @@ object Utils {
   def localHostName(): String = {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
   }
-  
+
   /**
    * Returns a standard ThreadFactory except all threads are daemons.
    */
@@ -179,10 +241,10 @@ object Utils {
 
     return threadPool
   }
-  
+
   /**
-   * Return the string to tell how long has passed in seconds. The passing parameter should be in 
-   * millisecond. 
+   * Return the string to tell how long has passed in seconds. The passing parameter should be in
+   * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
     return " " + (System.currentTimeMillis - startTimeMs) + " ms "
@@ -293,5 +355,44 @@ object Utils {
    */
   def execute(command: Seq[String]) {
     execute(command, new File("."))
+  }
+
+
+  /**
+   * When called inside a class in the spark package, returns the name of the user code class
+   * (outside the spark package) that called into Spark, as well as which Spark method they called.
+   * This is used, for example, to tell users where in their code each RDD got created.
+   */
+  def getSparkCallSite: String = {
+    val trace = Thread.currentThread.getStackTrace().filter( el =>
+      (!el.getMethodName.contains("getStackTrace")))
+
+    // Keep crawling up the stack trace until we find the first function not inside of the spark
+    // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
+    // transformation, a SparkContext function (such as parallelize), or anything else that leads
+    // to instantiation of an RDD. We also track the first (deepest) user method, file, and line.
+    var lastSparkMethod = "<unknown>"
+    var firstUserFile = "<unknown>"
+    var firstUserLine = 0
+    var finished = false
+
+    for (el <- trace) {
+      if (!finished) {
+        if (el.getClassName.startsWith("spark.") && !el.getClassName.startsWith("spark.examples.")) {
+          lastSparkMethod = if (el.getMethodName == "<init>") {
+            // Spark method is a constructor; get its class name
+            el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
+          } else {
+            el.getMethodName
+          }
+        }
+        else {
+          firstUserLine = el.getLineNumber
+          firstUserFile = el.getFileName
+          finished = true
+        }
+      }
+    }
+    "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
   }
 }

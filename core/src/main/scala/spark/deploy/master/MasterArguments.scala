@@ -6,7 +6,7 @@ import spark.Utils
 /**
  * Command-line parser for the master.
  */
-class MasterArguments(args: Array[String]) {
+private[spark] class MasterArguments(args: Array[String]) {
   var ip = Utils.localIpAddress()
   var port = 7077
   var webUiPort = 8080
@@ -51,7 +51,7 @@ class MasterArguments(args: Array[String]) {
    */
   def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "Usage: spark-master [options]\n" +
+      "Usage: Master [options]\n" +
       "\n" +
       "Options:\n" +
       "  -i IP, --ip IP         IP address or DNS name to listen on\n" +

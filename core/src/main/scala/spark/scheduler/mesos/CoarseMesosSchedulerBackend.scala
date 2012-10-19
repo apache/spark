@@ -24,7 +24,7 @@ import spark.TaskState
  * Unfortunately this has a bit of duplication from MesosSchedulerBackend, but it seems hard to
  * remove this.
  */
-class CoarseMesosSchedulerBackend(
+private[spark] class CoarseMesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
@@ -32,14 +32,6 @@ class CoarseMesosSchedulerBackend(
   extends StandaloneSchedulerBackend(scheduler, sc.env.actorSystem)
   with MScheduler
   with Logging {
-
-  // Environment variables to pass to our executors
-  val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
-    "SPARK_MEM",
-    "SPARK_CLASSPATH",
-    "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS"
-  )
 
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
 
@@ -79,6 +71,8 @@ class CoarseMesosSchedulerBackend(
       throw new SparkException("Spark home is not set; set it through the spark.home system " +
         "property, the SPARK_HOME environment variable or the SparkContext constructor")
   }
+
+  val extraCoresPerSlave = System.getProperty("spark.mesos.extra.cores", "0").toInt
 
   var nextMesosTaskId = 0
 
@@ -120,13 +114,11 @@ class CoarseMesosSchedulerBackend(
     val command = "\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
       runScript, masterUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
     val environment = Environment.newBuilder()
-    for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
-      if (System.getenv(key) != null) {
-        environment.addVariables(Environment.Variable.newBuilder()
-          .setName(key)
-          .setValue(System.getenv(key))
-          .build())
-      }
+    sc.executorEnvs.foreach { case (key, value) =>
+      environment.addVariables(Environment.Variable.newBuilder()
+        .setName(key)
+        .setValue(value)
+        .build())
     }
     return CommandInfo.newBuilder().setValue(command).setEnvironment(environment).build()
   }
@@ -177,7 +169,7 @@ class CoarseMesosSchedulerBackend(
           val task = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
-            .setCommand(createCommand(offer, cpusToUse))
+            .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave))
             .setName("Task " + taskId)
             .addResources(createResource("cpus", cpusToUse))
             .addResources(createResource("mem", executorMemory))

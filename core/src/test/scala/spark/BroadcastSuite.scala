@@ -8,9 +8,12 @@ class BroadcastSuite extends FunSuite with BeforeAndAfter {
   var sc: SparkContext = _
   
   after {
-    if(sc != null) {
+    if (sc != null) {
       sc.stop()
+      sc = null
     }
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
   
   test("basic broadcast") {

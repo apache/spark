@@ -7,7 +7,7 @@ import java.util.Random
 object SimpleSkewedGroupByTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: SimpleSkewedGroupByTest <host> " +
+      System.err.println("Usage: SimpleSkewedGroupByTest <master> " +
         "[numMappers] [numKVPairs] [valSize] [numReducers] [ratio]")
       System.exit(1)
     }  

@@ -12,7 +12,7 @@ import spark.util.StatCounter
 /**
  * An ApproximateEvaluator for sums by key. Returns a map of key to confidence interval.
  */
-class GroupedSumEvaluator[T](totalOutputs: Int, confidence: Double)
+private[spark] class GroupedSumEvaluator[T](totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[JHashMap[T, StatCounter], Map[T, BoundedDouble]] {
 
   var outputsMerged = 0
