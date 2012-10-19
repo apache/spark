@@ -5,11 +5,15 @@ import java.io._
 import scala.collection.Map
 import scala.collection.JavaConversions._
 import scala.io.Source
-import spark._
-import api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
-import broadcast.Broadcast
-import scala.collection
-import java.nio.charset.Charset
+
+import spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
+import spark.broadcast.Broadcast
+import spark.SparkEnv
+import spark.Split
+import spark.RDD
+import spark.OneToOneDependency
+import spark.rdd.PipedRDD
+
 
 trait PythonRDDBase {
   def compute[T](split: Split, envVars: Map[String, String],
@@ -43,9 +47,9 @@ trait PythonRDDBase {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
         val dOut = new DataOutputStream(proc.getOutputStream)
-        out.println(broadcastVars.length)
+        dOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
-          out.print(broadcast.uuid.toString)
+          dOut.writeLong(broadcast.id)
           dOut.writeInt(broadcast.value.length)
           dOut.write(broadcast.value)
           dOut.flush()

@@ -7,7 +7,8 @@ SPARK_HOME = os.environ["SPARK_HOME"]
 
 
 assembly_jar = glob.glob(os.path.join(SPARK_HOME, "core/target") + \
-    "/spark-core-assembly-*-SNAPSHOT.jar")[0]
+    "/spark-core-assembly-*.jar")[0]
+    # TODO: what if multiple assembly jars are found?
 
 
 def launch_gateway():

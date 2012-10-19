@@ -66,5 +66,5 @@ class SparkContext(object):
 
     def broadcast(self, value):
         jbroadcast = self._jsc.broadcast(bytearray(dump_pickle(value)))
-        return Broadcast(jbroadcast.uuid().toString(), value, jbroadcast,
+        return Broadcast(jbroadcast.id(), value, jbroadcast,
                          self._pickled_broadcast_vars)

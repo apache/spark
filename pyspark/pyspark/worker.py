@@ -8,7 +8,7 @@ from base64 import standard_b64decode
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import write_with_length, read_with_length, \
-    dump_pickle, load_pickle
+    read_long, read_int, dump_pickle, load_pickle
 
 
 # Redirect stdout to stderr so that users must return values from functions.
@@ -29,11 +29,11 @@ def read_input():
 
 
 def main():
-    num_broadcast_variables = int(sys.stdin.readline().strip())
+    num_broadcast_variables = read_int(sys.stdin)
     for _ in range(num_broadcast_variables):
-        uuid = sys.stdin.read(36)
+        bid = read_long(sys.stdin)
         value = read_with_length(sys.stdin)
-        _broadcastRegistry[uuid] = Broadcast(uuid, load_pickle(value))
+        _broadcastRegistry[bid] = Broadcast(bid, load_pickle(value))
     func = load_obj()
     bypassSerializer = load_obj()
     if bypassSerializer:
