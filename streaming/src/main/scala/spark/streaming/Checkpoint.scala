@@ -14,7 +14,6 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time) ext
   val sparkHome = ssc.sc.sparkHome
   val jars = ssc.sc.jars
   val graph = ssc.graph
-  val batchDuration = ssc.batchDuration
   val checkpointFile = ssc.checkpointFile
   val checkpointInterval = ssc.checkpointInterval
 
@@ -24,7 +23,6 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time) ext
     assert(master != null, "Checkpoint.master is null")
     assert(framework != null, "Checkpoint.framework is null")
     assert(graph != null, "Checkpoint.graph is null")
-    assert(batchDuration != null, "Checkpoint.batchDuration is null")
     assert(checkpointTime != null, "Checkpoint.checkpointTime is null")
   }
 

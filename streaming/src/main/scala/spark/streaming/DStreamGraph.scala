@@ -11,7 +11,8 @@ final class DStreamGraph extends Serializable with Logging {
   private val outputStreams = new ArrayBuffer[DStream[_]]()
 
   private[streaming] var zeroTime: Time = null
-  private[streaming] var checkpointInProgress = false;
+  private[streaming] var batchDuration: Time = null
+  private[streaming] var checkpointInProgress = false
 
   def start(time: Time) {
     this.synchronized {
@@ -20,6 +21,7 @@ final class DStreamGraph extends Serializable with Logging {
       }
       zeroTime = time
       outputStreams.foreach(_.initialize(zeroTime))
+      outputStreams.foreach(_.setForgetTime())
       inputStreams.par.foreach(_.start())
     }
   }
@@ -36,14 +38,28 @@ final class DStreamGraph extends Serializable with Logging {
     }
   }
 
+  def setBatchDuration(duration: Time) {
+    this.synchronized {
+      if (batchDuration != null) {
+        throw new Exception("Batch duration already set as " + batchDuration +
+          ". cannot set it again.")
+      }
+    }
+    batchDuration = duration
+  }
+
   def addInputStream(inputStream: InputDStream[_]) {
-    inputStream.setGraph(this)
-    inputStreams += inputStream
+    this.synchronized {
+      inputStream.setGraph(this)
+      inputStreams += inputStream
+    }
   }
 
   def addOutputStream(outputStream: DStream[_]) {
-    outputStream.setGraph(this)
-    outputStreams += outputStream
+    this.synchronized {
+      outputStream.setGraph(this)
+      outputStreams += outputStream
+    }
   }
 
   def getInputStreams() = inputStreams.toArray
@@ -53,6 +69,20 @@ final class DStreamGraph extends Serializable with Logging {
   def generateRDDs(time: Time): Seq[Job] = {
     this.synchronized {
       outputStreams.flatMap(outputStream => outputStream.generateJob(time))
+    }
+  }
+
+  def forgetOldRDDs(time: Time) {
+    this.synchronized {
+      outputStreams.foreach(_.forgetOldRDDs(time))
+    }
+  }
+
+  def validate() {
+    this.synchronized {
+      assert(batchDuration != null, "Batch duration has not been set")
+      assert(batchDuration > Milliseconds(100), "Batch duration of " + batchDuration + " is very low")
+      assert(getOutputStreams().size > 0, "No output streams registered, so nothing to execute")
     }
   }
 

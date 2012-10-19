@@ -31,11 +31,14 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
 
   @transient val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
 
-  override def dependencies = List(reducedStream)
-
   def windowTime: Time =  _windowTime
 
+  override def dependencies = List(reducedStream)
+
   override def slideTime: Time = _slideTime
+
+  //TODO: This is wrong. This should depend on the checkpointInterval
+  override def parentForgetTime: Time = forgetTime + windowTime
 
   override def persist(
       storageLevel: StorageLevel, 
@@ -44,6 +47,13 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     super.persist(storageLevel, checkpointLevel, checkpointInterval)
     reducedStream.persist(storageLevel, checkpointLevel, checkpointInterval)
     this
+  }
+
+  protected[streaming] override def setForgetTime(time: Time) {
+    if (forgetTime == null || forgetTime < time) {
+      forgetTime = time
+      dependencies.foreach(_.setForgetTime(forgetTime + windowTime))
+    }
   }
 
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {

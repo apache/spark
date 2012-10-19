@@ -76,6 +76,13 @@ extends Serializable {
   }
 
   def reduceByKeyAndWindow(
+      reduceFunc: (V, V) => V,
+      windowTime: Time
+    ): DStream[(K, V)] = {
+    reduceByKeyAndWindow(reduceFunc, windowTime, stream.slideTime, defaultPartitioner())
+  }
+
+  def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V, 
       windowTime: Time, 
       slideTime: Time
@@ -106,7 +113,7 @@ extends Serializable {
   // so that new elements introduced in the window can be "added" using
   // reduceFunc to the previous window's result and old elements can be
   // "subtracted using invReduceFunc.
-  
+
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V,
       invReduceFunc: (V, V) => V,

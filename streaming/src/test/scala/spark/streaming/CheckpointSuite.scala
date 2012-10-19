@@ -1,6 +1,7 @@
 package spark.streaming
 
 import spark.streaming.StreamingContext._
+import java.io.File
 
 class CheckpointSuite extends DStreamSuiteBase {
 
@@ -14,17 +15,16 @@ class CheckpointSuite extends DStreamSuiteBase {
       expectedOutput: Seq[Seq[V]],
       useSet: Boolean = false
     ) {
-    System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
 
     // Current code assumes that:
     // number of inputs = number of outputs = number of batches to be run
 
-    // Do half the computation (half the number of batches), create checkpoint file and quit
     val totalNumBatches = input.size
     val initialNumBatches = input.size / 2
     val nextNumBatches = totalNumBatches - initialNumBatches
     val initialNumExpectedOutputs = initialNumBatches
 
+    // Do half the computation (half the number of batches), create checkpoint file and quit
     val ssc = setupStreams[U, V](input, operation)
     val output = runStreams[V](ssc, initialNumBatches, initialNumExpectedOutputs)
     verifyOutput[V](output, expectedOutput.take(initialNumBatches), useSet)
@@ -35,6 +35,11 @@ class CheckpointSuite extends DStreamSuiteBase {
     sscNew.setCheckpointDetails(null, null)
     val outputNew = runStreams[V](sscNew, nextNumBatches, expectedOutput.size)
     verifyOutput[V](outputNew, expectedOutput, useSet)
+
+    new File(checkpointFile).delete()
+    new File(checkpointFile + ".bk").delete()
+    new File("." + checkpointFile + ".crc").delete()
+    new File("." + checkpointFile + ".bk.crc").delete()
   }
 
   test("simple per-batch operation") {

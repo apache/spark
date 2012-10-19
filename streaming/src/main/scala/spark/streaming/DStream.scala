@@ -39,21 +39,29 @@ extends Serializable with Logging {
    * --------------------------------------- 
    */
 
-  // Variable to store the RDDs generated earlier in time
-  protected val generatedRDDs = new HashMap[Time, RDD[T]] ()
+  // RDDs generated, marked as protected[streaming] so that testsuites can access it
+  protected[streaming] val generatedRDDs = new HashMap[Time, RDD[T]] ()
   
-  // Variable to be set to the first time seen by the DStream (effective time zero)
+  // Time zero for the DStream
   protected var zeroTime: Time = null
 
-  // Variable to specify storage level
+  // Time after which RDDs will be forgotten
+  protected var forgetTime: Time = null
+
+  // Storage level of the RDDs in the stream
   protected var storageLevel: StorageLevel = StorageLevel.NONE
 
   // Checkpoint level and checkpoint interval
   protected var checkpointLevel: StorageLevel = StorageLevel.NONE  // NONE means don't checkpoint
   protected var checkpointInterval: Time = null
 
-  // Reference to whole DStream graph, so that checkpointing process can lock it
+  // Reference to whole DStream graph
   protected var graph: DStreamGraph = null
+
+  def isInitialized = (zeroTime != null)
+
+  // Time gap for forgetting old RDDs (i.e. removing them from generatedRDDs)
+  def parentForgetTime = forgetTime
 
   // Change this RDD's storage level
   def persist(
@@ -79,8 +87,6 @@ extends Serializable with Logging {
   // Turn on the default caching level for this RDD
   def cache(): DStream[T] = persist()
 
-  def isInitialized() = (zeroTime != null)
-
   /**
    * This method initializes the DStream by setting the "zero" time, based on which
    * the validity of future times is calculated. This method also recursively initializes
@@ -91,31 +97,43 @@ extends Serializable with Logging {
       throw new Exception("ZeroTime is already initialized, cannot initialize it again")
     }
     zeroTime = time
-    logInfo(this + " initialized")
     dependencies.foreach(_.initialize(zeroTime))
+    logInfo("Initialized " + this)
   }
 
   protected[streaming] def setContext(s: StreamingContext) {
     if (ssc != null && ssc != s) {
-      throw new Exception("Context is already set, cannot set it again")
+      throw new Exception("Context is already set in " + this + ", cannot set it again")
     }
     ssc = s
-    logInfo("Set context for " + this.getClass.getSimpleName)
+    logInfo("Set context for " + this)
     dependencies.foreach(_.setContext(ssc))
   }
 
   protected[streaming] def setGraph(g: DStreamGraph) {
     if (graph != null && graph != g) {
-      throw new Exception("Graph is already set, cannot set it again")
+      throw new Exception("Graph is already set in " + this + ", cannot set it again")
     }
     graph = g
     dependencies.foreach(_.setGraph(graph))
   }
 
+  protected[streaming] def setForgetTime(time: Time = slideTime) {
+    if (time == null) {
+      throw new Exception("Time gap for forgetting RDDs cannot be set to null for " + this)
+    } else if (forgetTime != null && time < forgetTime) {
+      throw new Exception("Time gap for forgetting RDDs cannot be reduced from " + forgetTime
+        + " to " + time + " for " + this)
+    }
+    forgetTime = time
+    dependencies.foreach(_.setForgetTime(parentForgetTime))
+    logInfo("Time gap for forgetting RDDs set to " + forgetTime + " for " + this)
+  }
+
   /** This method checks whether the 'time' is valid wrt slideTime for generating RDD */
   protected def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
-      throw new Exception (this.toString + " has not been initialized")
+      throw new Exception (this + " has not been initialized")
     } else if (time < zeroTime || ! (time - zeroTime).isMultipleOf(slideTime)) {
       false
     } else {
@@ -176,6 +194,21 @@ extends Serializable with Logging {
       }
       case None => None
     }
+  }
+
+  def forgetOldRDDs(time: Time) {
+    val keys = generatedRDDs.keys
+    var numForgotten = 0
+
+    keys.foreach(t => {
+      if (t < (time - forgetTime)) {
+        generatedRDDs.remove(t)
+        numForgotten += 1
+        //logInfo("Forgot RDD of time " + t + " from " + this)
+      }
+    })
+    logInfo("Forgot " + numForgotten + " RDDs from " + this)
+    dependencies.foreach(_.forgetOldRDDs(time))
   }
 
   @throws(classOf[IOException])
@@ -257,7 +290,7 @@ extends Serializable with Logging {
     new TransformedDStream(this, ssc.sc.clean(transformFunc))
   }
 
-  def toBlockingQueue = {
+  def toBlockingQueue() = {
     val queue = new ArrayBlockingQueue[RDD[T]](10000)
     this.foreachRDD(rdd => {
       queue.add(rdd)
@@ -265,7 +298,7 @@ extends Serializable with Logging {
     queue
   }
   
-  def print() = {
+  def print() {
     def foreachFunc = (rdd: RDD[T], time: Time) => {
       val first11 = rdd.take(11)
       println ("-------------------------------------------")
@@ -277,33 +310,38 @@ extends Serializable with Logging {
     }
     val newStream = new PerRDDForEachDStream(this, ssc.sc.clean(foreachFunc))
     ssc.registerOutputStream(newStream)
-    newStream
   }
 
-  def window(windowTime: Time, slideTime: Time) = new WindowedDStream(this, windowTime, slideTime)
+  def window(windowTime: Time): DStream[T] = window(windowTime, this.slideTime)
 
-  def batch(batchTime: Time) = window(batchTime, batchTime)
+  def window(windowTime: Time, slideTime: Time): DStream[T] = {
+    new WindowedDStream(this, windowTime, slideTime)
+  }
 
-  def reduceByWindow(reduceFunc: (T, T) => T, windowTime: Time, slideTime: Time) = 
+  def tumble(batchTime: Time): DStream[T] = window(batchTime, batchTime)
+
+  def reduceByWindow(reduceFunc: (T, T) => T, windowTime: Time, slideTime: Time): DStream[T] = {
     this.window(windowTime, slideTime).reduce(reduceFunc)
+  }
 
   def reduceByWindow(
-    reduceFunc: (T, T) => T, 
-    invReduceFunc: (T, T) => T, 
-    windowTime: Time, 
-    slideTime: Time) = { 
+      reduceFunc: (T, T) => T,
+      invReduceFunc: (T, T) => T,
+      windowTime: Time,
+      slideTime: Time
+    ): DStream[T] = {
       this.map(x => (1, x))
           .reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowTime, slideTime, 1)
           .map(_._2)
   }
 
-  def countByWindow(windowTime: Time, slideTime: Time) = {
+  def countByWindow(windowTime: Time, slideTime: Time): DStream[Int] = {
     def add(v1: Int, v2: Int) = (v1 + v2) 
     def subtract(v1: Int, v2: Int) = (v1 - v2) 
     this.map(_ => 1).reduceByWindow(add _, subtract _, windowTime, slideTime)
   }
 
-  def union(that: DStream[T]) = new UnifiedDStream(Array(this, that))
+  def union(that: DStream[T]): DStream[T] = new UnifiedDStream[T](Array(this, that))
 
   def slice(interval: Interval): Seq[RDD[T]] = {
     slice(interval.beginTime, interval.endTime)
@@ -336,8 +374,8 @@ abstract class InputDStream[T: ClassManifest] (@transient ssc_ : StreamingContex
 
   override def slideTime = {
     if (ssc == null) throw new Exception("ssc is null")
-    if (ssc.batchDuration == null) throw new Exception("ssc.batchDuration is null")
-    ssc.batchDuration
+    if (ssc.graph.batchDuration == null) throw new Exception("batchDuration is null")
+    ssc.graph.batchDuration
   }
   
   def start()  

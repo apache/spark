@@ -35,6 +35,8 @@ class TestOutputStream[T: ClassManifest](parent: DStream[T], val output: ArrayBu
 
 trait DStreamSuiteBase extends FunSuite with Logging {
 
+  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+
   def framework() = "DStreamSuiteBase"
 
   def master() = "local[2]"
@@ -73,6 +75,9 @@ trait DStreamSuiteBase extends FunSuite with Logging {
       numBatches: Int,
       numExpectedOutput: Int
     ): Seq[Seq[V]] = {
+
+    assert(numBatches > 0, "Number of batches to run stream computation is zero")
+    assert(numExpectedOutput > 0, "Number of expected outputs after " + numBatches + " is zero")
     logInfo("numBatches = " + numBatches + ", numExpectedOutput = " + numExpectedOutput)
 
     // Get the output buffer
@@ -150,8 +155,6 @@ trait DStreamSuiteBase extends FunSuite with Logging {
       numBatches: Int,
       useSet: Boolean
     ) {
-    System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
-
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
     val ssc = setupStreams[U, V](input, operation)
     val output = runStreams[V](ssc, numBatches_, expectedOutput.size)

@@ -6,16 +6,11 @@ import spark.SparkEnv
 import spark.SparkContext
 import spark.storage.StorageLevel
 
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
 import java.io.InputStream
-import java.io.IOException
-import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
@@ -65,20 +60,15 @@ class StreamingContext (
   }
 
   val nextNetworkInputStreamId = new AtomicInteger(0)
-  
-  var batchDuration: Time = if (isCheckpointPresent) cp_.batchDuration else null
-  var checkpointFile: String = if (isCheckpointPresent) cp_.checkpointFile else null
-  var checkpointInterval: Time = if (isCheckpointPresent) cp_.checkpointInterval else null
   var networkInputTracker: NetworkInputTracker = null
-  var receiverJobThread: Thread = null
-  var scheduler: Scheduler = null
+
+  private[streaming] var checkpointFile: String = if (isCheckpointPresent) cp_.checkpointFile else null
+  private[streaming] var checkpointInterval: Time = if (isCheckpointPresent) cp_.checkpointInterval else null
+  private[streaming] var receiverJobThread: Thread = null
+  private[streaming] var scheduler: Scheduler = null
 
   def setBatchDuration(duration: Time) {
-    if (batchDuration != null) {
-      throw new Exception("Batch duration alread set as " + batchDuration +
-        ". cannot set it again.")
-    }
-    batchDuration = duration
+    graph.setBatchDuration(duration)
   }
 
   def setCheckpointDetails(file: String, interval: Time) {
@@ -183,21 +173,17 @@ class StreamingContext (
     graph.addOutputStream(outputStream)
   }
   
-  /**
-   * This function validate whether the stream computation is eligible to be executed.
-   */
-  private def validate() {
-    assert(batchDuration != null, "Batch duration has not been set")
-    assert(batchDuration > Milliseconds(100), "Batch duration of " + batchDuration + " is very low")
+  def validate() {
     assert(graph != null, "Graph is null")
-    assert(graph.getOutputStreams().size > 0, "No output streams registered, so nothing to execute")
+    graph.validate()
   }
-  
+
   /**
    * This function starts the execution of the streams. 
    */  
   def start() {
     validate()
+
     val networkInputStreams = graph.getInputStreams().filter(s => s match {
         case n: NetworkInputDStream[_] => true 
         case _ => false

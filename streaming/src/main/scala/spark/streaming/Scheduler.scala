@@ -20,7 +20,7 @@ extends Logging {
   val jobManager = new JobManager(ssc, concurrentJobs)
   val clockClass = System.getProperty("spark.streaming.clock", "spark.streaming.util.SystemClock")
   val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
-  val timer = new RecurringTimer(clock, ssc.batchDuration, generateRDDs(_))
+  val timer = new RecurringTimer(clock, ssc.graph.batchDuration, generateRDDs(_))
 
   def start() {
     // If context was started from checkpoint, then restart timer such that
@@ -53,11 +53,12 @@ extends Logging {
   def generateRDDs(time: Time) {
     SparkEnv.set(ssc.env)
     logInfo("\n-----------------------------------------------------\n")
-    logInfo("Generating RDDs for time " + time)
     graph.generateRDDs(time).foreach(submitJob)
     logInfo("Generated RDDs for time " + time)
+    graph.forgetOldRDDs(time)
     if (ssc.checkpointInterval != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointInterval)) {
       ssc.doCheckpoint(time)
+      logInfo("Checkpointed at time " + time)
     }
   }
 

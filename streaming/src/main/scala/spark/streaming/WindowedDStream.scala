@@ -18,11 +18,13 @@ class WindowedDStream[T: ClassManifest](
     throw new Exception("The slide duration of WindowedDStream (" + _slideTime + ") " +
     "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
 
-  override def dependencies = List(parent)
-
   def windowTime: Time =  _windowTime
 
+  override def dependencies = List(parent)
+
   override def slideTime: Time = _slideTime
+
+  override def parentForgetTime: Time = forgetTime + windowTime
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     val currentWindow = Interval(validTime - windowTime + parent.slideTime, validTime)
