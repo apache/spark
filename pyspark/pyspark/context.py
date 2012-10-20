@@ -18,14 +18,13 @@ class SparkContext(object):
     asPickle = jvm.spark.api.python.PythonRDD.asPickle
     arrayAsPickle = jvm.spark.api.python.PythonRDD.arrayAsPickle
 
-    def __init__(self, master, name, defaultParallelism=None,
-                 pythonExec='python'):
+    def __init__(self, master, name, defaultParallelism=None):
         self.master = master
         self.name = name
         self._jsc = self.jvm.JavaSparkContext(master, name)
         self.defaultParallelism = \
             defaultParallelism or self._jsc.sc().defaultParallelism()
-        self.pythonExec = pythonExec
+        self.pythonExec = os.environ.get("PYSPARK_PYTHON_EXEC", 'python')
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to

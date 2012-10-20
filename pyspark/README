@@ -1,0 +1,58 @@
+# PySpark
+
+PySpark is a Python API for Spark.
+
+PySpark jobs are writen in Python and executed using a standard Python
+interpreter; this supports modules that use Python C extensions.  The
+API is based on the Spark Scala API and uses regular Python functions
+and lambdas to support user-defined functions.  PySpark supports
+interactive use through a standard Python interpreter; it can
+automatically serialize closures and ship them to worker processes.
+
+PySpark is built on top of the Spark Java API.  Data is uniformly
+represented as serialized Python objects and stored in Spark Java
+processes, which communicate with PySpark worker processes over pipes.
+
+## Features
+
+PySpark supports most of the Spark API, including broadcast variables.
+RDDs are dynamically typed and can hold any Python object.
+
+PySpark does not support:
+
+- Special functions on RDDs of doubles
+- Accumulators
+
+## Examples and Documentation
+
+The PySpark source contains docstrings and doctests that document its
+API.  The public classes are in `context.py` and `rdd.py`.
+
+The `pyspark/pyspark/examples` directory contains a few complete
+examples.
+
+## Installing PySpark
+
+PySpark requires a development version of Py4J, a Python library for
+interacting with Java processes.  It can be installed from
+https://github.com/bartdag/py4j; make sure to install a version that
+contains at least the commits through 3dbf380d3d.
+
+PySpark uses the `PYTHONPATH` environment variable to search for Python
+classes; Py4J should be on this path, along with any libraries used by
+PySpark programs.  `PYTHONPATH` will be automatically shipped to worker
+machines, but the files that it points to must be present on each
+machine.
+
+PySpark requires the Spark assembly JAR, which can be created by running
+`sbt/sbt assembly` in the Spark directory.
+
+Additionally, `SPARK_HOME` should be set to the location of the Spark
+package.
+
+## Running PySpark
+
+The easiest way to run PySpark is to use the `run-pyspark` and
+`pyspark-shell` scripts, which are included in the `pyspark` directory.
+These scripts automatically load the `spark-conf.sh` file, set
+`SPARK_HOME`, and add the `pyspark` package to the `PYTHONPATH`.
