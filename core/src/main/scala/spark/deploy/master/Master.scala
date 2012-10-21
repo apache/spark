@@ -123,7 +123,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     }
 
     case RequestMasterState => {
-      sender ! MasterState(ip + ":" + port, workers.toList, jobs.toList, completedJobs.toList)
+      sender ! MasterState(ip + ":" + port, workers.toArray, jobs.toArray, completedJobs.toArray)
     }
   }
 
@@ -179,8 +179,9 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
   }
 
   def addJob(desc: JobDescription, actor: ActorRef): JobInfo = {
-    val date = new Date
-    val job = new JobInfo(newJobId(date), desc, date, actor)
+    val now = System.currentTimeMillis()
+    val date = new Date(now)
+    val job = new JobInfo(now, newJobId(date), desc, date, actor)
     jobs += job
     idToJob(job.id) = job
     actorToJob(sender) = job
@@ -189,19 +190,21 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
   }
 
   def removeJob(job: JobInfo) {
-    logInfo("Removing job " + job.id)
-    jobs -= job
-    idToJob -= job.id
-    actorToJob -= job.actor
-    addressToWorker -= job.actor.path.address
-    completedJobs += job   // Remember it in our history
-    waitingJobs -= job
-    for (exec <- job.executors.values) {
-      exec.worker.removeExecutor(exec)
-      exec.worker.actor ! KillExecutor(exec.job.id, exec.id)
+    if (jobs.contains(job)) {
+      logInfo("Removing job " + job.id)
+      jobs -= job
+      idToJob -= job.id
+      actorToJob -= job.actor
+      addressToWorker -= job.actor.path.address
+      completedJobs += job   // Remember it in our history
+      waitingJobs -= job
+      for (exec <- job.executors.values) {
+        exec.worker.removeExecutor(exec)
+        exec.worker.actor ! KillExecutor(exec.job.id, exec.id)
+      }
+      job.markFinished(JobState.FINISHED)  // TODO: Mark it as FAILED if it failed
+      schedule()
     }
-    job.state = JobState.FINISHED
-    schedule()
   }
 
   /** Generate a new job ID given a job's submission date */

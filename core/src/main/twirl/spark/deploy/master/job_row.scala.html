@@ -1,5 +1,9 @@
 @(job: spark.deploy.master.JobInfo)
 
+@import spark.Utils
+@import spark.deploy.WebUI.formatDate
+@import spark.deploy.WebUI.formatDuration
+
 <tr>
   <td>
     <a href="job?jobId=@(job.id)">@job.id</a>
@@ -13,8 +17,9 @@
       , @job.coresLeft
     }
   </td>
-  <td>@job.desc.memoryPerSlave</td>
-  <td>@job.submitDate</td>
+  <td>@Utils.memoryMegabytesToString(job.desc.memoryPerSlave)</td>
+  <td>@formatDate(job.submitDate)</td>
   <td>@job.desc.user</td>
   <td>@job.state.toString()</td>
+  <td>@formatDuration(job.duration)</td>
 </tr>
