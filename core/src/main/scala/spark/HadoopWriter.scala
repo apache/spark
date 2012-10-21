@@ -23,7 +23,7 @@ import spark.SerializableWritable
  * Saves the RDD using a JobConf, which should contain an output key class, an output value class,
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
-class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializable {
+class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRedUtil with Serializable {
   
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
@@ -129,14 +129,14 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializabl
 
   private def getJobContext(): JobContext = {
     if (jobContext == null) { 
-      jobContext = new JobContext(conf.value, jID.value)
+      jobContext = newJobContext(conf.value, jID.value)
     }
     return jobContext
   }
 
   private def getTaskContext(): TaskAttemptContext = {
     if (taskContext == null) {
-      taskContext =  new TaskAttemptContext(conf.value, taID.value)
+      taskContext =  newTaskAttemptContext(conf.value, taID.value)
     }
     return taskContext
   }

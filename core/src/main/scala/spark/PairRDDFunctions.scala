@@ -28,11 +28,7 @@ import org.apache.hadoop.mapred.SequenceFileOutputFormat
 import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
-import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
-import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
-import org.apache.hadoop.mapreduce.TaskAttemptID
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, Job => NewAPIHadoopJob, HadoopMapReduceUtil, TaskAttemptID, TaskAttemptContext}
 
 import spark.partial.BoundedDouble
 import spark.partial.PartialResult
@@ -46,6 +42,7 @@ import spark.SparkContext._
 class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     self: RDD[(K, V)])
   extends Logging
+  with HadoopMapReduceUtil
   with Serializable {
 
   /**
@@ -506,7 +503,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = new TaskAttemptID(jobtrackerID,
         stageId, false, context.splitId, attemptNumber)
-      val hadoopContext = new TaskAttemptContext(wrappedConf.value, attemptId)
+      val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
@@ -525,7 +522,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
      * setupJob/commitJob, so we just use a dummy "map" task.
      */
     val jobAttemptId = new TaskAttemptID(jobtrackerID, stageId, true, 0, 0)
-    val jobTaskContext = new TaskAttemptContext(wrappedConf.value, jobAttemptId)
+    val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
     val count = self.context.runJob(self, writeShard _).sum
