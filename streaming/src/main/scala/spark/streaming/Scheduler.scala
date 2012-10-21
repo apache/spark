@@ -37,8 +37,8 @@ extends Logging {
       timer.restart(graph.zeroTime.milliseconds)
       logInfo("Scheduler's timer restarted")
     } else {
-      val zeroTime = Time(timer.start())
-      graph.start(zeroTime)
+      val firstTime = Time(timer.start())
+      graph.start(firstTime - ssc.graph.batchDuration)
       logInfo("Scheduler's timer started")
     }
     logInfo("Scheduler started")

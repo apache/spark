@@ -30,7 +30,7 @@ extends Serializable with Logging {
   // List of parent DStreams on which this DStream depends on
   def dependencies: List[DStream[_]]
 
-  // Key method that computes RDD for a valid time 
+  // Key method that computes RDD for a valid time
   def compute (validTime: Time): Option[RDD[T]]
 
   /**
@@ -45,8 +45,8 @@ extends Serializable with Logging {
   // Time zero for the DStream
   protected var zeroTime: Time = null
 
-  // Time after which RDDs will be forgotten
-  protected var forgetTime: Time = null
+  // Duration for which the DStream will remember each RDD created
+  protected var rememberDuration: Time = null
 
   // Storage level of the RDDs in the stream
   protected var storageLevel: StorageLevel = StorageLevel.NONE
@@ -60,8 +60,8 @@ extends Serializable with Logging {
 
   def isInitialized = (zeroTime != null)
 
-  // Time gap for forgetting old RDDs (i.e. removing them from generatedRDDs)
-  def parentForgetTime = forgetTime
+  // Duration for which the DStream requires its parent DStream to remember each RDD created
+  def parentRememberDuration = rememberDuration
 
   // Change this RDD's storage level
   def persist(
@@ -118,23 +118,24 @@ extends Serializable with Logging {
     dependencies.foreach(_.setGraph(graph))
   }
 
-  protected[streaming] def setForgetTime(time: Time = slideTime) {
-    if (time == null) {
-      throw new Exception("Time gap for forgetting RDDs cannot be set to null for " + this)
-    } else if (forgetTime != null && time < forgetTime) {
-      throw new Exception("Time gap for forgetting RDDs cannot be reduced from " + forgetTime
-        + " to " + time + " for " + this)
+  protected[streaming] def setRememberDuration(duration: Time = slideTime) {
+    if (duration == null) {
+      throw new Exception("Duration for remembering RDDs cannot be set to null for " + this)
+    } else if (rememberDuration != null && duration < rememberDuration) {
+      logWarning("Duration for remembering RDDs cannot be reduced from " + rememberDuration
+        + " to " + duration + " for " + this)
+    } else {
+      rememberDuration = duration
+      dependencies.foreach(_.setRememberDuration(parentRememberDuration))
+      logInfo("Duration for remembering RDDs set to " + rememberDuration + " for " + this)
     }
-    forgetTime = time
-    dependencies.foreach(_.setForgetTime(parentForgetTime))
-    logInfo("Time gap for forgetting RDDs set to " + forgetTime + " for " + this)
   }
 
   /** This method checks whether the 'time' is valid wrt slideTime for generating RDD */
   protected def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
       throw new Exception (this + " has not been initialized")
-    } else if (time < zeroTime || ! (time - zeroTime).isMultipleOf(slideTime)) {
+    } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideTime)) {
       false
     } else {
       true
@@ -143,7 +144,7 @@ extends Serializable with Logging {
 
   /**
    * This method either retrieves a precomputed RDD of this DStream,
-   * or computes the RDD (if the time is valid) 
+   * or computes the RDD (if the time is valid)
    */  
   def getOrCompute(time: Time): Option[RDD[T]] = {
     // If this DStream was not initialized (i.e., zeroTime not set), then do it
@@ -154,7 +155,7 @@ extends Serializable with Logging {
       // probably all RDDs in this DStream will be reused and hence should be cached
       case Some(oldRDD) => Some(oldRDD)
       
-      // if RDD was not generated, and if the time is valid 
+      // if RDD was not generated, and if the time is valid
       // (based on sliding time of this DStream), then generate the RDD
       case None => {
         if (isTimeValid(time)) {
@@ -199,9 +200,8 @@ extends Serializable with Logging {
   def forgetOldRDDs(time: Time) {
     val keys = generatedRDDs.keys
     var numForgotten = 0
-
     keys.foreach(t => {
-      if (t < (time - forgetTime)) {
+      if (t <= (time - rememberDuration)) {
         generatedRDDs.remove(t)
         numForgotten += 1
         //logInfo("Forgot RDD of time " + t + " from " + this)
@@ -530,7 +530,7 @@ class UnifiedDStream[T: ClassManifest](parents: Array[DStream[T]])
     val rdds = new ArrayBuffer[RDD[T]]()
     parents.map(_.getOrCompute(validTime)).foreach(_ match {
       case Some(rdd) => rdds += rdd
-      case None => throw new Exception("Could not generate RDD from a parent for unifying at time " + validTime) 
+      case None => throw new Exception("Could not generate RDD from a parent for unifying at time " + validTime)
     })
     if (rdds.size > 0) {
       Some(new UnionRDD(ssc.sc, rdds))

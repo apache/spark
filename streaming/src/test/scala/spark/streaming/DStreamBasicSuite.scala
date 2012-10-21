@@ -41,7 +41,7 @@ class DStreamBasicSuite extends DStreamSuiteBase {
     )
   }
 
-  test("stateful operations") {
+  test("updateStateByKey") {
     val inputData =
       Seq(
         Seq("a"),
@@ -75,63 +75,54 @@ class DStreamBasicSuite extends DStreamSuiteBase {
     testOperation(inputData, updateStateOperation, outputData, true)
   }
 
-  test("forgetting of RDDs") {
+  test("forgetting of RDDs - map and window operations") {
     assert(batchDuration === Seconds(1), "Batch duration has changed from 1 second")
 
-    val input = Seq(1 to 4, 5 to 8, 9 to 12, 13 to 16, 17 to 20, 21 to 24, 25 to 28, 29 to 32)
+    val input = (0 until 10).map(x => Seq(x, x + 1)).toSeq
+    val rememberDuration = Seconds(3)
 
-    assert(input.size % 4 === 0, "Number of inputs should be a multiple of 4")
+    assert(input.size === 10, "Number of inputs have changed")
 
     def operation(s: DStream[Int]): DStream[(Int, Int)] = {
       s.map(x => (x % 10, 1))
        .window(Seconds(2), Seconds(1))
-       .reduceByKeyAndWindow(_ + _, _ - _, Seconds(4), Seconds(1))
+       .window(Seconds(4), Seconds(2))
     }
 
     val ssc = setupStreams(input, operation _)
-    runStreams[(Int, Int)](ssc, input.size, input.size)
+    ssc.setRememberDuration(rememberDuration)
+    runStreams[(Int, Int)](ssc, input.size, input.size / 2)
 
-    val reducedWindowedStream = ssc.graph.getOutputStreams().head.dependencies.head
-                                   .asInstanceOf[ReducedWindowedDStream[Int, Int]]
-    val windowedStream = reducedWindowedStream.dependencies.head.dependencies.head
-                                              .asInstanceOf[WindowedDStream[(Int, Int)]]
-    val mappedStream = windowedStream.dependencies.head
+    val windowedStream2 = ssc.graph.getOutputStreams().head.dependencies.head
+    val windowedStream1 = windowedStream2.dependencies.head
+    val mappedStream = windowedStream1.dependencies.head
 
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    val finalTime = Seconds(7)
-    //assert(clock.time === finalTime.milliseconds)
+    assert(clock.time === Seconds(10).milliseconds)
 
-    // ReducedWindowedStream should remember the last RDD created
-    assert(reducedWindowedStream.generatedRDDs.contains(finalTime))
+    // IDEALLY
+    // WindowedStream2 should remember till 7 seconds: 10, 8,
+    // WindowedStream1 should remember till 4 seconds: 10, 9, 8, 7, 6, 5
+    // MappedStream should remember till 7 seconds:    10, 9, 8, 7, 6, 5, 4, 3,
 
-    // ReducedWindowedStream should have forgotten the previous to last RDD created
-    assert(!reducedWindowedStream.generatedRDDs.contains(finalTime - reducedWindowedStream.slideTime))
+    // IN THIS TEST
+    // WindowedStream2 should remember till 7 seconds: 10, 8,
+    // WindowedStream1 should remember till 4 seconds: 10, 9, 8, 7, 6, 5, 4
+    // MappedStream should remember till 7 seconds:    10, 9, 8, 7, 6, 5, 4, 3, 2
 
-    // WindowedStream should remember the last RDD created
-    assert(windowedStream.generatedRDDs.contains(finalTime))
+    // WindowedStream2
+    assert(windowedStream2.generatedRDDs.contains(Seconds(10)))
+    assert(windowedStream2.generatedRDDs.contains(Seconds(8)))
+    assert(!windowedStream2.generatedRDDs.contains(Seconds(6)))
 
-    // WindowedStream should still remember the previous to last RDD created
-    // as the last RDD of ReducedWindowedStream requires that RDD
-    assert(windowedStream.generatedRDDs.contains(finalTime - windowedStream.slideTime))
+    // WindowedStream1
+    assert(windowedStream1.generatedRDDs.contains(Seconds(10)))
+    assert(windowedStream1.generatedRDDs.contains(Seconds(4)))
+    assert(!windowedStream1.generatedRDDs.contains(Seconds(3)))
 
-    // WindowedStream should have forgotten this RDD as the last RDD of
-    // ReducedWindowedStream DOES NOT require this RDD
-    assert(!windowedStream.generatedRDDs.contains(finalTime - windowedStream.slideTime - reducedWindowedStream.windowTime))
-
-    // MappedStream should remember the last RDD created
-    assert(mappedStream.generatedRDDs.contains(finalTime))
-
-    // MappedStream should still remember the previous to last RDD created
-    // as the last RDD of WindowedStream requires that RDD
-    assert(mappedStream.generatedRDDs.contains(finalTime - mappedStream.slideTime))
-
-    // MappedStream should still remember this RDD as the last RDD of
-    // ReducedWindowedStream requires that RDD (even though the last RDD of
-    // WindowedStream does not need it)
-    assert(mappedStream.generatedRDDs.contains(finalTime - windowedStream.windowTime))
-
-    // MappedStream should have forgotten this RDD as the last RDD of
-    // ReducedWindowedStream DOES NOT require this RDD
-    assert(!mappedStream.generatedRDDs.contains(finalTime - mappedStream.slideTime - windowedStream.windowTime - reducedWindowedStream.windowTime))
+    // MappedStream
+    assert(mappedStream.generatedRDDs.contains(Seconds(10)))
+    assert(mappedStream.generatedRDDs.contains(Seconds(2)))
+    assert(!mappedStream.generatedRDDs.contains(Seconds(1)))
   }
 }

@@ -33,7 +33,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time) ext
     if (fs.exists(path)) {
       val bkPath = new Path(path.getParent, path.getName + ".bk")
       FileUtil.copy(fs, path, fs, bkPath, true, true, conf)
-      println("Moved existing checkpoint file to " + bkPath)
+      //logInfo("Moved existing checkpoint file to " + bkPath)
     }
     val fos = fs.create(path)
     val oos = new ObjectOutputStream(fos)

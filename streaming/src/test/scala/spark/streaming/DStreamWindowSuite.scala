@@ -9,24 +9,23 @@ class DStreamWindowSuite extends DStreamSuiteBase {
   override def maxWaitTimeMillis() = 20000
 
   val largerSlideInput = Seq(
-    Seq(("a", 1)),  // 1st window from here
-    Seq(("a", 2)),
-    Seq(("a", 3)),  // 2nd window from here
-    Seq(("a", 4)),
-    Seq(("a", 5)),  // 3rd window from here
-    Seq(("a", 6)),
-    Seq(),          // 4th window from here
+    Seq(("a", 1)),
+    Seq(("a", 2)),  // 1st window from here
+    Seq(("a", 3)),
+    Seq(("a", 4)),  // 2nd window from here
+    Seq(("a", 5)),
+    Seq(("a", 6)),  // 3rd window from here
     Seq(),
-    Seq()           // 5th window from here
+    Seq()           // 4th window from here
   )
 
   val largerSlideOutput = Seq(
-    Seq(("a", 1)),
-    Seq(("a", 6)),
-    Seq(("a", 14)),
-    Seq(("a", 15)),
-    Seq(("a", 6))
+    Seq(("a", 3)),
+    Seq(("a", 10)),
+    Seq(("a", 18)),
+    Seq(("a", 11))
   )
+
 
   val bigInput = Seq(
     Seq(("a", 1)),

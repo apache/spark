@@ -71,6 +71,10 @@ class StreamingContext (
     graph.setBatchDuration(duration)
   }
 
+  def setRememberDuration(duration: Time) {
+    graph.setRememberDuration(duration)
+  }
+
   def setCheckpointDetails(file: String, interval: Time) {
     checkpointFile = file
     checkpointInterval = interval

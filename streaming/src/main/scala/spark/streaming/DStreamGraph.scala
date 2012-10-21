@@ -12,6 +12,7 @@ final class DStreamGraph extends Serializable with Logging {
 
   private[streaming] var zeroTime: Time = null
   private[streaming] var batchDuration: Time = null
+  private[streaming] var rememberDuration: Time = null
   private[streaming] var checkpointInProgress = false
 
   def start(time: Time) {
@@ -21,7 +22,11 @@ final class DStreamGraph extends Serializable with Logging {
       }
       zeroTime = time
       outputStreams.foreach(_.initialize(zeroTime))
-      outputStreams.foreach(_.setForgetTime())
+      outputStreams.foreach(_.setRememberDuration()) // first set the rememberDuration to default values
+      if (rememberDuration != null) {
+        // if custom rememberDuration has been provided, set the rememberDuration
+        outputStreams.foreach(_.setRememberDuration(rememberDuration))
+      }
       inputStreams.par.foreach(_.start())
     }
   }
@@ -46,6 +51,16 @@ final class DStreamGraph extends Serializable with Logging {
       }
     }
     batchDuration = duration
+  }
+
+  def setRememberDuration(duration: Time) {
+    this.synchronized {
+      if (rememberDuration != null) {
+        throw new Exception("Batch duration already set as " + batchDuration +
+          ". cannot set it again.")
+      }
+    }
+    rememberDuration = duration
   }
 
   def addInputStream(inputStream: InputDStream[_]) {

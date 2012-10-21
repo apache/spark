@@ -24,7 +24,7 @@ class WindowedDStream[T: ClassManifest](
 
   override def slideTime: Time = _slideTime
 
-  override def parentForgetTime: Time = forgetTime + windowTime
+  override def parentRememberDuration: Time = rememberDuration + windowTime
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     val currentWindow = Interval(validTime - windowTime + parent.slideTime, validTime)

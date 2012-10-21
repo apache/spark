@@ -104,6 +104,8 @@ trait DStreamSuiteBase extends FunSuite with Logging {
 
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
+
+      Thread.sleep(500) // Give some time for the forgetting old RDDs to complete
     } catch {
       case e: Exception => e.printStackTrace(); throw e;
     } finally {

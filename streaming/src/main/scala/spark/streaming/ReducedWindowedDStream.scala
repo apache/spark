@@ -38,7 +38,7 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
   override def slideTime: Time = _slideTime
 
   //TODO: This is wrong. This should depend on the checkpointInterval
-  override def parentForgetTime: Time = forgetTime + windowTime
+  override def parentRememberDuration: Time = rememberDuration + windowTime
 
   override def persist(
       storageLevel: StorageLevel, 
@@ -49,10 +49,10 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     this
   }
 
-  protected[streaming] override def setForgetTime(time: Time) {
-    if (forgetTime == null || forgetTime < time) {
-      forgetTime = time
-      dependencies.foreach(_.setForgetTime(forgetTime + windowTime))
+  protected[streaming] override def setRememberDuration(time: Time) {
+    if (rememberDuration == null || rememberDuration < time) {
+      rememberDuration = time
+      dependencies.foreach(_.setRememberDuration(rememberDuration + windowTime))
     }
   }
 
