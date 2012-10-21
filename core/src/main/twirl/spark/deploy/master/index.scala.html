@@ -1,5 +1,6 @@
 @(state: spark.deploy.MasterState)
 @import spark.deploy.master._
+@import spark.Utils
 
 @spark.deploy.common.html.layout(title = "Spark Master on " + state.uri) {
       
@@ -8,9 +9,11 @@
     <div class="span12">
       <ul class="unstyled">
         <li><strong>URL:</strong> spark://@(state.uri)</li>
-        <li><strong>Number of Workers:</strong> @state.workers.size </li>
-        <li><strong>Cores:</strong> @state.workers.map(_.cores).sum Total, @state.workers.map(_.coresUsed).sum Used</li>
-        <li><strong>Memory:</strong> @state.workers.map(_.memory).sum Total,  @state.workers.map(_.memoryUsed).sum Used</li>
+        <li><strong>Workers:</strong> @state.workers.size </li>
+        <li><strong>Cores:</strong> @{state.workers.map(_.cores).sum} Total,
+                                    @{state.workers.map(_.coresUsed).sum} Used</li>
+        <li><strong>Memory:</strong> @{Utils.memoryMegabytesToString(state.workers.map(_.memory).sum)} Total, 
+                                     @{Utils.memoryMegabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
         <li><strong>Jobs:</strong> @state.activeJobs.size Running, @state.completedJobs.size Completed </li>
       </ul>
     </div>
@@ -21,7 +24,7 @@
     <div class="span12">
       <h3> Cluster Summary </h3>
       <br/>
-      @worker_table(state.workers)
+      @worker_table(state.workers.sortBy(_.id))
     </div>
   </div>
 
@@ -32,7 +35,7 @@
     <div class="span12">
       <h3> Running Jobs </h3>
       <br/>
-      @job_table(state.activeJobs)
+      @job_table(state.activeJobs.sortBy(_.startTime).reverse)
     </div>
   </div>
 
@@ -43,7 +46,7 @@
     <div class="span12">
       <h3> Completed Jobs </h3>
       <br/>
-      @job_table(state.completedJobs)
+      @job_table(state.completedJobs.sortBy(_.endTime).reverse)
     </div>
   </div>
 

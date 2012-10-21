@@ -123,7 +123,7 @@ private[spark] class Worker(
       manager.start()
       coresUsed += cores_
       memoryUsed += memory_
-      master ! ExecutorStateChanged(jobId, execId, ExecutorState.LOADING, None)
+      master ! ExecutorStateChanged(jobId, execId, ExecutorState.RUNNING, None)
 
     case ExecutorStateChanged(jobId, execId, state, message) =>
       master ! ExecutorStateChanged(jobId, execId, state, message)
