@@ -24,6 +24,44 @@ class DStreamBasicSuite extends DStreamSuiteBase {
     )
   }
 
+  test("filter") {
+    val input = Seq(1 to 4, 5 to 8, 9 to 12)
+    testOperation(
+      input,
+      (r: DStream[Int]) => r.filter(x => (x % 2 == 0)),
+      input.map(_.filter(x => (x % 2 == 0)))
+    )
+  }
+
+  test("glom") {
+    assert(numInputPartitions === 2, "Number of input partitions has been changed from 2")
+    val input = Seq(1 to 4, 5 to 8, 9 to 12)
+    val output = Seq(
+      Seq( Seq(1, 2), Seq(3, 4) ),
+      Seq( Seq(5, 6), Seq(7, 8) ),
+      Seq( Seq(9, 10), Seq(11, 12) )
+    )
+    val operation = (r: DStream[Int]) => r.glom().map(_.toSeq)
+    testOperation(input, operation, output)
+  }
+
+  test("mapPartitions") {
+    assert(numInputPartitions === 2, "Number of input partitions has been changed from 2")
+    val input = Seq(1 to 4, 5 to 8, 9 to 12)
+    val output = Seq(Seq(3, 7), Seq(11, 15), Seq(19, 23))
+    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.reduce(_ + _)))
+    testOperation(input, operation, output, true)
+  }
+
+  test("groupByKey") {
+    testOperation(
+      Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
+      (s: DStream[String]) => s.map(x => (x, 1)).groupByKey(),
+      Seq( Seq(("a", Seq(1, 1)), ("b", Seq(1))), Seq(("", Seq(1, 1))), Seq() ),
+      true
+    )
+  }
+
   test("reduceByKey") {
     testOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
@@ -39,6 +77,54 @@ class DStreamBasicSuite extends DStreamSuiteBase {
       (s: DStream[Int]) => s.reduce(_ + _),
       Seq(Seq(10), Seq(26), Seq(42))
     )
+  }
+
+  test("mapValues") {
+    testOperation(
+      Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
+      (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _).mapValues(_ + 10),
+      Seq( Seq(("a", 12), ("b", 11)), Seq(("", 12)), Seq() ),
+      true
+    )
+  }
+
+  test("flatMapValues") {
+    testOperation(
+      Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
+      (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _).flatMapValues(x => Seq(x, x + 10)),
+      Seq( Seq(("a", 2), ("a", 12), ("b", 1), ("b", 11)), Seq(("", 2), ("", 12)), Seq() ),
+      true
+    )
+  }
+
+  test("cogroup") {
+    val inputData1 = Seq( Seq("a", "a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq( Seq("a", "a", "b"), Seq("b", ""), Seq(), Seq()   )
+    val outputData = Seq(
+      Seq( ("a", (Seq(1, 1), Seq("x", "x"))), ("b", (Seq(1), Seq("x"))) ),
+      Seq( ("a", (Seq(1), Seq())), ("b", (Seq(), Seq("x"))), ("", (Seq(1), Seq("x"))) ),
+      Seq( ("", (Seq(1), Seq())) ),
+      Seq(  )
+    )
+    val operation = (s1: DStream[String], s2: DStream[String]) => {
+      s1.map(x => (x,1)).cogroup(s2.map(x => (x, "x")))
+    }
+    testOperation(inputData1, inputData2, operation, outputData, true)
+  }
+
+  test("join") {
+    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
+    val outputData = Seq(
+      Seq( ("a", (1, "x")), ("b", (1, "x")) ),
+      Seq( ("", (1, "x")) ),
+      Seq(  ),
+      Seq(  )
+    )
+    val operation = (s1: DStream[String], s2: DStream[String]) => {
+      s1.map(x => (x,1)).join(s2.map(x => (x,"x")))
+    }
+    testOperation(inputData1, inputData2, operation, outputData, true)
   }
 
   test("updateStateByKey") {

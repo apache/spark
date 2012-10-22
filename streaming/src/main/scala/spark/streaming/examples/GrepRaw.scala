@@ -25,7 +25,7 @@ object GrepRaw {
 
     val rawStreams = (1 to numStreams).map(_ =>
       ssc.createRawNetworkStream[String](host, port, StorageLevel.MEMORY_ONLY_2)).toArray
-    val union = new UnifiedDStream(rawStreams)
+    val union = new UnionDStream(rawStreams)
     union.filter(_.contains("Culpepper")).count().foreachRDD(r =>
       println("Grep count: " + r.collect().mkString))
     ssc.start()

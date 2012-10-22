@@ -37,7 +37,7 @@ object WordCountRaw {
 
     val rawStreams = (1 to streams).map(_ =>
       ssc.createRawNetworkStream[String](host, port, StorageLevel.MEMORY_ONLY_2)).toArray
-    val union = new UnifiedDStream(rawStreams)
+    val union = new UnionDStream(rawStreams)
 
     val windowedCounts = union.mapPartitions(splitAndCountPartitions)
       .reduceByKeyAndWindow(add _, subtract _, Seconds(30), Milliseconds(batchMs), reduces)

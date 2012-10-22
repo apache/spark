@@ -6,7 +6,7 @@ import collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 import collection.mutable.SynchronizedBuffer
 
-class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, val input: Seq[Seq[T]])
+class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
   extends InputDStream[T](ssc_) {
   var currentIndex = 0
 
@@ -17,9 +17,9 @@ class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, val input: Seq[
   def compute(validTime: Time): Option[RDD[T]] = {
     logInfo("Computing RDD for time " + validTime)
     val rdd = if (currentIndex < input.size) {
-      ssc.sc.makeRDD(input(currentIndex), 2)
+      ssc.sc.makeRDD(input(currentIndex), numPartitions)
     } else {
-      ssc.sc.makeRDD(Seq[T](), 2)
+      ssc.sc.makeRDD(Seq[T](), numPartitions)
     }
     logInfo("Created RDD " + rdd.id)
     currentIndex += 1
@@ -47,6 +47,8 @@ trait DStreamSuiteBase extends FunSuite with Logging {
 
   def checkpointInterval() = batchDuration
 
+  def numInputPartitions() = 2
+
   def maxWaitTimeMillis() = 10000
 
   def setupStreams[U: ClassManifest, V: ClassManifest](
@@ -62,13 +64,38 @@ trait DStreamSuiteBase extends FunSuite with Logging {
     }
 
     // Setup the stream computation
-    val inputStream = new TestInputStream(ssc, input)
+    val inputStream = new TestInputStream(ssc, input, numInputPartitions)
     val operatedStream = operation(inputStream)
     val outputStream = new TestOutputStream(operatedStream, new ArrayBuffer[Seq[V]] with SynchronizedBuffer[Seq[V]])
     ssc.registerInputStream(inputStream)
     ssc.registerOutputStream(outputStream)
     ssc
   }
+
+  def setupStreams[U: ClassManifest, V: ClassManifest, W: ClassManifest](
+      input1: Seq[Seq[U]],
+      input2: Seq[Seq[V]],
+      operation: (DStream[U], DStream[V]) => DStream[W]
+    ): StreamingContext = {
+
+    // Create StreamingContext
+    val ssc = new StreamingContext(master, framework)
+    ssc.setBatchDuration(batchDuration)
+    if (checkpointFile != null) {
+      ssc.setCheckpointDetails(checkpointFile, checkpointInterval())
+    }
+
+    // Setup the stream computation
+    val inputStream1 = new TestInputStream(ssc, input1, numInputPartitions)
+    val inputStream2 = new TestInputStream(ssc, input2, numInputPartitions)
+    val operatedStream = operation(inputStream1, inputStream2)
+    val outputStream = new TestOutputStream(operatedStream, new ArrayBuffer[Seq[W]] with SynchronizedBuffer[Seq[W]])
+    ssc.registerInputStream(inputStream1)
+    ssc.registerInputStream(inputStream2)
+    ssc.registerOutputStream(outputStream)
+    ssc
+  }
+
 
   def runStreams[V: ClassManifest](
       ssc: StreamingContext,
@@ -161,5 +188,29 @@ trait DStreamSuiteBase extends FunSuite with Logging {
     val ssc = setupStreams[U, V](input, operation)
     val output = runStreams[V](ssc, numBatches_, expectedOutput.size)
     verifyOutput[V](output, expectedOutput, useSet)
+  }
+
+  def testOperation[U: ClassManifest, V: ClassManifest, W: ClassManifest](
+      input1: Seq[Seq[U]],
+      input2: Seq[Seq[V]],
+      operation: (DStream[U], DStream[V]) => DStream[W],
+      expectedOutput: Seq[Seq[W]],
+      useSet: Boolean
+    ) {
+    testOperation[U, V, W](input1, input2, operation, expectedOutput, -1, useSet)
+  }
+
+  def testOperation[U: ClassManifest, V: ClassManifest, W: ClassManifest](
+      input1: Seq[Seq[U]],
+      input2: Seq[Seq[V]],
+      operation: (DStream[U], DStream[V]) => DStream[W],
+      expectedOutput: Seq[Seq[W]],
+      numBatches: Int,
+      useSet: Boolean
+    ) {
+    val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
+    val ssc = setupStreams[U, V, W](input1, input2, operation)
+    val output = runStreams[W](ssc, numBatches_, expectedOutput.size)
+    verifyOutput[W](output, expectedOutput, useSet)
   }
 }

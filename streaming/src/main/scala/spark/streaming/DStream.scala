@@ -244,27 +244,27 @@ extends Serializable with Logging {
    * DStream operations
    * -------------- 
    */
-  def map[U: ClassManifest](mapFunc: T => U) = {
+  def map[U: ClassManifest](mapFunc: T => U): DStream[U] = {
     new MappedDStream(this, ssc.sc.clean(mapFunc))
   }
 
-  def flatMap[U: ClassManifest](flatMapFunc: T => Traversable[U]) = {
+  def flatMap[U: ClassManifest](flatMapFunc: T => Traversable[U]): DStream[U] = {
     new FlatMappedDStream(this, ssc.sc.clean(flatMapFunc))
   }
 
-  def filter(filterFunc: T => Boolean) = new FilteredDStream(this, filterFunc)
+  def filter(filterFunc: T => Boolean): DStream[T] = new FilteredDStream(this, filterFunc)
 
-  def glom() = new GlommedDStream(this)
+  def glom(): DStream[Array[T]] = new GlommedDStream(this)
 
-  def mapPartitions[U: ClassManifest](mapPartFunc: Iterator[T] => Iterator[U]) = {
+  def mapPartitions[U: ClassManifest](mapPartFunc: Iterator[T] => Iterator[U]): DStream[U] = {
     new MapPartitionedDStream(this, ssc.sc.clean(mapPartFunc))
   }
 
-  def reduce(reduceFunc: (T, T) => T) = this.map(x => (null, x)).reduceByKey(reduceFunc, 1).map(_._2)
+  def reduce(reduceFunc: (T, T) => T): DStream[T] = this.map(x => (null, x)).reduceByKey(reduceFunc, 1).map(_._2)
 
-  def count() = this.map(_ => 1).reduce(_ + _)
+  def count(): DStream[Int] = this.map(_ => 1).reduce(_ + _)
   
-  def collect() = this.map(x => (1, x)).groupByKey(1).map(_._2)
+  def collect(): DStream[Seq[T]] = this.map(x => (null, x)).groupByKey(1).map(_._2)
 
   def foreach(foreachFunc: T => Unit) {
     val newStream = new PerElementForEachDStream(this, ssc.sc.clean(foreachFunc))
@@ -341,7 +341,7 @@ extends Serializable with Logging {
     this.map(_ => 1).reduceByWindow(add _, subtract _, windowTime, slideTime)
   }
 
-  def union(that: DStream[T]): DStream[T] = new UnifiedDStream[T](Array(this, that))
+  def union(that: DStream[T]): DStream[T] = new UnionDStream[T](Array(this, that))
 
   def slice(interval: Interval): Seq[RDD[T]] = {
     slice(interval.beginTime, interval.endTime)
@@ -507,8 +507,47 @@ class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
  * TODO
  */
 
-class UnifiedDStream[T: ClassManifest](parents: Array[DStream[T]])
-  extends DStream[T](parents(0).ssc) {
+class MapValuesDStream[K: ClassManifest, V: ClassManifest, U: ClassManifest](
+    parent: DStream[(K, V)],
+    mapValueFunc: V => U
+  ) extends DStream[(K, U)](parent.ssc) {
+
+  override def dependencies = List(parent)
+
+  override def slideTime: Time = parent.slideTime
+
+  override def compute(validTime: Time): Option[RDD[(K, U)]] = {
+    parent.getOrCompute(validTime).map(_.mapValues[U](mapValueFunc))
+  }
+}
+
+
+/**
+ * TODO
+ */
+
+class FlatMapValuesDStream[K: ClassManifest, V: ClassManifest, U: ClassManifest](
+    parent: DStream[(K, V)],
+    flatMapValueFunc: V => TraversableOnce[U]
+  ) extends DStream[(K, U)](parent.ssc) {
+
+  override def dependencies = List(parent)
+
+  override def slideTime: Time = parent.slideTime
+
+  override def compute(validTime: Time): Option[RDD[(K, U)]] = {
+    parent.getOrCompute(validTime).map(_.flatMapValues[U](flatMapValueFunc))
+  }
+}
+
+
+
+/**
+ * TODO
+ */
+
+class UnionDStream[T: ClassManifest](parents: Array[DStream[T]])
+  extends DStream[T](parents.head.ssc) {
 
   if (parents.length == 0) {
     throw new IllegalArgumentException("Empty array of parents")
@@ -524,7 +563,7 @@ class UnifiedDStream[T: ClassManifest](parents: Array[DStream[T]])
 
   override def dependencies = parents.toList
 
-  override def slideTime: Time = parents(0).slideTime
+  override def slideTime: Time = parents.head.slideTime
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     val rdds = new ArrayBuffer[RDD[T]]()

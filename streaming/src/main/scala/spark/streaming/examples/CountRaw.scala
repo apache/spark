@@ -25,7 +25,7 @@ object CountRaw {
 
     val rawStreams = (1 to numStreams).map(_ =>
       ssc.createRawNetworkStream[String](host, port, StorageLevel.MEMORY_ONLY_2)).toArray
-    val union = new UnifiedDStream(rawStreams)
+    val union = new UnionDStream(rawStreams)
     union.map(_.length + 2).reduce(_ + _).foreachRDD(r => println("Byte count: " + r.collect().mkString))
     ssc.start()
   }
