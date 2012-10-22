@@ -7,16 +7,16 @@ import spark.streaming.Seconds
 
 import scala.collection.mutable.SynchronizedQueue
 
-object ExampleOne {
+object QueueStream {
   
   def main(args: Array[String]) {
     if (args.length < 1) {
-      System.err.println("Usage: ExampleOne <master>")
+      System.err.println("Usage: QueueStream <master>")
       System.exit(1)
     }
     
     // Create the context and set the batch size
-    val ssc = new StreamingContext(args(0), "ExampleOne")
+    val ssc = new StreamingContext(args(0), "QueueStream")
     ssc.setBatchDuration(Seconds(1))
     
     // Create the queue through which RDDs can be pushed to 

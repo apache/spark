@@ -7,15 +7,15 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
 
 
-object ExampleTwo {
+object FileStream {
   def main(args: Array[String]) {
     if (args.length < 2) {
-      System.err.println("Usage: ExampleOne <master> <new HDFS compatible directory>")
+      System.err.println("Usage: FileStream <master> <new HDFS compatible directory>")
       System.exit(1)
     }
     
     // Create the context and set the batch size
-    val ssc = new StreamingContext(args(0), "ExampleTwo")
+    val ssc = new StreamingContext(args(0), "FileStream")
     ssc.setBatchDuration(Seconds(2))
     
     // Create the new directory 
@@ -23,6 +23,7 @@ object ExampleTwo {
     val fs = directory.getFileSystem(new Configuration())
     if (fs.exists(directory)) throw new Exception("This directory already exists")
     fs.mkdirs(directory)
+    fs.deleteOnExit(directory)
     
     // Create the FileInputDStream on the directory and use the
     // stream to count words in new files created
@@ -41,7 +42,6 @@ object ExampleTwo {
     }
     Thread.sleep(5000) // Waiting for the file to be processed 
     ssc.stop()
-    fs.delete(directory)
     System.exit(0)
   }
 }
