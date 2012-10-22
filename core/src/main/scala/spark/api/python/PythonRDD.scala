@@ -131,18 +131,17 @@ trait PythonRDDBase {
 }
 
 class PythonRDD[T: ClassManifest](
-  parent: RDD[T], command: Seq[String], envVars: Map[String, String],
+  parent: RDD[T], command: Seq[String], envVars: java.util.Map[String, String],
   preservePartitoning: Boolean, pythonExec: String, broadcastVars: java.util.List[Broadcast[Array[Byte]]])
   extends RDD[Array[Byte]](parent.context) with PythonRDDBase {
 
-  def this(parent: RDD[T], command: Seq[String], preservePartitoning: Boolean,
-    pythonExec: String, broadcastVars: java.util.List[Broadcast[Array[Byte]]]) =
-    this(parent, command, Map(), preservePartitoning, pythonExec, broadcastVars)
-
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
-  def this(parent: RDD[T], command: String, preservePartitoning: Boolean, pythonExec: String, broadcastVars: java.util.List[Broadcast[Array[Byte]]]) =
-    this(parent, PipedRDD.tokenize(command), preservePartitoning, pythonExec, broadcastVars)
+  def this(parent: RDD[T], command: String, envVars: java.util.Map[String, String],
+    preservePartitoning: Boolean, pythonExec: String,
+    broadcastVars: java.util.List[Broadcast[Array[Byte]]]) =
+    this(parent, PipedRDD.tokenize(command), envVars, preservePartitoning, pythonExec,
+      broadcastVars)
 
   override def splits = parent.splits
 
@@ -151,7 +150,7 @@ class PythonRDD[T: ClassManifest](
   override val partitioner = if (preservePartitoning) parent.partitioner else None
 
   override def compute(split: Split): Iterator[Array[Byte]] =
-    compute(split, envVars, command, parent, pythonExec, broadcastVars)
+    compute(split, envVars.toMap, command, parent, pythonExec, broadcastVars)
 
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
