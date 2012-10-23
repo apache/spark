@@ -8,14 +8,17 @@ import spark.SparkContext._
 import spark.storage.StorageLevel
 
 
-class StateRDD[U: ClassManifest, T: ClassManifest](prev: RDD[T], f: Iterator[T] => Iterator[U], rememberPartitioner: Boolean)
-  extends MapPartitionsRDD[U, T](prev, f) {
+class StateRDD[U: ClassManifest, T: ClassManifest](
+    prev: RDD[T],
+    f: Iterator[T] => Iterator[U],
+    rememberPartitioner: Boolean
+  ) extends MapPartitionsRDD[U, T](prev, f) {
   override val partitioner = if (rememberPartitioner) prev.partitioner else None
 }
 
 class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManifest](
-    @transient parent: DStream[(K, V)],
-    updateFunc: (Iterator[(K, Seq[V], S)]) => Iterator[(K, S)],
+    parent: DStream[(K, V)],
+    updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
     partitioner: Partitioner,
     rememberPartitioner: Boolean
   ) extends DStream[(K, S)](parent.ssc) {
@@ -82,7 +85,7 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
             val updateFuncLocal = updateFunc
             val finalFunc = (iterator: Iterator[(K, (Seq[V], Seq[S]))]) => {
               val i = iterator.map(t => {
-                (t._1, t._2._1, t._2._2.headOption.getOrElse(null.asInstanceOf[S]))
+                (t._1, t._2._1, t._2._2.headOption)
               })
               updateFuncLocal(i)
             }
@@ -108,7 +111,7 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
             // and then apply the update function
             val updateFuncLocal = updateFunc
             val finalFunc = (iterator: Iterator[(K, Seq[V])]) => {
-                updateFuncLocal(iterator.map(tuple => (tuple._1, tuple._2, null.asInstanceOf[S])))
+              updateFuncLocal(iterator.map(tuple => (tuple._1, tuple._2, None)))
             }
 
             val groupedRDD = parentRDD.groupByKey(partitioner)

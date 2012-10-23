@@ -156,30 +156,30 @@ extends Serializable {
   //
   //
   def updateStateByKey[S <: AnyRef : ClassManifest](
-      updateFunc: (Seq[V], S) => S
+      updateFunc: (Seq[V], Option[S]) => Option[S]
     ): DStream[(K, S)] = {
     updateStateByKey(updateFunc, defaultPartitioner())
   }
 
   def updateStateByKey[S <: AnyRef : ClassManifest](
-      updateFunc: (Seq[V], S) => S,
+      updateFunc: (Seq[V], Option[S]) => Option[S],
       numPartitions: Int
     ): DStream[(K, S)] = {
     updateStateByKey(updateFunc, defaultPartitioner(numPartitions))
   }
 
   def updateStateByKey[S <: AnyRef : ClassManifest](
-      updateFunc: (Seq[V], S) => S,
+      updateFunc: (Seq[V], Option[S]) => Option[S],
       partitioner: Partitioner
     ): DStream[(K, S)] = {
-    val func = (iterator: Iterator[(K, Seq[V], S)]) => {
-      iterator.map(tuple => (tuple._1, updateFunc(tuple._2, tuple._3)))
+    val newUpdateFunc = (iterator: Iterator[(K, Seq[V], Option[S])]) => {
+      iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
     }
-    updateStateByKey(func, partitioner, true)
+    updateStateByKey(newUpdateFunc, partitioner, true)
   }
 
   def updateStateByKey[S <: AnyRef : ClassManifest](
-      updateFunc: (Iterator[(K, Seq[V], S)]) => Iterator[(K, S)],
+      updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
       partitioner: Partitioner,
       rememberPartitioner: Boolean
     ): DStream[(K, S)] = {

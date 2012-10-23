@@ -149,11 +149,8 @@ class DStreamBasicSuite extends DStreamSuiteBase {
       )
 
     val updateStateOperation = (s: DStream[String]) => {
-      val updateFunc = (values: Seq[Int], state: RichInt) => {
-        var newState = 0
-        if (values != null && values.size > 0) newState += values.reduce(_ + _)
-        if (state != null) newState += state.self
-        new RichInt(newState)
+      val updateFunc = (values: Seq[Int], state: Option[RichInt]) => {
+        Some(new RichInt(values.foldLeft(0)(_ + _) + state.map(_.self).getOrElse(0)))
       }
       s.map(x => (x, 1)).updateStateByKey[RichInt](updateFunc).map(t => (t._1, t._2.self))
     }
