@@ -1,16 +1,11 @@
 package spark.streaming
 
-import akka.actor._
-import akka.pattern.ask
-import akka.util.duration._
-import akka.dispatch._
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, SocketChannel}
 import java.io.EOFException
 import java.util.concurrent.ArrayBlockingQueue
-import scala.collection.mutable.ArrayBuffer
-import spark.{DaemonThread, Logging, SparkEnv}
+import spark._
 import spark.storage.StorageLevel
 
 /**
@@ -20,20 +15,23 @@ import spark.storage.StorageLevel
  * in the format that the system is configured with.
  */
 class RawInputDStream[T: ClassManifest](
-    @transient ssc: StreamingContext,
+    @transient ssc_ : StreamingContext,
     host: String,
     port: Int,
-    storageLevel: StorageLevel)
-  extends NetworkInputDStream[T](ssc) with Logging {
+    storageLevel: StorageLevel
+  ) extends NetworkInputDStream[T](ssc_ ) with Logging {
 
-  val streamId = id
+  def createReceiver(): NetworkReceiver[T] = {
+    new RawNetworkReceiver(id, host, port, storageLevel).asInstanceOf[NetworkReceiver[T]]
+  }
+}
 
-  /** Called on workers to run a receiver for the stream. */
-  def runReceiver() {
-    val env = SparkEnv.get
-    val actor = env.actorSystem.actorOf(
-      Props(new ReceiverActor(env, Thread.currentThread)), "ReceiverActor-" + streamId)
+class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: StorageLevel)
+  extends NetworkReceiver[Any](streamId) {
 
+  var blockPushingThread: Thread = null
+
+  def onStart() {
     // Open a socket to the target address and keep reading from it
     logInfo("Connecting to " + host + ":" + port)
     val channel = SocketChannel.open()
@@ -43,18 +41,18 @@ class RawInputDStream[T: ClassManifest](
 
     val queue = new ArrayBlockingQueue[ByteBuffer](2)
 
-    new DaemonThread {
+    blockPushingThread = new DaemonThread {
       override def run() {
         var nextBlockNumber = 0
         while (true) {
           val buffer = queue.take()
           val blockId = "input-" + streamId + "-" + nextBlockNumber
           nextBlockNumber += 1
-          env.blockManager.putBytes(blockId, buffer, storageLevel)
-          actor ! BlockPublished(blockId)
+          pushBlock(blockId, buffer, storageLevel)
         }
       }
-    }.start()
+    }
+    blockPushingThread.start()
 
     val lengthBuffer = ByteBuffer.allocate(4)
     while (true) {
@@ -70,6 +68,10 @@ class RawInputDStream[T: ClassManifest](
     }
   }
 
+  def onStop() {
+    blockPushingThread.interrupt()
+  }
+
   /** Read a buffer fully from a given Channel */
   private def readFully(channel: ReadableByteChannel, dest: ByteBuffer) {
     while (dest.position < dest.limit) {
@@ -77,42 +79,5 @@ class RawInputDStream[T: ClassManifest](
         throw new EOFException("End of channel")
       }
     }
-  }
-
-  /** Message sent to ReceiverActor to tell it that a block was published */
-  case class BlockPublished(blockId: String) {}
-
-  /** A helper actor that communicates with the NetworkInputTracker */
-  private class ReceiverActor(env: SparkEnv, receivingThread: Thread) extends Actor {
-    val newBlocks = new ArrayBuffer[String]
-
-    logInfo("Attempting to register with tracker")
-    val ip = System.getProperty("spark.master.host", "localhost")
-    val port = System.getProperty("spark.master.port", "7077").toInt
-    val actorName: String = "NetworkInputTracker"
-    val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
-    val trackerActor = env.actorSystem.actorFor(url)
-    val timeout = 5.seconds
-
-    override def preStart() {
-      val future = trackerActor.ask(RegisterReceiver(streamId, self))(timeout)
-      Await.result(future, timeout)
-    }
-
-    override def receive = {
-      case BlockPublished(blockId) =>
-        newBlocks += blockId
-        val future = trackerActor ! GotBlockIds(streamId, Array(blockId))
-
-      case GetBlockIds(time) =>
-        logInfo("Got request for block IDs for " + time)
-        sender ! GotBlockIds(streamId, newBlocks.toArray)
-        newBlocks.clear()
-
-      case StopReceiver =>
-        receivingThread.interrupt()
-        sender ! true
-    }
-
   }
 }

@@ -95,7 +95,7 @@ class StreamingContext (
       port: Int, 
       converter: (InputStream) => Iterator[T]
     ): DStream[T] = {
-    val inputStream = new ObjectInputDStream[T](this, hostname, port, converter)
+    val inputStream = new ObjectInputDStream[T](this, hostname, port, converter, StorageLevel.DISK_AND_MEMORY_2)
     graph.addInputStream(inputStream)
     inputStream
   }
@@ -207,7 +207,7 @@ class StreamingContext (
   }
   
   /**
-   * This function starts the execution of the streams. 
+   * This function stops the execution of the streams.
    */
   def stop() {
     try {

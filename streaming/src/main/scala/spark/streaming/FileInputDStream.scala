@@ -19,15 +19,6 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
   @transient private var path_ : Path = null
   @transient private var fs_ : FileSystem = null
 
-  /*
-  @transient @noinline lazy val path = {
-    //if (directory == null) throw new Exception("directory is null")
-    //println(directory)
-    new Path(directory)
-  }
-  @transient lazy val fs = path.getFileSystem(new Configuration())
-  */
-
   var lastModTime: Long = 0
 
   def path(): Path = {
@@ -79,15 +70,6 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
       file => ssc.sc.newAPIHadoopFile[K, V, F](file.getPath.toString)))
     Some(newRDD)
   }
-  /*
-  @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream) {
-    println(this.getClass().getSimpleName + ".readObject used")
-    ois.defaultReadObject()
-    println("HERE HERE" + this.directory)
-  }
-  */
-
 }
 
 object FileInputDStream {

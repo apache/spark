@@ -13,13 +13,44 @@ import akka.dispatch._
 
 trait NetworkInputTrackerMessage 
 case class RegisterReceiver(streamId: Int, receiverActor: ActorRef) extends NetworkInputTrackerMessage
+case class AddBlocks(streamId: Int, blockIds: Seq[String]) extends NetworkInputTrackerMessage
+case class DeregisterReceiver(streamId: Int, msg: String) extends NetworkInputTrackerMessage
+
 
 class NetworkInputTracker(
     @transient ssc: StreamingContext, 
-    @transient networkInputStreams: Array[NetworkInputDStream[_]]) 
-extends Logging {
+    @transient networkInputStreams: Array[NetworkInputDStream[_]])
+  extends Logging {
 
-  class TrackerActor extends Actor {
+  val networkInputStreamIds = networkInputStreams.map(_.id).toArray
+  val receiverExecutor = new ReceiverExecutor()
+  val receiverInfo = new HashMap[Int, ActorRef]
+  val receivedBlockIds = new HashMap[Int, Queue[String]]
+  val timeout = 5000.milliseconds
+
+  var currentTime: Time = null
+
+  def start() {
+    ssc.env.actorSystem.actorOf(Props(new NetworkInputTrackerActor), "NetworkInputTracker")
+    receiverExecutor.start()
+  }
+
+  def stop() {
+    receiverExecutor.interrupt()
+    receiverExecutor.stopReceivers()
+  }
+
+  def getBlockIds(receiverId: Int, time: Time): Array[String] = synchronized {
+    val queue =  receivedBlockIds.synchronized {
+      receivedBlockIds.getOrElse(receiverId, new Queue[String]())
+    }
+    val result = queue.synchronized {
+      queue.dequeueAll(x => true)
+    }
+    result.toArray
+  }
+
+  private class NetworkInputTrackerActor extends Actor {
     def receive = {
       case RegisterReceiver(streamId, receiverActor) => {
         if (!networkInputStreamIds.contains(streamId)) {
@@ -29,7 +60,7 @@ extends Logging {
         logInfo("Registered receiver for network stream " + streamId)
         sender ! true
       } 
-      case GotBlockIds(streamId, blockIds) => {
+      case AddBlocks(streamId, blockIds) => {
         val tmp = receivedBlockIds.synchronized {
           if (!receivedBlockIds.contains(streamId)) {
             receivedBlockIds += ((streamId, new Queue[String]))
@@ -39,6 +70,12 @@ extends Logging {
         tmp.synchronized {
           tmp ++= blockIds
         }
+      }
+      case DeregisterReceiver(streamId, msg) => {
+        receiverInfo -= streamId
+        logInfo("De-registered receiver for network stream " + streamId
+          + " with message " + msg)
+        //TODO: Do something about the corresponding NetworkInputDStream
       }
     }
   }
@@ -58,15 +95,15 @@ extends Logging {
     }
     
     def startReceivers() {
-      val tempRDD = ssc.sc.makeRDD(networkInputStreams, networkInputStreams.size)
-      
-      val startReceiver = (iterator: Iterator[NetworkInputDStream[_]]) => {
+      val receivers = networkInputStreams.map(_.createReceiver())
+      val tempRDD = ssc.sc.makeRDD(receivers, receivers.size)
+
+      val startReceiver = (iterator: Iterator[NetworkReceiver[_]]) => {
         if (!iterator.hasNext) {
           throw new Exception("Could not start receiver as details not found.")
         }
-        iterator.next().runReceiver()
+        iterator.next().start()
       }
-      
       ssc.sc.runJob(tempRDD, startReceiver)
     }
     
@@ -77,33 +114,4 @@ extends Logging {
       Await.result(futureOfList, timeout) 
     }
   }
-  
-  val networkInputStreamIds = networkInputStreams.map(_.id).toArray
-  val receiverExecutor = new ReceiverExecutor()
-  val receiverInfo = new HashMap[Int, ActorRef]
-  val receivedBlockIds = new HashMap[Int, Queue[String]]
-  val timeout = 5000.milliseconds
-  
-  
-  var currentTime: Time = null 
-  
-  def start() {
-    ssc.env.actorSystem.actorOf(Props(new TrackerActor), "NetworkInputTracker")
-    receiverExecutor.start()
-  }
-  
-  def stop() {
-    // stop the actor
-    receiverExecutor.interrupt()
-  }
-  
-  def getBlockIds(receiverId: Int, time: Time): Array[String] = synchronized {
-    val queue =  receivedBlockIds.synchronized {
-      receivedBlockIds.getOrElse(receiverId, new Queue[String]())
-    }
-    val result = queue.synchronized {
-      queue.dequeueAll(x => true)
-    }
-    result.toArray
-  }  
 }
