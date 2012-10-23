@@ -4,7 +4,9 @@ import spark.streaming.StreamingContext._
 import scala.runtime.RichInt
 import util.ManualClock
 
-class DStreamBasicSuite extends DStreamSuiteBase {
+class BasicOperationsSuite extends TestSuiteBase {
+
+  override def framework() = "BasicOperationsSuite"
 
   test("map") {
     val input = Seq(1 to 4, 5 to 8, 9 to 12)

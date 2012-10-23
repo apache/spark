@@ -3,7 +3,7 @@ package spark.streaming
 import spark.streaming.StreamingContext._
 import java.io.File
 
-class CheckpointSuite extends DStreamSuiteBase {
+class CheckpointSuite extends TestSuiteBase {
 
   override def framework() = "CheckpointSuite"
 

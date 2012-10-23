@@ -2,9 +2,9 @@ package spark.streaming
 
 import spark.streaming.StreamingContext._
 
-class DStreamWindowSuite extends DStreamSuiteBase {
+class WindowOperationsSuite extends TestSuiteBase {
 
-  override def framework() = "DStreamWindowSuite"
+  override def framework() = "WindowOperationsSuite"
 
   override def maxWaitTimeMillis() = 20000
 

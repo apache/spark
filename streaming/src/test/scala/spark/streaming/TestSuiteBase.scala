@@ -33,11 +33,11 @@ class TestOutputStream[T: ClassManifest](parent: DStream[T], val output: ArrayBu
     output += collected
   })
 
-trait DStreamSuiteBase extends FunSuite with Logging {
+trait TestSuiteBase extends FunSuite with Logging {
 
   System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
 
-  def framework() = "DStreamSuiteBase"
+  def framework() = "TestSuiteBase"
 
   def master() = "local[2]"
 
