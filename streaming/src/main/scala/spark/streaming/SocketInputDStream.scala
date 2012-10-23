@@ -9,7 +9,7 @@ import java.util.concurrent.ArrayBlockingQueue
 
 import scala.collection.mutable.ArrayBuffer
 
-class ObjectInputDStream[T: ClassManifest](
+class SocketInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
     host: String,
     port: Int,

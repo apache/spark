@@ -86,21 +86,26 @@ class StreamingContext (
 
   private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
 
-  def createNetworkTextStream(hostname: String, port: Int): DStream[String] = {
-    createNetworkObjectStream[String](hostname, port, ObjectInputReceiver.bytesToLines)
+  def networkTextStream(
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel = StorageLevel.DISK_AND_MEMORY_2
+    ): DStream[String] = {
+    networkStream[String](hostname, port, ObjectInputReceiver.bytesToLines, storageLevel)
   }
-  
-  def createNetworkObjectStream[T: ClassManifest](
-      hostname: String, 
-      port: Int, 
-      converter: (InputStream) => Iterator[T]
+
+  def networkStream[T: ClassManifest](
+      hostname: String,
+      port: Int,
+      converter: (InputStream) => Iterator[T],
+      storageLevel: StorageLevel
     ): DStream[T] = {
-    val inputStream = new ObjectInputDStream[T](this, hostname, port, converter, StorageLevel.DISK_AND_MEMORY_2)
+    val inputStream = new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
     graph.addInputStream(inputStream)
     inputStream
   }
-  
-  def createRawNetworkStream[T: ClassManifest](
+
+  def rawNetworkStream[T: ClassManifest](
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_2
@@ -109,26 +114,26 @@ class StreamingContext (
     graph.addInputStream(inputStream)
     inputStream
   }
- 
+
   /*
   def createHttpTextStream(url: String): DStream[String] = {
     createHttpStream(url, ObjectInputReceiver.bytesToLines)
   }
-  
+
   def createHttpStream[T: ClassManifest](
-      url: String, 
+      url: String,
       converter: (InputStream) => Iterator[T]
     ): DStream[T] = {
   }
   */
 
-  /** 
+  /**
    * This function creates a input stream that monitors a Hadoop-compatible
    * for new files and executes the necessary processing on them.
-   */  
+   */
   def createFileStream[
-    K: ClassManifest, 
-    V: ClassManifest, 
+    K: ClassManifest,
+    V: ClassManifest,
     F <: NewInputFormat[K, V]: ClassManifest
   ](directory: String): DStream[(K, V)] = {
     val inputStream = new FileInputDStream[K, V, F](this, directory)
@@ -139,13 +144,13 @@ class StreamingContext (
   def createTextFileStream(directory: String): DStream[String] = {
     createFileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
   }
-  
+
   /**
    * This function create a input stream from an queue of RDDs. In each batch,
-   * it will process either one or all of the RDDs returned by the queue 
+   * it will process either one or all of the RDDs returned by the queue
    */
   def createQueueStream[T: ClassManifest](
-      queue: Queue[RDD[T]],      
+      queue: Queue[RDD[T]],
       oneAtATime: Boolean = true,
       defaultRDD: RDD[T] = null
     ): DStream[T] = {
@@ -153,7 +158,7 @@ class StreamingContext (
     graph.addInputStream(inputStream)
     inputStream
   }
-  
+
   def createQueueStream[T: ClassManifest](array: Array[RDD[T]]): DStream[T] = {
     val queue = new Queue[RDD[T]]
     val inputStream = createQueueStream(queue, true, null)
@@ -172,27 +177,27 @@ class StreamingContext (
   /**
    * This function registers a DStream as an output stream that will be
    * computed every interval.
-   */  
+   */
   def registerOutputStream(outputStream: DStream[_]) {
     graph.addOutputStream(outputStream)
   }
-  
+
   def validate() {
     assert(graph != null, "Graph is null")
     graph.validate()
   }
 
   /**
-   * This function starts the execution of the streams. 
-   */  
+   * This function starts the execution of the streams.
+   */
   def start() {
     validate()
 
     val networkInputStreams = graph.getInputStreams().filter(s => s match {
-        case n: NetworkInputDStream[_] => true 
+        case n: NetworkInputDStream[_] => true
         case _ => false
       }).map(_.asInstanceOf[NetworkInputDStream[_]]).toArray
-     
+
     if (networkInputStreams.length > 0) {
       // Start the network input tracker (must start before receivers)
       networkInputTracker = new NetworkInputTracker(this, networkInputStreams)
@@ -203,9 +208,9 @@ class StreamingContext (
 
     // Start the scheduler
     scheduler = new Scheduler(this)
-    scheduler.start()    
+    scheduler.start()
   }
-  
+
   /**
    * This function stops the execution of the streams.
    */
