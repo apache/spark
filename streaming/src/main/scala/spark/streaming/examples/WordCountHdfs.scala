@@ -16,7 +16,7 @@ object WordCountHdfs {
 
     // Create the FileInputDStream on the directory and use the
     // stream to count words in new files created
-    val lines = ssc.createTextFileStream(args(1))
+    val lines = ssc.textFileStream(args(1))
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.print()

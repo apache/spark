@@ -131,7 +131,7 @@ class StreamingContext (
    * This function creates a input stream that monitors a Hadoop-compatible
    * for new files and executes the necessary processing on them.
    */
-  def createFileStream[
+  def fileStream[
     K: ClassManifest,
     V: ClassManifest,
     F <: NewInputFormat[K, V]: ClassManifest
@@ -141,15 +141,15 @@ class StreamingContext (
     inputStream
   }
 
-  def createTextFileStream(directory: String): DStream[String] = {
-    createFileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
+  def textFileStream(directory: String): DStream[String] = {
+    fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
   }
 
   /**
    * This function create a input stream from an queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue
    */
-  def createQueueStream[T: ClassManifest](
+  def queueStream[T: ClassManifest](
       queue: Queue[RDD[T]],
       oneAtATime: Boolean = true,
       defaultRDD: RDD[T] = null
@@ -159,9 +159,9 @@ class StreamingContext (
     inputStream
   }
 
-  def createQueueStream[T: ClassManifest](array: Array[RDD[T]]): DStream[T] = {
+  def queueStream[T: ClassManifest](array: Array[RDD[T]]): DStream[T] = {
     val queue = new Queue[RDD[T]]
-    val inputStream = createQueueStream(queue, true, null)
+    val inputStream = queueStream(queue, true, null)
     queue ++= array
     inputStream
   }

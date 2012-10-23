@@ -24,7 +24,7 @@ object QueueStream {
     val rddQueue = new SynchronizedQueue[RDD[Int]]()
     
     // Create the QueueInputDStream and use it do some processing
-    val inputStream = ssc.createQueueStream(rddQueue)
+    val inputStream = ssc.queueStream(rddQueue)
     val mappedStream = inputStream.map(x => (x % 10, 1))
     val reducedStream = mappedStream.reduceByKey(_ + _)
     reducedStream.print()    

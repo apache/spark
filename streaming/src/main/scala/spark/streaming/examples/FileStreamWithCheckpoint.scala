@@ -37,7 +37,7 @@ object FileStreamWithCheckpoint {
         ssc_.setCheckpointDetails(checkpointFile, Seconds(1))
 
         // Setup the streaming computation
-        val inputStream = ssc_.createTextFileStream(directory.toString)
+        val inputStream = ssc_.textFileStream(directory.toString)
         val words = inputStream.flatMap(_.split(" "))
         val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
         wordCounts.print()

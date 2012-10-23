@@ -27,7 +27,7 @@ object FileStream {
     
     // Create the FileInputDStream on the directory and use the
     // stream to count words in new files created
-    val inputStream = ssc.createTextFileStream(directory.toString)
+    val inputStream = ssc.textFileStream(directory.toString)
     val words = inputStream.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.print()
