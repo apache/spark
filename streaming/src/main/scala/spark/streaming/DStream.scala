@@ -93,8 +93,9 @@ extends Serializable with Logging {
    * its parent DStreams.
    */
   protected[streaming] def initialize(time: Time) {
-    if (zeroTime != null) {
-      throw new Exception("ZeroTime is already initialized, cannot initialize it again")
+    if (zeroTime != null && zeroTime != time) {
+      throw new Exception("ZeroTime is already initialized to " + zeroTime
+        + ", cannot initialize it again to " + time)
     }
     zeroTime = time
     dependencies.foreach(_.initialize(zeroTime))

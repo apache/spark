@@ -108,10 +108,11 @@ class NetworkInputTracker(
     }
     
     def stopReceivers() {
-      implicit val ec = env.actorSystem.dispatcher
-      val listOfFutures = receiverInfo.values.map(_.ask(StopReceiver)(timeout)).toList
-      val futureOfList = Future.sequence(listOfFutures)
-      Await.result(futureOfList, timeout) 
+      //implicit val ec = env.actorSystem.dispatcher
+      receiverInfo.values.foreach(_ ! StopReceiver)
+      //val listOfFutures = receiverInfo.values.map(_.ask(StopReceiver)(timeout)).toList
+      //val futureOfList = Future.sequence(listOfFutures)
+      //Await.result(futureOfList, timeout)
     }
   }
 }

@@ -91,7 +91,7 @@ class StreamingContext (
       port: Int,
       storageLevel: StorageLevel = StorageLevel.DISK_AND_MEMORY_2
     ): DStream[String] = {
-    networkStream[String](hostname, port, ObjectInputReceiver.bytesToLines, storageLevel)
+    networkStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
   def networkStream[T: ClassManifest](
@@ -114,18 +114,6 @@ class StreamingContext (
     graph.addInputStream(inputStream)
     inputStream
   }
-
-  /*
-  def createHttpTextStream(url: String): DStream[String] = {
-    createHttpStream(url, ObjectInputReceiver.bytesToLines)
-  }
-
-  def createHttpStream[T: ClassManifest](
-      url: String,
-      converter: (InputStream) => Iterator[T]
-    ): DStream[T] = {
-  }
-  */
 
   /**
    * This function creates a input stream that monitors a Hadoop-compatible

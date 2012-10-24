@@ -18,12 +18,12 @@ class SocketInputDStream[T: ClassManifest](
   ) extends NetworkInputDStream[T](ssc_) {
 
   def createReceiver(): NetworkReceiver[T] = {
-    new ObjectInputReceiver(id, host, port, bytesToObjects, storageLevel)
+    new SocketReceiver(id, host, port, bytesToObjects, storageLevel)
   }
 }
 
 
-class ObjectInputReceiver[T: ClassManifest](
+class SocketReceiver[T: ClassManifest](
     streamId: Int,
     host: String,
     port: Int,
@@ -120,7 +120,12 @@ class ObjectInputReceiver[T: ClassManifest](
 }
 
 
-object ObjectInputReceiver {
+object SocketReceiver  {
+
+  /**
+   * This methods translates the data from an inputstream (say, from a socket)
+   * to '\n' delimited strings and returns an iterator to access the strings.
+   */
   def bytesToLines(inputStream: InputStream): Iterator[String] = {
     val bufferedInputStream = new BufferedInputStream(inputStream)
     val dataInputStream = new DataInputStream(bufferedInputStream)
@@ -133,7 +138,11 @@ object ObjectInputReceiver {
       private def getNext() {
         try {
           nextValue = dataInputStream.readLine()
-          println("[" + nextValue + "]")
+          if (nextValue != null) {
+            println("[" + nextValue + "]")
+          } else {
+            gotNext = false
+          }
         } catch {
           case eof: EOFException =>
             finished = true
