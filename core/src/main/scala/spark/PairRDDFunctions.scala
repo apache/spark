@@ -1,10 +1,6 @@
 package spark
 
-import java.io.EOFException
-import java.io.ObjectInputStream
-import java.net.URL
 import java.util.{Date, HashMap => JHashMap}
-import java.util.concurrent.atomic.AtomicLong
 import java.text.SimpleDateFormat
 
 import scala.collection.Map
@@ -14,18 +10,11 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.BytesWritable
-import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.io.Text
-import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.FileOutputCommitter
 import org.apache.hadoop.mapred.FileOutputFormat
 import org.apache.hadoop.mapred.HadoopWriter
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapred.OutputCommitter
 import org.apache.hadoop.mapred.OutputFormat
-import org.apache.hadoop.mapred.SequenceFileOutputFormat
-import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, Job => NewAPIHadoopJob, HadoopMapReduceUtil, TaskAttemptID, TaskAttemptContext}
@@ -64,15 +53,18 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       partitioner: Partitioner,
       mapSideCombine: Boolean = true): RDD[(K, C)] = {
     val aggregator =
-      if (mapSideCombine) {
-        new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-      } else {
-        // Don't apply map-side combiner.
-        // A sanity check to make sure mergeCombiners is not defined.
-        assert(mergeCombiners == null)
-        new Aggregator[K, V, C](createCombiner, mergeValue, null, false)
-      }
-    new ShuffledAggregatedRDD(self, aggregator, partitioner)
+      new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
+    if (mapSideCombine) {
+      val mapSideCombined = self.mapPartitions(aggregator.combineValuesByKey(_), true)
+      val partitioned = new ShuffledRDD[K, C](mapSideCombined, partitioner)
+      partitioned.mapPartitions(aggregator.combineCombinersByKey(_), true)
+    } else {
+      // Don't apply map-side combiner.
+      // A sanity check to make sure mergeCombiners is not defined.
+      assert(mergeCombiners == null)
+      val values = new ShuffledRDD[K, V](self, partitioner)
+      values.mapPartitions(aggregator.combineValuesByKey(_), true)
+    }
   }
 
   /**
@@ -181,7 +173,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         createCombiner _, mergeValue _, mergeCombiners _, partitioner)
       bufs.flatMapValues(buf => buf)
     } else {
-      new RepartitionShuffledRDD(self, partitioner)
+      new ShuffledRDD[K, V](self, partitioner)
     }
   }
 
@@ -618,7 +610,16 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
    * order of the keys).
    */
   def sortByKey(ascending: Boolean = true, numSplits: Int = self.splits.size): RDD[(K,V)] = {
-    new ShuffledSortedRDD(self, ascending, numSplits)
+    val shuffled =
+      new ShuffledRDD[K, V](self, new RangePartitioner(numSplits, self, ascending))
+    shuffled.mapPartitions(iter => {
+      val buf = iter.toArray
+      if (ascending) {
+        buf.sortWith((x, y) => x._1 < y._1).iterator
+      } else {
+        buf.sortWith((x, y) => x._1 > y._1).iterator
+      }
+    }, true)
   }
 }
 
