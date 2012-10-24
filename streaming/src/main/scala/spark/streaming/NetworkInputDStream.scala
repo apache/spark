@@ -74,7 +74,8 @@ abstract class NetworkReceiver[T: ClassManifest](streamId: Int) extends Serializ
       onStart()
     } catch {
       case ie: InterruptedException =>
-        logWarning("Receiving thread interrupted")
+        logInfo("Receiving thread interrupted")
+        //println("Receiving thread interrupted")
       case e: Exception =>
         stopOnError(e)
     }

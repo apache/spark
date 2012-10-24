@@ -3,11 +3,12 @@ package spark.streaming
 import spark.streaming.util.{RecurringTimer, SystemClock}
 import spark.storage.StorageLevel
 
-import java.io.{EOFException, DataInputStream, BufferedInputStream, InputStream}
+import java.io._
 import java.net.Socket
 import java.util.concurrent.ArrayBlockingQueue
 
 import scala.collection.mutable.ArrayBuffer
+import scala.Serializable
 
 class SocketInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
@@ -127,8 +128,7 @@ object SocketReceiver  {
    * to '\n' delimited strings and returns an iterator to access the strings.
    */
   def bytesToLines(inputStream: InputStream): Iterator[String] = {
-    val bufferedInputStream = new BufferedInputStream(inputStream)
-    val dataInputStream = new DataInputStream(bufferedInputStream)
+    val dataInputStream = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))
 
     val iterator = new Iterator[String] {
       var gotNext = false
@@ -138,34 +138,31 @@ object SocketReceiver  {
       private def getNext() {
         try {
           nextValue = dataInputStream.readLine()
-          if (nextValue != null) {
-            println("[" + nextValue + "]")
-          } else {
-            gotNext = false
-          }
-        } catch {
-          case eof: EOFException =>
+          if (nextValue == null) {
             finished = true
+          }
         }
         gotNext = true
       }
 
       override def hasNext: Boolean = {
-        if (!gotNext) {
-          getNext()
-        }
-        if (finished) {
-          dataInputStream.close()
+        if (!finished) {
+          if (!gotNext) {
+            getNext()
+            if (finished) {
+              dataInputStream.close()
+            }
+          }
         }
         !finished
       }
 
       override def next(): String = {
-        if (!gotNext) {
-          getNext()
-        }
         if (finished) {
           throw new NoSuchElementException("End of stream")
+        }
+        if (!gotNext) {
+          getNext()
         }
         gotNext = false
         nextValue

@@ -6,6 +6,7 @@ import java.util.concurrent.{TimeUnit, ArrayBlockingQueue}
 import collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import util.ManualClock
 import spark.storage.StorageLevel
+import spark.Logging
 
 
 class InputStreamsSuite extends TestSuiteBase {
@@ -39,9 +40,10 @@ class InputStreamsSuite extends TestSuiteBase {
     Thread.sleep(5000)
     val timeTaken = System.currentTimeMillis() - startTime
     assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
-
-    ssc.stop()
+    logInfo("Stopping server")
     server.stop()
+    logInfo("Stopping context")
+    ssc.stop()
 
     assert(outputBuffer.size === expectedOutput.size)
     for (i <- 0 until outputBuffer.size) {
@@ -52,7 +54,7 @@ class InputStreamsSuite extends TestSuiteBase {
 }
 
 
-class TestServer(port: Int) {
+class TestServer(port: Int) extends Logging {
 
   val queue = new ArrayBlockingQueue[String](100)
 
@@ -62,9 +64,9 @@ class TestServer(port: Int) {
     override def run() {
       try {
         while(true) {
-          println("Accepting connections on port " + port)
+          logInfo("Accepting connections on port " + port)
           val clientSocket = serverSocket.accept()
-          println("New connection")
+          logInfo("New connection")
           try {
             clientSocket.setTcpNoDelay(true)
             val outputStream = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream))
@@ -74,13 +76,13 @@ class TestServer(port: Int) {
               if (msg != null) {
                 outputStream.write(msg)
                 outputStream.flush()
-                println("Message '" + msg + "' sent")
+                logInfo("Message '" + msg + "' sent")
               }
             }
           } catch {
             case e: SocketException => println(e)
           } finally {
-            println("Connection closed")
+            logInfo("Connection closed")
             if (!clientSocket.isClosed) clientSocket.close()
           }
         }
