@@ -45,7 +45,6 @@ import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import spark.storage.BlockManagerMaster
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -199,7 +198,7 @@ class SparkContext(
     parallelize(seq, numSlices)
   }
 
-  /** 
+  /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
@@ -400,7 +399,7 @@ class SparkContext(
     new Accumulable(initialValue, param)
   }
 
-  /** 
+  /**
    * Broadcast a read-only variable to the cluster, returning a [[spark.Broadcast]] object for
    * reading it in distributed functions. The variable will be sent to each cluster only once.
    */
@@ -424,6 +423,16 @@ class SparkContext(
     Utils.fetchFile(path, new File("."))
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
+  }
+
+  /**
+   * Return a map from the slave to the max memory available for caching and the remaining
+   * memory available for caching.
+   */
+  def getSlavesMemoryStatus: Map[String, (Long, Long)] = {
+    env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
+      (blockManagerId.ip + ":" + blockManagerId.port, mem)
+    }
   }
 
   /**
