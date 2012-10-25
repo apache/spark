@@ -49,7 +49,7 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
         if (!filter.accept(path)) {
           return false
         } else {
-          val modTime = fs.getFileStatus(path).getModificationTime() 
+          val modTime = fs.getFileStatus(path).getModificationTime()
           if (modTime <= lastModTime) {
             return false
           }
@@ -60,7 +60,7 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
         }        
       }
     }
-    
+
     val newFiles = fs.listStatus(path, newFilter)
     logInfo("New files: " + newFiles.map(_.getPath).mkString(", "))
     if (newFiles.length > 0) {
