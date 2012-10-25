@@ -1,15 +1,23 @@
 import sbt._
+import sbt.Classpaths.publishTask
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
 import twirl.sbt.TwirlPlugin._
+// For Sonatype publishing
+//import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
-  // "1.0.1" for Apache releases, or "0.20.2-cdh3u3" for Cloudera Hadoop.
+  // "1.0.3" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
   val HADOOP_VERSION = "0.20.205.0"
+  val HADOOP_MAJOR_VERSION = "1"
 
-  lazy val root = Project("root", file("."), settings = sharedSettings) aggregate(core, repl, examples, bagel, streaming)
+  // For Hadoop 2 versions such as "2.0.0-mr1-cdh4.1.1", set the HADOOP_MAJOR_VERSION to "2"
+  //val HADOOP_VERSION = "2.0.0-mr1-cdh4.1.1"
+  //val HADOOP_MAJOR_VERSION = "2"
+
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -21,16 +29,64 @@ object SparkBuild extends Build {
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
 
+  // A configuration to set an alternative publishLocalConfiguration
+  lazy val MavenCompile = config("m2r") extend(Compile)
+  lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
+
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
-    version := "0.6.0-SNAPSHOT",
-    scalaVersion := "2.9.1",
+    version := "0.7.0-SNAPSHOT",
+    scalaVersion := "2.9.2",
     scalacOptions := Seq(/*"-deprecation",*/ "-unchecked", "-optimize"), // -deprecation is too noisy due to usage of old Hadoop API, enable it once that's no longer an issue
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
-    publishTo <<= baseDirectory { base => Some(Resolver.file("Local", base / "target" / "maven" asFile)(Patterns(true, Resolver.mavenStyleBasePattern))) },
+
+    // For Sonatype publishing
+    resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
+      "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
+
+    publishMavenStyle := true,
+
+    //useGpg in Global := true,
+
+    pomExtra := (
+      <url>http://spark-project.org/</url>
+      <licenses>
+        <license>
+          <name>BSD License</name>
+          <url>https://github.com/mesos/spark/blob/master/LICENSE</url>
+          <distribution>repo</distribution>
+        </license>
+      </licenses>
+      <scm>
+        <connection>scm:git:git@github.com:mesos/spark.git</connection>
+        <url>scm:git:git@github.com:mesos/spark.git</url>
+      </scm>
+      <developers>
+        <developer>
+          <id>matei</id>
+          <name>Matei Zaharia</name>
+          <email>matei.zaharia@gmail.com</email>
+          <url>http://www.cs.berkeley.edu/~matei</url>
+          <organization>U.C. Berkeley Computer Science</organization>
+          <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
+        </developer>
+      </developers>
+    ),
+
+/*
+    publishTo <<= version { (v: String) =>
+      val nexus = "https://oss.sonatype.org/"
+      if (v.trim.endsWith("SNAPSHOT"))
+        Some("sonatype-snapshots" at nexus + "content/repositories/snapshots")
+      else
+        Some("sonatype-staging"  at nexus + "service/local/staging/deploy/maven2")
+    },
+
+*/
+
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
       "org.scalatest" %% "scalatest" % "1.6.1" % "test",
@@ -40,7 +96,15 @@ object SparkBuild extends Build {
     parallelExecution := false,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
-      const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) }
+      const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) },
+
+    otherResolvers := Seq(Resolver.file("dotM2", file(Path.userHome + "/.m2/repository"))),
+    publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
+      (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
+    },
+    publishMavenStyle in MavenCompile := true,
+    publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
+    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
   )
 
   val slf4jVersion = "1.6.1"
@@ -50,9 +114,10 @@ object SparkBuild extends Build {
     resolvers ++= Seq(
       "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      "Cloudera Repository" at "http://repository.cloudera.com/artifactory/cloudera-repos/",
-      "Spray Repository" at "http://repo.spray.cc/"
+      "Spray Repository" at "http://repo.spray.cc/",
+      "Cloudera Repository" at "https://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
+
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "11.0.1",
       "log4j" % "log4j" % "1.2.16",
@@ -63,20 +128,26 @@ object SparkBuild extends Build {
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.9",
-      "com.typesafe.akka" % "akka-actor" % "2.0.2",
-      "com.typesafe.akka" % "akka-remote" % "2.0.2",
-      "com.typesafe.akka" % "akka-slf4j" % "2.0.2",
+      "com.typesafe.akka" % "akka-actor" % "2.0.3",
+      "com.typesafe.akka" % "akka-remote" % "2.0.3",
+      "com.typesafe.akka" % "akka-slf4j" % "2.0.3",
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
       "cc.spray" % "spray-can" % "1.0-M2.1",
-      "cc.spray" % "spray-server" % "1.0-M2.1"
-    )
+      "cc.spray" % "spray-server" % "1.0-M2.1",
+      "org.apache.mesos" % "mesos" % "0.9.0-incubating"
+    ) ++ (if (HADOOP_MAJOR_VERSION == "2") Some("org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION) else None).toSeq,
+    unmanagedSourceDirectories in Compile <+= baseDirectory{ _ / ("src/hadoop" + HADOOP_MAJOR_VERSION + "/scala") }
   ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
+
+  def rootSettings = sharedSettings ++ Seq(
+    publish := {}
+  )
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples"
@@ -89,11 +160,10 @@ object SparkBuild extends Build {
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
-    mergeStrategy in assembly := { 
-      case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard 
+    mergeStrategy in assembly := {
+      case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }
-  ) 
-
+  )
 }

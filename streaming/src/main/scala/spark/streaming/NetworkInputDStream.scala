@@ -1,6 +1,9 @@
 package spark.streaming
 
-import spark.{Logging, SparkEnv, RDD, BlockRDD}
+import scala.collection.mutable.ArrayBuffer
+
+import spark.{Logging, SparkEnv, RDD}
+import spark.rdd.BlockRDD
 import spark.storage.StorageLevel
 
 import java.nio.ByteBuffer
@@ -107,7 +110,8 @@ abstract class NetworkReceiver[T: ClassManifest](streamId: Int) extends Serializ
    * This method pushes a block (as iterator of values) into the block manager.
    */
   protected def pushBlock(blockId: String, iterator: Iterator[T], level: StorageLevel) {
-    env.blockManager.put(blockId, iterator, level)
+    val buffer = new ArrayBuffer[T] ++ iterator
+    env.blockManager.put(blockId, buffer.asInstanceOf[ArrayBuffer[Any]], level)
     actor ! ReportBlock(blockId)
   }
 

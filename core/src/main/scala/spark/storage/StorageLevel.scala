@@ -1,7 +1,14 @@
 package spark.storage
 
-import java.io._
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
+/**
+ * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
+ * whether to drop the RDD to disk if it falls out of memory, whether to keep the data in memory
+ * in a serialized format, and whether to replicate the RDD partitions on multiple nodes.
+ * The [[spark.storage.StorageLevel$]] singleton object contains some static constants for
+ * commonly useful storage levels.
+ */
 class StorageLevel(
     var useDisk: Boolean, 
     var useMemory: Boolean,
@@ -67,12 +74,12 @@ object StorageLevel {
   val NONE = new StorageLevel(false, false, false)
   val DISK_ONLY = new StorageLevel(true, false, false)
   val DISK_ONLY_2 = new StorageLevel(true, false, false, 2)
-  val MEMORY_ONLY = new StorageLevel(false, true, false)
-  val MEMORY_ONLY_2 = new StorageLevel(false, true, false, 2)
-  val MEMORY_ONLY_DESER = new StorageLevel(false, true, true)
-  val MEMORY_ONLY_DESER_2 = new StorageLevel(false, true, true, 2)
-  val DISK_AND_MEMORY = new StorageLevel(true, true, false)
-  val DISK_AND_MEMORY_2 = new StorageLevel(true, true, false, 2)
-  val DISK_AND_MEMORY_DESER = new StorageLevel(true, true, true)
-  val DISK_AND_MEMORY_DESER_2 = new StorageLevel(true, true, true, 2)
+  val MEMORY_ONLY = new StorageLevel(false, true, true)
+  val MEMORY_ONLY_2 = new StorageLevel(false, true, true, 2)
+  val MEMORY_ONLY_SER = new StorageLevel(false, true, false)
+  val MEMORY_ONLY_SER_2 = new StorageLevel(false, true, false, 2)
+  val MEMORY_AND_DISK = new StorageLevel(true, true, true)
+  val MEMORY_AND_DISK_2 = new StorageLevel(true, true, true, 2)
+  val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false)
+  val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, 2)
 }

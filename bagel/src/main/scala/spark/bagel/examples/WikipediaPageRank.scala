@@ -8,6 +8,11 @@ import spark.bagel.Bagel._
 
 import scala.xml.{XML,NodeSeq}
 
+/**
+ * Run PageRank on XML Wikipedia dumps from http://wiki.freebase.com/wiki/WEX. Uses the "articles"
+ * files from there, which contains one line per wiki article in a tab-separated format
+ * (http://wiki.freebase.com/wiki/WEX/Documentation#articles).
+ */
 object WikipediaPageRank {
   def main(args: Array[String]) {
     if (args.length < 5) {

@@ -1,6 +1,5 @@
 package spark.examples;
 
-import scala.util.Random;
 import spark.api.java.JavaRDD;
 import spark.api.java.JavaSparkContext;
 import spark.api.java.function.Function;
@@ -9,6 +8,7 @@ import spark.api.java.function.Function2;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.StringTokenizer;
+import java.util.Random;
 
 public class JavaHdfsLR {
 

@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicLong
  * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
  * start(), then submit task sets through the runTasks method.
  */
-class ClusterScheduler(sc: SparkContext)
+private[spark] class ClusterScheduler(val sc: SparkContext)
   extends TaskScheduler
   with Logging {
 
@@ -60,7 +60,6 @@ class ClusterScheduler(sc: SparkContext)
 
   def initialize(context: SchedulerBackend) {
     backend = context
-    createJarServer()
   }
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
@@ -236,32 +235,7 @@ class ClusterScheduler(sc: SparkContext)
   }
 
   override def defaultParallelism() = backend.defaultParallelism()
-
-  // Create a server for all the JARs added by the user to SparkContext.
-  // We first copy the JARs to a temp directory for easier server setup.
-  private def createJarServer() {
-    val jarDir = Utils.createTempDir()
-    logInfo("Temp directory for JARs: " + jarDir)
-    val filenames = ArrayBuffer[String]()
-    // Copy each JAR to a unique filename in the jarDir
-    for ((path, index) <- sc.jars.zipWithIndex) {
-      val file = new File(path)
-      if (file.exists) {
-        val filename = index + "_" + file.getName
-        Utils.copyFile(file, new File(jarDir, filename))
-        filenames += filename
-      }
-    }
-    // Create the server
-    jarServer = new HttpServer(jarDir)
-    jarServer.start()
-    // Build up the jar URI list
-    val serverUri = jarServer.uri
-    jarUris = filenames.map(f => serverUri + "/" + f).mkString(",")
-    System.setProperty("spark.jar.uris", jarUris)
-    logInfo("JAR server started at " + serverUri)
-  }
-
+  
   // Check for speculatable tasks in all our active jobs.
   def checkSpeculatableTasks() {
     var shouldRevive = false

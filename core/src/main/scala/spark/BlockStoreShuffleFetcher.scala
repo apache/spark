@@ -1,52 +1,43 @@
 package spark
 
-import java.io.EOFException
-import java.net.URL
-
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import spark.storage.BlockException
 import spark.storage.BlockManagerId
 
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
-
-
-class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
-  def fetch[K, V](shuffleId: Int, reduceId: Int, func: (K, V) => Unit) {
+private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
+  override def fetch[K, V](shuffleId: Int, reduceId: Int) = {
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
     val blockManager = SparkEnv.get.blockManager
     
     val startTime = System.currentTimeMillis
-    val addresses = SparkEnv.get.mapOutputTracker.getServerAddresses(shuffleId)
+    val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
     logDebug("Fetching map output location for shuffle %d, reduce %d took %d ms".format(
       shuffleId, reduceId, System.currentTimeMillis - startTime))
     
-    val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[Int]]
-    for ((address, index) <- addresses.zipWithIndex) {
-      splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += index
+    val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
+    for (((address, size), index) <- statuses.zipWithIndex) {
+      splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
     }
 
-    val blocksByAddress: Seq[(BlockManagerId, Seq[String])] = splitsByAddress.toSeq.map {
+    val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])] = splitsByAddress.toSeq.map {
       case (address, splits) =>
-        (address, splits.map(i => "shuffleid_%d_%d_%d".format(shuffleId, i, reduceId)))
+        (address, splits.map(s => ("shuffle_%d_%d_%d".format(shuffleId, s._1, reduceId), s._2)))
     }
 
-    for ((blockId, blockOption) <- blockManager.getMultiple(blocksByAddress)) {
+    def unpackBlock(blockPair: (String, Option[Iterator[Any]])) : Iterator[(K, V)] = {
+      val blockId = blockPair._1
+      val blockOption = blockPair._2
       blockOption match {
         case Some(block) => {
-          val values = block
-          for(value <- values) {
-            val v = value.asInstanceOf[(K, V)]
-            func(v._1, v._2)
-          }
+          block.asInstanceOf[Iterator[(K, V)]]
         }
         case None => {
-          val regex = "shuffleid_([0-9]*)_([0-9]*)_([0-9]*)".r
+          val regex = "shuffle_([0-9]*)_([0-9]*)_([0-9]*)".r
           blockId match {
-            case regex(shufId, mapId, reduceId) =>
-              val addr = addresses(mapId.toInt)
-              throw new FetchFailedException(addr, shufId.toInt, mapId.toInt, reduceId.toInt, null)
+            case regex(shufId, mapId, _) =>
+              val address = statuses(mapId.toInt)._1
+              throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, null)
             case _ =>
               throw new SparkException(
                 "Failed to get block " + blockId + ", which is not a shuffle block")
@@ -54,8 +45,6 @@ class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
         }
       }
     }
-
-    logDebug("Fetching and merging outputs of shuffle %d, reduce %d took %d ms".format(
-      shuffleId, reduceId, System.currentTimeMillis - startTime))
+    blockManager.getMultiple(blocksByAddress).flatMap(unpackBlock)
   }
 }

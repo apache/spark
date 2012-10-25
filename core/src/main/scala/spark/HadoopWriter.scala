@@ -16,11 +16,14 @@ import spark.Logging
 import spark.SerializableWritable
 
 /**
- * Saves an RDD using a Hadoop OutputFormat as specified by a JobConf. The JobConf should also 
- * contain an output key class, an output value class, a filename to write to, etc exactly like in 
- * a Hadoop job.
+ * Internal helper class that saves an RDD using a Hadoop OutputFormat. This is only public
+ * because we need to access this class from the `spark` package to use some package-private Hadoop
+ * functions, but this class should not be used directly by users.
+ *
+ * Saves the RDD using a JobConf, which should contain an output key class, an output value class,
+ * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
-class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializable {
+class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRedUtil with Serializable {
   
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
@@ -42,7 +45,7 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializabl
     setConfParams()
     
     val jCtxt = getJobContext() 
-    getOutputCommitter().setupJob(jCtxt) 		
+    getOutputCommitter().setupJob(jCtxt)
   }
 
 
@@ -126,14 +129,14 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with Serializabl
 
   private def getJobContext(): JobContext = {
     if (jobContext == null) { 
-      jobContext = new JobContext(conf.value, jID.value)
+      jobContext = newJobContext(conf.value, jID.value)
     }
     return jobContext
   }
 
   private def getTaskContext(): TaskAttemptContext = {
     if (taskContext == null) {
-      taskContext =  new TaskAttemptContext(conf.value, taID.value)
+      taskContext =  newTaskAttemptContext(conf.value, taID.value)
     }
     return taskContext
   }

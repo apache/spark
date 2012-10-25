@@ -2,9 +2,9 @@ package spark
 
 import java.util.concurrent.atomic.AtomicInteger
 
-sealed trait CachePutResponse
-case class CachePutSuccess(size: Long) extends CachePutResponse
-case class CachePutFailure() extends CachePutResponse
+private[spark] sealed trait CachePutResponse
+private[spark] case class CachePutSuccess(size: Long) extends CachePutResponse
+private[spark] case class CachePutFailure() extends CachePutResponse
 
 /**
  * An interface for caches in Spark, to allow for multiple implementations. Caches are used to store
@@ -22,7 +22,7 @@ case class CachePutFailure() extends CachePutResponse
  * This abstract class handles the creation of key spaces, so that subclasses need only deal with
  * keys that are unique across modules.
  */
-abstract class Cache {
+private[spark] abstract class Cache {
   private val nextKeySpaceId = new AtomicInteger(0)
   private def newKeySpaceId() = nextKeySpaceId.getAndIncrement()
 
@@ -52,7 +52,7 @@ abstract class Cache {
 /**
  * A key namespace in a Cache.
  */
-class KeySpace(cache: Cache, val keySpaceId: Int) {
+private[spark] class KeySpace(cache: Cache, val keySpaceId: Int) {
   def get(datasetId: Any, partition: Int): Any =
     cache.get((keySpaceId, datasetId), partition)
 

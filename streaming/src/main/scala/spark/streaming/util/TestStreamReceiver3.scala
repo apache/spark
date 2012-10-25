@@ -171,11 +171,11 @@ extends Thread with Logging {
           logInfo("Pushing block")
           val startTime = System.currentTimeMillis
 
-          val bytes = blockManager.dataSerialize(block.data.toIterator)
+          val bytes = blockManager.dataSerialize("rdd_", block.data.toIterator) // TODO: Will this be an RDD block?
           val finishTime = System.currentTimeMillis
           logInfo(block + " serialization delay is " + (finishTime - startTime) / 1000.0 + " s")
           
-          blockManager.putBytes(block.id.toString, bytes, StorageLevel.DISK_AND_MEMORY_2)
+          blockManager.putBytes(block.id.toString, bytes, StorageLevel.MEMORY_AND_DISK_SER_2)
           /*blockManager.putBytes(block.id.toString, bytes, StorageLevel.DISK_AND_MEMORY_DESER_2)*/
           /*blockManager.put(block.id.toString, block.data.toIterator, StorageLevel.DISK_AND_MEMORY_DESER)*/
           /*blockManager.put(block.id.toString, block.data.toIterator, StorageLevel.DISK_AND_MEMORY)*/

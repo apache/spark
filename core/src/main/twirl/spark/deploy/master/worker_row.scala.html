@@ -1,0 +1,11 @@
+@(worker: spark.deploy.master.WorkerInfo)
+
+<tr>
+  <td>
+    <a href="http://@worker.host:@worker.webUiPort">@worker.id</href>
+  </td>
+  <td>@{worker.host}:@{worker.port}</td>
+  <td>@worker.cores (@worker.coresUsed Used)</td>
+  <td>@{spark.Utils.memoryMegabytesToString(worker.memory)}
+     (@{spark.Utils.memoryMegabytesToString(worker.memoryUsed)} Used)</td>
+</tr>

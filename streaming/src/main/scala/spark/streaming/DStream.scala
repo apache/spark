@@ -4,6 +4,7 @@ import spark.streaming.StreamingContext._
 
 import spark._
 import spark.SparkContext._
+import spark.rdd._
 import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
@@ -82,7 +83,7 @@ extends Serializable with Logging {
   // Set caching level for the RDDs created by this DStream
   def persist(newLevel: StorageLevel): DStream[T] = persist(newLevel, StorageLevel.NONE, null)
 
-  def persist(): DStream[T] = persist(StorageLevel.MEMORY_ONLY_DESER)
+  def persist(): DStream[T] = persist(StorageLevel.MEMORY_ONLY)
   
   // Turn on the default caching level for this RDD
   def cache(): DStream[T] = persist()

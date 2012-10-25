@@ -1,7 +1,10 @@
 package spark
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.ShouldMatchers
 import org.scalatest.prop.Checkers
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
@@ -9,21 +12,22 @@ import org.scalacheck.Prop._
 
 import com.google.common.io.Files
 
-import scala.collection.mutable.ArrayBuffer
+import spark.rdd.ShuffledRDD
+import spark.SparkContext._
 
-import SparkContext._
+class ShuffleSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
 
-class ShuffleSuite extends FunSuite with BeforeAndAfter {
-  
   var sc: SparkContext = _
-  
+
   after {
     if (sc != null) {
       sc.stop()
       sc = null
     }
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
-  
+
   test("groupByKey") {
     sc = new SparkContext("local", "test")
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)))
@@ -56,7 +60,7 @@ class ShuffleSuite extends FunSuite with BeforeAndAfter {
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
   }
-  
+
   test("groupByKey with many output partitions") {
     sc = new SparkContext("local", "test")
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)))
@@ -66,6 +70,22 @@ class ShuffleSuite extends FunSuite with BeforeAndAfter {
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
+  }
+
+  test("groupByKey with compression") {
+    try {
+      System.setProperty("spark.blockManager.compress", "true")
+      sc = new SparkContext("local", "test")
+      val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
+      val groups = pairs.groupByKey(4).collect()
+      assert(groups.size === 2)
+      val valuesFor1 = groups.find(_._1 == 1).get._2
+      assert(valuesFor1.toList.sorted === List(1, 2, 3))
+      val valuesFor2 = groups.find(_._1 == 2).get._2
+      assert(valuesFor2.toList.sorted === List(1))
+    } finally {
+      System.setProperty("spark.blockManager.compress", "false")
+    }
   }
 
   test("reduceByKey") {
@@ -186,7 +206,7 @@ class ShuffleSuite extends FunSuite with BeforeAndAfter {
       (4, (ArrayBuffer(), ArrayBuffer('w')))
     ))
   }
-  
+
   test("zero-partition RDD") {
     sc = new SparkContext("local", "test")
     val emptyDir = Files.createTempDir()
@@ -194,6 +214,13 @@ class ShuffleSuite extends FunSuite with BeforeAndAfter {
     assert(file.splits.size == 0)
     assert(file.collect().toList === Nil)
     // Test that a shuffle on the file works, because this used to be a bug
-    assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)    
+    assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
+  }
+}
+
+object ShuffleSuite {
+  def mergeCombineException(x: Int, y: Int): Int = {
+    throw new SparkException("Exception for map-side combine.")
+    x + y
   }
 }

@@ -18,7 +18,7 @@ class InputStreamsSuite extends TestSuiteBase {
     val ssc = new StreamingContext(master, framework)
     ssc.setBatchDuration(batchDuration)
 
-    val networkStream = ssc.networkTextStream("localhost", serverPort, StorageLevel.DISK_AND_MEMORY)
+    val networkStream = ssc.networkTextStream("localhost", serverPort, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String  ]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     ssc.registerOutputStream(outputStream)

@@ -2,8 +2,10 @@ package spark
 
 import org.scalatest.FunSuite
 import org.scalatest.PrivateMethodTester
+import org.scalatest.matchers.ShouldMatchers
 
-class BoundedMemoryCacheSuite extends FunSuite with PrivateMethodTester {
+// TODO: Replace this with a test of MemoryStore
+class BoundedMemoryCacheSuite extends FunSuite with PrivateMethodTester with ShouldMatchers {
   test("constructor test") {
     val cache = new BoundedMemoryCache(60)
     expect(60)(cache.getCapacity)
@@ -22,15 +24,21 @@ class BoundedMemoryCacheSuite extends FunSuite with PrivateMethodTester {
         logInfo("Dropping key (%s, %d) of size %d to make space".format(datasetId, partition, entry.size))
       }
     }
+
+    // NOTE: The String class definition changed in JDK 7 to exclude the int fields count and length
+    // This means that the size of strings will be lesser by 8 bytes in JDK 7 compared to JDK 6.
+    // http://mail.openjdk.java.net/pipermail/core-libs-dev/2012-May/010257.html
+    // Work around to check for either.
+
     //should be OK
-    expect(CachePutSuccess(56))(cache.put("1", 0, "Meh"))
+    cache.put("1", 0, "Meh") should (equal (CachePutSuccess(56)) or equal (CachePutSuccess(48)))
 
     //we cannot add this to cache (there is not enough space in cache) & we cannot evict the only value from
     //cache because it's from the same dataset
     expect(CachePutFailure())(cache.put("1", 1, "Meh"))
 
     //should be OK, dataset '1' can be evicted from cache
-    expect(CachePutSuccess(56))(cache.put("2", 0, "Meh"))
+    cache.put("2", 0, "Meh") should (equal (CachePutSuccess(56)) or equal (CachePutSuccess(48)))
 
     //should fail, cache should obey it's capacity
     expect(CachePutFailure())(cache.put("3", 0, "Very_long_and_useless_string"))

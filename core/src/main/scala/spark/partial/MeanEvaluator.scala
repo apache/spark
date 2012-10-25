@@ -7,7 +7,7 @@ import spark.util.StatCounter
 /**
  * An ApproximateEvaluator for means.
  */
-class MeanEvaluator(totalOutputs: Int, confidence: Double)
+private[spark] class MeanEvaluator(totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[StatCounter, BoundedDouble] {
 
   var outputsMerged = 0

@@ -19,41 +19,71 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def rdd: RDD[T]
 
+  /** Set of partitions in this RDD. */
   def splits: JList[Split] = new java.util.ArrayList(rdd.splits.toSeq)
 
+  /** The [[spark.SparkContext]] that this RDD was created on. */
   def context: SparkContext = rdd.context
-
+  
+  /** A unique ID for this RDD (within its SparkContext). */
   def id: Int = rdd.id
 
+  /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel: StorageLevel = rdd.getStorageLevel
 
+  /**
+   * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
+   * This should ''not'' be called by users directly, but is available for implementors of custom
+   * subclasses of RDD.
+   */
   def iterator(split: Split): java.util.Iterator[T] = asJavaIterator(rdd.iterator(split))
 
   // Transformations (return a new RDD)
 
+  /**
+   * Return a new RDD by applying a function to all elements of this RDD.
+   */
   def map[R](f: JFunction[T, R]): JavaRDD[R] =
     new JavaRDD(rdd.map(f)(f.returnType()))(f.returnType())
 
+  /**
+   * Return a new RDD by applying a function to all elements of this RDD.
+   */
   def map[R](f: DoubleFunction[T]): JavaDoubleRDD =
     new JavaDoubleRDD(rdd.map(x => f(x).doubleValue()))
 
+  /**
+   * Return a new RDD by applying a function to all elements of this RDD.
+   */
   def map[K2, V2](f: PairFunction[T, K2, V2]): JavaPairRDD[K2, V2] = {
     def cm = implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[Tuple2[K2, V2]]]
     new JavaPairRDD(rdd.map(f)(cm))(f.keyType(), f.valueType())
   }
 
+  /**
+   *  Return a new RDD by first applying a function to all elements of this
+   *  RDD, and then flattening the results.
+   */
   def flatMap[U](f: FlatMapFunction[T, U]): JavaRDD[U] = {
     import scala.collection.JavaConverters._
     def fn = (x: T) => f.apply(x).asScala
     JavaRDD.fromRDD(rdd.flatMap(fn)(f.elementType()))(f.elementType())
   }
 
+  /**
+   *  Return a new RDD by first applying a function to all elements of this
+   *  RDD, and then flattening the results.
+   */
   def flatMap(f: DoubleFlatMapFunction[T]): JavaDoubleRDD = {
     import scala.collection.JavaConverters._
     def fn = (x: T) => f.apply(x).asScala
     new JavaDoubleRDD(rdd.flatMap(fn).map((x: java.lang.Double) => x.doubleValue()))
   }
 
+  /**
+   *  Return a new RDD by first applying a function to all elements of this
+   *  RDD, and then flattening the results.
+   */
   def flatMap[K, V](f: PairFlatMapFunction[T, K, V]): JavaPairRDD[K, V] = {
     import scala.collection.JavaConverters._
     def fn = (x: T) => f.apply(x).asScala
@@ -61,29 +91,50 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     JavaPairRDD.fromRDD(rdd.flatMap(fn)(cm))(f.keyType(), f.valueType())
   }
 
+  /**
+   * Return a new RDD by applying a function to each partition of this RDD.
+   */
   def mapPartitions[U](f: FlatMapFunction[java.util.Iterator[T], U]): JavaRDD[U] = {
     def fn = (x: Iterator[T]) => asScalaIterator(f.apply(asJavaIterator(x)).iterator())
     JavaRDD.fromRDD(rdd.mapPartitions(fn)(f.elementType()))(f.elementType())
   }
 
+  
+  /**
+   * Return a new RDD by applying a function to each partition of this RDD.
+   */
   def mapPartitions(f: DoubleFlatMapFunction[java.util.Iterator[T]]): JavaDoubleRDD = {
     def fn = (x: Iterator[T]) => asScalaIterator(f.apply(asJavaIterator(x)).iterator())
     new JavaDoubleRDD(rdd.mapPartitions(fn).map((x: java.lang.Double) => x.doubleValue()))
   }
 
+  /**
+   * Return a new RDD by applying a function to each partition of this RDD.
+   */
   def mapPartitions[K, V](f: PairFlatMapFunction[java.util.Iterator[T], K, V]):
   JavaPairRDD[K, V] = {
     def fn = (x: Iterator[T]) => asScalaIterator(f.apply(asJavaIterator(x)).iterator())
     JavaPairRDD.fromRDD(rdd.mapPartitions(fn))(f.keyType(), f.valueType())
   }
 
+  /**
+   * Return an RDD created by coalescing all elements within each partition into an array.
+   */
   def glom(): JavaRDD[JList[T]] =
     new JavaRDD(rdd.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
 
+  /**
+   * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
+   * elements (a, b) where a is in `this` and b is in `other`.
+   */
   def cartesian[U](other: JavaRDDLike[U, _]): JavaPairRDD[T, U] =
     JavaPairRDD.fromRDD(rdd.cartesian(other.rdd)(other.classManifest))(classManifest,
       other.classManifest)
 
+  /**
+   * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
+   * mapping to that key.
+   */
   def groupBy[K](f: JFunction[T, K]): JavaPairRDD[K, JList[T]] = {
     implicit val kcm: ClassManifest[K] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[K]]
@@ -92,6 +143,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f)(f.returnType)))(kcm, vcm)
   }
 
+  /**
+   * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
+   * mapping to that key.
+   */
   def groupBy[K](f: JFunction[T, K], numSplits: Int): JavaPairRDD[K, JList[T]] = {
     implicit val kcm: ClassManifest[K] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[K]]
@@ -100,56 +155,114 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f, numSplits)(f.returnType)))(kcm, vcm)
   }
 
+  /**
+   * Return an RDD created by piping elements to a forked external process.
+   */
   def pipe(command: String): JavaRDD[String] = rdd.pipe(command)
 
+  /**
+   * Return an RDD created by piping elements to a forked external process.
+   */
   def pipe(command: JList[String]): JavaRDD[String] =
     rdd.pipe(asScalaBuffer(command))
 
+  /**
+   * Return an RDD created by piping elements to a forked external process.
+   */
   def pipe(command: JList[String], env: java.util.Map[String, String]): JavaRDD[String] =
     rdd.pipe(asScalaBuffer(command), mapAsScalaMap(env))
 
   // Actions (launch a job to return a value to the user program)
-
+    
+  /**
+   * Applies a function f to all elements of this RDD.
+   */
   def foreach(f: VoidFunction[T]) {
     val cleanF = rdd.context.clean(f)
     rdd.foreach(cleanF)
   }
 
+  /**
+   * Return an array that contains all of the elements in this RDD.
+   */
   def collect(): JList[T] = {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[T] = rdd.collect().toSeq
     new java.util.ArrayList(arr)
   }
-
+  
+  /**
+   * Reduces the elements of this RDD using the specified associative binary operator.
+   */
   def reduce(f: JFunction2[T, T, T]): T = rdd.reduce(f)
 
+  /**
+   * Aggregate the elements of each partition, and then the results for all the partitions, using a
+   * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to 
+   * modify t1 and return it as its result value to avoid object allocation; however, it should not
+   * modify t2.
+   */
   def fold(zeroValue: T)(f: JFunction2[T, T, T]): T =
     rdd.fold(zeroValue)(f)
 
+  /**
+   * Aggregate the elements of each partition, and then the results for all the partitions, using
+   * given combine functions and a neutral "zero value". This function can return a different result
+   * type, U, than the type of this RDD, T. Thus, we need one operation for merging a T into an U
+   * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
+   * allowed to modify and return their first argument instead of creating a new U to avoid memory
+   * allocation.
+   */
   def aggregate[U](zeroValue: U)(seqOp: JFunction2[U, T, U],
     combOp: JFunction2[U, U, U]): U =
     rdd.aggregate(zeroValue)(seqOp, combOp)(seqOp.returnType)
 
+  /**
+   * Return the number of elements in the RDD.
+   */
   def count(): Long = rdd.count()
 
+  /**
+   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * within a timeout, even if not all tasks have finished.
+   */
   def countApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout, confidence)
 
+  /**
+   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * within a timeout, even if not all tasks have finished.
+   */
   def countApprox(timeout: Long): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout)
 
+  /**
+   * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
+   * combine step happens locally on the master, equivalent to running a single reduce task.
+   */
   def countByValue(): java.util.Map[T, java.lang.Long] =
     mapAsJavaMap(rdd.countByValue().map((x => (x._1, new lang.Long(x._2)))))
 
+  /**
+   * (Experimental) Approximate version of countByValue().
+   */
   def countByValueApprox(
     timeout: Long,
     confidence: Double
     ): PartialResult[java.util.Map[T, BoundedDouble]] =
     rdd.countByValueApprox(timeout, confidence).map(mapAsJavaMap)
 
+  /**
+   * (Experimental) Approximate version of countByValue().
+   */
   def countByValueApprox(timeout: Long): PartialResult[java.util.Map[T, BoundedDouble]] =
     rdd.countByValueApprox(timeout).map(mapAsJavaMap)
 
+  /**
+   * Take the first num elements of the RDD. This currently scans the partitions *one by one*, so
+   * it will be slow if a lot of partitions are required. In that case, use collect() to get the
+   * whole RDD instead.
+   */
   def take(num: Int): JList[T] = {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[T] = rdd.take(num).toSeq
@@ -162,9 +275,18 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     new java.util.ArrayList(arr)
   }
 
+  /**
+   * Return the first element in this RDD.
+   */
   def first(): T = rdd.first()
 
+  /**
+   * Save this RDD as a text file, using string representations of elements.
+   */
   def saveAsTextFile(path: String) = rdd.saveAsTextFile(path)
 
+  /**
+   * Save this RDD as a SequenceFile of serialized objects.
+   */
   def saveAsObjectFile(path: String) = rdd.saveAsObjectFile(path)
 }

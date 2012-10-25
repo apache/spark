@@ -41,7 +41,7 @@ object WordCountRaw {
 
     val windowedCounts = union.mapPartitions(splitAndCountPartitions)
       .reduceByKeyAndWindow(add _, subtract _, Seconds(30), Milliseconds(batchMs), reduces)
-    windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, StorageLevel.MEMORY_ONLY_DESER_2,
+    windowedCounts.persist(StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY_2,
       Milliseconds(chkptMs))
     //windowedCounts.print()    // TODO: something else?
     windowedCounts.foreachRDD(r => println("Element count: " + r.count()))

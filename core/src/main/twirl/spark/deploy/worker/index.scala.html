@@ -1,0 +1,43 @@
+@(worker: spark.deploy.WorkerState)
+
+@spark.deploy.common.html.layout(title = "Spark Worker on " + worker.uri) {
+      
+  <!-- Worker Details -->
+  <div class="row">
+    <div class="span12">
+      <ul class="unstyled">
+        <li><strong>ID:</strong> @worker.workerId</li>
+        <li><strong>
+          Master URL:</strong> @worker.masterUrl 
+          (WebUI at <a href="@worker.masterWebUiUrl">@worker.masterWebUiUrl</a>)
+        </li>
+        <li><strong>Cores:</strong> @worker.cores (@worker.coresUsed Used)</li>
+        <li><strong>Memory:</strong> @{spark.Utils.memoryMegabytesToString(worker.memory)}
+          (@{spark.Utils.memoryMegabytesToString(worker.memoryUsed)} Used)</li>
+      </ul>
+    </div>
+  </div>
+
+  <hr/>
+
+  <!-- Running Executors -->
+  <div class="row">
+    <div class="span12">
+      <h3> Running Executors </h3>
+      <br/>
+      @executors_table(worker.executors)
+    </div>
+  </div>
+
+  <hr/>
+
+  <!-- Finished Executors  -->
+  <div class="row">
+    <div class="span12">
+      <h3> Finished Executors </h3>
+      <br/>
+      @executors_table(worker.finishedExecutors)
+    </div>
+  </div>
+      
+}

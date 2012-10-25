@@ -1,6 +1,7 @@
 package spark.streaming
 
-import spark.{CoGroupedRDD, RDD, Partitioner}
+import spark.{RDD, Partitioner}
+import spark.rdd.CoGroupedRDD
 
 class CoGroupedDStream[K : ClassManifest](
     parents: Seq[DStream[(_, _)]],

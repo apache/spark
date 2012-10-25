@@ -10,6 +10,7 @@ import cc.spray.directives._
 import cc.spray.typeconversion.TwirlSupport._
 import spark.deploy._
 
+private[spark]
 class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/master/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
@@ -22,7 +23,7 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
         completeWith {
           val future = master ? RequestMasterState
           future.map { 
-            masterState => masterui.html.index.render(masterState.asInstanceOf[MasterState])
+            masterState => spark.deploy.master.html.index.render(masterState.asInstanceOf[MasterState])
           }
         }
       } ~
@@ -36,7 +37,7 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
               // A bit ugly an inefficient, but we won't have a number of jobs 
               // so large that it will make a significant difference.
               (masterState.activeJobs ::: masterState.completedJobs).find(_.id == jobId) match {
-                case Some(job) => masterui.html.job_details.render(job)
+                case Some(job) => spark.deploy.master.html.job_details.render(job)
                 case _ => null
               }
             }

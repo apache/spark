@@ -16,6 +16,7 @@ import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClient
  * Akka. These may be executed in a variety of ways, such as Mesos tasks for the coarse-grained
  * Mesos mode or standalone processes for Spark's standalone deploy mode (spark.deploy.*).
  */
+private[spark]
 class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: ActorSystem)
   extends SchedulerBackend with Logging {
 
@@ -99,7 +100,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
     // Remove a disconnected slave from the cluster
     def removeSlave(slaveId: String) {
-      logWarning("Slave " + slaveId + " disconnected, so removing it")
+      logInfo("Slave " + slaveId + " disconnected, so removing it")
       val numCores = freeCores(slaveId)
       actorToSlaveId -= slaveActor(slaveId)
       addressToSlaveId -= slaveAddress(slaveId)
@@ -149,6 +150,6 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
   def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
 }
 
-object StandaloneSchedulerBackend {
+private[spark] object StandaloneSchedulerBackend {
   val ACTOR_NAME = "StandaloneScheduler"
 }
