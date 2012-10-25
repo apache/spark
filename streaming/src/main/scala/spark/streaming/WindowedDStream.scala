@@ -1,7 +1,7 @@
 package spark.streaming
 
 import spark.RDD
-import spark.UnionRDD
+import spark.rdd.UnionRDD
 
 
 class WindowedDStream[T: ClassManifest](

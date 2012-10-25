@@ -3,8 +3,8 @@ package spark.streaming
 import spark.streaming.StreamingContext._
 
 import spark.RDD
-import spark.UnionRDD
-import spark.CoGroupedRDD
+import spark.rdd.UnionRDD
+import spark.rdd.CoGroupedRDD
 import spark.Partitioner
 import spark.SparkContext._
 import spark.storage.StorageLevel

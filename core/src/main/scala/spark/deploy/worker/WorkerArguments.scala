@@ -8,13 +8,14 @@ import java.lang.management.ManagementFactory
 /**
  * Command-line parser for the master.
  */
-class WorkerArguments(args: Array[String]) {
+private[spark] class WorkerArguments(args: Array[String]) {
   var ip = Utils.localIpAddress()
   var port = 0
   var webUiPort = 8081
   var cores = inferDefaultCores()
   var memory = inferDefaultMemory()
   var master: String = null
+  var workDir: String = null
   
   // Check for settings in environment variables 
   if (System.getenv("SPARK_WORKER_PORT") != null) {
@@ -28,6 +29,9 @@ class WorkerArguments(args: Array[String]) {
   }
   if (System.getenv("SPARK_WORKER_WEBUI_PORT") != null) {
     webUiPort = System.getenv("SPARK_WORKER_WEBUI_PORT").toInt
+  }
+  if (System.getenv("SPARK_WORKER_DIR") != null) {
+    workDir = System.getenv("SPARK_WORKER_DIR")
   }
   
   parse(args.toList)
@@ -49,6 +53,10 @@ class WorkerArguments(args: Array[String]) {
       memory = value
       parse(tail)
 
+    case ("--work-dir" | "-d") :: value :: tail =>
+      workDir = value
+      parse(tail)
+      
     case "--webui-port" :: IntParam(value) :: tail =>
       webUiPort = value
       parse(tail)
@@ -77,13 +85,14 @@ class WorkerArguments(args: Array[String]) {
    */
   def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "Usage: spark-worker [options] <master>\n" +
+      "Usage: Worker [options] <master>\n" +
       "\n" +
       "Master must be a URL of the form spark://hostname:port\n" +
       "\n" +
       "Options:\n" +
       "  -c CORES, --cores CORES  Number of cores to use\n" +
       "  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)\n" +
+      "  -d DIR, --work-dir DIR   Directory to run jobs in (default: SPARK_HOME/work)\n" +
       "  -i IP, --ip IP           IP address or DNS name to listen on\n" +
       "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
       "  --webui-port PORT        Port for web UI (default: 8081)")

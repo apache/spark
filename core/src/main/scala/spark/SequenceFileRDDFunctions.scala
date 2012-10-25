@@ -23,19 +23,21 @@ import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.Text
 
-import SparkContext._
+import spark.SparkContext._
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,
  * through an implicit conversion. Note that this can't be part of PairRDDFunctions because
  * we need more implicit parameters to convert our keys and values to Writable.
+ *
+ * Users should import `spark.SparkContext._` at the top of their program to use these functions.
  */
 class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : ClassManifest](
     self: RDD[(K, V)])
   extends Logging
   with Serializable {
   
-  def getWritableClass[T <% Writable: ClassManifest](): Class[_ <: Writable] = {
+  private def getWritableClass[T <% Writable: ClassManifest](): Class[_ <: Writable] = {
     val c = {
       if (classOf[Writable].isAssignableFrom(classManifest[T].erasure)) { 
         classManifest[T].erasure
@@ -47,6 +49,13 @@ class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : Cla
     c.asInstanceOf[Class[_ <: Writable]]
   }
 
+  /**
+   * Output the RDD as a Hadoop SequenceFile using the Writable types we infer from the RDD's key
+   * and value types. If the key or value are Writable, then we use their classes directly;
+   * otherwise we map primitive types such as Int and Double to IntWritable, DoubleWritable, etc,
+   * byte arrays to BytesWritable, and Strings to Text. The `path` can be on any Hadoop-supported
+   * file system.
+   */
   def saveAsSequenceFile(path: String) {
     def anyToWritable[U <% Writable](u: U): Writable = u
 

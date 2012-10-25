@@ -1,9 +1,9 @@
 package spark.streaming
 
 import spark.RDD
-import spark.BlockRDD
+import spark.rdd.BlockRDD
 import spark.Partitioner
-import spark.MapPartitionsRDD
+import spark.rdd.MapPartitionsRDD
 import spark.SparkContext._
 import spark.storage.StorageLevel
 

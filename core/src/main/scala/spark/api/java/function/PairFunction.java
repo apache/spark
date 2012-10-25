@@ -7,6 +7,9 @@ import scala.runtime.AbstractFunction1;
 
 import java.io.Serializable;
 
+/**
+ * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.
+ */
 // PairFunction does not extend Function because some UDF functions, like map,
 // are overloaded for both Function and PairFunction.
 public abstract class PairFunction<T, K, V>

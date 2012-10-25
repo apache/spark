@@ -100,8 +100,8 @@ object WordCount2 {
     val windowedCounts = sentences
       .mapPartitions(splitAndCountPartitions)
       .reduceByKeyAndWindow(add _, subtract _, Seconds(30), batchDuration, reduceTasks.toInt)
-    windowedCounts.persist(StorageLevel.MEMORY_ONLY_DESER, 
-      StorageLevel.MEMORY_ONLY_DESER_2,
+    windowedCounts.persist(StorageLevel.MEMORY_ONLY, 
+      StorageLevel.MEMORY_ONLY_2,
       //new StorageLevel(false, true, true, 3),
       Milliseconds(chkptMillis.toLong))
     windowedCounts.foreachRDD(r => println("Element count: " + r.count()))

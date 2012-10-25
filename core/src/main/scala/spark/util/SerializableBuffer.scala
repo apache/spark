@@ -8,6 +8,7 @@ import java.nio.channels.Channels
  * A wrapper around a java.nio.ByteBuffer that is serializable through Java serialization, to make
  * it easier to pass ByteBuffers in case class messages.
  */
+private[spark]
 class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable {
   def value = buffer
 

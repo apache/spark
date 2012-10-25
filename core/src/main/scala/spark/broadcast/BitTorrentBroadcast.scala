@@ -11,14 +11,17 @@ import scala.math
 import spark._
 import spark.storage.StorageLevel
 
-class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean)
-extends Broadcast[T] with Logging with Serializable {
+private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+  extends Broadcast[T](id)
+  with Logging
+  with Serializable {
 
   def value = value_
 
+  def blockId: String = "broadcast_" + id
+
   MultiTracker.synchronized {
-    SparkEnv.get.blockManager.putSingle(
-      uuid.toString, value_, StorageLevel.MEMORY_ONLY_DESER, false)
+    SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
   }
 
   @transient var arrayOfBlocks: Array[BroadcastBlock] = null
@@ -45,7 +48,7 @@ extends Broadcast[T] with Logging with Serializable {
   // Used only in Workers
   @transient var ttGuide: TalkToGuide = null
 
-  @transient var hostAddress = Utils.localIpAddress
+  @transient var hostAddress = Utils.localIpAddress()
   @transient var listenPort = -1
   @transient var guidePort = -1
 
@@ -53,7 +56,7 @@ extends Broadcast[T] with Logging with Serializable {
 
   // Must call this after all the variables have been created/initialized
   if (!isLocal) {
-    sendBroadcast
+    sendBroadcast()
   }
 
   def sendBroadcast() {
@@ -106,20 +109,22 @@ extends Broadcast[T] with Logging with Serializable {
     listOfSources += masterSource
 
     // Register with the Tracker
-    MultiTracker.registerBroadcast(uuid,
+    MultiTracker.registerBroadcast(id,
       SourceInfo(hostAddress, guidePort, totalBlocks, totalBytes))
   }
 
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     MultiTracker.synchronized {
-      SparkEnv.get.blockManager.getSingle(uuid.toString) match {
-        case Some(x) => x.asInstanceOf[T]
-        case None => {
-          logInfo("Started reading broadcast variable " + uuid)
+      SparkEnv.get.blockManager.getSingle(blockId) match {
+        case Some(x) =>
+          value_ = x.asInstanceOf[T]
+
+        case None =>
+          logInfo("Started reading broadcast variable " + id)
           // Initializing everything because Master will only send null/0 values
           // Only the 1st worker in a node can be here. Others will get from cache
-          initializeWorkerVariables
+          initializeWorkerVariables()
 
           logInfo("Local host address: " + hostAddress)
 
@@ -131,18 +136,17 @@ extends Broadcast[T] with Logging with Serializable {
 
           val start = System.nanoTime
 
-          val receptionSucceeded = receiveBroadcast(uuid)
+          val receptionSucceeded = receiveBroadcast(id)
           if (receptionSucceeded) {
             value_ = MultiTracker.unBlockifyObject[T](arrayOfBlocks, totalBytes, totalBlocks)
             SparkEnv.get.blockManager.putSingle(
-              uuid.toString, value_, StorageLevel.MEMORY_ONLY_DESER, false)
+              blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
           }  else {
-            logError("Reading Broadcasted variable " + uuid + " failed")
+            logError("Reading broadcast variable " + id + " failed")
           }
 
           val time = (System.nanoTime - start) / 1e9
-          logInfo("Reading Broadcasted variable " + uuid + " took " + time + " s")
-        }
+          logInfo("Reading broadcast variable " + id + " took " + time + " s")
       }
     }
   }
@@ -254,8 +258,8 @@ extends Broadcast[T] with Logging with Serializable {
     }
   }
 
-  def receiveBroadcast(variableUUID: UUID): Boolean = {
-    val gInfo = MultiTracker.getGuideInfo(variableUUID)
+  def receiveBroadcast(variableID: Long): Boolean = {
+    val gInfo = MultiTracker.getGuideInfo(variableID)
 
     if (gInfo.listenPort == SourceInfo.TxOverGoToDefault) {
       return false
@@ -307,9 +311,11 @@ extends Broadcast[T] with Logging with Serializable {
       var threadPool = Utils.newDaemonFixedThreadPool(MultiTracker.MaxChatSlots)
 
       while (hasBlocks.get < totalBlocks) {
-        var numThreadsToCreate =
-          math.min(listOfSources.size, MultiTracker.MaxChatSlots) -
+        var numThreadsToCreate = 0
+        listOfSources.synchronized {
+          numThreadsToCreate = math.min(listOfSources.size, MultiTracker.MaxChatSlots) -
           threadPool.getActiveCount
+        }
 
         while (hasBlocks.get < totalBlocks && numThreadsToCreate > 0) {
           var peerToTalkTo = pickPeerToTalkToRandom
@@ -722,7 +728,6 @@ extends Broadcast[T] with Logging with Serializable {
       guidePortLock.synchronized { guidePortLock.notifyAll() }
 
       try {
-        // Don't stop until there is a copy in HDFS
         while (!stopBroadcast) {
           var clientSocket: Socket = null
           try {
@@ -730,14 +735,17 @@ extends Broadcast[T] with Logging with Serializable {
             clientSocket = serverSocket.accept()
           } catch {
             case e: Exception => {
-              logError("GuideMultipleRequests Timeout.")
-
               // Stop broadcast if at least one worker has connected and
               // everyone connected so far are done. Comparing with
               // listOfSources.size - 1, because it includes the Guide itself
-              if (listOfSources.size > 1 &&
-                setOfCompletedSources.size == listOfSources.size - 1) {
-                stopBroadcast = true
+              listOfSources.synchronized {
+                setOfCompletedSources.synchronized {
+                  if (listOfSources.size > 1 &&
+                    setOfCompletedSources.size == listOfSources.size - 1) {
+                    stopBroadcast = true
+                    logInfo("GuideMultipleRequests Timeout. stopBroadcast == true.")
+                  }
+                }
               }
             }
           }
@@ -760,7 +768,7 @@ extends Broadcast[T] with Logging with Serializable {
         logInfo("Sending stopBroadcast notifications...")
         sendStopBroadcastNotifications
 
-        MultiTracker.unregisterBroadcast(uuid)
+        MultiTracker.unregisterBroadcast(id)
       } finally {
         if (serverSocket != null) {
           logInfo("GuideMultipleRequests now stopping...")
@@ -918,9 +926,7 @@ extends Broadcast[T] with Logging with Serializable {
             serverSocket.setSoTimeout(MultiTracker.ServerSocketTimeout)
             clientSocket = serverSocket.accept()
           } catch {
-            case e: Exception => {
-              logError("ServeMultipleRequests Timeout.")
-            }
+            case e: Exception => { }
           }
           if (clientSocket != null) {
             logDebug("Serve: Accepted new client connection:" + clientSocket)
@@ -1023,9 +1029,12 @@ extends Broadcast[T] with Logging with Serializable {
   }
 }
 
-class BitTorrentBroadcastFactory
+private[spark] class BitTorrentBroadcastFactory
 extends BroadcastFactory {
-  def initialize(isMaster: Boolean) = MultiTracker.initialize(isMaster)
-  def newBroadcast[T](value_ : T, isLocal: Boolean) = new BitTorrentBroadcast[T](value_, isLocal)
-  def stop() = MultiTracker.stop
+  def initialize(isMaster: Boolean) { MultiTracker.initialize(isMaster) }
+
+  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
+    new BitTorrentBroadcast[T](value_, isLocal, id)
+
+  def stop() { MultiTracker.stop() }
 }

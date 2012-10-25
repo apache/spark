@@ -20,7 +20,7 @@ import spark.TaskState
  * separate Mesos task, allowing multiple applications to share cluster nodes both in space (tasks
  * from multiple apps can run on different cores) and in time (a core can switch ownership).
  */
-class MesosSchedulerBackend(
+private[spark] class MesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
@@ -28,14 +28,6 @@ class MesosSchedulerBackend(
   extends SchedulerBackend
   with MScheduler
   with Logging {
-
-  // Environment variables to pass to our executors
-  val ENV_VARS_TO_SEND_TO_EXECUTORS = Array(
-    "SPARK_MEM",
-    "SPARK_CLASSPATH",
-    "SPARK_LIBRARY_PATH",
-    "SPARK_JAVA_OPTS"
-  )
 
   // Memory used by each executor (in megabytes)
   val EXECUTOR_MEMORY = {
@@ -93,13 +85,11 @@ class MesosSchedulerBackend(
     }
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val environment = Environment.newBuilder()
-    for (key <- ENV_VARS_TO_SEND_TO_EXECUTORS) {
-      if (System.getenv(key) != null) {
-        environment.addVariables(Environment.Variable.newBuilder()
-          .setName(key)
-          .setValue(System.getenv(key))
-          .build())
-      }
+    sc.executorEnvs.foreach { case (key, value) =>
+      environment.addVariables(Environment.Variable.newBuilder()
+        .setName(key)
+        .setValue(value)
+        .build())
     }
     val memory = Resource.newBuilder()
       .setName("mem")

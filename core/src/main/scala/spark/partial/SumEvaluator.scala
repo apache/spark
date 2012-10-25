@@ -9,7 +9,7 @@ import spark.util.StatCounter
  * together, then uses the formula for the variance of two independent random variables to get
  * a variance for the result and compute a confidence interval.
  */
-class SumEvaluator(totalOutputs: Int, confidence: Double)
+private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[StatCounter, BoundedDouble] {
 
   var outputsMerged = 0

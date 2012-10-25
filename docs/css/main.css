@@ -1,0 +1,106 @@
+/* ==========================================================================
+   Author's custom styles
+   ========================================================================== */
+
+.navbar .brand {
+  height: 50px;
+  width: 110px;
+  margin-left: 1px;
+  padding: 0;
+}
+
+.version {
+  line-height: 30px;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
+}
+
+.navbar-inner {
+  padding-top: 2px;
+  height: 50px;
+}
+
+.navbar-inner .nav {
+  margin-top: 5px;
+  font-size: 15px;
+}
+
+.navbar .divider-vertical {
+  border-right-color: lightgray;
+}
+
+.navbar-text .version-text {
+  color: #555555;
+  padding: 5px;
+  margin-left: 10px;
+}
+
+body #content {
+  line-height: 1.6; /* Inspired by Github's wiki style */
+}
+
+.title {
+  font-size: 32px;
+}
+
+h1 {
+  font-size: 28px;
+  margin-top: 12px;
+}
+
+h2 {
+  font-size: 24px;
+  margin-top: 12px;
+}
+
+h3 {
+  font-size: 21px;
+  margin-top: 10px;
+}
+
+pre {
+  font-family: "Menlo", "Lucida Console", monospace;
+}
+
+code {
+  font-family: "Menlo", "Lucida Console", monospace;
+  background: white;
+  border: none;
+  padding: 0;
+  color: #444444;
+}
+
+a code {
+  color: #0088cc;
+}
+
+a:hover code {
+  color: #005580;
+  text-decoration: underline;
+}
+
+.container {
+  max-width: 914px;
+}
+
+/**
+ * Make dropdown menus in nav bars show on hover instead of click
+ * using solution at http://stackoverflow.com/questions/8878033/how-
+ * to-make-twitter-bootstrap-menu-dropdown-on-hover-rather-than-click
+ **/
+.dropdown-menu {
+  /* Remove the default 2px top margin which causes a small
+    gap between the hover trigger area and the popup menu */
+  margin-top: 0;
+}
+ul.nav li.dropdown:hover ul.dropdown-menu{
+  display: block;
+}
+a.menu:after, .dropdown-toggle:after {
+  content: none;
+}
+

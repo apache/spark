@@ -1,7 +1,7 @@
 package spark.streaming
 
 import spark.RDD
-import spark.UnionRDD
+import spark.rdd.UnionRDD
 
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.conf.Configuration

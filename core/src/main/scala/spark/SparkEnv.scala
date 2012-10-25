@@ -1,46 +1,57 @@
 package spark
 
 import akka.actor.ActorSystem
+import akka.actor.ActorSystemImpl
+import akka.remote.RemoteActorRefProvider
 
+import serializer.Serializer
 import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
 import spark.util.AkkaUtils
 
+/**
+ * Holds all the runtime environment objects for a running Spark instance (either master or worker),
+ * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
+ * Spark code finds the SparkEnv through a thread-local variable, so each thread that accesses these
+ * objects needs to have the right SparkEnv set. You can get the current environment with
+ * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
+ */
 class SparkEnv (
     val actorSystem: ActorSystem,
-    val cache: Cache,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheTracker: CacheTracker,
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
-    val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
-    val connectionManager: ConnectionManager
+    val connectionManager: ConnectionManager,
+    val httpFileServer: HttpFileServer
   ) {
 
   /** No-parameter constructor for unit tests. */
   def this() = {
-    this(null, null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
+    this(null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
   }
 
   def stop() {
+    httpFileServer.stop()
     mapOutputTracker.stop()
     cacheTracker.stop()
     shuffleFetcher.stop()
-    shuffleManager.stop()
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
     actorSystem.shutdown()
+    // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
+    // down, but let's call it anyway in case it gets fixed in a later release
     actorSystem.awaitTermination()
   }
 }
 
-object SparkEnv {
+object SparkEnv extends Logging {
   private val env = new ThreadLocal[SparkEnv]
 
   def set(e: SparkEnv) {
@@ -66,66 +77,55 @@ object SparkEnv {
       System.setProperty("spark.master.port", boundPort.toString)
     }
 
-    val serializerClass = System.getProperty("spark.serializer", "spark.KryoSerializer")
-    val serializer = Class.forName(serializerClass).newInstance().asInstanceOf[Serializer]
+    val classLoader = Thread.currentThread.getContextClassLoader
+
+    // Create an instance of the class named by the given Java system property, or by
+    // defaultClassName if the property is not set, and return it as a T
+    def instantiateClass[T](propertyName: String, defaultClassName: String): T = {
+      val name = System.getProperty(propertyName, defaultClassName)
+      Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
+    }
+
+    val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
     
     val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
-
     val blockManager = new BlockManager(blockManagerMaster, serializer)
     
-    val connectionManager = blockManager.connectionManager 
-    
-    val shuffleManager = new ShuffleManager()
+    val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isMaster)
 
-    val closureSerializerClass =
-      System.getProperty("spark.closure.serializer", "spark.JavaSerializer")
-    val closureSerializer =
-      Class.forName(closureSerializerClass).newInstance().asInstanceOf[Serializer]
-    val cacheClass = System.getProperty("spark.cache.class", "spark.BoundedMemoryCache")
-    val cache = Class.forName(cacheClass).newInstance().asInstanceOf[Cache]
+    val closureSerializer = instantiateClass[Serializer](
+      "spark.closure.serializer", "spark.JavaSerializer")
 
     val cacheTracker = new CacheTracker(actorSystem, isMaster, blockManager)
     blockManager.cacheTracker = cacheTracker
 
     val mapOutputTracker = new MapOutputTracker(actorSystem, isMaster)
 
-    val shuffleFetcherClass = 
-      System.getProperty("spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
-    val shuffleFetcher = 
-      Class.forName(shuffleFetcherClass).newInstance().asInstanceOf[ShuffleFetcher]
+    val shuffleFetcher = instantiateClass[ShuffleFetcher](
+      "spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
+    
+    val httpFileServer = new HttpFileServer()
+    httpFileServer.initialize()
+    System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
 
-    /*
-    if (System.getProperty("spark.stream.distributed", "false") == "true") {
-      val blockManagerClass = classOf[spark.storage.BlockManager].asInstanceOf[Class[_]] 
-      if (isLocal || !isMaster) { 
-        (new Thread() {
-          override def run() {
-            println("Wait started") 
-            Thread.sleep(60000)
-            println("Wait ended")
-            val receiverClass = Class.forName("spark.stream.TestStreamReceiver4")
-            val constructor = receiverClass.getConstructor(blockManagerClass)
-            val receiver = constructor.newInstance(blockManager)
-            receiver.asInstanceOf[Thread].start()
-          }
-        }).start()
-      }
+    // Warn about deprecated spark.cache.class property
+    if (System.getProperty("spark.cache.class") != null) {
+      logWarning("The spark.cache.class property is no longer being used! Specify storage " +
+        "levels using the RDD.persist() method instead.")
     }
-    */
 
     new SparkEnv(
       actorSystem,
-      cache,
       serializer,
       closureSerializer,
       cacheTracker,
       mapOutputTracker,
       shuffleFetcher,
-      shuffleManager,
       broadcastManager,
       blockManager,
-      connectionManager)
+      connectionManager,
+      httpFileServer)
   }
 }

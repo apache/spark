@@ -10,7 +10,7 @@ import java.io.{InputStream, ObjectStreamClass, ObjectInputStream, ObjectOutputS
 
 class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time) extends Serializable {
   val master = ssc.sc.master
-  val framework = ssc.sc.frameworkName
+  val framework = ssc.sc.jobName
   val sparkHome = ssc.sc.sparkHome
   val jars = ssc.sc.jars
   val graph = ssc.graph
