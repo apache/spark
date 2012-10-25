@@ -173,10 +173,11 @@ class SparkContext(
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
+        val masterWithoutProtocol = master.replaceFirst("^mesos://", "")  // Strip initial mesos://
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, this, master, jobName)
+          new CoarseMesosSchedulerBackend(scheduler, this, masterWithoutProtocol, jobName)
         } else {
-          new MesosSchedulerBackend(scheduler, this, master, jobName)
+          new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, jobName)
         }
         scheduler.initialize(backend)
         scheduler
