@@ -243,6 +243,12 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " " + blockId + " "
 
+    if (!blockManagerInfo.contains(blockManagerId)) {
+      // Can happen if this is from a locally cached partition on the master
+      sender ! true
+      return
+    }
+
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       logDebug("Got in heartBeat 1" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
