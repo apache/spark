@@ -13,6 +13,8 @@
 
 >>> sc.parallelize([0, 0]).flatMap(lambda x: b.value).collect()
 [1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
+
+>>> large_broadcast = sc.broadcast(list(range(10000)))
 """
 # Holds broadcasted data received from Java, keyed by its id.
 _broadcastRegistry = {}

@@ -36,7 +36,7 @@ examples.
 PySpark requires a development version of Py4J, a Python library for
 interacting with Java processes.  It can be installed from
 https://github.com/bartdag/py4j; make sure to install a version that
-contains at least the commits through 3dbf380d3d.
+contains at least the commits through b7924aabe9.
 
 PySpark uses the `PYTHONPATH` environment variable to search for Python
 classes; Py4J should be on this path, along with any libraries used by

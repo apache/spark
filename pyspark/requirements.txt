@@ -3,4 +3,4 @@
 # package is not at the root of the git repository.  It may be possible to
 # install Py4J from git once https://github.com/pypa/pip/pull/526 is merged.
 
-# git+git://github.com/bartdag/py4j.git@3dbf380d3d2cdeb9aab394454ea74d80c4aba1ea
+# git+git://github.com/bartdag/py4j.git@b7924aabe9c5e63f0a4d8bbd17019534c7ec014e
