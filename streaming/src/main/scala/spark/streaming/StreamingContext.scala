@@ -225,5 +225,15 @@ object StreamingContext {
   implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
   }
+
+  def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
+    if (prefix == null) {
+      time.millis.toString
+    } else if (suffix == null || suffix.length ==0) {
+      prefix + "-" + time.milliseconds
+    } else {
+      prefix + "-" + time.milliseconds + "." + suffix
+    }
+  }
 }
 

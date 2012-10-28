@@ -363,6 +363,22 @@ extends Serializable with Logging {
     rdds.toSeq
   }
 
+  def saveAsObjectFiles(prefix: String, suffix: String = "") {
+    val saveFunc = (rdd: RDD[T], time: Time) => {
+      val file = rddToFileName(prefix, suffix, time)
+      rdd.saveAsObjectFile(file)
+    }
+    this.foreachRDD(saveFunc)
+  }
+
+  def saveAsTextFiles(prefix: String, suffix: String = "") {
+    val saveFunc = (rdd: RDD[T], time: Time) => {
+      val file = rddToFileName(prefix, suffix, time)
+      rdd.saveAsTextFile(file)
+    }
+    this.foreachRDD(saveFunc)
+  }
+
   def register() {
     ssc.registerOutputStream(this)
   }
