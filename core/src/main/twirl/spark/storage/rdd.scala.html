@@ -50,7 +50,12 @@
           @blocks.map { case (k,v) => 
             <tr>
               <td>@k</td>
-              <td>@v.storageLevel</td>
+              <td>
+                @(if (v.storageLevel.useDisk) "Disk" else "")
+                @(if (v.storageLevel.useMemory) "Memory" else "")
+                @(if (v.storageLevel.deserialized) "Deserialized" else "")
+                @(v.storageLevel.replication)x Replicated
+              </td>
               <td>@{spark.Utils.memoryBytesToString(v.memSize)}</td>
               <td>@{spark.Utils.memoryBytesToString(v.diskSize)}</td>
             </tr>
