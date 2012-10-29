@@ -23,11 +23,12 @@ class NewHadoopSplit(rddId: Int, val index: Int, @transient rawSplit: InputSplit
 }
 
 class NewHadoopRDD[K, V](
-    sc: SparkContext,
+    sc : SparkContext,
     inputFormatClass: Class[_ <: InputFormat[K, V]],
-    keyClass: Class[K], valueClass: Class[V],
+    keyClass: Class[K],
+    valueClass: Class[V],
     @transient conf: Configuration)
-  extends RDD[(K, V)](sc)
+  extends RDD[(K, V)](sc, Nil)
   with HadoopMapReduceUtil {
   
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
@@ -92,6 +93,4 @@ class NewHadoopRDD[K, V](
     val theSplit = split.asInstanceOf[NewHadoopSplit]
     theSplit.serializableHadoopSplit.value.getLocations.filter(_ != "localhost")
   }
-
-  override val dependencies: List[Dependency[_]] = Nil
 }

@@ -46,7 +46,7 @@ class HadoopRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     minSplits: Int)
-  extends RDD[(K, V)](sc) {
+  extends RDD[(K, V)](sc, Nil) {
   
   // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it
   val confBroadcast = sc.broadcast(new SerializableWritable(conf))
@@ -115,6 +115,4 @@ class HadoopRDD[K, V](
     val hadoopSplit = split.asInstanceOf[HadoopSplit]
     hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")
   }
-  
-  override val dependencies: List[Dependency[_]] = Nil
 }

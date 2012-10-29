@@ -3,10 +3,11 @@ package spark.rdd
 import spark.OneToOneDependency
 import spark.RDD
 import spark.Split
+import java.lang.ref.WeakReference
 
 private[spark]
-class GlommedRDD[T: ClassManifest](prev: RDD[T]) extends RDD[Array[T]](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = Array(prev.iterator(split).toArray).iterator
+class GlommedRDD[T: ClassManifest](@transient prev: WeakReference[RDD[T]])
+  extends RDD[Array[T]](prev.get) {
+  override def splits = firstParent[T].splits
+  override def compute(split: Split) = Array(firstParent[T].iterator(split).toArray).iterator
 }

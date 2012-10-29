@@ -14,11 +14,14 @@ private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) exten
  * This transformation is useful when an RDD with many partitions gets filtered into a smaller one,
  * or to avoid having a large number of small tasks when processing a directory with many files.
  */
-class CoalescedRDD[T: ClassManifest](prev: RDD[T], maxPartitions: Int)
-  extends RDD[T](prev.context) {
+class CoalescedRDD[T: ClassManifest](
+    @transient prev: RDD[T],    // TODO: Make this a weak reference
+    maxPartitions: Int)
+  extends RDD[T](prev.context, Nil) {  // Nil, so the dependencies_ var does not refer to parent RDDs
 
+  // TODO: make this null when finishing checkpoint
   @transient val splits_ : Array[Split] = {
-    val prevSplits = prev.splits
+    val prevSplits = firstParent[T].splits
     if (prevSplits.length < maxPartitions) {
       prevSplits.zipWithIndex.map{ case (s, idx) => new CoalescedRDDSplit(idx, Array(s)) }
     } else {
@@ -30,18 +33,22 @@ class CoalescedRDD[T: ClassManifest](prev: RDD[T], maxPartitions: Int)
     }
   }
 
+  // TODO: make this return checkpoint Hadoop RDDs split when checkpointed
   override def splits = splits_
 
   override def compute(split: Split): Iterator[T] = {
     split.asInstanceOf[CoalescedRDDSplit].parents.iterator.flatMap {
-      parentSplit => prev.iterator(parentSplit)
+      parentSplit => firstParent[T].iterator(parentSplit)
     }
   }
 
-  val dependencies = List(
-    new NarrowDependency(prev) {
+  // TODO: make this null when finishing checkpoint
+  var deps = List(
+    new NarrowDependency(firstParent) {
       def getParents(id: Int): Seq[Int] =
         splits(id).asInstanceOf[CoalescedRDDSplit].parents.map(_.index)
     }
   )
+
+  override def dependencies = deps
 }

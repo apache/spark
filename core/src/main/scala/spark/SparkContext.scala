@@ -3,6 +3,7 @@ package spark
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.{URI, URLClassLoader}
+import java.lang.ref.WeakReference
 
 import scala.collection.Map
 import scala.collection.generic.Growable
@@ -695,6 +696,9 @@ object SparkContext {
 
   /** Find the JAR that contains the class of a particular object */
   def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
+
+  implicit def rddToWeakRefRDD[T: ClassManifest](rdd: RDD[T]) = new WeakReference(rdd)
+
 }
 
 

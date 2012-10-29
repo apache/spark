@@ -31,12 +31,13 @@ private[spark] class CoGroupAggregator
   with Serializable
 
 class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
-  extends RDD[(K, Seq[Seq[_]])](rdds.head.context) with Logging {
+  extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) with Logging {
   
   val aggr = new CoGroupAggregator
-  
+
+  // TODO: make this null when finishing checkpoint
   @transient
-  override val dependencies = {
+  var deps = {
     val deps = new ArrayBuffer[Dependency[_]]
     for ((rdd, index) <- rdds.zipWithIndex) {
       val mapSideCombinedRDD = rdd.mapPartitions(aggr.combineValuesByKey(_), true)
@@ -50,7 +51,10 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
     }
     deps.toList
   }
-  
+
+  override def dependencies = deps
+
+  // TODO: make this null when finishing checkpoint
   @transient
   val splits_ : Array[Split] = {
     val firstRdd = rdds.head
@@ -68,6 +72,7 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
     array
   }
 
+  // TODO: make this return checkpoint Hadoop RDDs split when checkpointed
   override def splits = splits_
   
   override val partitioner = Some(part)

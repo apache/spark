@@ -72,7 +72,14 @@ import SparkContext._
  * [[http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
  * on RDD internals.
  */
-abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serializable {
+abstract class RDD[T: ClassManifest](
+    @transient var sc: SparkContext,
+    @transient var dependencies_ : List[Dependency[_]] = Nil
+  ) extends Serializable {
+
+
+  def this(@transient oneParent: RDD[_]) =
+    this(oneParent.context , List(new OneToOneDependency(oneParent)))
 
   // Methods that must be implemented by subclasses:
 
@@ -83,10 +90,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   def compute(split: Split): Iterator[T]
 
   /** How this RDD depends on any parent RDDs. */
-  @transient val dependencies: List[Dependency[_]]
+  def dependencies: List[Dependency[_]] = dependencies_
+  //var dependencies: List[Dependency[_]] = dependencies_
 
-  // Methods available on all RDDs:
-  
   /** Record user function generating this RDD. */
   private[spark] val origin = Utils.getSparkCallSite
   
@@ -106,8 +112,13 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   
   // Variables relating to persistence
   private var storageLevel: StorageLevel = StorageLevel.NONE
-  
-  /** 
+
+  private[spark] def firstParent[U: ClassManifest] = dependencies.head.rdd.asInstanceOf[RDD[U]]
+  private[spark] def parent[U: ClassManifest](id: Int) = dependencies(id).rdd.asInstanceOf[RDD[U]]
+
+  // Methods available on all RDDs:
+
+  /**
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. Can only be called once on each RDD.
    */
@@ -129,7 +140,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel = storageLevel
-  
+
   private[spark] def checkpoint(level: StorageLevel = StorageLevel.MEMORY_AND_DISK_2): RDD[T] = {
     if (!level.useDisk && level.replication < 2) {
       throw new Exception("Cannot checkpoint without using disk or replication (level requested was " + level + ")")
