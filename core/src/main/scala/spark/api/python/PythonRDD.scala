@@ -179,14 +179,12 @@ object PythonRDD {
     val dOut = new DataOutputStream(baos);
     if (elem.isInstanceOf[Array[Byte]]) {
       elem.asInstanceOf[Array[Byte]]
-    } else if (elem.isInstanceOf[scala.Tuple2[_, _]]) {
-      val t = elem.asInstanceOf[scala.Tuple2[_, _]]
-      val t1 = t._1.asInstanceOf[Array[Byte]]
-      val t2 = t._2.asInstanceOf[Array[Byte]]
+    } else if (elem.isInstanceOf[scala.Tuple2[Array[Byte], Array[Byte]]]) {
+      val t = elem.asInstanceOf[scala.Tuple2[Array[Byte], Array[Byte]]]
       dOut.writeByte(Pickle.PROTO)
       dOut.writeByte(Pickle.TWO)
-      dOut.write(PythonRDD.stripPickle(t1))
-      dOut.write(PythonRDD.stripPickle(t2))
+      dOut.write(PythonRDD.stripPickle(t._1))
+      dOut.write(PythonRDD.stripPickle(t._2))
       dOut.writeByte(Pickle.TUPLE2)
       dOut.writeByte(Pickle.STOP)
       baos.toByteArray()

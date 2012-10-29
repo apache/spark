@@ -310,6 +310,12 @@ class RDD(object):
         return python_right_outer_join(self, other, numSplits)
 
     def partitionBy(self, numSplits, hashFunc=hash):
+        """
+        >>> pairs = sc.parallelize([1, 2, 3, 4, 2, 4, 1]).map(lambda x: (x, x))
+        >>> sets = pairs.partitionBy(2).glom().collect()
+        >>> set(sets[0]).intersection(set(sets[1]))
+        set([])
+        """
         if numSplits is None:
             numSplits = self.ctx.defaultParallelism
         def add_shuffle_key(iterator):
@@ -319,7 +325,7 @@ class RDD(object):
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
         pairRDD = self.ctx.jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
-        partitioner = self.ctx.jvm.spark.HashPartitioner(numSplits)
+        partitioner = self.ctx.jvm.spark.api.python.PythonPartitioner(numSplits)
         jrdd = pairRDD.partitionBy(partitioner)
         jrdd = jrdd.map(self.ctx.jvm.ExtractValue())
         return RDD(jrdd, self.ctx)
@@ -391,7 +397,7 @@ class RDD(object):
         """
         >>> x = sc.parallelize([("a", 1), ("b", 4)])
         >>> y = sc.parallelize([("a", 2)])
-        >>> x.cogroup(y).collect()
+        >>> sorted(x.cogroup(y).collect())
         [('a', ([1], [2])), ('b', ([4], []))]
         """
         return python_cogroup(self, other, numSplits)
@@ -462,7 +468,7 @@ def _test():
     import doctest
     from pyspark.context import SparkContext
     globs = globals().copy()
-    globs['sc'] = SparkContext('local', 'PythonTest')
+    globs['sc'] = SparkContext('local[4]', 'PythonTest')
     doctest.testmod(globs=globs)
     globs['sc'].stop()
 
