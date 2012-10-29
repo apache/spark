@@ -21,7 +21,8 @@ object BlockManagerUI extends Logging {
     try {
       logInfo("Starting BlockManager WebUI.")
       val port = Option(System.getenv("BLOCKMANAGER_UI_PORT")).getOrElse("9080").toInt
-      AkkaUtils.startSprayServer(actorSystem, "0.0.0.0", port, webUIDirectives.handler, "BlockManagerHTTPServer")
+      AkkaUtils.startSprayServer(actorSystem, "0.0.0.0", port, 
+        webUIDirectives.handler, "BlockManagerHTTPServer")
     } catch {
       case e: Exception =>
         logError("Failed to create BlockManager WebUI", e)
@@ -32,10 +33,12 @@ object BlockManagerUI extends Logging {
 }
 
 private[spark]
-case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel, numPartitions: Int, memSize: Long, diskSize: Long)
+case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel, 
+  numPartitions: Int, memSize: Long, diskSize: Long)
 
 private[spark]
-class BlockManagerUIDirectives(val actorSystem: ActorSystem, master: ActorRef, sc: SparkContext) extends Directives {  
+class BlockManagerUIDirectives(val actorSystem: ActorSystem, master: ActorRef, 
+  sc: SparkContext) extends Directives {  
 
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
   implicit val timeout = Timeout(1 seconds)
@@ -55,7 +58,9 @@ class BlockManagerUIDirectives(val actorSystem: ActorSystem, master: ActorRef, s
           .reduceOption(_+_).getOrElse(0L)
 
         // Filter out everything that's not and rdd.
-        val rddBlocks = storageStati.flatMap(_.blocks).filter { case(k,v) => k.startsWith("rdd") }.toMap
+        val rddBlocks = storageStati.flatMap(_.blocks).filter { case(k,v) => 
+          k.startsWith("rdd") 
+        }.toMap
         val rdds = rddInfoFromBlockStati(rddBlocks)
 
         spark.storage.html.index.render(maxMem, remainingMem, diskSpaceUsed, rdds.toList)
@@ -67,7 +72,9 @@ class BlockManagerUIDirectives(val actorSystem: ActorSystem, master: ActorRef, s
         val prefix = "rdd_" + id.toString
 
         val storageStati = status.asInstanceOf[ArrayBuffer[StorageStatus]]
-        val rddBlocks = storageStati.flatMap(_.blocks).filter { case(k,v) => k.startsWith(prefix) }.toMap
+        val rddBlocks = storageStati.flatMap(_.blocks).filter { case(k,v) => 
+          k.startsWith(prefix) 
+        }.toMap
         val rddInfo = rddInfoFromBlockStati(rddBlocks).first
 
         spark.storage.html.rdd.render(rddInfo, rddBlocks)
