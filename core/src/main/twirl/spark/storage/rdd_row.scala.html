@@ -1,0 +1,18 @@
+@(rdd: spark.storage.RDDInfo)
+
+<tr>
+  <td>
+    <a href="rdd?id=@(rdd.id)">
+      @rdd.name
+    </a>
+  </td>
+  <td>
+    @(if (rdd.storageLevel.useDisk) "Disk" else "")
+    @(if (rdd.storageLevel.useMemory) "Memory" else "")
+    @(if (rdd.storageLevel.deserialized) "Deserialized" else "")
+    @(rdd.storageLevel.replication)x Replicated
+  </td>
+  <td>@rdd.numPartitions</td>
+  <td>@{spark.Utils.memoryBytesToString(rdd.memSize)}</td>
+  <td>@{spark.Utils.memoryBytesToString(rdd.diskSize)}</td>
+</tr>

@@ -1,0 +1,18 @@
+@(rdds: List[spark.storage.RDDInfo])
+
+<table class="table table-bordered table-striped table-condensed sortable">
+  <thead>
+    <tr>
+      <th>RDD Name</th>
+      <th>Storage Level</th>
+      <th>Partitions</th>
+      <th>Size in Memory</th>
+      <th>Size on Disk</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for(rdd <- rdds) {
+      @rdd_row(rdd)
+    }
+  </tbody>
+</table>

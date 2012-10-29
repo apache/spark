@@ -3,7 +3,8 @@ package spark.storage
 import java.io._
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.Random
 
 import akka.actor._
@@ -90,6 +91,15 @@ case object StopBlockManagerMaster extends ToBlockManagerMaster
 private[spark]
 case object GetMemoryStatus extends ToBlockManagerMaster
 
+private[spark]
+case class GetStorageStatus extends ToBlockManagerMaster
+
+private[spark]
+case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
+
+private[spark]
+case class StorageStatus(maxMem: Long, remainingMem: Long, blocks: Map[String, BlockStatus])
+
 
 private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
@@ -99,7 +109,8 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
       val maxMem: Long) {
     private var _lastSeenMs = timeMs
     private var _remainingMem = maxMem
-    private val _blocks = new JHashMap[String, StorageLevel]
+
+    private val _blocks = new JHashMap[String, BlockStatus]
 
     logInfo("Registering block manager %s:%d with %s RAM".format(
       blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(maxMem)))
@@ -115,7 +126,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
       if (_blocks.containsKey(blockId)) {
         // The block exists on the slave already.
-        val originalLevel: StorageLevel = _blocks.get(blockId)
+        val originalLevel: StorageLevel = _blocks.get(blockId).storageLevel
 
         if (originalLevel.useMemory) {
           _remainingMem += memSize
@@ -124,7 +135,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
       if (storageLevel.isValid) {
         // isValid means it is either stored in-memory or on-disk.
-        _blocks.put(blockId, storageLevel)
+        _blocks.put(blockId, BlockStatus(storageLevel, memSize, diskSize))
         if (storageLevel.useMemory) {
           _remainingMem -= memSize
           logInfo("Added %s in memory on %s:%d (size: %s, free: %s)".format(
@@ -137,7 +148,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
         }
       } else if (_blocks.containsKey(blockId)) {
         // If isValid is not true, drop the block.
-        val originalLevel: StorageLevel = _blocks.get(blockId)
+        val originalLevel: StorageLevel = _blocks.get(blockId).storageLevel
         _blocks.remove(blockId)
         if (originalLevel.useMemory) {
           _remainingMem += memSize
@@ -151,6 +162,8 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
         }
       }
     }
+
+    def blocks: JHashMap[String, BlockStatus] = _blocks
 
     def remainingMem: Long = _remainingMem
 
@@ -198,6 +211,9 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     case GetMemoryStatus =>
       getMemoryStatus
 
+    case GetStorageStatus =>
+      getStorageStatus
+
     case RemoveHost(host) =>
       removeHost(host)
       sender ! true
@@ -216,6 +232,13 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     val res = blockManagerInfo.map { case(blockManagerId, info) =>
       (blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
+    sender ! res
+  }
+
+  private def getStorageStatus() {
+    val res = blockManagerInfo.map { case(blockManagerId, info) =>
+      StorageStatus(info.maxMem, info.remainingMem, info.blocks.asScala)
+    }
     sender ! res
   }
 
