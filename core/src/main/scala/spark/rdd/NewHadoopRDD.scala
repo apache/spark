@@ -93,4 +93,6 @@ class NewHadoopRDD[K, V](
     val theSplit = split.asInstanceOf[NewHadoopSplit]
     theSplit.serializableHadoopSplit.value.getLocations.filter(_ != "localhost")
   }
+
+  override val isCheckpointable = false
 }

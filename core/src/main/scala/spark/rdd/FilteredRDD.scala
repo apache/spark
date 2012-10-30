@@ -7,7 +7,7 @@ import java.lang.ref.WeakReference
 
 private[spark]
 class FilteredRDD[T: ClassManifest](
-    @transient prev: WeakReference[RDD[T]],
+    prev: WeakReference[RDD[T]],
     f: T => Boolean)
   extends RDD[T](prev.get) {
 

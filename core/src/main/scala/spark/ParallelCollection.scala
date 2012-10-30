@@ -22,10 +22,10 @@ private[spark] class ParallelCollectionSplit[T: ClassManifest](
 }
 
 private[spark] class ParallelCollection[T: ClassManifest](
-    @transient sc_ : SparkContext,
+    @transient sc : SparkContext,
     @transient data: Seq[T],
     numSlices: Int)
-  extends RDD[T](sc_, Nil) {
+  extends RDD[T](sc, Nil) {
   // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
   // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
   // instead. UPDATE: With the new changes to enable checkpointing, this an be done.

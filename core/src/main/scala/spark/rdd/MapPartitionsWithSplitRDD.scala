@@ -12,7 +12,7 @@ import java.lang.ref.WeakReference
  */
 private[spark]
 class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
-    @transient prev: WeakReference[RDD[T]],
+    prev: WeakReference[RDD[T]],
     f: (Int, Iterator[T]) => Iterator[U])
   extends RDD[U](prev.get) {
 

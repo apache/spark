@@ -625,7 +625,7 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
 }
 
 private[spark]
-class MappedValuesRDD[K, V, U](@transient prev: WeakReference[RDD[(K, V)]], f: V => U)
+class MappedValuesRDD[K, V, U](prev: WeakReference[RDD[(K, V)]], f: V => U)
   extends RDD[(K, U)](prev.get) {
 
   override def splits = firstParent[(K, V)].splits
@@ -634,7 +634,7 @@ class MappedValuesRDD[K, V, U](@transient prev: WeakReference[RDD[(K, V)]], f: V
 }
 
 private[spark]
-class FlatMappedValuesRDD[K, V, U](@transient prev: WeakReference[RDD[(K, V)]], f: V => TraversableOnce[U])
+class FlatMappedValuesRDD[K, V, U](prev: WeakReference[RDD[(K, V)]], f: V => TraversableOnce[U])
   extends RDD[(K, U)](prev.get) {
 
   override def splits = firstParent[(K, V)].splits

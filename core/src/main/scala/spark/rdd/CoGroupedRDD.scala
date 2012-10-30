@@ -30,14 +30,13 @@ private[spark] class CoGroupAggregator
     { (b1, b2) => b1 ++ b2 })
   with Serializable
 
-class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
+class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) with Logging {
   
   val aggr = new CoGroupAggregator
 
-  // TODO: make this null when finishing checkpoint
   @transient
-  var deps = {
+  var deps_ = {
     val deps = new ArrayBuffer[Dependency[_]]
     for ((rdd, index) <- rdds.zipWithIndex) {
       val mapSideCombinedRDD = rdd.mapPartitions(aggr.combineValuesByKey(_), true)
@@ -52,11 +51,10 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
     deps.toList
   }
 
-  override def dependencies = deps
+  override def dependencies = deps_
 
-  // TODO: make this null when finishing checkpoint
   @transient
-  val splits_ : Array[Split] = {
+  var splits_ : Array[Split] = {
     val firstRdd = rdds.head
     val array = new Array[Split](part.numPartitions)
     for (i <- 0 until array.size) {
@@ -72,12 +70,9 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
     array
   }
 
-  // TODO: make this return checkpoint Hadoop RDDs split when checkpointed
   override def splits = splits_
   
   override val partitioner = Some(part)
-  
-  override def preferredLocations(s: Split) = Nil
   
   override def compute(s: Split): Iterator[(K, Seq[Seq[_]])] = {
     val split = s.asInstanceOf[CoGroupSplit]
@@ -105,5 +100,11 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
       }
     }
     map.iterator
+  }
+
+  override protected def changeDependencies(newRDD: RDD[_]) {
+    deps_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
+    splits_ = newRDD.splits
+    rdds = null
   }
 }

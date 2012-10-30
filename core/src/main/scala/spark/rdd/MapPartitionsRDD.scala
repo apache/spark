@@ -7,7 +7,7 @@ import java.lang.ref.WeakReference
 
 private[spark]
 class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
-    @transient prev: WeakReference[RDD[T]],
+    prev: WeakReference[RDD[T]],
     f: Iterator[T] => Iterator[U],
     preservesPartitioning: Boolean = false)
   extends RDD[U](prev.get) {

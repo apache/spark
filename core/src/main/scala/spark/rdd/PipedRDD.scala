@@ -12,6 +12,7 @@ import spark.OneToOneDependency
 import spark.RDD
 import spark.SparkEnv
 import spark.Split
+import java.lang.ref.WeakReference
 
 
 /**
@@ -19,16 +20,16 @@ import spark.Split
  * (printing them one per line) and returns the output as a collection of strings.
  */
 class PipedRDD[T: ClassManifest](
-    @transient prev: RDD[T],
+    prev: WeakReference[RDD[T]],
     command: Seq[String],
     envVars: Map[String, String])
-  extends RDD[String](prev) {
+  extends RDD[String](prev.get) {
 
-  def this(@transient prev: RDD[T], command: Seq[String]) = this(prev, command, Map())
+  def this(prev: WeakReference[RDD[T]], command: Seq[String]) = this(prev, command, Map())
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
-  def this(@transient prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
+  def this(prev: WeakReference[RDD[T]], command: String) = this(prev, PipedRDD.tokenize(command))
 
   override def splits = firstParent[T].splits
 

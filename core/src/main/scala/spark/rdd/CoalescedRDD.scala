@@ -1,8 +1,7 @@
 package spark.rdd
 
-import spark.NarrowDependency
-import spark.RDD
-import spark.Split
+import spark._
+import java.lang.ref.WeakReference
 
 private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) extends Split
 
@@ -15,13 +14,12 @@ private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) exten
  * or to avoid having a large number of small tasks when processing a directory with many files.
  */
 class CoalescedRDD[T: ClassManifest](
-    @transient prev: RDD[T],    // TODO: Make this a weak reference
+    var prev: RDD[T],
     maxPartitions: Int)
   extends RDD[T](prev.context, Nil) {  // Nil, so the dependencies_ var does not refer to parent RDDs
 
-  // TODO: make this null when finishing checkpoint
-  @transient val splits_ : Array[Split] = {
-    val prevSplits = firstParent[T].splits
+  @transient var splits_ : Array[Split] = {
+    val prevSplits = prev.splits
     if (prevSplits.length < maxPartitions) {
       prevSplits.zipWithIndex.map{ case (s, idx) => new CoalescedRDDSplit(idx, Array(s)) }
     } else {
@@ -33,7 +31,6 @@ class CoalescedRDD[T: ClassManifest](
     }
   }
 
-  // TODO: make this return checkpoint Hadoop RDDs split when checkpointed
   override def splits = splits_
 
   override def compute(split: Split): Iterator[T] = {
@@ -42,13 +39,18 @@ class CoalescedRDD[T: ClassManifest](
     }
   }
 
-  // TODO: make this null when finishing checkpoint
-  var deps = List(
-    new NarrowDependency(firstParent) {
+  var deps_ : List[Dependency[_]] = List(
+    new NarrowDependency(prev) {
       def getParents(id: Int): Seq[Int] =
         splits(id).asInstanceOf[CoalescedRDDSplit].parents.map(_.index)
     }
   )
 
-  override def dependencies = deps
+  override def dependencies = deps_
+
+  override protected def changeDependencies(newRDD: RDD[_]) {
+    deps_ = List(new OneToOneDependency(newRDD))
+    splits_ = newRDD.splits
+    prev = null
+  }
 }

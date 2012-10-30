@@ -15,7 +15,7 @@ class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Seriali
 }
 
 class SampledRDD[T: ClassManifest](
-    @transient prev: WeakReference[RDD[T]],
+    prev: WeakReference[RDD[T]],
     withReplacement: Boolean, 
     frac: Double,
     seed: Int)

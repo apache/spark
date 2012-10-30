@@ -31,11 +31,6 @@ class ShuffledRDD[K, V](
 
   override def splits = splits_
 
-  override def preferredLocations(split: Split) = Nil
-
-  //val dep = new ShuffleDependency(parent, part)
-  //override val dependencies = List(dep)
-
   override def compute(split: Split): Iterator[(K, V)] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
     SparkEnv.get.shuffleFetcher.fetch[K, V](shuffledId, split.index)

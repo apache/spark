@@ -7,7 +7,7 @@ import java.lang.ref.WeakReference
 
 private[spark]
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
-    @transient prev: WeakReference[RDD[T]],
+    prev: WeakReference[RDD[T]],
     f: T => TraversableOnce[U])
   extends RDD[U](prev.get) {
   

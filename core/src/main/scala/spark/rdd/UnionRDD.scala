@@ -2,11 +2,7 @@ package spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
 
-import spark.Dependency
-import spark.RangeDependency
-import spark.RDD
-import spark.SparkContext
-import spark.Split
+import spark._
 import java.lang.ref.WeakReference
 
 private[spark] class UnionSplit[T: ClassManifest](
@@ -23,12 +19,11 @@ private[spark] class UnionSplit[T: ClassManifest](
 
 class UnionRDD[T: ClassManifest](
     sc: SparkContext,
-    @transient rdds: Seq[RDD[T]])  // TODO: Make this a weak reference
+    @transient var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil)  {    // Nil, so the dependencies_ var does not refer to parent RDDs
 
-  // TODO: make this null when finishing checkpoint
   @transient
-  val splits_ : Array[Split] = {
+  var splits_ : Array[Split] = {
     val array = new Array[Split](rdds.map(_.splits.size).sum)
     var pos = 0
     for (rdd <- rdds; split <- rdd.splits) {
@@ -38,11 +33,9 @@ class UnionRDD[T: ClassManifest](
     array
   }
 
-  // TODO: make this return checkpoint Hadoop RDDs split when checkpointed
   override def splits = splits_
 
-  // TODO: make this null when finishing checkpoint
-  @transient var deps = {
+  @transient var deps_ = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for (rdd <- rdds) {
@@ -52,10 +45,21 @@ class UnionRDD[T: ClassManifest](
     deps.toList
   }
 
-  override def dependencies = deps
+  override def dependencies = deps_
 
   override def compute(s: Split): Iterator[T] = s.asInstanceOf[UnionSplit[T]].iterator()
 
-  override def preferredLocations(s: Split): Seq[String] =
-    s.asInstanceOf[UnionSplit[T]].preferredLocations()
+  override def preferredLocations(s: Split): Seq[String] = {
+    if (isCheckpointed) {
+      checkpointRDD.preferredLocations(s)
+    } else {
+      s.asInstanceOf[UnionSplit[T]].preferredLocations()
+    }
+  }
+
+  override protected def changeDependencies(newRDD: RDD[_]) {
+    deps_ = List(new OneToOneDependency(newRDD))
+    splits_ = newRDD.splits
+    rdds = null
+  }
 }

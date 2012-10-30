@@ -14,7 +14,7 @@ private[spark] class BlockRDDSplit(val blockId: String, idx: Int) extends Split 
 
 private[spark]
 class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[String])
-  extends RDD[T](sc) {
+  extends RDD[T](sc, Nil) {
 
   @transient
   val splits_ = (0 until blockIds.size).map(i => {
@@ -41,9 +41,12 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     }
   }
 
-  override def preferredLocations(split: Split) = 
-    locations_(split.asInstanceOf[BlockRDDSplit].blockId)
-
-  override val dependencies: List[Dependency[_]] = Nil
+  override def preferredLocations(split: Split) = {
+    if (isCheckpointed) {
+      checkpointRDD.preferredLocations(split)
+    } else {
+      locations_(split.asInstanceOf[BlockRDDSplit].blockId)
+    }
+  }
 }
 
