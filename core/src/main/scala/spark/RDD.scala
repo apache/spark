@@ -1,8 +1,7 @@
 package spark
 
-import java.io.EOFException
+import java.io.{ObjectOutputStream, IOException, EOFException, ObjectInputStream}
 import java.net.URL
-import java.io.ObjectInputStream
 import java.util.concurrent.atomic.AtomicLong
 import java.util.Random
 import java.util.Date
@@ -589,4 +588,19 @@ abstract class RDD[T: ClassManifest](
   private[spark] def collectPartitions(): Array[Array[T]] = {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
+
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    synchronized {
+      oos.defaultWriteObject()
+    }
+  }
+
+  @throws(classOf[IOException])
+  private def readObject(ois: ObjectInputStream) {
+    synchronized {
+      ois.defaultReadObject()
+    }
+  }
+
 }
