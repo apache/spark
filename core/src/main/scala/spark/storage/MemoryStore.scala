@@ -37,9 +37,6 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
       tryToPut(blockId, elements, sizeEstimate, true)
     } else {
-      val entry = new Entry(bytes, bytes.limit, false)
-      ensureFreeSpace(blockId, bytes.limit)
-      synchronized { entries.put(blockId, entry) }
       tryToPut(blockId, bytes, bytes.limit, false)
     }
   }
