@@ -51,6 +51,15 @@ class InputStreamsSuite extends TestSuiteBase {
     ssc.stop()
 
     // Verify whether data received by Spark Streaming was as expected
+    logInfo("--------------------------------")
+    logInfo("output.size = " + outputBuffer.size)
+    logInfo("output")
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output.size = " + expectedOutput.size)
+    logInfo("expected output")
+    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("--------------------------------")
+
     assert(outputBuffer.size === expectedOutput.size)
     for (i <- 0 until outputBuffer.size) {
       assert(outputBuffer(i).size === 1)
@@ -101,6 +110,15 @@ class InputStreamsSuite extends TestSuiteBase {
     ssc.stop()
 
     // Verify whether data received by Spark Streaming was as expected
+    logInfo("--------------------------------")
+    logInfo("output.size = " + outputBuffer.size)
+    logInfo("output")
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output.size = " + expectedOutput.size)
+    logInfo("expected output")
+    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("--------------------------------")
+
     assert(outputBuffer.size === expectedOutput.size)
     for (i <- 0 until outputBuffer.size) {
       assert(outputBuffer(i).size === 1)

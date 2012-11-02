@@ -338,9 +338,7 @@ extends Serializable with Logging {
   }
 
   def countByWindow(windowTime: Time, slideTime: Time): DStream[Int] = {
-    def add(v1: Int, v2: Int) = (v1 + v2) 
-    def subtract(v1: Int, v2: Int) = (v1 - v2) 
-    this.map(_ => 1).reduceByWindow(add _, subtract _, windowTime, slideTime)
+    this.map(_ => 1).reduceByWindow(_ + _, _ - _, windowTime, slideTime)
   }
 
   def union(that: DStream[T]): DStream[T] = new UnionDStream[T](Array(this, that))

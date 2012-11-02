@@ -16,13 +16,14 @@ class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[
 
   def compute(validTime: Time): Option[RDD[T]] = {
     logInfo("Computing RDD for time " + validTime)
-    val rdd = if (currentIndex < input.size) {
-      ssc.sc.makeRDD(input(currentIndex), numPartitions)
+    val index = ((validTime - zeroTime) / slideTime - 1).toInt
+    val rdd = if (index < input.size) {
+      ssc.sc.makeRDD(input(index), numPartitions)
     } else {
       ssc.sc.makeRDD(Seq[T](), numPartitions)
     }
     logInfo("Created RDD " + rdd.id)
-    currentIndex += 1
+    //currentIndex += 1
     Some(rdd)
   }
 }
@@ -95,7 +96,6 @@ trait TestSuiteBase extends FunSuite with Logging {
     ssc.registerOutputStream(outputStream)
     ssc
   }
-
 
   def runStreams[V: ClassManifest](
       ssc: StreamingContext,

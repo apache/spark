@@ -53,12 +53,16 @@ extends Serializable {
     combineByKey((v: V) => v, cleanedReduceFunc, cleanedReduceFunc, partitioner)
   }
 
-  private def combineByKey[C: ClassManifest](
+  def combineByKey[C: ClassManifest](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
-    partitioner: Partitioner) : ShuffledDStream[K, V, C] = {
+    partitioner: Partitioner) : DStream[(K, C)] = {
     new ShuffledDStream[K, V, C](self, createCombiner, mergeValue, mergeCombiner, partitioner)
+  }
+
+  def countByKey(numPartitions: Int = self.ssc.sc.defaultParallelism): DStream[(K, Long)] = {
+    self.map(x => (x._1, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
   }
 
   def groupByKeyAndWindow(windowTime: Time, slideTime: Time): DStream[(K, Seq[V])] = {
@@ -155,6 +159,21 @@ extends Serializable {
     val cleanedInvReduceFunc = ssc.sc.clean(invReduceFunc)
     new ReducedWindowedDStream[K, V](
       self, cleanedReduceFunc, cleanedInvReduceFunc, windowTime, slideTime, partitioner)
+  }
+
+  def countByKeyAndWindow(
+      windowTime: Time,
+      slideTime: Time,
+      numPartitions: Int = self.ssc.sc.defaultParallelism
+    ): DStream[(K, Long)] = {
+
+    self.map(x => (x._1, 1L)).reduceByKeyAndWindow(
+      (x: Long, y: Long) => x + y,
+      (x: Long, y: Long) => x - y,
+      windowTime,
+      slideTime,
+      numPartitions
+    )
   }
 
   // TODO:
