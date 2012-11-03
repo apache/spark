@@ -3,6 +3,7 @@ package spark
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.{URI, URLClassLoader}
+import java.lang.ref.WeakReference
 
 import scala.collection.Map
 import scala.collection.generic.Growable
@@ -186,6 +187,8 @@ class SparkContext(
   taskScheduler.start()
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
+
+  private[spark] var checkpointDir: String = null
 
   // Methods for creating RDDs
 
@@ -518,6 +521,7 @@ class SparkContext(
     val start = System.nanoTime
     val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    rdd.doCheckpoint()
     result
   }
 
@@ -572,6 +576,24 @@ class SparkContext(
   private[spark] def clean[F <: AnyRef](f: F): F = {
     ClosureCleaner.clean(f)
     return f
+  }
+
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. This method will
+   * create this directory and will throw an exception of the path already exists (to avoid
+   * overwriting existing files may be overwritten). The directory will be deleted on exit
+   * if indicated.
+   */
+  def setCheckpointDir(dir: String, deleteOnExit: Boolean = false) {
+    val path = new Path(dir)
+    val fs = path.getFileSystem(new Configuration())
+    if (fs.exists(path)) {
+      throw new Exception("Checkpoint directory '" + path + "' already exists.")
+    } else {
+      fs.mkdirs(path)
+      if (deleteOnExit) fs.deleteOnExit(path)
+    }
+    checkpointDir = dir
   }
 
   /** Default level of parallelism to use when not given by user (e.g. for reduce tasks) */
@@ -695,6 +717,9 @@ object SparkContext {
 
   /** Find the JAR that contains the class of a particular object */
   def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
+
+  implicit def rddToWeakRefRDD[T: ClassManifest](rdd: RDD[T]) = new WeakReference(rdd)
+
 }
 
 

@@ -12,6 +12,7 @@ import spark.OneToOneDependency
 import spark.RDD
 import spark.SparkEnv
 import spark.Split
+import java.lang.ref.WeakReference
 
 
 /**
@@ -19,18 +20,18 @@ import spark.Split
  * (printing them one per line) and returns the output as a collection of strings.
  */
 class PipedRDD[T: ClassManifest](
-  parent: RDD[T], command: Seq[String], envVars: Map[String, String])
-  extends RDD[String](parent.context) {
+    prev: WeakReference[RDD[T]],
+    command: Seq[String],
+    envVars: Map[String, String])
+  extends RDD[String](prev.get) {
 
-  def this(parent: RDD[T], command: Seq[String]) = this(parent, command, Map())
+  def this(prev: WeakReference[RDD[T]], command: Seq[String]) = this(prev, command, Map())
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
-  def this(parent: RDD[T], command: String) = this(parent, PipedRDD.tokenize(command))
+  def this(prev: WeakReference[RDD[T]], command: String) = this(prev, PipedRDD.tokenize(command))
 
-  override def splits = parent.splits
-
-  override val dependencies = List(new OneToOneDependency(parent))
+  override def splits = firstParent[T].splits
 
   override def compute(split: Split): Iterator[String] = {
     val pb = new ProcessBuilder(command)
@@ -55,7 +56,7 @@ class PipedRDD[T: ClassManifest](
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
-        for (elem <- parent.iterator(split)) {
+        for (elem <- firstParent[T].iterator(split)) {
           out.println(elem)
         }
         out.close()

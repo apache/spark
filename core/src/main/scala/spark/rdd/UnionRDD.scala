@@ -2,11 +2,8 @@ package spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
 
-import spark.Dependency
-import spark.RangeDependency
-import spark.RDD
-import spark.SparkContext
-import spark.Split
+import spark._
+import java.lang.ref.WeakReference
 
 private[spark] class UnionSplit[T: ClassManifest](
     idx: Int, 
@@ -22,12 +19,11 @@ private[spark] class UnionSplit[T: ClassManifest](
 
 class UnionRDD[T: ClassManifest](
     sc: SparkContext,
-    @transient rdds: Seq[RDD[T]])
-  extends RDD[T](sc)
-  with Serializable {
-  
+    @transient var rdds: Seq[RDD[T]])
+  extends RDD[T](sc, Nil)  {    // Nil, so the dependencies_ var does not refer to parent RDDs
+
   @transient
-  val splits_ : Array[Split] = {
+  var splits_ : Array[Split] = {
     val array = new Array[Split](rdds.map(_.splits.size).sum)
     var pos = 0
     for (rdd <- rdds; split <- rdd.splits) {
@@ -39,19 +35,31 @@ class UnionRDD[T: ClassManifest](
 
   override def splits = splits_
 
-  @transient
-  override val dependencies = {
+  @transient var deps_ = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for (rdd <- rdds) {
-      deps += new RangeDependency(rdd, 0, pos, rdd.splits.size) 
+      deps += new RangeDependency(rdd, 0, pos, rdd.splits.size)
       pos += rdd.splits.size
     }
     deps.toList
   }
-  
+
+  override def dependencies = deps_
+
   override def compute(s: Split): Iterator[T] = s.asInstanceOf[UnionSplit[T]].iterator()
 
-  override def preferredLocations(s: Split): Seq[String] =
-    s.asInstanceOf[UnionSplit[T]].preferredLocations()
+  override def preferredLocations(s: Split): Seq[String] = {
+    if (isCheckpointed) {
+      checkpointRDD.preferredLocations(s)
+    } else {
+      s.asInstanceOf[UnionSplit[T]].preferredLocations()
+    }
+  }
+
+  override protected def changeDependencies(newRDD: RDD[_]) {
+    deps_ = List(new OneToOneDependency(newRDD))
+    splits_ = newRDD.splits
+    rdds = null
+  }
 }

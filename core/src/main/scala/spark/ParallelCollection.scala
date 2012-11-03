@@ -22,13 +22,13 @@ private[spark] class ParallelCollectionSplit[T: ClassManifest](
 }
 
 private[spark] class ParallelCollection[T: ClassManifest](
-    sc: SparkContext, 
+    @transient sc : SparkContext,
     @transient data: Seq[T],
     numSlices: Int)
-  extends RDD[T](sc) {
+  extends RDD[T](sc, Nil) {
   // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
   // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
-  // instead.
+  // instead. UPDATE: With the new changes to enable checkpointing, this an be done.
 
   @transient
   val splits_ = {
@@ -41,8 +41,6 @@ private[spark] class ParallelCollection[T: ClassManifest](
   override def compute(s: Split) = s.asInstanceOf[ParallelCollectionSplit[T]].iterator
   
   override def preferredLocations(s: Split): Seq[String] = Nil
-  
-  override val dependencies: List[Dependency[_]] = Nil
 }
 
 private object ParallelCollection {

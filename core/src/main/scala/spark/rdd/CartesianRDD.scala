@@ -1,9 +1,7 @@
 package spark.rdd
 
-import spark.NarrowDependency
-import spark.RDD
-import spark.SparkContext
-import spark.Split
+import spark._
+import java.lang.ref.WeakReference
 
 private[spark]
 class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with Serializable {
@@ -13,15 +11,15 @@ class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with 
 private[spark]
 class CartesianRDD[T: ClassManifest, U:ClassManifest](
     sc: SparkContext,
-    rdd1: RDD[T],
-    rdd2: RDD[U])
-  extends RDD[Pair[T, U]](sc)
+    var rdd1 : RDD[T],
+    var rdd2 : RDD[U])
+  extends RDD[Pair[T, U]](sc, Nil)
   with Serializable {
-  
+
   val numSplitsInRdd2 = rdd2.splits.size
-  
+
   @transient
-  val splits_ = {
+  var splits_ = {
     // create the cross product split
     val array = new Array[Split](rdd1.splits.size * rdd2.splits.size)
     for (s1 <- rdd1.splits; s2 <- rdd2.splits) {
@@ -34,16 +32,20 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
   override def splits = splits_
 
   override def preferredLocations(split: Split) = {
-    val currSplit = split.asInstanceOf[CartesianSplit]
-    rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
+    if (isCheckpointed) {
+      checkpointRDD.preferredLocations(split)
+    } else {
+      val currSplit = split.asInstanceOf[CartesianSplit]
+      rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
+    }
   }
 
   override def compute(split: Split) = {
     val currSplit = split.asInstanceOf[CartesianSplit]
     for (x <- rdd1.iterator(currSplit.s1); y <- rdd2.iterator(currSplit.s2)) yield (x, y)
   }
-  
-  override val dependencies = List(
+
+  var deps_ = List(
     new NarrowDependency(rdd1) {
       def getParents(id: Int): Seq[Int] = List(id / numSplitsInRdd2)
     },
@@ -51,4 +53,13 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
       def getParents(id: Int): Seq[Int] = List(id % numSplitsInRdd2)
     }
   )
+
+  override def dependencies = deps_
+
+  override protected def changeDependencies(newRDD: RDD[_]) {
+    deps_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
+    splits_ = newRDD.splits
+    rdd1 = null
+    rdd2 = null
+  }
 }
