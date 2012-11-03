@@ -194,12 +194,20 @@ class SparkContext(
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
-    new ParallelCollection[T](this, seq, numSlices)
+    new ParallelCollection[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
   /** Distribute a local Scala collection to form an RDD. */
   def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     parallelize(seq, numSlices)
+  }
+
+  /** Distribute a local Scala collection to form an RDD, with one or more
+    * location preferences for each object. Create a new partition for each
+    * collection item. */
+   def makeLocalityConstrainedRDD[T: ClassManifest](seq: Seq[(T, Seq[String])]): RDD[T] = {
+    val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
+    new ParallelCollection[T](this, seq.map(_._1), seq.size, indexToPrefs)
   }
 
   /**
