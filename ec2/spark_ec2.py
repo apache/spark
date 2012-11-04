@@ -180,16 +180,12 @@ def launch_cluster(conn, opts, cluster_name):
     zoo_group.authorize('tcp', 3888, 3888, '0.0.0.0/0')
 
   # Check if instances are already running in our groups
-  print "Checking for running cluster..."
-  reservations = conn.get_all_instances()
-  for res in reservations:
-    group_names = [g.id for g in res.groups]
-    if master_group.name in group_names or slave_group.name in group_names or zoo_group.name in group_names:
-      active = [i for i in res.instances if is_active(i)]
-      if len(active) > 0:
-        print >> stderr, ("ERROR: There are already instances running in " +
-            "group %s, %s or %s" % (master_group.name, slave_group.name, zoo_group.name))
-        sys.exit(1)
+  active_nodes = get_existing_cluster(conn, opts, cluster_name,
+                                      die_on_error=False)
+  if any(active_nodes):
+    print >> stderr, ("ERROR: There are already instances running in " +
+        "group %s, %s or %s" % (master_group.name, slave_group.name, zoo_group.name))
+    sys.exit(1)
 
   # Figure out the latest AMI from our static URL
   if opts.ami == "latest":
