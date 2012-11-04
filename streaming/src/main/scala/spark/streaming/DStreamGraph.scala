@@ -22,11 +22,8 @@ final class DStreamGraph extends Serializable with Logging {
       }
       zeroTime = time
       outputStreams.foreach(_.initialize(zeroTime))
-      outputStreams.foreach(_.setRememberDuration()) // first set the rememberDuration to default values
-      if (rememberDuration != null) {
-        // if custom rememberDuration has been provided, set the rememberDuration
-        outputStreams.foreach(_.setRememberDuration(rememberDuration))
-      }
+      outputStreams.foreach(_.setRememberDuration(rememberDuration))
+      outputStreams.foreach(_.validate)
       inputStreams.par.foreach(_.start())
     }
   }

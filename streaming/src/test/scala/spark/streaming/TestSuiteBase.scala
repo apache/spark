@@ -5,10 +5,16 @@ import util.ManualClock
 import collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 import collection.mutable.SynchronizedBuffer
+import java.io.{ObjectInputStream, IOException}
 
+
+/**
+ * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
+ * replayable, reliable message queue like Kafka. It requires a sequence as input, and
+ * returns the i_th element at the i_th batch unde manual clock.
+ */
 class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
   extends InputDStream[T](ssc_) {
-  var currentIndex = 0
 
   def start() {}
 
@@ -23,17 +29,32 @@ class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[
       ssc.sc.makeRDD(Seq[T](), numPartitions)
     }
     logInfo("Created RDD " + rdd.id)
-    //currentIndex += 1
     Some(rdd)
   }
 }
 
+/**
+ * This is a output stream just for the testsuites. All the output is collected into a
+ * ArrayBuffer. This buffer is wiped clean on being restored from checkpoint.
+ */
 class TestOutputStream[T: ClassManifest](parent: DStream[T], val output: ArrayBuffer[Seq[T]])
   extends PerRDDForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
-  })
+  }) {
 
+  // This is to clear the output buffer every it is read from a checkpoint
+  @throws(classOf[IOException])
+  private def readObject(ois: ObjectInputStream) {
+    ois.defaultReadObject()
+    output.clear()
+  }
+}
+
+/**
+ * This is the base trait for Spark Streaming testsuites. This provides basic functionality
+ * to run user-defined set of input on user-defined stream operations, and verify the output.
+ */
 trait TestSuiteBase extends FunSuite with Logging {
 
   System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
@@ -44,7 +65,7 @@ trait TestSuiteBase extends FunSuite with Logging {
 
   def batchDuration() = Seconds(1)
 
-  def checkpointFile() = null.asInstanceOf[String]
+  def checkpointDir() = null.asInstanceOf[String]
 
   def checkpointInterval() = batchDuration
 
@@ -60,8 +81,8 @@ trait TestSuiteBase extends FunSuite with Logging {
     // Create StreamingContext
     val ssc = new StreamingContext(master, framework)
     ssc.setBatchDuration(batchDuration)
-    if (checkpointFile != null) {
-      ssc.setCheckpointDetails(checkpointFile, checkpointInterval())
+    if (checkpointDir != null) {
+      ssc.checkpoint(checkpointDir, checkpointInterval())
     }
 
     // Setup the stream computation
@@ -82,8 +103,8 @@ trait TestSuiteBase extends FunSuite with Logging {
     // Create StreamingContext
     val ssc = new StreamingContext(master, framework)
     ssc.setBatchDuration(batchDuration)
-    if (checkpointFile != null) {
-      ssc.setCheckpointDetails(checkpointFile, checkpointInterval())
+    if (checkpointDir != null) {
+      ssc.checkpoint(checkpointDir, checkpointInterval())
     }
 
     // Setup the stream computation

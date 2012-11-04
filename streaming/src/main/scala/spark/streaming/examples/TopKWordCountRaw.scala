@@ -41,9 +41,8 @@ object TopKWordCountRaw {
 
     val windowedCounts = union.mapPartitions(splitAndCountPartitions)
       .reduceByKeyAndWindow(add _, subtract _, Seconds(30), Milliseconds(batchMs), reduces)
-    windowedCounts.persist(StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY_2,
-      Milliseconds(chkptMs))
-    //windowedCounts.print()    // TODO: something else?
+    windowedCounts.persist().checkpoint(Milliseconds(chkptMs))
+    //.persist(StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY_2, Milliseconds(chkptMs))
 
     def topK(data: Iterator[(String, Long)], k: Int): Iterator[(String, Long)] = {
       val taken = new Array[(String, Long)](k)

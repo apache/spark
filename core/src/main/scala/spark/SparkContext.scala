@@ -584,14 +584,15 @@ class SparkContext(
    * overwriting existing files may be overwritten). The directory will be deleted on exit
    * if indicated.
    */
-  def setCheckpointDir(dir: String, deleteOnExit: Boolean = false) {
+  def setCheckpointDir(dir: String, useExisting: Boolean = false) {
     val path = new Path(dir)
     val fs = path.getFileSystem(new Configuration())
-    if (fs.exists(path)) {
-      throw new Exception("Checkpoint directory '" + path + "' already exists.")
-    } else {
-      fs.mkdirs(path)
-      if (deleteOnExit) fs.deleteOnExit(path)
+    if (!useExisting) {
+      if (fs.exists(path)) {
+        throw new Exception("Checkpoint directory '" + path + "' already exists.")
+      } else {
+        fs.mkdirs(path)
+      }
     }
     checkpointDir = dir
   }

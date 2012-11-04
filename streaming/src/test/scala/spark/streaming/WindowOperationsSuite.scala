@@ -283,7 +283,9 @@ class WindowOperationsSuite extends TestSuiteBase {
     test("reduceByKeyAndWindowInv - " + name) {
       val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
       val operation = (s: DStream[(String, Int)]) => {
-        s.reduceByKeyAndWindow(_ + _, _ - _, windowTime, slideTime).persist()
+        s.reduceByKeyAndWindow(_ + _, _ - _, windowTime, slideTime)
+         .persist()
+         .checkpoint(Seconds(100)) // Large value to avoid effect of RDD checkpointing
       }
       testOperation(input, operation, expectedOutput, numBatches, true)
     }
