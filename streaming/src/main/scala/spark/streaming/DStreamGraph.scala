@@ -4,7 +4,7 @@ import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 import collection.mutable.ArrayBuffer
 import spark.Logging
 
-final class DStreamGraph extends Serializable with Logging {
+final private[streaming] class DStreamGraph extends Serializable with Logging {
   initLogging()
 
   private val inputStreams = new ArrayBuffer[InputDStream[_]]()
@@ -15,7 +15,7 @@ final class DStreamGraph extends Serializable with Logging {
   private[streaming] var rememberDuration: Time = null
   private[streaming] var checkpointInProgress = false
 
-  def start(time: Time) {
+  private[streaming] def start(time: Time) {
     this.synchronized {
       if (zeroTime != null) {
         throw new Exception("DStream graph computation already started")
@@ -28,7 +28,7 @@ final class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  def stop() {
+  private[streaming] def stop() {
     this.synchronized {
       inputStreams.par.foreach(_.stop())
     }
@@ -40,7 +40,7 @@ final class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  def setBatchDuration(duration: Time) {
+  private[streaming] def setBatchDuration(duration: Time) {
     this.synchronized {
       if (batchDuration != null) {
         throw new Exception("Batch duration already set as " + batchDuration +
@@ -50,7 +50,7 @@ final class DStreamGraph extends Serializable with Logging {
     batchDuration = duration
   }
 
-  def setRememberDuration(duration: Time) {
+  private[streaming] def setRememberDuration(duration: Time) {
     this.synchronized {
       if (rememberDuration != null) {
         throw new Exception("Batch duration already set as " + batchDuration +
@@ -60,37 +60,49 @@ final class DStreamGraph extends Serializable with Logging {
     rememberDuration = duration
   }
 
-  def addInputStream(inputStream: InputDStream[_]) {
+  private[streaming] def addInputStream(inputStream: InputDStream[_]) {
     this.synchronized {
       inputStream.setGraph(this)
       inputStreams += inputStream
     }
   }
 
-  def addOutputStream(outputStream: DStream[_]) {
+  private[streaming] def addOutputStream(outputStream: DStream[_]) {
     this.synchronized {
       outputStream.setGraph(this)
       outputStreams += outputStream
     }
   }
 
-  def getInputStreams() = inputStreams.toArray
+  private[streaming] def getInputStreams() = this.synchronized { inputStreams.toArray }
 
-  def getOutputStreams() = outputStreams.toArray
+  private[streaming] def getOutputStreams() = this.synchronized { outputStreams.toArray }
 
-  def generateRDDs(time: Time): Seq[Job] = {
+  private[streaming] def generateRDDs(time: Time): Seq[Job] = {
     this.synchronized {
       outputStreams.flatMap(outputStream => outputStream.generateJob(time))
     }
   }
 
-  def forgetOldRDDs(time: Time) {
+  private[streaming] def forgetOldRDDs(time: Time) {
     this.synchronized {
       outputStreams.foreach(_.forgetOldRDDs(time))
     }
   }
 
-  def validate() {
+  private[streaming] def updateCheckpointData() {
+    this.synchronized {
+      outputStreams.foreach(_.updateCheckpointData())
+    }
+  }
+
+  private[streaming] def restoreCheckpointData() {
+    this.synchronized {
+      outputStreams.foreach(_.restoreCheckpointData())
+    }
+  }
+
+  private[streaming] def validate() {
     this.synchronized {
       assert(batchDuration != null, "Batch duration has not been set")
       assert(batchDuration > Milliseconds(100), "Batch duration of " + batchDuration + " is very low")

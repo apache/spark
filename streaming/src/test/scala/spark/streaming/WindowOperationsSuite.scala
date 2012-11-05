@@ -5,11 +5,11 @@ import collection.mutable.ArrayBuffer
 
 class WindowOperationsSuite extends TestSuiteBase {
 
-  override def framework() = "WindowOperationsSuite"
+  override def framework = "WindowOperationsSuite"
 
-  override def maxWaitTimeMillis() = 20000
+  override def maxWaitTimeMillis = 20000
 
-  override def batchDuration() = Seconds(1)
+  override def batchDuration = Seconds(1)
 
   val largerSlideInput = Seq(
     Seq(("a", 1)),

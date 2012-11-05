@@ -474,8 +474,10 @@ class SparkContext(
 
   /** Shut down the SparkContext. */
   def stop() {
-    dagScheduler.stop()
-    dagScheduler = null
+    if (dagScheduler != null) {
+      dagScheduler.stop()
+      dagScheduler = null
+    }
     taskScheduler = null
     // TODO: Cache.stop()?
     env.stop()

@@ -54,6 +54,7 @@ class StreamingContext (
   val graph: DStreamGraph = {
     if (isCheckpointPresent) {
       cp_.graph.setContext(this)
+      cp_.graph.restoreCheckpointData()
       cp_.graph
     } else {
       new DStreamGraph()
@@ -218,17 +219,16 @@ class StreamingContext (
       if (scheduler != null) scheduler.stop()
       if (networkInputTracker != null) networkInputTracker.stop()
       if (receiverJobThread != null) receiverJobThread.interrupt()
-      sc.stop() 
+      sc.stop()
+      logInfo("StreamingContext stopped successfully")
     } catch {
       case e: Exception => logWarning("Error while stopping", e)
     }
-    
-    logInfo("StreamingContext stopped")
   }
 
   def doCheckpoint(currentTime: Time) {
+    graph.updateCheckpointData()
     new Checkpoint(this, currentTime).save(checkpointDir)
-
   }
 }
 

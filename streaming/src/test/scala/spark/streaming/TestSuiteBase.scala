@@ -57,21 +57,21 @@ class TestOutputStream[T: ClassManifest](parent: DStream[T], val output: ArrayBu
  */
 trait TestSuiteBase extends FunSuite with Logging {
 
-  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+  def framework = "TestSuiteBase"
 
-  def framework() = "TestSuiteBase"
+  def master = "local[2]"
 
-  def master() = "local[2]"
+  def batchDuration = Seconds(1)
 
-  def batchDuration() = Seconds(1)
+  def checkpointDir = null.asInstanceOf[String]
 
-  def checkpointDir() = null.asInstanceOf[String]
+  def checkpointInterval = batchDuration
 
-  def checkpointInterval() = batchDuration
+  def numInputPartitions = 2
 
-  def numInputPartitions() = 2
+  def maxWaitTimeMillis = 10000
 
-  def maxWaitTimeMillis() = 10000
+  def actuallyWait = false
 
   def setupStreams[U: ClassManifest, V: ClassManifest](
       input: Seq[Seq[U]],
@@ -82,7 +82,7 @@ trait TestSuiteBase extends FunSuite with Logging {
     val ssc = new StreamingContext(master, framework)
     ssc.setBatchDuration(batchDuration)
     if (checkpointDir != null) {
-      ssc.checkpoint(checkpointDir, checkpointInterval())
+      ssc.checkpoint(checkpointDir, checkpointInterval)
     }
 
     // Setup the stream computation
@@ -104,7 +104,7 @@ trait TestSuiteBase extends FunSuite with Logging {
     val ssc = new StreamingContext(master, framework)
     ssc.setBatchDuration(batchDuration)
     if (checkpointDir != null) {
-      ssc.checkpoint(checkpointDir, checkpointInterval())
+      ssc.checkpoint(checkpointDir, checkpointInterval)
     }
 
     // Setup the stream computation
@@ -118,11 +118,18 @@ trait TestSuiteBase extends FunSuite with Logging {
     ssc
   }
 
+  /**
+   * Runs the streams set up in `ssc` on manual clock for `numBatches` batches and
+   * returns the collected output. It will wait until `numExpectedOutput` number of
+   * output data has been collected or timeout (set by `maxWaitTimeMillis`) is reached.
+   */
   def runStreams[V: ClassManifest](
       ssc: StreamingContext,
       numBatches: Int,
       numExpectedOutput: Int
     ): Seq[Seq[V]] = {
+
+    System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
 
     assert(numBatches > 0, "Number of batches to run stream computation is zero")
     assert(numExpectedOutput > 0, "Number of expected outputs after " + numBatches + " is zero")
@@ -139,7 +146,15 @@ trait TestSuiteBase extends FunSuite with Logging {
       // Advance manual clock
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
       logInfo("Manual clock before advancing = " + clock.time)
-      clock.addToTime(numBatches * batchDuration.milliseconds)
+      if (actuallyWait) {
+        for (i <- 1 to numBatches) {
+          logInfo("Actually waiting for " + batchDuration)
+          clock.addToTime(batchDuration.milliseconds)
+          Thread.sleep(batchDuration.milliseconds)
+        }
+      } else {
+        clock.addToTime(numBatches * batchDuration.milliseconds)
+      }
       logInfo("Manual clock after advancing = " + clock.time)
 
       // Wait until expected number of output items have been generated

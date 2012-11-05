@@ -14,6 +14,8 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 import scala.Some
 import collection.mutable
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
 
 abstract class DStream[T: ClassManifest] (@transient var ssc: StreamingContext)
 extends Serializable with Logging {
@@ -42,6 +44,7 @@ extends Serializable with Logging {
    */
 
   // RDDs generated, marked as protected[streaming] so that testsuites can access it
+  @transient
   protected[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
   
   // Time zero for the DStream
@@ -112,7 +115,7 @@ extends Serializable with Logging {
     // Set the minimum value of the rememberDuration if not already set
     var minRememberDuration = slideTime
     if (checkpointInterval != null && minRememberDuration <= checkpointInterval) {
-      minRememberDuration = checkpointInterval + slideTime
+      minRememberDuration = checkpointInterval * 2  // times 2 just to be sure that the latest checkpoint is not forgetten
     }
     if (rememberDuration == null || rememberDuration < minRememberDuration) {
       rememberDuration = minRememberDuration
@@ -265,33 +268,59 @@ extends Serializable with Logging {
       if (t <= (time - rememberDuration)) {
         generatedRDDs.remove(t)
         numForgotten += 1
-        //logInfo("Forgot RDD of time " + t + " from " + this)
+        logInfo("Forgot RDD of time " + t + " from " + this)
       }
     })
     logInfo("Forgot " + numForgotten + " RDDs from " + this)
     dependencies.foreach(_.forgetOldRDDs(time))
   }
 
+  /**
+   * Refreshes the list of checkpointed RDDs that will be saved along with checkpoint of this stream.
+   * Along with that it forget old checkpoint files.
+   */
   protected[streaming] def updateCheckpointData() {
+
+    // TODO (tdas): This code can be simplified. Its kept verbose to aid debugging.
+    val checkpointedRDDs = generatedRDDs.filter(_._2.getCheckpointData() != null)
+    val removedCheckpointData = checkpointData.filter(x => !generatedRDDs.contains(x._1))
+
     checkpointData.clear()
-    generatedRDDs.foreach {
-      case(time, rdd) => {
-        logDebug("Adding checkpointed RDD for time " + time)
+    checkpointedRDDs.foreach {
+      case (time, rdd) => {
         val data = rdd.getCheckpointData()
-        if (data != null) {
-          checkpointData += ((time, data))
+        assert(data != null)
+        checkpointData += ((time, data))
+        logInfo("Added checkpointed RDD " + rdd + " for time " + time + " to stream checkpoint")
+      }
+    }
+
+    dependencies.foreach(_.updateCheckpointData())
+    // If at least one checkpoint is present, then delete old checkpoints
+    if (checkpointData.size > 0) {
+      // Delete the checkpoint RDD files that are not needed any more
+      removedCheckpointData.foreach {
+        case (time: Time, file: String) => {
+          val path = new Path(file)
+          val fs = path.getFileSystem(new Configuration())
+          fs.delete(path, true)
+          logInfo("Deleted checkpoint file '" + file + "' for time " + time)
         }
       }
     }
+
+    logInfo("Updated checkpoint data")
   }
 
   protected[streaming] def restoreCheckpointData() {
+    logInfo("Restoring checkpoint data from " + checkpointData.size + " checkpointed RDDs")
     checkpointData.foreach {
       case(time, data) => {
-        logInfo("Restoring checkpointed RDD for time " + time)
+        logInfo("Restoring checkpointed RDD for time " + time + " from file")
         generatedRDDs += ((time, ssc.sc.objectFile[T](data.toString)))
       }
     }
+    dependencies.foreach(_.restoreCheckpointData())
   }
 
   @throws(classOf[IOException])
@@ -300,7 +329,6 @@ extends Serializable with Logging {
     if (graph != null) {
       graph.synchronized {
         if (graph.checkpointInProgress) {
-          updateCheckpointData()
           oos.defaultWriteObject()
         } else {
           val msg = "Object of " + this.getClass.getName + " is being serialized " +
@@ -322,7 +350,6 @@ extends Serializable with Logging {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
     generatedRDDs = new HashMap[Time, RDD[T]] ()
-    restoreCheckpointData()
   }
 
   /** 

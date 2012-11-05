@@ -6,6 +6,7 @@ import org.apache.hadoop.fs.{FileUtil, Path}
 import org.apache.hadoop.conf.Configuration
 
 import java.io.{InputStream, ObjectStreamClass, ObjectInputStream, ObjectOutputStream}
+import sys.process.processInternal
 
 
 class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
@@ -52,17 +53,17 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   }
 }
 
-object Checkpoint {
+object Checkpoint extends Logging {
 
   def load(path: String): Checkpoint = {
 
     val fs = new Path(path).getFileSystem(new Configuration())
-    val attempts = Seq(new Path(path), new Path(path, "graph"), new Path(path, "graph.bk"))
-    var lastException: Exception = null
-    var lastExceptionFile: String = null
+    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"), new Path(path), new Path(path + ".bk"))
+    var detailedLog: String = ""
 
     attempts.foreach(file => {
       if (fs.exists(file)) {
+        logInfo("Attempting to load checkpoint from file '" + file + "'")
         try {
           val fis = fs.open(file)
           // ObjectInputStream uses the last defined user-defined class loader in the stack
@@ -75,21 +76,18 @@ object Checkpoint {
           ois.close()
           fs.close()
           cp.validate()
-          println("Checkpoint successfully loaded from file " + file)
+          logInfo("Checkpoint successfully loaded from file '" + file + "'")
           return cp
         } catch {
           case e: Exception =>
-            lastException = e
-            lastExceptionFile = file.toString
+            logError("Error loading checkpoint from file '" + file + "'", e)
         }
+      } else {
+        logWarning("Could not load checkpoint from file '" + file + "' as it does not exist")
       }
-    })
 
-    if (lastException == null) {
-      throw new Exception("Could not load checkpoint from path '" + path + "'")
-    } else {
-      throw new Exception("Error loading checkpoint from path '" + lastExceptionFile + "'", lastException)
-    }
+    })
+    throw new Exception("Could not load checkpoint from path '" + path + "'")
   }
 
   def fromBytes(bytes: Array[Byte]): Checkpoint = {
