@@ -227,7 +227,7 @@ class StreamingContext (
   }
 
   def doCheckpoint(currentTime: Time) {
-    graph.updateCheckpointData()
+    graph.updateCheckpointData(currentTime)
     new Checkpoint(this, currentTime).save(checkpointDir)
   }
 }

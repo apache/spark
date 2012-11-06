@@ -6,7 +6,6 @@ import org.apache.hadoop.fs.{FileUtil, Path}
 import org.apache.hadoop.conf.Configuration
 
 import java.io.{InputStream, ObjectStreamClass, ObjectInputStream, ObjectOutputStream}
-import sys.process.processInternal
 
 
 class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)

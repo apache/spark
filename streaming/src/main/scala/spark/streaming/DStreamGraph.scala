@@ -90,9 +90,9 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  private[streaming] def updateCheckpointData() {
+  private[streaming] def updateCheckpointData(time: Time) {
     this.synchronized {
-      outputStreams.foreach(_.updateCheckpointData())
+      outputStreams.foreach(_.updateCheckpointData(time))
     }
   }
 

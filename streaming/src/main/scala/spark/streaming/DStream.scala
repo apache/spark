@@ -1,6 +1,7 @@
 package spark.streaming
 
-import spark.streaming.StreamingContext._
+import StreamingContext._
+import Time._
 
 import spark._
 import spark.SparkContext._
@@ -12,8 +13,7 @@ import scala.collection.mutable.HashMap
 
 import java.util.concurrent.ArrayBlockingQueue
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
-import scala.Some
-import collection.mutable
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
 
@@ -206,10 +206,10 @@ extends Serializable with Logging {
   }
 
   /**
-   * This method either retrieves a precomputed RDD of this DStream,
-   * or computes the RDD (if the time is valid)
+   * Retrieves a precomputed RDD of this DStream, or computes the RDD. This is an internal
+   * method that should not be called directly.
    */  
-  def getOrCompute(time: Time): Option[RDD[T]] = {
+  protected[streaming] def getOrCompute(time: Time): Option[RDD[T]] = {
     // If this DStream was not initialized (i.e., zeroTime not set), then do it
     // If RDD was already generated, then retrieve it from HashMap
     generatedRDDs.get(time) match {
@@ -245,10 +245,12 @@ extends Serializable with Logging {
   }
 
   /**
-   * This method generates a SparkStreaming job for the given time
-   * and may required to be overriden by subclasses
+   * Generates a SparkStreaming job for the given time. This is an internal method that
+   * should not be called directly. This default implementation creates a job
+   * that materializes the corresponding RDD. Subclasses of DStream may override this
+   * (eg. PerRDDForEachDStream).
    */
-  def generateJob(time: Time): Option[Job] = {
+  protected[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
       case Some(rdd) => {
         val jobFunc = () => {
@@ -261,6 +263,9 @@ extends Serializable with Logging {
     }
   }
 
+  /**
+   * Dereferences RDDs that are older than rememberDuration.
+   */
   protected[streaming] def forgetOldRDDs(time: Time) {
     val keys = generatedRDDs.keys
     var numForgotten = 0
@@ -276,42 +281,46 @@ extends Serializable with Logging {
   }
 
   /**
-   * Refreshes the list of checkpointed RDDs that will be saved along with checkpoint of this stream.
-   * Along with that it forget old checkpoint files.
+   * Refreshes the list of checkpointed RDDs that will be saved along with checkpoint of
+   * this stream. This is an internal method that should not be called directly. This is
+   * a default implementation that saves only the file names of the checkpointed RDDs to
+   * checkpointData. Subclasses of DStream (especially those of InputDStream) may override
+   * this method to save custom checkpoint data.
    */
-  protected[streaming] def updateCheckpointData() {
-
-    // TODO (tdas): This code can be simplified. Its kept verbose to aid debugging.
-    val checkpointedRDDs = generatedRDDs.filter(_._2.getCheckpointData() != null)
-    val removedCheckpointData = checkpointData.filter(x => !generatedRDDs.contains(x._1))
-
-    checkpointData.clear()
-    checkpointedRDDs.foreach {
-      case (time, rdd) => {
-        val data = rdd.getCheckpointData()
-        assert(data != null)
-        checkpointData += ((time, data))
-        logInfo("Added checkpointed RDD " + rdd + " for time " + time + " to stream checkpoint")
-      }
+  protected[streaming] def updateCheckpointData(currentTime: Time) {
+    val newCheckpointData = generatedRDDs.filter(_._2.getCheckpointData() != null)
+                                         .map(x => (x._1, x._2.getCheckpointData()))
+    val oldCheckpointData = checkpointData.clone()
+    if (newCheckpointData.size > 0) {
+      checkpointData.clear()
+      checkpointData ++= newCheckpointData
     }
 
-    dependencies.foreach(_.updateCheckpointData())
-    // If at least one checkpoint is present, then delete old checkpoints
-    if (checkpointData.size > 0) {
-      // Delete the checkpoint RDD files that are not needed any more
-      removedCheckpointData.foreach {
-        case (time: Time, file: String) => {
-          val path = new Path(file)
+    dependencies.foreach(_.updateCheckpointData(currentTime))
+
+    newCheckpointData.foreach {
+      case (time, data) => { logInfo("Added checkpointed RDD for time " + time + " to stream checkpoint") }
+    }
+
+    if (newCheckpointData.size > 0) {
+      (oldCheckpointData -- newCheckpointData.keySet).foreach {
+        case (time, data) => {
+          val path = new Path(data.toString)
           val fs = path.getFileSystem(new Configuration())
           fs.delete(path, true)
-          logInfo("Deleted checkpoint file '" + file + "' for time " + time)
+          logInfo("Deleted checkpoint file '" + path + "' for time " + time)
         }
       }
     }
-
     logInfo("Updated checkpoint data")
   }
 
+  /**
+   * Restores the RDDs in generatedRDDs from the checkpointData. This is an internal method
+   * that should not be called directly. This is a default implementation that recreates RDDs
+   * from the checkpoint file names stored in checkpointData. Subclasses of DStream that
+   * override the updateCheckpointData() method would also need to override this method.
+   */
   protected[streaming] def restoreCheckpointData() {
     logInfo("Restoring checkpoint data from " + checkpointData.size + " checkpointed RDDs")
     checkpointData.foreach {

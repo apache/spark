@@ -43,7 +43,7 @@ object Time {
 
   implicit def toTime(long: Long) = Time(long)
   
-  implicit def toLong(time: Time) = time.milliseconds  
+  implicit def toLong(time: Time) = time.milliseconds
 }
 
 object Milliseconds {
