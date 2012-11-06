@@ -21,15 +21,19 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     partitioner: Partitioner
   ) extends DStream[(K,V)](parent.ssc) {
 
-  if (!_windowTime.isMultipleOf(parent.slideTime))
-    throw new Exception("The window duration of ReducedWindowedDStream (" + _slideTime + ") " +
-    "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
+  assert(_windowTime.isMultipleOf(parent.slideTime),
+    "The window duration of ReducedWindowedDStream (" + _slideTime + ") " +
+      "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")"
+  )
 
-  if (!_slideTime.isMultipleOf(parent.slideTime))
-    throw new Exception("The slide duration of ReducedWindowedDStream (" + _slideTime + ") " +
-    "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
+  assert(_slideTime.isMultipleOf(parent.slideTime),
+    "The slide duration of ReducedWindowedDStream (" + _slideTime + ") " +
+      "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")"
+  )
 
-  @transient val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
+  super.persist(StorageLevel.MEMORY_ONLY)
+
+  val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
 
   def windowTime: Time =  _windowTime
 
@@ -37,15 +41,19 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
 
   override def slideTime: Time = _slideTime
 
-  //TODO: This is wrong. This should depend on the checkpointInterval
+  override val mustCheckpoint = true
+
   override def parentRememberDuration: Time = rememberDuration + windowTime
 
-  override def persist(
-      storageLevel: StorageLevel, 
-      checkpointLevel: StorageLevel, 
-      checkpointInterval: Time): DStream[(K,V)] = {
-    super.persist(storageLevel, checkpointLevel, checkpointInterval)
-    reducedStream.persist(storageLevel, checkpointLevel, checkpointInterval)
+  override def persist(storageLevel: StorageLevel): DStream[(K,V)] = {
+    super.persist(storageLevel)
+    reducedStream.persist(storageLevel)
+    this
+  }
+
+  override def checkpoint(interval: Time): DStream[(K, V)] = {
+    super.checkpoint(interval)
+    reducedStream.checkpoint(interval)
     this
   }
 

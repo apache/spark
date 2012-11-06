@@ -1,6 +1,7 @@
 package spark.streaming
 
-import spark.streaming.StreamingContext._
+import StreamingContext._
+import Time._
 
 import spark._
 import spark.SparkContext._
@@ -12,7 +13,9 @@ import scala.collection.mutable.HashMap
 
 import java.util.concurrent.ArrayBlockingQueue
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
-import scala.Some
+
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
 
 abstract class DStream[T: ClassManifest] (@transient var ssc: StreamingContext)
 extends Serializable with Logging {
@@ -41,52 +44,55 @@ extends Serializable with Logging {
    */
 
   // RDDs generated, marked as protected[streaming] so that testsuites can access it
-  protected[streaming] val generatedRDDs = new HashMap[Time, RDD[T]] ()
+  @transient
+  protected[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
   
   // Time zero for the DStream
-  protected var zeroTime: Time = null
+  protected[streaming] var zeroTime: Time = null
 
   // Duration for which the DStream will remember each RDD created
-  protected var rememberDuration: Time = null
+  protected[streaming] var rememberDuration: Time = null
 
   // Storage level of the RDDs in the stream
-  protected var storageLevel: StorageLevel = StorageLevel.NONE
+  protected[streaming] var storageLevel: StorageLevel = StorageLevel.NONE
 
-  // Checkpoint level and checkpoint interval
-  protected var checkpointLevel: StorageLevel = StorageLevel.NONE  // NONE means don't checkpoint
-  protected var checkpointInterval: Time = null
+  // Checkpoint details
+  protected[streaming] val mustCheckpoint = false
+  protected[streaming] var checkpointInterval: Time = null
+  protected[streaming] val checkpointData = new HashMap[Time, Any]()
 
   // Reference to whole DStream graph
-  protected var graph: DStreamGraph = null
+  protected[streaming] var graph: DStreamGraph = null
 
   def isInitialized = (zeroTime != null)
 
   // Duration for which the DStream requires its parent DStream to remember each RDD created
   def parentRememberDuration = rememberDuration
 
-  // Change this RDD's storage level
-  def persist(
-      storageLevel: StorageLevel,
-      checkpointLevel: StorageLevel, 
-      checkpointInterval: Time): DStream[T] = {
-    if (this.storageLevel != StorageLevel.NONE && this.storageLevel != storageLevel) {
-      // TODO: not sure this is necessary for DStreams
+  // Set caching level for the RDDs created by this DStream
+  def persist(level: StorageLevel): DStream[T] = {
+    if (this.isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change storage level of an DStream after it was already assigned a level")
+        "Cannot change storage level of an DStream after streaming context has started")
     }
-    this.storageLevel = storageLevel
-    this.checkpointLevel = checkpointLevel
-    this.checkpointInterval = checkpointInterval
+    this.storageLevel = level
     this
   }
-
-  // Set caching level for the RDDs created by this DStream
-  def persist(newLevel: StorageLevel): DStream[T] = persist(newLevel, StorageLevel.NONE, null)
 
   def persist(): DStream[T] = persist(StorageLevel.MEMORY_ONLY)
   
   // Turn on the default caching level for this RDD
   def cache(): DStream[T] = persist()
+
+  def checkpoint(interval: Time): DStream[T] = {
+    if (isInitialized) {
+      throw new UnsupportedOperationException(
+        "Cannot change checkpoint interval of an DStream after streaming context has started")
+    }
+    persist()
+    checkpointInterval = interval
+    this
+  }
 
   /**
    * This method initializes the DStream by setting the "zero" time, based on which
@@ -99,7 +105,67 @@ extends Serializable with Logging {
         + ", cannot initialize it again to " + time)
     }
     zeroTime = time
+
+    // Set the checkpoint interval to be slideTime or 10 seconds, which ever is larger
+    if (mustCheckpoint && checkpointInterval == null) {
+      checkpointInterval = slideTime.max(Seconds(10))
+      logInfo("Checkpoint interval automatically set to " + checkpointInterval)
+    }
+
+    // Set the minimum value of the rememberDuration if not already set
+    var minRememberDuration = slideTime
+    if (checkpointInterval != null && minRememberDuration <= checkpointInterval) {
+      minRememberDuration = checkpointInterval * 2  // times 2 just to be sure that the latest checkpoint is not forgetten
+    }
+    if (rememberDuration == null || rememberDuration < minRememberDuration) {
+      rememberDuration = minRememberDuration
+    }
+
+    // Initialize the dependencies
     dependencies.foreach(_.initialize(zeroTime))
+  }
+
+  protected[streaming] def validate() {
+    assert(
+      !mustCheckpoint || checkpointInterval != null,
+      "The checkpoint interval for " + this.getClass.getSimpleName + " has not been set. " +
+        " Please use DStream.checkpoint() to set the interval."
+    )
+
+    assert(
+      checkpointInterval == null || checkpointInterval >= slideTime,
+      "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
+        checkpointInterval + " which is lower than its slide time (" + slideTime + "). " +
+        "Please set it to at least " + slideTime + "."
+    )
+
+    assert(
+      checkpointInterval == null || checkpointInterval.isMultipleOf(slideTime),
+      "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
+        checkpointInterval + " which not a multiple of its slide time (" + slideTime + "). " +
+        "Please set it to a multiple " + slideTime + "."
+    )
+
+    assert(
+      checkpointInterval == null || storageLevel != StorageLevel.NONE,
+      "" + this.getClass.getSimpleName + " has been marked for checkpointing but the storage " +
+        "level has not been set to enable persisting. Please use DStream.persist() to set the " +
+        "storage level to use memory for better checkpointing performance."
+    )
+
+    assert(
+      checkpointInterval == null || rememberDuration > checkpointInterval,
+      "The remember duration for " + this.getClass.getSimpleName + " has been set to " +
+        rememberDuration + " which is not more than the checkpoint interval (" +
+        checkpointInterval + "). Please set it to higher than " + checkpointInterval + "."
+    )
+
+    dependencies.foreach(_.validate())
+
+    logInfo("Slide time = " + slideTime)
+    logInfo("Storage level = " + storageLevel)
+    logInfo("Checkpoint interval = " + checkpointInterval)
+    logInfo("Remember duration = " + rememberDuration)
     logInfo("Initialized " + this)
   }
 
@@ -120,17 +186,12 @@ extends Serializable with Logging {
     dependencies.foreach(_.setGraph(graph))
   }
 
-  protected[streaming] def setRememberDuration(duration: Time = slideTime) {
-    if (duration == null) {
-      throw new Exception("Duration for remembering RDDs cannot be set to null for " + this)
-    } else if (rememberDuration != null && duration < rememberDuration) {
-      logWarning("Duration for remembering RDDs cannot be reduced from " + rememberDuration
-        + " to " + duration + " for " + this)
-    } else {
+  protected[streaming] def setRememberDuration(duration: Time) {
+    if (duration != null && duration > rememberDuration) {
       rememberDuration = duration
-      dependencies.foreach(_.setRememberDuration(parentRememberDuration))
       logInfo("Duration for remembering RDDs set to " + rememberDuration + " for " + this)
     }
+    dependencies.foreach(_.setRememberDuration(parentRememberDuration))
   }
 
   /** This method checks whether the 'time' is valid wrt slideTime for generating RDD */
@@ -145,10 +206,10 @@ extends Serializable with Logging {
   }
 
   /**
-   * This method either retrieves a precomputed RDD of this DStream,
-   * or computes the RDD (if the time is valid)
+   * Retrieves a precomputed RDD of this DStream, or computes the RDD. This is an internal
+   * method that should not be called directly.
    */  
-  def getOrCompute(time: Time): Option[RDD[T]] = {
+  protected[streaming] def getOrCompute(time: Time): Option[RDD[T]] = {
     // If this DStream was not initialized (i.e., zeroTime not set), then do it
     // If RDD was already generated, then retrieve it from HashMap
     generatedRDDs.get(time) match {
@@ -163,12 +224,13 @@ extends Serializable with Logging {
         if (isTimeValid(time)) {
           compute(time) match {
             case Some(newRDD) =>
-              if (checkpointInterval != null && (time - zeroTime).isMultipleOf(checkpointInterval)) { 
-                newRDD.persist(checkpointLevel)
-                logInfo("Persisting " + newRDD + " to " + checkpointLevel + " at time " + time)
-              } else if (storageLevel != StorageLevel.NONE) {
+              if (storageLevel != StorageLevel.NONE) {
                 newRDD.persist(storageLevel)
-                logInfo("Persisting " + newRDD + " to " + storageLevel + " at time " + time)
+                logInfo("Persisting RDD for time " + time + " to " + storageLevel + " at time " + time)
+              }
+              if (checkpointInterval != null && (time - zeroTime).isMultipleOf(checkpointInterval)) {
+                newRDD.checkpoint()
+                logInfo("Marking RDD for time " + time + " for checkpointing at time " + time)
               }
               generatedRDDs.put(time, newRDD)
               Some(newRDD)
@@ -183,10 +245,12 @@ extends Serializable with Logging {
   }
 
   /**
-   * This method generates a SparkStreaming job for the given time
-   * and may required to be overriden by subclasses
+   * Generates a SparkStreaming job for the given time. This is an internal method that
+   * should not be called directly. This default implementation creates a job
+   * that materializes the corresponding RDD. Subclasses of DStream may override this
+   * (eg. PerRDDForEachDStream).
    */
-  def generateJob(time: Time): Option[Job] = {
+  protected[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
       case Some(rdd) => {
         val jobFunc = () => {
@@ -199,18 +263,73 @@ extends Serializable with Logging {
     }
   }
 
-  def forgetOldRDDs(time: Time) {
+  /**
+   * Dereferences RDDs that are older than rememberDuration.
+   */
+  protected[streaming] def forgetOldRDDs(time: Time) {
     val keys = generatedRDDs.keys
     var numForgotten = 0
     keys.foreach(t => {
       if (t <= (time - rememberDuration)) {
         generatedRDDs.remove(t)
         numForgotten += 1
-        //logInfo("Forgot RDD of time " + t + " from " + this)
+        logInfo("Forgot RDD of time " + t + " from " + this)
       }
     })
     logInfo("Forgot " + numForgotten + " RDDs from " + this)
     dependencies.foreach(_.forgetOldRDDs(time))
+  }
+
+  /**
+   * Refreshes the list of checkpointed RDDs that will be saved along with checkpoint of
+   * this stream. This is an internal method that should not be called directly. This is
+   * a default implementation that saves only the file names of the checkpointed RDDs to
+   * checkpointData. Subclasses of DStream (especially those of InputDStream) may override
+   * this method to save custom checkpoint data.
+   */
+  protected[streaming] def updateCheckpointData(currentTime: Time) {
+    val newCheckpointData = generatedRDDs.filter(_._2.getCheckpointData() != null)
+                                         .map(x => (x._1, x._2.getCheckpointData()))
+    val oldCheckpointData = checkpointData.clone()
+    if (newCheckpointData.size > 0) {
+      checkpointData.clear()
+      checkpointData ++= newCheckpointData
+    }
+
+    dependencies.foreach(_.updateCheckpointData(currentTime))
+
+    newCheckpointData.foreach {
+      case (time, data) => { logInfo("Added checkpointed RDD for time " + time + " to stream checkpoint") }
+    }
+
+    if (newCheckpointData.size > 0) {
+      (oldCheckpointData -- newCheckpointData.keySet).foreach {
+        case (time, data) => {
+          val path = new Path(data.toString)
+          val fs = path.getFileSystem(new Configuration())
+          fs.delete(path, true)
+          logInfo("Deleted checkpoint file '" + path + "' for time " + time)
+        }
+      }
+    }
+    logInfo("Updated checkpoint data")
+  }
+
+  /**
+   * Restores the RDDs in generatedRDDs from the checkpointData. This is an internal method
+   * that should not be called directly. This is a default implementation that recreates RDDs
+   * from the checkpoint file names stored in checkpointData. Subclasses of DStream that
+   * override the updateCheckpointData() method would also need to override this method.
+   */
+  protected[streaming] def restoreCheckpointData() {
+    logInfo("Restoring checkpoint data from " + checkpointData.size + " checkpointed RDDs")
+    checkpointData.foreach {
+      case(time, data) => {
+        logInfo("Restoring checkpointed RDD for time " + time + " from file")
+        generatedRDDs += ((time, ssc.sc.objectFile[T](data.toString)))
+      }
+    }
+    dependencies.foreach(_.restoreCheckpointData())
   }
 
   @throws(classOf[IOException])
@@ -239,6 +358,7 @@ extends Serializable with Logging {
   private def readObject(ois: ObjectInputStream) {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
+    generatedRDDs = new HashMap[Time, RDD[T]] ()
   }
 
   /** 

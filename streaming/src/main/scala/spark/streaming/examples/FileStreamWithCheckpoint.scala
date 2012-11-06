@@ -10,20 +10,20 @@ object FileStreamWithCheckpoint {
   def main(args: Array[String]) {
 
     if (args.size != 3) {
-      println("FileStreamWithCheckpoint <master> <directory> <checkpoint file>")
-      println("FileStreamWithCheckpoint restart <directory> <checkpoint file>")
+      println("FileStreamWithCheckpoint <master> <directory> <checkpoint dir>")
+      println("FileStreamWithCheckpoint restart <directory> <checkpoint dir>")
       System.exit(-1)
     }
 
     val directory = new Path(args(1))
-    val checkpointFile = args(2)
+    val checkpointDir = args(2)
 
     val ssc: StreamingContext = {
 
       if (args(0) == "restart") {
 
         // Recreated streaming context from specified checkpoint file
-        new StreamingContext(checkpointFile)
+        new StreamingContext(checkpointDir)
 
       } else {
 
@@ -34,7 +34,7 @@ object FileStreamWithCheckpoint {
         // Create new streaming context
         val ssc_ = new StreamingContext(args(0), "FileStreamWithCheckpoint")
         ssc_.setBatchDuration(Seconds(1))
-        ssc_.setCheckpointDetails(checkpointFile, Seconds(1))
+        ssc_.checkpoint(checkpointDir, Seconds(1))
 
         // Setup the streaming computation
         val inputStream = ssc_.textFileStream(directory.toString)

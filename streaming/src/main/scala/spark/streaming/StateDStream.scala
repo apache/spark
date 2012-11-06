@@ -23,51 +23,14 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
     rememberPartitioner: Boolean
   ) extends DStream[(K, S)](parent.ssc) {
 
+  super.persist(StorageLevel.MEMORY_ONLY)
+
   override def dependencies = List(parent)
 
   override def slideTime = parent.slideTime
 
-  override def getOrCompute(time: Time): Option[RDD[(K, S)]] = {
-    generatedRDDs.get(time) match {
-      case Some(oldRDD) => {
-        if (checkpointInterval != null && time > zeroTime && (time - zeroTime).isMultipleOf(checkpointInterval) && oldRDD.dependencies.size > 0) {
-          val r = oldRDD
-          val oldRDDBlockIds = oldRDD.splits.map(s => "rdd:" + r.id + ":" + s.index)
-          val checkpointedRDD = new BlockRDD[(K, S)](ssc.sc, oldRDDBlockIds) {
-            override val partitioner = oldRDD.partitioner
-          }
-          generatedRDDs.update(time, checkpointedRDD)
-          logInfo("Checkpointed RDD " + oldRDD.id + " of time " + time + " with its new RDD " + checkpointedRDD.id)
-          Some(checkpointedRDD)
-        } else {
-          Some(oldRDD)
-        }
-      }
-      case None => {
-        if (isTimeValid(time)) {
-          compute(time) match {
-            case Some(newRDD) => {
-              if (checkpointInterval != null && (time - zeroTime).isMultipleOf(checkpointInterval)) { 
-                newRDD.persist(checkpointLevel)
-                logInfo("Persisting " + newRDD + " to " + checkpointLevel + " at time " + time)
-              } else if (storageLevel != StorageLevel.NONE) {
-                newRDD.persist(storageLevel)
-                logInfo("Persisting " + newRDD + " to " + storageLevel + " at time " + time)
-              }
-              generatedRDDs.put(time, newRDD)
-              Some(newRDD)
-            }
-            case None => {
-              None
-            }
-          }
-        } else {
-          None
-        }
-      }
-    }
-  }
-  
+  override val mustCheckpoint = true
+
   override def compute(validTime: Time): Option[RDD[(K, S)]] = {
 
     // Try to get the previous state RDD

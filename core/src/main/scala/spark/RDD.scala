@@ -119,22 +119,23 @@ abstract class RDD[T: ClassManifest](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** Returns the first parent RDD */
-  private[spark] def firstParent[U: ClassManifest] = {
+  protected[spark] def firstParent[U: ClassManifest] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 
   /** Returns the `i` th parent RDD */
-  private[spark] def parent[U: ClassManifest](i: Int) = dependencies(i).rdd.asInstanceOf[RDD[U]]
+  protected[spark] def parent[U: ClassManifest](i: Int) = dependencies(i).rdd.asInstanceOf[RDD[U]]
 
   // Variables relating to checkpointing
-  val isCheckpointable = true         // override to set this to false to avoid checkpointing an RDD
-  var shouldCheckpoint = false        // set to true when an RDD is marked for checkpointing
-  var isCheckpointInProgress = false  // set to true when checkpointing is in progress
-  var isCheckpointed = false          // set to true after checkpointing is completed
+  protected val isCheckpointable = true         // override to set this to false to avoid checkpointing an RDD
 
-  var checkpointFile: String = null   // set to the checkpoint file after checkpointing is completed
-  var checkpointRDD: RDD[T] = null    // set to the HadoopRDD of the checkpoint file
-  var checkpointRDDSplits: Seq[Split] = null  // set to the splits of the Hadoop RDD
+  protected var shouldCheckpoint = false        // set to true when an RDD is marked for checkpointing
+  protected var isCheckpointInProgress = false  // set to true when checkpointing is in progress
+  protected[spark] var isCheckpointed = false          // set to true after checkpointing is completed
+
+  protected[spark] var checkpointFile: String = null   // set to the checkpoint file after checkpointing is completed
+  protected var checkpointRDD: RDD[T] = null    // set to the HadoopRDD of the checkpoint file
+  protected var checkpointRDDSplits: Seq[Split] = null  // set to the splits of the Hadoop RDD
 
   // Methods available on all RDDs:
 
@@ -176,9 +177,22 @@ abstract class RDD[T: ClassManifest](
       if (isCheckpointed || shouldCheckpoint || isCheckpointInProgress) {
         // do nothing
       } else if (isCheckpointable) {
+        if (sc.checkpointDir == null) {
+          throw new Exception("Checkpoint directory has not been set in the SparkContext.")
+        }
         shouldCheckpoint = true
       } else {
         throw new Exception(this + " cannot be checkpointed")
+      }
+    }
+  }
+
+  def getCheckpointData(): Any = {
+    synchronized {
+      if (isCheckpointed) {
+        checkpointFile
+      } else {
+        null
       }
     }
   }

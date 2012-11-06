@@ -5,11 +5,11 @@ import collection.mutable.ArrayBuffer
 
 class WindowOperationsSuite extends TestSuiteBase {
 
-  override def framework() = "WindowOperationsSuite"
+  override def framework = "WindowOperationsSuite"
 
-  override def maxWaitTimeMillis() = 20000
+  override def maxWaitTimeMillis = 20000
 
-  override def batchDuration() = Seconds(1)
+  override def batchDuration = Seconds(1)
 
   val largerSlideInput = Seq(
     Seq(("a", 1)),
@@ -283,7 +283,9 @@ class WindowOperationsSuite extends TestSuiteBase {
     test("reduceByKeyAndWindowInv - " + name) {
       val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
       val operation = (s: DStream[(String, Int)]) => {
-        s.reduceByKeyAndWindow(_ + _, _ - _, windowTime, slideTime).persist()
+        s.reduceByKeyAndWindow(_ + _, _ - _, windowTime, slideTime)
+         .persist()
+         .checkpoint(Seconds(100)) // Large value to avoid effect of RDD checkpointing
       }
       testOperation(input, operation, expectedOutput, numBatches, true)
     }

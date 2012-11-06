@@ -58,7 +58,6 @@ extends Logging {
     graph.forgetOldRDDs(time)
     if (ssc.checkpointInterval != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointInterval)) {
       ssc.doCheckpoint(time)
-      logInfo("Checkpointed at time " + time)
     }
   }
 

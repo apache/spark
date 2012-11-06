@@ -15,6 +15,8 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.hadoop.fs.Path
+import java.util.UUID
 
 class StreamingContext (
     sc_ : SparkContext,
@@ -26,7 +28,7 @@ class StreamingContext (
   def this(master: String, frameworkName: String, sparkHome: String = null, jars: Seq[String] = Nil) =
     this(new SparkContext(master, frameworkName, sparkHome, jars), null)
 
-  def this(file: String) = this(null, Checkpoint.loadFromFile(file))
+  def this(path: String) = this(null, Checkpoint.load(path))
 
   def this(cp_ : Checkpoint) = this(null, cp_)
 
@@ -51,8 +53,8 @@ class StreamingContext (
 
   val graph: DStreamGraph = {
     if (isCheckpointPresent) {
-
       cp_.graph.setContext(this)
+      cp_.graph.restoreCheckpointData()
       cp_.graph
     } else {
       new DStreamGraph()
@@ -62,7 +64,15 @@ class StreamingContext (
   val nextNetworkInputStreamId = new AtomicInteger(0)
   var networkInputTracker: NetworkInputTracker = null
 
-  private[streaming] var checkpointFile: String = if (isCheckpointPresent) cp_.checkpointFile else null
+  private[streaming] var checkpointDir: String = {
+    if (isCheckpointPresent) {
+      sc.setCheckpointDir(cp_.checkpointDir, true)
+      cp_.checkpointDir
+    } else {
+      null
+    }
+  }
+
   private[streaming] var checkpointInterval: Time = if (isCheckpointPresent) cp_.checkpointInterval else null
   private[streaming] var receiverJobThread: Thread = null
   private[streaming] var scheduler: Scheduler = null
@@ -75,9 +85,15 @@ class StreamingContext (
     graph.setRememberDuration(duration)
   }
 
-  def setCheckpointDetails(file: String, interval: Time) {
-    checkpointFile = file
-    checkpointInterval = interval
+  def checkpoint(dir: String, interval: Time) {
+    if (dir != null) {
+      sc.setCheckpointDir(new Path(dir, "rdds-" + UUID.randomUUID.toString).toString)
+      checkpointDir = dir
+      checkpointInterval = interval
+    } else {
+      checkpointDir = null
+      checkpointInterval = null
+    }
   }
 
   private[streaming] def getInitialCheckpoint(): Checkpoint = {
@@ -181,16 +197,12 @@ class StreamingContext (
     graph.addOutputStream(outputStream)
   }
 
-  def validate() {
-    assert(graph != null, "Graph is null")
-    graph.validate()
-  }
-
   /**
    * This function starts the execution of the streams.
    */
   def start() {
-    validate()
+    assert(graph != null, "Graph is null")
+    graph.validate()
 
     val networkInputStreams = graph.getInputStreams().filter(s => s match {
         case n: NetworkInputDStream[_] => true
@@ -218,16 +230,16 @@ class StreamingContext (
       if (scheduler != null) scheduler.stop()
       if (networkInputTracker != null) networkInputTracker.stop()
       if (receiverJobThread != null) receiverJobThread.interrupt()
-      sc.stop() 
+      sc.stop()
+      logInfo("StreamingContext stopped successfully")
     } catch {
       case e: Exception => logWarning("Error while stopping", e)
     }
-    
-    logInfo("StreamingContext stopped")
   }
 
   def doCheckpoint(currentTime: Time) {
-    new Checkpoint(this, currentTime).saveToFile(checkpointFile)
+    graph.updateCheckpointData(currentTime)
+    new Checkpoint(this, currentTime).save(checkpointDir)
   }
 }
 

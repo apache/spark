@@ -25,6 +25,10 @@ case class Time(millis: Long) {
   def isMultipleOf(that: Time): Boolean = 
     (this.millis % that.millis == 0)
 
+  def min(that: Time): Time = if (this < that) this else that
+
+  def max(that: Time): Time = if (this > that) this else that
+
   def isZero: Boolean = (this.millis == 0)
 
   override def toString: String = (millis.toString + " ms")
@@ -39,7 +43,7 @@ object Time {
 
   implicit def toTime(long: Long) = Time(long)
   
-  implicit def toLong(time: Time) = time.milliseconds  
+  implicit def toLong(time: Time) = time.milliseconds
 }
 
 object Milliseconds {

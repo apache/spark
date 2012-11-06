@@ -57,11 +57,13 @@ object WordMax2 {
     val windowedCounts = sentences
       .mapPartitions(splitAndCountPartitions)
       .reduceByKey(add _, reduceTasks.toInt)
-      .persist(StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY_2,
-                      Milliseconds(chkptMillis.toLong))
+      .persist()
+      .checkpoint(Milliseconds(chkptMillis.toLong))
+      //.persist(StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY_2, Milliseconds(chkptMillis.toLong))
       .reduceByKeyAndWindow(max _, Seconds(10), batchDuration, reduceTasks.toInt)
-      //.persist(StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY_2,
-      //        Milliseconds(chkptMillis.toLong))
+      .persist()
+      .checkpoint(Milliseconds(chkptMillis.toLong))
+      //.persist(StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY_2, Milliseconds(chkptMillis.toLong))
     windowedCounts.foreachRDD(r => println("Element count: " + r.count()))
 
     ssc.start()
