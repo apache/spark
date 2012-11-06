@@ -288,20 +288,27 @@ extends Serializable with Logging {
    * this method to save custom checkpoint data.
    */
   protected[streaming] def updateCheckpointData(currentTime: Time) {
+    // Get the checkpointed RDDs from the generated RDDs
     val newCheckpointData = generatedRDDs.filter(_._2.getCheckpointData() != null)
                                          .map(x => (x._1, x._2.getCheckpointData()))
+    // Make a copy of the existing checkpoint data
     val oldCheckpointData = checkpointData.clone()
+
+    // If the new checkpoint has checkpoints then replace existing with the new one
     if (newCheckpointData.size > 0) {
       checkpointData.clear()
       checkpointData ++= newCheckpointData
     }
 
+    // Make dependencies update their checkpoint data
     dependencies.foreach(_.updateCheckpointData(currentTime))
 
+    // TODO: remove this, this is just for debugging
     newCheckpointData.foreach {
       case (time, data) => { logInfo("Added checkpointed RDD for time " + time + " to stream checkpoint") }
     }
 
+    // If old checkpoint files have been removed from checkpoint data, then remove the files
     if (newCheckpointData.size > 0) {
       (oldCheckpointData -- newCheckpointData.keySet).foreach {
         case (time, data) => {
@@ -322,6 +329,7 @@ extends Serializable with Logging {
    * override the updateCheckpointData() method would also need to override this method.
    */
   protected[streaming] def restoreCheckpointData() {
+    // Create RDDs from the checkpoint data
     logInfo("Restoring checkpoint data from " + checkpointData.size + " checkpointed RDDs")
     checkpointData.foreach {
       case(time, data) => {
