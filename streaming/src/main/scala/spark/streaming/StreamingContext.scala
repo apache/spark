@@ -86,6 +86,17 @@ class StreamingContext (
 
   private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
 
+  def kafkaStream[T: ClassManifest](
+      hostname: String,
+      port: Int,
+      groupId: String,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
+    ): DStream[T] = {
+    val inputStream = new KafkaInputDStream[T](this, hostname, port, groupId, storageLevel)
+    graph.addInputStream(inputStream)
+    inputStream
+  }
+
   def networkTextStream(
       hostname: String,
       port: Int,
