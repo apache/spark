@@ -272,7 +272,7 @@ private[spark] class MesosSchedulerBackend(
     synchronized {
       slaveIdsWithExecutors -= slaveId.getValue
     }
-    scheduler.slaveLost(slaveId.toString)
+    scheduler.slaveLost(slaveId.getValue)
   }
 
   override def executorLost(d: SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int) {
