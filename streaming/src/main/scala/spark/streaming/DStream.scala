@@ -288,6 +288,7 @@ extends Serializable with Logging {
    * this method to save custom checkpoint data.
    */
   protected[streaming] def updateCheckpointData(currentTime: Time) {
+    logInfo("Updating checkpoint data for time " + currentTime)
     // Get the checkpointed RDDs from the generated RDDs
     val newCheckpointData = generatedRDDs.filter(_._2.getCheckpointData() != null)
                                          .map(x => (x._1, x._2.getCheckpointData()))
@@ -319,7 +320,7 @@ extends Serializable with Logging {
         }
       }
     }
-    logInfo("Updated checkpoint data")
+    logInfo("Updated checkpoint data for time " + currentTime)
   }
 
   /**
@@ -338,6 +339,7 @@ extends Serializable with Logging {
       }
     }
     dependencies.foreach(_.restoreCheckpointData())
+    logInfo("Restored checkpoint data")
   }
 
   @throws(classOf[IOException])

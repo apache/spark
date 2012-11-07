@@ -32,7 +32,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
     val file = new Path(path, "graph")
     val conf = new Configuration()
     val fs = file.getFileSystem(conf)
-    logDebug("Saved checkpoint for time " + checkpointTime + " to file '" + file + "'")
+    logDebug("Saving checkpoint for time " + checkpointTime + " to file '" + file + "'")
     if (fs.exists(file)) {
       val bkFile = new Path(file.getParent, file.getName + ".bk")
       FileUtil.copy(fs, file, fs, bkFile, true, true, conf)
@@ -43,7 +43,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
     oos.writeObject(this)
     oos.close()
     fs.close()
-    logInfo("Saved checkpoint for time " + checkpointTime + " to file '" + file + "'")
+    logInfo("Checkpoint of streaming context for time " + checkpointTime + " saved successfully to file '" + file + "'")
   }
 
   def toBytes(): Array[Byte] = {
@@ -58,7 +58,6 @@ object Checkpoint extends Logging {
 
     val fs = new Path(path).getFileSystem(new Configuration())
     val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"), new Path(path), new Path(path + ".bk"))
-    var detailedLog: String = ""
 
     attempts.foreach(file => {
       if (fs.exists(file)) {
@@ -76,6 +75,7 @@ object Checkpoint extends Logging {
           fs.close()
           cp.validate()
           logInfo("Checkpoint successfully loaded from file '" + file + "'")
+          logInfo("Checkpoint was generated at time " + cp.checkpointTime)
           return cp
         } catch {
           case e: Exception =>
