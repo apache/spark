@@ -304,7 +304,8 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
       connectionRequests += newConnection
       newConnection   
     }
-    val connection = connectionsById.getOrElse(connectionManagerId, startNewConnection())
+    val lookupKey = ConnectionManagerId.fromSocketAddress(connectionManagerId.toSocketAddress)
+    val connection = connectionsById.getOrElse(lookupKey, startNewConnection())
     message.senderAddress = id.toSocketAddress()
     logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")
     /*connection.send(message)*/
