@@ -29,10 +29,12 @@ extends Logging {
     // on this first trigger time of the timer.
     if (ssc.isCheckpointPresent) {
       // If manual clock is being used for testing, then
-      // set manual clock to the last checkpointed time
+      // either set the manual clock to the last checkpointed time,
+      // or if the property is defined set it to that time
       if (clock.isInstanceOf[ManualClock]) {
         val lastTime = ssc.getInitialCheckpoint.checkpointTime.milliseconds
-        clock.asInstanceOf[ManualClock].setTime(lastTime)
+        val jumpTime = System.getProperty("spark.streaming.manualClock.jump", "0").toLong
+        clock.asInstanceOf[ManualClock].setTime(lastTime + jumpTime)
       }
       timer.restart(graph.zeroTime.milliseconds)
       logInfo("Scheduler's timer restarted")

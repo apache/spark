@@ -12,6 +12,8 @@ import org.apache.commons.io.FileUtils
 
 
 class InputStreamsSuite extends TestSuiteBase {
+    
+  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
 
   test("network input stream") {
     // Start the server

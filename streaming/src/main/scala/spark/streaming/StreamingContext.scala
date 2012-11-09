@@ -18,7 +18,7 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import java.util.UUID
 
-class StreamingContext (
+final class StreamingContext (
     sc_ : SparkContext,
     cp_ : Checkpoint
   ) extends Logging {
@@ -61,12 +61,12 @@ class StreamingContext (
     }
   }
 
-  val nextNetworkInputStreamId = new AtomicInteger(0)
-  var networkInputTracker: NetworkInputTracker = null
+  private[streaming] val nextNetworkInputStreamId = new AtomicInteger(0)
+  private[streaming] var networkInputTracker: NetworkInputTracker = null
 
   private[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
-      sc.setCheckpointDir(cp_.checkpointDir, true)
+      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(cp_.checkpointDir), true)
       cp_.checkpointDir
     } else {
       null
@@ -87,7 +87,7 @@ class StreamingContext (
 
   def checkpoint(dir: String, interval: Time) {
     if (dir != null) {
-      sc.setCheckpointDir(new Path(dir, "rdds-" + UUID.randomUUID.toString).toString)
+      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(dir))
       checkpointDir = dir
       checkpointInterval = interval
     } else {
@@ -240,8 +240,11 @@ class StreamingContext (
   }
 
   def doCheckpoint(currentTime: Time) {
+    val startTime = System.currentTimeMillis()
     graph.updateCheckpointData(currentTime)
     new Checkpoint(this, currentTime).save(checkpointDir)
+    val stopTime = System.currentTimeMillis()
+    logInfo("Checkpointing the graph took " + (stopTime - startTime) + " ms")
   }
 }
 
@@ -259,6 +262,10 @@ object StreamingContext {
     } else {
       prefix + "-" + time.milliseconds + "." + suffix
     }
+  }
+
+  def getSparkCheckpointDir(sscCheckpointDir: String): String = {
+    new Path(sscCheckpointDir, UUID.randomUUID.toString).toString
   }
 }
 

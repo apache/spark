@@ -52,15 +52,13 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
       .checkpoint(stateStreamCheckpointInterval)
       .map(t => (t._1, t._2.self))
     }
-    val ssc = setupStreams(input, operation)
-    val stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
+    var ssc = setupStreams(input, operation)
+    var stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
 
-    // Run till a time such that at least one RDD in the stream should have been checkpointed
+    // Run till a time such that at least one RDD in the stream should have been checkpointed,
+    // then check whether some RDD has been checkpointed or not
     ssc.start()
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    advanceClock(clock, firstNumBatches)
-
-    // Check whether some RDD has been checkpointed or not
+    runStreamsWithRealDelay(ssc, firstNumBatches)
     logInfo("Checkpoint data of state stream = \n[" + stateStream.checkpointData.mkString(",\n") + "]")
     assert(!stateStream.checkpointData.isEmpty, "No checkpointed RDDs in state stream before first failure")
     stateStream.checkpointData.foreach {
@@ -73,42 +71,45 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     // Run till a further time such that previous checkpoint files in the stream would be deleted
     // and check whether the earlier checkpoint files are deleted
     val checkpointFiles = stateStream.checkpointData.map(x => new File(x._2.toString))
-    advanceClock(clock, secondNumBatches)
+    runStreamsWithRealDelay(ssc, secondNumBatches)
     checkpointFiles.foreach(file => assert(!file.exists, "Checkpoint file '" + file + "' was not deleted"))
+    ssc.stop()
 
     // Restart stream computation using the checkpoint file and check whether
     // checkpointed RDDs have been restored or not
-    ssc.stop()
-    val sscNew = new StreamingContext(checkpointDir)
-    val stateStreamNew = sscNew.graph.getOutputStreams().head.dependencies.head.dependencies.head
-    logInfo("Restored data of state stream = \n[" + stateStreamNew.generatedRDDs.mkString("\n") + "]")
-    assert(!stateStreamNew.generatedRDDs.isEmpty, "No restored RDDs in state stream after recovery from first failure")
+    ssc = new StreamingContext(checkpointDir)
+    stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
+    logInfo("Restored data of state stream = \n[" + stateStream.generatedRDDs.mkString("\n") + "]")
+    assert(!stateStream.generatedRDDs.isEmpty, "No restored RDDs in state stream after recovery from first failure")
 
 
-    // Run one batch to generate a new checkpoint file
-    sscNew.start()
-    val clockNew = sscNew.scheduler.clock.asInstanceOf[ManualClock]
-    advanceClock(clockNew, 1)
-
-    // Check whether some RDD is present in the checkpoint data or not
-    assert(!stateStreamNew.checkpointData.isEmpty, "No checkpointed RDDs in state stream before second failure")
+    // Run one batch to generate a new checkpoint file and check whether some RDD
+    // is present in the checkpoint data or not
+    ssc.start()
+    runStreamsWithRealDelay(ssc, 1)
+    assert(!stateStream.checkpointData.isEmpty, "No checkpointed RDDs in state stream before second failure")
     stateStream.checkpointData.foreach {
       case (time, data) => {
         val file = new File(data.toString)
-        assert(file.exists(), "Checkpoint file '" + file +"' for time " + time + " for state stream before seconds failure does not exist")
+        assert(file.exists(),
+          "Checkpoint file '" + file +"' for time " + time + " for state stream before seconds failure does not exist")
       }
     }
+    ssc.stop()
 
     // Restart stream computation from the new checkpoint file to see whether that file has
     // correct checkpoint data
-    sscNew.stop()
-    val sscNewNew = new StreamingContext(checkpointDir)
-    val stateStreamNewNew = sscNew.graph.getOutputStreams().head.dependencies.head.dependencies.head
-    logInfo("Restored data of state stream = \n[" + stateStreamNew.generatedRDDs.mkString("\n") + "]")
-    assert(!stateStreamNewNew.generatedRDDs.isEmpty, "No restored RDDs in state stream after recovery from second failure")
-    sscNewNew.start()
-    advanceClock(sscNewNew.scheduler.clock.asInstanceOf[ManualClock], 1)
-    sscNewNew.stop()
+    ssc = new StreamingContext(checkpointDir)
+    stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
+    logInfo("Restored data of state stream = \n[" + stateStream.generatedRDDs.mkString("\n") + "]")
+    assert(!stateStream.generatedRDDs.isEmpty, "No restored RDDs in state stream after recovery from second failure")
+
+    // Adjust manual clock time as if it is being restarted after a delay
+    System.setProperty("spark.streaming.manualClock.jump", (batchDuration.milliseconds * 7).toString)
+    ssc.start()
+    runStreamsWithRealDelay(ssc, 4)
+    ssc.stop()
+    System.clearProperty("spark.streaming.manualClock.jump")
   }
 
   test("map and reduceByKey") {
@@ -123,10 +124,12 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
   test("reduceByKeyAndWindowInv") {
     val n = 10
     val w = 4
-    val input = (1 to n).map(x => Seq("a")).toSeq
+    val input = (1 to n).map(_ => Seq("a")).toSeq
     val output = Seq(Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 3))) ++ (1 to (n - w + 1)).map(x => Seq(("a", 4)))
     val operation = (st: DStream[String]) => {
-      st.map(x => (x, 1)).reduceByKeyAndWindow(_ + _, _ - _, batchDuration * 4, batchDuration)
+      st.map(x => (x, 1))
+        .reduceByKeyAndWindow(_ + _, _ - _, batchDuration * w, batchDuration)
+        .checkpoint(Seconds(2))
     }
     for (i <- Seq(2, 3, 4)) {
       testCheckpointedOperation(input, operation, output, i)
@@ -184,7 +187,14 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     verifyOutput[V](outputNew, expectedOutput.takeRight(nextNumExpectedOutputs), true)
   }
 
-  def advanceClock(clock: ManualClock, numBatches: Long) {
+  /**
+   * Advances the manual clock on the streaming scheduler by given number of batches.
+   * It also wait for the expected amount of time for each batch.
+   */
+
+
+  def runStreamsWithRealDelay(ssc: StreamingContext, numBatches: Long) {
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     logInfo("Manual clock before advancing = " + clock.time)
     for (i <- 1 to numBatches.toInt) {
       clock.addToTime(batchDuration.milliseconds)
@@ -193,4 +203,5 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     logInfo("Manual clock after advancing = " + clock.time)
     Thread.sleep(batchDuration.milliseconds)
   }
+
 }
