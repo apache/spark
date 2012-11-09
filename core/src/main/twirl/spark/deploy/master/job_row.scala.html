@@ -10,12 +10,7 @@
   </td>
   <td>@job.desc.name</td>
   <td>
-    @job.coresGranted Granted
-    @if(job.desc.cores == Integer.MAX_VALUE) {
-      
-    } else {
-      , @job.coresLeft
-    }
+    @job.coresGranted
   </td>
   <td>@Utils.memoryMegabytesToString(job.desc.memoryPerSlave)</td>
   <td>@formatDate(job.submitDate)</td>

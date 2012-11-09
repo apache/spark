@@ -33,6 +33,10 @@ private[spark] class WorkerInfo(
       memoryUsed -= exec.memory
     }
   }
+
+  def hasExecutor(job: JobInfo): Boolean = {
+    executors.values.exists(_.job == job)
+  }
   
   def webUiAddress : String = {
     "http://" + this.host + ":" + this.webUiPort
