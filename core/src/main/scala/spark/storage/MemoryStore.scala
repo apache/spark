@@ -214,7 +214,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           // This should never be null as only one thread should be dropping
           // blocks and removing entries. However the check is still here for
           // future safety.
-          if (entries != null) {
+          if (entry != null) {
             val data = if (entry.deserialized) {
               Left(entry.value.asInstanceOf[ArrayBuffer[Any]])
             } else {

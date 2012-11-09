@@ -16,7 +16,7 @@ import util.Random
 private[spark] object ThreadingTest {
 
   val numProducers = 5
-  val numBlocksPerProducer = 10000
+  val numBlocksPerProducer = 20000
 
   private[spark] class ProducerThread(manager: BlockManager, id: Int) extends Thread {
     val queue = new ArrayBlockingQueue[(String, Seq[Int])](100)
@@ -26,7 +26,7 @@ private[spark] object ThreadingTest {
         val blockId = "b-" + id + "-" + i
         val blockSize = Random.nextInt(1000)
         val block = (1 to blockSize).map(_ => Random.nextInt())
-        val level = if (Random.nextBoolean()) StorageLevel.MEMORY_ONLY_SER else StorageLevel.MEMORY_AND_DISK
+        val level = randomLevel()
         val startTime = System.currentTimeMillis()
         manager.put(blockId, block.iterator, level, true)
         println("Pushed block " + blockId + " in " + (System.currentTimeMillis - startTime) + " ms")
@@ -34,9 +34,21 @@ private[spark] object ThreadingTest {
       }
       println("Producer thread " + id + " terminated")
     }
+
+    def randomLevel(): StorageLevel = {
+      math.abs(Random.nextInt()) % 4 match {
+        case 0 => StorageLevel.MEMORY_ONLY
+        case 1 => StorageLevel.MEMORY_ONLY_SER
+        case 2 => StorageLevel.MEMORY_AND_DISK
+        case 3 => StorageLevel.MEMORY_AND_DISK_SER
+      }
+    }
   }
 
-  private[spark] class ConsumerThread(manager: BlockManager, queue: ArrayBlockingQueue[(String, Seq[Int])]) extends Thread {
+  private[spark] class ConsumerThread(
+      manager: BlockManager,
+      queue: ArrayBlockingQueue[(String, Seq[Int])]
+    ) extends Thread {
     var numBlockConsumed = 0
 
     override def run() {
@@ -73,5 +85,7 @@ private[spark] object ThreadingTest {
     blockManagerMaster.stop()
     actorSystem.shutdown()
     actorSystem.awaitTermination()
+    println("Everything stopped.")
+    println("It will take sometime for the JVM to clean all temporary files and shutdown. Sit tight.")
   }
 }
