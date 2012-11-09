@@ -48,7 +48,7 @@ class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: S
           val buffer = queue.take()
           val blockId = "input-" + streamId + "-" + nextBlockNumber
           nextBlockNumber += 1
-          pushBlock(blockId, buffer, storageLevel)
+          pushBlock(blockId, buffer, null, storageLevel)
         }
       }
     }

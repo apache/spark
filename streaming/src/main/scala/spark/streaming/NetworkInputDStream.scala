@@ -4,9 +4,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import spark.{Logging, SparkEnv, RDD}
 import spark.rdd.BlockRDD
+import spark.streaming.util.{RecurringTimer, SystemClock}
 import spark.storage.StorageLevel
 
 import java.nio.ByteBuffer
+import java.util.concurrent.ArrayBlockingQueue
 
 import akka.actor.{Props, Actor}
 import akka.pattern.ask
@@ -41,10 +43,10 @@ abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : Streaming
 
 sealed trait NetworkReceiverMessage
 case class StopReceiver(msg: String) extends NetworkReceiverMessage
-case class ReportBlock(blockId: String) extends NetworkReceiverMessage
+case class ReportBlock(blockId: String, metadata: Any) extends NetworkReceiverMessage
 case class ReportError(msg: String) extends NetworkReceiverMessage
 
-abstract class NetworkReceiver[T: ClassManifest](streamId: Int) extends Serializable with Logging {
+abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Serializable with Logging {
 
   initLogging()
 
@@ -106,21 +108,23 @@ abstract class NetworkReceiver[T: ClassManifest](streamId: Int) extends Serializ
     actor ! ReportError(e.toString)
   }
 
+
   /**
    * This method pushes a block (as iterator of values) into the block manager.
    */
-  protected def pushBlock(blockId: String, iterator: Iterator[T], level: StorageLevel) {
+  def pushBlock(blockId: String, iterator: Iterator[T], metadata: Any, level: StorageLevel) {
     val buffer = new ArrayBuffer[T] ++ iterator
     env.blockManager.put(blockId, buffer.asInstanceOf[ArrayBuffer[Any]], level)
-    actor ! ReportBlock(blockId)
+
+    actor ! ReportBlock(blockId, metadata)
   }
 
   /**
    * This method pushes a block (as bytes) into the block manager.
    */
-  protected def pushBlock(blockId: String, bytes: ByteBuffer, level: StorageLevel) {
+  def pushBlock(blockId: String, bytes: ByteBuffer, metadata: Any, level: StorageLevel) {
     env.blockManager.putBytes(blockId, bytes, level)
-    actor ! ReportBlock(blockId)
+    actor ! ReportBlock(blockId, metadata)
   }
 
   /** A helper actor that communicates with the NetworkInputTracker */
@@ -138,8 +142,8 @@ abstract class NetworkReceiver[T: ClassManifest](streamId: Int) extends Serializ
     }
 
     override def receive() = {
-      case ReportBlock(blockId) =>
-        tracker ! AddBlocks(streamId, Array(blockId))
+      case ReportBlock(blockId, metadata) =>
+        tracker ! AddBlocks(streamId, Array(blockId), metadata)
       case ReportError(msg) =>
         tracker ! DeregisterReceiver(streamId, msg)
       case StopReceiver(msg) =>
@@ -147,5 +151,6 @@ abstract class NetworkReceiver[T: ClassManifest](streamId: Int) extends Serializ
         tracker ! DeregisterReceiver(streamId, msg)
     }
   }
+
 }
 

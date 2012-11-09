@@ -1,121 +1,164 @@
 package spark.streaming
 
+import java.lang.reflect.Method
 import java.nio.ByteBuffer
 import java.util.Properties
-import java.util.concurrent.{ArrayBlockingQueue, Executors}
+import java.util.concurrent.{ArrayBlockingQueue, ConcurrentHashMap, Executors}
 import kafka.api.{FetchRequest}
-import kafka.consumer.{Consumer, ConsumerConfig, KafkaStream}
-import kafka.javaapi.consumer.SimpleConsumer
-import kafka.javaapi.message.ByteBufferMessageSet
+import kafka.consumer._
+import kafka.cluster.Partition
 import kafka.message.{Message, MessageSet, MessageAndMetadata}
-import kafka.utils.Utils
+import kafka.serializer.StringDecoder
+import kafka.utils.{Pool, Utils, ZKGroupTopicDirs}
+import kafka.utils.ZkUtils._
+import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 import spark._
 import spark.RDD
 import spark.storage.StorageLevel
 
 
+case class KafkaPartitionKey(brokerId: Int, topic: String, groupId: String, partId: Int)
+case class KafkaInputDStreamMetadata(timestamp: Long, data: Map[KafkaPartitionKey, Long])
+case class KafkaDStreamCheckpointData(kafkaRdds: HashMap[Time, Any], 
+  savedOffsets: HashMap[Long, Map[KafkaPartitionKey, Long]]) extends DStreamCheckpointData(kafkaRdds)
+
 /**
- * An input stream that pulls messages form a Kafka Broker.
+ * Input stream that pulls messages form a Kafka Broker.
  */
 class KafkaInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
     host: String,
     port: Int,
     groupId: String,
-    storageLevel: StorageLevel,
-    timeout: Int = 10000,
-    bufferSize: Int = 1024000
+    topics: Map[String, Int],
+    initialOffsets: Map[KafkaPartitionKey, Long],
+    storageLevel: StorageLevel
   ) extends NetworkInputDStream[T](ssc_ ) with Logging {
 
+  var savedOffsets = HashMap[Long, Map[KafkaPartitionKey, Long]]()
+
+  override protected[streaming] def addMetadata(metadata: Any) {
+    metadata match {
+      case x : KafkaInputDStreamMetadata => 
+        savedOffsets(x.timestamp) = x.data
+        logInfo("Saved Offsets: " + savedOffsets)
+      case _ => logInfo("Received unknown metadata: " + metadata.toString)
+    }
+  }
+
+  override protected[streaming] def updateCheckpointData(currentTime: Time) {
+    super.updateCheckpointData(currentTime)
+    logInfo("Updating KafkaDStream checkpoint data: " + savedOffsets.toString)
+    checkpointData = KafkaDStreamCheckpointData(checkpointData.rdds, savedOffsets)
+  }
+
+  override protected[streaming] def restoreCheckpointData() {
+    super.restoreCheckpointData()
+    logInfo("Restoring KafkaDStream checkpoint data.")
+    checkpointData match { 
+      case x : KafkaDStreamCheckpointData => 
+        savedOffsets = x.savedOffsets
+        logInfo("Restored KafkaDStream offsets: " + savedOffsets.toString)
+    }
+  }
+
   def createReceiver(): NetworkReceiver[T] = {
-    new KafkaReceiver(id, host, port, storageLevel, groupId, timeout).asInstanceOf[NetworkReceiver[T]]
+    new KafkaReceiver(id, host, port,  groupId, topics, initialOffsets, storageLevel)
+      .asInstanceOf[NetworkReceiver[T]]
   }
 }
 
-class KafkaReceiver(streamId: Int, host: String, port: Int, storageLevel: StorageLevel, groupId: String, timeout: Int)
-  extends NetworkReceiver[Any](streamId) {
+class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String, 
+  topics: Map[String, Int], initialOffsets: Map[KafkaPartitionKey, Long], 
+  storageLevel: StorageLevel) extends NetworkReceiver[Any](streamId) {
 
-  //var executorPool : = null
-  var blockPushingThread : Thread = null
+  // Timeout for establishing a connection to Zookeper in ms.
+  val ZK_TIMEOUT = 10000
+
+  // Handles pushing data into the BlockManager
+  lazy protected val dataHandler = new KafkaDataHandler(this, storageLevel)
+  // Keeps track of the current offsets. Maps from (topic, partitionID) -> Offset
+  lazy val offsets = HashMap[KafkaPartitionKey, Long]()
+  // Connection to Kafka
+  var consumerConnector : ZookeeperConsumerConnector = null
 
   def onStop() {
-    blockPushingThread.interrupt()
+    dataHandler.stop()
   }
 
   def onStart() {
 
-    val executorPool = Executors.newFixedThreadPool(2)
+    // Starting the DataHandler that buffers blocks and pushes them into them BlockManager
+    dataHandler.start()
 
-    logInfo("Starting Kafka Consumer with groupId " + groupId)
+    // In case we are using multiple Threads to handle Kafka Messages
+    val executorPool = Executors.newFixedThreadPool(topics.values.reduce(_ + _))
 
     val zooKeeperEndPoint = host + ":" + port
+    logInfo("Starting Kafka Consumer Stream in group " + groupId)
+    logInfo("Initial offsets: " + initialOffsets.toString)
     logInfo("Connecting to " + zooKeeperEndPoint)
-
-    // Specify some consumer properties
+    // Specify some Consumer properties
     val props = new Properties()
     props.put("zk.connect", zooKeeperEndPoint)
-    props.put("zk.connectiontimeout.ms", timeout.toString)
+    props.put("zk.connectiontimeout.ms", ZK_TIMEOUT.toString)
     props.put("groupid", groupId)
 
     // Create the connection to the cluster
     val consumerConfig = new ConsumerConfig(props)
-    val consumerConnector = Consumer.create(consumerConfig)
-    logInfo("Connected to " + zooKeeperEndPoint)
-    logInfo("")
-    logInfo("")
+    consumerConnector = Consumer.create(consumerConfig).asInstanceOf[ZookeeperConsumerConnector]
 
-    // Specify which topics we are listening to
-    val topicCountMap = Map("test" -> 2)
-    val topicMessageStreams = consumerConnector.createMessageStreams(topicCountMap)
-    val streams = topicMessageStreams.get("test")
+    // Reset the Kafka offsets in case we are recovering from a failure
+    resetOffsets(initialOffsets)
     
-    // Queue that holds the blocks
-    val queue = new ArrayBlockingQueue[ByteBuffer](2)
+    logInfo("Connected to " + zooKeeperEndPoint)
 
-    streams.getOrElse(Nil).foreach { stream =>
-      executorPool.submit(new MessageHandler(stream, queue))
+    // Create Threads for each Topic/Message Stream we are listening
+    val topicMessageStreams = consumerConnector.createMessageStreams(topics, new StringDecoder())
+
+    topicMessageStreams.values.foreach { streams =>
+      streams.foreach { stream => executorPool.submit(new MessageHandler(stream)) }
     }
 
-    blockPushingThread = new DaemonThread {
-      override def run() {
-        logInfo("Starting BlockPushingThread.")
-        var nextBlockNumber = 0
-        while (true) {
-          val buffer = queue.take()
-          val blockId = "input-" + streamId + "-" + nextBlockNumber
-          nextBlockNumber += 1
-          pushBlock(blockId, buffer, storageLevel)
-        }
-      }
-    }
-    blockPushingThread.start()
-
-    // while (true) {
-    //   // Create a fetch request for topic “test”, partition 0, current offset, and fetch size of 1MB
-    //   val fetchRequest = new FetchRequest("test", 0, offset, 1000000)
-
-    //   // get the message set from the consumer and print them out
-    //   val messages = consumer.fetch(fetchRequest)
-    //   for(msg <- messages.iterator) {
-    //     logInfo("consumed: " + Utils.toString(msg.message.payload, "UTF-8"))
-    //     // advance the offset after consuming each message
-    //     offset = msg.offset
-    //     queue.put(msg.message.payload)
-    //   }
-    // }
   }
 
-  class MessageHandler(stream: KafkaStream[Message], queue: ArrayBlockingQueue[ByteBuffer]) extends Runnable {
+  // Overwrites the offets in Zookeper.
+  private def resetOffsets(offsets: Map[KafkaPartitionKey, Long]) {
+    offsets.foreach { case(key, offset) =>
+      val topicDirs = new ZKGroupTopicDirs(key.groupId, key.topic)
+      val partitionName = key.brokerId + "-" + key.partId
+      updatePersistentPath(consumerConnector.zkClient, 
+        topicDirs.consumerOffsetDir + "/" + partitionName, offset.toString)
+    }
+  }
+
+  // Responsible for handling Kafka Messages
+  class MessageHandler(stream: KafkaStream[String]) extends Runnable {
     def run() {
       logInfo("Starting MessageHandler.")
-      while(true) {
-        stream.foreach { msgAndMetadata => 
-          logInfo("Consumed: " + Utils.toString(msgAndMetadata.message.payload, "UTF-8"))
-          queue.put(msgAndMetadata.message.payload)
-        }
-      }      
+      stream.takeWhile { msgAndMetadata => 
+        dataHandler += msgAndMetadata.message
+
+        // Updating the offet. The key is (topic, partitionID).
+        val key = KafkaPartitionKey(msgAndMetadata.topicInfo.brokerId, msgAndMetadata.topic, 
+          groupId, msgAndMetadata.topicInfo.partition.partId)
+        val offset = msgAndMetadata.topicInfo.getConsumeOffset
+        offsets.put(key, offset)
+        logInfo((key, offset).toString)
+
+        // Keep on handling messages
+        true
+      }  
     }
   }
 
+  class KafkaDataHandler(receiver: KafkaReceiver, storageLevel: StorageLevel) 
+  extends DataHandler[Any](receiver, storageLevel) {
+
+    override def createBlock(blockId: String, iterator: Iterator[Any]) : Block = {
+      new Block(blockId, iterator, KafkaInputDStreamMetadata(System.currentTimeMillis, offsets.toMap))
+    }
+
+  }
 }

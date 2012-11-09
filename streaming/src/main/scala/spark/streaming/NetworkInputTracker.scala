@@ -13,7 +13,7 @@ import akka.dispatch._
 
 trait NetworkInputTrackerMessage 
 case class RegisterReceiver(streamId: Int, receiverActor: ActorRef) extends NetworkInputTrackerMessage
-case class AddBlocks(streamId: Int, blockIds: Seq[String]) extends NetworkInputTrackerMessage
+case class AddBlocks(streamId: Int, blockIds: Seq[String], metadata: Any) extends NetworkInputTrackerMessage
 case class DeregisterReceiver(streamId: Int, msg: String) extends NetworkInputTrackerMessage
 
 
@@ -22,7 +22,7 @@ class NetworkInputTracker(
     @transient networkInputStreams: Array[NetworkInputDStream[_]])
   extends Logging {
 
-  val networkInputStreamIds = networkInputStreams.map(_.id).toArray
+  val networkInputStreamMap = Map(networkInputStreams.map(x => (x.id, x)): _*)
   val receiverExecutor = new ReceiverExecutor()
   val receiverInfo = new HashMap[Int, ActorRef]
   val receivedBlockIds = new HashMap[Int, Queue[String]]
@@ -53,14 +53,14 @@ class NetworkInputTracker(
   private class NetworkInputTrackerActor extends Actor {
     def receive = {
       case RegisterReceiver(streamId, receiverActor) => {
-        if (!networkInputStreamIds.contains(streamId)) {
+        if (!networkInputStreamMap.contains(streamId)) {
           throw new Exception("Register received for unexpected id " + streamId)        
         }
         receiverInfo += ((streamId, receiverActor))
         logInfo("Registered receiver for network stream " + streamId)
         sender ! true
       } 
-      case AddBlocks(streamId, blockIds) => {
+      case AddBlocks(streamId, blockIds, metadata) => {
         val tmp = receivedBlockIds.synchronized {
           if (!receivedBlockIds.contains(streamId)) {
             receivedBlockIds += ((streamId, new Queue[String]))
@@ -70,6 +70,7 @@ class NetworkInputTracker(
         tmp.synchronized {
           tmp ++= blockIds
         }
+        networkInputStreamMap(streamId).addMetadata(metadata)
       }
       case DeregisterReceiver(streamId, msg) => {
         receiverInfo -= streamId

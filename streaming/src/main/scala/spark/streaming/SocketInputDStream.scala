@@ -32,7 +32,7 @@ class SocketReceiver[T: ClassManifest](
     storageLevel: StorageLevel
   ) extends NetworkReceiver[T](streamId) {
 
-  lazy protected val dataHandler = new DataHandler(this)
+  lazy protected val dataHandler = new DataHandler(this, storageLevel)
 
   protected def onStart() {
     logInfo("Connecting to " + host + ":" + port)
@@ -50,74 +50,6 @@ class SocketReceiver[T: ClassManifest](
     dataHandler.stop()
   }
 
-  /**
-   * This is a helper object that manages the data received from the socket. It divides
-   * the object received into small batches of 100s of milliseconds, pushes them as
-   * blocks into the block manager and reports the block IDs to the network input
-   * tracker. It starts two threads, one to periodically start a new batch and prepare
-   * the previous batch of as a block, the other to push the blocks into the block
-   * manager.
-   */
-  class DataHandler(receiver: NetworkReceiver[T]) extends Serializable {
-    case class Block(id: String, iterator: Iterator[T])
-
-    val clock = new SystemClock()
-    val blockInterval = 200L
-    val blockIntervalTimer = new RecurringTimer(clock, blockInterval, updateCurrentBuffer)
-    val blockStorageLevel = storageLevel
-    val blocksForPushing = new ArrayBlockingQueue[Block](1000)
-    val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
-
-    var currentBuffer = new ArrayBuffer[T]
-
-    def start() {
-      blockIntervalTimer.start()
-      blockPushingThread.start()
-      logInfo("Data handler started")
-    }
-
-    def stop() {
-      blockIntervalTimer.stop()
-      blockPushingThread.interrupt()
-      logInfo("Data handler stopped")
-    }
-
-    def += (obj: T) {
-      currentBuffer += obj
-    }
-
-    def updateCurrentBuffer(time: Long) {
-      try {
-        val newBlockBuffer = currentBuffer
-        currentBuffer = new ArrayBuffer[T]
-        if (newBlockBuffer.size > 0) {
-          val blockId = "input-" + streamId + "- " + (time - blockInterval)
-          val newBlock = new Block(blockId, newBlockBuffer.toIterator)
-          blocksForPushing.add(newBlock)
-        }
-      } catch {
-        case ie: InterruptedException =>
-          logInfo("Block interval timer thread interrupted")
-        case e: Exception =>
-          receiver.stop()
-      }
-    }
-
-    def keepPushingBlocks() {
-      logInfo("Block pushing thread started")
-      try {
-        while(true) {
-          val block = blocksForPushing.take()
-          pushBlock(block.id, block.iterator, storageLevel)
-        }
-      } catch {
-        case ie: InterruptedException =>
-          logInfo("Block pushing thread interrupted")
-        case e: Exception =>
-          receiver.stop()
-      }
-    }
-  }
 }
 
 

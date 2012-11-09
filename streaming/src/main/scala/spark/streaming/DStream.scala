@@ -17,6 +17,8 @@ import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
 
+case class DStreamCheckpointData(rdds: HashMap[Time, Any])
+
 abstract class DStream[T: ClassManifest] (@transient var ssc: StreamingContext)
 extends Serializable with Logging {
 
@@ -59,7 +61,7 @@ extends Serializable with Logging {
   // Checkpoint details
   protected[streaming] val mustCheckpoint = false
   protected[streaming] var checkpointInterval: Time = null
-  protected[streaming] val checkpointData = new HashMap[Time, Any]()
+  protected[streaming] var checkpointData = DStreamCheckpointData(HashMap[Time, Any]())
 
   // Reference to whole DStream graph
   protected[streaming] var graph: DStreamGraph = null
@@ -280,6 +282,13 @@ extends Serializable with Logging {
     dependencies.foreach(_.forgetOldRDDs(time))
   }
 
+  /* Adds metadata to the Stream while it is running. 
+   * This methd should be overwritten by sublcasses of InputDStream.
+   */
+  protected[streaming] def addMetadata(metadata: Any) {
+    logInfo("Dropping Metadata: " + metadata.toString)
+  }
+
   /**
    * Refreshes the list of checkpointed RDDs that will be saved along with checkpoint of
    * this stream. This is an internal method that should not be called directly. This is
@@ -288,22 +297,22 @@ extends Serializable with Logging {
    * this method to save custom checkpoint data.
    */
   protected[streaming] def updateCheckpointData(currentTime: Time) {
-    val newCheckpointData = generatedRDDs.filter(_._2.getCheckpointData() != null)
+    val newRdds = generatedRDDs.filter(_._2.getCheckpointData() != null)
                                          .map(x => (x._1, x._2.getCheckpointData()))
-    val oldCheckpointData = checkpointData.clone()
-    if (newCheckpointData.size > 0) {
-      checkpointData.clear()
-      checkpointData ++= newCheckpointData
+    val oldRdds = checkpointData.rdds.clone()
+    if (newRdds.size > 0) {
+      checkpointData.rdds.clear()
+      checkpointData.rdds ++= newRdds
     }
 
     dependencies.foreach(_.updateCheckpointData(currentTime))
 
-    newCheckpointData.foreach {
+    newRdds.foreach {
       case (time, data) => { logInfo("Added checkpointed RDD for time " + time + " to stream checkpoint") }
     }
 
-    if (newCheckpointData.size > 0) {
-      (oldCheckpointData -- newCheckpointData.keySet).foreach {
+    if (newRdds.size > 0) {
+      (oldRdds -- newRdds.keySet).foreach {
         case (time, data) => {
           val path = new Path(data.toString)
           val fs = path.getFileSystem(new Configuration())
@@ -322,8 +331,8 @@ extends Serializable with Logging {
    * override the updateCheckpointData() method would also need to override this method.
    */
   protected[streaming] def restoreCheckpointData() {
-    logInfo("Restoring checkpoint data from " + checkpointData.size + " checkpointed RDDs")
-    checkpointData.foreach {
+    logInfo("Restoring checkpoint data from " + checkpointData.rdds.size + " checkpointed RDDs")
+    checkpointData.rdds.foreach {
       case(time, data) => {
         logInfo("Restoring checkpointed RDD for time " + time + " from file")
         generatedRDDs += ((time, ssc.sc.objectFile[T](data.toString)))

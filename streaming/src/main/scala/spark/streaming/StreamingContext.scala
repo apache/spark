@@ -106,9 +106,11 @@ class StreamingContext (
       hostname: String,
       port: Int,
       groupId: String,
+      topics: Map[String, Int],
+      initialOffsets: Map[KafkaPartitionKey, Long] = Map[KafkaPartitionKey, Long](),
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
     ): DStream[T] = {
-    val inputStream = new KafkaInputDStream[T](this, hostname, port, groupId, storageLevel)
+    val inputStream = new KafkaInputDStream[T](this, hostname, port, groupId, topics, initialOffsets, storageLevel)
     graph.addInputStream(inputStream)
     inputStream
   }
