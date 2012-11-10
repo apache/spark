@@ -50,16 +50,6 @@ private[spark]
 case class BlockException(blockId: String, message: String, ex: Exception = null)
 extends Exception(message)
 
-
-private[spark] class BlockLocker(numLockers: Int) {
-  private val hashLocker = Array.fill(numLockers)(new Object())
-
-  def getLock(blockId: String): Object = {
-    return hashLocker(math.abs(blockId.hashCode % numLockers))
-  }
-}
-
-
 private[spark]
 class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
   extends Logging {
@@ -87,10 +77,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
   }
 
-  private val NUM_LOCKS = 337
-  private val locker = new BlockLocker(NUM_LOCKS)
-
-  private val blockInfo = new ConcurrentHashMap[String, BlockInfo]()
+  private val blockInfo = new ConcurrentHashMap[String, BlockInfo](1000)
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
   private[storage] val diskStore: BlockStore =
@@ -110,7 +97,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   val maxBytesInFlight =
     System.getProperty("spark.reducer.maxMbInFlight", "48").toLong * 1024 * 1024
 
+  // Whether to compress broadcast variables that are stored
   val compressBroadcast = System.getProperty("spark.broadcast.compress", "true").toBoolean
+  // Whether to compress shuffle output that are stored
   val compressShuffle = System.getProperty("spark.shuffle.compress", "true").toBoolean
   // Whether to compress RDD partitions that are stored serialized
   val compressRdds = System.getProperty("spark.rdd.compress", "false").toBoolean
@@ -150,28 +139,28 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * For example, a block with MEMORY_AND_DISK set might have fallen out to be only on disk.
    */
   def reportBlockStatus(blockId: String) {
-    locker.getLock(blockId).synchronized {
-      val curLevel = blockInfo.get(blockId) match {
-        case null =>
-          StorageLevel.NONE
-        case info =>
+
+    val (curLevel, inMemSize, onDiskSize) = blockInfo.get(blockId) match {
+      case null =>
+        (StorageLevel.NONE, 0L, 0L)
+      case info =>
+        info.synchronized {
           info.level match {
             case null =>
-              StorageLevel.NONE
+              (StorageLevel.NONE, 0L, 0L)
             case level =>
               val inMem = level.useMemory && memoryStore.contains(blockId)
               val onDisk = level.useDisk && diskStore.contains(blockId)
-              new StorageLevel(onDisk, inMem, level.deserialized, level.replication)
+              (
+                new StorageLevel(onDisk, inMem, level.deserialized, level.replication),
+                if (inMem) memoryStore.getSize(blockId) else 0L,
+                if (onDisk) diskStore.getSize(blockId) else 0L
+              )
           }
-      }
-      master.mustHeartBeat(HeartBeat(
-        blockManagerId,
-        blockId,
-        curLevel,
-        if (curLevel.useMemory) memoryStore.getSize(blockId) else 0L,
-        if (curLevel.useDisk) diskStore.getSize(blockId) else 0L))
-      logDebug("Told master about block " + blockId)
+        }
     }
+    master.mustHeartBeat(HeartBeat(blockManagerId, blockId, curLevel, inMemSize, onDiskSize))
+    logDebug("Told master about block " + blockId)
   }
 
   /**
@@ -213,9 +202,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
     }
 
-    locker.getLock(blockId).synchronized {
-      val info = blockInfo.get(blockId)
-      if (info != null) {
+    val info = blockInfo.get(blockId)
+    if (info != null) {
+      info.synchronized {
         info.waitForReady() // In case the block is still being put() by another thread
         val level = info.level
         logDebug("Level for block " + blockId + " is " + level)
@@ -273,9 +262,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
             }
           }
         }
-      } else {
-        logDebug("Block " + blockId + " not registered locally")
       }
+    } else {
+      logDebug("Block " + blockId + " not registered locally")
     }
     return None
   }
@@ -298,9 +287,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
     }
 
-    locker.getLock(blockId).synchronized {
-      val info = blockInfo.get(blockId)
-      if (info != null) {
+    val info = blockInfo.get(blockId)
+    if (info != null) {
+      info.synchronized {
         info.waitForReady() // In case the block is still being put() by another thread
         val level = info.level
         logDebug("Level for block " + blockId + " is " + level)
@@ -338,9 +327,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
               throw new Exception("Block " + blockId + " not found on disk, though it should be")
           }
         }
-      } else {
-        logDebug("Block " + blockId + " not registered locally")
       }
+    } else {
+      logDebug("Block " + blockId + " not registered locally")
     }
     return None
   }
@@ -583,7 +572,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     // Size of the block in bytes (to return to caller)
     var size = 0L
 
-    locker.getLock(blockId).synchronized {
+    myInfo.synchronized {
       logDebug("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
         + " to get into synchronized block")
 
@@ -681,7 +670,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       null
     }
 
-    locker.getLock(blockId).synchronized {
+    myInfo.synchronized {
       logDebug("PutBytes for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
         + " to get into synchronized block")
 
@@ -779,26 +768,30 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    */
   def dropFromMemory(blockId: String, data: Either[ArrayBuffer[Any], ByteBuffer]) {
     logInfo("Dropping block " + blockId + " from memory")
-    locker.getLock(blockId).synchronized {
-      val info = blockInfo.get(blockId)
-      val level = info.level
-      if (level.useDisk && !diskStore.contains(blockId)) {
-        logInfo("Writing block " + blockId + " to disk")
-        data match {
-          case Left(elements) =>
-            diskStore.putValues(blockId, elements, level, false)
-          case Right(bytes) =>
-            diskStore.putBytes(blockId, bytes, level)
+    val info = blockInfo.get(blockId)
+    if (info != null)  {
+      info.synchronized {
+        val level = info.level
+        if (level.useDisk && !diskStore.contains(blockId)) {
+          logInfo("Writing block " + blockId + " to disk")
+          data match {
+            case Left(elements) =>
+              diskStore.putValues(blockId, elements, level, false)
+            case Right(bytes) =>
+              diskStore.putBytes(blockId, bytes, level)
+          }
+        }
+        memoryStore.remove(blockId)
+        if (info.tellMaster) {
+          reportBlockStatus(blockId)
+        }
+        if (!level.useDisk) {
+          // The block is completely gone from this node; forget it so we can put() it again later.
+          blockInfo.remove(blockId)
         }
       }
-      memoryStore.remove(blockId)
-      if (info.tellMaster) {
-        reportBlockStatus(blockId)
-      }
-      if (!level.useDisk) {
-        // The block is completely gone from this node; forget it so we can put() it again later.
-        blockInfo.remove(blockId)
-      }
+    } else {
+      // The block has already been dropped
     }
   }
 
