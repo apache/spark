@@ -66,6 +66,8 @@ class KafkaInputDStream[T: ClassManifest](
       val latestOffsets = savedOffsets(key)
       logInfo("Updating KafkaDStream checkpoint data: " + latestOffsets.toString)
       checkpointData = KafkaDStreamCheckpointData(checkpointData.rdds, latestOffsets)
+      // TODO: This may throw out offsets that are created after the checkpoint,
+      // but it's unlikely we'll need them.
       savedOffsets.clear()
     }
   }
