@@ -1,4 +1,5 @@
 @(worker: spark.deploy.WorkerState)
+@import spark.Utils
 
 @spark.common.html.layout(title = "Spark Worker on " + worker.uri) {
       
@@ -12,8 +13,8 @@
           (WebUI at <a href="@worker.masterWebUiUrl">@worker.masterWebUiUrl</a>)
         </li>
         <li><strong>Cores:</strong> @worker.cores (@worker.coresUsed Used)</li>
-        <li><strong>Memory:</strong> @{spark.Utils.memoryMegabytesToString(worker.memory)}
-          (@{spark.Utils.memoryMegabytesToString(worker.memoryUsed)} Used)</li>
+        <li><strong>Memory:</strong> @{Utils.memoryMegabytesToString(worker.memory)}
+          (@{Utils.memoryMegabytesToString(worker.memoryUsed)} Used)</li>
       </ul>
     </div>
   </div>

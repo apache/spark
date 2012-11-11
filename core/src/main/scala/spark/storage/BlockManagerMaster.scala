@@ -98,7 +98,7 @@ private[spark]
 case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
 
 private[spark]
-case class StorageStatus(maxMem: Long, remainingMem: Long, blocks: Map[String, BlockStatus])
+case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long, remainingMem: Long, blocks: Map[String, BlockStatus])
 
 
 private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
@@ -237,7 +237,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
   private def getStorageStatus() {
     val res = blockManagerInfo.map { case(blockManagerId, info) =>
-      StorageStatus(info.maxMem, info.remainingMem, info.blocks.asScala)
+      StorageStatus(blockManagerId, info.maxMem, info.remainingMem, info.blocks.asScala)
     }
     sender ! res
   }

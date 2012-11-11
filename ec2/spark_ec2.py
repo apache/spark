@@ -180,16 +180,12 @@ def launch_cluster(conn, opts, cluster_name):
     zoo_group.authorize('tcp', 3888, 3888, '0.0.0.0/0')
 
   # Check if instances are already running in our groups
-  print "Checking for running cluster..."
-  reservations = conn.get_all_instances()
-  for res in reservations:
-    group_names = [g.id for g in res.groups]
-    if master_group.name in group_names or slave_group.name in group_names or zoo_group.name in group_names:
-      active = [i for i in res.instances if is_active(i)]
-      if len(active) > 0:
-        print >> stderr, ("ERROR: There are already instances running in " +
-            "group %s, %s or %s" % (master_group.name, slave_group.name, zoo_group.name))
-        sys.exit(1)
+  active_nodes = get_existing_cluster(conn, opts, cluster_name,
+                                      die_on_error=False)
+  if any(active_nodes):
+    print >> stderr, ("ERROR: There are already instances running in " +
+        "group %s, %s or %s" % (master_group.name, slave_group.name, zoo_group.name))
+    sys.exit(1)
 
   # Figure out the latest AMI from our static URL
   if opts.ami == "latest":
@@ -233,27 +229,37 @@ def launch_cluster(conn, opts, cluster_name):
         block_device_map = block_map)
     my_req_ids = [req.id for req in slave_reqs]
     print "Waiting for spot instances to be granted..."
-    while True:
-      time.sleep(10)
-      reqs = conn.get_all_spot_instance_requests()
-      id_to_req = {}
-      for r in reqs:
-        id_to_req[r.id] = r
-      active = 0
-      instance_ids = []
-      for i in my_req_ids:
-        if id_to_req[i].state == "active":
-          active += 1
-          instance_ids.append(id_to_req[i].instance_id)
-      if active == opts.slaves:
-        print "All %d slaves granted" % opts.slaves
-        reservations = conn.get_all_instances(instance_ids)
-        slave_nodes = []
-        for r in reservations:
-          slave_nodes += r.instances
-        break
-      else:
-        print "%d of %d slaves granted, waiting longer" % (active, opts.slaves)
+    try:
+      while True:
+        time.sleep(10)
+        reqs = conn.get_all_spot_instance_requests()
+        id_to_req = {}
+        for r in reqs:
+          id_to_req[r.id] = r
+        active_instance_ids = []
+        for i in my_req_ids:
+          if i in id_to_req and id_to_req[i].state == "active":
+            active_instance_ids.append(id_to_req[i].instance_id)
+        if len(active_instance_ids) == opts.slaves:
+          print "All %d slaves granted" % opts.slaves
+          reservations = conn.get_all_instances(active_instance_ids)
+          slave_nodes = []
+          for r in reservations:
+            slave_nodes += r.instances
+          break
+        else:
+          print "%d of %d slaves granted, waiting longer" % (
+            len(active_instance_ids), opts.slaves)
+    except:
+      print "Canceling spot instance requests"
+      conn.cancel_spot_instance_requests(my_req_ids)
+      # Log a warning if any of these requests actually launched instances:
+      (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(
+          conn, opts, cluster_name, die_on_error=False)
+      running = len(master_nodes) + len(slave_nodes) + len(zoo_nodes)
+      if running:
+        print >> stderr, ("WARNING: %d instances are still running" % running)
+      sys.exit(0)
   else:
     # Launch non-spot instances
     slave_res = image.run(key_name = opts.key_pair,

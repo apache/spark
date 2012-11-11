@@ -5,11 +5,17 @@ import java.util.Date
 import akka.actor.ActorRef
 import scala.collection.mutable
 
-private[spark]
-class JobInfo(val id: String, val desc: JobDescription, val submitDate: Date, val actor: ActorRef) {
+private[spark] class JobInfo(
+    val startTime: Long,
+    val id: String,
+    val desc: JobDescription,
+    val submitDate: Date,
+    val actor: ActorRef)
+{
   var state = JobState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]
   var coresGranted = 0
+  var endTime = -1L
 
   private var nextExecutorId = 0
 
@@ -40,5 +46,18 @@ class JobInfo(val id: String, val desc: JobDescription, val submitDate: Date, va
   def incrementRetryCount = {
     _retryCount += 1
     _retryCount
+  }
+
+  def markFinished(endState: JobState.Value) {
+    state = endState
+    endTime = System.currentTimeMillis()
+  }
+
+  def duration: Long = {
+    if (endTime != -1) {
+      endTime - startTime
+    } else {
+      System.currentTimeMillis() - startTime
+    }
   }
 }

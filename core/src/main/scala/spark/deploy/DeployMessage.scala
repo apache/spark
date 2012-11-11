@@ -67,8 +67,8 @@ private[spark] case object RequestMasterState
 // Master to MasterWebUI
 
 private[spark] 
-case class MasterState(uri : String, workers: List[WorkerInfo], activeJobs: List[JobInfo], 
-  completedJobs: List[JobInfo])
+case class MasterState(uri: String, workers: Array[WorkerInfo], activeJobs: Array[JobInfo],
+  completedJobs: Array[JobInfo])
 
 //  WorkerWebUI to Worker
 private[spark] case object RequestWorkerState
