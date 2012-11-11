@@ -20,9 +20,11 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   var oldOops: String = null
   
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test 
+  System.setProperty("spark.kryoserializer.buffer.mb", "1")
   val serializer = new KryoSerializer
 
   before {
+
     actorSystem = ActorSystem("test")
     master = new BlockManagerMaster(actorSystem, true, true)
 
@@ -55,7 +57,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     }
   }
 
-  test("manager-master interaction") {
+  test("master + 1 manager interaction") {
     store = new BlockManager(master, serializer, 2000)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
@@ -72,17 +74,33 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.getSingle("a3") != None, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
-    assert(master.mustGetLocations(GetLocations("a2")).size > 0, "master was not told about a2")
-    assert(master.mustGetLocations(GetLocations("a3")).size === 0, "master was told about a3")
+    assert(master.getLocations("a1").size === 1, "master was not told about a1")
+    assert(master.getLocations("a2").size === 1, "master was not told about a2")
+    assert(master.getLocations("a3").size === 0, "master was told about a3")
     
     // Drop a1 and a2 from memory; this should be reported back to the master
     store.dropFromMemory("a1", null)
     store.dropFromMemory("a2", null)
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
-    assert(master.mustGetLocations(GetLocations("a1")).size === 0, "master did not remove a1")
-    assert(master.mustGetLocations(GetLocations("a2")).size === 0, "master did not remove a2")
+    assert(master.getLocations("a1").size === 0, "master did not remove a1")
+    assert(master.getLocations("a2").size === 0, "master did not remove a2")
+  }
+
+  test("master + 2 managers interaction") {
+    store = new BlockManager(master, serializer, 2000)
+    val otherStore = new BlockManager(master, new KryoSerializer, 2000)
+
+    val peers = master.getPeers(store.blockManagerId, 1)
+    assert(peers.size === 1, "master did not return the other manager as a peer")
+    assert(peers.head === otherStore.blockManagerId, "peer returned by master is not the other manager")
+
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_2)
+    otherStore.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_2)
+    assert(master.getLocations("a1").size === 2, "master did not report 2 locations for a1")
+    assert(master.getLocations("a2").size === 2, "master did not report 2 locations for a2")
   }
 
   test("in-memory LRU storage") {
