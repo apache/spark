@@ -49,7 +49,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
     return ans
   }
 
-  def +=(other: Vector) {
+  def += (other: Vector): Vector = {
     if (length != other.length)
       throw new IllegalArgumentException("Vectors of different length")
     var ans = 0.0
@@ -58,6 +58,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
       elements(i) += other(i)
       i += 1
     }
+    this
   }
 
   def * (scale: Double): Vector = Vector(length, i => this(i) * scale)
