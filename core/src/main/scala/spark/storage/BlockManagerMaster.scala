@@ -26,7 +26,7 @@ case class RegisterBlockManager(
   extends ToBlockManagerMaster
 
 private[spark]
-class HeartBeat(
+class UpdateBlockInfo(
     var blockManagerId: BlockManagerId,
     var blockId: String,
     var storageLevel: StorageLevel,
@@ -57,17 +57,17 @@ class HeartBeat(
 }
 
 private[spark]
-object HeartBeat {
+object UpdateBlockInfo {
   def apply(blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long): HeartBeat = {
-    new HeartBeat(blockManagerId, blockId, storageLevel, memSize, diskSize)
+      diskSize: Long): UpdateBlockInfo = {
+    new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize)
   }
 
   // For pattern-matching
-  def unapply(h: HeartBeat): Option[(BlockManagerId, String, StorageLevel, Long, Long)] = {
+  def unapply(h: UpdateBlockInfo): Option[(BlockManagerId, String, StorageLevel, Long, Long)] = {
     Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize))
   }
 }
@@ -182,8 +182,8 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     case RegisterBlockManager(blockManagerId, maxMemSize) =>
       register(blockManagerId, maxMemSize)
 
-    case HeartBeat(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
-      heartBeat(blockManagerId, blockId, storageLevel, deserializedSize, size)
+    case UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
+      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
 
     case GetLocations(blockId) =>
       getLocations(blockId)
@@ -233,7 +233,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     sender ! true
   }
 
-  private def heartBeat(
+  private def updateBlockInfo(
       blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
@@ -245,7 +245,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
-      logDebug("Got in heartBeat 1" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
+      logDebug("Got in updateBlockInfo 1" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
       sender ! true
     }
 
@@ -350,211 +350,124 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean)
   extends Logging {
 
-  val AKKA_ACTOR_NAME: String = "BlockMasterManager"
-  val REQUEST_RETRY_INTERVAL_MS = 100
-  val DEFAULT_MASTER_IP: String = System.getProperty("spark.master.host", "localhost")
-  val DEFAULT_MASTER_PORT: Int = System.getProperty("spark.master.port", "7077").toInt
-  val DEFAULT_MANAGER_IP: String = Utils.localHostName()
-  val DEFAULT_MANAGER_PORT: String = "10902"
-
+  val actorName = "BlockMasterManager"
   val timeout = 10.seconds
-  var masterActor: ActorRef = null
+  val maxAttempts = 5
 
-  if (isMaster) {
-    masterActor = actorSystem.actorOf(
-      Props(new BlockManagerMasterActor(isLocal)), name = AKKA_ACTOR_NAME)
+  var masterActor = if (isMaster) {
+    val actor = actorSystem.actorOf(Props(new BlockManagerMasterActor(isLocal)), name = actorName)
     logInfo("Registered BlockManagerMaster Actor")
+    actor
   } else {
-    val url = "akka://spark@%s:%s/user/%s".format(
-      DEFAULT_MASTER_IP, DEFAULT_MASTER_PORT, AKKA_ACTOR_NAME)
+    val host = System.getProperty("spark.master.host", "localhost")
+    val port = System.getProperty("spark.master.port", "7077").toInt
+    val url = "akka://spark@%s:%s/user/%s".format(host, port, actorName)
+    val actor = actorSystem.actorFor(url)
     logInfo("Connecting to BlockManagerMaster: " + url)
-    masterActor = actorSystem.actorFor(url)
+    actor
   }
 
+  /**
+   * Send a message to the master actor and get its result within a default timeout, or
+   * throw a SparkException if this fails.
+   */
+  private def ask[T](message: Any): T = {
+    // TODO: Consider removing multiple attempts
+    if (masterActor == null) {
+      throw new SparkException("Error sending message to BlockManager as masterActor is null " +
+        "[message = " + message + "]")
+    }
+    var attempts = 0
+    var lastException: Exception = null
+    while (attempts < maxAttempts) {
+      attempts += 1
+        try {
+        val future = masterActor.ask(message)(timeout)
+        val result = Await.result(future, timeout)
+        if (result == null) {
+          throw new Exception("BlockManagerMaster returned null")
+        }
+        return result.asInstanceOf[T]
+      } catch {
+        case ie: InterruptedException =>
+          throw ie
+        case e: Exception =>
+          lastException = e
+          logWarning(
+            "Error sending message to BlockManagerMaster in " + attempts + " attempts", e)
+      }
+      Thread.sleep(100)
+    }
+    throw new SparkException(
+      "Error sending message to BlockManagerMaster [message = " + message + "]", lastException)
+  }
+
+  /**
+   * Send a one-way message to the master actor, to which we expect it to reply with true
+   */
+  private def tell(message: Any) {
+    if (!ask[Boolean](message)) {
+      throw new SparkException("Telling master a message returned false")
+    }
+  }
+
+  /**
+   * Register the BlockManager's id with the master
+   */
+  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long) {
+    logInfo("Trying to register BlockManager")
+    tell(RegisterBlockManager(blockManagerId, maxMemSize))
+    logInfo("Registered BlockManager")
+  }
+
+  def updateBlockInfo(
+      blockManagerId: BlockManagerId,
+      blockId: String,
+      storageLevel: StorageLevel,
+      memSize: Long,
+      diskSize: Long
+    ) {
+    tell(UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize))
+    logInfo("Updated info of block " + blockId)
+  }
+
+  /** Get locations of the blockId from the master */
+  def getLocations(blockId: String): Seq[BlockManagerId] = {
+    ask[Seq[BlockManagerId]](GetLocations(blockId))
+  }
+
+  /** Get locations of multiple blockIds from the master */
+  def getLocations(blockIds: Array[String]): Seq[Seq[BlockManagerId]] = {
+    ask[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
+  }
+
+  /** Get ids of other nodes in the cluster from the master */
+  def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId] = {
+    val result = ask[Seq[BlockManagerId]](GetPeers(blockManagerId, numPeers))
+    if (result.length != numPeers) {
+      throw new SparkException(
+        "Error getting peers, only got " + result.size + " instead of " + numPeers)
+    }
+    result
+  }
+
+  /** Notify the master of a dead node */
+  def notifyADeadHost(host: String) {
+    tell(RemoveHost(host + ":10902"))
+    logInfo("Told BlockManagerMaster to remove dead host " + host)
+  }
+
+  /** Get the memory status form the master */
+  def getMemoryStatus(): Map[BlockManagerId, (Long, Long)] = {
+    ask[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
+  }
+
+  /** Stop the master actor, called only on the Spark master node */
   def stop() {
     if (masterActor != null) {
-      communicate(StopBlockManagerMaster)
+      tell(StopBlockManagerMaster)
       masterActor = null
       logInfo("BlockManagerMaster stopped")
     }
-  }
-
-  // Send a message to the master actor and get its result within a default timeout, or
-  // throw a SparkException if this fails.
-  def askMaster(message: Any): Any = {
-    try {
-      val future = masterActor.ask(message)(timeout)
-      return Await.result(future, timeout)
-    } catch {
-      case e: Exception =>
-        throw new SparkException("Error communicating with BlockManagerMaster", e)
-    }
-  }
-
-  // Send a one-way message to the master actor, to which we expect it to reply with true.
-  def communicate(message: Any) {
-    if (askMaster(message) != true) {
-      throw new SparkException("Error reply received from BlockManagerMaster")
-    }
-  }
-
-  def notifyADeadHost(host: String) {
-    communicate(RemoveHost(host + ":" + DEFAULT_MANAGER_PORT))
-    logInfo("Removed " + host + " successfully in notifyADeadHost")
-  }
-
-  def mustRegisterBlockManager(msg: RegisterBlockManager) {
-    logInfo("Trying to register BlockManager")
-    while (! syncRegisterBlockManager(msg)) {
-      logWarning("Failed to register " + msg)
-      Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
-    }
-    logInfo("Done registering BlockManager")
-  }
-
-  def syncRegisterBlockManager(msg: RegisterBlockManager): Boolean = {
-    //val masterActor = RemoteActor.select(node, name)
-    val startTimeMs = System.currentTimeMillis()
-    val tmp = " msg " + msg + " "
-    logDebug("Got in syncRegisterBlockManager 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-
-    try {
-      communicate(msg)
-      logInfo("BlockManager registered successfully @ syncRegisterBlockManager")
-      logDebug("Got in syncRegisterBlockManager 1 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-      return true
-    } catch {
-      case e: Exception =>
-        logError("Failed in syncRegisterBlockManager", e)
-        return false
-    }
-  }
-
-  def mustHeartBeat(msg: HeartBeat) {
-    while (! syncHeartBeat(msg)) {
-      logWarning("Failed to send heartbeat" + msg)
-      Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
-    }
-  }
-
-  def syncHeartBeat(msg: HeartBeat): Boolean = {
-    val startTimeMs = System.currentTimeMillis()
-    val tmp = " msg " + msg + " "
-    logDebug("Got in syncHeartBeat " + tmp + " 0 " + Utils.getUsedTimeMs(startTimeMs))
-
-    try {
-      communicate(msg)
-      logDebug("Heartbeat sent successfully")
-      logDebug("Got in syncHeartBeat 1 " + tmp + " 1 " + Utils.getUsedTimeMs(startTimeMs))
-      return true
-    } catch {
-      case e: Exception =>
-        logError("Failed in syncHeartBeat", e)
-        return false
-    }
-  }
-
-  def mustGetLocations(msg: GetLocations): Seq[BlockManagerId] = {
-    var res = syncGetLocations(msg)
-    while (res == null) {
-      logInfo("Failed to get locations " + msg)
-      Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
-      res = syncGetLocations(msg)
-    }
-    return res
-  }
-
-  def syncGetLocations(msg: GetLocations): Seq[BlockManagerId] = {
-    val startTimeMs = System.currentTimeMillis()
-    val tmp = " msg " + msg + " "
-    logDebug("Got in syncGetLocations 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-
-    try {
-      val answer = askMaster(msg).asInstanceOf[ArrayBuffer[BlockManagerId]]
-      if (answer != null) {
-        logDebug("GetLocations successful")
-        logDebug("Got in syncGetLocations 1 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-        return answer
-      } else {
-        logError("Master replied null in response to GetLocations")
-        return null
-      }
-    } catch {
-      case e: Exception =>
-        logError("GetLocations failed", e)
-        return null
-    }
-  }
-
-  def mustGetLocationsMultipleBlockIds(msg: GetLocationsMultipleBlockIds):
-       Seq[Seq[BlockManagerId]] = {
-    var res: Seq[Seq[BlockManagerId]] = syncGetLocationsMultipleBlockIds(msg)
-    while (res == null) {
-      logWarning("Failed to GetLocationsMultipleBlockIds " + msg)
-      Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
-      res = syncGetLocationsMultipleBlockIds(msg)
-    }
-    return res
-  }
-
-  def syncGetLocationsMultipleBlockIds(msg: GetLocationsMultipleBlockIds):
-      Seq[Seq[BlockManagerId]] = {
-    val startTimeMs = System.currentTimeMillis
-    val tmp = " msg " + msg + " "
-    logDebug("Got in syncGetLocationsMultipleBlockIds 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-
-    try {
-      val answer = askMaster(msg).asInstanceOf[Seq[Seq[BlockManagerId]]]
-      if (answer != null) {
-        logDebug("GetLocationsMultipleBlockIds successful")
-        logDebug("Got in syncGetLocationsMultipleBlockIds 1 " + tmp +
-          Utils.getUsedTimeMs(startTimeMs))
-        return answer
-      } else {
-        logError("Master replied null in response to GetLocationsMultipleBlockIds")
-        return null
-      }
-    } catch {
-      case e: Exception =>
-        logError("GetLocationsMultipleBlockIds failed", e)
-        return null
-    }
-  }
-
-  def mustGetPeers(msg: GetPeers): Seq[BlockManagerId] = {
-    var res = syncGetPeers(msg)
-    while ((res == null) || (res.length != msg.size)) {
-      logInfo("Failed to get peers " + msg)
-      Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
-      res = syncGetPeers(msg)
-    }
-
-    return res
-  }
-
-  def syncGetPeers(msg: GetPeers): Seq[BlockManagerId] = {
-    val startTimeMs = System.currentTimeMillis
-    val tmp = " msg " + msg + " "
-    logDebug("Got in syncGetPeers 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-
-    try {
-      val answer = askMaster(msg).asInstanceOf[Seq[BlockManagerId]]
-      if (answer != null) {
-        logDebug("GetPeers successful")
-        logDebug("Got in syncGetPeers 1 " + tmp + Utils.getUsedTimeMs(startTimeMs))
-        return answer
-      } else {
-        logError("Master replied null in response to GetPeers")
-        return null
-      }
-    } catch {
-      case e: Exception =>
-        logError("GetPeers failed", e)
-        return null
-    }
-  }
-
-  def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
-    askMaster(GetMemoryStatus).asInstanceOf[Map[BlockManagerId, (Long, Long)]]
   }
 }

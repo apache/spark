@@ -120,8 +120,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * BlockManagerWorker actor.
    */
   private def initialize() {
-    master.mustRegisterBlockManager(
-      RegisterBlockManager(blockManagerId, maxMemory))
+    master.registerBlockManager(blockManagerId, maxMemory)
     BlockManagerWorker.startBlockManagerWorker(this)
   }
 
@@ -158,7 +157,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
           }
         }
     }
-    master.mustHeartBeat(HeartBeat(blockManagerId, blockId, curLevel, inMemSize, onDiskSize))
+    master.updateBlockInfo(blockManagerId, blockId, curLevel, inMemSize, onDiskSize)
     logDebug("Told master about block " + blockId)
   }
 
@@ -167,7 +166,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    */
   def getLocations(blockId: String): Seq[String] = {
     val startTimeMs = System.currentTimeMillis
-    var managers = master.mustGetLocations(GetLocations(blockId))
+    var managers = master.getLocations(blockId)
     val locations = managers.map(_.ip)
     logDebug("Get block locations in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
@@ -178,8 +177,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    */
   def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
     val startTimeMs = System.currentTimeMillis
-    val locations = master.mustGetLocationsMultipleBlockIds(
-      GetLocationsMultipleBlockIds(blockIds)).map(_.map(_.ip).toSeq).toArray
+    val locations = master.getLocations(blockIds).map(_.map(_.ip).toSeq).toArray
     logDebug("Get multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
@@ -343,7 +341,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
     logDebug("Getting remote block " + blockId)
     // Get locations of block
-    val locations = master.mustGetLocations(GetLocations(blockId))
+    val locations = master.getLocations(blockId)
 
     // Get block from remote locations
     for (loc <- locations) {
@@ -721,7 +719,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
     if (cachedPeers == null) {
-      cachedPeers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
+      cachedPeers = master.getPeers(blockManagerId, level.replication - 1)
     }
     for (peer: BlockManagerId <- cachedPeers) {
       val start = System.nanoTime
