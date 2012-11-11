@@ -104,7 +104,7 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
 
   // Handles pushing data into the BlockManager
   lazy protected val dataHandler = new KafkaDataHandler(this, storageLevel)
-  // Keeps track of the current offsets. Maps from (topic, partitionID) -> Offset
+  // Keeps track of the current offsets. Maps from (broker, topic, group, part) -> Offset
   lazy val offsets = HashMap[KafkaPartitionKey, Long]()
   // Connection to Kafka
   var consumerConnector : ZookeeperConsumerConnector = null
