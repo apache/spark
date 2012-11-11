@@ -17,6 +17,7 @@ import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
 
+
 case class DStreamCheckpointData(rdds: HashMap[Time, Any])
 
 abstract class DStream[T: ClassManifest] (@transient var ssc: StreamingContext)
@@ -61,7 +62,7 @@ extends Serializable with Logging {
   // Checkpoint details
   protected[streaming] val mustCheckpoint = false
   protected[streaming] var checkpointInterval: Time = null
-  protected[streaming] var checkpointData = DStreamCheckpointData(HashMap[Time, Any]())
+  protected[streaming] var checkpointData = new DStreamCheckpointData(HashMap[Time, Any]())
 
   // Reference to whole DStream graph
   protected[streaming] var graph: DStreamGraph = null
@@ -286,7 +287,9 @@ extends Serializable with Logging {
    * This methd should be overwritten by sublcasses of InputDStream.
    */
   protected[streaming] def addMetadata(metadata: Any) {
-    logInfo("Dropping Metadata: " + metadata.toString)
+    if (metadata != null) {
+      logInfo("Dropping Metadata: " + metadata.toString)
+    }
   }
 
   /**

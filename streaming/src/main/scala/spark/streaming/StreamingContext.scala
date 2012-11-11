@@ -102,6 +102,18 @@ final class StreamingContext (
 
   private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
 
+ /**
+   * Create an input stream that pulls messages form a Kafka Broker.
+   * 
+   * @param host Zookeper hostname.
+   * @param port Zookeper port.
+   * @param groupId The group id for this consumer.
+   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   * in its own thread.
+   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
+   * By default the value is pulled from zookeper.
+   * @param storageLevel RDD storage level. Defaults to memory-only.
+   */
   def kafkaStream[T: ClassManifest](
       hostname: String,
       port: Int,
