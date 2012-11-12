@@ -47,6 +47,7 @@ class NetworkInputTracker(
     val result = queue.synchronized {
       queue.dequeueAll(x => true)
     }
+    logInfo("Stream " + receiverId + " received " + result.size + " blocks")
     result.toArray
   }
 

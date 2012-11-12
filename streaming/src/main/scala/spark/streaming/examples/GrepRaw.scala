@@ -2,8 +2,10 @@ package spark.streaming.examples
 
 import spark.util.IntParam
 import spark.storage.StorageLevel
+
 import spark.streaming._
 import spark.streaming.StreamingContext._
+import spark.streaming.util.RawTextHelper._
 
 object GrepRaw {
   def main(args: Array[String]) {
@@ -17,16 +19,13 @@ object GrepRaw {
     // Create the context and set the batch size
     val ssc = new StreamingContext(master, "GrepRaw")
     ssc.setBatchDuration(Milliseconds(batchMillis))
+    warmUp(ssc.sc)
 
-    // Make sure some tasks have started on each node
-    ssc.sc.parallelize(1 to 1000, 1000).count()
-    ssc.sc.parallelize(1 to 1000, 1000).count()
-    ssc.sc.parallelize(1 to 1000, 1000).count()
 
     val rawStreams = (1 to numStreams).map(_ =>
-      ssc.rawNetworkStream[String](host, port, StorageLevel.MEMORY_ONLY_2)).toArray
+      ssc.rawNetworkStream[String](host, port, StorageLevel.MEMORY_ONLY_SER_2)).toArray
     val union = new UnionDStream(rawStreams)
-    union.filter(_.contains("Culpepper")).count().foreachRDD(r =>
+    union.filter(_.contains("Alice")).count().foreachRDD(r =>
       println("Grep count: " + r.collect().mkString))
     ssc.start()
   }

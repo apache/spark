@@ -31,9 +31,13 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
       "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")"
   )
 
-  super.persist(StorageLevel.MEMORY_ONLY)
-
+  // Reduce each batch of data using reduceByKey which will be further reduced by window 
+  // by ReducedWindowedDStream
   val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
+
+  // Persist RDDs to memory by default as these RDDs are going to be reused.
+  super.persist(StorageLevel.MEMORY_ONLY_SER)
+  reducedStream.persist(StorageLevel.MEMORY_ONLY_SER)
 
   def windowTime: Time =  _windowTime
 
@@ -55,13 +59,6 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     super.checkpoint(interval)
     reducedStream.checkpoint(interval)
     this
-  }
-
-  protected[streaming] override def setRememberDuration(time: Time) {
-    if (rememberDuration == null || rememberDuration < time) {
-      rememberDuration = time
-      dependencies.foreach(_.setRememberDuration(rememberDuration + windowTime))
-    }
   }
 
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {

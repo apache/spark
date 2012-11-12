@@ -13,6 +13,10 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
+if [ -e $FWDIR/conf/streaming-env.sh ] ; then
+  . $FWDIR/conf/streaming-env.sh
+fi
+
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
   if [ `command -v scala` ]; then
     RUNNER="scala"

@@ -1,50 +1,43 @@
 package spark.streaming.examples
 
-import spark.util.IntParam
-import spark.SparkContext
-import spark.SparkContext._
 import spark.storage.StorageLevel
+import spark.util.IntParam
+
 import spark.streaming._
 import spark.streaming.StreamingContext._
+import spark.streaming.util.RawTextHelper._
 
-import WordCount2_ExtraFunctions._
+import java.util.UUID
 
 object WordCountRaw {
-  def moreWarmup(sc: SparkContext) {
-    (0 until 40).foreach {i =>
-      sc.parallelize(1 to 20000000, 1000)
-        .map(_ % 1331).map(_.toString)
-        .mapPartitions(splitAndCountPartitions).reduceByKey(_ + _, 10)
-        .collect()
-    }
-  }
 
   def main(args: Array[String]) {
-    if (args.length != 7) {
-      System.err.println("Usage: WordCountRaw <master> <streams> <host> <port> <batchMs> <chkptMs> <reduces>")
+    if (args.length != 4) {
+      System.err.println("Usage: WordCountRaw <master> <# streams> <port> <HDFS checkpoint directory> ")
       System.exit(1)
     }
 
-    val Array(master, IntParam(streams), host, IntParam(port), IntParam(batchMs),
-              IntParam(chkptMs), IntParam(reduces)) = args
+    val Array(master, IntParam(numStreams), IntParam(port), checkpointDir) = args
 
-    // Create the context and set the batch size
+    // Create the context, set the batch size and checkpoint directory.
+    // Checkpoint directory is necessary for achieving fault-tolerance, by saving counts 
+    // periodically to HDFS 
     val ssc = new StreamingContext(master, "WordCountRaw")
-    ssc.setBatchDuration(Milliseconds(batchMs))
+    ssc.setBatchDuration(Seconds(1))
+    ssc.checkpoint(checkpointDir + "/" + UUID.randomUUID.toString, Seconds(1)) 
+   
+    // Warm up the JVMs on master and slave for JIT compilation to kick in  
+    warmUp(ssc.sc)
 
-    // Make sure some tasks have started on each node
-    moreWarmup(ssc.sc)
-
-    val rawStreams = (1 to streams).map(_ =>
-      ssc.rawNetworkStream[String](host, port, StorageLevel.MEMORY_ONLY_2)).toArray
-    val union = new UnionDStream(rawStreams)
-
-    val windowedCounts = union.mapPartitions(splitAndCountPartitions)
-      .reduceByKeyAndWindow(add _, subtract _, Seconds(30), Milliseconds(batchMs), reduces)
-    windowedCounts.persist().checkpoint(chkptMs)
-      //.persist(StorageLevel.MEMORY_ONLY, StorageLevel.MEMORY_ONLY_2, Milliseconds(chkptMs))
-
-    windowedCounts.foreachRDD(r => println("Element count: " + r.count()))
+    // Set up the raw network streams that will connect to localhost:port to raw test
+    // senders on the slaves and generate count of words of last 30 seconds
+    val lines = (1 to numStreams).map(_ => {
+        ssc.rawNetworkStream[String]("localhost", port, StorageLevel.MEMORY_ONLY_SER_2)
+    })
+    val union = new UnionDStream(lines.toArray)
+    val counts = union.mapPartitions(splitAndCountPartitions)
+    val windowedCounts = counts.reduceByKeyAndWindow(add _, subtract _, Seconds(30), Seconds(1), 10)
+    windowedCounts.foreachRDD(r => println("# unique words = " + r.count()))
 
     ssc.start()
   }
