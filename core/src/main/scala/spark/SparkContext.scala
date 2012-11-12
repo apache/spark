@@ -113,8 +113,6 @@ class SparkContext(
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = new ConcurrentHashMap[Int, RDD[_]]()
-  // A HashMap for friendly RDD Names
-  private[spark] val rddNames = new ConcurrentHashMap[Int, String]()
 
   // Add each JAR given through the constructor
   jars.foreach { addJar(_) }

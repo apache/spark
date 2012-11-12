@@ -1,4 +1,5 @@
-@(maxMem: Long, remainingMem: Long, diskSpaceUsed: Long, rdds: List[spark.storage.RDDInfo])
+@(maxMem: Long, remainingMem: Long, diskSpaceUsed: Long, rdds: Array[spark.storage.RDDInfo], storageStatusList: Array[spark.storage.StorageStatus])
+@import spark.Utils
 
 @spark.common.html.layout(title = "Storage Dashboard") {
   
@@ -7,21 +8,32 @@
     <div class="span12">
       <ul class="unstyled">
         <li><strong>Memory:</strong> 
-          @{spark.Utils.memoryBytesToString(maxMem - remainingMem)} Used 
-          (@{spark.Utils.memoryBytesToString(remainingMem)} Available) </li>
-        <li><strong>Disk:</strong> @{spark.Utils.memoryBytesToString(diskSpaceUsed)} Used </li>
+          @{Utils.memoryBytesToString(maxMem - remainingMem)} Used 
+          (@{Utils.memoryBytesToString(remainingMem)} Available) </li>
+        <li><strong>Disk:</strong> @{Utils.memoryBytesToString(diskSpaceUsed)} Used </li>
       </ul>
     </div>
   </div>
 
   <hr/>
 
-  <!-- RDD Summary (Running) -->
+  <!-- RDD Summary -->
   <div class="row">
     <div class="span12">
       <h3> RDD Summary </h3>
       <br/>
        @rdd_table(rdds)
+    </div>
+  </div>
+
+  <hr/>
+
+  <!-- Worker Summary -->
+  <div class="row">
+    <div class="span12">
+      <h3> Worker Summary </h3>
+      <br/>
+       @worker_table(storageStatusList)
     </div>
   </div>
 

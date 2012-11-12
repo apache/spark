@@ -86,6 +86,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   @transient val dependencies: List[Dependency[_]]
 
   // Methods available on all RDDs:
+
+  // A friendly name for this RDD
+  var name: String = null
   
   /** Record user function generating this RDD. */
   private[spark] val origin = Utils.getSparkCallSite
@@ -108,8 +111,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   private var storageLevel: StorageLevel = StorageLevel.NONE
   
   /* Assign a name to this RDD */
-  def name(name: String) = {
-    sc.rddNames(this.id) = name
+  def setName(_name: String) = {
+    name = _name
     this
   }
 

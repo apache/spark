@@ -4,7 +4,7 @@ import java.io._
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import akka.actor._
@@ -95,10 +95,7 @@ private[spark]
 case class GetStorageStatus extends ToBlockManagerMaster
 
 private[spark]
-case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
-
-private[spark]
-case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long, remainingMem: Long, blocks: Map[String, BlockStatus])
+case class BlockStatus(blockManagerId: BlockManagerId, storageLevel: StorageLevel, memSize: Long, diskSize: Long)
 
 
 private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
@@ -135,7 +132,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
       if (storageLevel.isValid) {
         // isValid means it is either stored in-memory or on-disk.
-        _blocks.put(blockId, BlockStatus(storageLevel, memSize, diskSize))
+        _blocks.put(blockId, BlockStatus(blockManagerId, storageLevel, memSize, diskSize))
         if (storageLevel.useMemory) {
           _remainingMem -= memSize
           logInfo("Added %s in memory on %s:%d (size: %s, free: %s)".format(
@@ -237,7 +234,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
   private def getStorageStatus() {
     val res = blockManagerInfo.map { case(blockManagerId, info) =>
-      StorageStatus(blockManagerId, info.maxMem, info.remainingMem, info.blocks.asScala)
+      StorageStatus(blockManagerId, info.maxMem, info.blocks.asScala.toMap)
     }
     sender ! res
   }

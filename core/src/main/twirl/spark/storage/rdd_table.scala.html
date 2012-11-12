@@ -1,4 +1,5 @@
-@(rdds: List[spark.storage.RDDInfo])
+@(rdds: Array[spark.storage.RDDInfo])
+@import spark.Utils
 
 <table class="table table-bordered table-striped table-condensed sortable">
   <thead>
@@ -12,7 +13,18 @@
   </thead>
   <tbody>
     @for(rdd <- rdds) {
-      @rdd_row(rdd)
+      <tr>
+        <td>
+          <a href="rdd?id=@(rdd.id)">
+            @rdd.name
+          </a>
+        </td>
+        <td>@(rdd.storageLevel.description)
+        </td>
+        <td>@rdd.numPartitions</td>
+        <td>@{Utils.memoryBytesToString(rdd.memSize)}</td>
+        <td>@{Utils.memoryBytesToString(rdd.diskSize)}</td>
+      </tr>
     }
   </tbody>
 </table>
