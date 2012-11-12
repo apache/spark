@@ -479,8 +479,10 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
           ") for resubmision due to a fetch failure")
         // Mark the map whose fetch failed as broken in the map stage
         val mapStage = shuffleToMapStage(shuffleId)
-        mapStage.removeOutputLoc(mapId, bmAddress)
-        mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+        if (mapId != -1) {
+          mapStage.removeOutputLoc(mapId, bmAddress)
+          mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+        }
         logInfo("The failed fetch was from " + mapStage + " (" + mapStage.origin +
           "); marking it for resubmission")
         failed += mapStage

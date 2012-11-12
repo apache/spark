@@ -156,6 +156,10 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
         fetching -= shuffleId
         fetching.notifyAll()
       }
+      if (fetchedStatuses.contains(null)) {
+        throw new FetchFailedException(null, shuffleId, -1, reduceId,
+          new Exception("Missing an output location for shuffle " + shuffleId))
+      }
       return fetchedStatuses.map(s =>
         (s.address, MapOutputTracker.decompressSize(s.compressedSizes(reduceId))))
     } else {
