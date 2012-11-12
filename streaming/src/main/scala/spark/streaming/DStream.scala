@@ -79,7 +79,7 @@ extends Serializable with Logging {
     this
   }
 
-  def persist(): DStream[T] = persist(StorageLevel.MEMORY_ONLY)
+  def persist(): DStream[T] = persist(StorageLevel.MEMORY_ONLY_SER)
   
   // Turn on the default caching level for this RDD
   def cache(): DStream[T] = persist()

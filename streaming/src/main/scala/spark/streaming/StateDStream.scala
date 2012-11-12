@@ -23,7 +23,7 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
     rememberPartitioner: Boolean
   ) extends DStream[(K, S)](parent.ssc) {
 
-  super.persist(StorageLevel.MEMORY_ONLY)
+  super.persist(StorageLevel.MEMORY_ONLY_SER)
 
   override def dependencies = List(parent)
 
