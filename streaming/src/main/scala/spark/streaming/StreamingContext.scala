@@ -85,7 +85,7 @@ final class StreamingContext (
     graph.setRememberDuration(duration)
   }
 
-  def checkpoint(dir: String, interval: Time) {
+  def checkpoint(dir: String, interval: Time = null) {
     if (dir != null) {
       sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(dir))
       checkpointDir = dir
@@ -186,12 +186,29 @@ final class StreamingContext (
     graph.addOutputStream(outputStream)
   }
 
+  def validate() {
+    assert(graph != null, "Graph is null")
+    graph.validate()
+
+    assert(
+      checkpointDir == null || checkpointInterval != null,
+      "Checkpoint directory has been set, but the graph checkpointing interval has " +
+        "not been set. Please use StreamingContext.checkpoint() to set the interval."
+    )
+
+
+  }
+
+
   /**
    * This function starts the execution of the streams.
    */
   def start() {
-    assert(graph != null, "Graph is null")
-    graph.validate()
+    if (checkpointDir != null && checkpointInterval == null && graph != null) {
+      checkpointInterval = graph.batchDuration
+    }
+
+    validate()
 
     val networkInputStreams = graph.getInputStreams().filter(s => s match {
         case n: NetworkInputDStream[_] => true

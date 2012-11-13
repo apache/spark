@@ -57,7 +57,7 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
 
   override def checkpoint(interval: Time): DStream[(K, V)] = {
     super.checkpoint(interval)
-    reducedStream.checkpoint(interval)
+    //reducedStream.checkpoint(interval)
     this
   }
 

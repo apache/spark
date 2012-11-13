@@ -230,7 +230,7 @@ extends Serializable with Logging {
               }
               if (checkpointInterval != null && (time - zeroTime).isMultipleOf(checkpointInterval)) {
                 newRDD.checkpoint()
-                logInfo("Marking RDD for time " + time + " for checkpointing at time " + time)
+                logInfo("Marking RDD " + newRDD + " for time " + time + " for checkpointing at time " + time)
               }
               generatedRDDs.put(time, newRDD)
               Some(newRDD)
