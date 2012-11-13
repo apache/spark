@@ -3,7 +3,7 @@ package spark.streaming.examples
 import spark.streaming._
 import spark.streaming.StreamingContext._
 import spark.storage.StorageLevel
-import WordCount2_ExtraFunctions._
+import spark.streaming.util.RawTextHelper._
 
 object KafkaWordCount {
   def main(args: Array[String]) {
