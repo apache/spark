@@ -189,11 +189,7 @@ abstract class RDD[T: ClassManifest](
 
   def getCheckpointData(): Any = {
     synchronized {
-      if (isCheckpointed) {
-        checkpointFile
-      } else {
-        null
-      }
+      checkpointFile
     }
   }
 

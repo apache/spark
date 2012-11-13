@@ -233,7 +233,7 @@ extends Serializable with Logging {
               }
               if (checkpointInterval != null && (time - zeroTime).isMultipleOf(checkpointInterval)) {
                 newRDD.checkpoint()
-                logInfo("Marking RDD for time " + time + " for checkpointing at time " + time)
+                logInfo("Marking RDD " + newRDD + " for time " + time + " for checkpointing at time " + time)
               }
               generatedRDDs.put(time, newRDD)
               Some(newRDD)
@@ -300,6 +300,9 @@ extends Serializable with Logging {
    * this method to save custom checkpoint data.
    */
   protected[streaming] def updateCheckpointData(currentTime: Time) {
+
+    logInfo("Updating checkpoint data for time " + currentTime)
+
     // Get the checkpointed RDDs from the generated RDDs
     val newRdds = generatedRDDs.filter(_._2.getCheckpointData() != null)
                                          .map(x => (x._1, x._2.getCheckpointData()))
@@ -342,8 +345,11 @@ extends Serializable with Logging {
     logInfo("Restoring checkpoint data from " + checkpointData.rdds.size + " checkpointed RDDs")
     checkpointData.rdds.foreach {
       case(time, data) => {
-        logInfo("Restoring checkpointed RDD for time " + time + " from file")
-        generatedRDDs += ((time, ssc.sc.objectFile[T](data.toString)))
+        logInfo("Restoring checkpointed RDD for time " + time + " from file '" + data.toString + "'")
+        val rdd = ssc.sc.objectFile[T](data.toString)
+        // Set the checkpoint file name to identify this RDD as a checkpointed RDD by updateCheckpointData()
+        rdd.checkpointFile = data.toString
+        generatedRDDs += ((time, rdd))
       }
     }
     dependencies.foreach(_.restoreCheckpointData())

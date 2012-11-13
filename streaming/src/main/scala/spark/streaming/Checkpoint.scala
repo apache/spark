@@ -5,7 +5,7 @@ import spark.{Logging, Utils}
 import org.apache.hadoop.fs.{FileUtil, Path}
 import org.apache.hadoop.conf.Configuration
 
-import java.io.{InputStream, ObjectStreamClass, ObjectInputStream, ObjectOutputStream}
+import java.io._
 
 
 class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
@@ -18,8 +18,6 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDir = ssc.checkpointDir
   val checkpointInterval = ssc.checkpointInterval
 
-  validate()
-
   def validate() {
     assert(master != null, "Checkpoint.master is null")
     assert(framework != null, "Checkpoint.framework is null")
@@ -27,35 +25,50 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
     assert(checkpointTime != null, "Checkpoint.checkpointTime is null")
     logInfo("Checkpoint for time " + checkpointTime + " validated")
   }
+}
 
-  def save(path: String) {
-    val file = new Path(path, "graph")
-    val conf = new Configuration()
-    val fs = file.getFileSystem(conf)
-    logDebug("Saving checkpoint for time " + checkpointTime + " to file '" + file + "'")
-    if (fs.exists(file)) {
-      val bkFile = new Path(file.getParent, file.getName + ".bk")
-      FileUtil.copy(fs, file, fs, bkFile, true, true, conf)
-      logDebug("Moved existing checkpoint file to " + bkFile)
+/**
+ * Convenience class to speed up the writing of graph checkpoint to file
+ */
+class CheckpointWriter(checkpointDir: String) extends Logging {
+  val file = new Path(checkpointDir, "graph")
+  val conf = new Configuration()
+  var fs = file.getFileSystem(conf)
+  val maxAttempts = 3
+
+  def write(checkpoint: Checkpoint) {
+    // TODO: maybe do this in a different thread from the main stream execution thread
+    var attempts = 0
+    while (attempts < maxAttempts) {
+      attempts += 1
+      try {
+        logDebug("Saving checkpoint for time " + checkpoint.checkpointTime + " to file '" + file + "'")
+        if (fs.exists(file)) {
+          val bkFile = new Path(file.getParent, file.getName + ".bk")
+          FileUtil.copy(fs, file, fs, bkFile, true, true, conf)
+          logDebug("Moved existing checkpoint file to " + bkFile)
+        }
+        val fos = fs.create(file)
+        val oos = new ObjectOutputStream(fos)
+        oos.writeObject(checkpoint)
+        oos.close()
+        logInfo("Checkpoint for time " + checkpoint.checkpointTime + " saved to file '" + file + "'")
+        fos.close()
+        return
+      } catch {
+        case ioe: IOException =>
+          logWarning("Error writing checkpoint to file in " + attempts + " attempts", ioe)
+      }
     }
-    val fos = fs.create(file)
-    val oos = new ObjectOutputStream(fos)
-    oos.writeObject(this)
-    oos.close()
-    fs.close()
-    logInfo("Checkpoint of streaming context for time " + checkpointTime + " saved successfully to file '" + file + "'")
-  }
-
-  def toBytes(): Array[Byte] = {
-    val bytes = Utils.serialize(this)
-    bytes
+    logError("Could not write checkpoint for time " + checkpoint.checkpointTime + " to file '" + file + "'")
   }
 }
 
-object Checkpoint extends Logging {
 
-  def load(path: String): Checkpoint = {
 
+object CheckpointReader extends Logging {
+
+  def read(path: String): Checkpoint = {
     val fs = new Path(path).getFileSystem(new Configuration())
     val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"), new Path(path), new Path(path + ".bk"))
 
@@ -82,17 +95,11 @@ object Checkpoint extends Logging {
             logError("Error loading checkpoint from file '" + file + "'", e)
         }
       } else {
-        logWarning("Could not load checkpoint from file '" + file + "' as it does not exist")
+        logWarning("Could not read checkpoint from file '" + file + "' as it does not exist")
       }
 
     })
-    throw new Exception("Could not load checkpoint from path '" + path + "'")
-  }
-
-  def fromBytes(bytes: Array[Byte]): Checkpoint = {
-    val cp = Utils.deserialize[Checkpoint](bytes)
-    cp.validate()
-    cp
+    throw new Exception("Could not read checkpoint from path '" + path + "'")
   }
 }
 

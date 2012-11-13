@@ -24,7 +24,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
 
   override def framework = "CheckpointSuite"
 
-  override def batchDuration = Milliseconds(200)
+  override def batchDuration = Milliseconds(500)
 
   override def checkpointDir = "checkpoint"
 
@@ -34,7 +34,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
 
   test("basic stream+rdd recovery") {
 
-    assert(batchDuration === Milliseconds(200), "batchDuration for this test must be 1 second")
+    assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
     assert(checkpointInterval === batchDuration, "checkpointInterval for this test much be same as batchDuration")
 
     System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
@@ -134,9 +134,9 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     val operation = (st: DStream[String]) => {
       st.map(x => (x, 1))
         .reduceByKeyAndWindow(_ + _, _ - _, batchDuration * w, batchDuration)
-        .checkpoint(Seconds(2))
+        .checkpoint(batchDuration * 2)
     }
-    testCheckpointedOperation(input, operation, output, 3)
+    testCheckpointedOperation(input, operation, output, 7)
   }
 
   test("updateStateByKey") {
@@ -148,14 +148,18 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
       }
       st.map(x => (x, 1))
         .updateStateByKey[RichInt](updateFunc)
-        .checkpoint(Seconds(2))
+        .checkpoint(batchDuration * 2)
         .map(t => (t._1, t._2.self))
     }
-    testCheckpointedOperation(input, operation, output, 3)
+    testCheckpointedOperation(input, operation, output, 7)
   }
 
-
-
+  /**
+   * Tests a streaming operation under checkpointing, by restart the operation
+   * from checkpoint file and verifying whether the final output is correct.
+   * The output is assumed to have come from a reliable queue which an replay
+   * data as required.
+   */
   def testCheckpointedOperation[U: ClassManifest, V: ClassManifest](
     input: Seq[Seq[U]],
     operation: DStream[U] => DStream[V],
@@ -170,8 +174,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     val initialNumExpectedOutputs = initialNumBatches
     val nextNumExpectedOutputs = expectedOutput.size - initialNumExpectedOutputs
 
-    // Do half the computation (half the number of batches), create checkpoint file and quit
-
+    // Do the computation for initial number of batches, create checkpoint file and quit
     ssc = setupStreams[U, V](input, operation)
     val output = runStreams[V](ssc, initialNumBatches, initialNumExpectedOutputs)
     verifyOutput[V](output, expectedOutput.take(initialNumBatches), true)
@@ -193,8 +196,6 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also wait for the expected amount of time for each batch.
    */
-
-
   def runStreamsWithRealDelay(ssc: StreamingContext, numBatches: Long) {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     logInfo("Manual clock before advancing = " + clock.time)

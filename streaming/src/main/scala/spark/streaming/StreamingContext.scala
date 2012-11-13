@@ -28,7 +28,7 @@ final class StreamingContext (
   def this(master: String, frameworkName: String, sparkHome: String = null, jars: Seq[String] = Nil) =
     this(new SparkContext(master, frameworkName, sparkHome, jars), null)
 
-  def this(path: String) = this(null, Checkpoint.load(path))
+  def this(path: String) = this(null, CheckpointReader.read(path))
 
   def this(cp_ : Checkpoint) = this(null, cp_)
 
@@ -85,7 +85,7 @@ final class StreamingContext (
     graph.setRememberDuration(duration)
   }
 
-  def checkpoint(dir: String, interval: Time) {
+  def checkpoint(dir: String, interval: Time = null) {
     if (dir != null) {
       sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(dir))
       checkpointDir = dir
@@ -211,12 +211,29 @@ final class StreamingContext (
     graph.addOutputStream(outputStream)
   }
 
+  def validate() {
+    assert(graph != null, "Graph is null")
+    graph.validate()
+
+    assert(
+      checkpointDir == null || checkpointInterval != null,
+      "Checkpoint directory has been set, but the graph checkpointing interval has " +
+        "not been set. Please use StreamingContext.checkpoint() to set the interval."
+    )
+
+
+  }
+
+
   /**
    * This function starts the execution of the streams.
    */
   def start() {
-    assert(graph != null, "Graph is null")
-    graph.validate()
+    if (checkpointDir != null && checkpointInterval == null && graph != null) {
+      checkpointInterval = graph.batchDuration
+    }
+
+    validate()
 
     val networkInputStreams = graph.getInputStreams().filter(s => s match {
         case n: NetworkInputDStream[_] => true
@@ -249,14 +266,6 @@ final class StreamingContext (
     } catch {
       case e: Exception => logWarning("Error while stopping", e)
     }
-  }
-
-  def doCheckpoint(currentTime: Time) {
-    val startTime = System.currentTimeMillis()
-    graph.updateCheckpointData(currentTime)
-    new Checkpoint(this, currentTime).save(checkpointDir)
-    val stopTime = System.currentTimeMillis()
-    logInfo("Checkpointing the graph took " + (stopTime - startTime) + " ms")
   }
 }
 

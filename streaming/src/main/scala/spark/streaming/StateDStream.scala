@@ -7,20 +7,11 @@ import spark.rdd.MapPartitionsRDD
 import spark.SparkContext._
 import spark.storage.StorageLevel
 
-
-class StateRDD[U: ClassManifest, T: ClassManifest](
-    prev: RDD[T],
-    f: Iterator[T] => Iterator[U],
-    rememberPartitioner: Boolean
-  ) extends MapPartitionsRDD[U, T](prev, f) {
-  override val partitioner = if (rememberPartitioner) prev.partitioner else None
-}
-
 class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManifest](
     parent: DStream[(K, V)],
     updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
     partitioner: Partitioner,
-    rememberPartitioner: Boolean
+    preservePartitioning: Boolean
   ) extends DStream[(K, S)](parent.ssc) {
 
   super.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -53,7 +44,7 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
               updateFuncLocal(i)
             }
             val cogroupedRDD = parentRDD.cogroup(prevStateRDD, partitioner)
-            val stateRDD = new StateRDD(cogroupedRDD, finalFunc, rememberPartitioner)
+            val stateRDD = cogroupedRDD.mapPartitions(finalFunc, preservePartitioning)
             //logDebug("Generating state RDD for time " + validTime)
             return Some(stateRDD)
           }
@@ -78,7 +69,7 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
             }
 
             val groupedRDD = parentRDD.groupByKey(partitioner)
-            val sessionRDD = new StateRDD(groupedRDD, finalFunc, rememberPartitioner)
+            val sessionRDD = groupedRDD.mapPartitions(finalFunc, preservePartitioning)
             //logDebug("Generating state RDD for time " + validTime + " (first)")
             return Some(sessionRDD)
           }
