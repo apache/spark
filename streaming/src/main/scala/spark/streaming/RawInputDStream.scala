@@ -69,7 +69,7 @@ class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: S
   }
 
   def onStop() {
-    blockPushingThread.interrupt()
+    if (blockPushingThread != null) blockPushingThread.interrupt()
   }
 
   /** Read a buffer fully from a given Channel */

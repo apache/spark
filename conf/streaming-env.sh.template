@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+# This file contains a few additional setting that are useful for
+# running streaming jobs in Spark. Copy this file as streaming-env.sh . 
+# Note that this shell script will be read after spark-env.sh, so settings
+# in this file may override similar settings (if present) in spark-env.sh .
+
+
+# Using concurrent GC is strongly recommended as it can significantly
+# reduce GC related pauses.
+
+SPARK_JAVA_OPTS+=" -XX:+UseConcMarkSweepGC" 
+
+# Using of Kryo serialization can improve serialization performance
+# and therefore the throughput of the Spark Streaming programs. However,
+# using Kryo serialization with custom classes may required you to 
+# register the classes with Kryo. Refer to the Spark documentation
+# for more details.
+
+# SPARK_JAVA_OPTS+=" -Dspark.serializer=spark.KryoSerializer"
+
+export SPARK_JAVA_OPTS

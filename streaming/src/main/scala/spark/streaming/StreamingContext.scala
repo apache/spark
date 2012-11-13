@@ -149,7 +149,7 @@ final class StreamingContext (
   def rawNetworkStream[T: ClassManifest](
       hostname: String,
       port: Int,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[T] = {
     val inputStream = new RawInputDStream[T](this, hostname, port, storageLevel)
     graph.addInputStream(inputStream)
@@ -157,7 +157,7 @@ final class StreamingContext (
   }
 
   /**
-   * This function creates a input stream that monitors a Hadoop-compatible
+   * This function creates a input stream that monitors a Hadoop-compatible filesystem
    * for new files and executes the necessary processing on them.
    */
   def fileStream[
