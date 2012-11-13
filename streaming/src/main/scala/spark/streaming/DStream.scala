@@ -289,6 +289,7 @@ extends Serializable with Logging {
    */
   protected[streaming] def updateCheckpointData(currentTime: Time) {
     logInfo("Updating checkpoint data for time " + currentTime)
+
     // Get the checkpointed RDDs from the generated RDDs
     val newCheckpointData = generatedRDDs.filter(_._2.getCheckpointData() != null)
                                          .map(x => (x._1, x._2.getCheckpointData()))
@@ -334,8 +335,11 @@ extends Serializable with Logging {
     logInfo("Restoring checkpoint data from " + checkpointData.size + " checkpointed RDDs")
     checkpointData.foreach {
       case(time, data) => {
-        logInfo("Restoring checkpointed RDD for time " + time + " from file")
-        generatedRDDs += ((time, ssc.sc.objectFile[T](data.toString)))
+        logInfo("Restoring checkpointed RDD for time " + time + " from file '" + data.toString + "'")
+        val rdd = ssc.sc.objectFile[T](data.toString)
+        // Set the checkpoint file name to identify this RDD as a checkpointed RDD by updateCheckpointData()
+        rdd.checkpointFile = data.toString
+        generatedRDDs += ((time, rdd))
       }
     }
     dependencies.foreach(_.restoreCheckpointData())

@@ -28,7 +28,7 @@ final class StreamingContext (
   def this(master: String, frameworkName: String, sparkHome: String = null, jars: Seq[String] = Nil) =
     this(new SparkContext(master, frameworkName, sparkHome, jars), null)
 
-  def this(path: String) = this(null, Checkpoint.load(path))
+  def this(path: String) = this(null, CheckpointReader.read(path))
 
   def this(cp_ : Checkpoint) = this(null, cp_)
 
@@ -224,14 +224,6 @@ final class StreamingContext (
     } catch {
       case e: Exception => logWarning("Error while stopping", e)
     }
-  }
-
-  def doCheckpoint(currentTime: Time) {
-    val startTime = System.currentTimeMillis()
-    graph.updateCheckpointData(currentTime)
-    new Checkpoint(this, currentTime).save(checkpointDir)
-    val stopTime = System.currentTimeMillis()
-    logInfo("Checkpointing the graph took " + (stopTime - startTime) + " ms")
   }
 }
 

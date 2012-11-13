@@ -16,8 +16,16 @@ extends Logging {
   initLogging()
 
   val graph = ssc.graph
+
   val concurrentJobs = System.getProperty("spark.stream.concurrentJobs", "1").toInt
   val jobManager = new JobManager(ssc, concurrentJobs)
+
+  val checkpointWriter = if (ssc.checkpointInterval != null && ssc.checkpointDir != null) {
+    new CheckpointWriter(ssc.checkpointDir)
+  } else {
+    null
+  }
+
   val clockClass = System.getProperty("spark.streaming.clock", "spark.streaming.util.SystemClock")
   val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
   val timer = new RecurringTimer(clock, ssc.graph.batchDuration, generateRDDs(_))
@@ -52,19 +60,23 @@ extends Logging {
     logInfo("Scheduler stopped")    
   }
   
-  def generateRDDs(time: Time) {
+  private def generateRDDs(time: Time) {
     SparkEnv.set(ssc.env)
     logInfo("\n-----------------------------------------------------\n")
-    graph.generateRDDs(time).foreach(submitJob)
-    logInfo("Generated RDDs for time " + time)
+    graph.generateRDDs(time).foreach(jobManager.runJob)
     graph.forgetOldRDDs(time)
-    if (ssc.checkpointInterval != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointInterval)) {
-      ssc.doCheckpoint(time)
-    }
+    doCheckpoint(time)
+    logInfo("Generated RDDs for time " + time)
   }
 
-  def submitJob(job: Job) {    
-    jobManager.runJob(job)
+  private def doCheckpoint(time: Time) {
+    if (ssc.checkpointInterval != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointInterval)) {
+      val startTime = System.currentTimeMillis()
+      ssc.graph.updateCheckpointData(time)
+      checkpointWriter.write(new Checkpoint(ssc, time))
+      val stopTime = System.currentTimeMillis()
+      logInfo("Checkpointing the graph took " + (stopTime - startTime) + " ms")
+    }
   }
 }
 
