@@ -7,7 +7,7 @@ import spark.Utils
  * Command-line parser for the master.
  */
 private[spark] class MasterArguments(args: Array[String]) {
-  var ip = Utils.localIpAddress()
+  var ip = Utils.localHostName()
   var port = 7077
   var webUiPort = 8080
   
