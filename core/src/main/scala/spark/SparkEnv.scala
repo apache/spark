@@ -68,7 +68,6 @@ object SparkEnv extends Logging {
       isMaster: Boolean,
       isLocal: Boolean
     ) : SparkEnv = {
-
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port)
 
     // Bit of a hack: If this is the master and our port was 0 (meaning bind to any free port),
