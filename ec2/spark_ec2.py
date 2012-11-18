@@ -62,7 +62,8 @@ def parse_args():
       help="EC2 region zone to launch instances in")
   parser.add_option("-z", "--zone", default="",
       help="Availability zone to launch instances in, or 'all' to spread " +
-           "slaves across multiple")
+           "slaves across multiple (an additional $0.01/Gb for bandwidth" +
+           "between zones applies)")
   parser.add_option("-a", "--ami", default="latest",
       help="Amazon Machine Image ID to use, or 'latest' to use latest " +
            "available AMI (default: latest)")
