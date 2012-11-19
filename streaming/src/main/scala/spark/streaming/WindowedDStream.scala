@@ -2,6 +2,7 @@ package spark.streaming
 
 import spark.RDD
 import spark.rdd.UnionRDD
+import spark.storage.StorageLevel
 
 
 class WindowedDStream[T: ClassManifest](
@@ -17,6 +18,8 @@ class WindowedDStream[T: ClassManifest](
   if (!_slideTime.isMultipleOf(parent.slideTime))
     throw new Exception("The slide duration of WindowedDStream (" + _slideTime + ") " +
     "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
+
+  parent.persist(StorageLevel.MEMORY_ONLY_SER)
 
   def windowTime: Time =  _windowTime
 

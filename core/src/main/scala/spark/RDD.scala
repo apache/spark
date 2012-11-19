@@ -222,12 +222,13 @@ abstract class RDD[T: ClassManifest](
           rdd.checkpointFile = new Path(context.checkpointDir, "rdd-" + id).toString
           rdd.saveAsObjectFile(checkpointFile)
           rdd.synchronized {
-            rdd.checkpointRDD = context.objectFile[T](checkpointFile)
+            rdd.checkpointRDD = context.objectFile[T](checkpointFile, rdd.splits.size)
             rdd.checkpointRDDSplits = rdd.checkpointRDD.splits
             rdd.changeDependencies(rdd.checkpointRDD)
             rdd.shouldCheckpoint = false
             rdd.isCheckpointInProgress = false
             rdd.isCheckpointed = true
+            println("Done checkpointing RDD " + rdd.id + ", " + rdd)
           }
         }
       }

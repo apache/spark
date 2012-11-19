@@ -321,7 +321,8 @@ extends Serializable with Logging {
         }
       }
     }
-    logInfo("Updated checkpoint data for time " + currentTime)
+    logInfo("Updated checkpoint data for time " + currentTime + ", " + checkpointData.size + " checkpoints, " 
+      + "[" + checkpointData.mkString(",") + "]")
   }
 
   /**
