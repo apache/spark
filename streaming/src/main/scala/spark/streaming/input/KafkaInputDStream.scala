@@ -171,8 +171,7 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
           groupId, msgAndMetadata.topicInfo.partition.partId)
         val offset = msgAndMetadata.topicInfo.getConsumeOffset
         offsets.put(key, offset)
-        // TODO: Remove Logging
-        logInfo("Handled message: " + (key, offset).toString)
+        // logInfo("Handled message: " + (key, offset).toString)
 
         // Keep on handling messages
         true
@@ -190,5 +189,5 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
   //   }
 
   // }
-  
+
 }
