@@ -105,7 +105,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   private[streaming] def validate() {
     this.synchronized {
       assert(batchDuration != null, "Batch duration has not been set")
-      assert(batchDuration > Milliseconds(100), "Batch duration of " + batchDuration + " is very low")
+      //assert(batchDuration >= Milliseconds(100), "Batch duration of " + batchDuration + " is very low")
       assert(getOutputStreams().size > 0, "No output streams registered, so nothing to execute")
     }
   }

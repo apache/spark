@@ -229,11 +229,11 @@ extends Serializable with Logging {
             case Some(newRDD) =>
               if (storageLevel != StorageLevel.NONE) {
                 newRDD.persist(storageLevel)
-                logInfo("Persisting RDD for time " + time + " to " + storageLevel + " at time " + time)
+                logInfo("Persisting RDD " + newRDD.id + " for time " + time + " to " + storageLevel + " at time " + time)
               }
               if (checkpointInterval != null && (time - zeroTime).isMultipleOf(checkpointInterval)) {
                 newRDD.checkpoint()
-                logInfo("Marking RDD " + newRDD + " for time " + time + " for checkpointing at time " + time)
+                logInfo("Marking RDD " + newRDD.id + " for time " + time + " for checkpointing at time " + time)
               }
               generatedRDDs.put(time, newRDD)
               Some(newRDD)

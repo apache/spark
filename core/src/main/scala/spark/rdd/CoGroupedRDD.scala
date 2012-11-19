@@ -12,9 +12,20 @@ import spark.RDD
 import spark.ShuffleDependency
 import spark.SparkEnv
 import spark.Split
+import java.io.{ObjectOutputStream, IOException}
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
-private[spark] case class NarrowCoGroupSplitDep(rdd: RDD[_], split: Split) extends CoGroupSplitDep
+private[spark] case class NarrowCoGroupSplitDep(rdd: RDD[_], splitIndex: Int, var split: Split = null)
+  extends CoGroupSplitDep {
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    rdd.synchronized {
+      // Update the reference to parent split at the time of task serialization
+      split = rdd.splits(splitIndex)
+      oos.defaultWriteObject()
+    }
+  }
+}
 private[spark] case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
 
 private[spark] 
@@ -55,7 +66,6 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
 
   @transient
   var splits_ : Array[Split] = {
-    val firstRdd = rdds.head
     val array = new Array[Split](part.numPartitions)
     for (i <- 0 until array.size) {
       array(i) = new CoGroupSplit(i, rdds.zipWithIndex.map { case (r, j) =>
@@ -63,7 +73,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
           case s: ShuffleDependency[_, _] =>
             new ShuffleCoGroupSplitDep(s.shuffleId): CoGroupSplitDep
           case _ =>
-            new NarrowCoGroupSplitDep(r, r.splits(i)): CoGroupSplitDep
+            new NarrowCoGroupSplitDep(r, i): CoGroupSplitDep
         }
       }.toList)
     }
@@ -82,7 +92,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
       map.getOrElseUpdate(k, Array.fill(numRdds)(new ArrayBuffer[Any]))
     }
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
-      case NarrowCoGroupSplitDep(rdd, itsSplit) => {
+      case NarrowCoGroupSplitDep(rdd, itsSplitIndex, itsSplit) => {
         // Read them from the parent
         for ((k, v) <- rdd.iterator(itsSplit)) {
           getSeq(k.asInstanceOf[K])(depNum) += v

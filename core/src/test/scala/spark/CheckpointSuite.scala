@@ -6,6 +6,7 @@ import rdd.{BlockRDD, CoalescedRDD, MapPartitionsWithSplitRDD}
 import spark.SparkContext._
 import storage.StorageLevel
 import java.util.concurrent.Semaphore
+import collection.mutable.ArrayBuffer
 
 class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
   initLogging()
@@ -92,6 +93,33 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     val rdd2 = sc.makeRDD(5 to 6, 4).map(x => (x % 2, 1))
     testCheckpointing(rdd1 => rdd1.map(x => (x % 2, 1)).cogroup(rdd2))
     testCheckpointing(rdd1 => rdd1.map(x => (x % 2, x)).join(rdd2))
+
+    // Special test to make sure that the CoGroupSplit of CoGroupedRDD do not
+    // hold on to the splits of its parent RDDs, as the splits of parent RDDs
+    // may change while checkpointing. Rather the splits of parent RDDs must
+    // be fetched at the time of serialization to ensure the latest splits to
+    // be sent along with the task.
+
+    val add = (x: (Seq[Int], Seq[Int])) => (x._1 ++ x._2).reduce(_ + _)
+
+    val ones = sc.parallelize(1 to 100, 1).map(x => (x,1))
+    val reduced = ones.reduceByKey(_ + _)
+    val seqOfCogrouped = new ArrayBuffer[RDD[(Int, Int)]]()
+    seqOfCogrouped += reduced.cogroup(ones).mapValues[Int](add)
+    for(i <- 1 to 10) {
+      seqOfCogrouped += seqOfCogrouped.last.cogroup(ones).mapValues(add)
+    }
+    val finalCogrouped = seqOfCogrouped.last
+    val intermediateCogrouped = seqOfCogrouped(5)
+
+    val bytesBeforeCheckpoint = Utils.serialize(finalCogrouped.splits)
+    intermediateCogrouped.checkpoint()
+    finalCogrouped.count()
+    sleep(intermediateCogrouped)
+    val bytesAfterCheckpoint = Utils.serialize(finalCogrouped.splits)
+    println("Before = " + bytesBeforeCheckpoint.size + ", after = " + bytesAfterCheckpoint.size)
+    assert(bytesAfterCheckpoint.size < bytesBeforeCheckpoint.size,
+      "CoGroupedSplits still holds on to the splits of its parent RDDs")
   }
 
   /**
