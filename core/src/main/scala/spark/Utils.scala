@@ -199,7 +199,13 @@ private object Utils extends Logging {
   /**
    * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4).
    */
-  def localIpAddress(): String = InetAddress.getLocalHost.getHostAddress
+  def localIpAddress(): String = {
+    val defaultIpOverride = System.getenv("SPARK_LOCAL_IP")
+    if (defaultIpOverride != null)
+      defaultIpOverride
+    else
+      InetAddress.getLocalHost.getHostAddress
+  }
 
   private var customHostname: Option[String] = None
 
