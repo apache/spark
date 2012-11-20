@@ -16,9 +16,10 @@ object GrepRaw {
 
     val Array(master, IntParam(numStreams), host, IntParam(port), IntParam(batchMillis)) = args
 
-    // Create the context and set the batch size
-    val ssc = new StreamingContext(master, "GrepRaw")
-    ssc.setBatchDuration(Milliseconds(batchMillis))
+    // Create the context
+    val ssc = new StreamingContext(master, "GrepRaw", Milliseconds(batchMillis))
+
+    // Warm up the JVMs on master and slave for JIT compilation to kick in
     warmUp(ssc.sc)
 
 

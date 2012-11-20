@@ -14,10 +14,9 @@ object FileStream {
       System.exit(1)
     }
     
-    // Create the context and set the batch size
-    val ssc = new StreamingContext(args(0), "FileStream")
-    ssc.setBatchDuration(Seconds(2))
-    
+    // Create the context
+    val ssc = new StreamingContext(args(0), "FileStream", Seconds(1))
+
     // Create the new directory 
     val directory = new Path(args(1))
     val fs = directory.getFileSystem(new Configuration())

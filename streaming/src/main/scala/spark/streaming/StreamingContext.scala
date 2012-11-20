@@ -18,19 +18,39 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import java.util.UUID
 
-final class StreamingContext (
+/**
+ * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
+ * information (such as, cluster URL and job name) to internally create a SparkContext, it provides
+ * methods used to create DStream from various input sources.
+ */
+class StreamingContext private (
     sc_ : SparkContext,
-    cp_ : Checkpoint
+    cp_ : Checkpoint,
+    batchDur_ : Time
   ) extends Logging {
 
-  def this(sparkContext: SparkContext) = this(sparkContext, null)
+  /**
+   * Creates a StreamingContext using an existing SparkContext.
+   * @param sparkContext Existing SparkContext
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(sparkContext: SparkContext, batchDuration: Time) = this(sparkContext, null, batchDuration)
 
-  def this(master: String, frameworkName: String, sparkHome: String = null, jars: Seq[String] = Nil) =
-    this(new SparkContext(master, frameworkName, sparkHome, jars), null)
+  /**
+   * Creates a StreamingContext by providing the details necessary for creating a new SparkContext.
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param frameworkName A name for your job, to display on the cluster web UI
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(master: String, frameworkName: String, batchDuration: Time) =
+    this(new SparkContext(master, frameworkName), null, batchDuration)
 
-  def this(path: String) = this(null, CheckpointReader.read(path))
-
-  def this(cp_ : Checkpoint) = this(null, cp_)
+  /**
+   * Recreates the StreamingContext from a checkpoint file.
+   * @param path Path either to the directory that was specified as the checkpoint directory, or
+   *             to the checkpoint file 'graph' or 'graph.bk'.
+   */
+  def this(path: String) = this(null, CheckpointReader.read(path), null)
 
   initLogging()
 
@@ -57,7 +77,10 @@ final class StreamingContext (
       cp_.graph.restoreCheckpointData()
       cp_.graph
     } else {
-      new DStreamGraph()
+      assert(batchDur_ != null, "Batch duration for streaming context cannot be null")
+      val newGraph = new DStreamGraph()
+      newGraph.setBatchDuration(batchDur_)
+      newGraph
     }
   }
 
@@ -77,12 +100,8 @@ final class StreamingContext (
   private[streaming] var receiverJobThread: Thread = null
   private[streaming] var scheduler: Scheduler = null
 
-  def setBatchDuration(duration: Time) {
-    graph.setBatchDuration(duration)
-  }
-
-  def setRememberDuration(duration: Time) {
-    graph.setRememberDuration(duration)
+  def remember(duration: Time) {
+    graph.remember(duration)
   }
 
   def checkpoint(dir: String, interval: Time = null) {

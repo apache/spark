@@ -175,7 +175,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     }
 
     val ssc = setupStreams(input, operation _)
-    ssc.setRememberDuration(rememberDuration)
+    ssc.remember(rememberDuration)
     runStreams[(Int, Int)](ssc, input.size, input.size / 2)
 
     val windowedStream2 = ssc.graph.getOutputStreams().head.dependencies.head

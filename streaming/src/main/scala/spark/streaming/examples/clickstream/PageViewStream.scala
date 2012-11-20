@@ -23,9 +23,8 @@ object PageViewStream {
     val host = args(1)
     val port = args(2).toInt
 
-    // Create the context and set the batch size
-    val ssc = new StreamingContext("local[2]", "PageViewStream")
-    ssc.setBatchDuration(Seconds(1))
+    // Create the context
+    val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1))
 
     // Create a NetworkInputDStream on target host:port and convert each line to a PageView
     val pageViews = ssc.networkTextStream(host, port)

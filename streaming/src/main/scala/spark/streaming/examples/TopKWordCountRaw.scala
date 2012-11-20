@@ -20,12 +20,11 @@ object TopKWordCountRaw {
     val Array(master, IntParam(numStreams), IntParam(port), checkpointDir) = args
     val k = 10
     
-    // Create the context, set the batch size and checkpoint directory.
+    // Create the context, and set the checkpoint directory.
     // Checkpoint directory is necessary for achieving fault-tolerance, by saving counts 
     // periodically to HDFS 
-    val ssc = new StreamingContext(master, "TopKWordCountRaw")
-    ssc.setBatchDuration(Seconds(1))
-    ssc.checkpoint(checkpointDir + "/" + UUID.randomUUID.toString, Seconds(1)) 
+    val ssc = new StreamingContext(master, "TopKWordCountRaw", Seconds(1))
+    ssc.checkpoint(checkpointDir + "/" + UUID.randomUUID.toString, Seconds(1))
    
     // Warm up the JVMs on master and slave for JIT compilation to kick in  
     /*warmUp(ssc.sc)*/
