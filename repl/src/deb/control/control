@@ -1,0 +1,8 @@
+Package: spark-repl
+Version: [[version]]-[[buildNumber]]
+Section: misc
+Priority: extra
+Architecture: all
+Maintainer: Matei Zaharia <matei.zaharia@gmail.com>
+Description: spark repl
+Distribution: development
