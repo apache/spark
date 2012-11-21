@@ -268,6 +268,17 @@
                         <filemode>744</filemode>
                       </mapper>
                     </data>
+                    <data>
+                      <src>${basedir}/../conf</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}/conf</prefix>
+                        <filemode>744</filemode>
+                      </mapper>
+                    </data>
                   </dataSet>
                 </configuration>
               </execution>
