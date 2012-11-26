@@ -1,4 +1,4 @@
-@(jobs: List[spark.deploy.master.JobInfo])
+@(jobs: Array[spark.deploy.master.JobInfo])
 
 <table class="table table-bordered table-striped table-condensed sortable">
   <thead>
@@ -6,10 +6,11 @@
       <th>JobID</th>
       <th>Description</th>
       <th>Cores</th>
-      <th>Memory per Slave</th>
-      <th>Submit Date</th>
+      <th>Memory per Node</th>
+      <th>Submit Time</th>
       <th>User</th>
       <th>State</th>
+      <th>Duration</th>
     </tr>
   </thead>
   <tbody>

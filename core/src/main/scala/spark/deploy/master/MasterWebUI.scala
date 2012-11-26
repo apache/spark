@@ -36,7 +36,7 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
               
               // A bit ugly an inefficient, but we won't have a number of jobs 
               // so large that it will make a significant difference.
-              (masterState.activeJobs ::: masterState.completedJobs).find(_.id == jobId) match {
+              (masterState.activeJobs ++ masterState.completedJobs).find(_.id == jobId) match {
                 case Some(job) => spark.deploy.master.html.job_details.render(job)
                 case _ => null
               }

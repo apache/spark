@@ -1,16 +1,16 @@
 @(executor: spark.deploy.worker.ExecutorRunner)
 
+@import spark.Utils
+
 <tr>
   <td>@executor.execId</td>
   <td>@executor.cores</td>
-  <td>@executor.memory</td>
+  <td>@Utils.memoryMegabytesToString(executor.memory)</td>
   <td>
     <ul class="unstyled">
       <li><strong>ID:</strong> @executor.jobId</li>
       <li><strong>Name:</strong> @executor.jobDesc.name</li>
       <li><strong>User:</strong> @executor.jobDesc.user</li>
-      <li><strong>Cores:</strong> @executor.jobDesc.cores </li>
-      <li><strong>Memory per Slave:</strong> @executor.jobDesc.memoryPerSlave</li>
     </ul>
   </td>
   <td>
