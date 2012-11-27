@@ -14,6 +14,7 @@ import scala.collection.mutable.HashSet
 
 import spark.storage.BlockManager
 import spark.storage.StorageLevel
+import util.{CleanupTask, TimeStampedHashMap}
 
 private[spark] sealed trait CacheTrackerMessage
 
@@ -30,13 +31,15 @@ private[spark] case object StopCacheTracker extends CacheTrackerMessage
 
 private[spark] class CacheTrackerActor extends Actor with Logging {
   // TODO: Should probably store (String, CacheType) tuples
-  private val locs = new HashMap[Int, Array[List[String]]]
+  private val locs = new TimeStampedHashMap[Int, Array[List[String]]]
 
   /**
    * A map from the slave's host name to its cache size.
    */
   private val slaveCapacity = new HashMap[String, Long]
   private val slaveUsage = new HashMap[String, Long]
+
+  private val cleanupTask = new CleanupTask("CacheTracker", locs.cleanup)
 
   private def getCacheUsage(host: String): Long = slaveUsage.getOrElse(host, 0L)
   private def getCacheCapacity(host: String): Long = slaveCapacity.getOrElse(host, 0L)
@@ -86,6 +89,7 @@ private[spark] class CacheTrackerActor extends Actor with Logging {
     case StopCacheTracker =>
       logInfo("Stopping CacheTrackerActor")
       sender ! true
+      cleanupTask.cancel()
       context.stop(self)
   }
 }

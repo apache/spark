@@ -43,7 +43,7 @@ class StreamingContext private (
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
   def this(master: String, frameworkName: String, batchDuration: Time) =
-    this(new SparkContext(master, frameworkName), null, batchDuration)
+    this(StreamingContext.createNewSparkContext(master, frameworkName), null, batchDuration)
 
   /**
    * Recreates the StreamingContext from a checkpoint file.
@@ -214,10 +214,7 @@ class StreamingContext private (
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
     )
-
-
   }
-
 
   /**
    * This function starts the execution of the streams.
@@ -265,6 +262,14 @@ class StreamingContext private (
 
 
 object StreamingContext {
+
+  def createNewSparkContext(master: String, frameworkName: String): SparkContext = {
+    if (System.getProperty("spark.cleanup.delay", "-1").toInt < 0) {
+      System.setProperty("spark.cleanup.delay", "60")
+    }
+    new SparkContext(master, frameworkName)
+  }
+
   implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
   }

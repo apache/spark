@@ -14,6 +14,7 @@ import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 import spark.storage.BlockManagerMaster
 import spark.storage.BlockManagerId
+import util.{CleanupTask, TimeStampedHashMap}
 
 /**
  * A Scheduler subclass that implements stage-oriented scheduling. It computes a DAG of stages for 
@@ -61,9 +62,9 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
   val nextStageId = new AtomicInteger(0)
 
-  val idToStage = new HashMap[Int, Stage]
+  val idToStage = new TimeStampedHashMap[Int, Stage]
 
-  val shuffleToMapStage = new HashMap[Int, Stage]
+  val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
@@ -82,6 +83,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
   val activeJobs = new HashSet[ActiveJob]
   val resultStageToJob = new HashMap[Stage, ActiveJob]
+
+  val cleanupTask = new CleanupTask("DAGScheduler", this.cleanup)
 
   // Start a thread to run the DAGScheduler event loop
   new Thread("DAGScheduler") {
@@ -591,8 +594,14 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     return Nil
   }
 
+  def cleanup(cleanupTime: Long) {
+    idToStage.cleanup(cleanupTime)
+    shuffleToMapStage.cleanup(cleanupTime)
+  }
+
   def stop() {
     eventQueue.put(StopDAGScheduler)
+    cleanupTask.cancel()
     taskSched.stop()
   }
 }

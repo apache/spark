@@ -14,17 +14,19 @@ import com.ning.compress.lzf.LZFOutputStream
 
 import spark._
 import spark.storage._
+import util.{TimeStampedHashMap, CleanupTask}
 
 private[spark] object ShuffleMapTask {
 
   // A simple map between the stage id to the serialized byte array of a task.
   // Served as a cache for task serialization because serialization can be
   // expensive on the master node if it needs to launch thousands of tasks.
-  val serializedInfoCache = new JHashMap[Int, Array[Byte]]
+  val serializedInfoCache = new TimeStampedHashMap[Int, Array[Byte]]
+  val cleanupTask = new CleanupTask("ShuffleMapTask", serializedInfoCache.cleanup)
 
   def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_]): Array[Byte] = {
     synchronized {
-      val old = serializedInfoCache.get(stageId)
+      val old = serializedInfoCache.get(stageId).orNull
       if (old != null) {
         return old
       } else {
