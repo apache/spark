@@ -48,7 +48,9 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
+    <java.version>1.6</java.version>
     <scala.version>2.9.2</scala.version>
+    <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.0.3</akka.version>
     <spray.version>1.0-M2.1</spray.version>
     <slf4j.version>1.6.1</slf4j.version>
@@ -228,11 +230,10 @@
         <artifactId>scala-io-file_${scala.version}</artifactId>
         <version>0.4.1</version>
       </dependency>
-      <!-- In the root dir: mvn install:install-file -Dfile=core/lib/mesos-0.9.0.jar -DgroupId=org.apache.mesos -DartifactId=mesos -Dversion=0.9.0 -Dpackaging=jar -->
       <dependency>
         <groupId>org.apache.mesos</groupId>
         <artifactId>mesos</artifactId>
-        <version>0.9.0</version>
+        <version>${mesos.version}</version>
       </dependency>
 
       <dependency>
@@ -286,7 +287,7 @@
                     <version>3.0.0</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>1.6</version>
+                    <version>${java.version}</version>
                   </requireJavaVersion>
                 </rules>
               </configuration>
@@ -301,7 +302,7 @@
         <plugin>
           <groupId>org.tomdz.twirl</groupId>
           <artifactId>twirl-maven-plugin</artifactId>
-          <version>1.0.0</version>
+          <version>1.0.1</version>
           <executions>
             <execution>
               <goals>
@@ -348,6 +349,12 @@
               <jvmArg>-Xms64m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
             </jvmArgs>
+            <javacArgs>
+              <javacArg>-source</javacArg>
+              <javacArg>${java.version}</javacArg>
+              <javacArg>-target</javacArg>
+              <javacArg>${java.version}</javacArg>
+            </javacArgs>
           </configuration>
         </plugin>
         <plugin>
@@ -355,8 +362,8 @@
           <artifactId>maven-compiler-plugin</artifactId>
           <version>2.5.1</version>
           <configuration>
-            <source>1.6</source>
-            <target>1.6</target>
+            <source>${java.version}</source>
+            <target>${java.version}</target>
             <encoding>UTF-8</encoding>
             <maxmem>1024m</maxmem>
           </configuration>

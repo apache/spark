@@ -5,6 +5,7 @@
     <groupId>org.spark-project</groupId>
     <artifactId>parent</artifactId>
     <version>0.6.1-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.spark-project</groupId>
