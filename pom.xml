@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.spark-project</groupId>
   <artifactId>parent</artifactId>
-  <version>0.6.1-SNAPSHOT</version>
+  <version>0.7.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark-project.org/</url>
@@ -48,7 +48,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-    <java.version>1.6</java.version>
+    <java.version>1.5</java.version>
     <scala.version>2.9.2</scala.version>
     <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.0.3</akka.version>
