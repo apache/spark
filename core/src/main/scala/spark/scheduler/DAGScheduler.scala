@@ -78,7 +78,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   val waiting = new HashSet[Stage] // Stages we need to run whose parents aren't done
   val running = new HashSet[Stage] // Stages we are running right now
   val failed = new HashSet[Stage]  // Stages that must be resubmitted due to fetch failures
-  val pendingTasks = new HashMap[Stage, HashSet[Task[_]]] // Missing tasks from each stage
+  val pendingTasks = new TimeStampedHashMap[Stage, HashSet[Task[_]]] // Missing tasks from each stage
   var lastFetchFailureTime: Long = 0  // Used to wait a bit to avoid repeated resubmits
 
   val activeJobs = new HashSet[ActiveJob]
@@ -595,8 +595,17 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   }
 
   def cleanup(cleanupTime: Long) {
+    var sizeBefore = idToStage.size
     idToStage.cleanup(cleanupTime)
+    logInfo("idToStage " + sizeBefore + " --> " + idToStage.size)
+
+    sizeBefore = shuffleToMapStage.size
     shuffleToMapStage.cleanup(cleanupTime)
+    logInfo("shuffleToMapStage " + sizeBefore + " --> " + shuffleToMapStage.size)
+    
+    sizeBefore = pendingTasks.size
+    pendingTasks.cleanup(cleanupTime)
+    logInfo("pendingTasks " + sizeBefore + " --> " + pendingTasks.size)
   }
 
   def stop() {

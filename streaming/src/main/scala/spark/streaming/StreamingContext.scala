@@ -264,7 +264,7 @@ class StreamingContext private (
 object StreamingContext {
 
   def createNewSparkContext(master: String, frameworkName: String): SparkContext = {
-    if (System.getProperty("spark.cleanup.delay", "-1").toInt < 0) {
+    if (System.getProperty("spark.cleanup.delay", "-1").toDouble < 0) {
       System.setProperty("spark.cleanup.delay", "60")
     }
     new SparkContext(master, frameworkName)
