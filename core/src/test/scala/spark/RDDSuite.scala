@@ -114,4 +114,16 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     assert(coalesced4.glom().collect().map(_.toList).toList ===
       (1 to 10).map(x => List(x)).toList)
   }
+
+  test("zipped RDDs") {
+    sc = new SparkContext("local", "test")
+    val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val zipped = nums.zip(nums.map(_ + 1.0))
+    assert(zipped.glom().map(_.toList).collect().toList ===
+      List(List((1, 2.0), (2, 3.0)), List((3, 4.0), (4, 5.0))))
+    
+    intercept[IllegalArgumentException] {
+      nums.zip(sc.parallelize(1 to 4, 1)).collect()
+    }
+  }
 }

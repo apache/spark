@@ -42,6 +42,7 @@ import spark.rdd.MapPartitionsWithSplitRDD
 import spark.rdd.PipedRDD
 import spark.rdd.SampledRDD
 import spark.rdd.UnionRDD
+import spark.rdd.ZippedRDD
 import spark.storage.StorageLevel
 
 import SparkContext._
@@ -292,6 +293,14 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
    */
   def mapPartitionsWithSplit[U: ClassManifest](f: (Int, Iterator[T]) => Iterator[U]): RDD[U] =
     new MapPartitionsWithSplitRDD(this, sc.clean(f))
+
+  /**
+   * Zips this RDD with another one, returning key-value pairs with the first element in each RDD,
+   * second element in each RDD, etc. Assumes that the two RDDs have the *same number of
+   * partitions* and the *same number of elements in each partition* (e.g. one was made through
+   * a map on the other).
+   */
+  def zip[U: ClassManifest](other: RDD[U]): RDD[(T, U)] = new ZippedRDD(sc, this, other)
 
   // Actions (launch a job to return a value to the user program)
 
