@@ -44,6 +44,8 @@ public class JavaAPISuite implements Serializable {
   public void tearDown() {
     sc.stop();
     sc = null;
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port");
   }
 
   static class ReverseIntComparator implements Comparator<Integer>, Serializable {
@@ -552,5 +554,18 @@ public class JavaAPISuite implements Serializable {
         return x.toString();
       }
     }).collect().toString());
+  }
+
+  @Test
+  public void zip() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
+    JavaDoubleRDD doubles = rdd.map(new DoubleFunction<Integer>() {
+      @Override
+      public Double call(Integer x) {
+        return 1.0 * x;
+      }
+    });
+    JavaPairRDD<Integer, Double> zipped = rdd.zip(doubles);
+    zipped.count();
   }
 }

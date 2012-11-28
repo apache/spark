@@ -172,6 +172,16 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def pipe(command: JList[String], env: java.util.Map[String, String]): JavaRDD[String] =
     rdd.pipe(asScalaBuffer(command), mapAsScalaMap(env))
 
+  /**
+   * Zips this RDD with another one, returning key-value pairs with the first element in each RDD,
+   * second element in each RDD, etc. Assumes that the two RDDs have the *same number of
+   * partitions* and the *same number of elements in each partition* (e.g. one was made through
+   * a map on the other).
+   */
+  def zip[U](other: JavaRDDLike[U, _]): JavaPairRDD[T, U] = {
+    JavaPairRDD.fromRDD(rdd.zip(other.rdd)(other.classManifest))(classManifest, other.classManifest)
+  }
+
   // Actions (launch a job to return a value to the user program)
     
   /**
