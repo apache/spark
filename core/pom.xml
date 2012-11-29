@@ -114,7 +114,7 @@
         <artifactId>maven-antrun-plugin</artifactId>
         <executions>
           <execution>
-            <phase>compile</phase>
+            <phase>test</phase>
             <goals>
               <goal>run</goal>
             </goals>
@@ -122,6 +122,17 @@
               <exportAntProperties>true</exportAntProperties>
               <tasks>
                 <property name="spark.classpath" refid="maven.test.classpath"/>
+                <property environment="env"/>
+                <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">
+                  <condition>
+                    <not>
+                      <or>
+                        <isset property="env.SCALA_HOME"/>
+                        <isset property="env.SCALA_LIBRARY_PATH"/>
+                      </or>
+                    </not>
+                  </condition>
+                </fail>
               </tasks>
             </configuration>
           </execution>
