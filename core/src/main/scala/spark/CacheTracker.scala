@@ -14,7 +14,7 @@ import scala.collection.mutable.HashSet
 
 import spark.storage.BlockManager
 import spark.storage.StorageLevel
-import util.{CleanupTask, TimeStampedHashMap}
+import util.{MetadataCleaner, TimeStampedHashMap}
 
 private[spark] sealed trait CacheTrackerMessage
 
@@ -39,7 +39,7 @@ private[spark] class CacheTrackerActor extends Actor with Logging {
   private val slaveCapacity = new HashMap[String, Long]
   private val slaveUsage = new HashMap[String, Long]
 
-  private val cleanupTask = new CleanupTask("CacheTracker", locs.cleanup)
+  private val metadataCleaner = new MetadataCleaner("CacheTracker", locs.cleanup)
 
   private def getCacheUsage(host: String): Long = slaveUsage.getOrElse(host, 0L)
   private def getCacheCapacity(host: String): Long = slaveCapacity.getOrElse(host, 0L)
@@ -89,7 +89,7 @@ private[spark] class CacheTrackerActor extends Actor with Logging {
     case StopCacheTracker =>
       logInfo("Stopping CacheTrackerActor")
       sender ! true
-      cleanupTask.cancel()
+      metadataCleaner.cancel()
       context.stop(self)
   }
 }

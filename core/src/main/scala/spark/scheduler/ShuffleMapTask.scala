@@ -14,7 +14,7 @@ import com.ning.compress.lzf.LZFOutputStream
 
 import spark._
 import spark.storage._
-import util.{TimeStampedHashMap, CleanupTask}
+import util.{TimeStampedHashMap, MetadataCleaner}
 
 private[spark] object ShuffleMapTask {
 
@@ -22,7 +22,8 @@ private[spark] object ShuffleMapTask {
   // Served as a cache for task serialization because serialization can be
   // expensive on the master node if it needs to launch thousands of tasks.
   val serializedInfoCache = new TimeStampedHashMap[Int, Array[Byte]]
-  val cleanupTask = new CleanupTask("ShuffleMapTask", serializedInfoCache.cleanup)
+
+  val metadataCleaner = new MetadataCleaner("ShuffleMapTask", serializedInfoCache.cleanup)
 
   def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_]): Array[Byte] = {
     synchronized {

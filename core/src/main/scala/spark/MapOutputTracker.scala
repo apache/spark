@@ -17,7 +17,7 @@ import scala.collection.mutable.HashSet
 import scheduler.MapStatus
 import spark.storage.BlockManagerId
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
-import util.{CleanupTask, TimeStampedHashMap}
+import util.{MetadataCleaner, TimeStampedHashMap}
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int, requester: String)
@@ -64,7 +64,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
     actorSystem.actorFor(url)
   }
 
-  val cleanupTask = new CleanupTask("MapOutputTracker", this.cleanup)
+  val metadataCleaner = new MetadataCleaner("MapOutputTracker", this.cleanup)
 
   // Send a message to the trackerActor and get its result within a default timeout, or
   // throw a SparkException if this fails.
@@ -175,7 +175,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
   def stop() {
     communicate(StopMapOutputTracker)
     mapStatuses.clear()
-    cleanupTask.cancel()
+    metadataCleaner.cancel()
     trackerActor = null
   }
 
