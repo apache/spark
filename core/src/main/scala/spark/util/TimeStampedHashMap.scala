@@ -1,7 +1,7 @@
 package spark.util
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, Map}
+import scala.collection.JavaConversions
+import scala.collection.mutable.Map
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -20,7 +20,7 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() {
 
   def iterator: Iterator[(A, B)] = {
     val jIterator = internalMap.entrySet().iterator()
-    jIterator.map(kv => (kv.getKey, kv.getValue._1))
+    JavaConversions.asScalaIterator(jIterator).map(kv => (kv.getKey, kv.getValue._1))
   }
 
   override def + [B1 >: B](kv: (A, B1)): Map[A, B1] = {
@@ -31,8 +31,10 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() {
   }
 
   override def - (key: A): Map[A, B] = {
-    internalMap.remove(key)
-    this
+    val newMap = new TimeStampedHashMap[A, B]
+    newMap.internalMap.putAll(this.internalMap)
+    newMap.internalMap.remove(key)
+    newMap
   }
 
   override def += (kv: (A, B)): this.type = {
@@ -56,7 +58,7 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() {
   }
 
   override def filter(p: ((A, B)) => Boolean): Map[A, B] = {
-    internalMap.map(kv => (kv._1, kv._2._1)).filter(p)
+    JavaConversions.asScalaConcurrentMap(internalMap).map(kv => (kv._1, kv._2._1)).filter(p)
   }
 
   override def empty: Map[A, B] = new TimeStampedHashMap[A, B]()
