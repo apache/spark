@@ -10,12 +10,12 @@ import java.nio.{MappedByteBuffer, ByteBuffer}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
-import scala.collection.JavaConversions._
 
 import spark.{CacheTracker, Logging, SizeEstimator, SparkException, Utils}
 import spark.network._
 import spark.serializer.Serializer
-import spark.util.ByteBufferInputStream
+import spark.util.{MetadataCleaner, TimeStampedHashMap, ByteBufferInputStream}
+
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import sun.nio.ch.DirectBuffer
 
@@ -51,7 +51,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
   }
 
-  private val blockInfo = new ConcurrentHashMap[String, BlockInfo](1000)
+  private val blockInfo = new TimeStampedHashMap[String, BlockInfo]()
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
   private[storage] val diskStore: BlockStore =
@@ -80,6 +80,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
   val host = System.getProperty("spark.hostname", Utils.localHostName())
 
+  val metadataCleaner = new MetadataCleaner("BlockManager", this.dropOldBlocks)
   initialize()
 
   /**
@@ -102,8 +103,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * Get storage level of local block. If no info exists for the block, then returns null.
    */
   def getLevel(blockId: String): StorageLevel = {
-    val info = blockInfo.get(blockId)
-    if (info != null) info.level else null
+    blockInfo.get(blockId).map(_.level).orNull
   }
 
   /**
@@ -113,9 +113,9 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    */
   def reportBlockStatus(blockId: String) {
     val (curLevel, inMemSize, onDiskSize) = blockInfo.get(blockId) match {
-      case null =>
+      case None =>
         (StorageLevel.NONE, 0L, 0L)
-      case info =>
+      case Some(info) =>
         info.synchronized {
           info.level match {
             case null =>
@@ -173,7 +173,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
     }
 
-    val info = blockInfo.get(blockId)
+    val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
         info.waitForReady() // In case the block is still being put() by another thread
@@ -258,7 +258,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
     }
 
-    val info = blockInfo.get(blockId)
+    val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
         info.waitForReady() // In case the block is still being put() by another thread
@@ -517,7 +517,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
 
-    val oldBlock = blockInfo.get(blockId)
+    val oldBlock = blockInfo.get(blockId).orNull
     if (oldBlock != null) {
       logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
       oldBlock.waitForReady()
@@ -618,7 +618,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
 
-    if (blockInfo.containsKey(blockId)) {
+    if (blockInfo.contains(blockId)) {
       logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
       return
     }
@@ -740,7 +740,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    */
   def dropFromMemory(blockId: String, data: Either[ArrayBuffer[Any], ByteBuffer]) {
     logInfo("Dropping block " + blockId + " from memory")
-    val info = blockInfo.get(blockId)
+    val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
         val level = info.level
@@ -764,6 +764,29 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       }
     } else {
       // The block has already been dropped
+    }
+  }
+
+  def dropOldBlocks(cleanupTime: Long) {
+    logInfo("Dropping blocks older than " + cleanupTime)
+    val iterator = blockInfo.internalMap.entrySet().iterator()
+    while(iterator.hasNext) {
+      val entry = iterator.next()
+      val (id, info, time) = (entry.getKey, entry.getValue._1, entry.getValue._2)
+      if (time < cleanupTime) {
+        info.synchronized {
+          val level = info.level
+          if (level.useMemory) {
+            memoryStore.remove(id)
+          }
+          if (level.useDisk) {
+            diskStore.remove(id)
+          }
+          iterator.remove()
+          logInfo("Dropped block " + id)
+        }
+        reportBlockStatus(id)
+      }
     }
   }
 

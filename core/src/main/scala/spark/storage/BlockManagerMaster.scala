@@ -341,6 +341,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
       throw new Exception("Self index for " + blockManagerId + " not found")
     }
 
+    // Note that this logic will select the same node multiple times if there aren't enough peers
     var index = selfIndex
     while (res.size < size) {
       index += 1
