@@ -189,6 +189,10 @@ class StreamingContext private (
     inputStream
   }
 
+  def union[T: ClassManifest](streams: Seq[DStream[T]]): DStream[T] = {
+    new UnionDStream[T](streams.toArray)
+  }
+
   /**
    * This function registers a InputDStream as an input stream that will be
    * started (InputDStream.start() called) to get the input data streams.

@@ -118,7 +118,8 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
       if (seqOfValues(0).isEmpty) {
         // If previous window's reduce value does not exist, then at least new values should exist
         if (newValues.isEmpty) {
-          throw new Exception("Neither previous window has value for key, nor new values found")
+          val info = "seqOfValues =\n" + seqOfValues.map(x => "[" + x.mkString(",") + "]").mkString("\n")
+          throw new Exception("Neither previous window has value for key, nor new values found\n" + info)
         }
         // Reduce the new values
         newValues.reduce(reduceF) // return
