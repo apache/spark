@@ -17,6 +17,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import java.util.UUID
+import spark.util.MetadataCleaner
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -268,8 +269,11 @@ class StreamingContext private (
 object StreamingContext {
 
   def createNewSparkContext(master: String, frameworkName: String): SparkContext = {
-    if (System.getProperty("spark.cleanup.delay", "-1").toDouble < 0) {
-      System.setProperty("spark.cleanup.delay", "60")
+
+    // Set the default cleaner delay to an hour if not already set.
+    // This should be sufficient for even 1 second interval.
+    if (MetadataCleaner.getDelaySeconds < 0) {
+      MetadataCleaner.setDelaySeconds(60)
     }
     new SparkContext(master, frameworkName)
   }

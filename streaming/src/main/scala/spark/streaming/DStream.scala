@@ -146,6 +146,8 @@ extends Serializable with Logging {
   }
 
   protected[streaming] def validate() {
+    assert(rememberDuration != null, "Remember duration is set to null")
+
     assert(
       !mustCheckpoint || checkpointInterval != null,
       "The checkpoint interval for " + this.getClass.getSimpleName + " has not been set. " +
@@ -180,13 +182,24 @@ extends Serializable with Logging {
         checkpointInterval + "). Please set it to higher than " + checkpointInterval + "."
     )
 
+    val metadataCleanupDelay = System.getProperty("spark.cleanup.delay", "-1").toDouble
+    assert(
+      metadataCleanupDelay < 0 || rememberDuration < metadataCleanupDelay * 60 * 1000,
+      "It seems you are doing some DStream window operation or setting a checkpoint interval " +
+        "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
+        "than " + rememberDuration.milliseconds + " milliseconds. But the Spark's metadata cleanup" +
+        "delay is set to " + metadataCleanupDelay + " minutes, which is not sufficient. Please set " +
+        "the Java property 'spark.cleanup.delay' to more than " +
+        math.ceil(rememberDuration.millis.toDouble / 60000.0).toInt + " minutes."
+    )
+
     dependencies.foreach(_.validate())
 
     logInfo("Slide time = " + slideTime)
     logInfo("Storage level = " + storageLevel)
     logInfo("Checkpoint interval = " + checkpointInterval)
     logInfo("Remember duration = " + rememberDuration)
-    logInfo("Initialized " + this)
+    logInfo("Initialized and validated " + this)
   }
 
   protected[streaming] def setContext(s: StreamingContext) {

@@ -5,7 +5,7 @@ import java.util.{TimerTask, Timer}
 import spark.Logging
 
 class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging {
-  val delaySeconds = (System.getProperty("spark.cleanup.delay", "-100").toDouble * 60).toInt
+  val delaySeconds = MetadataCleaner.getDelaySeconds
   val periodSeconds = math.max(10, delaySeconds / 10)
   val timer = new Timer(name + " cleanup timer", true)
   val task = new TimerTask {
@@ -29,4 +29,9 @@ class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging
   def cancel() {
     timer.cancel()
   }
+}
+
+object MetadataCleaner {
+  def getDelaySeconds = (System.getProperty("spark.cleaner.delay", "-100").toDouble * 60).toInt
+  def setDelaySeconds(delay: Long) { System.setProperty("spark.cleaner.delay", delay.toString) }
 }
