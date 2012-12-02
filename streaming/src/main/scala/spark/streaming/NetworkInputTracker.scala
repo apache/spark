@@ -58,7 +58,7 @@ class NetworkInputTracker(
           throw new Exception("Register received for unexpected id " + streamId)        
         }
         receiverInfo += ((streamId, receiverActor))
-        logInfo("Registered receiver for network stream " + streamId)
+        logInfo("Registered receiver for network stream " + streamId + " from " + sender.path.address)
         sender ! true
       } 
       case AddBlocks(streamId, blockIds) => {
