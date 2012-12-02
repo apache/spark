@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
  * threshold time can them be removed using the cleanup method. This is intended to be a drop-in
  * replacement of scala.collection.mutable.HashMap.
  */
-class TimeStampedHashMap[A, B] extends Map[A, B]() {
+class TimeStampedHashMap[A, B] extends Map[A, B]() with spark.Logging {
   val internalMap = new ConcurrentHashMap[A, (B, Long)]()
 
   def get(key: A): Option[B] = {
@@ -79,6 +79,7 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() {
     while(iterator.hasNext) {
       val entry = iterator.next()
       if (entry.getValue._2 < threshTime) {
+        logDebug("Removing key " + entry.getKey)
         iterator.remove()
       }
     }
