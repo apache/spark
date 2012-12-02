@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 
-# Starts the master on the machine this script is executed on.
-
 bin=`dirname "$0"`
 bin=`cd "$bin"; pwd`
 
-. "$bin/spark-config.sh"
-
-# Set SPARK_PUBLIC_DNS so the master report the correct webUI address to the slaves
+# Set SPARK_PUBLIC_DNS so slaves can be linked in master web UI
 if [ "$SPARK_PUBLIC_DNS" = "" ]; then
     # If we appear to be running on EC2, use the public address by default:
     if [[ `hostname` == *ec2.internal ]]; then
@@ -16,4 +12,4 @@ if [ "$SPARK_PUBLIC_DNS" = "" ]; then
     fi
 fi
 
-"$bin"/spark-daemon.sh start spark.deploy.master.Master
+"$bin"/spark-daemon.sh start spark.deploy.worker.Worker $1
