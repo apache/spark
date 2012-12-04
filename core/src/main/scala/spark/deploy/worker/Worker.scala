@@ -36,6 +36,10 @@ private[spark] class Worker(
   var workDir: File = null
   val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
+  val publicAddress = {
+    val envVar = System.getenv("SPARK_PUBLIC_DNS")
+    if (envVar != null) envVar else ip
+  }
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -79,7 +83,7 @@ private[spark] class Worker(
         val akkaUrl = "akka://spark@%s:%s/user/Master".format(masterHost, masterPort)
         try {
           master = context.actorFor(akkaUrl)
-          master ! RegisterWorker(workerId, ip, port, cores, memory, webUiPort)
+          master ! RegisterWorker(workerId, ip, port, cores, memory, webUiPort, publicAddress)
           context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
           context.watch(master) // Doesn't work with remote actors, but useful for testing
         } catch {

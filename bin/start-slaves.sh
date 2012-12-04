@@ -18,6 +18,7 @@ if [ "$SPARK_MASTER_IP" = "" ]; then
   SPARK_MASTER_IP=`hostname`
 fi
 
-echo "Master IP: $ip"
+echo "Master IP: $SPARK_MASTER_IP"
 
-"$bin"/spark-daemons.sh start spark.deploy.worker.Worker spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT
+# Launch the slaves
+exec "$bin/slaves.sh" cd "$SPARK_HOME" \; "$bin/start-slave.sh" spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT

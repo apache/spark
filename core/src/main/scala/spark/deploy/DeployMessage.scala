@@ -11,8 +11,15 @@ private[spark] sealed trait DeployMessage extends Serializable
 
 // Worker to Master
 
-private[spark] 
-case class RegisterWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int)
+private[spark]
+case class RegisterWorker(
+    id: String,
+    host: String,
+    port: Int,
+    cores: Int,
+    memory: Int,
+    webUiPort: Int,
+    publicAddress: String)
   extends DeployMessage
 
 private[spark] 
