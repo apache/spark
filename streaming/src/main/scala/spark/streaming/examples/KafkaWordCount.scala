@@ -4,6 +4,7 @@ import java.util.Properties
 import kafka.message.Message
 import kafka.producer.SyncProducerConfig
 import kafka.producer._
+import spark.SparkContext
 import spark.streaming._
 import spark.streaming.StreamingContext._
 import spark.storage.StorageLevel
@@ -19,9 +20,9 @@ object KafkaWordCount {
 
     val Array(master, hostname, port, group, topics, numThreads) = args
 
-    val ssc =  new StreamingContext(master, "KafkaWordCount")
+    val sc = new SparkContext(master, "KafkaWordCount")
+    val ssc =  new StreamingContext(sc, Seconds(2))
     ssc.checkpoint("checkpoint")
-    ssc.setBatchDuration(Seconds(2))
 
     val topicpMap = topics.split(",").map((_,numThreads.toInt)).toMap
     val lines = ssc.kafkaStream[String](hostname, port.toInt, group, topicpMap)
