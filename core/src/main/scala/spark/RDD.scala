@@ -211,27 +211,17 @@ abstract class RDD[T: ClassManifest](
 
     if (startCheckpoint) {
       val rdd = this
-      val env = SparkEnv.get
-
-      // Spawn a new thread to do the checkpoint as it takes sometime to write the RDD to file
-      val th = new Thread() {
-        override def run() {
-          // Save the RDD to a file, create a new HadoopRDD from it,
-          // and change the dependencies from the original parents to the new RDD
-          SparkEnv.set(env)
-          rdd.checkpointFile = new Path(context.checkpointDir, "rdd-" + id).toString
-          rdd.saveAsObjectFile(checkpointFile)
-          rdd.synchronized {
-            rdd.checkpointRDD = context.objectFile[T](checkpointFile)
-            rdd.checkpointRDDSplits = rdd.checkpointRDD.splits
-            rdd.changeDependencies(rdd.checkpointRDD)
-            rdd.shouldCheckpoint = false
-            rdd.isCheckpointInProgress = false
-            rdd.isCheckpointed = true
-          }
-        }
+      rdd.checkpointFile = new Path(context.checkpointDir, "rdd-" + id).toString
+      rdd.saveAsObjectFile(checkpointFile)
+      rdd.synchronized {
+        rdd.checkpointRDD = context.objectFile[T](checkpointFile, rdd.splits.size)
+        rdd.checkpointRDDSplits = rdd.checkpointRDD.splits
+        rdd.changeDependencies(rdd.checkpointRDD)
+        rdd.shouldCheckpoint = false
+        rdd.isCheckpointInProgress = false
+        rdd.isCheckpointed = true
+        println("Done checkpointing RDD " + rdd.id + ", " + rdd + ", created RDD " + rdd.checkpointRDD.id + ", " + rdd.checkpointRDD)
       }
-      th.start()
     } else {
       // Recursively call doCheckpoint() to perform checkpointing on parent RDD if they are marked
       dependencies.foreach(_.rdd.doCheckpoint())

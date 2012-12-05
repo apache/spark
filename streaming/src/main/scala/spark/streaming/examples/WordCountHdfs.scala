@@ -10,9 +10,8 @@ object WordCountHdfs {
       System.exit(1)
     }
 
-    // Create the context and set the batch size
-    val ssc = new StreamingContext(args(0), "WordCountHdfs")
-    ssc.setBatchDuration(Seconds(2))
+    // Create the context
+    val ssc = new StreamingContext(args(0), "WordCountHdfs", Seconds(2))
 
     // Create the FileInputDStream on the directory and use the
     // stream to count words in new files created

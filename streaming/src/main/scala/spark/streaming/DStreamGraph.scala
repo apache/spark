@@ -22,7 +22,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       }
       zeroTime = time
       outputStreams.foreach(_.initialize(zeroTime))
-      outputStreams.foreach(_.setRememberDuration(rememberDuration))
+      outputStreams.foreach(_.remember(rememberDuration))
       outputStreams.foreach(_.validate)
       inputStreams.par.foreach(_.start())
     }
@@ -50,7 +50,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     batchDuration = duration
   }
 
-  private[streaming] def setRememberDuration(duration: Time) {
+  private[streaming] def remember(duration: Time) {
     this.synchronized {
       if (rememberDuration != null) {
         throw new Exception("Batch duration already set as " + batchDuration +

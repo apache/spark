@@ -40,8 +40,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     testServer.start()
 
     // Set up the streaming context and input streams
-    val ssc = new StreamingContext(master, framework)
-    ssc.setBatchDuration(batchDuration)
+    val ssc = new StreamingContext(master, framework, batchDuration)
     val networkStream = ssc.networkTextStream("localhost", testPort, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String  ]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
@@ -89,8 +88,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     testServer.start()
 
     // Set up the streaming context and input streams
-    var ssc = new StreamingContext(master, framework)
-    ssc.setBatchDuration(batchDuration)
+    var ssc = new StreamingContext(master, framework, batchDuration)
     ssc.checkpoint(checkpointDir, checkpointInterval)
     val networkStream = ssc.networkTextStream("localhost", testPort, StorageLevel.MEMORY_AND_DISK)
     var outputStream = new TestOutputStream(networkStream, new ArrayBuffer[Seq[String]])
@@ -137,8 +135,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
 
     // Set up the streaming context and input streams
-    val ssc = new StreamingContext(master, framework)
-    ssc.setBatchDuration(batchDuration)
+    val ssc = new StreamingContext(master, framework, batchDuration)
     val filestream = ssc.textFileStream(testDir.toString)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     def output = outputBuffer.flatMap(x => x)
@@ -198,8 +195,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
 
     // Set up the streaming context and input streams
-    var ssc = new StreamingContext(master, framework)
-    ssc.setBatchDuration(batchDuration)
+    var ssc = new StreamingContext(master, framework, batchDuration)
     ssc.checkpoint(checkpointDir, checkpointInterval)
     val filestream = ssc.textFileStream(testDir.toString)
     var outputStream = new TestOutputStream(filestream, new ArrayBuffer[Seq[String]])

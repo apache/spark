@@ -17,20 +17,41 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import java.util.UUID
+import spark.util.MetadataCleaner
 
-final class StreamingContext (
+/**
+ * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
+ * information (such as, cluster URL and job name) to internally create a SparkContext, it provides
+ * methods used to create DStream from various input sources.
+ */
+class StreamingContext private (
     sc_ : SparkContext,
-    cp_ : Checkpoint
+    cp_ : Checkpoint,
+    batchDur_ : Time
   ) extends Logging {
 
-  def this(sparkContext: SparkContext) = this(sparkContext, null)
+  /**
+   * Creates a StreamingContext using an existing SparkContext.
+   * @param sparkContext Existing SparkContext
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(sparkContext: SparkContext, batchDuration: Time) = this(sparkContext, null, batchDuration)
 
-  def this(master: String, frameworkName: String, sparkHome: String = null, jars: Seq[String] = Nil) =
-    this(new SparkContext(master, frameworkName, sparkHome, jars), null)
+  /**
+   * Creates a StreamingContext by providing the details necessary for creating a new SparkContext.
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param frameworkName A name for your job, to display on the cluster web UI
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(master: String, frameworkName: String, batchDuration: Time) =
+    this(StreamingContext.createNewSparkContext(master, frameworkName), null, batchDuration)
 
-  def this(path: String) = this(null, CheckpointReader.read(path))
-
-  def this(cp_ : Checkpoint) = this(null, cp_)
+  /**
+   * Recreates the StreamingContext from a checkpoint file.
+   * @param path Path either to the directory that was specified as the checkpoint directory, or
+   *             to the checkpoint file 'graph' or 'graph.bk'.
+   */
+  def this(path: String) = this(null, CheckpointReader.read(path), null)
 
   initLogging()
 
@@ -57,7 +78,10 @@ final class StreamingContext (
       cp_.graph.restoreCheckpointData()
       cp_.graph
     } else {
-      new DStreamGraph()
+      assert(batchDur_ != null, "Batch duration for streaming context cannot be null")
+      val newGraph = new DStreamGraph()
+      newGraph.setBatchDuration(batchDur_)
+      newGraph
     }
   }
 
@@ -77,12 +101,8 @@ final class StreamingContext (
   private[streaming] var receiverJobThread: Thread = null
   private[streaming] var scheduler: Scheduler = null
 
-  def setBatchDuration(duration: Time) {
-    graph.setBatchDuration(duration)
-  }
-
-  def setRememberDuration(duration: Time) {
-    graph.setRememberDuration(duration)
+  def remember(duration: Time) {
+    graph.remember(duration)
   }
 
   def checkpoint(dir: String, interval: Time = null) {
@@ -195,6 +215,10 @@ final class StreamingContext (
     inputStream
   }
 
+  def union[T: ClassManifest](streams: Seq[DStream[T]]): DStream[T] = {
+    new UnionDStream[T](streams.toArray)
+  }
+
   /**
    * This function registers a InputDStream as an input stream that will be
    * started (InputDStream.start() called) to get the input data streams.
@@ -220,10 +244,7 @@ final class StreamingContext (
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
     )
-
-
   }
-
 
   /**
    * This function starts the execution of the streams.
@@ -271,6 +292,17 @@ final class StreamingContext (
 
 
 object StreamingContext {
+
+  def createNewSparkContext(master: String, frameworkName: String): SparkContext = {
+
+    // Set the default cleaner delay to an hour if not already set.
+    // This should be sufficient for even 1 second interval.
+    if (MetadataCleaner.getDelaySeconds < 0) {
+      MetadataCleaner.setDelaySeconds(60)
+    }
+    new SparkContext(master, frameworkName)
+  }
+
   implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
   }

@@ -11,7 +11,7 @@
 
 SPARK_JAVA_OPTS+=" -XX:+UseConcMarkSweepGC" 
 
-# Using of Kryo serialization can improve serialization performance
+# Using Kryo serialization can improve serialization performance
 # and therefore the throughput of the Spark Streaming programs. However,
 # using Kryo serialization with custom classes may required you to 
 # register the classes with Kryo. Refer to the Spark documentation

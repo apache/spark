@@ -17,7 +17,7 @@ extends Logging {
 
   val graph = ssc.graph
 
-  val concurrentJobs = System.getProperty("spark.stream.concurrentJobs", "1").toInt
+  val concurrentJobs = System.getProperty("spark.streaming.concurrentJobs", "1").toInt
   val jobManager = new JobManager(ssc, concurrentJobs)
 
   val checkpointWriter = if (ssc.checkpointInterval != null && ssc.checkpointDir != null) {

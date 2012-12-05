@@ -243,6 +243,12 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " " + blockId + " "
 
+    if (!blockManagerInfo.contains(blockManagerId)) {
+      // Can happen if this is from a locally cached partition on the master
+      sender ! true
+      return
+    }
+
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
       logDebug("Got in updateBlockInfo 1" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
@@ -335,6 +341,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
       throw new Exception("Self index for " + blockManagerId + " not found")
     }
 
+    // Note that this logic will select the same node multiple times if there aren't enough peers
     var index = selfIndex
     while (res.size < size) {
       index += 1

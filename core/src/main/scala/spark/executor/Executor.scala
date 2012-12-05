@@ -43,6 +43,21 @@ private[spark] class Executor extends Logging {
     urlClassLoader = createClassLoader()
     Thread.currentThread.setContextClassLoader(urlClassLoader)
 
+    // Make any thread terminations due to uncaught exceptions kill the entire
+    // executor process to avoid surprising stalls.
+    Thread.setDefaultUncaughtExceptionHandler(
+      new Thread.UncaughtExceptionHandler {
+        override def uncaughtException(thread: Thread, exception: Throwable) {
+          try {
+            logError("Uncaught exception in thread " + thread, exception)
+            System.exit(1)
+          } catch {
+            case t: Throwable => System.exit(2)
+          }
+        }
+      }
+    )
+
     // Initialize Spark environment (using system properties read above)
     env = SparkEnv.createFromSystemProperties(slaveHostname, 0, false, false)
     SparkEnv.set(env)

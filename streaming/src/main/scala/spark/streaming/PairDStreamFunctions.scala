@@ -4,6 +4,7 @@ import spark.streaming.StreamingContext._
 
 import spark.{Manifests, RDD, Partitioner, HashPartitioner}
 import spark.SparkContext._
+import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -115,7 +116,10 @@ extends Serializable {
       slideTime: Time,
       partitioner: Partitioner
     ): DStream[(K, V)] = {
-    self.window(windowTime, slideTime).reduceByKey(ssc.sc.clean(reduceFunc), partitioner)
+    val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
+    self.reduceByKey(cleanedReduceFunc, partitioner)
+        .window(windowTime, slideTime)
+        .reduceByKey(cleanedReduceFunc, partitioner)
   }
 
   // This method is the efficient sliding window reduce operation,

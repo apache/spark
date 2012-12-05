@@ -118,7 +118,8 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
       if (seqOfValues(0).isEmpty) {
         // If previous window's reduce value does not exist, then at least new values should exist
         if (newValues.isEmpty) {
-          throw new Exception("Neither previous window has value for key, nor new values found")
+          throw new Exception("Neither previous window has value for key, nor new values found. " +
+            "Are you sure your key class hashes consistently?")
         }
         // Reduce the new values
         newValues.reduce(reduceF) // return

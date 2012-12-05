@@ -76,8 +76,7 @@ trait TestSuiteBase extends FunSuite with Logging {
     ): StreamingContext = {
 
     // Create StreamingContext
-    val ssc = new StreamingContext(master, framework)
-    ssc.setBatchDuration(batchDuration)
+    val ssc = new StreamingContext(master, framework, batchDuration)
     if (checkpointDir != null) {
       ssc.checkpoint(checkpointDir, checkpointInterval)
     }
@@ -98,8 +97,7 @@ trait TestSuiteBase extends FunSuite with Logging {
     ): StreamingContext = {
 
     // Create StreamingContext
-    val ssc = new StreamingContext(master, framework)
-    ssc.setBatchDuration(batchDuration)
+    val ssc = new StreamingContext(master, framework, batchDuration)
     if (checkpointDir != null) {
       ssc.checkpoint(checkpointDir, checkpointInterval)
     }

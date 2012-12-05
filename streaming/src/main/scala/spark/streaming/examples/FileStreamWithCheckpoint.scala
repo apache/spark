@@ -32,9 +32,8 @@ object FileStreamWithCheckpoint {
         if (!fs.exists(directory)) fs.mkdirs(directory)
 
         // Create new streaming context
-        val ssc_ = new StreamingContext(args(0), "FileStreamWithCheckpoint")
-        ssc_.setBatchDuration(Seconds(1))
-        ssc_.checkpoint(checkpointDir, Seconds(1))
+        val ssc_ = new StreamingContext(args(0), "FileStreamWithCheckpoint", Seconds(1))
+        ssc_.checkpoint(checkpointDir)
 
         // Setup the streaming computation
         val inputStream = ssc_.textFileStream(directory.toString)

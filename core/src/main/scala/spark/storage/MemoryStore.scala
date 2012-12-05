@@ -40,7 +40,6 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
       tryToPut(blockId, elements, sizeEstimate, true)
     } else {
-      val entry = new Entry(bytes, bytes.limit, false)
       tryToPut(blockId, bytes, bytes.limit, false)
     }
   }
@@ -175,6 +174,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * Otherwise, the freed space may fill up before the caller puts in their new value.
    */
   private def ensureFreeSpace(blockIdToAdd: String, space: Long): Boolean = {
+
     logInfo("ensureFreeSpace(%d) called with curMem=%d, maxMem=%d".format(
       space, currentMemory, maxMemory))
 

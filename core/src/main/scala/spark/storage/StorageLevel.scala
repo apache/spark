@@ -1,6 +1,9 @@
 package spark.storage
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{IOException, Externalizable, ObjectInput, ObjectOutput}
+import collection.mutable
+import util.Random
+import collection.mutable.ArrayBuffer
 
 /**
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
@@ -17,7 +20,8 @@ class StorageLevel(
   extends Externalizable {
 
   // TODO: Also add fields for caching priority, dataset ID, and flushing.
-  
+  assert(replication < 40, "Replication restricted to be less than 40 for calculating hashcodes")
+
   def this(flags: Int, replication: Int) {
     this((flags & 4) != 0, (flags & 2) != 0, (flags & 1) != 0, replication)
   }
@@ -26,6 +30,10 @@ class StorageLevel(
 
   override def clone(): StorageLevel = new StorageLevel(
     this.useDisk, this.useMemory, this.deserialized, this.replication)
+
+  override def hashCode(): Int = {
+    toInt * 41 + replication
+  }
 
   override def equals(other: Any): Boolean = other match {
     case s: StorageLevel =>
@@ -66,6 +74,11 @@ class StorageLevel(
     replication = in.readByte()
   }
 
+  @throws(classOf[IOException])
+  private def readResolve(): Object = {
+    StorageLevel.getCachedStorageLevel(this)
+  }
+
   override def toString: String =
     "StorageLevel(%b, %b, %b, %d)".format(useDisk, useMemory, deserialized, replication)
 }
@@ -82,4 +95,15 @@ object StorageLevel {
   val MEMORY_AND_DISK_2 = new StorageLevel(true, true, true, 2)
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, 2)
+
+  val storageLevelCache = new java.util.concurrent.ConcurrentHashMap[StorageLevel, StorageLevel]()
+
+  def getCachedStorageLevel(level: StorageLevel): StorageLevel = {
+    if (storageLevelCache.containsKey(level)) {
+      storageLevelCache.get(level)
+    } else {
+      storageLevelCache.put(level, level)
+      level
+    }
+  }
 }

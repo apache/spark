@@ -9,7 +9,7 @@ import java.lang.management.ManagementFactory
  * Command-line parser for the master.
  */
 private[spark] class WorkerArguments(args: Array[String]) {
-  var ip = Utils.localIpAddress()
+  var ip = Utils.localHostName()
   var port = 0
   var webUiPort = 8081
   var cores = inferDefaultCores()

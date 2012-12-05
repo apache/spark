@@ -57,6 +57,32 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     }
   }
 
+  test("StorageLevel object caching") {
+    val level1 = new StorageLevel(false, false, false, 3)
+    val level2 = new StorageLevel(false, false, false, 3)
+    val bytes1 = spark.Utils.serialize(level1)
+    val level1_ = spark.Utils.deserialize[StorageLevel](bytes1)
+    val bytes2 = spark.Utils.serialize(level2)
+    val level2_ = spark.Utils.deserialize[StorageLevel](bytes2)
+    assert(level1_ === level1, "Deserialized level1 not same as original level1")
+    assert(level2_ === level2, "Deserialized level2 not same as original level1")
+    assert(level1_ === level2_, "Deserialized level1 not same as deserialized level2")
+    assert(level2_.eq(level1_), "Deserialized level2 not the same object as deserialized level1")
+  }
+
+  test("BlockManagerId object caching") {
+    val id1 = new StorageLevel(false, false, false, 3)
+    val id2 = new StorageLevel(false, false, false, 3)
+    val bytes1 = spark.Utils.serialize(id1)
+    val id1_ = spark.Utils.deserialize[StorageLevel](bytes1)
+    val bytes2 = spark.Utils.serialize(id2)
+    val id2_ = spark.Utils.deserialize[StorageLevel](bytes2)
+    assert(id1_ === id1, "Deserialized id1 not same as original id1")
+    assert(id2_ === id2, "Deserialized id2 not same as original id1")
+    assert(id1_ === id2_, "Deserialized id1 not same as deserialized id2")
+    assert(id2_.eq(id1_), "Deserialized id2 not the same object as deserialized level1")
+  }
+
   test("master + 1 manager interaction") {
     store = new BlockManager(master, serializer, 2000)
     val a1 = new Array[Byte](400)
