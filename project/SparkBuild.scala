@@ -158,7 +158,7 @@ object SparkBuild extends Build {
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
     libraryDependencies ++= Seq(
-      "kafka" % "core-kafka_2.9.1" % "0.7.2")
+      "com.github.sgroschupf" % "zkclient" % "0.1")
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
