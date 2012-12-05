@@ -41,7 +41,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(parCollection.dependencies === Nil)
     val result = parCollection.collect()
     sleep(parCollection) // slightly extra time as loading classes for the first can take some time
-    assert(sc.objectFile[Int](parCollection.checkpointFile).collect() === result)
+    assert(sc.objectFile[Int](parCollection.getCheckpointFile.get).collect() === result)
     assert(parCollection.dependencies != Nil)
     assert(parCollection.collect() === result)
   }
@@ -54,7 +54,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     blockRDD.checkpoint()
     val result = blockRDD.collect()
     sleep(blockRDD)
-    assert(sc.objectFile[String](blockRDD.checkpointFile).collect() === result)
+    assert(sc.objectFile[String](blockRDD.getCheckpointFile.get).collect() === result)
     assert(blockRDD.dependencies != Nil)
     assert(blockRDD.collect() === result)
   }
@@ -122,35 +122,6 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
       "CoGroupedSplits still holds on to the splits of its parent RDDs")
   }
 
-  /**
-   * This test forces two ResultTasks of the same job to be launched before and after
-   * the checkpointing of job's RDD is completed.
-   */
-  test("Threading - ResultTasks") {
-    val op1 = (parCollection: RDD[Int]) => {
-      parCollection.map(x => { println("1st map running on " + x); Thread.sleep(500); (x % 2, x) })
-    }
-    val op2 = (firstRDD: RDD[(Int, Int)]) => {
-      firstRDD.map(x => { println("2nd map running on " + x); Thread.sleep(500); x })
-    }
-    testThreading(op1, op2)
-  }
-
-  /**
-   * This test forces two ShuffleMapTasks of the same job to be launched before and after
-   * the checkpointing of job's RDD is completed.
-   */
-  test("Threading - ShuffleMapTasks") {
-    val op1 = (parCollection: RDD[Int]) => {
-      parCollection.map(x => { println("1st map running on " + x); Thread.sleep(500); (x % 2, x) })
-    }
-    val op2 = (firstRDD: RDD[(Int, Int)]) => {
-      firstRDD.groupByKey(2).map(x => { println("2nd map running on " + x); Thread.sleep(500); x })
-    }
-    testThreading(op1, op2)
-  }
-
-
   def testCheckpointing[U: ClassManifest](op: (RDD[Int]) => RDD[U], sleepTime: Long = 500) {
     val parCollection = sc.makeRDD(1 to 4, 4)
     val operatedRDD = op(parCollection)
@@ -159,47 +130,9 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     val result = operatedRDD.collect()
     sleep(operatedRDD)
     //println(parentRDD + ", " + operatedRDD.dependencies.head.rdd )
-    assert(sc.objectFile[U](operatedRDD.checkpointFile).collect() === result)
+    assert(sc.objectFile[U](operatedRDD.getCheckpointFile.get).collect() === result)
     assert(operatedRDD.dependencies.head.rdd != parentRDD)
     assert(operatedRDD.collect() === result)
-  }
-
-  def testThreading[U: ClassManifest, V: ClassManifest](op1: (RDD[Int]) => RDD[U], op2: (RDD[U]) => RDD[V]) {
-
-    val parCollection = sc.makeRDD(1 to 2, 2)
-
-    // This is the RDD that is to be checkpointed
-    val firstRDD = op1(parCollection)
-    val parentRDD = firstRDD.dependencies.head.rdd
-    firstRDD.checkpoint()
-
-    // This the RDD that uses firstRDD. This is designed to launch a
-    // ShuffleMapTask that uses firstRDD.
-    val secondRDD = op2(firstRDD)
-
-    // Starting first job, to initiate the checkpointing
-    logInfo("\nLaunching 1st job to initiate checkpointing\n")
-    firstRDD.collect()
-
-    // Checkpointing has started but not completed yet
-    Thread.sleep(100)
-    assert(firstRDD.dependencies.head.rdd === parentRDD)
-
-    // Starting second job; first task of this job will be
-    // launched _before_ firstRDD is marked as checkpointed
-    // and the second task will be launched _after_ firstRDD
-    // is marked as checkpointed
-    logInfo("\nLaunching 2nd job that is designed to launch tasks " +
-      "before and after checkpointing is complete\n")
-    val result = secondRDD.collect()
-
-    // Check whether firstRDD has been successfully checkpointed
-    assert(firstRDD.dependencies.head.rdd != parentRDD)
-
-    logInfo("\nRecomputing 2nd job to verify the results of the previous computation\n")
-    // Check whether the result in the previous job was correct or not
-    val correctResult = secondRDD.collect()
-    assert(result === correctResult)
   }
 
   def sleep(rdd: RDD[_]) {

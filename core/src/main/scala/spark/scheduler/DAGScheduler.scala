@@ -575,7 +575,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       return cached
     }
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
-    val rddPrefs = rdd.preferredLocations(rdd.splits(partition)).toList
+    val rddPrefs = rdd.getPreferredLocations(rdd.splits(partition)).toList
     if (rddPrefs != Nil) {
       return rddPrefs
     }

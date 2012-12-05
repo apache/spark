@@ -48,7 +48,7 @@ class CoalescedRDD[T: ClassManifest](
 
   override def dependencies = deps_
 
-  override protected def changeDependencies(newRDD: RDD[_]) {
+  override def changeDependencies(newRDD: RDD[_]) {
     deps_ = List(new OneToOneDependency(newRDD))
     splits_ = newRDD.splits
     prev = null

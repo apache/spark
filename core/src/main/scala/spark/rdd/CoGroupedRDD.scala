@@ -112,7 +112,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
     map.iterator
   }
 
-  override protected def changeDependencies(newRDD: RDD[_]) {
+  override def changeDependencies(newRDD: RDD[_]) {
     deps_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
     splits_ = newRDD.splits
     rdds = null

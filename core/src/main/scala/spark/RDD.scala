@@ -99,13 +99,7 @@ abstract class RDD[T: ClassManifest](
   val partitioner: Option[Partitioner] = None
 
   /** Optionally overridden by subclasses to specify placement preferences. */
-  def preferredLocations(split: Split): Seq[String] = {
-    if (isCheckpointed) {
-      checkpointRDD.preferredLocations(split)
-    } else {
-      Nil
-    }
-  }
+  def preferredLocations(split: Split): Seq[String] = Nil
   
   /** The [[spark.SparkContext]] that this RDD was created on. */
   def context = sc
@@ -118,6 +112,8 @@ abstract class RDD[T: ClassManifest](
   // Variables relating to persistence
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
+  protected[spark] val checkpointData = new RDDCheckpointData(this)
+
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassManifest] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
@@ -125,17 +121,6 @@ abstract class RDD[T: ClassManifest](
 
   /** Returns the `i` th parent RDD */
   protected[spark] def parent[U: ClassManifest](i: Int) = dependencies(i).rdd.asInstanceOf[RDD[U]]
-
-  // Variables relating to checkpointing
-  protected val isCheckpointable = true         // override to set this to false to avoid checkpointing an RDD
-
-  protected var shouldCheckpoint = false        // set to true when an RDD is marked for checkpointing
-  protected var isCheckpointInProgress = false  // set to true when checkpointing is in progress
-  protected[spark] var isCheckpointed = false          // set to true after checkpointing is completed
-
-  protected[spark] var checkpointFile: String = null   // set to the checkpoint file after checkpointing is completed
-  protected var checkpointRDD: RDD[T] = null    // set to the HadoopRDD of the checkpoint file
-  protected var checkpointRDDSplits: Seq[Split] = null  // set to the splits of the Hadoop RDD
 
   // Methods available on all RDDs:
 
@@ -162,81 +147,12 @@ abstract class RDD[T: ClassManifest](
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel = storageLevel
 
-  /**
-   * Mark this RDD for checkpointing. The RDD will be saved to a file inside `checkpointDir`
-   * (set using setCheckpointDir()) and all references to its parent RDDs will be removed.
-   * This is used to truncate very long lineages. In the current implementation, Spark will save
-   * this RDD to a file (using saveAsObjectFile()) after the first job using this RDD is done.
-   * Hence, it is strongly recommended to use checkpoint() on RDDs when
-   * (i) Checkpoint() is called before the any job has been executed on this RDD.
-   * (ii) This RDD has been made to persist in memory. Otherwise saving it on a file will
-   * require recomputation.
-   */
-  protected[spark] def checkpoint() {
-    synchronized {
-      if (isCheckpointed || shouldCheckpoint || isCheckpointInProgress) {
-        // do nothing
-      } else if (isCheckpointable) {
-        if (sc.checkpointDir == null) {
-          throw new Exception("Checkpoint directory has not been set in the SparkContext.")
-        }
-        shouldCheckpoint = true
-      } else {
-        throw new Exception(this + " cannot be checkpointed")
-      }
-    }
-  }
-
-  def getCheckpointData(): Any = {
-    synchronized {
-      checkpointFile
-    }
-  }
-
-  /**
-   * Performs the checkpointing of this RDD by saving this . It is called by the DAGScheduler after a job
-   * using this RDD has completed (therefore the RDD has been materialized and
-   * potentially stored in memory). In case this RDD is not marked for checkpointing,
-   * doCheckpoint() is called recursively on the parent RDDs.
-   */
-  private[spark] def doCheckpoint() {
-    val startCheckpoint = synchronized {
-      if (isCheckpointable && shouldCheckpoint && !isCheckpointInProgress) {
-        isCheckpointInProgress = true
-        true
-      } else {
-        false
-      }
-    }
-
-    if (startCheckpoint) {
-      val rdd = this
-      rdd.checkpointFile = new Path(context.checkpointDir, "rdd-" + id).toString
-      rdd.saveAsObjectFile(checkpointFile)
-      rdd.synchronized {
-        rdd.checkpointRDD = context.objectFile[T](checkpointFile, rdd.splits.size)
-        rdd.checkpointRDDSplits = rdd.checkpointRDD.splits
-        rdd.changeDependencies(rdd.checkpointRDD)
-        rdd.shouldCheckpoint = false
-        rdd.isCheckpointInProgress = false
-        rdd.isCheckpointed = true
-        println("Done checkpointing RDD " + rdd.id + ", " + rdd + ", created RDD " + rdd.checkpointRDD.id + ", " + rdd.checkpointRDD)
-      }
+  def getPreferredLocations(split: Split) = {
+    if (isCheckpointed) {
+      checkpointData.preferredLocations(split)
     } else {
-      // Recursively call doCheckpoint() to perform checkpointing on parent RDD if they are marked
-      dependencies.foreach(_.rdd.doCheckpoint())
+      preferredLocations(split)
     }
-  }
-
-  /**
-   * Changes the dependencies of this RDD from its original parents to the new [[spark.rdd.HadoopRDD]]
-   * (`newRDD`) created from the checkpoint file. This method must ensure that all references
-   * to the original parent RDDs must be removed to enable the parent RDDs to be garbage
-   * collected. Subclasses of RDD may override this method for implementing their own changing
-   * logic. See [[spark.rdd.UnionRDD]] and [[spark.rdd.ShuffledRDD]] to get a better idea.
-   */
-  protected def changeDependencies(newRDD: RDD[_]) {
-    dependencies_ = List(new OneToOneDependency(newRDD))
   }
 
   /**
@@ -247,7 +163,7 @@ abstract class RDD[T: ClassManifest](
   final def iterator(split: Split): Iterator[T] = {
     if (isCheckpointed) {
       // ASSUMPTION: Checkpoint Hadoop RDD will have same number of splits as original
-      checkpointRDD.iterator(checkpointRDDSplits(split.index))
+      checkpointData.iterator(split.index)
     } else if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheTracker.getOrCompute[T](this, split, storageLevel)
     } else {
@@ -587,6 +503,55 @@ abstract class RDD[T: ClassManifest](
   /** A private method for tests, to look at the contents of each partition */
   private[spark] def collectPartitions(): Array[Array[T]] = {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+  }
+
+  /**
+   * Mark this RDD for checkpointing. The RDD will be saved to a file inside `checkpointDir`
+   * (set using setCheckpointDir()) and all references to its parent RDDs will be removed.
+   * This is used to truncate very long lineages. In the current implementation, Spark will save
+   * this RDD to a file (using saveAsObjectFile()) after the first job using this RDD is done.
+   * Hence, it is strongly recommended to use checkpoint() on RDDs when
+   * (i) checkpoint() is called before the any job has been executed on this RDD.
+   * (ii) This RDD has been made to persist in memory. Otherwise saving it on a file will
+   * require recomputation.
+   */
+  def checkpoint() {
+    checkpointData.markForCheckpoint()
+  }
+
+  /**
+   * Return whether this RDD has been checkpointed or not
+   */
+  def isCheckpointed(): Boolean = {
+    checkpointData.isCheckpointed()
+  }
+
+  /**
+   * Gets the name of the file to which this RDD was checkpointed
+   */
+  def getCheckpointFile(): Option[String] = {
+    checkpointData.getCheckpointFile()
+  }
+
+  /**
+   * Performs the checkpointing of this RDD by saving this . It is called by the DAGScheduler
+   * after a job using this RDD has completed (therefore the RDD has been materialized and
+   * potentially stored in memory). doCheckpoint() is called recursively on the parent RDDs.
+   */
+  protected[spark] def doCheckpoint() {
+    checkpointData.doCheckpoint()
+    dependencies.foreach(_.rdd.doCheckpoint())
+  }
+
+  /**
+   * Changes the dependencies of this RDD from its original parents to the new [[spark.rdd.HadoopRDD]]
+   * (`newRDD`) created from the checkpoint file. This method must ensure that all references
+   * to the original parent RDDs must be removed to enable the parent RDDs to be garbage
+   * collected. Subclasses of RDD may override this method for implementing their own changing
+   * logic. See [[spark.rdd.UnionRDD]] and [[spark.rdd.ShuffledRDD]] to get a better idea.
+   */
+  protected[spark] def changeDependencies(newRDD: RDD[_]) {
+    dependencies_ = List(new OneToOneDependency(newRDD))
   }
 
   @throws(classOf[IOException])

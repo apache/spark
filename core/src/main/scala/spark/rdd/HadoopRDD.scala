@@ -115,6 +115,4 @@ class HadoopRDD[K, V](
     val hadoopSplit = split.asInstanceOf[HadoopSplit]
     hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")
   }
-
-  override val isCheckpointable = false
 }

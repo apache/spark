@@ -41,12 +41,7 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     }
   }
 
-  override def preferredLocations(split: Split) = {
-    if (isCheckpointed) {
-      checkpointRDD.preferredLocations(split)
-    } else {
-      locations_(split.asInstanceOf[BlockRDDSplit].blockId)
-    }
-  }
+  override def preferredLocations(split: Split) =
+    locations_(split.asInstanceOf[BlockRDDSplit].blockId)
 }
 

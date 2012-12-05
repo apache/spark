@@ -32,12 +32,8 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
   override def splits = splits_
 
   override def preferredLocations(split: Split) = {
-    if (isCheckpointed) {
-      checkpointRDD.preferredLocations(split)
-    } else {
-      val currSplit = split.asInstanceOf[CartesianSplit]
-      rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
-    }
+    val currSplit = split.asInstanceOf[CartesianSplit]
+    rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
   }
 
   override def compute(split: Split) = {
@@ -56,7 +52,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
 
   override def dependencies = deps_
 
-  override protected def changeDependencies(newRDD: RDD[_]) {
+  override def changeDependencies(newRDD: RDD[_]) {
     deps_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
     splits_ = newRDD.splits
     rdd1 = null

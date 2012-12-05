@@ -49,15 +49,11 @@ class UnionRDD[T: ClassManifest](
 
   override def compute(s: Split): Iterator[T] = s.asInstanceOf[UnionSplit[T]].iterator()
 
-  override def preferredLocations(s: Split): Seq[String] = {
-    if (isCheckpointed) {
-      checkpointRDD.preferredLocations(s)
-    } else {
-      s.asInstanceOf[UnionSplit[T]].preferredLocations()
-    }
-  }
+  override def preferredLocations(s: Split): Seq[String] =
+    s.asInstanceOf[UnionSplit[T]].preferredLocations()
 
-  override protected def changeDependencies(newRDD: RDD[_]) {
+
+  override def changeDependencies(newRDD: RDD[_]) {
     deps_ = List(new OneToOneDependency(newRDD))
     splits_ = newRDD.splits
     rdds = null
