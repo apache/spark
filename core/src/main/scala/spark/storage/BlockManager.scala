@@ -104,7 +104,32 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   // Whether to compress RDD partitions that are stored serialized
   val compressRdds = System.getProperty("spark.rdd.compress", "false").toBoolean
 
+  val heartBeatFrequency = BlockManager.getHeartBeatFrequencyFromSystemProperties
+
   val host = System.getProperty("spark.hostname", Utils.localHostName())
+
+  @volatile private var shuttingDown = false
+
+  private def heartBeat() {
+    if (!master.mustHeartBeat(HeartBeat(blockManagerId))) {
+      reregister()
+    }
+  }
+
+  val heartBeatThread = new Thread("BlockManager heartbeat") {
+    setDaemon(true)
+
+    override def run: Unit = {
+      while (!shuttingDown) {
+        heartBeat()
+        try {
+          Thread.sleep(heartBeatFrequency)
+        } catch {
+          case e: InterruptedException => {}
+        }
+      }
+    }
+  }
 
   initialize()
 
@@ -123,6 +148,41 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     master.mustRegisterBlockManager(
       RegisterBlockManager(blockManagerId, maxMemory))
     BlockManagerWorker.startBlockManagerWorker(this)
+    if (!BlockManager.getDisableHeartBeatsForTesting) {
+      heartBeatThread.start()
+    }
+  }
+
+  /**
+   * Report all blocks to the BlockManager again. This may be necessary if we are dropped
+   * by the BlockManager and come back or if we become capable of recovering blocks on disk after
+   * an executor crash.
+   *
+   * This function deliberately fails silently if the master returns false (indicating that
+   * the slave needs to reregister). The error condition will be detected again by the next
+   * heart beat attempt or new block registration and another try to reregister all blocks
+   * will be made then.
+   */
+  private def reportAllBlocks() {
+    logInfo("Reporting " + blockInfo.size + " blocks to the master.")
+    for (blockId <- blockInfo.keys) {
+      if (!tryToReportBlockStatus(blockId)) {
+        logError("Failed to report " + blockId + " to master; giving up.")
+        return
+      }
+    }
+  }
+
+  /**
+   * Reregister with the master and report all blocks to it. This will be called by the heart beat
+   * thread if our heartbeat to the block amnager indicates that we were not registered.
+   */
+  def reregister() {
+    // TODO: We might need to rate limit reregistering.
+    logInfo("BlockManager reregistering with master")
+    master.mustRegisterBlockManager(
+      RegisterBlockManager(blockManagerId, maxMemory))
+    reportAllBlocks()
   }
 
   /**
@@ -134,12 +194,25 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   /**
-   * Tell the master about the current storage status of a block. This will send a heartbeat
+   * Tell the master about the current storage status of a block. This will send a block update
    * message reflecting the current status, *not* the desired storage level in its block info.
    * For example, a block with MEMORY_AND_DISK set might have fallen out to be only on disk.
    */
   def reportBlockStatus(blockId: String) {
+    val needReregister = !tryToReportBlockStatus(blockId)
+    if (needReregister) {
+      logInfo("Got told to reregister updating block " + blockId)
+      // Reregistering will report our new block for free.
+      reregister()
+    }
+    logDebug("Told master about block " + blockId)
+  }
 
+  /**
+   * Actually send a BlockUpdate message. Returns the mater's repsonse, which will be true if theo
+   * block was successfully recorded and false if the slave needs to reregister.
+   */
+  private def tryToReportBlockStatus(blockId: String): Boolean = {
     val (curLevel, inMemSize, onDiskSize) = blockInfo.get(blockId) match {
       case null =>
         (StorageLevel.NONE, 0L, 0L)
@@ -159,9 +232,10 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
           }
         }
     }
-    master.mustHeartBeat(HeartBeat(blockManagerId, blockId, curLevel, inMemSize, onDiskSize))
-    logDebug("Told master about block " + blockId)
+    return master.mustBlockUpdate(
+      BlockUpdate(blockManagerId, blockId, curLevel, inMemSize, onDiskSize))
   }
+
 
   /**
    * Get locations of the block.
@@ -840,6 +914,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   def stop() {
+    shuttingDown = true
+    heartBeatThread.interrupt()
     connectionManager.stop()
     blockInfo.clear()
     memoryStore.clear()
@@ -854,6 +930,12 @@ object BlockManager extends Logging {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
     (Runtime.getRuntime.maxMemory * memoryFraction).toLong
   }
+
+  def getHeartBeatFrequencyFromSystemProperties: Long =
+    System.getProperty("spark.storage.blockManagerHeartBeatMs", "2000").toLong
+
+  def getDisableHeartBeatsForTesting: Boolean =
+    System.getProperty("spark.test.disableBlockManagerHeartBeat", "false").toBoolean
 
   /**
    * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
