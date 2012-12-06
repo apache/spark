@@ -105,7 +105,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
       blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(maxMem)))
 
     def updateLastSeenMs() {
-      _lastSeenMs = System.currentTimeMillis() / 1000
+      _lastSeenMs = System.currentTimeMillis()
     }
 
     def updateBlockInfo(blockId: String, storageLevel: StorageLevel, memSize: Long, diskSize: Long)
