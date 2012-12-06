@@ -361,7 +361,6 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
   val DEFAULT_MASTER_IP: String = System.getProperty("spark.master.host", "localhost")
   val DEFAULT_MASTER_PORT: Int = System.getProperty("spark.master.port", "7077").toInt
   val DEFAULT_MANAGER_IP: String = Utils.localHostName()
-  val DEFAULT_MANAGER_PORT: String = "10902"
 
   val timeout = 10.seconds
   var masterActor: ActorRef = null
@@ -405,7 +404,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
   }
 
   def notifyADeadHost(host: String) {
-    communicate(RemoveHost(host + ":" + DEFAULT_MANAGER_PORT))
+    communicate(RemoveHost(host))
     logInfo("Removed " + host + " successfully in notifyADeadHost")
   }
 
