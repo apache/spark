@@ -1,9 +1,24 @@
 package spark.rdd
 
 import spark._
-import java.lang.ref.WeakReference
+import java.io.{ObjectOutputStream, IOException}
 
-private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) extends Split
+private[spark] case class CoalescedRDDSplit(
+    index: Int,
+    @transient rdd: RDD[_],
+    parentsIndices: Array[Int]
+  ) extends Split {
+  var parents: Seq[Split] = parentsIndices.map(rdd.splits(_))
+
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    rdd.synchronized {
+      // Update the reference to parent split at the time of task serialization
+      parents = parentsIndices.map(rdd.splits(_))
+      oos.defaultWriteObject()
+    }
+  }
+}
 
 /**
  * Coalesce the partitions of a parent RDD (`prev`) into fewer partitions, so that each partition of
@@ -21,12 +36,12 @@ class CoalescedRDD[T: ClassManifest](
   @transient var splits_ : Array[Split] = {
     val prevSplits = prev.splits
     if (prevSplits.length < maxPartitions) {
-      prevSplits.zipWithIndex.map{ case (s, idx) => new CoalescedRDDSplit(idx, Array(s)) }
+      prevSplits.map(_.index).map{idx => new CoalescedRDDSplit(idx, prev, Array(idx)) }
     } else {
       (0 until maxPartitions).map { i =>
         val rangeStart = (i * prevSplits.length) / maxPartitions
         val rangeEnd = ((i + 1) * prevSplits.length) / maxPartitions
-        new CoalescedRDDSplit(i, prevSplits.slice(rangeStart, rangeEnd))
+        new CoalescedRDDSplit(i, prev, (rangeStart until rangeEnd).toArray)
       }.toArray
     }
   }
@@ -42,7 +57,7 @@ class CoalescedRDD[T: ClassManifest](
   var deps_ : List[Dependency[_]] = List(
     new NarrowDependency(prev) {
       def getParents(id: Int): Seq[Int] =
-        splits(id).asInstanceOf[CoalescedRDDSplit].parents.map(_.index)
+        splits(id).asInstanceOf[CoalescedRDDSplit].parentsIndices
     }
   )
 

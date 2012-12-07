@@ -17,6 +17,7 @@ import java.io.{ObjectOutputStream, IOException}
 private[spark] sealed trait CoGroupSplitDep extends Serializable
 private[spark] case class NarrowCoGroupSplitDep(rdd: RDD[_], splitIndex: Int, var split: Split = null)
   extends CoGroupSplitDep {
+
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
     rdd.synchronized {
@@ -50,12 +51,12 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
   var deps_ = {
     val deps = new ArrayBuffer[Dependency[_]]
     for ((rdd, index) <- rdds.zipWithIndex) {
-      val mapSideCombinedRDD = rdd.mapPartitions(aggr.combineValuesByKey(_), true)
-      if (mapSideCombinedRDD.partitioner == Some(part)) {
-        logInfo("Adding one-to-one dependency with " + mapSideCombinedRDD)
-        deps += new OneToOneDependency(mapSideCombinedRDD)
+      if (rdd.partitioner == Some(part)) {
+        logInfo("Adding one-to-one dependency with " + rdd)
+        deps += new OneToOneDependency(rdd)
       } else {
         logInfo("Adding shuffle dependency with " + rdd)
+        val mapSideCombinedRDD = rdd.mapPartitions(aggr.combineValuesByKey(_), true)
         deps += new ShuffleDependency[Any, ArrayBuffer[Any]](mapSideCombinedRDD, part)
       }
     }

@@ -7,7 +7,6 @@ import cern.jet.random.engine.DRand
 import spark.RDD
 import spark.OneToOneDependency
 import spark.Split
-import java.lang.ref.WeakReference
 
 private[spark]
 class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Serializable {
@@ -15,14 +14,14 @@ class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Seriali
 }
 
 class SampledRDD[T: ClassManifest](
-    prev: WeakReference[RDD[T]],
+    prev: RDD[T],
     withReplacement: Boolean, 
     frac: Double,
     seed: Int)
-  extends RDD[T](prev.get) {
+  extends RDD[T](prev) {
 
   @transient
-  val splits_ = {
+  var splits_ : Array[Split] = {
     val rg = new Random(seed)
     firstParent[T].splits.map(x => new SampledRDDSplit(x, rg.nextInt))
   }
@@ -50,5 +49,10 @@ class SampledRDD[T: ClassManifest](
       val rand = new Random(split.seed)
       firstParent[T].iterator(split.prev).filter(x => (rand.nextDouble <= frac))
     }
+  }
+
+  override def changeDependencies(newRDD: RDD[_]) {
+    dependencies_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
+    splits_ = newRDD.splits
   }
 }

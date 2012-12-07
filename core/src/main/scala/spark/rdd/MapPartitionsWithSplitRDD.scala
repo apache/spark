@@ -1,9 +1,7 @@
 package spark.rdd
 
-import spark.OneToOneDependency
 import spark.RDD
 import spark.Split
-import java.lang.ref.WeakReference
 
 /**
  * A variant of the MapPartitionsRDD that passes the split index into the
@@ -12,9 +10,9 @@ import java.lang.ref.WeakReference
  */
 private[spark]
 class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
-    prev: WeakReference[RDD[T]],
+    prev: RDD[T],
     f: (Int, Iterator[T]) => Iterator[U])
-  extends RDD[U](prev.get) {
+  extends RDD[U](prev) {
 
   override def splits = firstParent[T].splits
   override def compute(split: Split) = f(split.index, firstParent[T].iterator(split))

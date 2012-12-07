@@ -3,18 +3,28 @@ package spark.rdd
 import scala.collection.mutable.ArrayBuffer
 
 import spark._
-import java.lang.ref.WeakReference
+import java.io.{ObjectOutputStream, IOException}
 
 private[spark] class UnionSplit[T: ClassManifest](
-    idx: Int, 
+    idx: Int,
     rdd: RDD[T],
-    split: Split)
+    splitIndex: Int,
+    var split: Split = null)
   extends Split
   with Serializable {
   
   def iterator() = rdd.iterator(split)
   def preferredLocations() = rdd.preferredLocations(split)
   override val index: Int = idx
+
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    rdd.synchronized {
+      // Update the reference to parent split at the time of task serialization
+      split = rdd.splits(splitIndex)
+      oos.defaultWriteObject()
+    }
+  }
 }
 
 class UnionRDD[T: ClassManifest](
@@ -27,7 +37,7 @@ class UnionRDD[T: ClassManifest](
     val array = new Array[Split](rdds.map(_.splits.size).sum)
     var pos = 0
     for (rdd <- rdds; split <- rdd.splits) {
-      array(pos) = new UnionSplit(pos, rdd, split)
+      array(pos) = new UnionSplit(pos, rdd, split.index)
       pos += 1
     }
     array
@@ -51,7 +61,6 @@ class UnionRDD[T: ClassManifest](
 
   override def preferredLocations(s: Split): Seq[String] =
     s.asInstanceOf[UnionSplit[T]].preferredLocations()
-
 
   override def changeDependencies(newRDD: RDD[_]) {
     deps_ = List(new OneToOneDependency(newRDD))

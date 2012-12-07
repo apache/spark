@@ -1,16 +1,14 @@
 package spark.rdd
 
-import spark.OneToOneDependency
 import spark.RDD
 import spark.Split
-import java.lang.ref.WeakReference
 
 private[spark]
 class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
-    prev: WeakReference[RDD[T]],
+    prev: RDD[T],
     f: Iterator[T] => Iterator[U],
     preservesPartitioning: Boolean = false)
-  extends RDD[U](prev.get) {
+  extends RDD[U](prev) {
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
   

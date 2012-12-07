@@ -1,11 +1,7 @@
 package spark.rdd
 
-import spark.Partitioner
-import spark.RDD
-import spark.ShuffleDependency
-import spark.SparkEnv
-import spark.Split
-import java.lang.ref.WeakReference
+import spark._
+import scala.Some
 
 private[spark] class ShuffledRDDSplit(val idx: Int) extends Split {
   override val index = idx
@@ -14,15 +10,15 @@ private[spark] class ShuffledRDDSplit(val idx: Int) extends Split {
 
 /**
  * The resulting RDD from a shuffle (e.g. repartitioning of data).
- * @param parent the parent RDD.
+ * @param prev the parent RDD.
  * @param part the partitioner used to partition the RDD
  * @tparam K the key class.
  * @tparam V the value class.
  */
 class ShuffledRDD[K, V](
-    @transient prev: WeakReference[RDD[(K, V)]],
+    prev: RDD[(K, V)],
     part: Partitioner)
-  extends RDD[(K, V)](prev.get.context, List(new ShuffleDependency(prev.get, part))) {
+  extends RDD[(K, V)](prev.context, List(new ShuffleDependency(prev, part))) {
 
   override val partitioner = Some(part)
 
@@ -37,7 +33,7 @@ class ShuffledRDD[K, V](
   }
 
   override def changeDependencies(newRDD: RDD[_]) {
-    dependencies_ = Nil
+    dependencies_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
     splits_ = newRDD.splits
   }
 }

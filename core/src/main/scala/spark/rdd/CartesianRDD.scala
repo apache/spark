@@ -1,7 +1,6 @@
 package spark.rdd
 
 import spark._
-import java.lang.ref.WeakReference
 
 private[spark]
 class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with Serializable {
