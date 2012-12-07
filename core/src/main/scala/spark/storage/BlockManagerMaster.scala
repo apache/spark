@@ -225,7 +225,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
   def removeHost(host: String) {
     logInfo("Trying to remove the host: " + host + " from BlockManagerMaster.")
     logInfo("Previous hosts: " + blockManagerInfo.keySet.toSeq)
-    blockManagerIdByHost.get(host).map(removeBlockManager)
+    blockManagerIdByHost.get(host).foreach(removeBlockManager)
     logInfo("Current hosts: " + blockManagerInfo.keySet.toSeq)
     sender ! true
   }
