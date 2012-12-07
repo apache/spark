@@ -308,7 +308,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
       logInfo("Got Register Msg from master node, don't register it")
     } else {
       blockManagerInfo += (blockManagerId -> new BlockManagerInfo(
-        blockManagerId, System.currentTimeMillis() / 1000, maxMemSize))
+        blockManagerId, System.currentTimeMillis(), maxMemSize))
     }
     blockManagerIdByHost += (blockManagerId.ip -> blockManagerId)
     logDebug("Got in register 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
