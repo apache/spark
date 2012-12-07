@@ -98,7 +98,18 @@ class NetworkInputTracker(
     
     def startReceivers() {
       val receivers = networkInputStreams.map(_.createReceiver())
-      val tempRDD = ssc.sc.makeRDD(receivers, receivers.size)
+
+      // We only honor constraints if all receivers have them
+      val hasLocationConstraints = receivers.map(_.getLocationConstraint().isDefined).reduce(_ && _)
+
+      val tempRDD =
+        if (hasLocationConstraints) {
+          val receiversWithConstraints = receivers.map(r => (r, Seq(r.getLocationConstraint().toString)))
+          ssc.sc.makeLocalityConstrainedRDD[NetworkReceiver[_]](receiversWithConstraints)
+        }
+        else {
+          ssc.sc.makeRDD(receivers, receivers.size)
+        }
 
       val startReceiver = (iterator: Iterator[NetworkReceiver[_]]) => {
         if (!iterator.hasNext) {

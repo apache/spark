@@ -15,6 +15,7 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.hadoop.fs.Path
 import java.util.UUID
 import spark.util.MetadataCleaner
@@ -165,6 +166,16 @@ class StreamingContext private (
     graph.addInputStream(inputStream)
     inputStream
   }
+
+  def flumeStream (
+    hostname: String,
+    port: Int,
+    storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2): DStream[SparkFlumeEvent] = {
+    val inputStream = new FlumeInputDStream(this, hostname, port, storageLevel)
+    graph.addInputStream(inputStream)
+    inputStream
+  }
+
 
   def rawNetworkStream[T: ClassManifest](
       hostname: String,
