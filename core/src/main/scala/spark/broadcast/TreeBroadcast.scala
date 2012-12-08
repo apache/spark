@@ -36,7 +36,7 @@ extends Broadcast[T](id) with Logging with Serializable {
   @transient var serveMR: ServeMultipleRequests = null
   @transient var guideMR: GuideMultipleRequests = null
 
-  @transient var hostAddress = Utils.localIpAddress()
+  @transient var hostAddress = Utils.localIpAddress
   @transient var listenPort = -1
   @transient var guidePort = -1
 
@@ -138,7 +138,7 @@ extends Broadcast[T](id) with Logging with Serializable {
 
     serveMR =  null
 
-    hostAddress = Utils.localIpAddress()
+    hostAddress = Utils.localIpAddress
     listenPort = -1
 
     stopBroadcast = false
