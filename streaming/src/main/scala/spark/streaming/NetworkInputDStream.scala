@@ -62,8 +62,8 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
   /** This method will be called to stop receiving data. */
   protected def onStop()
 
-  /** This method conveys a placement constraint (hostname) for this receiver. */
-  def getLocationConstraint() : Option[String] = None
+  /** This method conveys a placement preference (hostname) for this receiver. */
+  def getLocationPreference() : Option[String] = None
 
   /**
    * This method starts the receiver. First is accesses all the lazy members to

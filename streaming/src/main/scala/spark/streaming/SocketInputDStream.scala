@@ -34,7 +34,7 @@ class SocketReceiver[T: ClassManifest](
 
   lazy protected val dataHandler = new DataHandler(this, storageLevel)
 
-  override def getLocationConstraint = None
+  override def getLocationPreference = None
 
   protected def onStart() {
     logInfo("Connecting to " + host + ":" + port)

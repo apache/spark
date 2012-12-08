@@ -126,5 +126,5 @@ class FlumeReceiver(
     logInfo("Flume receiver stopped")
   }
 
-  override def getLocationConstraint = Some(host)
+  override def getLocationPreference = Some(host)
 }
