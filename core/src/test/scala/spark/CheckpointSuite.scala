@@ -121,7 +121,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(bytesAfterCheckpoint.size < bytesBeforeCheckpoint.size,
       "CoGroupedSplits still holds on to the splits of its parent RDDs")
   }
-
+  /*
   /**
    * This test forces two ResultTasks of the same job to be launched before and after
    * the checkpointing of job's RDD is completed.
@@ -149,7 +149,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     }
     testThreading(op1, op2)
   }
-
+  */
 
   def testCheckpointing[U: ClassManifest](op: (RDD[Int]) => RDD[U], sleepTime: Long = 500) {
     val parCollection = sc.makeRDD(1 to 4, 4)
@@ -163,7 +163,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(operatedRDD.dependencies.head.rdd != parentRDD)
     assert(operatedRDD.collect() === result)
   }
-
+  /*
   def testThreading[U: ClassManifest, V: ClassManifest](op1: (RDD[Int]) => RDD[U], op2: (RDD[U]) => RDD[V]) {
 
     val parCollection = sc.makeRDD(1 to 2, 2)
@@ -201,7 +201,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     val correctResult = secondRDD.collect()
     assert(result === correctResult)
   }
-
+  */
   def sleep(rdd: RDD[_]) {
     val startTime = System.currentTimeMillis()
     val maxWaitTime = 5000
