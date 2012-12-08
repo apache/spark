@@ -48,7 +48,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
   // Used only in Workers
   @transient var ttGuide: TalkToGuide = null
 
-  @transient var hostAddress = Utils.localIpAddress()
+  @transient var hostAddress = Utils.localIpAddress
   @transient var listenPort = -1
   @transient var guidePort = -1
 
