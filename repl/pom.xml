@@ -246,7 +246,9 @@
                   <goal>jdeb</goal>
                 </goals>
                 <configuration>
-                  <deb>${project.build.directory}/${project.artifactId}-${classifier}_${project.version}-${buildNumber}.deb</deb>
+                  <deb>${project.build.directory}/${project.artifactId}-${classifier}_${project.version}-${buildNumber}_all.deb</deb>
+                  <attach>false</attach>
+                  <compression>gzip</compression>
                   <dataSet>
                     <data>
                       <src>${project.build.directory}/${project.artifactId}-${project.version}-shaded-${classifier}.jar</src>
