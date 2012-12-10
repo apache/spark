@@ -98,7 +98,18 @@ class NetworkInputTracker(
     
     def startReceivers() {
       val receivers = networkInputStreams.map(_.createReceiver())
-      val tempRDD = ssc.sc.makeRDD(receivers, receivers.size)
+
+      // Right now, we only honor preferences if all receivers have them
+      val hasLocationPreferences = receivers.map(_.getLocationPreference().isDefined).reduce(_ && _)
+
+      val tempRDD =
+        if (hasLocationPreferences) {
+          val receiversWithPreferences = receivers.map(r => (r, Seq(r.getLocationPreference().toString)))
+          ssc.sc.makeRDD[NetworkReceiver[_]](receiversWithPreferences)
+        }
+        else {
+          ssc.sc.makeRDD(receivers, receivers.size)
+        }
 
       val startReceiver = (iterator: Iterator[NetworkReceiver[_]]) => {
         if (!iterator.hasNext) {

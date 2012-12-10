@@ -31,6 +31,8 @@ class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: S
 
   var blockPushingThread: Thread = null
 
+  override def getLocationPreference = None
+
   def onStart() {
     // Open a socket to the target address and keep reading from it
     logInfo("Connecting to " + host + ":" + port)

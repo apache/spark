@@ -8,7 +8,6 @@ import spark.streaming.util.{RecurringTimer, SystemClock}
 import spark.storage.StorageLevel
 
 import java.nio.ByteBuffer
-import java.util.concurrent.ArrayBlockingQueue
 
 import akka.actor.{Props, Actor}
 import akka.pattern.ask
@@ -62,6 +61,9 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
 
   /** This method will be called to stop receiving data. */
   protected def onStop()
+
+  /** This method conveys a placement preference (hostname) for this receiver. */
+  def getLocationPreference() : Option[String] = None
 
   /**
    * This method starts the receiver. First is accesses all the lazy members to
@@ -151,6 +153,4 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
         tracker ! DeregisterReceiver(streamId, msg)
     }
   }
-
 }
-

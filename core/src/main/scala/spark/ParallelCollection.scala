@@ -2,6 +2,7 @@ package spark
 
 import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.Map
 
 private[spark] class ParallelCollectionSplit[T: ClassManifest](
     val rddId: Long,
@@ -24,7 +25,8 @@ private[spark] class ParallelCollectionSplit[T: ClassManifest](
 private[spark] class ParallelCollection[T: ClassManifest](
     @transient sc : SparkContext,
     @transient data: Seq[T],
-    numSlices: Int)
+    numSlices: Int,
+    locationPrefs : Map[Int,Seq[String]])
   extends RDD[T](sc, Nil) {
   // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
   // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
@@ -40,7 +42,12 @@ private[spark] class ParallelCollection[T: ClassManifest](
 
   override def compute(s: Split) = s.asInstanceOf[ParallelCollectionSplit[T]].iterator
   
-  override def preferredLocations(s: Split): Seq[String] = Nil
+  override def preferredLocations(s: Split): Seq[String] = {
+    locationPrefs.get(splits_.indexOf(s)) match {
+      case Some(s) => s
+      case _ => Nil
+    }
+  }
 }
 
 private object ParallelCollection {
