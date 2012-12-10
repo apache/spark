@@ -26,7 +26,10 @@ case class RegisterBlockManager(
   extends ToBlockManagerMaster
 
 private[spark]
-class HeartBeat(
+case class HeartBeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
+
+private[spark]
+class BlockUpdate(
     var blockManagerId: BlockManagerId,
     var blockId: String,
     var storageLevel: StorageLevel,
@@ -57,17 +60,17 @@ class HeartBeat(
 }
 
 private[spark]
-object HeartBeat {
+object BlockUpdate {
   def apply(blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long): HeartBeat = {
-    new HeartBeat(blockManagerId, blockId, storageLevel, memSize, diskSize)
+      diskSize: Long): BlockUpdate = {
+    new BlockUpdate(blockManagerId, blockId, storageLevel, memSize, diskSize)
   }
 
   // For pattern-matching
-  def unapply(h: HeartBeat): Option[(BlockManagerId, String, StorageLevel, Long, Long)] = {
+  def unapply(h: BlockUpdate): Option[(BlockManagerId, String, StorageLevel, Long, Long)] = {
     Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize))
   }
 }
@@ -90,6 +93,9 @@ case object StopBlockManagerMaster extends ToBlockManagerMaster
 private[spark]
 case object GetMemoryStatus extends ToBlockManagerMaster
 
+private[spark]
+case object ExpireDeadHosts extends ToBlockManagerMaster
+
 
 private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
@@ -105,7 +111,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
       blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(maxMem)))
 
     def updateLastSeenMs() {
-      _lastSeenMs = System.currentTimeMillis() / 1000
+      _lastSeenMs = System.currentTimeMillis()
     }
 
     def updateBlockInfo(blockId: String, storageLevel: StorageLevel, memSize: Long, diskSize: Long)
@@ -156,6 +162,8 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
     def lastSeenMs: Long = _lastSeenMs
 
+    def blocks: JHashMap[String, StorageLevel] = _blocks
+
     override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 
     def clear() {
@@ -164,26 +172,84 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
   }
 
   private val blockManagerInfo = new HashMap[BlockManagerId, BlockManagerInfo]
+  private val blockManagerIdByHost = new HashMap[String, BlockManagerId]
   private val blockInfo = new JHashMap[String, Pair[Int, HashSet[BlockManagerId]]]
 
   initLogging()
 
+  val slaveTimeout = System.getProperty("spark.storage.blockManagerSlaveTimeoutMs",
+    "" + (BlockManager.getHeartBeatFrequencyFromSystemProperties * 3)).toLong
+
+  val checkTimeoutInterval = System.getProperty("spark.storage.blockManagerTimeoutIntervalMs",
+    "5000").toLong
+
+  var timeoutCheckingTask: Cancellable = null
+
+  override def preStart() {
+    if (!BlockManager.getDisableHeartBeatsForTesting) {
+      timeoutCheckingTask = context.system.scheduler.schedule(
+        0.seconds, checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
+    }
+    super.preStart()
+  }
+
+  def removeBlockManager(blockManagerId: BlockManagerId) {
+    val info = blockManagerInfo(blockManagerId)
+    blockManagerIdByHost.remove(blockManagerId.ip)
+    blockManagerInfo.remove(blockManagerId)
+    var iterator = info.blocks.keySet.iterator
+    while (iterator.hasNext) {
+      val blockId = iterator.next
+      val locations = blockInfo.get(blockId)._2
+      locations -= blockManagerId
+      if (locations.size == 0) {
+        blockInfo.remove(locations)
+      }
+    }
+  }
+
+  def expireDeadHosts() {
+    logDebug("Checking for hosts with no recent heart beats in BlockManagerMaster.")
+    val now = System.currentTimeMillis()
+    val minSeenTime = now - slaveTimeout
+    val toRemove = new HashSet[BlockManagerId]
+    for (info <- blockManagerInfo.values) {
+      if (info.lastSeenMs < minSeenTime) {
+        logInfo("Removing BlockManager " + info.blockManagerId + " with no recent heart beats")
+        toRemove += info.blockManagerId
+      }
+    }
+    // TODO: Remove corresponding block infos
+    toRemove.foreach(removeBlockManager)
+  }
+
   def removeHost(host: String) {
     logInfo("Trying to remove the host: " + host + " from BlockManagerMaster.")
     logInfo("Previous hosts: " + blockManagerInfo.keySet.toSeq)
-    val ip = host.split(":")(0)
-    val port = host.split(":")(1)
-    blockManagerInfo.remove(new BlockManagerId(ip, port.toInt))
+    blockManagerIdByHost.get(host).foreach(removeBlockManager)
     logInfo("Current hosts: " + blockManagerInfo.keySet.toSeq)
     sender ! true
+  }
+
+  def heartBeat(blockManagerId: BlockManagerId) {
+    if (!blockManagerInfo.contains(blockManagerId)) {
+      if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
+        sender ! true
+      } else {
+        sender ! false
+      }
+    } else {
+      blockManagerInfo(blockManagerId).updateLastSeenMs()
+      sender ! true
+    }
   }
 
   def receive = {
     case RegisterBlockManager(blockManagerId, maxMemSize) =>
       register(blockManagerId, maxMemSize)
 
-    case HeartBeat(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
-      heartBeat(blockManagerId, blockId, storageLevel, deserializedSize, size)
+    case BlockUpdate(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
+      blockUpdate(blockManagerId, blockId, storageLevel, deserializedSize, size)
 
     case GetLocations(blockId) =>
       getLocations(blockId)
@@ -205,7 +271,16 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     case StopBlockManagerMaster =>
       logInfo("Stopping BlockManagerMaster")
       sender ! true
+      if (timeoutCheckingTask != null) {
+        timeoutCheckingTask.cancel
+      }
       context.stop(self)
+
+    case ExpireDeadHosts =>
+      expireDeadHosts()
+
+    case HeartBeat(blockManagerId) => 
+      heartBeat(blockManagerId)
 
     case other =>
       logInfo("Got unknown message: " + other)
@@ -223,17 +298,25 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " "
     logDebug("Got in register 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
+    if (blockManagerIdByHost.contains(blockManagerId.ip) &&
+        blockManagerIdByHost(blockManagerId.ip) != blockManagerId) {
+      val oldId = blockManagerIdByHost(blockManagerId.ip)
+      logInfo("Got second registration for host " + blockManagerId +
+              "; removing old slave " + oldId)
+      removeBlockManager(oldId)
+    }
     if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
       logInfo("Got Register Msg from master node, don't register it")
     } else {
       blockManagerInfo += (blockManagerId -> new BlockManagerInfo(
-        blockManagerId, System.currentTimeMillis() / 1000, maxMemSize))
+        blockManagerId, System.currentTimeMillis(), maxMemSize))
     }
+    blockManagerIdByHost += (blockManagerId.ip -> blockManagerId)
     logDebug("Got in register 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
     sender ! true
   }
 
-  private def heartBeat(
+  private def blockUpdate(
       blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
@@ -244,15 +327,21 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     val tmp = " " + blockManagerId + " " + blockId + " "
 
     if (!blockManagerInfo.contains(blockManagerId)) {
-      // Can happen if this is from a locally cached partition on the master
-      sender ! true
+      if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
+        // We intentionally do not register the master (except in local mode),
+        // so we should not indicate failure.
+        sender ! true
+      } else {
+        sender ! false
+      }
       return
     }
 
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
-      logDebug("Got in heartBeat 1" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
+      logDebug("Got in block update 1" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
       sender ! true
+      return
     }
 
     blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
@@ -361,7 +450,6 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
   val DEFAULT_MASTER_IP: String = System.getProperty("spark.master.host", "localhost")
   val DEFAULT_MASTER_PORT: Int = System.getProperty("spark.master.port", "7077").toInt
   val DEFAULT_MANAGER_IP: String = Utils.localHostName()
-  val DEFAULT_MANAGER_PORT: String = "10902"
 
   val timeout = 10.seconds
   var masterActor: ActorRef = null
@@ -405,7 +493,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
   }
 
   def notifyADeadHost(host: String) {
-    communicate(RemoveHost(host + ":" + DEFAULT_MANAGER_PORT))
+    communicate(RemoveHost(host))
     logInfo("Removed " + host + " successfully in notifyADeadHost")
   }
 
@@ -436,27 +524,49 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
     }
   }
 
-  def mustHeartBeat(msg: HeartBeat) {
-    while (! syncHeartBeat(msg)) {
-      logWarning("Failed to send heartbeat" + msg)
+  def mustHeartBeat(msg: HeartBeat): Boolean = {
+    var res = syncHeartBeat(msg)
+    while (!res.isDefined) {
+      logWarning("Failed to send heart beat " + msg)
       Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
+    }
+    return res.get
+  }
+
+  def syncHeartBeat(msg: HeartBeat): Option[Boolean] = {
+    try {
+      val answer = askMaster(msg).asInstanceOf[Boolean]
+      return Some(answer)
+    } catch {
+      case e: Exception => 
+        logError("Failed in syncHeartBeat", e)
+        return None
     }
   }
 
-  def syncHeartBeat(msg: HeartBeat): Boolean = {
+  def mustBlockUpdate(msg: BlockUpdate): Boolean = {
+    var res = syncBlockUpdate(msg)
+    while (!res.isDefined) {
+      logWarning("Failed to send block update " + msg)
+      Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
+    }
+    return res.get
+  }
+
+  def syncBlockUpdate(msg: BlockUpdate): Option[Boolean] = {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " msg " + msg + " "
-    logDebug("Got in syncHeartBeat " + tmp + " 0 " + Utils.getUsedTimeMs(startTimeMs))
+    logDebug("Got in syncBlockUpdate " + tmp + " 0 " + Utils.getUsedTimeMs(startTimeMs))
 
     try {
-      communicate(msg)
-      logDebug("Heartbeat sent successfully")
-      logDebug("Got in syncHeartBeat 1 " + tmp + " 1 " + Utils.getUsedTimeMs(startTimeMs))
-      return true
+      val answer = askMaster(msg).asInstanceOf[Boolean]
+      logDebug("Block update sent successfully")
+      logDebug("Got in synbBlockUpdate " + tmp + " 1 " + Utils.getUsedTimeMs(startTimeMs))
+      return Some(answer)
     } catch {
       case e: Exception =>
-        logError("Failed in syncHeartBeat", e)
-        return false
+        logError("Failed in syncBlockUpdate", e)
+        return None
     }
   }
 
