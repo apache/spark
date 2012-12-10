@@ -488,7 +488,6 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-core</artifactId>
             <version>0.20.205.0</version>
-            <scope>provided</scope>
           </dependency>
         </dependencies>
       </dependencyManagement>
