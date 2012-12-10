@@ -209,12 +209,13 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
   }
 
   def expireDeadHosts() {
-    logInfo("Checking for hosts with no recent heart beats in BlockManagerMaster.")
+    logDebug("Checking for hosts with no recent heart beats in BlockManagerMaster.")
     val now = System.currentTimeMillis()
     val minSeenTime = now - slaveTimeout
     val toRemove = new HashSet[BlockManagerId]
     for (info <- blockManagerInfo.values) {
       if (info.lastSeenMs < minSeenTime) {
+        logInfo("Removing BlockManager " + info.blockManagerId + " with no recent heart beats")
         toRemove += info.blockManagerId
       }
     }
