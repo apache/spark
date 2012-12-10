@@ -30,7 +30,7 @@
   </developers>
   <issueManagement>
     <system>github</system>
-    <url>https://github.com/mesos/spark/issues#issue/</url>
+    <url>https://spark-project.atlassian.net/browse/SPARK</url>
   </issueManagement>
 
   <prerequisites>
