@@ -215,7 +215,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     val toRemove = new HashSet[BlockManagerId]
     for (info <- blockManagerInfo.values) {
       if (info.lastSeenMs < minSeenTime) {
-        logInfo("Removing BlockManager " + info.blockManagerId + " with no recent heart beats")
+        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats")
         toRemove += info.blockManagerId
       }
     }
@@ -279,7 +279,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     case ExpireDeadHosts =>
       expireDeadHosts()
 
-    case HeartBeat(blockManagerId) => 
+    case HeartBeat(blockManagerId) =>
       heartBeat(blockManagerId)
 
     case other =>
@@ -538,7 +538,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
       val answer = askMaster(msg).asInstanceOf[Boolean]
       return Some(answer)
     } catch {
-      case e: Exception => 
+      case e: Exception =>
         logError("Failed in syncHeartBeat", e)
         return None
     }

@@ -47,7 +47,7 @@ private[spark] class BlockManagerId(var ip: String, var port: Int) extends Exter
   }
 }
 
-private[spark] 
+private[spark]
 case class BlockException(blockId: String, message: String, ex: Exception = null)
 extends Exception(message)
 
@@ -200,31 +200,36 @@ class BlockManager(actorSystem: ActorSystem, val master: BlockManagerMaster,
   }
 
   /**
-   * Actually send a BlockUpdate message. Returns the mater's repsonse, which will be true if theo
-   * block was successfully recorded and false if the slave needs to reregister.
+   * Actually send a BlockUpdate message. Returns the mater's response, which will be true if the
+   * block was successfully recorded and false if the slave needs to re-register.
    */
   private def tryToReportBlockStatus(blockId: String): Boolean = {
-    val (curLevel, inMemSize, onDiskSize) = blockInfo.get(blockId) match {
+    val (curLevel, inMemSize, onDiskSize, tellMaster) = blockInfo.get(blockId) match {
       case null =>
-        (StorageLevel.NONE, 0L, 0L)
+        (StorageLevel.NONE, 0L, 0L, false)
       case info =>
         info.synchronized {
           info.level match {
             case null =>
-              (StorageLevel.NONE, 0L, 0L)
+              (StorageLevel.NONE, 0L, 0L, false)
             case level =>
               val inMem = level.useMemory && memoryStore.contains(blockId)
               val onDisk = level.useDisk && diskStore.contains(blockId)
               (
                 new StorageLevel(onDisk, inMem, level.deserialized, level.replication),
                 if (inMem) memoryStore.getSize(blockId) else 0L,
-                if (onDisk) diskStore.getSize(blockId) else 0L
+                if (onDisk) diskStore.getSize(blockId) else 0L,
+                info.tellMaster
               )
           }
         }
     }
-    return master.mustBlockUpdate(
-      BlockUpdate(blockManagerId, blockId, curLevel, inMemSize, onDiskSize))
+
+    if (tellMaster) {
+      master.mustBlockUpdate(BlockUpdate(blockManagerId, blockId, curLevel, inMemSize, onDiskSize))
+    } else {
+      true
+    }
   }
 
 
