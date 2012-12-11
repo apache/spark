@@ -28,10 +28,11 @@ private[spark] class ParallelCollection[T: ClassManifest](
   extends RDD[T](sc, Nil) {
   // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
   // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
-  // instead. UPDATE: With the new changes to enable checkpointing, this an be done.
+  // instead.
+  // UPDATE: A parallel collection can be checkpointed to HDFS, which achieves this goal.
 
   @transient
-  val splits_ = {
+  var splits_ : Array[Split] = {
     val slices = ParallelCollection.slice(data, numSlices).toArray
     slices.indices.map(i => new ParallelCollectionSplit(id, i, slices(i))).toArray
   }
@@ -41,6 +42,11 @@ private[spark] class ParallelCollection[T: ClassManifest](
   override def compute(s: Split) = s.asInstanceOf[ParallelCollectionSplit[T]].iterator
   
   override def preferredLocations(s: Split): Seq[String] = Nil
+
+  override def changeDependencies(newRDD: RDD[_]) {
+    dependencies_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
+    splits_ = newRDD.splits
+  }
 }
 
 private object ParallelCollection {

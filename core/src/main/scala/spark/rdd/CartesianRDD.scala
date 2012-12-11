@@ -1,10 +1,27 @@
 package spark.rdd
 
 import spark._
+import java.io.{ObjectOutputStream, IOException}
 
 private[spark]
-class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with Serializable {
+class CartesianSplit(
+    idx: Int,
+    @transient rdd1: RDD[_],
+    @transient rdd2: RDD[_],
+    s1Index: Int,
+    s2Index: Int
+  ) extends Split {
+  var s1 = rdd1.splits(s1Index)
+  var s2 = rdd2.splits(s2Index)
   override val index: Int = idx
+
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    // Update the reference to parent split at the time of task serialization
+    s1 = rdd1.splits(s1Index)
+    s2 = rdd2.splits(s2Index)
+    oos.defaultWriteObject()
+  }
 }
 
 private[spark]
@@ -23,7 +40,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     val array = new Array[Split](rdd1.splits.size * rdd2.splits.size)
     for (s1 <- rdd1.splits; s2 <- rdd2.splits) {
       val idx = s1.index * numSplitsInRdd2 + s2.index
-      array(idx) = new CartesianSplit(idx, s1, s2)
+      array(idx) = new CartesianSplit(idx, rdd1, rdd2, s1.index, s2.index)
     }
     array
   }

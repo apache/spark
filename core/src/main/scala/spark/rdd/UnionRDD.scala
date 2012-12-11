@@ -19,11 +19,9 @@ private[spark] class UnionSplit[T: ClassManifest](
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
-    rdd.synchronized {
-      // Update the reference to parent split at the time of task serialization
-      split = rdd.splits(splitIndex)
-      oos.defaultWriteObject()
-    }
+    // Update the reference to parent split at the time of task serialization
+    split = rdd.splits(splitIndex)
+    oos.defaultWriteObject()
   }
 }
 
@@ -55,7 +53,9 @@ class UnionRDD[T: ClassManifest](
     deps.toList
   }
 
-  override def dependencies = deps_
+  // Pre-checkpoint dependencies deps_ should be transient (deps_)
+  // but post-checkpoint dependencies must not be transient (dependencies_)
+  override def dependencies = if (isCheckpointed) dependencies_ else deps_
 
   override def compute(s: Split): Iterator[T] = s.asInstanceOf[UnionSplit[T]].iterator()
 
@@ -63,7 +63,8 @@ class UnionRDD[T: ClassManifest](
     s.asInstanceOf[UnionSplit[T]].preferredLocations()
 
   override def changeDependencies(newRDD: RDD[_]) {
-    deps_ = List(new OneToOneDependency(newRDD))
+    deps_ = null
+    dependencies_ = List(new OneToOneDependency(newRDD))
     splits_ = newRDD.splits
     rdds = null
   }

@@ -20,11 +20,9 @@ private[spark] case class NarrowCoGroupSplitDep(rdd: RDD[_], splitIndex: Int, va
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
-    rdd.synchronized {
-      // Update the reference to parent split at the time of task serialization
-      split = rdd.splits(splitIndex)
-      oos.defaultWriteObject()
-    }
+    // Update the reference to parent split at the time of task serialization
+    split = rdd.splits(splitIndex)
+    oos.defaultWriteObject()
   }
 }
 private[spark] case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
@@ -42,7 +40,8 @@ private[spark] class CoGroupAggregator
     { (b1, b2) => b1 ++ b2 })
   with Serializable
 
-class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
+class
+CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) with Logging {
   
   val aggr = new CoGroupAggregator
@@ -63,7 +62,9 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
     deps.toList
   }
 
-  override def dependencies = deps_
+  // Pre-checkpoint dependencies deps_ should be transient (deps_)
+  // but post-checkpoint dependencies must not be transient (dependencies_)
+  override def dependencies = if (isCheckpointed) dependencies_ else deps_
 
   @transient
   var splits_ : Array[Split] = {
@@ -114,7 +115,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
   }
 
   override def changeDependencies(newRDD: RDD[_]) {
-    deps_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
+    deps_ = null
+    dependencies_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
     splits_ = newRDD.splits
     rdds = null
   }

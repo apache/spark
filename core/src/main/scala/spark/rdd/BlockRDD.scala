@@ -2,7 +2,7 @@ package spark.rdd
 
 import scala.collection.mutable.HashMap
 
-import spark.Dependency
+import spark.OneToOneDependency
 import spark.RDD
 import spark.SparkContext
 import spark.SparkEnv
@@ -17,7 +17,7 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
   extends RDD[T](sc, Nil) {
 
   @transient
-  val splits_ = (0 until blockIds.size).map(i => {
+  var splits_ : Array[Split] = (0 until blockIds.size).map(i => {
     new BlockRDDSplit(blockIds(i), i).asInstanceOf[Split]
   }).toArray 
   
@@ -43,5 +43,10 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
 
   override def preferredLocations(split: Split) =
     locations_(split.asInstanceOf[BlockRDDSplit].blockId)
+
+  override def changeDependencies(newRDD: RDD[_]) {
+    dependencies_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
+    splits_ = newRDD.splits
+  }
 }
 

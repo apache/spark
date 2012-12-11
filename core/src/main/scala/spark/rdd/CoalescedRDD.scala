@@ -12,11 +12,9 @@ private[spark] case class CoalescedRDDSplit(
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
-    rdd.synchronized {
-      // Update the reference to parent split at the time of task serialization
-      parents = parentsIndices.map(rdd.splits(_))
-      oos.defaultWriteObject()
-    }
+    // Update the reference to parent split at the time of task serialization
+    parents = parentsIndices.map(rdd.splits(_))
+    oos.defaultWriteObject()
   }
 }
 

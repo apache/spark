@@ -34,28 +34,6 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     }
   }
 
-  test("ParallelCollection") {
-    val parCollection = sc.makeRDD(1 to 4)
-    parCollection.checkpoint()
-    assert(parCollection.dependencies === Nil)
-    val result = parCollection.collect()
-    assert(sc.objectFile[Int](parCollection.getCheckpointFile.get).collect() === result)
-    assert(parCollection.dependencies != Nil)
-    assert(parCollection.collect() === result)
-  }
-
-  test("BlockRDD") {
-    val blockId = "id"
-    val blockManager = SparkEnv.get.blockManager
-    blockManager.putSingle(blockId, "test", StorageLevel.MEMORY_ONLY)
-    val blockRDD = new BlockRDD[String](sc, Array(blockId))
-    blockRDD.checkpoint()
-    val result = blockRDD.collect()
-    assert(sc.objectFile[String](blockRDD.getCheckpointFile.get).collect() === result)
-    assert(blockRDD.dependencies != Nil)
-    assert(blockRDD.collect() === result)
-  }
-
   test("RDDs with one-to-one dependencies") {
     testCheckpointing(_.map(x => x.toString))
     testCheckpointing(_.flatMap(x => 1 to x))
@@ -70,23 +48,76 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     testCheckpointing(_.pipe(Seq("cat")))
   }
 
+  test("ParallelCollection") {
+    val parCollection = sc.makeRDD(1 to 4, 2)
+    val numSplits = parCollection.splits.size
+    parCollection.checkpoint()
+    assert(parCollection.dependencies === Nil)
+    val result = parCollection.collect()
+    assert(sc.objectFile[Int](parCollection.getCheckpointFile.get).collect() === result)
+    assert(parCollection.dependencies != Nil)
+    assert(parCollection.splits.length === numSplits)
+    assert(parCollection.splits.toList === parCollection.checkpointData.cpRDDSplits.toList)
+    assert(parCollection.collect() === result)
+  }
+
+  test("BlockRDD") {
+    val blockId = "id"
+    val blockManager = SparkEnv.get.blockManager
+    blockManager.putSingle(blockId, "test", StorageLevel.MEMORY_ONLY)
+    val blockRDD = new BlockRDD[String](sc, Array(blockId))
+    val numSplits = blockRDD.splits.size
+    blockRDD.checkpoint()
+    val result = blockRDD.collect()
+    assert(sc.objectFile[String](blockRDD.getCheckpointFile.get).collect() === result)
+    assert(blockRDD.dependencies != Nil)
+    assert(blockRDD.splits.length === numSplits)
+    assert(blockRDD.splits.toList === blockRDD.checkpointData.cpRDDSplits.toList)
+    assert(blockRDD.collect() === result)
+  }
+
   test("ShuffledRDD") {
-    // Creating ShuffledRDD directly as PairRDDFunctions.combineByKey produces a MapPartitionedRDD
     testCheckpointing(rdd => {
+      // Creating ShuffledRDD directly as PairRDDFunctions.combineByKey produces a MapPartitionedRDD
       new ShuffledRDD(rdd.map(x => (x % 2, 1)), partitioner)
     })
   }
 
   test("UnionRDD") {
     def otherRDD = sc.makeRDD(1 to 10, 4)
+
+    // Test whether the size of UnionRDDSplits reduce in size after parent RDD is checkpointed.
+    // Current implementation of UnionRDD has transient reference to parent RDDs,
+    // so only the splits will reduce in serialized size, not the RDD.
     testCheckpointing(_.union(otherRDD), false, true)
     testParentCheckpointing(_.union(otherRDD), false, true)
   }
 
   test("CartesianRDD") {
-    def otherRDD = sc.makeRDD(1 to 10, 4)
-    testCheckpointing(_.cartesian(otherRDD))
-    testParentCheckpointing(_.cartesian(otherRDD), true, false)
+    def otherRDD = sc.makeRDD(1 to 10, 1)
+    testCheckpointing(new CartesianRDD(sc, _, otherRDD))
+
+    // Test whether size of CoalescedRDD reduce in size after parent RDD is checkpointed
+    // Current implementation of CoalescedRDDSplit has transient reference to parent RDD,
+    // so only the RDD will reduce in serialized size, not the splits.
+    testParentCheckpointing(new CartesianRDD(sc, _, otherRDD), true, false)
+
+    // Test that the CartesianRDD updates parent splits (CartesianRDD.s1/s2) after
+    // the parent RDD has been checkpointed and parent splits have been changed to HadoopSplits.
+    // Note that this test is very specific to the current implementation of CartesianRDD.
+    val ones = sc.makeRDD(1 to 100, 10).map(x => x)
+    ones.checkpoint // checkpoint that MappedRDD
+    val cartesian = new CartesianRDD(sc, ones, ones)
+    val splitBeforeCheckpoint =
+      serializeDeserialize(cartesian.splits.head.asInstanceOf[CartesianSplit])
+    cartesian.count() // do the checkpointing
+    val splitAfterCheckpoint =
+      serializeDeserialize(cartesian.splits.head.asInstanceOf[CartesianSplit])
+    assert(
+      (splitAfterCheckpoint.s1 != splitBeforeCheckpoint.s1) &&
+        (splitAfterCheckpoint.s2 != splitBeforeCheckpoint.s2),
+      "CartesianRDD.parents not updated after parent RDD checkpointed"
+    )
   }
 
   test("CoalescedRDD") {
@@ -94,7 +125,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
 
     // Test whether size of CoalescedRDD reduce in size after parent RDD is checkpointed
     // Current implementation of CoalescedRDDSplit has transient reference to parent RDD,
-    // so does not serialize the RDD (not need to check its size).
+    // so only the RDD will reduce in serialized size, not the splits.
     testParentCheckpointing(new CoalescedRDD(_, 2), true, false)
 
     // Test that the CoalescedRDDSplit updates parent splits (CoalescedRDDSplit.parents) after
@@ -145,13 +176,14 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     val operatedRDD = op(baseRDD)
     val parentRDD = operatedRDD.dependencies.headOption.orNull
     val rddType = operatedRDD.getClass.getSimpleName
+    val numSplits = operatedRDD.splits.length
 
     // Find serialized sizes before and after the checkpoint
     val (rddSizeBeforeCheckpoint, splitSizeBeforeCheckpoint) = getSerializedSizes(operatedRDD)
     operatedRDD.checkpoint()
     val result = operatedRDD.collect()
     val (rddSizeAfterCheckpoint, splitSizeAfterCheckpoint) = getSerializedSizes(operatedRDD)
-    
+
     // Test whether the checkpoint file has been created
     assert(sc.objectFile[U](operatedRDD.getCheckpointFile.get).collect() === result)
     
@@ -160,6 +192,9 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     
     // Test whether the splits have been changed to the new Hadoop splits
     assert(operatedRDD.splits.toList === operatedRDD.checkpointData.cpRDDSplits.toList)
+
+    // Test whether the number of splits is same as before
+    assert(operatedRDD.splits.length === numSplits)
     
     // Test whether the data in the checkpointed RDD is same as original
     assert(operatedRDD.collect() === result)
@@ -168,7 +203,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     // does not have any dependency to another RDD (e.g., ParallelCollection,
     // ShuffleRDD with ShuffleDependency), it may not reduce in size after checkpointing.
     if (testRDDSize) {
-      println("Size of " + rddType +
+      logInfo("Size of " + rddType +
         "[" + rddSizeBeforeCheckpoint + " --> " + rddSizeAfterCheckpoint + "]")
       assert(
         rddSizeAfterCheckpoint < rddSizeBeforeCheckpoint,
@@ -184,7 +219,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     // must be forgotten after checkpointing (to remove all reference to parent RDDs) and
     // replaced with the HadoopSplits of the checkpointed RDD.
     if (testRDDSplitSize) {
-      println("Size of " + rddType + " splits "
+      logInfo("Size of " + rddType + " splits "
         + "[" + splitSizeBeforeCheckpoint + " --> " + splitSizeAfterCheckpoint + "]")
       assert(
         splitSizeAfterCheckpoint < splitSizeBeforeCheckpoint,
@@ -294,14 +329,118 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     val bytes = Utils.serialize(obj)
     Utils.deserialize[T](bytes)
   }
+  /*
+  test("Consistency check for ResultTask") {
+    // Time ----------------------->
+    // Core 1: |<- count in thread 1, task 1 ->| |<-- checkpoint, task 1 ---->| |<- count in thread 2, task 2 ->|
+    // Core 2: |<- count in thread 1, task 2 ->| |<--- checkpoint, task 2 ---------->| |<- count in thread 2, task 1 ->|
+    //                                                                                |
+    //                                                                        checkpoint completed
+    sc.stop(); sc = null
+    System.clearProperty("spark.master.port")
+
+    val dir = File.createTempFile("temp_", "")
+    dir.delete()
+    val ctxt = new SparkContext("local[2]", "ResultTask")
+    ctxt.setCheckpointDir(dir.toString)
+
+    try {
+      val rdd = ctxt.makeRDD(1 to 2, 2).map(x => {
+        val state = CheckpointSuite.incrementState()
+        println("State = " + state)
+        if (state <= 3) {
+          // If executing the two tasks for the job comouting rdd.count
+          // of thread 1, or the first task for the recomputation due
+          // to checkpointing (saveing to HDFS), then do nothing
+        } else if (state == 4) {
+          // If executing the second task for the recomputation due to
+          // checkpointing. then prolong this task, to allow rdd.count
+          // of thread 2 to start before checkpoint of this RDD is completed
+
+          Thread.sleep(1000)
+          println("State = " + state + " wake up")
+        } else {
+          // Else executing the tasks from thread 2
+          Thread.sleep(1000)
+          println("State = " + state + " wake up")
+        }
+
+        (x, 1)
+      })
+      rdd.checkpoint()
+      val env = SparkEnv.get
+
+      val thread1 = new Thread() {
+        override def run() {
+          try {
+            SparkEnv.set(env)
+            rdd.count()
+          } catch {
+            case e: Exception => CheckpointSuite.failed("Exception in thread 1", e)
+          }
+        }
+      }
+      thread1.start()
+
+      val thread2 = new Thread() {
+        override def run() {
+          try {
+            SparkEnv.set(env)
+            CheckpointSuite.waitTillState(3)
+            println("\n\n\n\n")
+            rdd.count()
+          } catch {
+            case e: Exception => CheckpointSuite.failed("Exception in thread 2", e)
+          }
+        }
+      }
+      thread2.start()
+
+      thread1.join()
+      thread2.join()
+    } finally {
+      dir.delete()
+    }
+
+    assert(!CheckpointSuite.failed, CheckpointSuite.failureMessage)
+
+    ctxt.stop()
+
+  }
+  */
 }
 
 
 object CheckpointSuite {
+  /*
+  var state = 0
+  var failed = false
+  var failureMessage = ""
+
+  def incrementState(): Int = {
+    this.synchronized { state += 1; this.notifyAll(); state }
+  }
+
+  def getState(): Int = {
+    this.synchronized( state )
+  }
+
+  def waitTillState(s: Int) {
+    while(state < s) {
+      this.synchronized { this.wait() }
+    }
+  }
+
+  def failed(msg: String, ex: Exception) {
+    failed = true
+    failureMessage += msg + "\n" + ex + "\n\n"
+  }
+  */
+
   // This is a custom cogroup function that does not use mapValues like
   // the PairRDDFunctions.cogroup()
   def cogroup[K, V](first: RDD[(K, V)], second: RDD[(K, V)], part: Partitioner) = {
-    println("First = " + first + ", second = " + second)
+    //println("First = " + first + ", second = " + second)
     new CoGroupedRDD[K](
       Seq(first.asInstanceOf[RDD[(_, _)]], second.asInstanceOf[RDD[(_, _)]]),
       part

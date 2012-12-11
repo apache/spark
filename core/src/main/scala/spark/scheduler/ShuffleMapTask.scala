@@ -84,19 +84,22 @@ private[spark] class ShuffleMapTask(
   def this() = this(0, null, null, 0, null)
   
   var split = if (rdd == null) {
-    null 
-  } else { 
+    null
+  } else {
     rdd.splits(partition)
   }
 
   override def writeExternal(out: ObjectOutput) {
-    out.writeInt(stageId)
-    val bytes = ShuffleMapTask.serializeInfo(stageId, rdd, dep)
-    out.writeInt(bytes.length)
-    out.write(bytes)
-    out.writeInt(partition)
-    out.writeLong(generation)
-    out.writeObject(split)
+    RDDCheckpointData.synchronized {
+      split = rdd.splits(partition)
+      out.writeInt(stageId)
+      val bytes = ShuffleMapTask.serializeInfo(stageId, rdd, dep)
+      out.writeInt(bytes.length)
+      out.write(bytes)
+      out.writeInt(partition)
+      out.writeLong(generation)
+      out.writeObject(split)
+    }
   }
 
   override def readExternal(in: ObjectInput) {

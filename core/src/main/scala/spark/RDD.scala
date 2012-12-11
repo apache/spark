@@ -163,7 +163,7 @@ abstract class RDD[T: ClassManifest](
   final def iterator(split: Split): Iterator[T] = {
     if (isCheckpointed) {
       // ASSUMPTION: Checkpoint Hadoop RDD will have same number of splits as original
-      checkpointData.iterator(split.index)
+      checkpointData.iterator(split)
     } else if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheTracker.getOrCompute[T](this, split, storageLevel)
     } else {
@@ -556,16 +556,12 @@ abstract class RDD[T: ClassManifest](
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
-    synchronized {
-      oos.defaultWriteObject()
-    }
+    oos.defaultWriteObject()
   }
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream) {
-    synchronized {
-      ois.defaultReadObject()
-    }
+    ois.defaultReadObject()
   }
 
 }

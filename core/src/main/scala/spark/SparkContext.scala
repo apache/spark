@@ -40,9 +40,7 @@ import spark.partial.PartialResult
 import spark.rdd.HadoopRDD
 import spark.rdd.NewHadoopRDD
 import spark.rdd.UnionRDD
-import spark.scheduler.ShuffleMapTask
-import spark.scheduler.DAGScheduler
-import spark.scheduler.TaskScheduler
+import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
@@ -486,6 +484,7 @@ class SparkContext(
     clearJars()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
+    ResultTask.clearCache()
     logInfo("Successfully stopped SparkContext")
   }
 
