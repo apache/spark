@@ -15,8 +15,11 @@ import spark.Split
 import java.io.{ObjectOutputStream, IOException}
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
-private[spark] case class NarrowCoGroupSplitDep(rdd: RDD[_], splitIndex: Int, var split: Split = null)
-  extends CoGroupSplitDep {
+private[spark] case class NarrowCoGroupSplitDep(
+    rdd: RDD[_],
+    splitIndex: Int,
+    var split: Split
+  ) extends CoGroupSplitDep {
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
@@ -75,7 +78,7 @@ CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
           case s: ShuffleDependency[_, _] =>
             new ShuffleCoGroupSplitDep(s.shuffleId): CoGroupSplitDep
           case _ =>
-            new NarrowCoGroupSplitDep(r, i): CoGroupSplitDep
+            new NarrowCoGroupSplitDep(r, i, r.splits(i)): CoGroupSplitDep
         }
       }.toList)
     }

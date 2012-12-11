@@ -5,14 +5,10 @@ import scala.collection.mutable.ArrayBuffer
 import spark._
 import java.io.{ObjectOutputStream, IOException}
 
-private[spark] class UnionSplit[T: ClassManifest](
-    idx: Int,
-    rdd: RDD[T],
-    splitIndex: Int,
-    var split: Split = null)
-  extends Split
-  with Serializable {
-  
+private[spark] class UnionSplit[T: ClassManifest](idx: Int, rdd: RDD[T], splitIndex: Int)
+  extends Split {
+  var split: Split = rdd.splits(splitIndex)
+
   def iterator() = rdd.iterator(split)
   def preferredLocations() = rdd.preferredLocations(split)
   override val index: Int = idx
