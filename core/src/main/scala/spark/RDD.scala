@@ -112,7 +112,7 @@ abstract class RDD[T: ClassManifest](
   // Variables relating to persistence
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
-  protected[spark] val checkpointData = new RDDCheckpointData(this)
+  protected[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassManifest] = {
@@ -149,7 +149,7 @@ abstract class RDD[T: ClassManifest](
 
   def getPreferredLocations(split: Split) = {
     if (isCheckpointed) {
-      checkpointData.preferredLocations(split)
+      checkpointData.get.preferredLocations(split)
     } else {
       preferredLocations(split)
     }
@@ -163,7 +163,7 @@ abstract class RDD[T: ClassManifest](
   final def iterator(split: Split): Iterator[T] = {
     if (isCheckpointed) {
       // ASSUMPTION: Checkpoint Hadoop RDD will have same number of splits as original
-      checkpointData.iterator(split)
+      checkpointData.get.iterator(split)
     } else if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheTracker.getOrCompute[T](this, split, storageLevel)
     } else {
@@ -516,21 +516,24 @@ abstract class RDD[T: ClassManifest](
    * require recomputation.
    */
   def checkpoint() {
-    checkpointData.markForCheckpoint()
+    if (checkpointData.isEmpty) {
+      checkpointData = Some(new RDDCheckpointData(this))
+      checkpointData.get.markForCheckpoint()
+    }
   }
 
   /**
    * Return whether this RDD has been checkpointed or not
    */
   def isCheckpointed(): Boolean = {
-    checkpointData.isCheckpointed()
+    if (checkpointData.isDefined) checkpointData.get.isCheckpointed() else false
   }
 
   /**
    * Gets the name of the file to which this RDD was checkpointed
    */
   def getCheckpointFile(): Option[String] = {
-    checkpointData.getCheckpointFile()
+    if (checkpointData.isDefined) checkpointData.get.getCheckpointFile() else None
   }
 
   /**
@@ -539,12 +542,12 @@ abstract class RDD[T: ClassManifest](
    * potentially stored in memory). doCheckpoint() is called recursively on the parent RDDs.
    */
   protected[spark] def doCheckpoint() {
-    checkpointData.doCheckpoint()
+    if (checkpointData.isDefined) checkpointData.get.doCheckpoint()
     dependencies.foreach(_.rdd.doCheckpoint())
   }
 
   /**
-   * Changes the dependencies of this RDD from its original parents to the new [[spark.rdd.HadoopRDD]]
+   * Changes the dependencies of this RDD from its original parents to the new RDD
    * (`newRDD`) created from the checkpoint file. This method must ensure that all references
    * to the original parent RDDs must be removed to enable the parent RDDs to be garbage
    * collected. Subclasses of RDD may override this method for implementing their own changing

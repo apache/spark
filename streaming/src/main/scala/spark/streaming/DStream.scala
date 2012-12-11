@@ -372,9 +372,7 @@ extends Serializable with Logging {
     checkpointData.foreach {
       case(time, data) => {
         logInfo("Restoring checkpointed RDD for time " + time + " from file '" + data.toString + "'")
-        val rdd = ssc.sc.objectFile[T](data.toString)
-        // Set the checkpoint file name to identify this RDD as a checkpointed RDD by updateCheckpointData()
-        rdd.checkpointData.cpFile = Some(data.toString)
+        val rdd = ssc.sc.checkpointFile[T](data.toString)
         generatedRDDs += ((time, rdd))
       }
     }

@@ -57,7 +57,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(sc.objectFile[Int](parCollection.getCheckpointFile.get).collect() === result)
     assert(parCollection.dependencies != Nil)
     assert(parCollection.splits.length === numSplits)
-    assert(parCollection.splits.toList === parCollection.checkpointData.cpRDDSplits.toList)
+    assert(parCollection.splits.toList === parCollection.checkpointData.get.cpRDDSplits.toList)
     assert(parCollection.collect() === result)
   }
 
@@ -72,7 +72,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(sc.objectFile[String](blockRDD.getCheckpointFile.get).collect() === result)
     assert(blockRDD.dependencies != Nil)
     assert(blockRDD.splits.length === numSplits)
-    assert(blockRDD.splits.toList === blockRDD.checkpointData.cpRDDSplits.toList)
+    assert(blockRDD.splits.toList === blockRDD.checkpointData.get.cpRDDSplits.toList)
     assert(blockRDD.collect() === result)
   }
 
@@ -84,7 +84,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
   }
 
   test("UnionRDD") {
-    def otherRDD = sc.makeRDD(1 to 10, 4)
+    def otherRDD = sc.makeRDD(1 to 10, 1)
 
     // Test whether the size of UnionRDDSplits reduce in size after parent RDD is checkpointed.
     // Current implementation of UnionRDD has transient reference to parent RDDs,
@@ -191,7 +191,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(operatedRDD.dependencies.head.rdd != parentRDD)
     
     // Test whether the splits have been changed to the new Hadoop splits
-    assert(operatedRDD.splits.toList === operatedRDD.checkpointData.cpRDDSplits.toList)
+    assert(operatedRDD.splits.toList === operatedRDD.checkpointData.get.cpRDDSplits.toList)
 
     // Test whether the number of splits is same as before
     assert(operatedRDD.splits.length === numSplits)
@@ -289,8 +289,8 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
    */
   def generateLongLineageRDD(): RDD[Int] = {
     var rdd = sc.makeRDD(1 to 100, 4)
-    for (i <- 1 to 20) {
-      rdd = rdd.map(x => x)
+    for (i <- 1 to 50) {
+      rdd = rdd.map(x => x + 1)
     }
     rdd
   }

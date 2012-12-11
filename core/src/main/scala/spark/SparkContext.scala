@@ -366,6 +366,17 @@ class SparkContext(
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
 
+
+  protected[spark] def checkpointFile[T: ClassManifest](
+      path: String,
+      minSplits: Int = defaultMinSplits
+    ): RDD[T] = {
+    val rdd = objectFile[T](path, minSplits)
+    rdd.checkpointData = Some(new RDDCheckpointData(rdd))
+    rdd.checkpointData.get.cpFile = Some(path)
+    rdd
+  }
+
   /** Build the union of a list of RDDs. */
   def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
 
