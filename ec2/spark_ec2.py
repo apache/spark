@@ -511,6 +511,25 @@ def main():
         for inst in zoo_nodes:
           inst.terminate()
 
+      # Delete security groups as well
+      group_names = [cluster_name + "-master", cluster_name + "-slaves", cluster_name + "-zoo"]
+      groups = [g for g in conn.get_all_security_groups() if g.name in group_names]
+      # Delete individual rules in all groups before deleting groups to remove
+      # dependencies between them
+      for group in groups:
+        print "Deleting rules in security group " + group.name
+        for rule in group.rules:
+          for grant in rule.grants:
+              group.revoke(ip_protocol=rule.ip_protocol,
+                       from_port=rule.from_port,
+                       to_port=rule.to_port,
+                       src_group=grant)
+      # Sleep for AWS eventual-consistency to catch up
+      time.sleep(30)  # Yes, it does have to be this long :-(
+      for group in groups:
+        print "Deleting security group " + group.name
+        conn.delete_security_group(group.name)
+
   elif action == "login":
     (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(
         conn, opts, cluster_name)
