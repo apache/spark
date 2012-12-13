@@ -832,7 +832,10 @@ class BlockManager(
               diskStore.putBytes(blockId, bytes, level)
           }
         }
-        memoryStore.remove(blockId)
+        val blockWasRemoved = memoryStore.remove(blockId)
+        if (!blockWasRemoved) {
+          logWarning("Block " + blockId + " could not be dropped from memory as it does not exist")
+        }
         if (info.tellMaster) {
           reportBlockStatus(blockId)
         }
@@ -856,8 +859,12 @@ class BlockManager(
     val info = blockInfo.get(blockId)
     if (info != null) info.synchronized {
       // Removals are idempotent in disk store and memory store. At worst, we get a warning.
-      memoryStore.remove(blockId)
-      diskStore.remove(blockId)
+      val removedFromMemory = memoryStore.remove(blockId)
+      val removedFromDisk = diskStore.remove(blockId)
+      if (!removedFromMemory && !removedFromDisk) {
+        logWarning("Block " + blockId + " could not be removed as it was not found in either " +
+          "the disk or memory store")
+      }
       blockInfo.remove(blockId)
     } else {
       // The block has already been removed; do nothing.
