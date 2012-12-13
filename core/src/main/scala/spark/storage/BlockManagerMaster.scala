@@ -17,95 +17,24 @@ import spark.{Logging, SparkException, Utils}
 
 
 private[spark]
-sealed trait ToBlockManagerMaster
+case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
 
+
+// TODO(rxin): Move BlockManagerMasterActor to its own file.
 private[spark]
-case class RegisterBlockManager(
-    blockManagerId: BlockManagerId,
-    maxMemSize: Long)
-  extends ToBlockManagerMaster
-
-private[spark]
-case class HeartBeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
-
-private[spark]
-class BlockUpdate(
-    var blockManagerId: BlockManagerId,
-    var blockId: String,
-    var storageLevel: StorageLevel,
-    var memSize: Long,
-    var diskSize: Long)
-  extends ToBlockManagerMaster
-  with Externalizable {
-
-  def this() = this(null, null, null, 0, 0)  // For deserialization only
-
-  override def writeExternal(out: ObjectOutput) {
-    blockManagerId.writeExternal(out)
-    out.writeUTF(blockId)
-    storageLevel.writeExternal(out)
-    out.writeInt(memSize.toInt)
-    out.writeInt(diskSize.toInt)
-  }
-
-  override def readExternal(in: ObjectInput) {
-    blockManagerId = new BlockManagerId()
-    blockManagerId.readExternal(in)
-    blockId = in.readUTF()
-    storageLevel = new StorageLevel()
-    storageLevel.readExternal(in)
-    memSize = in.readInt()
-    diskSize = in.readInt()
-  }
-}
-
-private[spark]
-object BlockUpdate {
-  def apply(blockManagerId: BlockManagerId,
-      blockId: String,
-      storageLevel: StorageLevel,
-      memSize: Long,
-      diskSize: Long): BlockUpdate = {
-    new BlockUpdate(blockManagerId, blockId, storageLevel, memSize, diskSize)
-  }
-
-  // For pattern-matching
-  def unapply(h: BlockUpdate): Option[(BlockManagerId, String, StorageLevel, Long, Long)] = {
-    Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize))
-  }
-}
-
-private[spark]
-case class GetLocations(blockId: String) extends ToBlockManagerMaster
-
-private[spark]
-case class GetLocationsMultipleBlockIds(blockIds: Array[String]) extends ToBlockManagerMaster
-
-private[spark]
-case class GetPeers(blockManagerId: BlockManagerId, size: Int) extends ToBlockManagerMaster
-
-private[spark]
-case class RemoveHost(host: String) extends ToBlockManagerMaster
-
-private[spark]
-case object StopBlockManagerMaster extends ToBlockManagerMaster
-
-private[spark]
-case object GetMemoryStatus extends ToBlockManagerMaster
-
-private[spark]
-case object ExpireDeadHosts extends ToBlockManagerMaster
-
-
-private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
+class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
   class BlockManagerInfo(
       val blockManagerId: BlockManagerId,
       timeMs: Long,
-      val maxMem: Long) {
-    private var _lastSeenMs = timeMs
-    private var _remainingMem = maxMem
-    private val _blocks = new JHashMap[String, StorageLevel]
+      val maxMem: Long,
+      val slaveActor: ActorRef) {
+
+    private var _lastSeenMs: Long = timeMs
+    private var _remainingMem: Long = maxMem
+
+    // Mapping from block id to its status.
+    private val _blocks = new JHashMap[String, BlockStatus]
 
     logInfo("Registering block manager %s:%d with %s RAM".format(
       blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(maxMem)))
@@ -121,7 +50,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
       if (_blocks.containsKey(blockId)) {
         // The block exists on the slave already.
-        val originalLevel: StorageLevel = _blocks.get(blockId)
+        val originalLevel: StorageLevel = _blocks.get(blockId).storageLevel
 
         if (originalLevel.useMemory) {
           _remainingMem += memSize
@@ -130,7 +59,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
       if (storageLevel.isValid) {
         // isValid means it is either stored in-memory or on-disk.
-        _blocks.put(blockId, storageLevel)
+        _blocks.put(blockId, BlockStatus(storageLevel, memSize, diskSize))
         if (storageLevel.useMemory) {
           _remainingMem -= memSize
           logInfo("Added %s in memory on %s:%d (size: %s, free: %s)".format(
@@ -143,15 +72,15 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
         }
       } else if (_blocks.containsKey(blockId)) {
         // If isValid is not true, drop the block.
-        val originalLevel: StorageLevel = _blocks.get(blockId)
+        val blockStatus: BlockStatus = _blocks.get(blockId)
         _blocks.remove(blockId)
-        if (originalLevel.useMemory) {
-          _remainingMem += memSize
+        if (blockStatus.storageLevel.useMemory) {
+          _remainingMem += blockStatus.memSize
           logInfo("Removed %s on %s:%d in memory (size: %s, free: %s)".format(
             blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
             Utils.memoryBytesToString(_remainingMem)))
         }
-        if (originalLevel.useDisk) {
+        if (blockStatus.storageLevel.useDisk) {
           logInfo("Removed %s on %s:%d on disk (size: %s)".format(
             blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
         }
@@ -162,7 +91,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
     def lastSeenMs: Long = _lastSeenMs
 
-    def blocks: JHashMap[String, StorageLevel] = _blocks
+    def blocks: JHashMap[String, BlockStatus] = _blocks
 
     override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 
@@ -171,8 +100,13 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     }
   }
 
+  // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo = new HashMap[BlockManagerId, BlockManagerInfo]
+
+  // Mapping from host name to block manager id.
   private val blockManagerIdByHost = new HashMap[String, BlockManagerId]
+
+  // Mapping from block id to the set of block managers that have the block.
   private val blockInfo = new JHashMap[String, Pair[Int, HashSet[BlockManagerId]]]
 
   initLogging()
@@ -245,8 +179,8 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
   }
 
   def receive = {
-    case RegisterBlockManager(blockManagerId, maxMemSize) =>
-      register(blockManagerId, maxMemSize)
+    case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
+      register(blockManagerId, maxMemSize, slaveActor)
 
     case BlockUpdate(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
       blockUpdate(blockManagerId, blockId, storageLevel, deserializedSize, size)
@@ -263,6 +197,9 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
 
     case GetMemoryStatus =>
       getMemoryStatus
+
+    case RemoveBlock(blockId) =>
+      removeBlock(blockId)
 
     case RemoveHost(host) =>
       removeHost(host)
@@ -286,6 +223,27 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
       logInfo("Got unknown message: " + other)
   }
 
+  // Remove a block from the slaves that have it. This can only be used to remove
+  // blocks that the master knows about.
+  private def removeBlock(blockId: String) {
+    val block = blockInfo.get(blockId)
+    if (block != null) {
+      block._2.foreach { blockManagerId: BlockManagerId =>
+        val blockManager = blockManagerInfo.get(blockManagerId)
+        if (blockManager.isDefined) {
+          // Remove the block from the slave's BlockManager.
+          // Doesn't actually wait for a confirmation and the message might get lost.
+          // If message loss becomes frequent, we should add retry logic here.
+          blockManager.get.slaveActor ! RemoveBlock(blockId)
+          // Remove the block from the master's BlockManagerInfo.
+          blockManager.get.updateBlockInfo(blockId, StorageLevel.NONE, 0, 0)
+        }
+      }
+      blockInfo.remove(blockId)
+    }
+    sender ! true
+  }
+
   // Return a map from the block manager id to max memory and remaining memory.
   private def getMemoryStatus() {
     val res = blockManagerInfo.map { case(blockManagerId, info) =>
@@ -294,7 +252,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
     sender ! res
   }
 
-  private def register(blockManagerId: BlockManagerId, maxMemSize: Long) {
+  private def register(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " "
     logDebug("Got in register 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
@@ -309,7 +267,7 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
       logInfo("Got Register Msg from master node, don't register it")
     } else {
       blockManagerInfo += (blockManagerId -> new BlockManagerInfo(
-        blockManagerId, System.currentTimeMillis(), maxMemSize))
+        blockManagerId, System.currentTimeMillis(), maxMemSize, slaveActor))
     }
     blockManagerIdByHost += (blockManagerId.ip -> blockManagerId)
     logDebug("Got in register 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
@@ -442,25 +400,29 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
   }
 }
 
-private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Boolean, isLocal: Boolean)
+
+private[spark] class BlockManagerMaster(
+    val actorSystem: ActorSystem,
+    isMaster: Boolean,
+    isLocal: Boolean,
+    masterIp: String,
+    masterPort: Int)
   extends Logging {
 
-  val AKKA_ACTOR_NAME: String = "BlockMasterManager"
+  val MASTER_AKKA_ACTOR_NAME = "BlockMasterManager"
+  val SLAVE_AKKA_ACTOR_NAME = "BlockSlaveManager"
   val REQUEST_RETRY_INTERVAL_MS = 100
-  val DEFAULT_MASTER_IP: String = System.getProperty("spark.master.host", "localhost")
-  val DEFAULT_MASTER_PORT: Int = System.getProperty("spark.master.port", "7077").toInt
   val DEFAULT_MANAGER_IP: String = Utils.localHostName()
 
   val timeout = 10.seconds
   var masterActor: ActorRef = null
 
   if (isMaster) {
-    masterActor = actorSystem.actorOf(
-      Props(new BlockManagerMasterActor(isLocal)), name = AKKA_ACTOR_NAME)
+    masterActor = actorSystem.actorOf(Props(new BlockManagerMasterActor(isLocal)),
+      name = MASTER_AKKA_ACTOR_NAME)
     logInfo("Registered BlockManagerMaster Actor")
   } else {
-    val url = "akka://spark@%s:%s/user/%s".format(
-      DEFAULT_MASTER_IP, DEFAULT_MASTER_PORT, AKKA_ACTOR_NAME)
+    val url = "akka://spark@%s:%s/user/%s".format(masterIp, masterPort, MASTER_AKKA_ACTOR_NAME)
     logInfo("Connecting to BlockManagerMaster: " + url)
     masterActor = actorSystem.actorFor(url)
   }
@@ -497,7 +459,9 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
     logInfo("Removed " + host + " successfully in notifyADeadHost")
   }
 
-  def mustRegisterBlockManager(msg: RegisterBlockManager) {
+  def mustRegisterBlockManager(
+    blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+    val msg = RegisterBlockManager(blockManagerId, maxMemSize, slaveActor)
     logInfo("Trying to register BlockManager")
     while (! syncRegisterBlockManager(msg)) {
       logWarning("Failed to register " + msg)
@@ -506,7 +470,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
     logInfo("Done registering BlockManager")
   }
 
-  def syncRegisterBlockManager(msg: RegisterBlockManager): Boolean = {
+  private def syncRegisterBlockManager(msg: RegisterBlockManager): Boolean = {
     //val masterActor = RemoteActor.select(node, name)
     val startTimeMs = System.currentTimeMillis()
     val tmp = " msg " + msg + " "
@@ -533,7 +497,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
     return res.get
   }
 
-  def syncHeartBeat(msg: HeartBeat): Option[Boolean] = {
+  private def syncHeartBeat(msg: HeartBeat): Option[Boolean] = {
     try {
       val answer = askMaster(msg).asInstanceOf[Boolean]
       return Some(answer)
@@ -553,7 +517,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
     return res.get
   }
 
-  def syncBlockUpdate(msg: BlockUpdate): Option[Boolean] = {
+  private def syncBlockUpdate(msg: BlockUpdate): Option[Boolean] = {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " msg " + msg + " "
     logDebug("Got in syncBlockUpdate " + tmp + " 0 " + Utils.getUsedTimeMs(startTimeMs))
@@ -580,7 +544,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
     return res
   }
 
-  def syncGetLocations(msg: GetLocations): Seq[BlockManagerId] = {
+  private def syncGetLocations(msg: GetLocations): Seq[BlockManagerId] = {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " msg " + msg + " "
     logDebug("Got in syncGetLocations 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
@@ -603,7 +567,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
   }
 
   def mustGetLocationsMultipleBlockIds(msg: GetLocationsMultipleBlockIds):
-       Seq[Seq[BlockManagerId]] = {
+      Seq[Seq[BlockManagerId]] = {
     var res: Seq[Seq[BlockManagerId]] = syncGetLocationsMultipleBlockIds(msg)
     while (res == null) {
       logWarning("Failed to GetLocationsMultipleBlockIds " + msg)
@@ -613,7 +577,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
     return res
   }
 
-  def syncGetLocationsMultipleBlockIds(msg: GetLocationsMultipleBlockIds):
+  private def syncGetLocationsMultipleBlockIds(msg: GetLocationsMultipleBlockIds):
       Seq[Seq[BlockManagerId]] = {
     val startTimeMs = System.currentTimeMillis
     val tmp = " msg " + msg + " "
@@ -644,11 +608,10 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
       Thread.sleep(REQUEST_RETRY_INTERVAL_MS)
       res = syncGetPeers(msg)
     }
-
-    return res
+    res
   }
 
-  def syncGetPeers(msg: GetPeers): Seq[BlockManagerId] = {
+  private def syncGetPeers(msg: GetPeers): Seq[BlockManagerId] = {
     val startTimeMs = System.currentTimeMillis
     val tmp = " msg " + msg + " "
     logDebug("Got in syncGetPeers 0 " + tmp + Utils.getUsedTimeMs(startTimeMs))
@@ -670,6 +633,20 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
     }
   }
 
+  /**
+   * Remove a block from the slaves that have it. This can only be used to remove
+   * blocks that the master knows about.
+   */
+  def removeBlock(blockId: String) {
+    askMaster(RemoveBlock(blockId))
+  }
+
+  /**
+   * Return the memory status for each block manager, in the form of a map from
+   * the block manager's id to two long values. The first value is the maximum
+   * amount of memory allocated for the block manager, while the second is the
+   * amount of remaining memory.
+   */
   def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
     askMaster(GetMemoryStatus).asInstanceOf[Map[BlockManagerId, (Long, Long)]]
   }

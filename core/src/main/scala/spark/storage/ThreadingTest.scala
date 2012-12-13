@@ -58,8 +58,10 @@ private[spark] object ThreadingTest {
         val startTime = System.currentTimeMillis()
         manager.get(blockId) match {
           case Some(retrievedBlock) =>
-            assert(retrievedBlock.toList.asInstanceOf[List[Int]] == block.toList, "Block " + blockId + " did not match")
-            println("Got block " + blockId + " in " + (System.currentTimeMillis - startTime) + " ms")
+            assert(retrievedBlock.toList.asInstanceOf[List[Int]] == block.toList,
+              "Block " + blockId + " did not match")
+            println("Got block " + blockId + " in " +
+              (System.currentTimeMillis - startTime) + " ms")
           case None =>
             assert(false, "Block " + blockId + " could not be retrieved")
         }
@@ -73,7 +75,9 @@ private[spark] object ThreadingTest {
     System.setProperty("spark.kryoserializer.buffer.mb", "1")
     val actorSystem = ActorSystem("test")
     val serializer = new KryoSerializer
-    val blockManagerMaster = new BlockManagerMaster(actorSystem, true, true)
+    val masterIp: String = System.getProperty("spark.master.host", "localhost")
+    val masterPort: Int = System.getProperty("spark.master.port", "7077").toInt
+    val blockManagerMaster = new BlockManagerMaster(actorSystem, true, true, masterIp, masterPort)
     val blockManager = new BlockManager(actorSystem, blockManagerMaster, serializer, 1024 * 1024)
     val producers = (1 to numProducers).map(i => new ProducerThread(blockManager, i))
     val consumers = producers.map(p => new ConsumerThread(blockManager, p.queue))
@@ -86,6 +90,7 @@ private[spark] object ThreadingTest {
     actorSystem.shutdown()
     actorSystem.awaitTermination()
     println("Everything stopped.")
-    println("It will take sometime for the JVM to clean all temporary files and shutdown. Sit tight.")
+    println(
+      "It will take sometime for the JVM to clean all temporary files and shutdown. Sit tight.")
   }
 }

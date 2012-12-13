@@ -1,59 +1,39 @@
 package spark.storage
 
-import akka.actor.{ActorSystem, Cancellable}
-import akka.dispatch.{Await, Future}
-import akka.util.Duration
-import akka.util.duration._
-
-import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
-
-import java.io.{InputStream, OutputStream, Externalizable, ObjectInput, ObjectOutput}
-import java.nio.{MappedByteBuffer, ByteBuffer}
+import java.io.{InputStream, OutputStream}
+import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConversions._
 
+import akka.actor.{ActorSystem, Cancellable, Props}
+import akka.dispatch.{Await, Future}
+import akka.util.Duration
+import akka.util.duration._
+
+import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+
+import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
 import spark.{CacheTracker, Logging, SizeEstimator, SparkEnv, SparkException, Utils}
 import spark.network._
 import spark.serializer.Serializer
-import spark.util.ByteBufferInputStream
-import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+import spark.util.{ByteBufferInputStream, GenerationIdUtil}
+
 import sun.nio.ch.DirectBuffer
 
-
-private[spark] class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
-  def this() = this(null, 0)  // For deserialization only
-
-  def this(in: ObjectInput) = this(in.readUTF(), in.readInt())
-
-  override def writeExternal(out: ObjectOutput) {
-    out.writeUTF(ip)
-    out.writeInt(port)
-  }
-
-  override def readExternal(in: ObjectInput) {
-    ip = in.readUTF()
-    port = in.readInt()
-  }
-
-  override def toString = "BlockManagerId(" + ip + ", " + port + ")"
-
-  override def hashCode = ip.hashCode * 41 + port
-
-  override def equals(that: Any) = that match {
-    case id: BlockManagerId => port == id.port && ip == id.ip
-    case _ => false
-  }
-}
 
 private[spark]
 case class BlockException(blockId: String, message: String, ex: Exception = null)
 extends Exception(message)
 
 private[spark]
-class BlockManager(actorSystem: ActorSystem, val master: BlockManagerMaster,
-                   val serializer: Serializer, maxMemory: Long)
+class BlockManager(
+    actorSystem: ActorSystem,
+    val master: BlockManagerMaster,
+    val serializer: Serializer,
+    maxMemory: Long)
   extends Logging {
 
   class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
@@ -110,6 +90,9 @@ class BlockManager(actorSystem: ActorSystem, val master: BlockManagerMaster,
 
   val host = System.getProperty("spark.hostname", Utils.localHostName())
 
+  val slaveActor = master.actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
+    name = "BlockManagerActor" + GenerationIdUtil.BLOCK_MANAGER.next)
+
   @volatile private var shuttingDown = false
 
   private def heartBeat() {
@@ -134,8 +117,7 @@ class BlockManager(actorSystem: ActorSystem, val master: BlockManagerMaster,
    * BlockManagerWorker actor.
    */
   private def initialize() {
-    master.mustRegisterBlockManager(
-      RegisterBlockManager(blockManagerId, maxMemory))
+    master.mustRegisterBlockManager(blockManagerId, maxMemory, slaveActor)
     BlockManagerWorker.startBlockManagerWorker(this)
     if (!BlockManager.getDisableHeartBeatsForTesting) {
       heartBeatTask = actorSystem.scheduler.schedule(0.seconds, heartBeatFrequency.milliseconds) {
@@ -171,8 +153,7 @@ class BlockManager(actorSystem: ActorSystem, val master: BlockManagerMaster,
   def reregister() {
     // TODO: We might need to rate limit reregistering.
     logInfo("BlockManager reregistering with master")
-    master.mustRegisterBlockManager(
-      RegisterBlockManager(blockManagerId, maxMemory))
+    master.mustRegisterBlockManager(blockManagerId, maxMemory, slaveActor)
     reportAllBlocks()
   }
 
@@ -865,6 +846,25 @@ class BlockManager(actorSystem: ActorSystem, val master: BlockManagerMaster,
     }
   }
 
+  /**
+   * Remove a block from both memory and disk. This one doesn't report to the master
+   * because it expects the master to initiate the original block removal command, and
+   * then the master can update the block tracking itself.
+   */
+  def removeBlock(blockId: String) {
+    logInfo("Removing block " + blockId)
+    val info = blockInfo.get(blockId)
+    if (info != null) info.synchronized {
+      // Removals are idempotent in disk store and memory store. At worst, we get a warning.
+      memoryStore.remove(blockId)
+      diskStore.remove(blockId)
+      blockInfo.remove(blockId)
+    } else {
+      // The block has already been removed; do nothing.
+      logWarning("Block " + blockId + " does not exist.")
+    }
+  }
+
   def shouldCompress(blockId: String): Boolean = {
     if (blockId.startsWith("shuffle_")) {
       compressShuffle
@@ -914,6 +914,7 @@ class BlockManager(actorSystem: ActorSystem, val master: BlockManagerMaster,
       heartBeatTask.cancel()
     }
     connectionManager.stop()
+    master.actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
