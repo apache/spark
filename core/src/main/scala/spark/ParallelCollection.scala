@@ -8,8 +8,8 @@ private[spark] class ParallelCollectionSplit[T: ClassManifest](
     val slice: Int,
     values: Seq[T])
   extends Split with Serializable {
-  
-  def iterator(): Iterator[T] = values.iterator
+
+  def iterator: Iterator[T] = values.iterator
 
   override def hashCode(): Int = (41 * (41 + rddId) + slice).toInt
 
@@ -22,7 +22,7 @@ private[spark] class ParallelCollectionSplit[T: ClassManifest](
 }
 
 private[spark] class ParallelCollection[T: ClassManifest](
-    sc: SparkContext, 
+    sc: SparkContext,
     @transient data: Seq[T],
     numSlices: Int)
   extends RDD[T](sc) {
@@ -38,17 +38,18 @@ private[spark] class ParallelCollection[T: ClassManifest](
 
   override def splits = splits_.asInstanceOf[Array[Split]]
 
-  override def compute(s: Split) = s.asInstanceOf[ParallelCollectionSplit[T]].iterator
-  
+  override def compute(s: Split, taskContext: TaskContext) =
+    s.asInstanceOf[ParallelCollectionSplit[T]].iterator
+
   override def preferredLocations(s: Split): Seq[String] = Nil
-  
+
   override val dependencies: List[Dependency[_]] = Nil
 }
 
 private object ParallelCollection {
   /**
    * Slice a collection into numSlices sub-collections. One extra thing we do here is to treat Range
-   * collections specially, encoding the slices as other Ranges to minimize memory cost. This makes 
+   * collections specially, encoding the slices as other Ranges to minimize memory cost. This makes
    * it efficient to run Spark over RDDs representing large sets of numbers.
    */
   def slice[T: ClassManifest](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
@@ -58,7 +59,7 @@ private object ParallelCollection {
     seq match {
       case r: Range.Inclusive => {
         val sign = if (r.step < 0) {
-          -1 
+          -1
         } else {
           1
         }

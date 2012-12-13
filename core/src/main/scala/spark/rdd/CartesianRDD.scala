@@ -1,9 +1,7 @@
 package spark.rdd
 
-import spark.NarrowDependency
-import spark.RDD
-import spark.SparkContext
-import spark.Split
+import spark.{NarrowDependency, RDD, SparkContext, Split, TaskContext}
+
 
 private[spark]
 class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with Serializable {
@@ -17,9 +15,9 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     rdd2: RDD[U])
   extends RDD[Pair[T, U]](sc)
   with Serializable {
-  
+
   val numSplitsInRdd2 = rdd2.splits.size
-  
+
   @transient
   val splits_ = {
     // create the cross product split
@@ -38,11 +36,12 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
   }
 
-  override def compute(split: Split) = {
+  override def compute(split: Split, taskContext: TaskContext) = {
     val currSplit = split.asInstanceOf[CartesianSplit]
-    for (x <- rdd1.iterator(currSplit.s1); y <- rdd2.iterator(currSplit.s2)) yield (x, y)
+    for (x <- rdd1.iterator(currSplit.s1, taskContext);
+      y <- rdd2.iterator(currSplit.s2, taskContext)) yield (x, y)
   }
-  
+
   override val dependencies = List(
     new NarrowDependency(rdd1) {
       def getParents(id: Int): Seq[Int] = List(id / numSplitsInRdd2)

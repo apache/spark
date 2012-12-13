@@ -81,7 +81,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   def splits: Array[Split]
 
   /** Function for computing a given partition. */
-  def compute(split: Split): Iterator[T]
+  def compute(split: Split, taskContext: TaskContext): Iterator[T]
 
   /** How this RDD depends on any parent RDDs. */
   @transient val dependencies: List[Dependency[_]]
@@ -155,11 +155,11 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
    * This should ''not'' be called by users directly, but is available for implementors of custom
    * subclasses of RDD.
    */
-  final def iterator(split: Split): Iterator[T] = {
+  final def iterator(split: Split, taskContext: TaskContext): Iterator[T] = {
     if (storageLevel != StorageLevel.NONE) {
-      SparkEnv.get.cacheTracker.getOrCompute[T](this, split, storageLevel)
+      SparkEnv.get.cacheTracker.getOrCompute[T](this, split, taskContext, storageLevel)
     } else {
-      compute(split)
+      compute(split, taskContext)
     }
   }
 

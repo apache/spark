@@ -15,19 +15,16 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
-import spark.Dependency
-import spark.RDD
-import spark.SerializableWritable
-import spark.SparkContext
-import spark.Split
+import spark.{Dependency, RDD, SerializableWritable, SparkContext, Split, TaskContext}
 
-/** 
+
+/**
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
 private[spark] class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
   extends Split
   with Serializable {
-  
+
   val inputSplit = new SerializableWritable[InputSplit](s)
 
   override def hashCode(): Int = (41 * (41 + rddId) + idx).toInt
@@ -47,10 +44,10 @@ class HadoopRDD[K, V](
     valueClass: Class[V],
     minSplits: Int)
   extends RDD[(K, V)](sc) {
-  
+
   // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it
   val confBroadcast = sc.broadcast(new SerializableWritable(conf))
-  
+
   @transient
   val splits_ : Array[Split] = {
     val inputFormat = createInputFormat(conf)
@@ -69,13 +66,16 @@ class HadoopRDD[K, V](
 
   override def splits = splits_
 
-  override def compute(theSplit: Split) = new Iterator[(K, V)] {
+  override def compute(theSplit: Split, taskContext: TaskContext) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[HadoopSplit]
     var reader: RecordReader[K, V] = null
 
     val conf = confBroadcast.value.value
     val fmt = createInputFormat(conf)
     reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
+
+    // Register an on-task-completion callback to close the input stream.
+    taskContext.registerOnCompleteCallback(Unit => reader.close())
 
     val key: K = reader.createKey()
     val value: V = reader.createValue()
@@ -115,6 +115,6 @@ class HadoopRDD[K, V](
     val hadoopSplit = split.asInstanceOf[HadoopSplit]
     hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")
   }
-  
+
   override val dependencies: List[Dependency[_]] = Nil
 }

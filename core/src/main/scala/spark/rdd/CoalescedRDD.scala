@@ -1,8 +1,7 @@
 package spark.rdd
 
-import spark.NarrowDependency
-import spark.RDD
-import spark.Split
+import spark.{NarrowDependency, RDD, Split, TaskContext}
+
 
 private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) extends Split
 
@@ -32,9 +31,9 @@ class CoalescedRDD[T: ClassManifest](prev: RDD[T], maxPartitions: Int)
 
   override def splits = splits_
 
-  override def compute(split: Split): Iterator[T] = {
+  override def compute(split: Split, taskContext: TaskContext): Iterator[T] = {
     split.asInstanceOf[CoalescedRDDSplit].parents.iterator.flatMap {
-      parentSplit => prev.iterator(parentSplit)
+      parentSplit => prev.iterator(parentSplit, taskContext)
     }
   }
 
