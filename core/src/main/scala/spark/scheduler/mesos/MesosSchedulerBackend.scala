@@ -267,17 +267,23 @@ private[spark] class MesosSchedulerBackend(
 
   override def frameworkMessage(d: SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
 
-  override def slaveLost(d: SchedulerDriver, slaveId: SlaveID) {
+  private def recordSlaveLost(d: SchedulerDriver, slaveId: SlaveID, reason: ExecutorLostReason) {
     logInfo("Mesos slave lost: " + slaveId.getValue)
     synchronized {
       slaveIdsWithExecutors -= slaveId.getValue
     }
-    scheduler.slaveLost(slaveId.getValue)
+    scheduler.slaveLost(slaveId.getValue, reason)
   }
 
-  override def executorLost(d: SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int) {
-    logInfo("Executor lost: %s, marking slave %s as lost".format(e.getValue, s.getValue))
-    slaveLost(d, s)
+  override def slaveLost(d: SchedulerDriver, slaveId: SlaveID) {
+    recordSlaveLost(d, slaveId, SlaveLost())
+  }
+
+  override def executorLost(d: SchedulerDriver, executorId: ExecutorID,
+                            slaveId: SlaveID, status: Int) {
+    logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
+                                                                 slaveId.getValue))
+    recordSlaveLost(d, slaveId, ExecutorExited(status))
   }
 
   // TODO: query Mesos for number of cores

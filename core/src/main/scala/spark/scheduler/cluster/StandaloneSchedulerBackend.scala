@@ -109,7 +109,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
       freeCores -= slaveId
       slaveHost -= slaveId
       totalCoreCount.addAndGet(-numCores)
-      scheduler.slaveLost(slaveId)
+      scheduler.slaveLost(slaveId, SlaveLost())
     }
   }
 

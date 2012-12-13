@@ -249,7 +249,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
   }
 
-  def slaveLost(slaveId: String) {
+  def slaveLost(slaveId: String, reason: ExecutorLostReason) {
     var failedHost: Option[String] = None
     synchronized {
       val host = slaveIdToHost(slaveId)
@@ -261,6 +261,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       }
     }
     if (failedHost != None) {
+      logError("Lost an executor on " + failedHost.get + ": " + reason)
       listener.hostLost(failedHost.get)
       backend.reviveOffers()
     }

@@ -72,11 +72,19 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   def executorRemoved(id: String, message: String) {
+    var reason: ExecutorLostReason = SlaveLost(message)
+    if (message.startsWith("Command exited with code ")) {
+      try {
+        reason = ExecutorExited(message.substring("Command exited with code ".length).toInt)
+      } catch {
+        case nfe: NumberFormatException => {}
+      }
+    }
     logInfo("Executor %s removed: %s".format(id, message))
     executorIdToSlaveId.get(id) match {
       case Some(slaveId) => 
         executorIdToSlaveId.remove(id)
-        scheduler.slaveLost(slaveId)
+        scheduler.slaveLost(slaveId, reason)
       case None =>
         logInfo("No slave ID known for executor %s".format(id))
     }
