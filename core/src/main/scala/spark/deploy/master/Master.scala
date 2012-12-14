@@ -83,12 +83,12 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       schedule()
     }
 
-    case ExecutorStateChanged(jobId, execId, state, message) => {
+    case ExecutorStateChanged(jobId, execId, state, message, exitStatus) => {
       val execOption = idToJob.get(jobId).flatMap(job => job.executors.get(execId))
       execOption match {
         case Some(exec) => {
           exec.state = state
-          exec.job.actor ! ExecutorUpdated(execId, state, message)
+          exec.job.actor ! ExecutorUpdated(execId, state, message, exitStatus)
           if (ExecutorState.isFinished(state)) {
             val jobInfo = idToJob(jobId)
             // Remove this executor from the worker and job
@@ -218,7 +218,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     actorToWorker -= worker.actor
     addressToWorker -= worker.actor.path.address
     for (exec <- worker.executors.values) {
-      exec.job.actor ! ExecutorStateChanged(exec.job.id, exec.id, ExecutorState.LOST, None)
+      exec.job.actor ! ExecutorStateChanged(exec.job.id, exec.id, ExecutorState.LOST, None, None)
       exec.job.executors -= exec.id
     }
   }

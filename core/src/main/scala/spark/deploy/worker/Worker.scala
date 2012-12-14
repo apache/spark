@@ -127,10 +127,10 @@ private[spark] class Worker(
       manager.start()
       coresUsed += cores_
       memoryUsed += memory_
-      master ! ExecutorStateChanged(jobId, execId, ExecutorState.RUNNING, None)
+      master ! ExecutorStateChanged(jobId, execId, ExecutorState.RUNNING, None, None)
 
-    case ExecutorStateChanged(jobId, execId, state, message) =>
-      master ! ExecutorStateChanged(jobId, execId, state, message)
+    case ExecutorStateChanged(jobId, execId, state, message, exitStatus) =>
+      master ! ExecutorStateChanged(jobId, execId, state, message, exitStatus)
       val fullId = jobId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         val executor = executors(fullId)
