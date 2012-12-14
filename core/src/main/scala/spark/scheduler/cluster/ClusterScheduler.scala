@@ -249,7 +249,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
   }
 
-  def slaveLost(slaveId: String, reason: ExecutorLostReason) {
+  def slaveLost(slaveId: String, reason: ExecutorLossReason) {
     var failedHost: Option[String] = None
     synchronized {
       val host = slaveIdToHost(slaveId)

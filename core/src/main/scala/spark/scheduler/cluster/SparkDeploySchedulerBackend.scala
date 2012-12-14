@@ -72,7 +72,7 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   def executorRemoved(id: String, message: String) {
-    var reason: ExecutorLostReason = SlaveLost(message)
+    var reason: ExecutorLossReason = SlaveLost(message)
     if (message.startsWith("Command exited with code ")) {
       try {
         reason = ExecutorExited(message.substring("Command exited with code ".length).toInt)

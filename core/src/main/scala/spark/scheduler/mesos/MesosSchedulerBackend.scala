@@ -267,7 +267,7 @@ private[spark] class MesosSchedulerBackend(
 
   override def frameworkMessage(d: SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
 
-  private def recordSlaveLost(d: SchedulerDriver, slaveId: SlaveID, reason: ExecutorLostReason) {
+  private def recordSlaveLost(d: SchedulerDriver, slaveId: SlaveID, reason: ExecutorLossReason) {
     logInfo("Mesos slave lost: " + slaveId.getValue)
     synchronized {
       slaveIdsWithExecutors -= slaveId.getValue
