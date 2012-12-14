@@ -53,17 +53,18 @@ class NewHadoopRDD[K, V](
 
   override def splits = splits_
 
-  override def compute(theSplit: Split, taskContext: TaskContext) = new Iterator[(K, V)] {
+  override def compute(theSplit: Split, context: TaskContext) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[NewHadoopSplit]
     val conf = confBroadcast.value.value
     val attemptId = new TaskAttemptID(jobtrackerId, id, true, split.index, 0)
-    val context = newTaskAttemptContext(conf, attemptId)
+    val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
     val format = inputFormatClass.newInstance
-    val reader = format.createRecordReader(split.serializableHadoopSplit.value, context)
-    reader.initialize(split.serializableHadoopSplit.value, context)
+    val reader = format.createRecordReader(
+      split.serializableHadoopSplit.value, hadoopAttemptContext)
+    reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
     // Register an on-task-completion callback to close the input stream.
-    taskContext.registerOnCompleteCallback(Unit => reader.close())
+    context.addOnCompleteCallback(() => reader.close())
 
     var havePair = false
     var finished = false

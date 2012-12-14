@@ -7,6 +7,5 @@ private[spark]
 class FilteredRDD[T: ClassManifest](prev: RDD[T], f: T => Boolean) extends RDD[T](prev.context) {
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split, taskContext: TaskContext) =
-    prev.iterator(split, taskContext).filter(f)
+  override def compute(split: Split, context: TaskContext) = prev.iterator(split, context).filter(f)
 }

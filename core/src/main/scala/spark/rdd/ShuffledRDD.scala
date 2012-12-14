@@ -31,7 +31,7 @@ class ShuffledRDD[K, V](
   val dep = new ShuffleDependency(parent, part)
   override val dependencies = List(dep)
 
-  override def compute(split: Split, taskContext: TaskContext): Iterator[(K, V)] = {
+  override def compute(split: Split, context: TaskContext): Iterator[(K, V)] = {
     SparkEnv.get.shuffleFetcher.fetch[K, V](dep.shuffleId, split.index)
   }
 }

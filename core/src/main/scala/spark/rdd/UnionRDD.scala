@@ -12,7 +12,7 @@ private[spark] class UnionSplit[T: ClassManifest](
   extends Split
   with Serializable {
 
-  def iterator(taskContext: TaskContext) = rdd.iterator(split, taskContext)
+  def iterator(context: TaskContext) = rdd.iterator(split, context)
   def preferredLocations() = rdd.preferredLocations(split)
   override val index: Int = idx
 }
@@ -47,8 +47,8 @@ class UnionRDD[T: ClassManifest](
     deps.toList
   }
 
-  override def compute(s: Split, taskContext: TaskContext): Iterator[T] =
-    s.asInstanceOf[UnionSplit[T]].iterator(taskContext)
+  override def compute(s: Split, context: TaskContext): Iterator[T] =
+    s.asInstanceOf[UnionSplit[T]].iterator(context)
 
   override def preferredLocations(s: Split): Seq[String] =
     s.asInstanceOf[UnionSplit[T]].preferredLocations()

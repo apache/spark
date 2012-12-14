@@ -12,8 +12,8 @@ private[spark] class ZippedSplit[T: ClassManifest, U: ClassManifest](
   extends Split
   with Serializable {
 
-  def iterator(taskContext: TaskContext): Iterator[(T, U)] =
-    rdd1.iterator(split1, taskContext).zip(rdd2.iterator(split2, taskContext))
+  def iterator(context: TaskContext): Iterator[(T, U)] =
+    rdd1.iterator(split1, context).zip(rdd2.iterator(split2, context))
 
   def preferredLocations(): Seq[String] =
     rdd1.preferredLocations(split1).intersect(rdd2.preferredLocations(split2))
@@ -45,8 +45,8 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
   @transient
   override val dependencies = List(new OneToOneDependency(rdd1), new OneToOneDependency(rdd2))
 
-  override def compute(s: Split, taskContext: TaskContext): Iterator[(T, U)] =
-    s.asInstanceOf[ZippedSplit[T, U]].iterator(taskContext)
+  override def compute(s: Split, context: TaskContext): Iterator[(T, U)] =
+    s.asInstanceOf[ZippedSplit[T, U]].iterator(context)
 
   override def preferredLocations(s: Split): Seq[String] =
     s.asInstanceOf[ZippedSplit[T, U]].preferredLocations()

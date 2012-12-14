@@ -66,7 +66,7 @@ class HadoopRDD[K, V](
 
   override def splits = splits_
 
-  override def compute(theSplit: Split, taskContext: TaskContext) = new Iterator[(K, V)] {
+  override def compute(theSplit: Split, context: TaskContext) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[HadoopSplit]
     var reader: RecordReader[K, V] = null
 
@@ -75,7 +75,7 @@ class HadoopRDD[K, V](
     reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 
     // Register an on-task-completion callback to close the input stream.
-    taskContext.registerOnCompleteCallback(Unit => reader.close())
+    context.addOnCompleteCallback(() => reader.close())
 
     val key: K = reader.createKey()
     val value: V = reader.createValue()

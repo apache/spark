@@ -11,6 +11,6 @@ class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
 
-  override def compute(split: Split, taskContext: TaskContext) =
-    prev.iterator(split, taskContext).flatMap(f)
+  override def compute(split: Split, context: TaskContext) =
+    prev.iterator(split, context).flatMap(f)
 }

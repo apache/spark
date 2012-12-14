@@ -32,13 +32,13 @@ class SampledRDD[T: ClassManifest](
   override def preferredLocations(split: Split) =
     prev.preferredLocations(split.asInstanceOf[SampledRDDSplit].prev)
 
-  override def compute(splitIn: Split, taskContext: TaskContext) = {
+  override def compute(splitIn: Split, context: TaskContext) = {
     val split = splitIn.asInstanceOf[SampledRDDSplit]
     if (withReplacement) {
       // For large datasets, the expected number of occurrences of each element in a sample with
       // replacement is Poisson(frac). We use that to get a count for each element.
       val poisson = new Poisson(frac, new DRand(split.seed))
-      prev.iterator(split.prev, taskContext).flatMap { element =>
+      prev.iterator(split.prev, context).flatMap { element =>
         val count = poisson.nextInt()
         if (count == 0) {
           Iterator.empty  // Avoid object allocation when we return 0 items, which is quite often
@@ -48,7 +48,7 @@ class SampledRDD[T: ClassManifest](
       }
     } else { // Sampling without replacement
       val rand = new Random(split.seed)
-      prev.iterator(split.prev, taskContext).filter(x => (rand.nextDouble <= frac))
+      prev.iterator(split.prev, context).filter(x => (rand.nextDouble <= frac))
     }
   }
 }

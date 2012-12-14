@@ -31,9 +31,9 @@ class CoalescedRDD[T: ClassManifest](prev: RDD[T], maxPartitions: Int)
 
   override def splits = splits_
 
-  override def compute(split: Split, taskContext: TaskContext): Iterator[T] = {
+  override def compute(split: Split, context: TaskContext): Iterator[T] = {
     split.asInstanceOf[CoalescedRDDSplit].parents.iterator.flatMap {
-      parentSplit => prev.iterator(parentSplit, taskContext)
+      parentSplit => prev.iterator(parentSplit, context)
     }
   }
 

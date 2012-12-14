@@ -14,6 +14,5 @@ class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
 
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split, taskContext: TaskContext) =
-    f(prev.iterator(split, taskContext))
+  override def compute(split: Split, context: TaskContext) = f(prev.iterator(split, context))
 }

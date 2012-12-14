@@ -29,7 +29,7 @@ class PipedRDD[T: ClassManifest](
 
   override val dependencies = List(new OneToOneDependency(parent))
 
-  override def compute(split: Split, taskContext: TaskContext): Iterator[String] = {
+  override def compute(split: Split, context: TaskContext): Iterator[String] = {
     val pb = new ProcessBuilder(command)
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
@@ -52,7 +52,7 @@ class PipedRDD[T: ClassManifest](
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
-        for (elem <- parent.iterator(split, taskContext)) {
+        for (elem <- parent.iterator(split, context)) {
           out.println(elem)
         }
         out.close()

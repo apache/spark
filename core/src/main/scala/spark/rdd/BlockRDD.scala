@@ -28,7 +28,7 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
 
   override def splits = splits_
 
-  override def compute(split: Split, taskContext: TaskContext): Iterator[T] = {
+  override def compute(split: Split, context: TaskContext): Iterator[T] = {
     val blockManager = SparkEnv.get.blockManager
     val blockId = split.asInstanceOf[BlockRDDSplit].blockId
     blockManager.get(blockId) match {
