@@ -34,7 +34,7 @@ private[spark]
 case class HeartBeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
 private[spark]
-class BlockUpdate(
+class UpdateBlockInfo(
     var blockManagerId: BlockManagerId,
     var blockId: String,
     var storageLevel: StorageLevel,
@@ -65,17 +65,17 @@ class BlockUpdate(
 }
 
 private[spark]
-object BlockUpdate {
+object UpdateBlockInfo {
   def apply(blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long): BlockUpdate = {
-    new BlockUpdate(blockManagerId, blockId, storageLevel, memSize, diskSize)
+      diskSize: Long): UpdateBlockInfo = {
+    new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize)
   }
 
   // For pattern-matching
-  def unapply(h: BlockUpdate): Option[(BlockManagerId, String, StorageLevel, Long, Long)] = {
+  def unapply(h: UpdateBlockInfo): Option[(BlockManagerId, String, StorageLevel, Long, Long)] = {
     Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize))
   }
 }

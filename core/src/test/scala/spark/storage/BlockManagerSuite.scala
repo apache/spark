@@ -22,6 +22,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   var oldHeartBeat: String = null
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
+  System.setProperty("spark.kryoserializer.buffer.mb", "1")
   val serializer = new KryoSerializer
 
   before {
@@ -63,7 +64,33 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     }
   }
 
-  test("manager-master interaction") {
+  test("StorageLevel object caching") {
+    val level1 = new StorageLevel(false, false, false, 3)
+    val level2 = new StorageLevel(false, false, false, 3)
+    val bytes1 = spark.Utils.serialize(level1)
+    val level1_ = spark.Utils.deserialize[StorageLevel](bytes1)
+    val bytes2 = spark.Utils.serialize(level2)
+    val level2_ = spark.Utils.deserialize[StorageLevel](bytes2)
+    assert(level1_ === level1, "Deserialized level1 not same as original level1")
+    assert(level2_ === level2, "Deserialized level2 not same as original level1")
+    assert(level1_ === level2_, "Deserialized level1 not same as deserialized level2")
+    assert(level2_.eq(level1_), "Deserialized level2 not the same object as deserialized level1")
+  }
+
+  test("BlockManagerId object caching") {
+    val id1 = new StorageLevel(false, false, false, 3)
+    val id2 = new StorageLevel(false, false, false, 3)
+    val bytes1 = spark.Utils.serialize(id1)
+    val id1_ = spark.Utils.deserialize[StorageLevel](bytes1)
+    val bytes2 = spark.Utils.serialize(id2)
+    val id2_ = spark.Utils.deserialize[StorageLevel](bytes2)
+    assert(id1_ === id1, "Deserialized id1 not same as original id1")
+    assert(id2_ === id2, "Deserialized id2 not same as original id1")
+    assert(id1_ === id2_, "Deserialized id1 not same as deserialized id2")
+    assert(id2_.eq(id1_), "Deserialized id2 not the same object as deserialized level1")
+  }
+
+  test("master + 1 manager interaction") {
     store = new BlockManager(actorSystem, master, serializer, 2000)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
@@ -80,17 +107,33 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.getSingle("a3") != None, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
-    assert(master.mustGetLocations(GetLocations("a2")).size > 0, "master was not told about a2")
-    assert(master.mustGetLocations(GetLocations("a3")).size === 0, "master was told about a3")
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
+    assert(master.getLocations("a2").size > 0, "master was not told about a2")
+    assert(master.getLocations("a3").size === 0, "master was told about a3")
 
     // Drop a1 and a2 from memory; this should be reported back to the master
     store.dropFromMemory("a1", null)
     store.dropFromMemory("a2", null)
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
-    assert(master.mustGetLocations(GetLocations("a1")).size === 0, "master did not remove a1")
-    assert(master.mustGetLocations(GetLocations("a2")).size === 0, "master did not remove a2")
+    assert(master.getLocations("a1").size === 0, "master did not remove a1")
+    assert(master.getLocations("a2").size === 0, "master did not remove a2")
+  }
+
+  test("master + 2 managers interaction") {
+    store = new BlockManager(actorSystem, master, serializer, 2000)
+    val otherStore = new BlockManager(actorSystem, master, new KryoSerializer, 2000)
+
+    val peers = master.getPeers(store.blockManagerId, 1)
+    assert(peers.size === 1, "master did not return the other manager as a peer")
+    assert(peers.head === otherStore.blockManagerId, "peer returned by master is not the other manager")
+
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_2)
+    otherStore.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_2)
+    assert(master.getLocations("a1").size === 2, "master did not report 2 locations for a1")
+    assert(master.getLocations("a2").size === 2, "master did not report 2 locations for a2")
   }
 
   test("removing block") {
@@ -113,9 +156,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.getSingle("a3") != None, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
-    assert(master.mustGetLocations(GetLocations("a2")).size > 0, "master was not told about a2")
-    assert(master.mustGetLocations(GetLocations("a3")).size === 0, "master was told about a3")
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
+    assert(master.getLocations("a2").size > 0, "master was not told about a2")
+    assert(master.getLocations("a3").size === 0, "master was told about a3")
 
     // Remove a1 and a2 and a3. Should be no-op for a3.
     master.removeBlock("a1")
@@ -123,10 +166,10 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     master.removeBlock("a3")
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
-    assert(master.mustGetLocations(GetLocations("a1")).size === 0, "master did not remove a1")
-    assert(master.mustGetLocations(GetLocations("a2")).size === 0, "master did not remove a2")
+    assert(master.getLocations("a1").size === 0, "master did not remove a1")
+    assert(master.getLocations("a2").size === 0, "master did not remove a2")
     assert(store.getSingle("a3") != None, "a3 was not in store")
-    assert(master.mustGetLocations(GetLocations("a3")).size === 0, "master was told about a3")
+    assert(master.getLocations("a3").size === 0, "master was told about a3")
     memStatus = master.getMemoryStatus.head._2
     assert(memStatus._1 == 2000L, "total memory " + memStatus._1 + " should equal 2000")
     assert(memStatus._2 == 2000L, "remaining memory " + memStatus._1 + " should equal 2000")
@@ -140,13 +183,13 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
 
     assert(store.getSingle("a1") != None, "a1 was not in store")
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.notifyADeadHost(store.blockManagerId.ip)
-    assert(master.mustGetLocations(GetLocations("a1")).size == 0, "a1 was not removed from master")
+    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
     store invokePrivate heartBeat()
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0,
+    assert(master.getLocations("a1").size > 0,
            "a1 was not reregistered with master")
   }
 
@@ -157,17 +200,15 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
 
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.notifyADeadHost(store.blockManagerId.ip)
-    assert(master.mustGetLocations(GetLocations("a1")).size == 0, "a1 was not removed from master")
+    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
     store.putSingle("a2", a1, StorageLevel.MEMORY_ONLY)
 
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0,
-        "a1 was not reregistered with master")
-    assert(master.mustGetLocations(GetLocations("a2")).size > 0,
-        "master was not told about a2")
+    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
+    assert(master.getLocations("a2").size > 0, "master was not told about a2")
   }
 
   test("deregistration on duplicate") {
@@ -177,19 +218,19 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
 
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     store2 = new BlockManager(actorSystem, master, serializer, 2000)
 
-    assert(master.mustGetLocations(GetLocations("a1")).size == 0, "a1 was not removed from master")
+    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
     store invokePrivate heartBeat()
 
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     store2 invokePrivate heartBeat()
 
-    assert(master.mustGetLocations(GetLocations("a1")).size == 0, "a2 was not removed from master")
+    assert(master.getLocations("a1").size == 0, "a2 was not removed from master")
   }
 
   test("in-memory LRU storage") {

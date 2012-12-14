@@ -19,7 +19,7 @@ import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 import spark.{CacheTracker, Logging, SizeEstimator, SparkEnv, SparkException, Utils}
 import spark.network._
 import spark.serializer.Serializer
-import spark.util.{ByteBufferInputStream, GenerationIdUtil}
+import spark.util.{ByteBufferInputStream, GenerationIdUtil, MetadataCleaner, TimeStampedHashMap}
 
 import sun.nio.ch.DirectBuffer
 
@@ -59,7 +59,7 @@ class BlockManager(
     }
   }
 
-  private val blockInfo = new ConcurrentHashMap[String, BlockInfo](1000)
+  private val blockInfo = new TimeStampedHashMap[String, BlockInfo]()
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
   private[storage] val diskStore: BlockStore =
@@ -96,13 +96,14 @@ class BlockManager(
   @volatile private var shuttingDown = false
 
   private def heartBeat() {
-    if (!master.mustHeartBeat(HeartBeat(blockManagerId))) {
+    if (!master.sendHeartBeat(blockManagerId)) {
       reregister()
     }
   }
 
   var heartBeatTask: Cancellable = null
 
+  val metadataCleaner = new MetadataCleaner("BlockManager", this.dropOldBlocks)
   initialize()
 
   /**
@@ -117,7 +118,7 @@ class BlockManager(
    * BlockManagerWorker actor.
    */
   private def initialize() {
-    master.mustRegisterBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     BlockManagerWorker.startBlockManagerWorker(this)
     if (!BlockManager.getDisableHeartBeatsForTesting) {
       heartBeatTask = actorSystem.scheduler.schedule(0.seconds, heartBeatFrequency.milliseconds) {
@@ -153,17 +154,14 @@ class BlockManager(
   def reregister() {
     // TODO: We might need to rate limit reregistering.
     logInfo("BlockManager reregistering with master")
-    master.mustRegisterBlockManager(blockManagerId, maxMemory, slaveActor)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     reportAllBlocks()
   }
 
   /**
    * Get storage level of local block. If no info exists for the block, then returns null.
    */
-  def getLevel(blockId: String): StorageLevel = {
-    val info = blockInfo.get(blockId)
-    if (info != null) info.level else null
-  }
+  def getLevel(blockId: String): StorageLevel = blockInfo.get(blockId).map(_.level).orNull
 
   /**
    * Tell the master about the current storage status of a block. This will send a block update
@@ -186,9 +184,9 @@ class BlockManager(
    */
   private def tryToReportBlockStatus(blockId: String): Boolean = {
     val (curLevel, inMemSize, onDiskSize, tellMaster) = blockInfo.get(blockId) match {
-      case null =>
+      case None =>
         (StorageLevel.NONE, 0L, 0L, false)
-      case info =>
+      case Some(info) =>
         info.synchronized {
           info.level match {
             case null =>
@@ -207,7 +205,7 @@ class BlockManager(
     }
 
     if (tellMaster) {
-      master.mustBlockUpdate(BlockUpdate(blockManagerId, blockId, curLevel, inMemSize, onDiskSize))
+      master.updateBlockInfo(blockManagerId, blockId, curLevel, inMemSize, onDiskSize)
     } else {
       true
     }
@@ -219,7 +217,7 @@ class BlockManager(
    */
   def getLocations(blockId: String): Seq[String] = {
     val startTimeMs = System.currentTimeMillis
-    var managers = master.mustGetLocations(GetLocations(blockId))
+    var managers = master.getLocations(blockId)
     val locations = managers.map(_.ip)
     logDebug("Get block locations in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
@@ -230,8 +228,7 @@ class BlockManager(
    */
   def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
     val startTimeMs = System.currentTimeMillis
-    val locations = master.mustGetLocationsMultipleBlockIds(
-      GetLocationsMultipleBlockIds(blockIds)).map(_.map(_.ip).toSeq).toArray
+    val locations = master.getLocations(blockIds).map(_.map(_.ip).toSeq).toArray
     logDebug("Get multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
@@ -253,7 +250,7 @@ class BlockManager(
       }
     }
 
-    val info = blockInfo.get(blockId)
+    val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
         info.waitForReady() // In case the block is still being put() by another thread
@@ -338,7 +335,7 @@ class BlockManager(
       }
     }
 
-    val info = blockInfo.get(blockId)
+    val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
         info.waitForReady() // In case the block is still being put() by another thread
@@ -394,7 +391,7 @@ class BlockManager(
     }
     logDebug("Getting remote block " + blockId)
     // Get locations of block
-    val locations = master.mustGetLocations(GetLocations(blockId))
+    val locations = master.getLocations(blockId)
 
     // Get block from remote locations
     for (loc <- locations) {
@@ -596,7 +593,7 @@ class BlockManager(
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
 
-    val oldBlock = blockInfo.get(blockId)
+    val oldBlock = blockInfo.get(blockId).orNull
     if (oldBlock != null) {
       logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
       oldBlock.waitForReady()
@@ -697,7 +694,7 @@ class BlockManager(
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
 
-    if (blockInfo.containsKey(blockId)) {
+    if (blockInfo.contains(blockId)) {
       logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
       return
     }
@@ -772,7 +769,7 @@ class BlockManager(
     val tLevel: StorageLevel =
       new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
     if (cachedPeers == null) {
-      cachedPeers = master.mustGetPeers(GetPeers(blockManagerId, level.replication - 1))
+      cachedPeers = master.getPeers(blockManagerId, level.replication - 1)
     }
     for (peer: BlockManagerId <- cachedPeers) {
       val start = System.nanoTime
@@ -819,7 +816,7 @@ class BlockManager(
    */
   def dropFromMemory(blockId: String, data: Either[ArrayBuffer[Any], ByteBuffer]) {
     logInfo("Dropping block " + blockId + " from memory")
-    val info = blockInfo.get(blockId)
+    val info = blockInfo.get(blockId).orNull
     if (info != null)  {
       info.synchronized {
         val level = info.level
@@ -853,7 +850,7 @@ class BlockManager(
    */
   def removeBlock(blockId: String) {
     logInfo("Removing block " + blockId)
-    val info = blockInfo.get(blockId)
+    val info = blockInfo.get(blockId).orNull
     if (info != null) info.synchronized {
       // Removals are idempotent in disk store and memory store. At worst, we get a warning.
       memoryStore.remove(blockId)
@@ -862,6 +859,29 @@ class BlockManager(
     } else {
       // The block has already been removed; do nothing.
       logWarning("Block " + blockId + " does not exist.")
+    }
+  }
+
+  def dropOldBlocks(cleanupTime: Long) {
+    logInfo("Dropping blocks older than " + cleanupTime)
+    val iterator = blockInfo.internalMap.entrySet().iterator()
+    while(iterator.hasNext) {
+      val entry = iterator.next()
+      val (id, info, time) = (entry.getKey, entry.getValue._1, entry.getValue._2)
+      if (time < cleanupTime) {
+        info.synchronized {
+          val level = info.level
+          if (level.useMemory) {
+            memoryStore.remove(id)
+          }
+          if (level.useDisk) {
+            diskStore.remove(id)
+          }
+          iterator.remove()
+          logInfo("Dropped block " + id)
+        }
+        reportBlockStatus(id)
+      }
     }
   }
 
