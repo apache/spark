@@ -16,91 +16,6 @@ import spark.{Logging, Utils}
  * BlockManagerMasterActor is an actor on the master node to track statuses of
  * all slaves' block managers.
  */
-
-private[spark]
-object BlockManagerMasterActor {
-
-  case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
-
-  class BlockManagerInfo(
-      val blockManagerId: BlockManagerId,
-      timeMs: Long,
-      val maxMem: Long,
-      val slaveActor: ActorRef)
-    extends Logging {
-
-    private var _lastSeenMs: Long = timeMs
-    private var _remainingMem: Long = maxMem
-
-    // Mapping from block id to its status.
-    private val _blocks = new JHashMap[String, BlockStatus]
-
-    logInfo("Registering block manager %s:%d with %s RAM".format(
-      blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(maxMem)))
-
-    def updateLastSeenMs() {
-      _lastSeenMs = System.currentTimeMillis()
-    }
-
-    def updateBlockInfo(blockId: String, storageLevel: StorageLevel, memSize: Long, diskSize: Long)
-      : Unit = synchronized {
-
-      updateLastSeenMs()
-
-      if (_blocks.containsKey(blockId)) {
-        // The block exists on the slave already.
-        val originalLevel: StorageLevel = _blocks.get(blockId).storageLevel
-
-        if (originalLevel.useMemory) {
-          _remainingMem += memSize
-        }
-      }
-
-      if (storageLevel.isValid) {
-        // isValid means it is either stored in-memory or on-disk.
-        _blocks.put(blockId, BlockStatus(storageLevel, memSize, diskSize))
-        if (storageLevel.useMemory) {
-          _remainingMem -= memSize
-          logInfo("Added %s in memory on %s:%d (size: %s, free: %s)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
-            Utils.memoryBytesToString(_remainingMem)))
-        }
-        if (storageLevel.useDisk) {
-          logInfo("Added %s on disk on %s:%d (size: %s)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
-        }
-      } else if (_blocks.containsKey(blockId)) {
-        // If isValid is not true, drop the block.
-        val blockStatus: BlockStatus = _blocks.get(blockId)
-        _blocks.remove(blockId)
-        if (blockStatus.storageLevel.useMemory) {
-          _remainingMem += blockStatus.memSize
-          logInfo("Removed %s on %s:%d in memory (size: %s, free: %s)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
-            Utils.memoryBytesToString(_remainingMem)))
-        }
-        if (blockStatus.storageLevel.useDisk) {
-          logInfo("Removed %s on %s:%d on disk (size: %s)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
-        }
-      }
-    }
-
-    def remainingMem: Long = _remainingMem
-
-    def lastSeenMs: Long = _lastSeenMs
-
-    def blocks: JHashMap[String, BlockStatus] = _blocks
-
-    override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
-
-    def clear() {
-      _blocks.clear()
-    }
-  }
-}
-
-
 private[spark]
 class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
@@ -108,8 +23,9 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   private val blockManagerInfo =
     new HashMap[BlockManagerId, BlockManagerMasterActor.BlockManagerInfo]
 
-  // Mapping from host name to block manager id.
-  private val blockManagerIdByHost = new HashMap[String, BlockManagerId]
+  // Mapping from host name to block manager id. We allow multiple block managers
+  // on the same host name (ip).
+  private val blockManagerIdByHost = new HashMap[String, ArrayBuffer[BlockManagerId]]
 
   // Mapping from block id to the set of block managers that have the block.
   private val blockInfo = new JHashMap[String, Pair[Int, HashSet[BlockManagerId]]]
@@ -130,57 +46,6 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
         0.seconds, checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
     }
     super.preStart()
-  }
-
-  def removeBlockManager(blockManagerId: BlockManagerId) {
-    val info = blockManagerInfo(blockManagerId)
-    blockManagerIdByHost.remove(blockManagerId.ip)
-    blockManagerInfo.remove(blockManagerId)
-    var iterator = info.blocks.keySet.iterator
-    while (iterator.hasNext) {
-      val blockId = iterator.next
-      val locations = blockInfo.get(blockId)._2
-      locations -= blockManagerId
-      if (locations.size == 0) {
-        blockInfo.remove(locations)
-      }
-    }
-  }
-
-  def expireDeadHosts() {
-    logDebug("Checking for hosts with no recent heart beats in BlockManagerMaster.")
-    val now = System.currentTimeMillis()
-    val minSeenTime = now - slaveTimeout
-    val toRemove = new HashSet[BlockManagerId]
-    for (info <- blockManagerInfo.values) {
-      if (info.lastSeenMs < minSeenTime) {
-        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats")
-        toRemove += info.blockManagerId
-      }
-    }
-    // TODO: Remove corresponding block infos
-    toRemove.foreach(removeBlockManager)
-  }
-
-  def removeHost(host: String) {
-    logInfo("Trying to remove the host: " + host + " from BlockManagerMaster.")
-    logInfo("Previous hosts: " + blockManagerInfo.keySet.toSeq)
-    blockManagerIdByHost.get(host).foreach(removeBlockManager)
-    logInfo("Current hosts: " + blockManagerInfo.keySet.toSeq)
-    sender ! true
-  }
-
-  def heartBeat(blockManagerId: BlockManagerId) {
-    if (!blockManagerInfo.contains(blockManagerId)) {
-      if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
-        sender ! true
-      } else {
-        sender ! false
-      }
-    } else {
-      blockManagerInfo(blockManagerId).updateLastSeenMs()
-      sender ! true
-    }
   }
 
   def receive = {
@@ -228,6 +93,64 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       logInfo("Got unknown message: " + other)
   }
 
+  def removeBlockManager(blockManagerId: BlockManagerId) {
+    val info = blockManagerInfo(blockManagerId)
+
+    // Remove the block manager from blockManagerIdByHost. If the list of block
+    // managers belonging to the IP is empty, remove the entry from the hash map.
+    blockManagerIdByHost.get(blockManagerId.ip).foreach { managers: ArrayBuffer[BlockManagerId] =>
+      managers -= blockManagerId
+      if (managers.size == 0) blockManagerIdByHost.remove(blockManagerId.ip)
+    }
+
+    // Remove it from blockManagerInfo and remove all the blocks.
+    blockManagerInfo.remove(blockManagerId)
+    var iterator = info.blocks.keySet.iterator
+    while (iterator.hasNext) {
+      val blockId = iterator.next
+      val locations = blockInfo.get(blockId)._2
+      locations -= blockManagerId
+      if (locations.size == 0) {
+        blockInfo.remove(locations)
+      }
+    }
+  }
+
+  def expireDeadHosts() {
+    logDebug("Checking for hosts with no recent heart beats in BlockManagerMaster.")
+    val now = System.currentTimeMillis()
+    val minSeenTime = now - slaveTimeout
+    val toRemove = new HashSet[BlockManagerId]
+    for (info <- blockManagerInfo.values) {
+      if (info.lastSeenMs < minSeenTime) {
+        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats")
+        toRemove += info.blockManagerId
+      }
+    }
+    toRemove.foreach(removeBlockManager)
+  }
+
+  def removeHost(host: String) {
+    logInfo("Trying to remove the host: " + host + " from BlockManagerMaster.")
+    logInfo("Previous hosts: " + blockManagerInfo.keySet.toSeq)
+    blockManagerIdByHost.get(host).foreach(_.foreach(removeBlockManager))
+    logInfo("Current hosts: " + blockManagerInfo.keySet.toSeq)
+    sender ! true
+  }
+
+  def heartBeat(blockManagerId: BlockManagerId) {
+    if (!blockManagerInfo.contains(blockManagerId)) {
+      if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
+        sender ! true
+      } else {
+        sender ! false
+      }
+    } else {
+      blockManagerInfo(blockManagerId).updateLastSeenMs()
+      sender ! true
+    }
+  }
+
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
   private def removeBlock(blockId: String) {
@@ -261,20 +184,22 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " "
     logDebug("Got in register 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
-    if (blockManagerIdByHost.contains(blockManagerId.ip) &&
-        blockManagerIdByHost(blockManagerId.ip) != blockManagerId) {
-      val oldId = blockManagerIdByHost(blockManagerId.ip)
-      logInfo("Got second registration for host " + blockManagerId +
-              "; removing old slave " + oldId)
-      removeBlockManager(oldId)
-    }
+
     if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
       logInfo("Got Register Msg from master node, don't register it")
     } else {
+      blockManagerIdByHost.get(blockManagerId.ip) match {
+        case Some(managers) =>
+          // A block manager of the same host name already exists.
+          logInfo("Got another registration for host " + blockManagerId)
+          managers += blockManagerId
+        case None =>
+          blockManagerIdByHost += (blockManagerId.ip -> ArrayBuffer(blockManagerId))
+      }
+
       blockManagerInfo += (blockManagerId -> new BlockManagerMasterActor.BlockManagerInfo(
         blockManagerId, System.currentTimeMillis(), maxMemSize, slaveActor))
     }
-    blockManagerIdByHost += (blockManagerId.ip -> blockManagerId)
     logDebug("Got in register 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
     sender ! true
   }
@@ -387,12 +312,12 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     var peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
     var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
 
-    val peersWithIndices = peers.zipWithIndex
-    val selfIndex = peersWithIndices.find(_._1 == blockManagerId).map(_._2).getOrElse(-1)
+    val selfIndex = peers.indexOf(blockManagerId)
     if (selfIndex == -1) {
       throw new Exception("Self index for " + blockManagerId + " not found")
     }
 
+    // Note that this logic will select the same node multiple times if there aren't enough peers
     var index = selfIndex
     while (res.size < size) {
       index += 1
@@ -402,5 +327,89 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       res += peers(index % peers.size)
     }
     sender ! res.toSeq
+  }
+}
+
+
+private[spark]
+object BlockManagerMasterActor {
+
+  case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
+
+  class BlockManagerInfo(
+      val blockManagerId: BlockManagerId,
+      timeMs: Long,
+      val maxMem: Long,
+      val slaveActor: ActorRef)
+    extends Logging {
+
+    private var _lastSeenMs: Long = timeMs
+    private var _remainingMem: Long = maxMem
+
+    // Mapping from block id to its status.
+    private val _blocks = new JHashMap[String, BlockStatus]
+
+    logInfo("Registering block manager %s:%d with %s RAM".format(
+      blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(maxMem)))
+
+    def updateLastSeenMs() {
+      _lastSeenMs = System.currentTimeMillis()
+    }
+
+    def updateBlockInfo(blockId: String, storageLevel: StorageLevel, memSize: Long, diskSize: Long)
+      : Unit = synchronized {
+
+      updateLastSeenMs()
+
+      if (_blocks.containsKey(blockId)) {
+        // The block exists on the slave already.
+        val originalLevel: StorageLevel = _blocks.get(blockId).storageLevel
+
+        if (originalLevel.useMemory) {
+          _remainingMem += memSize
+        }
+      }
+
+      if (storageLevel.isValid) {
+        // isValid means it is either stored in-memory or on-disk.
+        _blocks.put(blockId, BlockStatus(storageLevel, memSize, diskSize))
+        if (storageLevel.useMemory) {
+          _remainingMem -= memSize
+          logInfo("Added %s in memory on %s:%d (size: %s, free: %s)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
+            Utils.memoryBytesToString(_remainingMem)))
+        }
+        if (storageLevel.useDisk) {
+          logInfo("Added %s on disk on %s:%d (size: %s)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
+        }
+      } else if (_blocks.containsKey(blockId)) {
+        // If isValid is not true, drop the block.
+        val blockStatus: BlockStatus = _blocks.get(blockId)
+        _blocks.remove(blockId)
+        if (blockStatus.storageLevel.useMemory) {
+          _remainingMem += blockStatus.memSize
+          logInfo("Removed %s on %s:%d in memory (size: %s, free: %s)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
+            Utils.memoryBytesToString(_remainingMem)))
+        }
+        if (blockStatus.storageLevel.useDisk) {
+          logInfo("Removed %s on %s:%d on disk (size: %s)".format(
+            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
+        }
+      }
+    }
+
+    def remainingMem: Long = _remainingMem
+
+    def lastSeenMs: Long = _lastSeenMs
+
+    def blocks: JHashMap[String, BlockStatus] = _blocks
+
+    override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
+
+    def clear() {
+      _blocks.clear()
+    }
   }
 }

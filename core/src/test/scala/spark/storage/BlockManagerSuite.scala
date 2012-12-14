@@ -122,16 +122,16 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
   test("master + 2 managers interaction") {
     store = new BlockManager(actorSystem, master, serializer, 2000)
-    val otherStore = new BlockManager(actorSystem, master, new KryoSerializer, 2000)
+    store2 = new BlockManager(actorSystem, master, new KryoSerializer, 2000)
 
     val peers = master.getPeers(store.blockManagerId, 1)
     assert(peers.size === 1, "master did not return the other manager as a peer")
-    assert(peers.head === otherStore.blockManagerId, "peer returned by master is not the other manager")
+    assert(peers.head === store2.blockManagerId, "peer returned by master is not the other manager")
 
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_2)
-    otherStore.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_2)
+    store2.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_2)
     assert(master.getLocations("a1").size === 2, "master did not report 2 locations for a1")
     assert(master.getLocations("a2").size === 2, "master did not report 2 locations for a2")
   }
@@ -189,8 +189,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
     store invokePrivate heartBeat()
-    assert(master.getLocations("a1").size > 0,
-           "a1 was not reregistered with master")
+    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
   }
 
   test("reregistration on block update") {
@@ -209,28 +208,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
     assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
     assert(master.getLocations("a2").size > 0, "master was not told about a2")
-  }
-
-  test("deregistration on duplicate") {
-    val heartBeat = PrivateMethod[Unit]('heartBeat)
-    store = new BlockManager(actorSystem, master, serializer, 2000)
-    val a1 = new Array[Byte](400)
-
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-
-    assert(master.getLocations("a1").size > 0, "master was not told about a1")
-
-    store2 = new BlockManager(actorSystem, master, serializer, 2000)
-
-    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
-
-    store invokePrivate heartBeat()
-
-    assert(master.getLocations("a1").size > 0, "master was not told about a1")
-
-    store2 invokePrivate heartBeat()
-
-    assert(master.getLocations("a1").size == 0, "a2 was not removed from master")
   }
 
   test("in-memory LRU storage") {

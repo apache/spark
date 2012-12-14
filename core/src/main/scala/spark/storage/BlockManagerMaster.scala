@@ -41,7 +41,6 @@ private[spark] class BlockManagerMaster(
     }
   }
 
-
   /** Remove a dead host from the master actor. This is only called on the master side. */
   def notifyADeadHost(host: String) {
     tell(RemoveHost(host))
