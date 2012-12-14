@@ -50,9 +50,14 @@ private[spark] class Executor extends Logging {
         override def uncaughtException(thread: Thread, exception: Throwable) {
           try {
             logError("Uncaught exception in thread " + thread, exception)
-            System.exit(1)
+            if (exception.isInstanceOf[OutOfMemoryError]) {
+              System.exit(ExecutorExitCode.OOM)
+            } else {
+              System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
+            }
           } catch {
-            case t: Throwable => System.exit(2)
+            case oom: OutOfMemoryError => System.exit(ExecutorExitCode.OOM)
+            case t: Throwable => System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
           }
         }
       }

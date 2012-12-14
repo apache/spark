@@ -249,15 +249,22 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
   }
 
-  def slaveLost(slaveId: String) {
+  def slaveLost(slaveId: String, reason: ExecutorLossReason) {
     var failedHost: Option[String] = None
     synchronized {
       val host = slaveIdToHost(slaveId)
       if (hostsAlive.contains(host)) {
+        logError("Lost an executor on " + host + ": " + reason)
         slaveIdsWithExecutors -= slaveId
         hostsAlive -= host
         activeTaskSetsQueue.foreach(_.hostLost(host))
         failedHost = Some(host)
+      } else {
+        // We may get multiple slaveLost() calls with different loss reasons. For example, one 
+        // may be triggered by a dropped connection from the slave while another may be a report
+        // of executor termination from Mesos. We produce log messages for both so we eventually
+        // report the termination reason.
+        logError("Lost an executor on " + host + " (already removed): " + reason)
       }
     }
     if (failedHost != None) {

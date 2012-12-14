@@ -19,6 +19,7 @@ private[spark] class SparkDeploySchedulerBackend(
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = System.getProperty("spark.cores.max", Int.MaxValue.toString).toInt
+  val executorIdToSlaveId = new HashMap[String, String]
 
   // Memory used by each executor (in megabytes)
   val executorMemory = {
@@ -65,9 +66,27 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   def executorAdded(id: String, workerId: String, host: String, cores: Int, memory: Int) {
+    executorIdToSlaveId += id -> workerId
     logInfo("Granted executor ID %s on host %s with %d cores, %s RAM".format(
        id, host, cores, Utils.memoryMegabytesToString(memory)))
   }
 
-  def executorRemoved(id: String, message: String) {}
+  def executorRemoved(id: String, message: String) {
+    var reason: ExecutorLossReason = SlaveLost(message)
+    if (message.startsWith("Command exited with code ")) {
+      try {
+        reason = ExecutorExited(message.substring("Command exited with code ".length).toInt)
+      } catch {
+        case nfe: NumberFormatException => {}
+      }
+    }
+    logInfo("Executor %s removed: %s".format(id, message))
+    executorIdToSlaveId.get(id) match {
+      case Some(slaveId) => 
+        executorIdToSlaveId.remove(id)
+        scheduler.slaveLost(slaveId, reason)
+      case None =>
+        logInfo("No slave ID known for executor %s".format(id))
+    }
+  }
 }
