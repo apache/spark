@@ -30,6 +30,7 @@ import time
 import urllib2
 from optparse import OptionParser
 from sys import stderr
+import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
 from boto import ec2
 
@@ -85,6 +86,8 @@ def parse_args():
       help="'mesos' for a mesos cluster, 'standalone' for a standalone spark cluster (default: mesos)")
   parser.add_option("-u", "--user", default="root",
       help="The ssh user you want to connect as (default: root)")
+  parser.add_option("--delete-groups", action="store_true", default=False,
+      help="When destroying a cluster, also destroy the security groups that were created")
             
   (opts, args) = parser.parse_args()
   if len(args) != 2:
@@ -283,16 +286,17 @@ def launch_cluster(conn, opts, cluster_name):
     slave_nodes = []
     for zone in zones:
       num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
-      slave_res = image.run(key_name = opts.key_pair,
-                            security_groups = [slave_group],
-                            instance_type = opts.instance_type,
-                            placement = zone,
-                            min_count = num_slaves_this_zone,
-                            max_count = num_slaves_this_zone,
-                            block_device_map = block_map)
-      slave_nodes += slave_res.instances
-      print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
-                                                      zone, slave_res.id)
+      if num_slaves_this_zone > 0:
+        slave_res = image.run(key_name = opts.key_pair,
+                              security_groups = [slave_group],
+                              instance_type = opts.instance_type,
+                              placement = zone,
+                              min_count = num_slaves_this_zone,
+                              max_count = num_slaves_this_zone,
+                              block_device_map = block_map)
+        slave_nodes += slave_res.instances
+        print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
+                                                        zone, slave_res.id)
       i += 1
 
   # Launch masters
@@ -556,20 +560,48 @@ def main():
         print "Terminating zoo..."
         for inst in zoo_nodes:
           inst.terminate()
+      
       # Delete security groups as well
-      group_names = [cluster_name + "-master", cluster_name + "-slaves", cluster_name + "-zoo"]
-      groups = conn.get_all_security_groups()
-      for group in groups:
-        if group.name in group_names:
-          print "Deleting security group " + group.name
-          # Delete individual rules before deleting group to remove dependencies
-          for rule in group.rules:
-            for grant in rule.grants:
-                group.revoke(ip_protocol=rule.ip_protocol,
-                         from_port=rule.from_port,
-                         to_port=rule.to_port,
-                         src_group=grant)
-          conn.delete_security_group(group.name)
+      if opts.delete_groups:
+        print "Deleting security groups (this will take some time)..."
+        group_names = [cluster_name + "-master", cluster_name + "-slaves", cluster_name + "-zoo"]
+        
+        attempt = 1;
+        while attempt <= 3:
+          print "Attempt %d" % attempt
+          groups = [g for g in conn.get_all_security_groups() if g.name in group_names]
+          success = True
+          # Delete individual rules in all groups before deleting groups to
+          # remove dependencies between them
+          for group in groups:
+            print "Deleting rules in security group " + group.name
+            for rule in group.rules:
+              for grant in rule.grants:
+                  success &= group.revoke(ip_protocol=rule.ip_protocol,
+                           from_port=rule.from_port,
+                           to_port=rule.to_port,
+                           src_group=grant)
+          
+          # Sleep for AWS eventual-consistency to catch up, and for instances
+          # to terminate
+          time.sleep(30)  # Yes, it does have to be this long :-(
+          for group in groups:
+            try:
+              conn.delete_security_group(group.name)
+              print "Deleted security group " + group.name
+            except boto.exception.EC2ResponseError:
+              success = False;
+              print "Failed to delete security group " + group.name
+          
+          # Unfortunately, group.revoke() returns True even if a rule was not
+          # deleted, so this needs to be rerun if something fails
+          if success: break;
+          
+          attempt += 1
+          
+        if not success:
+          print "Failed to delete all security groups after 3 tries."
+          print "Try re-running in a few minutes."
 
   elif action == "login":
     (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(

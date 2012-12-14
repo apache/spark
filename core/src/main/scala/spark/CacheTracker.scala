@@ -1,5 +1,9 @@
 package spark
 
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
+import scala.collection.mutable.HashSet
+
 import akka.actor._
 import akka.dispatch._
 import akka.pattern.ask
@@ -7,10 +11,6 @@ import akka.remote._
 import akka.util.Duration
 import akka.util.Timeout
 import akka.util.duration._
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
 
 import spark.storage.BlockManager
 import spark.storage.StorageLevel
@@ -41,7 +41,7 @@ private[spark] class CacheTrackerActor extends Actor with Logging {
   private def getCacheUsage(host: String): Long = slaveUsage.getOrElse(host, 0L)
   private def getCacheCapacity(host: String): Long = slaveCapacity.getOrElse(host, 0L)
   private def getCacheAvailable(host: String): Long = getCacheCapacity(host) - getCacheUsage(host)
-  
+
   def receive = {
     case SlaveCacheStarted(host: String, size: Long) =>
       slaveCapacity.put(host, size)
@@ -92,14 +92,14 @@ private[spark] class CacheTrackerActor extends Actor with Logging {
 
 private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, blockManager: BlockManager)
   extends Logging {
- 
+
   // Tracker actor on the master, or remote reference to it on workers
   val ip: String = System.getProperty("spark.master.host", "localhost")
   val port: Int = System.getProperty("spark.master.port", "7077").toInt
   val actorName: String = "CacheTracker"
 
   val timeout = 10.seconds
-  
+
   var trackerActor: ActorRef = if (isMaster) {
     val actor = actorSystem.actorOf(Props[CacheTrackerActor], name = actorName)
     logInfo("Registered CacheTrackerActor actor")
@@ -132,7 +132,7 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
       throw new SparkException("Error reply received from CacheTracker")
     }
   }
-  
+
   // Registers an RDD (on master only)
   def registerRDD(rddId: Int, numPartitions: Int) {
     registeredRddIds.synchronized {
@@ -143,7 +143,7 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
       }
     }
   }
-  
+
   // For BlockManager.scala only
   def cacheLost(host: String) {
     communicate(MemoryCacheLost(host))
@@ -155,19 +155,20 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
   def getCacheStatus(): Seq[(String, Long, Long)] = {
     askTracker(GetCacheStatus).asInstanceOf[Seq[(String, Long, Long)]]
   }
-  
+
   // For BlockManager.scala only
   def notifyFromBlockManager(t: AddedToCache) {
     communicate(t)
   }
-  
+
   // Get a snapshot of the currently known locations
   def getLocationsSnapshot(): HashMap[Int, Array[List[String]]] = {
     askTracker(GetCacheLocations).asInstanceOf[HashMap[Int, Array[List[String]]]]
   }
-  
+
   // Gets or computes an RDD split
-  def getOrCompute[T](rdd: RDD[T], split: Split, storageLevel: StorageLevel): Iterator[T] = {
+  def getOrCompute[T](rdd: RDD[T], split: Split, context: TaskContext, storageLevel: StorageLevel)
+  : Iterator[T] = {
     val key = "rdd_%d_%d".format(rdd.id, split.index)
     logInfo("Cache key is " + key)
     blockManager.get(key) match {
@@ -209,7 +210,7 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
         // TODO: also register a listener for when it unloads
         logInfo("Computing partition " + split)
         val elements = new ArrayBuffer[Any]
-        elements ++= rdd.compute(split)
+        elements ++= rdd.compute(split, context)
         try {
           // Try to put this block in the blockManager
           blockManager.put(key, elements, storageLevel, true)

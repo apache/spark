@@ -35,11 +35,11 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   with Serializable {
 
   /**
-   * Generic function to combine the elements for each key using a custom set of aggregation 
+   * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
    * Note that V and C can be different -- for example, one might group an RDD of type
    * (Int, Int) into an RDD of type (Int, Seq[Int]). Users provide three functions:
-   * 
+   *
    * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    * - `mergeCombiners`, to combine two C's into a single one.
@@ -118,7 +118,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   /** Count the number of elements for each key, and return the result to the master as a Map. */
   def countByKey(): Map[K, Long] = self.map(_._1).countByValue()
 
-  /** 
+  /**
    * (Experimental) Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
@@ -224,7 +224,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     }
   }
 
-  /** 
+  /**
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the default
    * parallelism level.
    */
@@ -628,7 +628,8 @@ class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)]
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override val partitioner = prev.partitioner
-  override def compute(split: Split) = prev.iterator(split).map{case (k, v) => (k, f(v))}
+  override def compute(split: Split, taskContext: TaskContext) =
+    prev.iterator(split, taskContext).map{case (k, v) => (k, f(v))}
 }
 
 private[spark]
@@ -639,8 +640,8 @@ class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U]
   override val dependencies = List(new OneToOneDependency(prev))
   override val partitioner = prev.partitioner
 
-  override def compute(split: Split) = {
-    prev.iterator(split).flatMap { case (k, v) => f(v).map(x => (k, x)) }
+  override def compute(split: Split, taskContext: TaskContext) = {
+    prev.iterator(split, taskContext).flatMap { case (k, v) => f(v).map(x => (k, x)) }
   }
 }
 
