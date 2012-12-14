@@ -72,7 +72,10 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   def executorRemoved(id: String, message: String, exitStatus: Option[Int]) {
-    var reason: ExecutorLossReason = exitStatus.map(ExecutorExited).getOrElse(SlaveLost(message))
+    val reason: ExecutorLossReason = exitStatus match {
+      case Some(code) => ExecutorExited(code)
+      case None => SlaveLost(message)
+    }
     logInfo("Executor %s removed: %s".format(id, message))
     executorIdToSlaveId.get(id) match {
       case Some(slaveId) => 
