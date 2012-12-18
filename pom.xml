@@ -39,9 +39,10 @@
 
   <modules>
     <module>core</module>
-    <module>repl</module>
-    <module>examples</module>
     <module>bagel</module>
+    <module>examples</module>
+    <module>repl</module>
+    <module>repl-bin</module>
   </modules>
 
   <properties>

@@ -99,46 +99,17 @@
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
+          <scope>provided</scope>
         </dependency>
       </dependencies>
       <build>
         <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-shade-plugin</artifactId>
+            <artifactId>maven-jar-plugin</artifactId>
             <configuration>
-              <shadedArtifactAttached>true</shadedArtifactAttached>
-              <shadedClassifierName>shaded-hadoop1</shadedClassifierName>
-              <filters>
-                <filter>
-                  <artifact>*:*</artifact>
-                  <excludes>
-                    <exclude>META-INF/*.SF</exclude>
-                    <exclude>META-INF/*.DSA</exclude>
-                    <exclude>META-INF/*.RSA</exclude>
-                  </excludes>
-                </filter>
-              </filters>
+              <classifier>hadoop1</classifier>
             </configuration>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>shade</goal>
-                </goals>
-                <configuration>
-                  <transformers>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                      <resource>reference.conf</resource>
-                    </transformer>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                      <mainClass>spark.repl.Main</mainClass>
-                    </transformer>
-                  </transformers>
-                </configuration>
-              </execution>
-            </executions>
           </plugin>
         </plugins>
       </build>
@@ -172,125 +143,22 @@
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
+          <scope>provided</scope>
         </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-client</artifactId>
+          <scope>provided</scope>
         </dependency>
       </dependencies>
       <build>
         <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-shade-plugin</artifactId>
+            <artifactId>maven-jar-plugin</artifactId>
             <configuration>
-              <shadedArtifactAttached>true</shadedArtifactAttached>
-              <shadedClassifierName>shaded-hadoop2</shadedClassifierName>
-              <filters>
-                <filter>
-                  <artifact>*:*</artifact>
-                  <excludes>
-                    <exclude>META-INF/*.SF</exclude>
-                    <exclude>META-INF/*.DSA</exclude>
-                    <exclude>META-INF/*.RSA</exclude>
-                  </excludes>
-                </filter>
-              </filters>
+              <classifier>hadoop2</classifier>
             </configuration>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>shade</goal>
-                </goals>
-                <configuration>
-                  <transformers>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                      <resource>reference.conf</resource>
-                    </transformer>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                      <mainClass>spark.repl.Main</mainClass>
-                    </transformer>
-                  </transformers>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>deb</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>buildnumber-maven-plugin</artifactId>
-            <version>1.1</version>
-            <executions>
-              <execution>
-                <phase>validate</phase>
-                <goals>
-                  <goal>create</goal>
-                </goals>
-                <configuration>
-                  <shortRevisionLength>8</shortRevisionLength>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.vafer</groupId>
-            <artifactId>jdeb</artifactId>
-            <version>0.11</version>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>jdeb</goal>
-                </goals>
-                <configuration>
-                  <deb>${project.build.directory}/${project.artifactId}-${classifier}_${project.version}-${buildNumber}_all.deb</deb>
-                  <attach>false</attach>
-                  <compression>gzip</compression>
-                  <dataSet>
-                    <data>
-                      <src>${project.build.directory}/${project.artifactId}-${project.version}-shaded-${classifier}.jar</src>
-                      <type>file</type>
-                      <mapper>
-                        <type>perm</type>
-                        <user>${deb.user}</user>
-                        <group>${deb.user}</group>
-                        <prefix>${deb.install.path}</prefix>
-                      </mapper>
-                    </data>
-                    <data>
-                      <src>${basedir}/src/deb/bin</src>
-                      <type>directory</type>
-                      <mapper>
-                        <type>perm</type>
-                        <user>${deb.user}</user>
-                        <group>${deb.user}</group>
-                        <prefix>${deb.install.path}</prefix>
-                        <filemode>744</filemode>
-                      </mapper>
-                    </data>
-                    <data>
-                      <src>${basedir}/../conf</src>
-                      <type>directory</type>
-                      <mapper>
-                        <type>perm</type>
-                        <user>${deb.user}</user>
-                        <group>${deb.user}</group>
-                        <prefix>${deb.install.path}/conf</prefix>
-                        <filemode>744</filemode>
-                      </mapper>
-                    </data>
-                  </dataSet>
-                </configuration>
-              </execution>
-            </executions>
           </plugin>
         </plugins>
       </build>
