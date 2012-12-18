@@ -1,4 +1,4 @@
-Package: spark-repl
+Package: [[artifactId]]
 Version: [[version]]-[[buildNumber]]
 Section: misc
 Priority: extra
