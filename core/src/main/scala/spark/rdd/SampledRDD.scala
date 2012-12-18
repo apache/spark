@@ -26,9 +26,9 @@ class SampledRDD[T: ClassManifest](
     firstParent[T].splits.map(x => new SampledRDDSplit(x, rg.nextInt))
   }
 
-  override def splits = splits_.asInstanceOf[Array[Split]]
+  override def getSplits = splits_.asInstanceOf[Array[Split]]
 
-  override def preferredLocations(split: Split) =
+  override def getPreferredLocations(split: Split) =
     firstParent[T].preferredLocations(split.asInstanceOf[SampledRDDSplit].prev)
 
   override def compute(splitIn: Split) = {
@@ -51,8 +51,7 @@ class SampledRDD[T: ClassManifest](
     }
   }
 
-  override def changeDependencies(newRDD: RDD[_]) {
-    dependencies_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
-    splits_ = newRDD.splits
+  override def clearDependencies() {
+    splits_ = null
   }
 }

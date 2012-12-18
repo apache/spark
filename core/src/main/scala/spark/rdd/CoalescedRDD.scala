@@ -44,7 +44,7 @@ class CoalescedRDD[T: ClassManifest](
     }
   }
 
-  override def splits = splits_
+  override def getSplits = splits_
 
   override def compute(split: Split): Iterator[T] = {
     split.asInstanceOf[CoalescedRDDSplit].parents.iterator.flatMap {
@@ -59,11 +59,11 @@ class CoalescedRDD[T: ClassManifest](
     }
   )
 
-  override def dependencies = deps_
+  override def getDependencies() = deps_
 
-  override def changeDependencies(newRDD: RDD[_]) {
-    deps_ = List(new OneToOneDependency(newRDD))
-    splits_ = newRDD.splits
+  override def clearDependencies() {
+    deps_ = Nil
+    splits_ = null
     prev = null
   }
 }

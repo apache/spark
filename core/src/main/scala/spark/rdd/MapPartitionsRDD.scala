@@ -12,6 +12,6 @@ class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
   
-  override def splits = firstParent[T].splits
+  override def getSplits = firstParent[T].splits
   override def compute(split: Split) = f(firstParent[T].iterator(split))
 }

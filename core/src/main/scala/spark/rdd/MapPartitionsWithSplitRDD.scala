@@ -14,6 +14,6 @@ class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
     f: (Int, Iterator[T]) => Iterator[U])
   extends RDD[U](prev) {
 
-  override def splits = firstParent[T].splits
+  override def getSplits = firstParent[T].splits
   override def compute(split: Split) = f(split.index, firstParent[T].iterator(split))
 }

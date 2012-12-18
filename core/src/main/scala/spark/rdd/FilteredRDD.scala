@@ -9,6 +9,6 @@ class FilteredRDD[T: ClassManifest](
     f: T => Boolean)
   extends RDD[T](prev) {
 
-  override def splits = firstParent[T].splits
+  override def getSplits = firstParent[T].splits
   override def compute(split: Split) = firstParent[T].iterator(split).filter(f)
 }

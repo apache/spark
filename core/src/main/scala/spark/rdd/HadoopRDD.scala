@@ -67,7 +67,7 @@ class HadoopRDD[K, V](
       .asInstanceOf[InputFormat[K, V]]
   }
 
-  override def splits = splits_
+  override def getSplits = splits_
 
   override def compute(theSplit: Split) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[HadoopSplit]
@@ -110,7 +110,7 @@ class HadoopRDD[K, V](
     }
   }
 
-  override def preferredLocations(split: Split) = {
+  override def getPreferredLocations(split: Split) = {
     // TODO: Filtering out "localhost" in case of file:// URLs
     val hadoopSplit = split.asInstanceOf[HadoopSplit]
     hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")

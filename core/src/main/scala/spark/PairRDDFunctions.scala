@@ -628,7 +628,7 @@ private[spark]
 class MappedValuesRDD[K, V, U](prev: WeakReference[RDD[(K, V)]], f: V => U)
   extends RDD[(K, U)](prev.get) {
 
-  override def splits = firstParent[(K, V)].splits
+  override def getSplits = firstParent[(K, V)].splits
   override val partitioner = firstParent[(K, V)].partitioner
   override def compute(split: Split) = firstParent[(K, V)].iterator(split).map{case (k, v) => (k, f(v))}
 }
@@ -637,7 +637,7 @@ private[spark]
 class FlatMappedValuesRDD[K, V, U](prev: WeakReference[RDD[(K, V)]], f: V => TraversableOnce[U])
   extends RDD[(K, U)](prev.get) {
 
-  override def splits = firstParent[(K, V)].splits
+  override def getSplits = firstParent[(K, V)].splits
   override val partitioner = firstParent[(K, V)].partitioner
   override def compute(split: Split) = {
     firstParent[(K, V)].iterator(split).flatMap { case (k, v) => f(v).map(x => (k, x)) }

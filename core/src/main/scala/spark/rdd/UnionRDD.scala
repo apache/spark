@@ -37,7 +37,7 @@ class UnionRDD[T: ClassManifest](
     array
   }
 
-  override def splits = splits_
+  override def getSplits = splits_
 
   @transient var deps_ = {
     val deps = new ArrayBuffer[Dependency[_]]
@@ -49,19 +49,16 @@ class UnionRDD[T: ClassManifest](
     deps.toList
   }
 
-  // Pre-checkpoint dependencies deps_ should be transient (deps_)
-  // but post-checkpoint dependencies must not be transient (dependencies_)
-  override def dependencies = if (isCheckpointed) dependencies_ else deps_
+  override def getDependencies = deps_
 
   override def compute(s: Split): Iterator[T] = s.asInstanceOf[UnionSplit[T]].iterator()
 
-  override def preferredLocations(s: Split): Seq[String] =
+  override def getPreferredLocations(s: Split): Seq[String] =
     s.asInstanceOf[UnionSplit[T]].preferredLocations()
 
-  override def changeDependencies(newRDD: RDD[_]) {
+  override def clearDependencies() {
     deps_ = null
-    dependencies_ = List(new OneToOneDependency(newRDD))
-    splits_ = newRDD.splits
+    splits_ = null
     rdds = null
   }
 }

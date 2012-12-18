@@ -65,9 +65,7 @@ CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
     deps.toList
   }
 
-  // Pre-checkpoint dependencies deps_ should be transient (deps_)
-  // but post-checkpoint dependencies must not be transient (dependencies_)
-  override def dependencies = if (isCheckpointed) dependencies_ else deps_
+  override def getDependencies = deps_
 
   @transient
   var splits_ : Array[Split] = {
@@ -85,7 +83,7 @@ CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
     array
   }
 
-  override def splits = splits_
+  override def getSplits = splits_
   
   override val partitioner = Some(part)
   
@@ -117,10 +115,9 @@ CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
     map.iterator
   }
 
-  override def changeDependencies(newRDD: RDD[_]) {
+  override def clearDependencies() {
     deps_ = null
-    dependencies_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
-    splits_ = newRDD.splits
+    splits_ = null
     rdds = null
   }
 }

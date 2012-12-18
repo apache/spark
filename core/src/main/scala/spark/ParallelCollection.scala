@@ -37,15 +37,12 @@ private[spark] class ParallelCollection[T: ClassManifest](
     slices.indices.map(i => new ParallelCollectionSplit(id, i, slices(i))).toArray
   }
 
-  override def splits = splits_.asInstanceOf[Array[Split]]
+  override def getSplits = splits_.asInstanceOf[Array[Split]]
 
   override def compute(s: Split) = s.asInstanceOf[ParallelCollectionSplit[T]].iterator
-  
-  override def preferredLocations(s: Split): Seq[String] = Nil
 
-  override def changeDependencies(newRDD: RDD[_]) {
-    dependencies_ = List(new OneToOneDependency(newRDD.asInstanceOf[RDD[Any]]))
-    splits_ = newRDD.splits
+  override def clearDependencies() {
+    splits_ = null
   }
 }
 

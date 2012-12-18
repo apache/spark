@@ -55,7 +55,7 @@ class NewHadoopRDD[K, V](
     result
   }
 
-  override def splits = splits_
+  override def getSplits = splits_
 
   override def compute(theSplit: Split) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[NewHadoopSplit]
@@ -89,7 +89,7 @@ class NewHadoopRDD[K, V](
     }
   }
 
-  override def preferredLocations(split: Split) = {
+  override def getPreferredLocations(split: Split) = {
     val theSplit = split.asInstanceOf[NewHadoopSplit]
     theSplit.serializableHadoopSplit.value.getLocations.filter(_ != "localhost")
   }

@@ -57,7 +57,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(sc.objectFile[Int](parCollection.getCheckpointFile.get).collect() === result)
     assert(parCollection.dependencies != Nil)
     assert(parCollection.splits.length === numSplits)
-    assert(parCollection.splits.toList === parCollection.checkpointData.get.cpRDDSplits.toList)
+    assert(parCollection.splits.toList === parCollection.checkpointData.get.getSplits.toList)
     assert(parCollection.collect() === result)
   }
 
@@ -72,7 +72,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(sc.objectFile[String](blockRDD.getCheckpointFile.get).collect() === result)
     assert(blockRDD.dependencies != Nil)
     assert(blockRDD.splits.length === numSplits)
-    assert(blockRDD.splits.toList === blockRDD.checkpointData.get.cpRDDSplits.toList)
+    assert(blockRDD.splits.toList === blockRDD.checkpointData.get.getSplits.toList)
     assert(blockRDD.collect() === result)
   }
 
@@ -191,7 +191,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     assert(operatedRDD.dependencies.head.rdd != parentRDD)
     
     // Test whether the splits have been changed to the new Hadoop splits
-    assert(operatedRDD.splits.toList === operatedRDD.checkpointData.get.cpRDDSplits.toList)
+    assert(operatedRDD.splits.toList === operatedRDD.checkpointData.get.getSplits.toList)
 
     // Test whether the number of splits is same as before
     assert(operatedRDD.splits.length === numSplits)

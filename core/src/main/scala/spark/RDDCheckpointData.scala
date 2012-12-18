@@ -24,7 +24,6 @@ extends Logging with Serializable {
   var cpState = Initialized
   @transient var cpFile: Option[String] = None
   @transient var cpRDD: Option[RDD[T]] = None
-  @transient var cpRDDSplits: Seq[Split] = Nil
 
   // Mark the RDD for checkpointing
   def markForCheckpoint() {
@@ -81,7 +80,6 @@ extends Logging with Serializable {
     RDDCheckpointData.synchronized {
       cpFile = Some(file)
       cpRDD = Some(newRDD)
-      cpRDDSplits = newRDD.splits
       rdd.changeDependencies(newRDD)
       cpState = Checkpointed
       RDDCheckpointData.checkpointCompleted()
@@ -90,9 +88,15 @@ extends Logging with Serializable {
   }
 
   // Get preferred location of a split after checkpointing
-  def preferredLocations(split: Split) = {
+  def getPreferredLocations(split: Split) = {
     RDDCheckpointData.synchronized {
       cpRDD.get.preferredLocations(split)
+    }
+  }
+
+  def getSplits: Array[Split] = {
+    RDDCheckpointData.synchronized {
+      cpRDD.get.splits
     }
   }
 
