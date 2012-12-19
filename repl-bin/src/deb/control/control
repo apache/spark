@@ -1,8 +1,8 @@
-Package: [[artifactId]]
+Package: [[deb.pkg.name]]
 Version: [[version]]-[[buildNumber]]
 Section: misc
 Priority: extra
 Architecture: all
 Maintainer: Matei Zaharia <matei.zaharia@gmail.com>
-Description: spark repl
+Description: [[name]]
 Distribution: development
