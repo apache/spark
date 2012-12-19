@@ -19,7 +19,7 @@ import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 import spark.{CacheTracker, Logging, SizeEstimator, SparkEnv, SparkException, Utils}
 import spark.network._
 import spark.serializer.Serializer
-import spark.util.{ByteBufferInputStream, GenerationIdUtil, MetadataCleaner, TimeStampedHashMap}
+import spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStampedHashMap}
 
 import sun.nio.ch.DirectBuffer
 
@@ -91,7 +91,7 @@ class BlockManager(
   val host = System.getProperty("spark.hostname", Utils.localHostName())
 
   val slaveActor = master.actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
-    name = "BlockManagerActor" + GenerationIdUtil.BLOCK_MANAGER.next)
+    name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
 
   @volatile private var shuttingDown = false
 
@@ -865,7 +865,7 @@ class BlockManager(
       blockInfo.remove(blockId)
     } else {
       // The block has already been removed; do nothing.
-      logWarning("Block " + blockId + " does not exist.")
+      logWarning("Asked to remove block " + blockId + ", which does not exist")
     }
   }
 
@@ -951,6 +951,9 @@ class BlockManager(
 
 private[spark]
 object BlockManager extends Logging {
+
+  val ID_GENERATOR = new IdGenerator
+
   def getMaxMemoryFromSystemProperties: Long = {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
     (Runtime.getRuntime.maxMemory * memoryFraction).toLong

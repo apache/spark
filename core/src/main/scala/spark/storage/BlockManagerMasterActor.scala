@@ -183,7 +183,6 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   private def register(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " "
-    logDebug("Got in register 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
 
     if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
       logInfo("Got Register Msg from master node, don't register it")
@@ -200,7 +199,6 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       blockManagerInfo += (blockManagerId -> new BlockManagerMasterActor.BlockManagerInfo(
         blockManagerId, System.currentTimeMillis(), maxMemSize, slaveActor))
     }
-    logDebug("Got in register 1" + tmp + Utils.getUsedTimeMs(startTimeMs))
     sender ! true
   }
 
@@ -227,7 +225,6 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
-      logDebug("Got in block update 1" + tmp + " used " + Utils.getUsedTimeMs(startTimeMs))
       sender ! true
       return
     }
@@ -257,15 +254,11 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   private def getLocations(blockId: String) {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockId + " "
-    logDebug("Got in getLocations 0" + tmp + Utils.getUsedTimeMs(startTimeMs))
     if (blockInfo.containsKey(blockId)) {
       var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
       res.appendAll(blockInfo.get(blockId)._2)
-      logDebug("Got in getLocations 1" + tmp + " as "+ res.toSeq + " at "
-          + Utils.getUsedTimeMs(startTimeMs))
       sender ! res.toSeq
     } else {
-      logDebug("Got in getLocations 2" + tmp + Utils.getUsedTimeMs(startTimeMs))
       var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
       sender ! res
     }
@@ -274,25 +267,20 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   private def getLocationsMultipleBlockIds(blockIds: Array[String]) {
     def getLocations(blockId: String): Seq[BlockManagerId] = {
       val tmp = blockId
-      logDebug("Got in getLocationsMultipleBlockIds Sub 0 " + tmp)
       if (blockInfo.containsKey(blockId)) {
         var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
         res.appendAll(blockInfo.get(blockId)._2)
-        logDebug("Got in getLocationsMultipleBlockIds Sub 1 " + tmp + " " + res.toSeq)
         return res.toSeq
       } else {
-        logDebug("Got in getLocationsMultipleBlockIds Sub 2 " + tmp)
         var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
         return res.toSeq
       }
     }
 
-    logDebug("Got in getLocationsMultipleBlockIds " + blockIds.toSeq)
     var res: ArrayBuffer[Seq[BlockManagerId]] = new ArrayBuffer[Seq[BlockManagerId]]
     for (blockId <- blockIds) {
       res.append(getLocations(blockId))
     }
-    logDebug("Got in getLocationsMultipleBlockIds " + blockIds.toSeq + " : " + res.toSeq)
     sender ! res.toSeq
   }
 
