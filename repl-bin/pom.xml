@@ -15,7 +15,8 @@
   <url>http://spark-project.org/</url>
 
   <properties>
-    <deb.install.path>/usr/share/spark</deb.install.path>
+    <deb.pkg.name>spark-${classifier}</deb.pkg.name>
+    <deb.install.path>/usr/share/spark-${classifier}</deb.install.path>
     <deb.user>root</deb.user>
   </properties>
 
@@ -183,7 +184,7 @@
                   <goal>jdeb</goal>
                 </goals>
                 <configuration>
-                  <deb>${project.build.directory}/${project.artifactId}-${classifier}_${project.version}-${buildNumber}_all.deb</deb>
+                  <deb>${project.build.directory}/${deb.pkg.name}_${project.version}-${buildNumber}_all.deb</deb>
                   <attach>false</attach>
                   <compression>gzip</compression>
                   <dataSet>
