@@ -14,7 +14,7 @@ private[spark] class WorkerInfo(
   val publicAddress: String) {
 
   var executors = new mutable.HashMap[String, ExecutorInfo]  // fullId => info
-
+  var state: WorkerState.Value = WorkerState.ALIVE
   var coresUsed = 0
   var memoryUsed = 0
 
@@ -41,5 +41,9 @@ private[spark] class WorkerInfo(
 
   def webUiAddress : String = {
     "http://" + this.publicAddress + ":" + this.webUiPort
+  }
+
+  def setState(state: WorkerState.Value) = {
+    this.state = state
   }
 }
