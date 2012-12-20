@@ -54,7 +54,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     parCollection.checkpoint()
     assert(parCollection.dependencies === Nil)
     val result = parCollection.collect()
-    assert(sc.objectFile[Int](parCollection.getCheckpointFile.get).collect() === result)
+    assert(sc.checkpointFile[Int](parCollection.getCheckpointFile.get).collect() === result)
     assert(parCollection.dependencies != Nil)
     assert(parCollection.splits.length === numSplits)
     assert(parCollection.splits.toList === parCollection.checkpointData.get.getSplits.toList)
@@ -69,7 +69,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     val numSplits = blockRDD.splits.size
     blockRDD.checkpoint()
     val result = blockRDD.collect()
-    assert(sc.objectFile[String](blockRDD.getCheckpointFile.get).collect() === result)
+    assert(sc.checkpointFile[String](blockRDD.getCheckpointFile.get).collect() === result)
     assert(blockRDD.dependencies != Nil)
     assert(blockRDD.splits.length === numSplits)
     assert(blockRDD.splits.toList === blockRDD.checkpointData.get.getSplits.toList)
@@ -185,7 +185,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
     val (rddSizeAfterCheckpoint, splitSizeAfterCheckpoint) = getSerializedSizes(operatedRDD)
 
     // Test whether the checkpoint file has been created
-    assert(sc.objectFile[U](operatedRDD.getCheckpointFile.get).collect() === result)
+    assert(sc.checkpointFile[U](operatedRDD.getCheckpointFile.get).collect() === result)
     
     // Test whether dependencies have been changed from its earlier parent RDD
     assert(operatedRDD.dependencies.head.rdd != parentRDD)

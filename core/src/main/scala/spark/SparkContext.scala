@@ -37,9 +37,7 @@ import spark.broadcast._
 import spark.deploy.LocalSparkCluster
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.rdd.HadoopRDD
-import spark.rdd.NewHadoopRDD
-import spark.rdd.UnionRDD
+import rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD}
 import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
@@ -368,13 +366,9 @@ class SparkContext(
 
 
   protected[spark] def checkpointFile[T: ClassManifest](
-      path: String,
-      minSplits: Int = defaultMinSplits
+      path: String
     ): RDD[T] = {
-    val rdd = objectFile[T](path, minSplits)
-    rdd.checkpointData = Some(new RDDCheckpointData(rdd))
-    rdd.checkpointData.get.cpFile = Some(path)
-    rdd
+    new CheckpointRDD[T](this, path)
   }
 
   /** Build the union of a list of RDDs. */

@@ -24,6 +24,9 @@ class CheckpointRDD[T: ClassManifest](sc: SparkContext, checkpointPath: String)
     splitFiles.zipWithIndex.map(x => new CheckpointRDDSplit(x._2, x._1)).toArray
   }
 
+  checkpointData = Some(new RDDCheckpointData[T](this))
+  checkpointData.get.cpFile = Some(checkpointPath)
+
   override def getSplits = splits_
 
   override def getPreferredLocations(split: Split): Seq[String] = {
