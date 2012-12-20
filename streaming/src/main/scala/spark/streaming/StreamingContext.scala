@@ -15,6 +15,7 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.hadoop.fs.Path
 import java.util.UUID
 import spark.util.MetadataCleaner
@@ -122,6 +123,31 @@ class StreamingContext private (
 
   private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
 
+ /**
+   * Create an input stream that pulls messages form a Kafka Broker.
+   * 
+   * @param host Zookeper hostname.
+   * @param port Zookeper port.
+   * @param groupId The group id for this consumer.
+   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   * in its own thread.
+   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
+   * By default the value is pulled from zookeper.
+   * @param storageLevel RDD storage level. Defaults to memory-only.
+   */
+  def kafkaStream[T: ClassManifest](
+      hostname: String,
+      port: Int,
+      groupId: String,
+      topics: Map[String, Int],
+      initialOffsets: Map[KafkaPartitionKey, Long] = Map[KafkaPartitionKey, Long](),
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
+    ): DStream[T] = {
+    val inputStream = new KafkaInputDStream[T](this, hostname, port, groupId, topics, initialOffsets, storageLevel)
+    graph.addInputStream(inputStream)
+    inputStream
+  }
+
   def networkTextStream(
       hostname: String,
       port: Int,
@@ -140,6 +166,16 @@ class StreamingContext private (
     graph.addInputStream(inputStream)
     inputStream
   }
+
+  def flumeStream (
+    hostname: String,
+    port: Int,
+    storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2): DStream[SparkFlumeEvent] = {
+    val inputStream = new FlumeInputDStream(this, hostname, port, storageLevel)
+    graph.addInputStream(inputStream)
+    inputStream
+  }
+
 
   def rawNetworkStream[T: ClassManifest](
       hostname: String,

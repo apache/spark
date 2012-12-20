@@ -63,9 +63,9 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     // then check whether some RDD has been checkpointed or not
     ssc.start()
     runStreamsWithRealDelay(ssc, firstNumBatches)
-    logInfo("Checkpoint data of state stream = \n[" + stateStream.checkpointData.mkString(",\n") + "]")
-    assert(!stateStream.checkpointData.isEmpty, "No checkpointed RDDs in state stream before first failure")
-    stateStream.checkpointData.foreach {
+    logInfo("Checkpoint data of state stream = \n[" + stateStream.checkpointData.rdds.mkString(",\n") + "]")
+    assert(!stateStream.checkpointData.rdds.isEmpty, "No checkpointed RDDs in state stream before first failure")
+    stateStream.checkpointData.rdds.foreach {
       case (time, data) => {
         val file = new File(data.toString)
         assert(file.exists(), "Checkpoint file '" + file +"' for time " + time + " for state stream before first failure does not exist")
@@ -74,7 +74,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Run till a further time such that previous checkpoint files in the stream would be deleted
     // and check whether the earlier checkpoint files are deleted
-    val checkpointFiles = stateStream.checkpointData.map(x => new File(x._2.toString))
+    val checkpointFiles = stateStream.checkpointData.rdds.map(x => new File(x._2.toString))
     runStreamsWithRealDelay(ssc, secondNumBatches)
     checkpointFiles.foreach(file => assert(!file.exists, "Checkpoint file '" + file + "' was not deleted"))
     ssc.stop()
@@ -91,8 +91,8 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     // is present in the checkpoint data or not
     ssc.start()
     runStreamsWithRealDelay(ssc, 1)
-    assert(!stateStream.checkpointData.isEmpty, "No checkpointed RDDs in state stream before second failure")
-    stateStream.checkpointData.foreach {
+    assert(!stateStream.checkpointData.rdds.isEmpty, "No checkpointed RDDs in state stream before second failure")
+    stateStream.checkpointData.rdds.foreach {
       case (time, data) => {
         val file = new File(data.toString)
         assert(file.exists(),

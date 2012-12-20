@@ -186,19 +186,19 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
 
     // Test whether the checkpoint file has been created
     assert(sc.checkpointFile[U](operatedRDD.getCheckpointFile.get).collect() === result)
-    
+
     // Test whether dependencies have been changed from its earlier parent RDD
     assert(operatedRDD.dependencies.head.rdd != parentRDD)
-    
+
     // Test whether the splits have been changed to the new Hadoop splits
     assert(operatedRDD.splits.toList === operatedRDD.checkpointData.get.getSplits.toList)
 
     // Test whether the number of splits is same as before
     assert(operatedRDD.splits.length === numSplits)
-    
+
     // Test whether the data in the checkpointed RDD is same as original
     assert(operatedRDD.collect() === result)
-    
+
     // Test whether serialized size of the RDD has reduced. If the RDD
     // does not have any dependency to another RDD (e.g., ParallelCollection,
     // ShuffleRDD with ShuffleDependency), it may not reduce in size after checkpointing.
@@ -211,7 +211,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
           "[" + rddSizeBeforeCheckpoint + " --> " + rddSizeAfterCheckpoint + "]"
       )
     }
-    
+
     // Test whether serialized size of the splits has reduced. If the splits
     // do not have any non-transient reference to another RDD or another RDD's splits, it
     // does not refer to a lineage and therefore may not reduce in size after checkpointing.
@@ -255,7 +255,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
 
     // Test whether the data in the checkpointed RDD is same as original
     assert(operatedRDD.collect() === result)
-    
+
     // Test whether serialized size of the RDD has reduced because of its parent being
     // checkpointed. If this RDD or its parent RDD do not have any dependency
     // to another RDD (e.g., ParallelCollection, ShuffleRDD with ShuffleDependency), it may
@@ -267,7 +267,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
           "[" + rddSizeBeforeCheckpoint + " --> " + rddSizeAfterCheckpoint + "]"
       )
     }
-    
+
     // Test whether serialized size of the splits has reduced because of its parent being
     // checkpointed. If the splits do not have any non-transient reference to another RDD
     // or another RDD's splits, it does not refer to a lineage and therefore may not reduce
@@ -281,7 +281,7 @@ class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
           "[" + splitSizeBeforeCheckpoint + " --> " + splitSizeAfterCheckpoint + "]"
       )
     }
-    
+
   }
 
   /**

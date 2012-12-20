@@ -37,6 +37,9 @@ import org.apache.hadoop.conf.Configuration
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
  */
+
+case class DStreamCheckpointData(rdds: HashMap[Time, Any])
+
 abstract class DStream[T: ClassManifest] (@transient var ssc: StreamingContext)
 extends Serializable with Logging {
 
@@ -79,7 +82,7 @@ extends Serializable with Logging {
   // Checkpoint details
   protected[streaming] val mustCheckpoint = false
   protected[streaming] var checkpointInterval: Time = null
-  protected[streaming] val checkpointData = new HashMap[Time, Any]()
+  protected[streaming] var checkpointData = new DStreamCheckpointData(HashMap[Time, Any]())
 
   // Reference to whole DStream graph
   protected[streaming] var graph: DStreamGraph = null
@@ -314,6 +317,15 @@ extends Serializable with Logging {
     dependencies.foreach(_.forgetOldRDDs(time))
   }
 
+  /* Adds metadata to the Stream while it is running. 
+   * This methd should be overwritten by sublcasses of InputDStream.
+   */
+  protected[streaming] def addMetadata(metadata: Any) {
+    if (metadata != null) {
+      logInfo("Dropping Metadata: " + metadata.toString)
+    }
+  }
+
   /**
    * Refreshes the list of checkpointed RDDs that will be saved along with checkpoint of
    * this stream. This is an internal method that should not be called directly. This is
@@ -325,29 +337,28 @@ extends Serializable with Logging {
     logInfo("Updating checkpoint data for time " + currentTime)
 
     // Get the checkpointed RDDs from the generated RDDs
+    val newRdds = generatedRDDs.filter(_._2.getCheckpointFile.isDefined)
+                               .map(x => (x._1, x._2.getCheckpointFile.get))
 
-    val newCheckpointData = generatedRDDs.filter(_._2.getCheckpointFile.isDefined)
-                                         .map(x => (x._1, x._2.getCheckpointFile.get))
-    // Make a copy of the existing checkpoint data
-    val oldCheckpointData = checkpointData.clone()
+    // Make a copy of the existing checkpoint data (checkpointed RDDs)
+    val oldRdds = checkpointData.rdds.clone()
 
-    // If the new checkpoint has checkpoints then replace existing with the new one
-    if (newCheckpointData.size > 0) {
-      checkpointData.clear()
-      checkpointData ++= newCheckpointData
+    // If the new checkpoint data has checkpoints then replace existing with the new one
+    if (newRdds.size > 0) {
+      checkpointData.rdds.clear()
+      checkpointData.rdds ++= newRdds
     }
 
-    // Make dependencies update their checkpoint data
+    // Make parent DStreams update their checkpoint data
     dependencies.foreach(_.updateCheckpointData(currentTime))
 
     // TODO: remove this, this is just for debugging
-    newCheckpointData.foreach {
+    newRdds.foreach {
       case (time, data) => { logInfo("Added checkpointed RDD for time " + time + " to stream checkpoint") }
     }
 
-    // If old checkpoint files have been removed from checkpoint data, then remove the files
-    if (newCheckpointData.size > 0) {
-      (oldCheckpointData -- newCheckpointData.keySet).foreach {
+    if (newRdds.size > 0) {
+      (oldRdds -- newRdds.keySet).foreach {
         case (time, data) => {
           val path = new Path(data.toString)
           val fs = path.getFileSystem(new Configuration())
@@ -356,8 +367,8 @@ extends Serializable with Logging {
         }
       }
     }
-    logInfo("Updated checkpoint data for time " + currentTime + ", " + checkpointData.size + " checkpoints, " 
-      + "[" + checkpointData.mkString(",") + "]")
+    logInfo("Updated checkpoint data for time " + currentTime + ", " + checkpointData.rdds.size + " checkpoints, " 
+      + "[" + checkpointData.rdds.mkString(",") + "]")
   }
 
   /**
@@ -368,8 +379,8 @@ extends Serializable with Logging {
    */
   protected[streaming] def restoreCheckpointData() {
     // Create RDDs from the checkpoint data
-    logInfo("Restoring checkpoint data from " + checkpointData.size + " checkpointed RDDs")
-    checkpointData.foreach {
+    logInfo("Restoring checkpoint data from " + checkpointData.rdds.size + " checkpointed RDDs")
+    checkpointData.rdds.foreach {
       case(time, data) => {
         logInfo("Restoring checkpointed RDD for time " + time + " from file '" + data.toString + "'")
         val rdd = ssc.sc.checkpointFile[T](data.toString)

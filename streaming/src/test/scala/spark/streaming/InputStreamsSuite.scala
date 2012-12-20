@@ -1,6 +1,6 @@
 package spark.streaming
 
-import java.net.{SocketException, Socket, ServerSocket}
+import java.net.{InetSocketAddress, SocketException, Socket, ServerSocket}
 import java.io.{File, BufferedWriter, OutputStreamWriter}
 import java.util.concurrent.{TimeUnit, ArrayBlockingQueue}
 import collection.mutable.{SynchronizedBuffer, ArrayBuffer}
@@ -10,7 +10,14 @@ import spark.Logging
 import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
-
+import org.apache.flume.source.avro.AvroSourceProtocol
+import org.apache.flume.source.avro.AvroFlumeEvent
+import org.apache.flume.source.avro.Status
+import org.apache.avro.ipc.{specific, NettyTransceiver}
+import org.apache.avro.ipc.specific.SpecificRequestor
+import java.nio.ByteBuffer
+import collection.JavaConversions._
+import java.nio.charset.Charset
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     
@@ -121,6 +128,54 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[String]]
     assert(outputStream.output.size > 0)
     ssc.stop()
+  }
+
+  test("flume input stream") {
+    // Set up the streaming context and input streams
+    val ssc = new StreamingContext(master, framework, batchDuration)
+    val flumeStream = ssc.flumeStream("localhost", 33333, StorageLevel.MEMORY_AND_DISK)
+    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
+      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    ssc.registerOutputStream(outputStream)
+    ssc.start()
+
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val input = Seq(1, 2, 3, 4, 5)
+
+    val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", 33333));
+    val client = SpecificRequestor.getClient(
+      classOf[AvroSourceProtocol], transceiver);
+
+    for (i <- 0 until input.size) {
+      val event = new AvroFlumeEvent
+      event.setBody(ByteBuffer.wrap(input(i).toString.getBytes()))
+      event.setHeaders(Map[CharSequence, CharSequence]("test" -> "header"))
+      client.append(event)
+      Thread.sleep(500)
+      clock.addToTime(batchDuration.milliseconds)
+    }
+
+    val startTime = System.currentTimeMillis()
+    while (outputBuffer.size < input.size && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
+      logInfo("output.size = " + outputBuffer.size + ", input.size = " + input.size)
+      Thread.sleep(100)
+    }
+    Thread.sleep(1000)
+    val timeTaken = System.currentTimeMillis() - startTime
+    assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
+    logInfo("Stopping context")
+    ssc.stop()
+
+    val decoder = Charset.forName("UTF-8").newDecoder()
+
+    assert(outputBuffer.size === input.length)
+    for (i <- 0 until outputBuffer.size) {
+      assert(outputBuffer(i).size === 1)
+      val str = decoder.decode(outputBuffer(i).head.event.getBody)
+      assert(str.toString === input(i).toString)
+      assert(outputBuffer(i).head.event.getHeaders.get("test") === "header")
+    }
   }
 
   test("file input stream") {

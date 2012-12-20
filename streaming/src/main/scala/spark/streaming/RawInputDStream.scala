@@ -31,6 +31,8 @@ class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: S
 
   var blockPushingThread: Thread = null
 
+  override def getLocationPreference = None
+
   def onStart() {
     // Open a socket to the target address and keep reading from it
     logInfo("Connecting to " + host + ":" + port)
@@ -48,7 +50,7 @@ class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: S
           val buffer = queue.take()
           val blockId = "input-" + streamId + "-" + nextBlockNumber
           nextBlockNumber += 1
-          pushBlock(blockId, buffer, storageLevel)
+          pushBlock(blockId, buffer, null, storageLevel)
         }
       }
     }

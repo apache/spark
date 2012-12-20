@@ -91,7 +91,8 @@ object SparkBuild extends Build {
       "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
       "org.scalatest" %% "scalatest" % "1.6.1" % "test",
       "org.scalacheck" %% "scalacheck" % "1.9" % "test",
-      "com.novocode" % "junit-interface" % "0.8" % "test"
+      "com.novocode" % "junit-interface" % "0.8" % "test",
+      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile"
     ),
     parallelExecution := false,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
@@ -156,7 +157,9 @@ object SparkBuild extends Build {
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
 
   def streamingSettings = sharedSettings ++ Seq(
-    name := "spark-streaming"
+    name := "spark-streaming",
+    libraryDependencies ++= Seq(
+      "com.github.sgroschupf" % "zkclient" % "0.1")
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
