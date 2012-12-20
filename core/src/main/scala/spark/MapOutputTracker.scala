@@ -2,6 +2,10 @@ package spark
 
 import java.io._
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.{GZIPInputStream, GZIPOutputStream}
+
+import scala.collection.mutable.HashMap
+import scala.collection.mutable.HashSet
 
 import akka.actor._
 import akka.dispatch._
@@ -11,17 +15,14 @@ import akka.util.Duration
 import akka.util.Timeout
 import akka.util.duration._
 
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
-
-import scheduler.MapStatus
+import spark.scheduler.MapStatus
 import spark.storage.BlockManagerId
-import java.util.zip.{GZIPInputStream, GZIPOutputStream}
-import util.{MetadataCleaner, TimeStampedHashMap}
+import spark.util.{MetadataCleaner, TimeStampedHashMap}
+
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int, requester: String)
-  extends MapOutputTrackerMessage 
+  extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
 private[spark] class MapOutputTrackerActor(tracker: MapOutputTracker) extends Actor with Logging {
@@ -91,14 +92,14 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
     }
     mapStatuses.put(shuffleId, new Array[MapStatus](numMaps))
   }
-  
+
   def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) {
     var array = mapStatuses(shuffleId)
     array.synchronized {
       array(mapId) = status
     }
   }
-  
+
   def registerMapOutputs(
       shuffleId: Int,
       statuses: Array[MapStatus],
@@ -113,7 +114,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
     var array = mapStatuses(shuffleId)
     if (array != null) {
       array.synchronized {
-        if (array(mapId).address == bmAddress) {
+        if (array(mapId) != null && array(mapId).address == bmAddress) {
           array(mapId) = null
         }
       }
@@ -122,10 +123,10 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
       throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
     }
   }
-  
+
   // Remembers which map output locations are currently being fetched on a worker
   val fetching = new HashSet[Int]
-  
+
   // Called on possibly remote nodes to get the server URIs and output sizes for a given shuffle
   def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
     val statuses = mapStatuses.get(shuffleId).orNull
@@ -150,14 +151,23 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
       // We won the race to fetch the output locs; do so
       logInfo("Doing the fetch; tracker actor = " + trackerActor)
       val host = System.getProperty("spark.hostname", Utils.localHostName)
-      val fetchedBytes = askTracker(GetMapOutputStatuses(shuffleId, host)).asInstanceOf[Array[Byte]]
-      val fetchedStatuses = deserializeStatuses(fetchedBytes)
-      
-      logInfo("Got the output locations")
-      mapStatuses.put(shuffleId, fetchedStatuses)
-      fetching.synchronized {
-        fetching -= shuffleId
-        fetching.notifyAll()
+      // This try-finally prevents hangs due to timeouts:
+      var fetchedStatuses: Array[MapStatus] = null
+      try {
+        val fetchedBytes =
+          askTracker(GetMapOutputStatuses(shuffleId, host)).asInstanceOf[Array[Byte]]
+        fetchedStatuses = deserializeStatuses(fetchedBytes)
+        logInfo("Got the output locations")
+        mapStatuses.put(shuffleId, fetchedStatuses)
+        if (fetchedStatuses.contains(null)) {
+          throw new FetchFailedException(null, shuffleId, -1, reduceId,
+            new Exception("Missing an output location for shuffle " + shuffleId))
+        }
+      } finally {
+        fetching.synchronized {
+          fetching -= shuffleId
+          fetching.notifyAll()
+        }
       }
       return fetchedStatuses.map(s =>
         (s.address, MapOutputTracker.decompressSize(s.compressedSizes(reduceId))))
@@ -263,8 +273,10 @@ private[spark] object MapOutputTracker {
    * sizes up to 35 GB with at most 10% error.
    */
   def compressSize(size: Long): Byte = {
-    if (size <= 1L) {
+    if (size == 0) {
       0
+    } else if (size <= 1L) {
+      1
     } else {
       math.min(255, math.ceil(math.log(size) / math.log(LOG_BASE)).toInt).toByte
     }
@@ -275,7 +287,7 @@ private[spark] object MapOutputTracker {
    */
   def decompressSize(compressedSize: Byte): Long = {
     if (compressedSize == 0) {
-      1
+      0
     } else {
       math.pow(LOG_BASE, (compressedSize & 0xFF)).toLong
     }

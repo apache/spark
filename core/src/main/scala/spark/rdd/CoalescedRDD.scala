@@ -1,7 +1,9 @@
 package spark.rdd
 
-import spark._
 import java.lang.ref.WeakReference
+
+import spark.{Dependency, OneToOneDependency, NarrowDependency, RDD, Split, TaskContext}
+
 
 private class CoalescedRDDSplit(val index: Int, val parents: Array[Split]) extends Split
 
@@ -33,9 +35,9 @@ class CoalescedRDD[T: ClassManifest](
 
   override def splits = splits_
 
-  override def compute(split: Split): Iterator[T] = {
-    split.asInstanceOf[CoalescedRDDSplit].parents.iterator.flatMap {
-      parentSplit => firstParent[T].iterator(parentSplit)
+  override def compute(split: Split, context: TaskContext): Iterator[T] = {
+    split.asInstanceOf[CoalescedRDDSplit].parents.iterator.flatMap { parentSplit =>
+      firstParent[T].iterator(parentSplit, context)
     }
   }
 

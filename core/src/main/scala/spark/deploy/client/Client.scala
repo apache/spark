@@ -66,12 +66,12 @@ private[spark] class Client(
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, host, cores))
         listener.executorAdded(fullId, workerId, host, cores, memory)
 
-      case ExecutorUpdated(id, state, message) =>
+      case ExecutorUpdated(id, state, message, exitStatus) =>
         val fullId = jobId + "/" + id
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
-          listener.executorRemoved(fullId, message.getOrElse(""))
+          listener.executorRemoved(fullId, message.getOrElse(""), exitStatus)
         }
 
       case Terminated(actor_) if actor_ == master =>

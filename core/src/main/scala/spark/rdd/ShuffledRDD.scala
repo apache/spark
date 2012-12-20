@@ -1,11 +1,9 @@
 package spark.rdd
 
-import spark.Partitioner
-import spark.RDD
-import spark.ShuffleDependency
-import spark.SparkEnv
-import spark.Split
 import java.lang.ref.WeakReference
+
+import spark.{Partitioner, RDD, SparkEnv, ShuffleDependency, Split, TaskContext}
+
 
 private[spark] class ShuffledRDDSplit(val idx: Int) extends Split {
   override val index = idx
@@ -31,7 +29,7 @@ class ShuffledRDD[K, V](
 
   override def splits = splits_
 
-  override def compute(split: Split): Iterator[(K, V)] = {
+  override def compute(split: Split, context: TaskContext): Iterator[(K, V)] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
     SparkEnv.get.shuffleFetcher.fetch[K, V](shuffledId, split.index)
   }

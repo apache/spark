@@ -1,7 +1,9 @@
 package spark.rdd
 
-import spark._
 import java.lang.ref.WeakReference
+
+import spark.{OneToOneDependency, NarrowDependency, RDD, SparkContext, Split, TaskContext}
+
 
 private[spark]
 class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with Serializable {
@@ -40,9 +42,10 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     }
   }
 
-  override def compute(split: Split) = {
+  override def compute(split: Split, context: TaskContext) = {
     val currSplit = split.asInstanceOf[CartesianSplit]
-    for (x <- rdd1.iterator(currSplit.s1); y <- rdd2.iterator(currSplit.s2)) yield (x, y)
+    for (x <- rdd1.iterator(currSplit.s1, context);
+      y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
   }
 
   var deps_ = List(

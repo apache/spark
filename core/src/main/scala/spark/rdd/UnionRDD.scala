@@ -1,18 +1,18 @@
 package spark.rdd
 
-import scala.collection.mutable.ArrayBuffer
-
-import spark._
 import java.lang.ref.WeakReference
+import scala.collection.mutable.ArrayBuffer
+import spark.{Dependency, OneToOneDependency, RangeDependency, RDD, SparkContext, Split, TaskContext}
+
 
 private[spark] class UnionSplit[T: ClassManifest](
-    idx: Int, 
+    idx: Int,
     rdd: RDD[T],
     split: Split)
   extends Split
   with Serializable {
-  
-  def iterator() = rdd.iterator(split)
+
+  def iterator(context: TaskContext) = rdd.iterator(split, context)
   def preferredLocations() = rdd.preferredLocations(split)
   override val index: Int = idx
 }
@@ -20,7 +20,7 @@ private[spark] class UnionSplit[T: ClassManifest](
 class UnionRDD[T: ClassManifest](
     sc: SparkContext,
     @transient var rdds: Seq[RDD[T]])
-  extends RDD[T](sc, Nil)  {    // Nil, so the dependencies_ var does not refer to parent RDDs
+  extends RDD[T](sc, Nil) {  // Nil, so the dependencies_ var does not refer to parent RDDs
 
   @transient
   var splits_ : Array[Split] = {
@@ -47,7 +47,8 @@ class UnionRDD[T: ClassManifest](
 
   override def dependencies = deps_
 
-  override def compute(s: Split): Iterator[T] = s.asInstanceOf[UnionSplit[T]].iterator()
+  override def compute(s: Split, context: TaskContext): Iterator[T] =
+    s.asInstanceOf[UnionSplit[T]].iterator(context)
 
   override def preferredLocations(s: Split): Seq[String] = {
     if (isCheckpointed) {

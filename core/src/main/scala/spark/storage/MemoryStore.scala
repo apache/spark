@@ -89,7 +89,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def remove(blockId: String) {
+  override def remove(blockId: String): Boolean = {
     entries.synchronized {
       val entry = entries.get(blockId)
       if (entry != null) {
@@ -97,8 +97,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         currentMemory -= entry.size
         logInfo("Block %s of size %d dropped from memory (free %d)".format(
           blockId, entry.size, freeMemory))
+        true
       } else {
-        logWarning("Block " + blockId + " could not be removed as it does not exist")
+        false
       }
     }
   }

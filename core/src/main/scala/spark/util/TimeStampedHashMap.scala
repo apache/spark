@@ -1,8 +1,8 @@
 package spark.util
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConversions
 import scala.collection.mutable.Map
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * This is a custom implementation of scala.collection.mutable.Map which stores the insertion

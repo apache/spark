@@ -1,7 +1,8 @@
 package spark.storage
 
-import java.io.{IOException, ObjectOutput, ObjectInput, Externalizable}
+import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
+
 
 private[spark] class BlockManagerId(var ip: String, var port: Int) extends Externalizable {
   def this() = this(null, 0)  // For deserialization only
@@ -19,10 +20,7 @@ private[spark] class BlockManagerId(var ip: String, var port: Int) extends Exter
   }
 
   @throws(classOf[IOException])
-  private def readResolve(): Object = {
-    BlockManagerId.getCachedBlockManagerId(this)
-  }
-
+  private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 
   override def toString = "BlockManagerId(" + ip + ", " + port + ")"
 
@@ -34,7 +32,9 @@ private[spark] class BlockManagerId(var ip: String, var port: Int) extends Exter
   }
 }
 
-object BlockManagerId {
+
+private[spark] object BlockManagerId {
+
   val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
 
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {

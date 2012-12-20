@@ -113,7 +113,7 @@ import SparkContext._
 object SimpleJob extends Application {
   val logFile = "/var/log/syslog" // Should be some file on your system
   val sc = new SparkContext("local", "Simple Job", "$YOUR_SPARK_HOME",
-    "target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar")
+    List("target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar"))
   val logData = sc.textFile(logFile, 2).cache()
   val numAs = logData.filter(line => line.contains("a")).count()
   val numBs = logData.filter(line => line.contains("b")).count()
@@ -172,7 +172,7 @@ public class SimpleJob {
   public static void main(String[] args) {
     String logFile = "/var/log/syslog"; // Should be some file on your system
     JavaSparkContext sc = new JavaSparkContext("local", "Simple Job",
-      "$YOUR_SPARK_HOME", "target/simple-project-1.0.jar");
+      "$YOUR_SPARK_HOME", new String[]{"target/simple-project-1.0.jar"});
     JavaRDD<String> logData = sc.textFile(logFile).cache();
 
     long numAs = logData.filter(new Function<String, Boolean>() {

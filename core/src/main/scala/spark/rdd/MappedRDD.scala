@@ -1,9 +1,9 @@
 package spark.rdd
 
-import spark.OneToOneDependency
-import spark.RDD
-import spark.Split
 import java.lang.ref.WeakReference
+
+import spark.{RDD, Split, TaskContext}
+
 
 private[spark]
 class MappedRDD[U: ClassManifest, T: ClassManifest](
@@ -12,5 +12,6 @@ class MappedRDD[U: ClassManifest, T: ClassManifest](
   extends RDD[U](prev.get) {
 
   override def splits = firstParent[T].splits
-  override def compute(split: Split) = firstParent[T].iterator(split).map(f)
+  override def compute(split: Split, context: TaskContext) =
+    firstParent[T].iterator(split, context).map(f)
 }

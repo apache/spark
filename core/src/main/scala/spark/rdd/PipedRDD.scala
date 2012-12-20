@@ -1,6 +1,7 @@
 package spark.rdd
 
 import java.io.PrintWriter
+import java.lang.ref.WeakReference
 import java.util.StringTokenizer
 
 import scala.collection.Map
@@ -8,11 +9,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
-import spark.OneToOneDependency
-import spark.RDD
-import spark.SparkEnv
-import spark.Split
-import java.lang.ref.WeakReference
+import spark.{RDD, SparkEnv, Split, TaskContext}
 
 
 /**
@@ -33,12 +30,12 @@ class PipedRDD[T: ClassManifest](
 
   override def splits = firstParent[T].splits
 
-  override def compute(split: Split): Iterator[String] = {
+  override def compute(split: Split, context: TaskContext): Iterator[String] = {
     val pb = new ProcessBuilder(command)
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
     envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
-    
+
     val proc = pb.start()
     val env = SparkEnv.get
 
@@ -56,7 +53,7 @@ class PipedRDD[T: ClassManifest](
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
-        for (elem <- firstParent[T].iterator(split)) {
+        for (elem <- firstParent[T].iterator(split, context)) {
           out.println(elem)
         }
         out.close()

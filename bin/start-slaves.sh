@@ -15,20 +15,10 @@ if [ "$SPARK_MASTER_PORT" = "" ]; then
 fi
 
 if [ "$SPARK_MASTER_IP" = "" ]; then
-  hostname=`hostname`
-  hostouput=`host "$hostname"`
-
-  if [[ "$hostouput" == *"not found"* ]]; then
-    echo $hostouput
-    echo "Fail to identiy the IP for the master."
-    echo "Set SPARK_MASTER_IP explicitly in configuration instead."
-    exit 1
-  fi
-  ip=`host "$hostname" | cut -d " " -f 4`
-else
-  ip=$SPARK_MASTER_IP
+  SPARK_MASTER_IP=`hostname`
 fi
 
-echo "Master IP: $ip"
+echo "Master IP: $SPARK_MASTER_IP"
 
-"$bin"/spark-daemons.sh start spark.deploy.worker.Worker spark://$ip:$SPARK_MASTER_PORT
+# Launch the slaves
+exec "$bin/slaves.sh" cd "$SPARK_HOME" \; "$bin/start-slave.sh" spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT

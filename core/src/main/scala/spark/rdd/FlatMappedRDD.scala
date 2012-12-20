@@ -1,16 +1,17 @@
 package spark.rdd
 
-import spark.OneToOneDependency
-import spark.RDD
-import spark.Split
 import java.lang.ref.WeakReference
+
+import spark.{RDD, Split, TaskContext}
+
 
 private[spark]
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
     prev: WeakReference[RDD[T]],
     f: T => TraversableOnce[U])
   extends RDD[U](prev.get) {
-  
+
   override def splits = firstParent[T].splits
-  override def compute(split: Split) = firstParent[T].iterator(split).flatMap(f)
+  override def compute(split: Split, context: TaskContext) =
+    firstParent[T].iterator(split, context).flatMap(f)
 }

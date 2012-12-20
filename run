@@ -80,13 +80,18 @@ CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$STREAMING_DIR/target/scala-$SCALA_VERSION/classes"
-for jar in `find $FWDIR/lib_managed/jars -name '*jar'`; do
+if [ -e "$FWDIR/lib_managed" ]; then
+  for jar in `find "$FWDIR/lib_managed/jars" -name '*jar'`; do
+    CLASSPATH+=":$jar"
+  done
+  for jar in `find "$FWDIR/lib_managed/bundles" -name '*jar'`; do
+    CLASSPATH+=":$jar"
+  done
+fi
+for jar in `find "$REPL_DIR/lib" -name '*jar'`; do
   CLASSPATH+=":$jar"
 done
-for jar in `find $FWDIR/lib_managed/bundles -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
-for jar in `find $REPL_DIR/lib -name '*jar'`; do
+for jar in `find "$REPL_DIR/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
   CLASSPATH+=":$jar"
 done
 CLASSPATH+=":$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"

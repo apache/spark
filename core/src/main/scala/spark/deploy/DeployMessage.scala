@@ -11,8 +11,15 @@ private[spark] sealed trait DeployMessage extends Serializable
 
 // Worker to Master
 
-private[spark] 
-case class RegisterWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int)
+private[spark]
+case class RegisterWorker(
+    id: String,
+    host: String,
+    port: Int,
+    cores: Int,
+    memory: Int,
+    webUiPort: Int,
+    publicAddress: String)
   extends DeployMessage
 
 private[spark] 
@@ -20,7 +27,8 @@ case class ExecutorStateChanged(
     jobId: String,
     execId: Int,
     state: ExecutorState,
-    message: Option[String])
+    message: Option[String],
+    exitStatus: Option[Int])
   extends DeployMessage
 
 // Master to Worker
@@ -51,7 +59,8 @@ private[spark]
 case class ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int)
 
 private[spark]
-case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String])
+case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String],
+                           exitStatus: Option[Int])
 
 private[spark]
 case class JobKilled(message: String)

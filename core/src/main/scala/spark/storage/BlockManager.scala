@@ -1,22 +1,26 @@
 package spark.storage
 
-import akka.dispatch.{Await, Future}
-import akka.util.Duration
-
-import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
-
-import java.io.{InputStream, OutputStream, Externalizable, ObjectInput, ObjectOutput}
-import java.nio.{MappedByteBuffer, ByteBuffer}
+import java.io.{InputStream, OutputStream}
+import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.collection.JavaConversions._
 
-import spark.{CacheTracker, Logging, SizeEstimator, SparkException, Utils}
-import spark.network._
-import spark.serializer.Serializer
-import spark.util.{MetadataCleaner, TimeStampedHashMap, ByteBufferInputStream}
+import akka.actor.{ActorSystem, Cancellable, Props}
+import akka.dispatch.{Await, Future}
+import akka.util.Duration
+import akka.util.duration._
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
+
+import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
+import spark.{CacheTracker, Logging, SizeEstimator, SparkEnv, SparkException, Utils}
+import spark.network._
+import spark.serializer.Serializer
+import spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStampedHashMap}
+
 import sun.nio.ch.DirectBuffer
 
 
@@ -25,7 +29,11 @@ case class BlockException(blockId: String, message: String, ex: Exception = null
 extends Exception(message)
 
 private[spark]
-class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, maxMemory: Long)
+class BlockManager(
+    actorSystem: ActorSystem,
+    val master: BlockManagerMaster,
+    val serializer: Serializer,
+    maxMemory: Long)
   extends Logging {
 
   class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
@@ -51,7 +59,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
   }
 
-  private val blockInfo = new TimeStampedHashMap[String, BlockInfo]()
+  private val blockInfo = new TimeStampedHashMap[String, BlockInfo]
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
   private[storage] val diskStore: BlockStore =
@@ -78,7 +86,22 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   // Whether to compress RDD partitions that are stored serialized
   val compressRdds = System.getProperty("spark.rdd.compress", "false").toBoolean
 
+  val heartBeatFrequency = BlockManager.getHeartBeatFrequencyFromSystemProperties
+
   val host = System.getProperty("spark.hostname", Utils.localHostName())
+
+  val slaveActor = master.actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
+    name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
+
+  @volatile private var shuttingDown = false
+
+  private def heartBeat() {
+    if (!master.sendHeartBeat(blockManagerId)) {
+      reregister()
+    }
+  }
+
+  var heartBeatTask: Cancellable = null
 
   val metadataCleaner = new MetadataCleaner("BlockManager", this.dropOldBlocks)
   initialize()
@@ -86,8 +109,8 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
    */
-  def this(master: BlockManagerMaster, serializer: Serializer) = {
-    this(master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
+  def this(actorSystem: ActorSystem, master: BlockManagerMaster, serializer: Serializer) = {
+    this(actorSystem, master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
   }
 
   /**
@@ -95,45 +118,93 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
    * BlockManagerWorker actor.
    */
   private def initialize() {
-    master.registerBlockManager(blockManagerId, maxMemory)
+    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     BlockManagerWorker.startBlockManagerWorker(this)
+    if (!BlockManager.getDisableHeartBeatsForTesting) {
+      heartBeatTask = actorSystem.scheduler.schedule(0.seconds, heartBeatFrequency.milliseconds) {
+        heartBeat()
+      }
+    }
+  }
+
+  /**
+   * Report all blocks to the BlockManager again. This may be necessary if we are dropped
+   * by the BlockManager and come back or if we become capable of recovering blocks on disk after
+   * an executor crash.
+   *
+   * This function deliberately fails silently if the master returns false (indicating that
+   * the slave needs to reregister). The error condition will be detected again by the next
+   * heart beat attempt or new block registration and another try to reregister all blocks
+   * will be made then.
+   */
+  private def reportAllBlocks() {
+    logInfo("Reporting " + blockInfo.size + " blocks to the master.")
+    for ((blockId, info) <- blockInfo) {
+      if (!tryToReportBlockStatus(blockId, info)) {
+        logError("Failed to report " + blockId + " to master; giving up.")
+        return
+      }
+    }
+  }
+
+  /**
+   * Reregister with the master and report all blocks to it. This will be called by the heart beat
+   * thread if our heartbeat to the block amnager indicates that we were not registered.
+   */
+  def reregister() {
+    // TODO: We might need to rate limit reregistering.
+    logInfo("BlockManager reregistering with master")
+    master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+    reportAllBlocks()
   }
 
   /**
    * Get storage level of local block. If no info exists for the block, then returns null.
    */
-  def getLevel(blockId: String): StorageLevel = {
-    blockInfo.get(blockId).map(_.level).orNull
-  }
+  def getLevel(blockId: String): StorageLevel = blockInfo.get(blockId).map(_.level).orNull
 
   /**
-   * Tell the master about the current storage status of a block. This will send a heartbeat
+   * Tell the master about the current storage status of a block. This will send a block update
    * message reflecting the current status, *not* the desired storage level in its block info.
    * For example, a block with MEMORY_AND_DISK set might have fallen out to be only on disk.
    */
-  def reportBlockStatus(blockId: String) {
-    val (curLevel, inMemSize, onDiskSize) = blockInfo.get(blockId) match {
-      case None =>
-        (StorageLevel.NONE, 0L, 0L)
-      case Some(info) =>
-        info.synchronized {
-          info.level match {
-            case null =>
-              (StorageLevel.NONE, 0L, 0L)
-            case level =>
-              val inMem = level.useMemory && memoryStore.contains(blockId)
-              val onDisk = level.useDisk && diskStore.contains(blockId)
-              (
-                new StorageLevel(onDisk, inMem, level.deserialized, level.replication),
-                if (inMem) memoryStore.getSize(blockId) else 0L,
-                if (onDisk) diskStore.getSize(blockId) else 0L
-              )
-          }
-        }
+  def reportBlockStatus(blockId: String, info: BlockInfo) {
+    val needReregister = !tryToReportBlockStatus(blockId, info)
+    if (needReregister) {
+      logInfo("Got told to reregister updating block " + blockId)
+      // Reregistering will report our new block for free.
+      reregister()
     }
-    master.updateBlockInfo(blockManagerId, blockId, curLevel, inMemSize, onDiskSize)
     logDebug("Told master about block " + blockId)
   }
+
+  /**
+   * Actually send a UpdateBlockInfo message. Returns the mater's response,
+   * which will be true if the block was successfully recorded and false if
+   * the slave needs to re-register.
+   */
+  private def tryToReportBlockStatus(blockId: String, info: BlockInfo): Boolean = {
+    val (curLevel, inMemSize, onDiskSize, tellMaster) = info.synchronized {
+      info.level match {
+        case null =>
+          (StorageLevel.NONE, 0L, 0L, false)
+        case level =>
+          val inMem = level.useMemory && memoryStore.contains(blockId)
+          val onDisk = level.useDisk && diskStore.contains(blockId)
+          val storageLevel = new StorageLevel(onDisk, inMem, level.deserialized, level.replication)
+          val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
+          val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
+          (storageLevel, memSize, diskSize, info.tellMaster)
+      }
+    }
+
+    if (tellMaster) {
+      master.updateBlockInfo(blockManagerId, blockId, curLevel, inMemSize, onDiskSize)
+    } else {
+      true
+    }
+  }
+
 
   /**
    * Get locations of the block.
@@ -302,7 +373,6 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     } else {
       logDebug("Block " + blockId + " not registered locally")
     }
-
     return None
   }
 
@@ -572,7 +642,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       // and tell the master about it.
       myInfo.markReady(size)
       if (tellMaster) {
-        reportBlockStatus(blockId)
+        reportBlockStatus(blockId, myInfo)
       }
     }
     logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))
@@ -659,7 +729,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
       // and tell the master about it.
       myInfo.markReady(bytes.limit)
       if (tellMaster) {
-        reportBlockStatus(blockId)
+        reportBlockStatus(blockId, myInfo)
       }
     }
 
@@ -741,7 +811,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   def dropFromMemory(blockId: String, data: Either[ArrayBuffer[Any], ByteBuffer]) {
     logInfo("Dropping block " + blockId + " from memory")
     val info = blockInfo.get(blockId).orNull
-    if (info != null) {
+    if (info != null)  {
       info.synchronized {
         val level = info.level
         if (level.useDisk && !diskStore.contains(blockId)) {
@@ -753,9 +823,12 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
               diskStore.putBytes(blockId, bytes, level)
           }
         }
-        memoryStore.remove(blockId)
+        val blockWasRemoved = memoryStore.remove(blockId)
+        if (!blockWasRemoved) {
+          logWarning("Block " + blockId + " could not be dropped from memory as it does not exist")
+        }
         if (info.tellMaster) {
-          reportBlockStatus(blockId)
+          reportBlockStatus(blockId, info)
         }
         if (!level.useDisk) {
           // The block is completely gone from this node; forget it so we can put() it again later.
@@ -767,10 +840,34 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
     }
   }
 
+  /**
+   * Remove a block from both memory and disk.
+   */
+  def removeBlock(blockId: String) {
+    logInfo("Removing block " + blockId)
+    val info = blockInfo.get(blockId).orNull
+    if (info != null) info.synchronized {
+      // Removals are idempotent in disk store and memory store. At worst, we get a warning.
+      val removedFromMemory = memoryStore.remove(blockId)
+      val removedFromDisk = diskStore.remove(blockId)
+      if (!removedFromMemory && !removedFromDisk) {
+        logWarning("Block " + blockId + " could not be removed as it was not found in either " +
+          "the disk or memory store")
+      }
+      blockInfo.remove(blockId)
+      if (info.tellMaster) {
+        reportBlockStatus(blockId, info)
+      }
+    } else {
+      // The block has already been removed; do nothing.
+      logWarning("Asked to remove block " + blockId + ", which does not exist")
+    }
+  }
+
   def dropOldBlocks(cleanupTime: Long) {
     logInfo("Dropping blocks older than " + cleanupTime)
     val iterator = blockInfo.internalMap.entrySet().iterator()
-    while(iterator.hasNext) {
+    while (iterator.hasNext) {
       val entry = iterator.next()
       val (id, info, time) = (entry.getKey, entry.getValue._1, entry.getValue._2)
       if (time < cleanupTime) {
@@ -785,7 +882,7 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
           iterator.remove()
           logInfo("Dropped block " + id)
         }
-        reportBlockStatus(id)
+        reportBlockStatus(id, info)
       }
     }
   }
@@ -835,7 +932,11 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
   }
 
   def stop() {
+    if (heartBeatTask != null) {
+      heartBeatTask.cancel()
+    }
     connectionManager.stop()
+    master.actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
@@ -845,10 +946,19 @@ class BlockManager(val master: BlockManagerMaster, val serializer: Serializer, m
 
 private[spark]
 object BlockManager extends Logging {
+
+  val ID_GENERATOR = new IdGenerator
+
   def getMaxMemoryFromSystemProperties: Long = {
     val memoryFraction = System.getProperty("spark.storage.memoryFraction", "0.66").toDouble
     (Runtime.getRuntime.maxMemory * memoryFraction).toLong
   }
+
+  def getHeartBeatFrequencyFromSystemProperties: Long =
+    System.getProperty("spark.storage.blockManagerHeartBeatMs", "5000").toLong
+
+  def getDisableHeartBeatsForTesting: Boolean =
+    System.getProperty("spark.test.disableBlockManagerHeartBeat", "false").toBoolean
 
   /**
    * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
