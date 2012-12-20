@@ -1,7 +1,7 @@
 package spark
 
 import org.apache.hadoop.fs.Path
-import rdd.CoalescedRDD
+import rdd.{CheckpointRDD, CoalescedRDD}
 import scheduler.{ResultTask, ShuffleMapTask}
 
 /**
@@ -55,30 +55,13 @@ extends Logging with Serializable {
     }
 
     // Save to file, and reload it as an RDD
-    val file = new Path(rdd.context.checkpointDir, "rdd-" + rdd.id).toString
-    rdd.saveAsObjectFile(file)
-
-    val newRDD = {
-      val hadoopRDD = rdd.context.objectFile[T](file, rdd.splits.size)
-
-      val oldSplits = rdd.splits.size
-      val newSplits = hadoopRDD.splits.size
-
-      logDebug("RDD splits = " + oldSplits + " --> " + newSplits)
-      if (newSplits < oldSplits) {
-        throw new Exception("# splits after checkpointing is less than before " +
-          "[" + oldSplits + " --> " + newSplits)
-      } else if (newSplits > oldSplits) {
-        new CoalescedRDD(hadoopRDD, rdd.splits.size)
-      } else {
-        hadoopRDD
-      }
-    }
-    logDebug("New RDD has " + newRDD.splits.size + " splits")
+    val path = new Path(rdd.context.checkpointDir, "rdd-" + rdd.id).toString
+    rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path) _)
+    val newRDD = new CheckpointRDD[T](rdd.context, path)
 
     // Change the dependencies and splits of the RDD
     RDDCheckpointData.synchronized {
-      cpFile = Some(file)
+      cpFile = Some(path)
       cpRDD = Some(newRDD)
       rdd.changeDependencies(newRDD)
       cpState = Checkpointed

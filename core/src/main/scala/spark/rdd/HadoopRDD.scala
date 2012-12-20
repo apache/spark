@@ -25,8 +25,7 @@ import spark.Split
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
 private[spark] class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
-  extends Split
-  with Serializable {
+  extends Split {
   
   val inputSplit = new SerializableWritable[InputSplit](s)
 
@@ -117,6 +116,6 @@ class HadoopRDD[K, V](
   }
 
   override def checkpoint() {
-    // Do nothing. Hadoop RDD cannot be checkpointed.
+    // Do nothing. Hadoop RDD should not be checkpointed.
   }
 }
