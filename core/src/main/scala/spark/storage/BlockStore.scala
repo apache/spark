@@ -31,7 +31,12 @@ abstract class BlockStore(val blockManager: BlockManager) extends Logging {
 
   def getValues(blockId: String): Option[Iterator[Any]]
 
-  def remove(blockId: String)
+  /**
+   * Remove a block, if it exists.
+   * @param blockId the block to remove.
+   * @return True if the block was found and removed, False otherwise.
+   */
+  def remove(blockId: String): Boolean
 
   def contains(blockId: String): Boolean
 
