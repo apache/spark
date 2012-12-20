@@ -28,7 +28,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   private val blockManagerIdByHost = new HashMap[String, ArrayBuffer[BlockManagerId]]
 
   // Mapping from block id to the set of block managers that have the block.
-  private val blockInfo = new JHashMap[String, Pair[Int, HashSet[BlockManagerId]]]
+  private val blockLocations = new JHashMap[String, Pair[Int, HashSet[BlockManagerId]]]
 
   initLogging()
 
@@ -53,7 +53,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       register(blockManagerId, maxMemSize, slaveActor)
 
     case UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
-      blockUpdate(blockManagerId, blockId, storageLevel, deserializedSize, size)
+      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
 
     case GetLocations(blockId) =>
       getLocations(blockId)
@@ -108,10 +108,10 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     var iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
-      val locations = blockInfo.get(blockId)._2
+      val locations = blockLocations.get(blockId)._2
       locations -= blockManagerId
       if (locations.size == 0) {
-        blockInfo.remove(locations)
+        blockLocations.remove(locations)
       }
     }
   }
@@ -154,7 +154,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
   private def removeBlock(blockId: String) {
-    val block = blockInfo.get(blockId)
+    val block = blockLocations.get(blockId)
     if (block != null) {
       block._2.foreach { blockManagerId: BlockManagerId =>
         val blockManager = blockManagerInfo.get(blockManagerId)
@@ -163,11 +163,8 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
           blockManager.get.slaveActor ! RemoveBlock(blockId)
-          // Remove the block from the master's BlockManagerInfo.
-          blockManager.get.updateBlockInfo(blockId, StorageLevel.NONE, 0, 0)
         }
       }
-      blockInfo.remove(blockId)
     }
     sender ! true
   }
@@ -202,7 +199,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     sender ! true
   }
 
-  private def blockUpdate(
+  private def updateBlockInfo(
       blockManagerId: BlockManagerId,
       blockId: String,
       storageLevel: StorageLevel,
@@ -232,21 +229,22 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
 
     var locations: HashSet[BlockManagerId] = null
-    if (blockInfo.containsKey(blockId)) {
-      locations = blockInfo.get(blockId)._2
+    if (blockLocations.containsKey(blockId)) {
+      locations = blockLocations.get(blockId)._2
     } else {
       locations = new HashSet[BlockManagerId]
-      blockInfo.put(blockId, (storageLevel.replication, locations))
+      blockLocations.put(blockId, (storageLevel.replication, locations))
     }
 
     if (storageLevel.isValid) {
-      locations += blockManagerId
+      locations.add(blockManagerId)
     } else {
       locations.remove(blockManagerId)
     }
 
+    // Remove the block from master tracking if it has been removed on all slaves.
     if (locations.size == 0) {
-      blockInfo.remove(blockId)
+      blockLocations.remove(blockId)
     }
     sender ! true
   }
@@ -254,9 +252,9 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   private def getLocations(blockId: String) {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockId + " "
-    if (blockInfo.containsKey(blockId)) {
+    if (blockLocations.containsKey(blockId)) {
       var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-      res.appendAll(blockInfo.get(blockId)._2)
+      res.appendAll(blockLocations.get(blockId)._2)
       sender ! res.toSeq
     } else {
       var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
@@ -267,9 +265,9 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   private def getLocationsMultipleBlockIds(blockIds: Array[String]) {
     def getLocations(blockId: String): Seq[BlockManagerId] = {
       val tmp = blockId
-      if (blockInfo.containsKey(blockId)) {
+      if (blockLocations.containsKey(blockId)) {
         var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-        res.appendAll(blockInfo.get(blockId)._2)
+        res.appendAll(blockLocations.get(blockId)._2)
         return res.toSeq
       } else {
         var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]

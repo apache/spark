@@ -101,7 +101,7 @@ private[spark] class BlockManagerMaster(
    * blocks that the master knows about.
    */
   def removeBlock(blockId: String) {
-    askMaster(RemoveBlock(blockId))
+    askMasterWithRetry(RemoveBlock(blockId))
   }
 
   /**
@@ -127,21 +127,6 @@ private[spark] class BlockManagerMaster(
   private def tell(message: Any) {
     if (!askMasterWithRetry[Boolean](message)) {
       throw new SparkException("BlockManagerMasterActor returned false, expected true.")
-    }
-  }
-
-  /**
-   * Send a message to the master actor and get its result within a default timeout, or
-   * throw a SparkException if this fails. There is no retry logic here so if the Akka
-   * message is lost, the master actor won't get the command.
-   */
-  private def askMaster[T](message: Any): Any = {
-    try {
-      val future = masterActor.ask(message)(timeout)
-      return Await.result(future, timeout).asInstanceOf[T]
-    } catch {
-      case e: Exception =>
-        throw new SparkException("Error communicating with BlockManagerMaster", e)
     }
   }
 

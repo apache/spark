@@ -7,6 +7,10 @@ import akka.actor._
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts._
+import org.scalatest.matchers.ShouldMatchers._
+import org.scalatest.time.SpanSugar._
 
 import spark.KryoSerializer
 import spark.SizeEstimator
@@ -142,37 +146,46 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
 
-    // Putting a1, a2  and a3 in memory and telling master only about a1 and a2
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
-    store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY, false)
+    // Putting a1, a2 and a3 in memory and telling master only about a1 and a2
+    store.putSingle("a1-to-remove", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle("a2-to-remove", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingle("a3-to-remove", a3, StorageLevel.MEMORY_ONLY, false)
 
     // Checking whether blocks are in memory and memory size
-    var memStatus = master.getMemoryStatus.head._2
+    val memStatus = master.getMemoryStatus.head._2
     assert(memStatus._1 == 2000L, "total memory " + memStatus._1 + " should equal 2000")
     assert(memStatus._2 <= 1200L, "remaining memory " + memStatus._2 + " should <= 1200")
-    assert(store.getSingle("a1") != None, "a1 was not in store")
-    assert(store.getSingle("a2") != None, "a2 was not in store")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
+    assert(store.getSingle("a1-to-remove") != None, "a1 was not in store")
+    assert(store.getSingle("a2-to-remove") != None, "a2 was not in store")
+    assert(store.getSingle("a3-to-remove") != None, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
-    assert(master.getLocations("a1").size > 0, "master was not told about a1")
-    assert(master.getLocations("a2").size > 0, "master was not told about a2")
-    assert(master.getLocations("a3").size === 0, "master was told about a3")
+    assert(master.getLocations("a1-to-remove").size > 0, "master was not told about a1")
+    assert(master.getLocations("a2-to-remove").size > 0, "master was not told about a2")
+    assert(master.getLocations("a3-to-remove").size === 0, "master was told about a3")
 
     // Remove a1 and a2 and a3. Should be no-op for a3.
-    master.removeBlock("a1")
-    master.removeBlock("a2")
-    master.removeBlock("a3")
-    assert(store.getSingle("a1") === None, "a1 not removed from store")
-    assert(store.getSingle("a2") === None, "a2 not removed from store")
-    assert(master.getLocations("a1").size === 0, "master did not remove a1")
-    assert(master.getLocations("a2").size === 0, "master did not remove a2")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
-    assert(master.getLocations("a3").size === 0, "master was told about a3")
-    memStatus = master.getMemoryStatus.head._2
-    assert(memStatus._1 == 2000L, "total memory " + memStatus._1 + " should equal 2000")
-    assert(memStatus._2 == 2000L, "remaining memory " + memStatus._1 + " should equal 2000")
+    master.removeBlock("a1-to-remove")
+    master.removeBlock("a2-to-remove")
+    master.removeBlock("a3-to-remove")
+
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("a1-to-remove") should be (None)
+      master.getLocations("a1-to-remove") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("a2-to-remove") should be (None)
+      master.getLocations("a2-to-remove") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("a3-to-remove") should not be (None)
+      master.getLocations("a3-to-remove") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      val memStatus = master.getMemoryStatus.head._2
+      memStatus._1 should equal (2000L)
+      memStatus._2 should equal (2000L)
+    }
   }
 
   test("reregistration on heart beat") {
