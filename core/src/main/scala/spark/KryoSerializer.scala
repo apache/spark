@@ -46,8 +46,8 @@ class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends Deser
   }
 
   def close() {
+    // Kryo's Input automatically closes the input stream it is using.
     input.close()
-    inStream.close()
   }
 }
 
