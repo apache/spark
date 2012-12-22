@@ -1,7 +1,6 @@
 package spark.streaming
 
 import spark.RDD
-import spark.streaming.{Time, InputDStream}
 import twitter4j._
 import twitter4j.auth.BasicAuthorization
 import collection.mutable.ArrayBuffer
