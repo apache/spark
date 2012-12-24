@@ -185,8 +185,10 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
-  def distinct(numSplits: Int = splits.size): RDD[T] =
+  def distinct(numSplits: Int): RDD[T] =
     map(x => (x, null)).reduceByKey((x, y) => x, numSplits).map(_._1)
+
+  def distinct(): RDD[T] = distinct(splits.size)
 
   /**
    * Return a sampled subset of this RDD.

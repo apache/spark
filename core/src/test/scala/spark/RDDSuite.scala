@@ -8,9 +8,9 @@ import spark.rdd.CoalescedRDD
 import SparkContext._
 
 class RDDSuite extends FunSuite with BeforeAndAfter {
-  
+
   var sc: SparkContext = _
-  
+
   after {
     if (sc != null) {
       sc.stop()
@@ -19,11 +19,15 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.master.port")
   }
-  
+
   test("basic operations") {
     sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
+    val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
+    assert(dups.distinct.count === 4)
+    assert(dups.distinct().collect === dups.distinct.collect)
+    assert(dups.distinct(2).collect === dups.distinct.collect)
     assert(nums.reduce(_ + _) === 10)
     assert(nums.fold(0)(_ + _) === 10)
     assert(nums.map(_.toString).collect().toList === List("1", "2", "3", "4"))
@@ -121,7 +125,7 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     val zipped = nums.zip(nums.map(_ + 1.0))
     assert(zipped.glom().map(_.toList).collect().toList ===
       List(List((1, 2.0), (2, 3.0)), List((3, 4.0), (4, 5.0))))
-    
+
     intercept[IllegalArgumentException] {
       nums.zip(sc.parallelize(1 to 4, 1)).collect()
     }
