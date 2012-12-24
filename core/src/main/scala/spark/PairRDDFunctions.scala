@@ -438,7 +438,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         val res = self.context.runJob(self, process _, Array(index), false)
         res(0)
       case None =>
-        throw new UnsupportedOperationException("lookup() called on an RDD without a partitioner")
+        self.filter(_._1 == key).map(_._2).collect
     }
   }
 

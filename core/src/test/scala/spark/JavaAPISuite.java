@@ -131,6 +131,17 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void lookup() {
+    JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
+      new Tuple2<String, String>("Apples", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Fruit"),
+      new Tuple2<String, String>("Oranges", "Citrus")
+      ));
+    Assert.assertEquals(2, categories.lookup("Oranges").size());
+    Assert.assertEquals(2, categories.groupByKey().lookup("Oranges").get(0).size());
+  }
+
+  @Test
   public void groupBy() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
     Function<Integer, Boolean> isOdd = new Function<Integer, Boolean>() {
