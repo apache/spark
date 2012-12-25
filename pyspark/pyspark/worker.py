@@ -8,7 +8,7 @@ from base64 import standard_b64decode
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import write_with_length, read_with_length, \
-    read_long, read_int, dump_pickle, load_pickle
+    read_long, read_int, dump_pickle, load_pickle, read_from_pickle_file
 
 
 # Redirect stdout to stderr so that users must return values from functions.
@@ -18,14 +18,6 @@ sys.stdout = sys.stderr
 
 def load_obj():
     return load_pickle(standard_b64decode(sys.stdin.readline().strip()))
-
-
-def read_input():
-    try:
-        while True:
-            yield load_pickle(read_with_length(sys.stdin))
-    except EOFError:
-        return
 
 
 def main():
@@ -40,7 +32,7 @@ def main():
         dumps = lambda x: x
     else:
         dumps = dump_pickle
-    for obj in func(read_input()):
+    for obj in func(read_from_pickle_file(sys.stdin)):
         write_with_length(dumps(obj), old_stdout)
 
 

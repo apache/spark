@@ -33,3 +33,11 @@ def read_with_length(stream):
     if obj == "":
         raise EOFError
     return obj
+
+
+def read_from_pickle_file(stream):
+    try:
+        while True:
+            yield load_pickle(read_with_length(stream))
+    except EOFError:
+        return

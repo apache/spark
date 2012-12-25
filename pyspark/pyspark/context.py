@@ -14,9 +14,8 @@ class SparkContext(object):
 
     gateway = launch_gateway()
     jvm = gateway.jvm
-    pickleFile = jvm.spark.api.python.PythonRDD.pickleFile
-    asPickle = jvm.spark.api.python.PythonRDD.asPickle
-    arrayAsPickle = jvm.spark.api.python.PythonRDD.arrayAsPickle
+    readRDDFromPickleFile = jvm.PythonRDD.readRDDFromPickleFile
+    writeArrayToPickleFile = jvm.PythonRDD.writeArrayToPickleFile
 
     def __init__(self, master, name, defaultParallelism=None):
         self.master = master
@@ -45,11 +44,11 @@ class SparkContext(object):
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
         tempFile = NamedTemporaryFile(delete=False)
+        atexit.register(lambda: os.unlink(tempFile.name))
         for x in c:
             write_with_length(dump_pickle(x), tempFile)
         tempFile.close()
-        atexit.register(lambda: os.unlink(tempFile.name))
-        jrdd = self.pickleFile(self._jsc, tempFile.name, numSlices)
+        jrdd = self.readRDDFromPickleFile(self._jsc, tempFile.name, numSlices)
         return RDD(jrdd, self)
 
     def textFile(self, name, minSplits=None):
