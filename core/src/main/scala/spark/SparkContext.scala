@@ -488,17 +488,19 @@ class SparkContext(
     if (dagScheduler != null) {
       dagScheduler.stop()
       dagScheduler = null
+      taskScheduler = null
+      // TODO: Cache.stop()?
+      env.stop()
+      // Clean up locally linked files
+      clearFiles()
+      clearJars()
+      SparkEnv.set(null)
+      ShuffleMapTask.clearCache()
+      ResultTask.clearCache()
+      logInfo("Successfully stopped SparkContext")
+    } else {
+      logInfo("SparkContext already stopped")
     }
-    taskScheduler = null
-    // TODO: Cache.stop()?
-    env.stop()
-    // Clean up locally linked files
-    clearFiles()
-    clearJars()
-    SparkEnv.set(null)
-    ShuffleMapTask.clearCache()
-    ResultTask.clearCache()
-    logInfo("Successfully stopped SparkContext")
   }
 
   /**

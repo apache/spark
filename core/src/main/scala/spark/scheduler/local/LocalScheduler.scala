@@ -81,7 +81,10 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
         val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
           ser.serialize(Accumulators.values))
         logInfo("Finished task " + idInJob)
-        listener.taskEnded(task, Success, resultToReturn, accumUpdates)
+
+        // If the threadpool has not already been shutdown, notify DAGScheduler
+        if (!Thread.currentThread().isInterrupted)
+          listener.taskEnded(task, Success, resultToReturn, accumUpdates)
       } catch {
         case t: Throwable => {
           logError("Exception in task " + idInJob, t)
@@ -91,7 +94,8 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
               submitTask(task, idInJob)
             } else {
               // TODO: Do something nicer here to return all the way to the user
-              listener.taskEnded(task, new ExceptionFailure(t), null, null)
+              if (!Thread.currentThread().isInterrupted)
+                listener.taskEnded(task, new ExceptionFailure(t), null, null)
             }
           }
         }
