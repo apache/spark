@@ -1,7 +1,5 @@
 package spark.rdd
 
-import java.lang.ref.WeakReference
-
 import spark.{RDD, Split, TaskContext}
 
 
@@ -12,13 +10,15 @@ import spark.{RDD, Split, TaskContext}
  */
 private[spark]
 class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
-    prev: WeakReference[RDD[T]],
+    prev: RDD[T],
     f: (Int, Iterator[T]) => Iterator[U],
-    preservesPartitioning: Boolean)
-  extends RDD[U](prev.get) {
+    preservesPartitioning: Boolean
+  ) extends RDD[U](prev) {
 
-  override val partitioner = if (preservesPartitioning) prev.get.partitioner else None
-  override def splits = firstParent[T].splits
+  override def getSplits = firstParent[T].splits
+
+  override val partitioner = if (preservesPartitioning) prev.partitioner else None
+
   override def compute(split: Split, context: TaskContext) =
     f(split.index, firstParent[T].iterator(split, context))
 }

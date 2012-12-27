@@ -23,7 +23,6 @@ import spark.partial.BoundedDouble
 import spark.partial.PartialResult
 import spark.rdd._
 import spark.SparkContext._
-import java.lang.ref.WeakReference
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -625,20 +624,20 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
 }
 
 private[spark]
-class MappedValuesRDD[K, V, U](prev: WeakReference[RDD[(K, V)]], f: V => U)
-  extends RDD[(K, U)](prev.get) {
+class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U)
+  extends RDD[(K, U)](prev) {
 
-  override def splits = firstParent[(K, V)].splits
+  override def getSplits = firstParent[(K, V)].splits
   override val partitioner = firstParent[(K, V)].partitioner
   override def compute(split: Split, context: TaskContext) =
     firstParent[(K, V)].iterator(split, context).map{ case (k, v) => (k, f(v)) }
 }
 
 private[spark]
-class FlatMappedValuesRDD[K, V, U](prev: WeakReference[RDD[(K, V)]], f: V => TraversableOnce[U])
-  extends RDD[(K, U)](prev.get) {
+class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U])
+  extends RDD[(K, U)](prev) {
 
-  override def splits = firstParent[(K, V)].splits
+  override def getSplits = firstParent[(K, V)].splits
   override val partitioner = firstParent[(K, V)].partitioner
   override def compute(split: Split, context: TaskContext) = {
     firstParent[(K, V)].iterator(split, context).flatMap { case (k, v) => f(v).map(x => (k, x)) }

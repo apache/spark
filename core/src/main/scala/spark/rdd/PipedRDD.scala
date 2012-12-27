@@ -1,7 +1,6 @@
 package spark.rdd
 
 import java.io.PrintWriter
-import java.lang.ref.WeakReference
 import java.util.StringTokenizer
 
 import scala.collection.Map
@@ -17,18 +16,18 @@ import spark.{RDD, SparkEnv, Split, TaskContext}
  * (printing them one per line) and returns the output as a collection of strings.
  */
 class PipedRDD[T: ClassManifest](
-    prev: WeakReference[RDD[T]],
+    prev: RDD[T],
     command: Seq[String],
     envVars: Map[String, String])
-  extends RDD[String](prev.get) {
+  extends RDD[String](prev) {
 
-  def this(prev: WeakReference[RDD[T]], command: Seq[String]) = this(prev, command, Map())
+  def this(prev: RDD[T], command: Seq[String]) = this(prev, command, Map())
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
-  def this(prev: WeakReference[RDD[T]], command: String) = this(prev, PipedRDD.tokenize(command))
+  def this(prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
 
-  override def splits = firstParent[T].splits
+  override def getSplits = firstParent[T].splits
 
   override def compute(split: Split, context: TaskContext): Iterator[String] = {
     val pb = new ProcessBuilder(command)

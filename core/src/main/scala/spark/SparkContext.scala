@@ -37,12 +37,8 @@ import spark.broadcast._
 import spark.deploy.LocalSparkCluster
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.rdd.HadoopRDD
-import spark.rdd.NewHadoopRDD
-import spark.rdd.UnionRDD
-import spark.scheduler.ShuffleMapTask
-import spark.scheduler.DAGScheduler
-import spark.scheduler.TaskScheduler
+import rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD}
+import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
@@ -376,6 +372,13 @@ class SparkContext(
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
 
+
+  protected[spark] def checkpointFile[T: ClassManifest](
+      path: String
+    ): RDD[T] = {
+    new CheckpointRDD[T](this, path)
+  }
+
   /** Build the union of a list of RDDs. */
   def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
 
@@ -494,6 +497,7 @@ class SparkContext(
     clearJars()
     SparkEnv.set(null)
     ShuffleMapTask.clearCache()
+    ResultTask.clearCache()
     logInfo("Successfully stopped SparkContext")
   }
 
@@ -629,10 +633,6 @@ class SparkContext(
  */
 object SparkContext {
 
-  // TODO: temporary hack for using HDFS as input in streaing
-  var inputFile: String = null
-  var idealPartitions: Int = 1
-
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
@@ -728,9 +728,6 @@ object SparkContext {
 
   /** Find the JAR that contains the class of a particular object */
   def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
-
-  implicit def rddToWeakRefRDD[T: ClassManifest](rdd: RDD[T]) = new WeakReference(rdd)
-
 }
 
 

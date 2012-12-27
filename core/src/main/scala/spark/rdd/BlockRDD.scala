@@ -1,9 +1,7 @@
 package spark.rdd
 
 import scala.collection.mutable.HashMap
-
 import spark.{RDD, SparkContext, SparkEnv, Split, TaskContext}
-
 
 private[spark] class BlockRDDSplit(val blockId: String, idx: Int) extends Split {
   val index = idx
@@ -14,7 +12,7 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
   extends RDD[T](sc, Nil) {
 
   @transient
-  val splits_ = (0 until blockIds.size).map(i => {
+  var splits_ : Array[Split] = (0 until blockIds.size).map(i => {
     new BlockRDDSplit(blockIds(i), i).asInstanceOf[Split]
   }).toArray
 
@@ -26,7 +24,7 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     HashMap(blockIds.zip(locations):_*)
   }
 
-  override def splits = splits_
+  override def getSplits = splits_
 
   override def compute(split: Split, context: TaskContext): Iterator[T] = {
     val blockManager = SparkEnv.get.blockManager
@@ -38,12 +36,11 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     }
   }
 
-  override def preferredLocations(split: Split) = {
-    if (isCheckpointed) {
-      checkpointRDD.preferredLocations(split)
-    } else {
-      locations_(split.asInstanceOf[BlockRDDSplit].blockId)
-    }
+  override def getPreferredLocations(split: Split) =
+    locations_(split.asInstanceOf[BlockRDDSplit].blockId)
+
+  override def clearDependencies() {
+    splits_ = null
   }
 }
 

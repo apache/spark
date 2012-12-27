@@ -1,6 +1,5 @@
 package spark.rdd
 
-import java.lang.ref.WeakReference
 import java.util.Random
 
 import cern.jet.random.Poisson
@@ -14,21 +13,21 @@ class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Seriali
 }
 
 class SampledRDD[T: ClassManifest](
-    prev: WeakReference[RDD[T]],
-    withReplacement: Boolean,
+    prev: RDD[T],
+    withReplacement: Boolean, 
     frac: Double,
     seed: Int)
-  extends RDD[T](prev.get) {
+  extends RDD[T](prev) {
 
   @transient
-  val splits_ = {
+  var splits_ : Array[Split] = {
     val rg = new Random(seed)
     firstParent[T].splits.map(x => new SampledRDDSplit(x, rg.nextInt))
   }
 
-  override def splits = splits_.asInstanceOf[Array[Split]]
+  override def getSplits = splits_.asInstanceOf[Array[Split]]
 
-  override def preferredLocations(split: Split) =
+  override def getPreferredLocations(split: Split) =
     firstParent[T].preferredLocations(split.asInstanceOf[SampledRDDSplit].prev)
 
   override def compute(splitIn: Split, context: TaskContext) = {
@@ -49,5 +48,9 @@ class SampledRDD[T: ClassManifest](
       val rand = new Random(split.seed)
       firstParent[T].iterator(split.prev, context).filter(x => (rand.nextDouble <= frac))
     }
+  }
+
+  override def clearDependencies() {
+    splits_ = null
   }
 }
