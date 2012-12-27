@@ -16,8 +16,6 @@ class PythonPartitioner(override val numPartitions: Int) extends Partitioner {
     else {
       val hashCode = {
         if (key.isInstanceOf[Array[Byte]]) {
-          System.err.println("Dumping a byte array!" +           Arrays.hashCode(key.asInstanceOf[Array[Byte]])
-          )
           Arrays.hashCode(key.asInstanceOf[Array[Byte]])
         }
         else
