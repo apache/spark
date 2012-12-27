@@ -33,7 +33,7 @@ in your operations) and performance. It provides two serialization libraries:
   Java serialization is flexible but often quite slow, and leads to large
   serialized formats for many classes.
 * [Kryo serialization](http://code.google.com/p/kryo/wiki/V1Documentation): Spark can also use
-  the Kryo library (currently just version 1) to serialize objects more quickly. Kryo is significantly
+  the Kryo library (version 2) to serialize objects more quickly. Kryo is significantly
   faster and more compact than Java serialization (often as much as 10x), but does not support all
   `Serializable` types and requires you to *register* the classes you'll use in the program in advance
   for best performance.
@@ -47,6 +47,8 @@ Finally, to register your classes with Kryo, create a public class that extends
 `spark.kryo.registrator` system property to point to it, as follows:
 
 {% highlight scala %}
+import com.esotericsoftware.kryo.Kryo
+
 class MyRegistrator extends KryoRegistrator {
   override def registerClasses(kryo: Kryo) {
     kryo.register(classOf[MyClass1])
@@ -60,7 +62,7 @@ System.setProperty("spark.kryo.registrator", "mypackage.MyRegistrator")
 val sc = new SparkContext(...)
 {% endhighlight %}
 
-The [Kryo documentation](http://code.google.com/p/kryo/wiki/V1Documentation) describes more advanced
+The [Kryo documentation](http://code.google.com/p/kryo/) describes more advanced
 registration options, such as adding custom serialization code.
 
 If your objects are large, you may also need to increase the `spark.kryoserializer.buffer.mb`
@@ -147,7 +149,7 @@ the space allocated to the RDD cache to mitigate this.
 
 **Measuring the Impact of GC**
 
-The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of 
+The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of
 time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to your
 `SPARK_JAVA_OPTS` environment variable. Next time your Spark job is run, you will see messages printed in the worker's logs
 each time a garbage collection occurs. Note these logs will be on your cluster's worker nodes (in the `stdout` files in
@@ -155,15 +157,15 @@ their work directories), *not* on your driver program.
 
 **Cache Size Tuning**
 
-One important configuration parameter for GC is the amount of memory that should be used for 
-caching RDDs. By default, Spark uses 66% of the configured memory (`SPARK_MEM`) to cache RDDs. This means that 
+One important configuration parameter for GC is the amount of memory that should be used for
+caching RDDs. By default, Spark uses 66% of the configured memory (`SPARK_MEM`) to cache RDDs. This means that
  33% of memory is available for any objects created during task execution.
 
 In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
-memory, lowering this value will help reduce the memory consumption. To change this to say 50%, you can call 
-`System.setProperty("spark.storage.memoryFraction", "0.5")`. Combined with the use of serialized caching, 
-using a smaller cache should be sufficient to mitigate most of the garbage collection problems. 
-In case you are interested in further tuning the Java GC, continue reading below. 
+memory, lowering this value will help reduce the memory consumption. To change this to say 50%, you can call
+`System.setProperty("spark.storage.memoryFraction", "0.5")`. Combined with the use of serialized caching,
+using a smaller cache should be sufficient to mitigate most of the garbage collection problems.
+In case you are interested in further tuning the Java GC, continue reading below.
 
 **Advanced GC Tuning**
 
@@ -172,9 +174,9 @@ To further tune garbage collection, we first need to understand some basic infor
 * Java Heap space is divided in to two regions Young and Old. The Young generation is meant to hold short-lived objects
   while the Old generation is intended for objects with longer lifetimes.
 
-* The Young generation is further divided into three regions [Eden, Survivor1, Survivor2]. 
+* The Young generation is further divided into three regions [Eden, Survivor1, Survivor2].
 
-* A simplified description of the garbage collection procedure: When Eden is full, a minor GC is run on Eden and objects 
+* A simplified description of the garbage collection procedure: When Eden is full, a minor GC is run on Eden and objects
   that are alive from Eden and Survivor1 are copied to Survivor2. The Survivor regions are swapped. If an object is old
   enough or Survivor2 is full, it is moved to Old. Finally when Old is close to full, a full GC is invoked.
 
@@ -186,7 +188,7 @@ temporary objects created during task execution. Some steps which may be useful 
   before a task completes, it means that there isn't enough memory available for executing tasks.
 
 * In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of memory used for caching.
-  This can be done using the `spark.storage.memoryFraction` property. It is better to cache fewer objects than to slow 
+  This can be done using the `spark.storage.memoryFraction` property. It is better to cache fewer objects than to slow
   down task execution!
 
 * If there are too many minor collections but not many major GCs, allocating more memory for Eden would help. You
@@ -195,8 +197,8 @@ temporary objects created during task execution. Some steps which may be useful 
   up by 4/3 is to account for space used by survivor regions as well.)
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
-  the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the 
-  size of the block. So if we wish to have 3 or 4 tasks worth of working space, and the HDFS block size is 64 MB, 
+  the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
+  size of the block. So if we wish to have 3 or 4 tasks worth of working space, and the HDFS block size is 64 MB,
   we can estimate size of Eden to be `4*3*64MB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
