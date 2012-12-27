@@ -38,6 +38,9 @@ interacting with Java processes.  It can be installed from
 https://github.com/bartdag/py4j; make sure to install a version that
 contains at least the commits through b7924aabe9.
 
+PySpark requires the `argparse` module, which is included in Python 2.7
+and is is available for Python 2.6 through `pip` or `easy_install`.
+
 PySpark uses the `PYTHONPATH` environment variable to search for Python
 classes; Py4J should be on this path, along with any libraries used by
 PySpark programs.  `PYTHONPATH` will be automatically shipped to worker
