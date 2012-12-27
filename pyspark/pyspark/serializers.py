@@ -2,6 +2,33 @@ import struct
 import cPickle
 
 
+class Batch(object):
+    """
+    Used to store multiple RDD entries as a single Java object.
+
+    This relieves us from having to explicitly track whether an RDD
+    is stored as batches of objects and avoids problems when processing
+    the union() of batched and unbatched RDDs (e.g. the union() of textFile()
+    with another RDD).
+    """
+    def __init__(self, items):
+        self.items = items
+
+
+def batched(iterator, batchSize):
+    items = []
+    count = 0
+    for item in iterator:
+        items.append(item)
+        count += 1
+        if count == batchSize:
+            yield Batch(items)
+            items = []
+            count = []
+    if items:
+        yield Batch(items)
+
+
 def dump_pickle(obj):
     return cPickle.dumps(obj, 2)
 
@@ -38,6 +65,11 @@ def read_with_length(stream):
 def read_from_pickle_file(stream):
     try:
         while True:
-            yield load_pickle(read_with_length(stream))
+            obj = load_pickle(read_with_length(stream))
+            if type(obj) == Batch:  # We don't care about inheritance
+                for item in obj.items:
+                    yield item
+            else:
+                yield obj
     except EOFError:
         return

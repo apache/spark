@@ -17,13 +17,14 @@ class SparkContext(object):
     readRDDFromPickleFile = jvm.PythonRDD.readRDDFromPickleFile
     writeArrayToPickleFile = jvm.PythonRDD.writeArrayToPickleFile
 
-    def __init__(self, master, name, defaultParallelism=None):
+    def __init__(self, master, name, defaultParallelism=None, batchSize=-1):
         self.master = master
         self.name = name
         self._jsc = self.jvm.JavaSparkContext(master, name)
         self.defaultParallelism = \
             defaultParallelism or self._jsc.sc().defaultParallelism()
         self.pythonExec = os.environ.get("PYSPARK_PYTHON_EXEC", 'python')
+        self.batchSize = batchSize  # -1 represents a unlimited batch size
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
