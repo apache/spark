@@ -32,30 +32,11 @@ The `pyspark/pyspark/examples` directory contains a few complete
 examples.
 
 ## Installing PySpark
-
-PySpark requires a development version of Py4J, a Python library for
-interacting with Java processes.  It can be installed from
-https://github.com/bartdag/py4j; make sure to install a version that
-contains at least the commits through b7924aabe9.
-
-PySpark requires the `argparse` module, which is included in Python 2.7
-and is is available for Python 2.6 through `pip` or `easy_install`.
-
-PySpark uses the `PYTHONPATH` environment variable to search for Python
-classes; Py4J should be on this path, along with any libraries used by
-PySpark programs.  `PYTHONPATH` will be automatically shipped to worker
-machines, but the files that it points to must be present on each
-machine.
-
-PySpark requires the Spark assembly JAR, which can be created by running
-`sbt/sbt assembly` in the Spark directory.
-
-Additionally, `SPARK_HOME` should be set to the location of the Spark
+#
+To use PySpark, `SPARK_HOME` should be set to the location of the Spark
 package.
 
 ## Running PySpark
 
 The easiest way to run PySpark is to use the `run-pyspark` and
 `pyspark-shell` scripts, which are included in the `pyspark` directory.
-These scripts automatically load the `spark-conf.sh` file, set
-`SPARK_HOME`, and add the `pyspark` package to the `PYTHONPATH`.

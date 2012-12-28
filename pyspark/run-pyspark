@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; cd ../; pwd)"
