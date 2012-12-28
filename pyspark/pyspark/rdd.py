@@ -1,5 +1,6 @@
 import atexit
 from base64 import standard_b64encode as b64enc
+import copy
 from collections import defaultdict
 from itertools import chain, ifilter, imap
 import operator
@@ -673,9 +674,9 @@ class PipelinedRDD(RDD):
             self.ctx.gateway._gateway_client)
         self.ctx._pickled_broadcast_vars.clear()
         class_manifest = self._prev_jrdd.classManifest()
-        env = MapConverter().convert(
-            {'PYTHONPATH' : os.environ.get("PYTHONPATH", "")},
-            self.ctx.gateway._gateway_client)
+        env = copy.copy(self.ctx.environment)
+        env['PYTHONPATH'] = os.environ.get("PYTHONPATH", "")
+        env = MapConverter().convert(env, self.ctx.gateway._gateway_client)
         python_rdd = self.ctx.jvm.PythonRDD(self._prev_jrdd.rdd(),
             pipe_command, env, self.preservesPartitioning, self.ctx.pythonExec,
             broadcast_vars, class_manifest)
