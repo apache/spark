@@ -3,7 +3,6 @@ package spark.api.python
 import java.io._
 import java.util.{List => JList}
 
-import scala.collection.Map
 import scala.collection.JavaConversions._
 import scala.io.Source
 
@@ -16,10 +15,26 @@ import spark.OneToOneDependency
 import spark.rdd.PipedRDD
 
 
-trait PythonRDDBase {
-  def compute[T](split: Split, envVars: Map[String, String],
-    command: Seq[String], parent: RDD[T], pythonExec: String,
-    broadcastVars: java.util.List[Broadcast[Array[Byte]]]): Iterator[Array[Byte]] = {
+private[spark] class PythonRDD[T: ClassManifest](
+  parent: RDD[T], command: Seq[String], envVars: java.util.Map[String, String],
+  preservePartitoning: Boolean, pythonExec: String, broadcastVars: java.util.List[Broadcast[Array[Byte]]])
+  extends RDD[Array[Byte]](parent.context) {
+
+  // Similar to Runtime.exec(), if we are given a single string, split it into words
+  // using a standard StringTokenizer (i.e. by spaces)
+  def this(parent: RDD[T], command: String, envVars: java.util.Map[String, String],
+    preservePartitoning: Boolean, pythonExec: String,
+    broadcastVars: java.util.List[Broadcast[Array[Byte]]]) =
+    this(parent, PipedRDD.tokenize(command), envVars, preservePartitoning, pythonExec,
+      broadcastVars)
+
+  override def splits = parent.splits
+
+  override val dependencies = List(new OneToOneDependency(parent))
+
+  override val partitioner = if (preservePartitoning) parent.partitioner else None
+
+  override def compute(split: Split): Iterator[Array[Byte]] = {
     val SPARK_HOME = new ProcessBuilder().environment().get("SPARK_HOME")
 
     val pb = new ProcessBuilder(Seq(pythonExec, SPARK_HOME + "/pyspark/pyspark/worker.py"))
@@ -100,29 +115,6 @@ trait PythonRDDBase {
       def hasNext = _nextObj.length != 0
     }
   }
-}
-
-class PythonRDD[T: ClassManifest](
-  parent: RDD[T], command: Seq[String], envVars: java.util.Map[String, String],
-  preservePartitoning: Boolean, pythonExec: String, broadcastVars: java.util.List[Broadcast[Array[Byte]]])
-  extends RDD[Array[Byte]](parent.context) with PythonRDDBase {
-
-  // Similar to Runtime.exec(), if we are given a single string, split it into words
-  // using a standard StringTokenizer (i.e. by spaces)
-  def this(parent: RDD[T], command: String, envVars: java.util.Map[String, String],
-    preservePartitoning: Boolean, pythonExec: String,
-    broadcastVars: java.util.List[Broadcast[Array[Byte]]]) =
-    this(parent, PipedRDD.tokenize(command), envVars, preservePartitoning, pythonExec,
-      broadcastVars)
-
-  override def splits = parent.splits
-
-  override val dependencies = List(new OneToOneDependency(parent))
-
-  override val partitioner = if (preservePartitoning) parent.partitioner else None
-
-  override def compute(split: Split): Iterator[Array[Byte]] =
-    compute(split, envVars.toMap, command, parent, pythonExec, broadcastVars)
 
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
@@ -139,7 +131,7 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
   val asJavaPairRDD : JavaPairRDD[Array[Byte], Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
 
-object PythonRDD {
+private[spark] object PythonRDD {
 
   /** Strips the pickle PROTO and STOP opcodes from the start and end of a pickle */
   def stripPickle(arr: Array[Byte]) : Array[Byte] = {

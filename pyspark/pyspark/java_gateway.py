@@ -1,4 +1,5 @@
 import os
+import sys
 from subprocess import Popen, PIPE
 from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
@@ -26,7 +27,7 @@ def launch_gateway():
         def run(self):
             while True:
                 line = self.stream.readline()
-                print line,
+                sys.stderr.write(line)
     EchoOutputThread(proc.stdout).start()
     # Connect to the gateway
     gateway = JavaGateway(GatewayClient(port=port))

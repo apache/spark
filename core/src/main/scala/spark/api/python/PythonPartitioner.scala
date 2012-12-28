@@ -7,7 +7,7 @@ import java.util.Arrays
 /**
  * A [[spark.Partitioner]] that performs handling of byte arrays, for use by the Python API.
  */
-class PythonPartitioner(override val numPartitions: Int) extends Partitioner {
+private[spark] class PythonPartitioner(override val numPartitions: Int) extends Partitioner {
 
   override def getPartition(key: Any): Int = {
     if (key == null) {
