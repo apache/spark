@@ -11,6 +11,11 @@ from py4j.java_collections import ListConverter
 
 
 class SparkContext(object):
+    """
+    Main entry point for Spark functionality. A SparkContext represents the
+    connection to a Spark cluster, and can be used to create L{RDD}s and
+    broadcast variables on that cluster.
+    """
 
     gateway = launch_gateway()
     jvm = gateway.jvm
@@ -36,10 +41,16 @@ class SparkContext(object):
             self._jsc.stop()
 
     def stop(self):
+        """
+        Shut down the SparkContext.
+        """
         self._jsc.stop()
         self._jsc = None
 
     def parallelize(self, c, numSlices=None):
+        """
+        Distribute a local Python collection to form an RDD.
+        """
         numSlices = numSlices or self.defaultParallelism
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
@@ -53,17 +64,30 @@ class SparkContext(object):
         return RDD(jrdd, self)
 
     def textFile(self, name, minSplits=None):
+        """
+        Read a text file from HDFS, a local file system (available on all
+        nodes), or any Hadoop-supported file system URI, and return it as an
+        RDD of Strings.
+        """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         jrdd = self._jsc.textFile(name, minSplits)
         return RDD(jrdd, self)
 
     def union(self, rdds):
+        """
+        Build the union of a list of RDDs
+        """
         first = rdds[0]._jrdd
         rest = [x._jrdd for x in rdds[1:]]
         rest = ListConverter().convert(rest, self.gateway._gateway_client)
         return RDD(self._jsc.union(first, rest), self)
 
     def broadcast(self, value):
+        """
+        Broadcast a read-only variable to the cluster, returning a C{Broadcast}
+        object for reading it in distributed functions. The variable will be
+        sent to each cluster only once.
+        """
         jbroadcast = self._jsc.broadcast(bytearray(dump_pickle(value)))
         return Broadcast(jbroadcast.id(), value, jbroadcast,
                          self._pickled_broadcast_vars)
