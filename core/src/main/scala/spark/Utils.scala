@@ -128,6 +128,9 @@ private object Utils extends Logging {
   /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   *
+   * Throws SparkException if the target file already exists and has different contents than
+   * the requested file.
    */
   def fetchFile(url: String, targetDir: File) {
     val filename = url.split("/").last
@@ -142,9 +145,9 @@ private object Utils extends Logging {
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          logWarning("File " + targetFile + " exists and does not match contents of " + url +
-            "; using existing version")
           tempFile.delete()
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
         } else {
           Files.move(tempFile, targetFile)
         }
@@ -155,8 +158,8 @@ private object Utils extends Logging {
           new File(url)
         }
         if (targetFile.exists && !Files.equal(sourceFile, targetFile)) {
-          logWarning("File " + targetFile + " exists and does not match contents of " + url +
-            "; using existing version")
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
         } else {
           // Remove the file if it already exists
           targetFile.delete()
@@ -182,9 +185,9 @@ private object Utils extends Logging {
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          logWarning("File " + targetFile + " exists and does not match contents of " + url +
-            "; using existing version")
           tempFile.delete()
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
         } else {
           Files.move(tempFile, targetFile)
         }
