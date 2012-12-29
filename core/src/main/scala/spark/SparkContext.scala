@@ -419,8 +419,9 @@ class SparkContext(
     }
     addedFiles(key) = System.currentTimeMillis
 
-    // Fetch the file locally in case the task is executed locally
-    val filename = new File(path.split("/").last)
+    // Fetch the file locally in case a job is executed locally.
+    // Jobs that run through LocalScheduler will already fetch the required dependencies,
+    // but jobs run in DAGScheduler.runLocally() will not so we must fetch the files here.
     Utils.fetchFile(path, new File("."))
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
@@ -437,11 +438,10 @@ class SparkContext(
   }
 
   /**
-   * Clear the job's list of files added by `addFile` so that they do not get donwloaded to
+   * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
   def clearFiles() {
-    addedFiles.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
     addedFiles.clear()
   }
 
@@ -465,7 +465,6 @@ class SparkContext(
    * any new nodes.
    */
   def clearJars() {
-    addedJars.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
     addedJars.clear()
   }
 
