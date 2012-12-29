@@ -7,11 +7,11 @@ title: Spark Overview
 TODO(andyk): Rewrite to make the Java API a first class part of the story.
 {% endcomment %}
 
-Spark is a MapReduce-like cluster computing framework designed for low-latency iterative jobs and interactive use from an 
-interpreter. It provides clean, language-integrated APIs in Scala and Java, with a rich array of parallel operators. Spark can 
-run on top of the [Apache Mesos](http://incubator.apache.org/mesos/) cluster manager, 
+Spark is a MapReduce-like cluster computing framework designed for low-latency iterative jobs and interactive use from an interpreter.
+It provides clean, language-integrated APIs in Scala, Java, and Python, with a rich array of parallel operators.
+Spark can run on top of the [Apache Mesos](http://incubator.apache.org/mesos/) cluster manager,
 [Hadoop YARN](http://hadoop.apache.org/docs/r2.0.1-alpha/hadoop-yarn/hadoop-yarn-site/YARN.html),
-Amazon EC2, or without an independent resource manager ("standalone mode"). 
+Amazon EC2, or without an independent resource manager ("standalone mode").
 
 # Downloading
 
@@ -59,6 +59,7 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
 * [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts, and details on the Scala API
 * [Java Programming Guide](java-programming-guide.html): using Spark from Java
+* [Python Programming Guide](python-programming-guide.html): using Spark from Python
 
 **Deployment guides:**
 
@@ -72,7 +73,7 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 * [Configuration](configuration.html): customize Spark via its configuration system
 * [Tuning Guide](tuning.html): best practices to optimize performance and memory use
-* [API Docs (Scaladoc)](api/core/index.html)
+* API Docs: [Java/Scala (Scaladoc)](api/core/index.html) and [Python (Epydoc)](api/pyspark/index.html)
 * [Bagel](bagel-programming-guide.html): an implementation of Google's Pregel on Spark
 * [Contributing to Spark](contributing-to-spark.html)
 
