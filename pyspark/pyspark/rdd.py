@@ -695,7 +695,9 @@ def _test():
     import doctest
     from pyspark.context import SparkContext
     globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest')
+    # The small batch size here ensures that we see multiple batches,
+    # even in these small test examples:
+    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     doctest.testmod(globs=globs)
     globs['sc'].stop()
 

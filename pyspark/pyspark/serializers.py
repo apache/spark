@@ -24,7 +24,7 @@ def batched(iterator, batchSize):
         if count == batchSize:
             yield Batch(items)
             items = []
-            count = []
+            count = 0
     if items:
         yield Batch(items)
 
