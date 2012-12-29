@@ -4,7 +4,7 @@ from tempfile import NamedTemporaryFile
 
 from pyspark.broadcast import Broadcast
 from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import dump_pickle, write_with_length
+from pyspark.serializers import dump_pickle, write_with_length, batched
 from pyspark.rdd import RDD
 
 from py4j.java_collections import ListConverter
@@ -91,6 +91,8 @@ class SparkContext(object):
         # objects are written to a file and loaded through textFile().
         tempFile = NamedTemporaryFile(delete=False)
         atexit.register(lambda: os.unlink(tempFile.name))
+        if self.batchSize != 1:
+            c = batched(c, self.batchSize)
         for x in c:
             write_with_length(dump_pickle(x), tempFile)
         tempFile.close()

@@ -2,7 +2,7 @@ import atexit
 from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
-from itertools import chain, ifilter, imap
+from itertools import chain, ifilter, imap, product
 import operator
 import os
 import shlex
@@ -123,12 +123,6 @@ class RDD(object):
         >>> rdd = sc.parallelize([1, 1, 2, 3])
         >>> rdd.union(rdd).collect()
         [1, 1, 2, 3, 1, 1, 2, 3]
-
-        Union of batched and unbatched RDDs (internal test):
-
-        >>> batchedRDD = sc.parallelize([Batch([1, 2, 3, 4, 5])])
-        >>> rdd.union(batchedRDD).collect()
-        [1, 1, 2, 3, 1, 2, 3, 4, 5]
         """
         return RDD(self._jrdd.union(other._jrdd), self.ctx)
 
@@ -168,7 +162,18 @@ class RDD(object):
         >>> sorted(rdd.cartesian(rdd).collect())
         [(1, 1), (1, 2), (2, 1), (2, 2)]
         """
-        return RDD(self._jrdd.cartesian(other._jrdd), self.ctx)
+        # Due to batching, we can't use the Java cartesian method.
+        java_cartesian = RDD(self._jrdd.cartesian(other._jrdd), self.ctx)
+        def unpack_batches(pair):
+            (x, y) = pair
+            if type(x) == Batch or type(y) == Batch:
+                xs = x.items if type(x) == Batch else [x]
+                ys = y.items if type(y) == Batch else [y]
+                for pair in product(xs, ys):
+                    yield pair
+            else:
+                yield pair
+        return java_cartesian.flatMap(unpack_batches)
 
     def groupBy(self, f, numSplits=None):
         """
@@ -292,8 +297,6 @@ class RDD(object):
         Return the number of elements in this RDD.
 
         >>> sc.parallelize([2, 3, 4]).count()
-        3
-        >>> sc.parallelize([Batch([2, 3, 4])]).count()
         3
         """
         return self.mapPartitions(lambda i: [sum(1 for _ in i)]).sum()
@@ -667,12 +670,8 @@ class PipelinedRDD(RDD):
         if not self._bypass_serializer and self.ctx.batchSize != 1:
             oldfunc = self.func
             batchSize = self.ctx.batchSize
-            if batchSize == -1:  # unlimited batch size
-                def batched_func(iterator):
-                    yield Batch(list(oldfunc(iterator)))
-            else:
-                def batched_func(iterator):
-                    return batched(oldfunc(iterator), batchSize)
+            def batched_func(iterator):
+                return batched(oldfunc(iterator), batchSize)
             func = batched_func
         cmds = [func, self._bypass_serializer]
         pipe_command = ' '.join(b64enc(cloudpickle.dumps(f)) for f in cmds)

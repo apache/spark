@@ -16,17 +16,20 @@ class Batch(object):
 
 
 def batched(iterator, batchSize):
-    items = []
-    count = 0
-    for item in iterator:
-        items.append(item)
-        count += 1
-        if count == batchSize:
+    if batchSize == -1: # unlimited batch size
+        yield Batch(list(iterator))
+    else:
+        items = []
+        count = 0
+        for item in iterator:
+            items.append(item)
+            count += 1
+            if count == batchSize:
+                yield Batch(items)
+                items = []
+                count = 0
+        if items:
             yield Batch(items)
-            items = []
-            count = 0
-    if items:
-        yield Batch(items)
 
 
 def dump_pickle(obj):
