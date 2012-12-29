@@ -152,8 +152,8 @@ class RDD(object):
         into a list.
 
         >>> rdd = sc.parallelize([1, 2, 3, 4], 2)
-        >>> rdd.glom().first()
-        [1, 2]
+        >>> sorted(rdd.glom().collect())
+        [[1, 2], [3, 4]]
         """
         def func(iterator): yield list(iterator)
         return self.mapPartitions(func)
@@ -211,10 +211,10 @@ class RDD(object):
         """
         Return a list that contains all of the elements in this RDD.
         """
-        picklesInJava = self._jrdd.rdd().collect()
-        return list(self._collect_array_through_file(picklesInJava))
+        picklesInJava = self._jrdd.collect().iterator()
+        return list(self._collect_iterator_through_file(picklesInJava))
 
-    def _collect_array_through_file(self, array):
+    def _collect_iterator_through_file(self, iterator):
         # Transferring lots of data through Py4J can be slow because
         # socket.readline() is inefficient.  Instead, we'll dump the data to a
         # file and read it back.
@@ -224,7 +224,7 @@ class RDD(object):
             try: os.unlink(tempFile.name)
             except: pass
         atexit.register(clean_up_file)
-        self.ctx.writeArrayToPickleFile(array, tempFile.name)
+        self.ctx._writeIteratorToPickleFile(iterator, tempFile.name)
         # Read the data into Python and deserialize it:
         with open(tempFile.name, 'rb') as tempFile:
             for item in read_from_pickle_file(tempFile):
@@ -325,11 +325,18 @@ class RDD(object):
         a lot of partitions are required. In that case, use L{collect} to get
         the whole RDD instead.
 
-        >>> sc.parallelize([2, 3, 4]).take(2)
+        >>> sc.parallelize([2, 3, 4, 5, 6]).take(2)
         [2, 3]
+        >>> sc.parallelize([2, 3, 4, 5, 6]).take(10)
+        [2, 3, 4, 5, 6]
         """
-        picklesInJava = self._jrdd.rdd().take(num)
-        return list(self._collect_array_through_file(picklesInJava))
+        items = []
+        splits = self._jrdd.splits()
+        while len(items) < num and splits:
+            split = splits.pop(0)
+            iterator = self._jrdd.iterator(split)
+            items.extend(self._collect_iterator_through_file(iterator))
+        return items[:num]
 
     def first(self):
         """

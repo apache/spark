@@ -194,7 +194,7 @@ private[spark] object PythonRDD {
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
 
-  def writeArrayToPickleFile[T](items: Array[T], filename: String) {
+  def writeIteratorToPickleFile[T](items: java.util.Iterator[T], filename: String) {
     val file = new DataOutputStream(new FileOutputStream(filename))
     for (item <- items) {
       writeAsPickle(item, file)

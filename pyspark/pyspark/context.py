@@ -19,8 +19,8 @@ class SparkContext(object):
 
     gateway = launch_gateway()
     jvm = gateway.jvm
-    readRDDFromPickleFile = jvm.PythonRDD.readRDDFromPickleFile
-    writeArrayToPickleFile = jvm.PythonRDD.writeArrayToPickleFile
+    _readRDDFromPickleFile = jvm.PythonRDD.readRDDFromPickleFile
+    _writeIteratorToPickleFile = jvm.PythonRDD.writeIteratorToPickleFile
 
     def __init__(self, master, jobName, sparkHome=None, pyFiles=None,
         environment=None, batchSize=1024):
@@ -94,7 +94,7 @@ class SparkContext(object):
         for x in c:
             write_with_length(dump_pickle(x), tempFile)
         tempFile.close()
-        jrdd = self.readRDDFromPickleFile(self._jsc, tempFile.name, numSlices)
+        jrdd = self._readRDDFromPickleFile(self._jsc, tempFile.name, numSlices)
         return RDD(jrdd, self)
 
     def textFile(self, name, minSplits=None):

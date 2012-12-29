@@ -30,7 +30,7 @@ def launch_gateway():
                 sys.stderr.write(line)
     EchoOutputThread(proc.stdout).start()
     # Connect to the gateway
-    gateway = JavaGateway(GatewayClient(port=port))
+    gateway = JavaGateway(GatewayClient(port=port), auto_convert=False)
     # Import the classes used by PySpark
     java_import(gateway.jvm, "spark.api.java.*")
     java_import(gateway.jvm, "spark.api.python.*")
