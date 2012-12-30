@@ -1,10 +1,12 @@
 package spark
 
 private[spark] abstract class ShuffleFetcher {
-  // Fetch the shuffle outputs for a given ShuffleDependency, calling func exactly
-  // once on each key-value pair obtained.
-  def fetch[K, V](shuffleId: Int, reduceId: Int, func: (K, V) => Unit)
+  /**
+   * Fetch the shuffle outputs for a given ShuffleDependency.
+   * @return An iterator over the elements of the fetched shuffle outputs.
+   */
+  def fetch[K, V](shuffleId: Int, reduceId: Int) : Iterator[(K, V)]
 
-  // Stop the fetcher
+  /** Stop the fetcher */
   def stop() {}
 }

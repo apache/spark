@@ -13,10 +13,33 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
-# Check that SCALA_HOME has been specified
-if [ -z "$SCALA_HOME" ]; then
-  echo "SCALA_HOME is not set" >&2
-  exit 1
+if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
+  if [ `command -v scala` ]; then
+    RUNNER="scala"
+  else
+    if [ -z "$SCALA_HOME" ]; then
+      echo "SCALA_HOME is not set" >&2
+      exit 1
+    fi
+    RUNNER="${SCALA_HOME}/bin/scala"
+  fi
+else
+  if [ `command -v java` ]; then
+    RUNNER="java"
+  else
+    if [ -z "$JAVA_HOME" ]; then
+      echo "JAVA_HOME is not set" >&2
+      exit 1
+    fi
+    RUNNER="${JAVA_HOME}/bin/java"
+  fi
+  if [ -z "$SCALA_LIBRARY_PATH" ]; then
+    if [ -z "$SCALA_HOME" ]; then
+      echo "SCALA_HOME is not set" >&2
+      exit 1
+    fi
+    SCALA_LIBRARY_PATH="$SCALA_HOME/lib"
+  fi
 fi
 
 # Figure out how much memory to use per executor and set it as an environment
@@ -52,13 +75,18 @@ fi
 CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
-for jar in `find $FWDIR/lib_managed/jars -name '*jar'`; do
+if [ -e "$FWDIR/lib_managed" ]; then
+  for jar in `find "$FWDIR/lib_managed/jars" -name '*jar'`; do
+    CLASSPATH+=":$jar"
+  done
+  for jar in `find "$FWDIR/lib_managed/bundles" -name '*jar'`; do
+    CLASSPATH+=":$jar"
+  done
+fi
+for jar in `find "$REPL_DIR/lib" -name '*jar'`; do
   CLASSPATH+=":$jar"
 done
-for jar in `find $FWDIR/lib_managed/bundles -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
-for jar in `find $REPL_DIR/lib -name '*jar'`; do
+for jar in `find "$REPL_DIR/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
   CLASSPATH+=":$jar"
 done
 CLASSPATH+=":$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
@@ -74,17 +102,11 @@ export CLASSPATH # Needed for spark-shell
 # the Spark shell, the wrapper is necessary to properly reset the terminal
 # when we exit, so we allow it to set a variable to launch with scala.
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
-  RUNNER="${SCALA_HOME}/bin/scala"
   EXTRA_ARGS=""     # Java options will be passed to scala as JAVA_OPTS
 else
-  CLASSPATH+=":$SCALA_HOME/lib/scala-library.jar"
-  CLASSPATH+=":$SCALA_HOME/lib/scala-compiler.jar"
-  CLASSPATH+=":$SCALA_HOME/lib/jline.jar"
-  if [ -n "$JAVA_HOME" ]; then
-    RUNNER="${JAVA_HOME}/bin/java"
-  else
-    RUNNER=java
-  fi
+  CLASSPATH+=":$SCALA_LIBRARY_PATH/scala-library.jar"
+  CLASSPATH+=":$SCALA_LIBRARY_PATH/scala-compiler.jar"
+  CLASSPATH+=":$SCALA_LIBRARY_PATH/jline.jar"
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 fi

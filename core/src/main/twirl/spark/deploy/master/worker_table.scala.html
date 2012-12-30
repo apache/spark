@@ -1,10 +1,11 @@
-@(workers: List[spark.deploy.master.WorkerInfo])
+@(workers: Array[spark.deploy.master.WorkerInfo])
 
 <table class="table table-bordered table-striped table-condensed sortable">
   <thead>
     <tr>
       <th>ID</th>
       <th>Address</th>
+      <th>State</th>
       <th>Cores</th>
       <th>Memory</th>
     </tr>

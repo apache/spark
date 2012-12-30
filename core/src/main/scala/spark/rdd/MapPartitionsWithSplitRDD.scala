@@ -1,8 +1,6 @@
 package spark.rdd
 
-import spark.OneToOneDependency
-import spark.RDD
-import spark.Split
+import spark.{OneToOneDependency, RDD, Split, TaskContext}
 
 /**
  * A variant of the MapPartitionsRDD that passes the split index into the
@@ -12,10 +10,13 @@ import spark.Split
 private[spark]
 class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
-    f: (Int, Iterator[T]) => Iterator[U])
+    f: (Int, Iterator[T]) => Iterator[U],
+    preservesPartitioning: Boolean)
   extends RDD[U](prev.context) {
 
+  override val partitioner = if (preservesPartitioning) prev.partitioner else None
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split) = f(split.index, prev.iterator(split))
+  override def compute(split: Split, context: TaskContext) =
+    f(split.index, prev.iterator(split, context))
 }

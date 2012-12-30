@@ -68,7 +68,6 @@ object SparkEnv extends Logging {
       isMaster: Boolean,
       isLocal: Boolean
     ) : SparkEnv = {
-
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port)
 
     // Bit of a hack: If this is the master and our port was 0 (meaning bind to any free port),
@@ -87,10 +86,13 @@ object SparkEnv extends Logging {
     }
 
     val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
-    
-    val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
-    val blockManager = new BlockManager(blockManagerMaster, serializer)
-    
+
+    val masterIp: String = System.getProperty("spark.master.host", "localhost")
+    val masterPort: Int = System.getProperty("spark.master.port", "7077").toInt
+    val blockManagerMaster = new BlockManagerMaster(
+      actorSystem, isMaster, isLocal, masterIp, masterPort)
+    val blockManager = new BlockManager(actorSystem, blockManagerMaster, serializer)
+
     val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isMaster)
@@ -105,7 +107,7 @@ object SparkEnv extends Logging {
 
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
-    
+
     val httpFileServer = new HttpFileServer()
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)

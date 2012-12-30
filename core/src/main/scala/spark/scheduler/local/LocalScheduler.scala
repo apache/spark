@@ -30,12 +30,12 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
   val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
   val classLoader = new ExecutorURLClassLoader(Array(), Thread.currentThread.getContextClassLoader)
-  
+
   // TODO: Need to take into account stage priority in scheduling
 
   override def start() { }
 
-  override def setListener(listener: TaskSchedulerListener) { 
+  override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener
   }
 
@@ -78,7 +78,8 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
         // on in development (so when users move their local Spark programs
         // to the cluster, they don't get surprised by serialization errors).
         val resultToReturn = ser.deserialize[Any](ser.serialize(result))
-        val accumUpdates = Accumulators.values
+        val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
+          ser.serialize(Accumulators.values))
         logInfo("Finished task " + idInJob)
         listener.taskEnded(task, Success, resultToReturn, accumUpdates)
       } catch {
@@ -107,26 +108,28 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
-    // Fetch missing dependencies
-    for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name + " with timestamp " + timestamp)
-      Utils.fetchFile(name, new File("."))
-      currentFiles(name) = timestamp
-    }
-    for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name + " with timestamp " + timestamp)
-      Utils.fetchFile(name, new File("."))
-      currentJars(name) = timestamp
-      // Add it to our class loader
-      val localName = name.split("/").last
-      val url = new File(".", localName).toURI.toURL
-      if (!classLoader.getURLs.contains(url)) {
-        logInfo("Adding " + url + " to class loader")
-        classLoader.addURL(url)
+    synchronized {
+      // Fetch missing dependencies
+      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchFile(name, new File("."))
+        currentFiles(name) = timestamp
+      }
+      for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchFile(name, new File("."))
+        currentJars(name) = timestamp
+        // Add it to our class loader
+        val localName = name.split("/").last
+        val url = new File(".", localName).toURI.toURL
+        if (!classLoader.getURLs.contains(url)) {
+          logInfo("Adding " + url + " to class loader")
+          classLoader.addURL(url)
+        }
       }
     }
   }
-  
+
   override def stop() {
     threadPool.shutdownNow()
   }

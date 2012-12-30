@@ -14,7 +14,11 @@ if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
 fi
 
-hostname=`hostname`
-ip=`host "$hostname" | cut -d " " -f 4`
+if [ "$SPARK_MASTER_IP" = "" ]; then
+  SPARK_MASTER_IP=`hostname`
+fi
 
-"$bin"/spark-daemons.sh start spark.deploy.worker.Worker spark://$ip:$SPARK_MASTER_PORT
+echo "Master IP: $SPARK_MASTER_IP"
+
+# Launch the slaves
+exec "$bin/slaves.sh" cd "$SPARK_HOME" \; "$bin/start-slave.sh" spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT

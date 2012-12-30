@@ -45,7 +45,6 @@ import spark.scheduler.TaskScheduler
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import spark.storage.BlockManagerMaster
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -87,7 +86,7 @@ class SparkContext(
 
   // Set Spark master host and port system properties
   if (System.getProperty("spark.master.host") == null) {
-    System.setProperty("spark.master.host", Utils.localIpAddress())
+    System.setProperty("spark.master.host", Utils.localIpAddress)
   }
   if (System.getProperty("spark.master.port") == null) {
     System.setProperty("spark.master.port", "0")
@@ -174,10 +173,11 @@ class SparkContext(
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
+        val masterWithoutProtocol = master.replaceFirst("^mesos://", "")  // Strip initial mesos://
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, this, master, jobName)
+          new CoarseMesosSchedulerBackend(scheduler, this, masterWithoutProtocol, jobName)
         } else {
-          new MesosSchedulerBackend(scheduler, this, master, jobName)
+          new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, jobName)
         }
         scheduler.initialize(backend)
         scheduler
@@ -199,7 +199,7 @@ class SparkContext(
     parallelize(seq, numSlices)
   }
 
-  /** 
+  /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
@@ -400,7 +400,7 @@ class SparkContext(
     new Accumulable(initialValue, param)
   }
 
-  /** 
+  /**
    * Broadcast a read-only variable to the cluster, returning a [[spark.Broadcast]] object for
    * reading it in distributed functions. The variable will be sent to each cluster only once.
    */
@@ -419,19 +419,29 @@ class SparkContext(
     }
     addedFiles(key) = System.currentTimeMillis
 
-    // Fetch the file locally in case the task is executed locally
-    val filename = new File(path.split("/").last)
+    // Fetch the file locally in case a job is executed locally.
+    // Jobs that run through LocalScheduler will already fetch the required dependencies,
+    // but jobs run in DAGScheduler.runLocally() will not so we must fetch the files here.
     Utils.fetchFile(path, new File("."))
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
   }
 
   /**
-   * Clear the job's list of files added by `addFile` so that they do not get donwloaded to
+   * Return a map from the slave to the max memory available for caching and the remaining
+   * memory available for caching.
+   */
+  def getSlavesMemoryStatus: Map[String, (Long, Long)] = {
+    env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
+      (blockManagerId.ip + ":" + blockManagerId.port, mem)
+    }
+  }
+
+  /**
+   * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
   def clearFiles() {
-    addedFiles.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
     addedFiles.clear()
   }
 
@@ -455,7 +465,6 @@ class SparkContext(
    * any new nodes.
    */
   def clearJars() {
-    addedJars.keySet.map(_.split("/").last).foreach { k => new File(k).delete() }
     addedJars.clear()
   }
 

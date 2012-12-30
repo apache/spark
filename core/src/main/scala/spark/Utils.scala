@@ -1,13 +1,15 @@
 package spark
 
 import java.io._
-import java.net.{InetAddress, URL, URI}
+import java.net.{NetworkInterface, InetAddress, URL, URI}
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions._
 import scala.io.Source
+import com.google.common.io.Files
 
 /**
  * Various utility methods used by Spark.
@@ -126,31 +128,53 @@ private object Utils extends Logging {
   /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   *
+   * Throws SparkException if the target file already exists and has different contents than
+   * the requested file.
    */
   def fetchFile(url: String, targetDir: File) {
     val filename = url.split("/").last
+    val tempDir = System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir"))
+    val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
-        logInfo("Fetching " + url + " to " + targetFile)
+        logInfo("Fetching " + url + " to " + tempFile)
         val in = new URL(url).openStream()
-        val out = new FileOutputStream(targetFile)
+        val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
-      case "file" | null =>
-        // Remove the file if it already exists
-        targetFile.delete()
-        // Symlink the file locally.
-        if (uri.isAbsolute) {
-          // url is absolute, i.e. it starts with "file:///". Extract the source
-          // file's absolute path from the url.
-          val sourceFile = new File(uri)
-          logInfo("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
-          FileUtil.symLink(sourceFile.getAbsolutePath, targetFile.getAbsolutePath)
+        if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
+          tempFile.delete()
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
         } else {
-          // url is not absolute, i.e. itself is the path to the source file.
-          logInfo("Symlinking " + url + " to " + targetFile.getAbsolutePath)
-          FileUtil.symLink(url, targetFile.getAbsolutePath)
+          Files.move(tempFile, targetFile)
+        }
+      case "file" | null =>
+        val sourceFile = if (uri.isAbsolute) {
+          new File(uri)
+        } else {
+          new File(url)
+        }
+        if (targetFile.exists && !Files.equal(sourceFile, targetFile)) {
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
+        } else {
+          // Remove the file if it already exists
+          targetFile.delete()
+          // Symlink the file locally.
+          if (uri.isAbsolute) {
+            // url is absolute, i.e. it starts with "file:///". Extract the source
+            // file's absolute path from the url.
+            val sourceFile = new File(uri)
+            logInfo("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
+            FileUtil.symLink(sourceFile.getAbsolutePath, targetFile.getAbsolutePath)
+          } else {
+            // url is not absolute, i.e. itself is the path to the source file.
+            logInfo("Symlinking " + url + " to " + targetFile.getAbsolutePath)
+            FileUtil.symLink(url, targetFile.getAbsolutePath)
+          }
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
@@ -158,8 +182,15 @@ private object Utils extends Logging {
         val conf = new Configuration()
         val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(uri))
-        val out = new FileOutputStream(targetFile)
+        val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
+        if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
+          tempFile.delete()
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
+        } else {
+          Files.move(tempFile, targetFile)
+        }
     }
     // Decompress the file if it's a .tar or .tar.gz
     if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
@@ -199,7 +230,35 @@ private object Utils extends Logging {
   /**
    * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4).
    */
-  def localIpAddress(): String = InetAddress.getLocalHost.getHostAddress
+  lazy val localIpAddress: String = findLocalIpAddress()
+
+  private def findLocalIpAddress(): String = {
+    val defaultIpOverride = System.getenv("SPARK_LOCAL_IP")
+    if (defaultIpOverride != null) {
+      defaultIpOverride
+    } else {
+      val address = InetAddress.getLocalHost
+      if (address.isLoopbackAddress) {
+        // Address resolves to something like 127.0.1.1, which happens on Debian; try to find
+        // a better address using the local network interfaces
+        for (ni <- NetworkInterface.getNetworkInterfaces) {
+          for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress && !addr.isLoopbackAddress) {
+            // We've found an address that looks reasonable!
+            logWarning("Your hostname, " + InetAddress.getLocalHost.getHostName + " resolves to" +
+              " a loopback address: " + address.getHostAddress + "; using " + addr.getHostAddress +
+              " instead (on interface " + ni.getName + ")")
+            logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
+            return addr.getHostAddress
+          }
+        }
+        logWarning("Your hostname, " + InetAddress.getLocalHost.getHostName + " resolves to" +
+          " a loopback address: " + address.getHostAddress + ", but we couldn't find any" +
+          " external IP address!")
+        logWarning("Set SPARK_LOCAL_IP if you need to bind to another address")
+      }
+      address.getHostAddress
+    }
+  }
 
   private var customHostname: Option[String] = None
 

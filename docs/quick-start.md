@@ -6,7 +6,7 @@ title: Quick Start
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-This tutorial provides a quick introduction to using Spark. We will first introduce the API through Spark's interactive Scala shell (don't worry if you don't know Scala -- you will need much for this), then show how to write standalone jobs in Scala, Java, and Python.
+This tutorial provides a quick introduction to using Spark. We will first introduce the API through Spark's interactive Scala shell (don't worry if you don't know Scala -- you will not need much for this), then show how to write standalone jobs in Scala, Java, and Python.
 See the [programming guide](scala-programming-guide.html) for a more complete reference.
 
 To follow along with this guide, you only need to have successfully built Spark on one machine. Simply go into your Spark directory and run:
@@ -61,7 +61,7 @@ scala> textFile.map(line => line.split(" ").size).reduce((a, b) => if (a > b) a 
 res4: Long = 16
 {% endhighlight %}
 
-This first maps a line to an integer value, creating a new RDD. `reduce` is called on that RDD to find the largest line count. The arguments to `map` and `reduce` are Scala function literals (closures), and can use any language feature or Scala/Java library. For example, we can easily call functions declared elsewhere. We'll use `Math.max()` function to make this code easier to understand: 
+This first maps a line to an integer value, creating a new RDD. `reduce` is called on that RDD to find the largest line count. The arguments to `map` and `reduce` are Scala function literals (closures), and can use any language feature or Scala/Java library. For example, we can easily call functions declared elsewhere. We'll use `Math.max()` function to make this code easier to understand:
 
 {% highlight scala %}
 scala> import java.lang.Math
@@ -99,10 +99,10 @@ scala> linesWithSpark.count()
 res9: Long = 15
 {% endhighlight %}
 
-It may seem silly to use a Spark to explore and cache a 30-line text file. The interesting part is that these same functions can be used on very large data sets, even when they are striped across tens or hundreds of nodes. You can also do this interactively by connecting `spark-shell` to a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
+It may seem silly to use Spark to explore and cache a 30-line text file. The interesting part is that these same functions can be used on very large data sets, even when they are striped across tens or hundreds of nodes. You can also do this interactively by connecting `spark-shell` to a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
 
 # A Standalone Job in Scala
-Now say we wanted to write a standalone job using the Spark API. We will walk through a simple job in both Scala (with sbt) and Java (with maven). If you using other build systems, consider using the Spark assembly JAR described in the developer guide. 
+Now say we wanted to write a standalone job using the Spark API. We will walk through a simple job in both Scala (with sbt) and Java (with maven). If you are using other build systems, consider using the Spark assembly JAR described in the developer guide.
 
 We'll create a very simple Spark job in Scala. So simple, in fact, that it's named `SimpleJob.scala`:
 
@@ -113,8 +113,8 @@ import SparkContext._
 
 object SimpleJob extends Application {
   val logFile = "/var/log/syslog" // Should be some file on your system
-  val sc = new SparkContext("local", "Simple Job", "$YOUR_SPARK_HOME", 
-    "target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar")
+  val sc = new SparkContext("local", "Simple Job", "$YOUR_SPARK_HOME",
+    List("target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar"))
   val logData = sc.textFile(logFile, 2).cache()
   val numAs = logData.filter(line => line.contains("a")).count()
   val numBs = logData.filter(line => line.contains("b")).count()
@@ -140,10 +140,10 @@ resolvers ++= Seq(
   "Spray Repository" at "http://repo.spray.cc/")
 {% endhighlight %}
 
-Of course, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job. 
+Of course, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job.
 
 {% highlight bash %}
-$ find . 
+$ find .
 .
 ./simple.sbt
 ./src
@@ -160,7 +160,7 @@ Lines with a: 8422, Lines with b: 1836
 This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
 
 # A Standalone Job In Java
-Now say we wanted to write a standalone job using the Java API. We will walk through doing this with Maven. If you using other build systems, consider using the Spark assembly JAR described in the developer guide.
+Now say we wanted to write a standalone job using the Java API. We will walk through doing this with Maven. If you are using other build systems, consider using the Spark assembly JAR described in the developer guide.
 
 We'll create a very simple Spark job, `SimpleJob.java`:
 
@@ -172,8 +172,8 @@ import spark.api.java.function.Function;
 public class SimpleJob {
   public static void main(String[] args) {
     String logFile = "/var/log/syslog"; // Should be some file on your system
-    JavaSparkContext sc = new JavaSparkContext("local", "Simple Job", 
-      "$YOUR_SPARK_HOME", "target/simple-project-1.0.jar");
+    JavaSparkContext sc = new JavaSparkContext("local", "Simple Job",
+      "$YOUR_SPARK_HOME", new String[]{"target/simple-project-1.0.jar"});
     JavaRDD<String> logData = sc.textFile(logFile).cache();
 
     long numAs = logData.filter(new Function<String, Boolean>() {

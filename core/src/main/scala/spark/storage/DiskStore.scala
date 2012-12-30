@@ -10,6 +10,8 @@ import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import scala.collection.mutable.ArrayBuffer
 
+import spark.executor.ExecutorExitCode
+
 import spark.Utils
 
 /**
@@ -90,10 +92,13 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes))
   }
 
-  override def remove(blockId: String) {
+  override def remove(blockId: String): Boolean = {
     val file = getFile(blockId)
     if (file.exists()) {
       file.delete()
+      true
+    } else {
+      false
     }
   }
 
@@ -162,7 +167,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       if (!foundLocalDir) {
         logError("Failed " + MAX_DIR_CREATION_ATTEMPTS +
           " attempts to create local dir in " + rootDir)
-        System.exit(1)
+        System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
       }
       logInfo("Created local directory at " + localDir)
       localDir

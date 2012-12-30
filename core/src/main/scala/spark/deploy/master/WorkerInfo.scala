@@ -10,10 +10,11 @@ private[spark] class WorkerInfo(
   val cores: Int,
   val memory: Int,
   val actor: ActorRef,
-  val webUiPort: Int) {
+  val webUiPort: Int,
+  val publicAddress: String) {
 
   var executors = new mutable.HashMap[String, ExecutorInfo]  // fullId => info
-
+  var state: WorkerState.Value = WorkerState.ALIVE
   var coresUsed = 0
   var memoryUsed = 0
 
@@ -33,8 +34,16 @@ private[spark] class WorkerInfo(
       memoryUsed -= exec.memory
     }
   }
-  
+
+  def hasExecutor(job: JobInfo): Boolean = {
+    executors.values.exists(_.job == job)
+  }
+
   def webUiAddress : String = {
-    "http://" + this.host + ":" + this.webUiPort
+    "http://" + this.publicAddress + ":" + this.webUiPort
+  }
+
+  def setState(state: WorkerState.Value) = {
+    this.state = state
   }
 }

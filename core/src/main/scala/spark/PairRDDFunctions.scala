@@ -1,10 +1,6 @@
 package spark
 
-import java.io.EOFException
-import java.io.ObjectInputStream
-import java.net.URL
 import java.util.{Date, HashMap => JHashMap}
-import java.util.concurrent.atomic.AtomicLong
 import java.text.SimpleDateFormat
 
 import scala.collection.Map
@@ -14,25 +10,14 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.BytesWritable
-import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.io.Text
-import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.FileOutputCommitter
 import org.apache.hadoop.mapred.FileOutputFormat
 import org.apache.hadoop.mapred.HadoopWriter
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapred.OutputCommitter
 import org.apache.hadoop.mapred.OutputFormat
-import org.apache.hadoop.mapred.SequenceFileOutputFormat
-import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
-import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
-import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
-import org.apache.hadoop.mapreduce.TaskAttemptID
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, Job => NewAPIHadoopJob, HadoopMapReduceUtil, TaskAttemptID, TaskAttemptContext}
 
 import spark.partial.BoundedDouble
 import spark.partial.PartialResult
@@ -46,14 +31,15 @@ import spark.SparkContext._
 class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     self: RDD[(K, V)])
   extends Logging
+  with HadoopMapReduceUtil
   with Serializable {
 
   /**
-   * Generic function to combine the elements for each key using a custom set of aggregation 
+   * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
    * Note that V and C can be different -- for example, one might group an RDD of type
    * (Int, Int) into an RDD of type (Int, Seq[Int]). Users provide three functions:
-   * 
+   *
    * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    * - `mergeCombiners`, to combine two C's into a single one.
@@ -67,15 +53,18 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       partitioner: Partitioner,
       mapSideCombine: Boolean = true): RDD[(K, C)] = {
     val aggregator =
-      if (mapSideCombine) {
-        new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-      } else {
-        // Don't apply map-side combiner.
-        // A sanity check to make sure mergeCombiners is not defined.
-        assert(mergeCombiners == null)
-        new Aggregator[K, V, C](createCombiner, mergeValue, null, false)
-      }
-    new ShuffledAggregatedRDD(self, aggregator, partitioner)
+      new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
+    if (mapSideCombine) {
+      val mapSideCombined = self.mapPartitions(aggregator.combineValuesByKey(_), true)
+      val partitioned = new ShuffledRDD[K, C](mapSideCombined, partitioner)
+      partitioned.mapPartitions(aggregator.combineCombinersByKey(_), true)
+    } else {
+      // Don't apply map-side combiner.
+      // A sanity check to make sure mergeCombiners is not defined.
+      assert(mergeCombiners == null)
+      val values = new ShuffledRDD[K, V](self, partitioner)
+      values.mapPartitions(aggregator.combineValuesByKey(_), true)
+    }
   }
 
   /**
@@ -129,7 +118,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   /** Count the number of elements for each key, and return the result to the master as a Map. */
   def countByKey(): Map[K, Long] = self.map(_._1).countByValue()
 
-  /** 
+  /**
    * (Experimental) Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
@@ -184,7 +173,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         createCombiner _, mergeValue _, mergeCombiners _, partitioner)
       bufs.flatMapValues(buf => buf)
     } else {
-      new RepartitionShuffledRDD(self, partitioner)
+      new ShuffledRDD[K, V](self, partitioner)
     }
   }
 
@@ -235,7 +224,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     }
   }
 
-  /** 
+  /**
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the default
    * parallelism level.
    */
@@ -449,7 +438,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         val res = self.context.runJob(self, process _, Array(index), false)
         res(0)
       case None =>
-        throw new UnsupportedOperationException("lookup() called on an RDD without a partitioner")
+        self.filter(_._1 == key).map(_._2).collect
     }
   }
 
@@ -506,7 +495,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = new TaskAttemptID(jobtrackerID,
         stageId, false, context.splitId, attemptNumber)
-      val hadoopContext = new TaskAttemptContext(wrappedConf.value, attemptId)
+      val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
@@ -525,7 +514,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
      * setupJob/commitJob, so we just use a dummy "map" task.
      */
     val jobAttemptId = new TaskAttemptID(jobtrackerID, stageId, true, 0, 0)
-    val jobTaskContext = new TaskAttemptContext(wrappedConf.value, jobAttemptId)
+    val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
     val count = self.context.runJob(self, writeShard _).sum
@@ -621,7 +610,16 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
    * order of the keys).
    */
   def sortByKey(ascending: Boolean = true, numSplits: Int = self.splits.size): RDD[(K,V)] = {
-    new ShuffledSortedRDD(self, ascending, numSplits)
+    val shuffled =
+      new ShuffledRDD[K, V](self, new RangePartitioner(numSplits, self, ascending))
+    shuffled.mapPartitions(iter => {
+      val buf = iter.toArray
+      if (ascending) {
+        buf.sortWith((x, y) => x._1 < y._1).iterator
+      } else {
+        buf.sortWith((x, y) => x._1 > y._1).iterator
+      }
+    }, true)
   }
 }
 
@@ -630,7 +628,8 @@ class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)]
   override def splits = prev.splits
   override val dependencies = List(new OneToOneDependency(prev))
   override val partitioner = prev.partitioner
-  override def compute(split: Split) = prev.iterator(split).map{case (k, v) => (k, f(v))}
+  override def compute(split: Split, taskContext: TaskContext) =
+    prev.iterator(split, taskContext).map{case (k, v) => (k, f(v))}
 }
 
 private[spark]
@@ -641,8 +640,8 @@ class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U]
   override val dependencies = List(new OneToOneDependency(prev))
   override val partitioner = prev.partitioner
 
-  override def compute(split: Split) = {
-    prev.iterator(split).flatMap { case (k, v) => f(v).map(x => (k, x)) }
+  override def compute(split: Split, taskContext: TaskContext) = {
+    prev.iterator(split, taskContext).flatMap { case (k, v) => f(v).map(x => (k, x)) }
   }
 }
 

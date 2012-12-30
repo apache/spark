@@ -1,0 +1,5 @@
+#!/bin/bash
+
+FWDIR="$(cd `dirname $0`; pwd)"
+echo "Running spark-executor with framework dir = $FWDIR"
+exec $FWDIR/run spark.executor.MesosExecutorBackend

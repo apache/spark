@@ -43,6 +43,26 @@ private[spark] class Executor extends Logging {
     urlClassLoader = createClassLoader()
     Thread.currentThread.setContextClassLoader(urlClassLoader)
 
+    // Make any thread terminations due to uncaught exceptions kill the entire
+    // executor process to avoid surprising stalls.
+    Thread.setDefaultUncaughtExceptionHandler(
+      new Thread.UncaughtExceptionHandler {
+        override def uncaughtException(thread: Thread, exception: Throwable) {
+          try {
+            logError("Uncaught exception in thread " + thread, exception)
+            if (exception.isInstanceOf[OutOfMemoryError]) {
+              System.exit(ExecutorExitCode.OOM)
+            } else {
+              System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
+            }
+          } catch {
+            case oom: OutOfMemoryError => System.exit(ExecutorExitCode.OOM)
+            case t: Throwable => System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
+          }
+        }
+      }
+    )
+
     // Initialize Spark environment (using system properties read above)
     env = SparkEnv.createFromSystemProperties(slaveHostname, 0, false, false)
     SparkEnv.set(env)

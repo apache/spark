@@ -1,0 +1,4 @@
+#!/bin/bash
+
+FWDIR="$(cd `dirname $0`; pwd)"
+exec $FWDIR/run spark.repl.Main "$@"

@@ -22,7 +22,7 @@ private[spark] object ShuffleMapTask {
   // expensive on the master node if it needs to launch thousands of tasks.
   val serializedInfoCache = new JHashMap[Int, Array[Byte]]
 
-  def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_,_]): Array[Byte] = {
+  def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_]): Array[Byte] = {
     synchronized {
       val old = serializedInfoCache.get(stageId)
       if (old != null) {
@@ -41,14 +41,14 @@ private[spark] object ShuffleMapTask {
     }
   }
 
-  def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], ShuffleDependency[_,_,_]) = {
+  def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], ShuffleDependency[_,_]) = {
     synchronized {
       val loader = Thread.currentThread.getContextClassLoader
       val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
       val ser = SparkEnv.get.closureSerializer.newInstance
       val objIn = ser.deserializeStream(in)
       val rdd = objIn.readObject().asInstanceOf[RDD[_]]
-      val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_,_,_]]
+      val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_,_]]
       return (rdd, dep)
     }
   }
@@ -70,19 +70,19 @@ private[spark] object ShuffleMapTask {
 
 private[spark] class ShuffleMapTask(
     stageId: Int,
-    var rdd: RDD[_], 
-    var dep: ShuffleDependency[_,_,_],
-    var partition: Int, 
+    var rdd: RDD[_],
+    var dep: ShuffleDependency[_,_],
+    var partition: Int,
     @transient var locs: Seq[String])
   extends Task[MapStatus](stageId)
   with Externalizable
   with Logging {
 
   def this() = this(0, null, null, 0, null)
-  
+
   var split = if (rdd == null) {
-    null 
-  } else { 
+    null
+  } else {
     rdd.splits(partition)
   }
 
@@ -113,33 +113,16 @@ private[spark] class ShuffleMapTask(
     val numOutputSplits = dep.partitioner.numPartitions
     val partitioner = dep.partitioner
 
-    val bucketIterators =
-      if (dep.aggregator.isDefined && dep.aggregator.get.mapSideCombine) {
-        val aggregator = dep.aggregator.get.asInstanceOf[Aggregator[Any, Any, Any]]
-        // Apply combiners (map-side aggregation) to the map output.
-        val buckets = Array.tabulate(numOutputSplits)(_ => new JHashMap[Any, Any])
-        for (elem <- rdd.iterator(split)) {
-          val (k, v) = elem.asInstanceOf[(Any, Any)]
-          val bucketId = partitioner.getPartition(k)
-          val bucket = buckets(bucketId)
-          val existing = bucket.get(k)
-          if (existing == null) {
-            bucket.put(k, aggregator.createCombiner(v))
-          } else {
-            bucket.put(k, aggregator.mergeValue(existing, v))
-          }
-        }
-        buckets.map(_.iterator)
-      } else {
-        // No combiners (no map-side aggregation). Simply partition the map output.
-        val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
-        for (elem <- rdd.iterator(split)) {
-          val pair = elem.asInstanceOf[(Any, Any)]
-          val bucketId = partitioner.getPartition(pair._1)
-          buckets(bucketId) += pair
-        }
-        buckets.map(_.iterator)
-      }
+    val taskContext = new TaskContext(stageId, partition, attemptId)
+
+    // Partition the map output.
+    val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
+    for (elem <- rdd.iterator(split, taskContext)) {
+      val pair = elem.asInstanceOf[(Any, Any)]
+      val bucketId = partitioner.getPartition(pair._1)
+      buckets(bucketId) += pair
+    }
+    val bucketIterators = buckets.map(_.iterator)
 
     val compressedSizes = new Array[Byte](numOutputSplits)
 
@@ -151,6 +134,9 @@ private[spark] class ShuffleMapTask(
       val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
       compressedSizes(i) = MapOutputTracker.compressSize(size)
     }
+
+    // Execute the callbacks on task completion.
+    taskContext.executeOnCompleteCallbacks()
 
     return new MapStatus(blockManager.blockManagerId, compressedSizes)
   }

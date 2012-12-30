@@ -14,5 +14,5 @@ private[spark] trait ClientListener {
 
   def executorAdded(id: String, workerId: String, host: String, cores: Int, memory: Int): Unit
 
-  def executorRemoved(id: String, message: String): Unit
+  def executorRemoved(id: String, message: String, exitStatus: Option[Int]): Unit
 }

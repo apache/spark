@@ -31,3 +31,4 @@ project/plugins/src_managed/
 logs/
 log/
 spark-tests.log
+dependency-reduced-pom.xml

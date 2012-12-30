@@ -65,5 +65,5 @@ if "%SPARK_LAUNCH_WITH_SCALA%" NEQ 1 goto java_runner
   set EXTRA_ARGS=%JAVA_OPTS%
 :run_spark
 
-%RUNNER% -cp "%CLASSPATH%" %EXTRA_ARGS% %*
+"%RUNNER%" -cp "%CLASSPATH%" %EXTRA_ARGS% %*
 :exit

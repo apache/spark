@@ -60,7 +60,7 @@ private[spark] class ExecutorRunner(
         process.destroy()
         process.waitFor()
       }
-      worker ! ExecutorStateChanged(jobId, execId, ExecutorState.KILLED, None)
+      worker ! ExecutorStateChanged(jobId, execId, ExecutorState.KILLED, None, None)
       Runtime.getRuntime.removeShutdownHook(shutdownHook)
     }
   }
@@ -134,7 +134,8 @@ private[spark] class ExecutorRunner(
       // times on the same machine.
       val exitCode = process.waitFor()
       val message = "Command exited with code " + exitCode
-      worker ! ExecutorStateChanged(jobId, execId, ExecutorState.FAILED, Some(message))
+      worker ! ExecutorStateChanged(jobId, execId, ExecutorState.FAILED, Some(message),
+                                    Some(exitCode))
     } catch {
       case interrupted: InterruptedException =>
         logInfo("Runner thread for executor " + fullId + " interrupted")
@@ -145,7 +146,7 @@ private[spark] class ExecutorRunner(
           process.destroy()
         }
         val message = e.getClass + ": " + e.getMessage
-        worker ! ExecutorStateChanged(jobId, execId, ExecutorState.FAILED, Some(message))
+        worker ! ExecutorStateChanged(jobId, execId, ExecutorState.FAILED, Some(message), None)
       }
     }
   }

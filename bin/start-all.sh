@@ -11,7 +11,7 @@ bin=`cd "$bin"; pwd`
 . "$bin/spark-config.sh"
 
 # Start Master
-"$bin"/start-master.sh --config $SPARK_CONF_DIR
+"$bin"/start-master.sh
 
 # Start Workers
-"$bin"/start-slaves.sh --config $SPARK_CONF_DIR
+"$bin"/start-slaves.sh
