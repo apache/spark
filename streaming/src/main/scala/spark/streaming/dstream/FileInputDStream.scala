@@ -1,7 +1,8 @@
-package spark.streaming
+package spark.streaming.dstream
 
 import spark.RDD
 import spark.rdd.UnionRDD
+import spark.streaming.{StreamingContext, Time}
 
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.conf.Configuration

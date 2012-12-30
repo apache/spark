@@ -1,6 +1,9 @@
 package spark.streaming
 
 import spark.streaming.StreamingContext._
+import spark.streaming.dstream.{ReducedWindowedDStream, StateDStream}
+import spark.streaming.dstream.{CoGroupedDStream, ShuffledDStream}
+import spark.streaming.dstream.{MapValuedDStream, FlatMapValuedDStream}
 
 import spark.{Manifests, RDD, Partitioner, HashPartitioner}
 import spark.SparkContext._
@@ -218,13 +221,13 @@ extends Serializable {
 
 
   def mapValues[U: ClassManifest](mapValuesFunc: V => U): DStream[(K, U)] = {
-    new MapValuesDStream[K, V, U](self, mapValuesFunc)
+    new MapValuedDStream[K, V, U](self, mapValuesFunc)
   }
 
   def flatMapValues[U: ClassManifest](
       flatMapValuesFunc: V => TraversableOnce[U]
     ): DStream[(K, U)] = {
-    new FlatMapValuesDStream[K, V, U](self, flatMapValuesFunc)
+    new FlatMapValuedDStream[K, V, U](self, flatMapValuesFunc)
   }
 
   def cogroup[W: ClassManifest](other: DStream[(K, W)]): DStream[(K, (Seq[V], Seq[W]))] = {

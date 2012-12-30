@@ -42,7 +42,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     val stateStreamCheckpointInterval = Seconds(1)
 
     // this ensure checkpointing occurs at least once
-    val firstNumBatches = (stateStreamCheckpointInterval.millis / batchDuration.millis) * 2
+    val firstNumBatches = (stateStreamCheckpointInterval / batchDuration) * 2
     val secondNumBatches = firstNumBatches
 
     // Setup the streams

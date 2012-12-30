@@ -1,5 +1,7 @@
 package spark.streaming
 
+import spark.streaming.dstream.{NetworkInputDStream, NetworkReceiver}
+import spark.streaming.dstream.{StopReceiver, ReportBlock, ReportError}
 import spark.Logging
 import spark.SparkEnv
 

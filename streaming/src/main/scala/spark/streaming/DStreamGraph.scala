@@ -1,5 +1,6 @@
 package spark.streaming
 
+import dstream.InputDStream
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 import collection.mutable.ArrayBuffer
 import spark.Logging

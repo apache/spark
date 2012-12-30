@@ -1,17 +1,21 @@
-package spark.streaming
+package spark.streaming.dstream
+
+import spark.Logging
+import spark.storage.StorageLevel
+import spark.streaming.{Time, DStreamCheckpointData, StreamingContext}
 
 import java.util.Properties
 import java.util.concurrent.Executors
+
 import kafka.consumer._
 import kafka.message.{Message, MessageSet, MessageAndMetadata}
 import kafka.serializer.StringDecoder
 import kafka.utils.{Utils, ZKGroupTopicDirs}
 import kafka.utils.ZkUtils._
+
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
-import spark._
-import spark.RDD
-import spark.storage.StorageLevel
+
 
 // Key for a specific Kafka Partition: (broker, topic, group, part)
 case class KafkaPartitionKey(brokerId: Int, topic: String, groupId: String, partId: Int)
@@ -24,7 +28,7 @@ case class KafkaDStreamCheckpointData(kafkaRdds: HashMap[Time, Any],
   savedOffsets: Map[KafkaPartitionKey, Long]) extends DStreamCheckpointData(kafkaRdds)
 
 /**
- * Input stream that pulls messages form a Kafka Broker.
+ * Input stream that pulls messages from a Kafka Broker.
  * 
  * @param host Zookeper hostname.
  * @param port Zookeper port.

@@ -4,9 +4,6 @@ import util.{ManualClock, RecurringTimer, Clock}
 import spark.SparkEnv
 import spark.Logging
 
-import scala.collection.mutable.HashMap
-
-
 private[streaming]
 class Scheduler(ssc: StreamingContext) extends Logging {
 

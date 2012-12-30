@@ -1,5 +1,6 @@
 package spark.streaming
 
+import dstream.SparkFlumeEvent
 import java.net.{InetSocketAddress, SocketException, Socket, ServerSocket}
 import java.io.{File, BufferedWriter, OutputStreamWriter}
 import java.util.concurrent.{TimeUnit, ArrayBlockingQueue}

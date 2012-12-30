@@ -1,11 +1,12 @@
-package spark.streaming
+package spark.streaming.dstream
 
-import scala.collection.mutable.ArrayBuffer
+import spark.streaming.{Time, StreamingContext, AddBlocks, RegisterReceiver, DeregisterReceiver}
 
 import spark.{Logging, SparkEnv, RDD}
 import spark.rdd.BlockRDD
-import spark.streaming.util.{RecurringTimer, SystemClock}
 import spark.storage.StorageLevel
+
+import scala.collection.mutable.ArrayBuffer
 
 import java.nio.ByteBuffer
 

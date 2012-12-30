@@ -1,6 +1,7 @@
-package spark.streaming
+package spark.streaming.dstream
 
 import spark.RDD
+import spark.streaming.{Time, StreamingContext}
 
 /**
  * An input stream that always returns the same RDD on each timestep. Useful for testing.

@@ -1,8 +1,9 @@
-package spark.streaming
+package spark.streaming.dstream
 
 import spark.RDD
 import spark.rdd.UnionRDD
 import spark.storage.StorageLevel
+import spark.streaming.{Interval, Time, DStream}
 
 
 class WindowedDStream[T: ClassManifest](

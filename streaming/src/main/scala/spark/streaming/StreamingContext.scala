@@ -1,10 +1,10 @@
 package spark.streaming
 
-import spark.RDD
-import spark.Logging
-import spark.SparkEnv
-import spark.SparkContext
+import spark.streaming.dstream._
+
+import spark.{RDD, Logging, SparkEnv, SparkContext}
 import spark.storage.StorageLevel
+import spark.util.MetadataCleaner
 
 import scala.collection.mutable.Queue
 
@@ -18,7 +18,6 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.hadoop.fs.Path
 import java.util.UUID
-import spark.util.MetadataCleaner
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -126,7 +125,7 @@ class StreamingContext private (
  /**
    * Create an input stream that pulls messages form a Kafka Broker.
    * 
-   * @param host Zookeper hostname.
+   * @param hostname Zookeper hostname.
    * @param port Zookeper port.
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
@@ -319,7 +318,7 @@ object StreamingContext {
 
   protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
     if (prefix == null) {
-      time.millis.toString
+      time.milliseconds.toString
     } else if (suffix == null || suffix.length ==0) {
       prefix + "-" + time.milliseconds
     } else {

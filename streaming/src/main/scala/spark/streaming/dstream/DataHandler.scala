@@ -1,4 +1,4 @@
-package spark.streaming
+package spark.streaming.dstream
 
 import java.util.concurrent.ArrayBlockingQueue
 import scala.collection.mutable.ArrayBuffer

@@ -1,6 +1,11 @@
 package spark.streaming
 
-case class Time(millis: Long) {
+/**
+ * This class is simple wrapper class that represents time in UTC.
+ * @param millis Time in UTC long
+ */
+
+case class Time(private val millis: Long) {
   
   def < (that: Time): Boolean = (this.millis < that.millis)
  
@@ -15,7 +20,9 @@ case class Time(millis: Long) {
   def - (that: Time): Time = Time(millis - that.millis)
   
   def * (times: Int): Time = Time(millis * times)
-  
+
+  def / (that: Time): Long = millis / that.millis
+
   def floor(that: Time): Time = {
     val t = that.millis
     val m = math.floor(this.millis / t).toLong 

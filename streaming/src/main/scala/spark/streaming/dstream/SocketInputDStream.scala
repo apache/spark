@@ -1,14 +1,10 @@
-package spark.streaming
+package spark.streaming.dstream
 
-import spark.streaming.util.{RecurringTimer, SystemClock}
+import spark.streaming.StreamingContext
 import spark.storage.StorageLevel
 
 import java.io._
 import java.net.Socket
-import java.util.concurrent.ArrayBlockingQueue
-
-import scala.collection.mutable.ArrayBuffer
-import scala.Serializable
 
 class SocketInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
