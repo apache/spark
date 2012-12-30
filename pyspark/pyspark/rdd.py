@@ -335,9 +335,10 @@ class RDD(object):
         """
         items = []
         splits = self._jrdd.splits()
+        taskContext = self.ctx.jvm.spark.TaskContext(0, 0, 0)
         while len(items) < num and splits:
             split = splits.pop(0)
-            iterator = self._jrdd.iterator(split)
+            iterator = self._jrdd.iterator(split, taskContext)
             items.extend(self._collect_iterator_through_file(iterator))
         return items[:num]
 
