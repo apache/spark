@@ -351,10 +351,17 @@ class RDD(object):
         """
         return self.take(1)[0]
 
-    # TODO: add test and fix for use with Batch
     def saveAsTextFile(self, path):
         """
         Save this RDD as a text file, using string representations of elements.
+
+        >>> tempFile = NamedTemporaryFile(delete=True)
+        >>> tempFile.close()
+        >>> sc.parallelize(range(10)).saveAsTextFile(tempFile.name)
+        >>> from fileinput import input
+        >>> from glob import glob
+        >>> ''.join(input(glob(tempFile.name + "/part-0000*")))
+        '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
         """
         def func(iterator):
             return (str(x).encode("utf-8") for x in iterator)
