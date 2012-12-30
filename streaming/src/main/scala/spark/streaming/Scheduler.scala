@@ -7,11 +7,8 @@ import spark.Logging
 import scala.collection.mutable.HashMap
 
 
-sealed trait SchedulerMessage
-case class InputGenerated(inputName: String, interval: Interval, reference: AnyRef = null) extends SchedulerMessage
-
-class Scheduler(ssc: StreamingContext)
-extends Logging {
+private[streaming]
+class Scheduler(ssc: StreamingContext) extends Logging {
 
   initLogging()
 

@@ -281,7 +281,7 @@ extends Serializable {
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)
     }
-    self.foreachRDD(saveFunc)
+    self.foreach(saveFunc)
   }
 
   def saveAsNewAPIHadoopFiles[F <: NewOutputFormat[K, V]](
@@ -303,7 +303,7 @@ extends Serializable {
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsNewAPIHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)
     }
-    self.foreachRDD(saveFunc)
+    self.foreach(saveFunc)
   }
 
   private def getKeyClass() = implicitly[ClassManifest[K]].erasure

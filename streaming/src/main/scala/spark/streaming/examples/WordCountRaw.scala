@@ -36,7 +36,7 @@ object WordCountRaw {
     val union = new UnionDStream(lines.toArray)
     val counts = union.mapPartitions(splitAndCountPartitions)
     val windowedCounts = counts.reduceByKeyAndWindow(add _, subtract _, Seconds(30), Seconds(1), 10)
-    windowedCounts.foreachRDD(r => println("# unique words = " + r.count()))
+    windowedCounts.foreach(r => println("# unique words = " + r.count()))
 
     ssc.start()
   }

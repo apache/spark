@@ -35,7 +35,7 @@ class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[
  * ArrayBuffer. This buffer is wiped clean on being restored from checkpoint.
  */
 class TestOutputStream[T: ClassManifest](parent: DStream[T], val output: ArrayBuffer[Seq[T]])
-  extends PerRDDForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
+  extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
   }) {

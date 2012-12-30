@@ -5,6 +5,7 @@ import spark.SparkEnv
 import java.util.concurrent.Executors
 
 
+private[streaming]
 class JobManager(ssc: StreamingContext, numThreads: Int = 1) extends Logging {
   
   class JobHandler(ssc: StreamingContext, job: Job) extends Runnable {

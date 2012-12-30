@@ -48,7 +48,7 @@ class StreamingContext private (
     this(StreamingContext.createNewSparkContext(master, frameworkName), null, batchDuration)
 
   /**
-   * Recreates the StreamingContext from a checkpoint file.
+   * Re-creates a StreamingContext from a checkpoint file.
    * @param path Path either to the directory that was specified as the checkpoint directory, or
    *             to the checkpoint file 'graph' or 'graph.bk'.
    */
@@ -61,7 +61,7 @@ class StreamingContext private (
       "both SparkContext and checkpoint as null")
   }
 
-  val isCheckpointPresent = (cp_ != null)
+  protected[streaming] val isCheckpointPresent = (cp_ != null)
 
   val sc: SparkContext = {
     if (isCheckpointPresent) {
@@ -71,9 +71,9 @@ class StreamingContext private (
     }
   }
 
-  val env = SparkEnv.get
+  protected[streaming] val env = SparkEnv.get
 
-  val graph: DStreamGraph = {
+  protected[streaming] val graph: DStreamGraph = {
     if (isCheckpointPresent) {
       cp_.graph.setContext(this)
       cp_.graph.restoreCheckpointData()
@@ -86,10 +86,10 @@ class StreamingContext private (
     }
   }
 
-  private[streaming] val nextNetworkInputStreamId = new AtomicInteger(0)
-  private[streaming] var networkInputTracker: NetworkInputTracker = null
+  protected[streaming] val nextNetworkInputStreamId = new AtomicInteger(0)
+  protected[streaming] var networkInputTracker: NetworkInputTracker = null
 
-  private[streaming] var checkpointDir: String = {
+  protected[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
       sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(cp_.checkpointDir), true)
       cp_.checkpointDir
@@ -98,9 +98,9 @@ class StreamingContext private (
     }
   }
 
-  private[streaming] var checkpointInterval: Time = if (isCheckpointPresent) cp_.checkpointInterval else null
-  private[streaming] var receiverJobThread: Thread = null
-  private[streaming] var scheduler: Scheduler = null
+  protected[streaming] var checkpointInterval: Time = if (isCheckpointPresent) cp_.checkpointInterval else null
+  protected[streaming] var receiverJobThread: Thread = null
+  protected[streaming] var scheduler: Scheduler = null
 
   def remember(duration: Time) {
     graph.remember(duration)
@@ -117,11 +117,11 @@ class StreamingContext private (
     }
   }
 
-  private[streaming] def getInitialCheckpoint(): Checkpoint = {
+  protected[streaming] def getInitialCheckpoint(): Checkpoint = {
     if (isCheckpointPresent) cp_ else null
   }
 
-  private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
+  protected[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
 
  /**
    * Create an input stream that pulls messages form a Kafka Broker.
@@ -188,7 +188,7 @@ class StreamingContext private (
   }
 
   /**
-   * This function creates a input stream that monitors a Hadoop-compatible filesystem
+   * Creates a input stream that monitors a Hadoop-compatible filesystem
    * for new files and executes the necessary processing on them.
    */
   def fileStream[
@@ -206,7 +206,7 @@ class StreamingContext private (
   }
 
   /**
-   * This function create a input stream from an queue of RDDs. In each batch,
+   * Creates a input stream from an queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue
    */
   def queueStream[T: ClassManifest](
@@ -231,22 +231,21 @@ class StreamingContext private (
   }
 
   /**
-   * This function registers a InputDStream as an input stream that will be
-   * started (InputDStream.start() called) to get the input data streams.
+   * Registers an input stream that will be started (InputDStream.start() called) to get the
+   * input data.
    */
   def registerInputStream(inputStream: InputDStream[_]) {
     graph.addInputStream(inputStream)
   }
 
   /**
-   * This function registers a DStream as an output stream that will be
-   * computed every interval.
+   * Registers an output stream that will be computed every interval
    */
   def registerOutputStream(outputStream: DStream[_]) {
     graph.addOutputStream(outputStream)
   }
 
-  def validate() {
+  protected def validate() {
     assert(graph != null, "Graph is null")
     graph.validate()
 
@@ -304,7 +303,7 @@ class StreamingContext private (
 
 object StreamingContext {
 
-  def createNewSparkContext(master: String, frameworkName: String): SparkContext = {
+  protected[streaming] def createNewSparkContext(master: String, frameworkName: String): SparkContext = {
 
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second interval.
@@ -318,7 +317,7 @@ object StreamingContext {
     new PairDStreamFunctions[K, V](stream)
   }
 
-  def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
+  protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
     if (prefix == null) {
       time.millis.toString
     } else if (suffix == null || suffix.length ==0) {
@@ -328,7 +327,7 @@ object StreamingContext {
     }
   }
 
-  def getSparkCheckpointDir(sscCheckpointDir: String): String = {
+  protected[streaming] def getSparkCheckpointDir(sscCheckpointDir: String): String = {
     new Path(sscCheckpointDir, UUID.randomUUID.toString).toString
   }
 }

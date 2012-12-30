@@ -79,7 +79,7 @@ class SparkFlumeEvent() extends Externalizable {
   }
 }
 
-object SparkFlumeEvent {
+private[streaming] object SparkFlumeEvent {
   def fromAvroFlumeEvent(in : AvroFlumeEvent) : SparkFlumeEvent = {
     val event = new SparkFlumeEvent
     event.event = in
