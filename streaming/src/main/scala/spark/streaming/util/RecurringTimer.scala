@@ -1,5 +1,6 @@
 package spark.streaming.util
 
+private[streaming]
 class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) => Unit) {
   
   val minPollTime = 25L

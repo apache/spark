@@ -5,6 +5,7 @@ import spark.RDD
 import collection.mutable.ArrayBuffer
 import spark.rdd.UnionRDD
 
+private[streaming]
 class UnionDStream[T: ClassManifest](parents: Array[DStream[T]])
   extends DStream[T](parents.head.ssc) {
 

@@ -22,7 +22,7 @@ class Scheduler(ssc: StreamingContext) extends Logging {
 
   val clockClass = System.getProperty("spark.streaming.clock", "spark.streaming.util.SystemClock")
   val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
-  val timer = new RecurringTimer(clock, ssc.graph.batchDuration, generateRDDs(_))
+  val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds, generateRDDs(_))
 
   def start() {
     // If context was started from checkpoint, then restart timer such that

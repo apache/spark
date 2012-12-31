@@ -17,6 +17,7 @@ import java.net.InetSocketAddress
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
 
+private[streaming]
 class FlumeInputDStream[T: ClassManifest](
   @transient ssc_ : StreamingContext,
   host: String,
@@ -93,6 +94,7 @@ private[streaming] object SparkFlumeEvent {
 }
 
 /** A simple server that implements Flume's Avro protocol. */
+private[streaming]
 class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
   override def append(event : AvroFlumeEvent) : Status = {
     receiver.dataHandler += SparkFlumeEvent.fromAvroFlumeEvent(event)
@@ -108,12 +110,13 @@ class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
 
 /** A NetworkReceiver which listens for events using the
   * Flume Avro interface.*/
+private[streaming]
 class FlumeReceiver(
-      streamId: Int,
-      host: String,
-      port: Int,
-      storageLevel: StorageLevel
-      ) extends NetworkReceiver[SparkFlumeEvent](streamId) {
+    streamId: Int,
+    host: String,
+    port: Int,
+    storageLevel: StorageLevel
+  ) extends NetworkReceiver[SparkFlumeEvent](streamId) {
 
   lazy val dataHandler = new DataHandler(this, storageLevel)
 

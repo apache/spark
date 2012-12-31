@@ -4,6 +4,7 @@ import spark.{RDD, Partitioner}
 import spark.rdd.CoGroupedRDD
 import spark.streaming.{Time, DStream}
 
+private[streaming]
 class CoGroupedDStream[K : ClassManifest](
     parents: Seq[DStream[(_, _)]],
     partitioner: Partitioner

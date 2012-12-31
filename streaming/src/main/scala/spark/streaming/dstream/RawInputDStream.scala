@@ -17,6 +17,7 @@ import java.util.concurrent.ArrayBlockingQueue
  * data into Spark Streaming, though it requires the sender to batch data and serialize it
  * in the format that the system is configured with.
  */
+private[streaming]
 class RawInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
     host: String,
@@ -29,6 +30,7 @@ class RawInputDStream[T: ClassManifest](
   }
 }
 
+private[streaming]
 class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: StorageLevel)
   extends NetworkReceiver[Any](streamId) {
 

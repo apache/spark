@@ -6,6 +6,7 @@ import spark.storage.StorageLevel
 import java.io._
 import java.net.Socket
 
+private[streaming]
 class SocketInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
     host: String,
@@ -19,7 +20,7 @@ class SocketInputDStream[T: ClassManifest](
   }
 }
 
-
+private[streaming]
 class SocketReceiver[T: ClassManifest](
     streamId: Int,
     host: String,
@@ -50,7 +51,7 @@ class SocketReceiver[T: ClassManifest](
 
 }
 
-
+private[streaming]
 object SocketReceiver  {
 
   /**

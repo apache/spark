@@ -15,7 +15,6 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
-import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.hadoop.fs.Path
 import java.util.UUID
 
@@ -101,14 +100,27 @@ class StreamingContext private (
   protected[streaming] var receiverJobThread: Thread = null
   protected[streaming] var scheduler: Scheduler = null
 
+  /**
+   * Sets each DStreams in this context to remember RDDs it generated in the last given duration.
+   * DStreams remember RDDs only for a limited duration of time and releases them for garbage
+   * collection. This method allows the developer to specify how to long to remember the RDDs (
+   * if the developer wishes to query old data outside the DStream computation).
+   * @param duration Minimum duration that each DStream should remember its RDDs
+   */
   def remember(duration: Time) {
     graph.remember(duration)
   }
 
-  def checkpoint(dir: String, interval: Time = null) {
-    if (dir != null) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(dir))
-      checkpointDir = dir
+  /**
+   * Sets the context to periodically checkpoint the DStream operations for master
+   * fault-tolerance. By default, the graph will be checkpointed every batch interval.
+   * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
+   * @param interval checkpoint interval
+   */
+  def checkpoint(directory: String, interval: Time = null) {
+    if (directory != null) {
+      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
+      checkpointDir = directory
       checkpointInterval = interval
     } else {
       checkpointDir = null
@@ -122,9 +134,8 @@ class StreamingContext private (
 
   protected[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
 
- /**
+  /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * 
    * @param hostname Zookeper hostname.
    * @param port Zookeper port.
    * @param groupId The group id for this consumer.
@@ -147,6 +158,15 @@ class StreamingContext private (
     inputStream
   }
 
+  /**
+   * Create a input stream from network source hostname:port. Data is received using
+   * a TCP socket and the receive bytes is interpreted as UTF8 encoded \n delimited
+   * lines.
+   * @param hostname      Hostname to connect to for receiving data
+   * @param port          Port to connect to for receiving data
+   * @param storageLevel  Storage level to use for storing the received objects
+   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
+   */
   def networkTextStream(
       hostname: String,
       port: Int,
@@ -155,6 +175,16 @@ class StreamingContext private (
     networkStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
+  /**
+   * Create a input stream from network source hostname:port. Data is received using
+   * a TCP socket and the receive bytes it interepreted as object using the given
+   * converter.
+   * @param hostname      Hostname to connect to for receiving data
+   * @param port          Port to connect to for receiving data
+   * @param converter     Function to convert the byte stream to objects
+   * @param storageLevel  Storage level to use for storing the received objects
+   * @tparam T            Type of the objects received (after converting bytes to objects)
+   */
   def networkStream[T: ClassManifest](
       hostname: String,
       port: Int,
@@ -166,16 +196,32 @@ class StreamingContext private (
     inputStream
   }
 
+  /**
+   * Creates a input stream from a Flume source.
+   * @param hostname Hostname of the slave machine to which the flume data will be sent
+   * @param port     Port of the slave machine to which the flume data will be sent
+   * @param storageLevel  Storage level to use for storing the received objects
+   */
   def flumeStream (
-    hostname: String,
-    port: Int,
-    storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2): DStream[SparkFlumeEvent] = {
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+    ): DStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream(this, hostname, port, storageLevel)
     graph.addInputStream(inputStream)
     inputStream
   }
 
-
+  /**
+   * Create a input stream from network source hostname:port, where data is received
+   * as serialized blocks (serialized using the Spark's serializer) that can be directly
+   * pushed into the block manager without deserializing them. This is the most efficient
+   * way to receive data.
+   * @param hostname      Hostname to connect to for receiving data
+   * @param port          Port to connect to for receiving data
+   * @param storageLevel  Storage level to use for storing the received objects
+   * @tparam T            Type of the objects in the received blocks
+   */
   def rawNetworkStream[T: ClassManifest](
       hostname: String,
       port: Int,
@@ -188,7 +234,11 @@ class StreamingContext private (
 
   /**
    * Creates a input stream that monitors a Hadoop-compatible filesystem
-   * for new files and executes the necessary processing on them.
+   * for new files and reads them using the given key-value types and input format.
+   * @param directory HDFS directory to monitor for new file
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
    */
   def fileStream[
     K: ClassManifest,
@@ -200,13 +250,23 @@ class StreamingContext private (
     inputStream
   }
 
+  /**
+   * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them as text files (using key as LongWritable, value
+   * as Text and input format as TextInputFormat).
+   * @param directory HDFS directory to monitor for new file
+   */
   def textFileStream(directory: String): DStream[String] = {
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
   }
 
   /**
    * Creates a input stream from an queue of RDDs. In each batch,
-   * it will process either one or all of the RDDs returned by the queue
+   * it will process either one or all of the RDDs returned by the queue.
+   * @param queue      Queue of RDDs
+   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
+   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty
+   * @tparam T         Type of objects in the RDD
    */
   def queueStream[T: ClassManifest](
       queue: Queue[RDD[T]],
@@ -218,13 +278,9 @@ class StreamingContext private (
     inputStream
   }
 
-  def queueStream[T: ClassManifest](array: Array[RDD[T]]): DStream[T] = {
-    val queue = new Queue[RDD[T]]
-    val inputStream = queueStream(queue, true, null)
-    queue ++= array
-    inputStream
-  }
-
+  /**
+   * Create a unified DStream from multiple DStreams of the same type and same interval
+   */
   def union[T: ClassManifest](streams: Seq[DStream[T]]): DStream[T] = {
     new UnionDStream[T](streams.toArray)
   }
@@ -256,7 +312,7 @@ class StreamingContext private (
   }
 
   /**
-   * This function starts the execution of the streams.
+   * Starts the execution of the streams.
    */
   def start() {
     if (checkpointDir != null && checkpointInterval == null && graph != null) {
@@ -284,7 +340,7 @@ class StreamingContext private (
   }
 
   /**
-   * This function stops the execution of the streams.
+   * Sstops the execution of the streams.
    */
   def stop() {
     try {
@@ -302,6 +358,10 @@ class StreamingContext private (
 
 object StreamingContext {
 
+  implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) = {
+    new PairDStreamFunctions[K, V](stream)
+  }
+
   protected[streaming] def createNewSparkContext(master: String, frameworkName: String): SparkContext = {
 
     // Set the default cleaner delay to an hour if not already set.
@@ -310,10 +370,6 @@ object StreamingContext {
       MetadataCleaner.setDelaySeconds(60)
     }
     new SparkContext(master, frameworkName)
-  }
-
-  implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) = {
-    new PairDStreamFunctions[K, V](stream)
   }
 
   protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {

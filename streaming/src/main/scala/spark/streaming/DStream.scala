@@ -189,7 +189,7 @@ abstract class DStream[T: ClassManifest] (
     val metadataCleanerDelay = spark.util.MetadataCleaner.getDelaySeconds
     logInfo("metadataCleanupDelay = " + metadataCleanerDelay)
     assert(
-      metadataCleanerDelay < 0 || rememberDuration < metadataCleanerDelay * 1000,
+      metadataCleanerDelay < 0 || rememberDuration.milliseconds < metadataCleanerDelay * 1000,
       "It seems you are doing some DStream window operation or setting a checkpoint interval " +
         "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
         "than " + rememberDuration.milliseconds + " milliseconds. But the Spark's metadata cleanup" +

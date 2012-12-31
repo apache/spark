@@ -11,6 +11,7 @@ import spark.storage.StorageLevel
 import scala.collection.mutable.ArrayBuffer
 import spark.streaming.{Interval, Time, DStream}
 
+private[streaming]
 class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     parent: DStream[(K, V)],
     reduceFunc: (V, V) => V,
