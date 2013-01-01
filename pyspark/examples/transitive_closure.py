@@ -1,6 +1,7 @@
 import sys
 from random import Random
-from pyspark.context import SparkContext
+
+from pyspark import SparkContext
 
 numEdges = 200
 numVertices = 100
@@ -20,7 +21,7 @@ def generateGraph():
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         print >> sys.stderr, \
-            "Usage: PythonTC <host> [<slices>]"
+            "Usage: PythonTC <master> [<slices>]"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonTC")
     slices = sys.argv[2] if len(sys.argv) > 2 else 2

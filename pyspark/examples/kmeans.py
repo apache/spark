@@ -1,18 +1,21 @@
+"""
+This example requires numpy (http://www.numpy.org/)
+"""
 import sys
 
-from pyspark.context import SparkContext
-from numpy import array, sum as np_sum
+import numpy as np
+from pyspark import SparkContext
 
 
 def parseVector(line):
-    return array([float(x) for x in line.split(' ')])
+    return np.array([float(x) for x in line.split(' ')])
 
 
 def closestPoint(p, centers):
     bestIndex = 0
     closest = float("+inf")
     for i in range(len(centers)):
-        tempDist = np_sum((p - centers[i]) ** 2)
+        tempDist = np.sum((p - centers[i]) ** 2)
         if tempDist < closest:
             closest = tempDist
             bestIndex = i
@@ -41,7 +44,7 @@ if __name__ == "__main__":
         newPoints = pointStats.map(
             lambda (x, (y, z)): (x, y / z)).collect()
 
-        tempDist = sum(np_sum((kPoints[x] - y) ** 2) for (x, y) in newPoints)
+        tempDist = sum(np.sum((kPoints[x] - y) ** 2) for (x, y) in newPoints)
 
         for (x, y) in newPoints:
             kPoints[x] = y

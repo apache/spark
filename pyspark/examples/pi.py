@@ -1,13 +1,14 @@
 import sys
 from random import random
 from operator import add
-from pyspark.context import SparkContext
+
+from pyspark import SparkContext
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         print >> sys.stderr, \
-            "Usage: PythonPi <host> [<slices>]"
+            "Usage: PythonPi <master> [<slices>]"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonPi")
     slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2

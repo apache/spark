@@ -7,7 +7,7 @@ from os.path import realpath
 import sys
 
 import numpy as np
-from pyspark.context import SparkContext
+from pyspark import SparkContext
 
 
 N = 100000  # Number of data points
@@ -32,7 +32,7 @@ def generateData():
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         print >> sys.stderr, \
-            "Usage: PythonLR <host> [<slices>]"
+            "Usage: PythonLR <master> [<slices>]"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonLR", pyFiles=[realpath(__file__)])
     slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2

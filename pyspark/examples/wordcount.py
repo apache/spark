@@ -1,6 +1,8 @@
 import sys
 from operator import add
-from pyspark.context import SparkContext
+
+from pyspark import SparkContext
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:

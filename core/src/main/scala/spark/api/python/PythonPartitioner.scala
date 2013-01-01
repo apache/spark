@@ -17,9 +17,9 @@ private[spark] class PythonPartitioner(override val numPartitions: Int) extends 
       val hashCode = {
         if (key.isInstanceOf[Array[Byte]]) {
           Arrays.hashCode(key.asInstanceOf[Array[Byte]])
-        }
-        else
+        } else {
           key.hashCode()
+        }
       }
       val mod = hashCode % numPartitions
       if (mod < 0) {
