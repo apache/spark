@@ -301,6 +301,40 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * (in that order of preference). If neither of these is set, return None.
    */
   def getSparkHome(): Option[String] = sc.getSparkHome()
+
+  /**
+   * Add a file to be downloaded into the working directory of this Spark job on every node.
+   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI.
+   */
+  def addFile(path: String) {
+    sc.addFile(path)
+  }
+
+  /**
+   * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
+   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI.
+   */
+  def addJar(path: String) {
+    sc.addJar(path)
+  }
+
+  /**
+   * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
+   * any new nodes.
+   */
+  def clearJars() {
+    sc.clearJars()
+  }
+
+  /**
+   * Clear the job's list of files added by `addFile` so that they do not get downloaded to
+   * any new nodes.
+   */
+  def clearFiles() {
+    sc.clearFiles()
+  }
 }
 
 object JavaSparkContext {

@@ -101,6 +101,29 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     assert(rdd.collect().toList === List(1, 2, 3, 4))
   }
 
+  test("caching with failures") {
+    sc = new SparkContext("local", "test") 
+    val onlySplit = new Split { override def index: Int = 0 }
+    var shouldFail = true
+    val rdd = new RDD[Int](sc) {
+      override def splits: Array[Split] = Array(onlySplit)
+      override val dependencies = List[Dependency[_]]()
+      override def compute(split: Split, context: TaskContext): Iterator[Int] = {
+        if (shouldFail) {
+          throw new Exception("injected failure")
+        } else {
+          return Array(1, 2, 3, 4).iterator
+        }
+      }
+    }.cache()
+    val thrown = intercept[Exception]{
+      rdd.collect()
+    }
+    assert(thrown.getMessage.contains("injected failure"))
+    shouldFail = false
+    assert(rdd.collect().toList === List(1, 2, 3, 4))
+  }
+
   test("coalesced RDDs") {
     sc = new SparkContext("local", "test")
     val data = sc.parallelize(1 to 10, 10)
