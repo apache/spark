@@ -63,7 +63,7 @@ CORE_DIR="$FWDIR/core"
 REPL_DIR="$FWDIR/repl"
 EXAMPLES_DIR="$FWDIR/examples"
 BAGEL_DIR="$FWDIR/bagel"
-PYSPARK_DIR="$FWDIR/pyspark"
+PYSPARK_DIR="$FWDIR/python"
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH"

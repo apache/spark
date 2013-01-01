@@ -38,7 +38,7 @@ private[spark] class PythonRDD[T: ClassManifest](
   override def compute(split: Split, context: TaskContext): Iterator[Array[Byte]] = {
     val SPARK_HOME = new ProcessBuilder().environment().get("SPARK_HOME")
 
-    val pb = new ProcessBuilder(Seq(pythonExec, SPARK_HOME + "/pyspark/pyspark/worker.py"))
+    val pb = new ProcessBuilder(Seq(pythonExec, SPARK_HOME + "/python/pyspark/worker.py"))
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
 

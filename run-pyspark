@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Figure out where the Scala framework is installed
-FWDIR="$(cd `dirname $0`; cd ../; pwd)"
+FWDIR="$(cd `dirname $0`; pwd)"
 
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
@@ -18,7 +18,7 @@ fi
 export PYSPARK_PYTHON
 
 # Add the PySpark classes to the Python path:
-export PYTHONPATH=$SPARK_HOME/pyspark/:$PYTHONPATH
+export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
 
 # Launch with `scala` by default:
 if [[ "$SPARK_LAUNCH_WITH_SCALA" != "0" ]] ; then
