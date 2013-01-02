@@ -105,9 +105,9 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     sc = new SparkContext("local", "test") 
     val onlySplit = new Split { override def index: Int = 0 }
     var shouldFail = true
-    val rdd = new RDD[Int](sc) {
-      override def splits: Array[Split] = Array(onlySplit)
-      override val dependencies = List[Dependency[_]]()
+    val rdd = new RDD[Int](sc, Nil) {
+      override def getSplits: Array[Split] = Array(onlySplit)
+      override val getDependencies = List[Dependency[_]]()
       override def compute(split: Split, context: TaskContext): Iterator[Int] = {
         if (shouldFail) {
           throw new Exception("injected failure")
