@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-FWDIR="`dirname $0`"
-exec $FWDIR/run-pyspark $FWDIR/python/pyspark/shell.py "$@"

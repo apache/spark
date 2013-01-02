@@ -258,11 +258,11 @@ We can pass Python functions to Spark, which are automatically serialized along 
 For jobs that use custom classes or third-party libraries, we can add those code dependencies to SparkContext to ensure that they will be available on remote machines; this is described in more detail in the [Python programming guide](python-programming-guide).
 `SimpleJob` is simple enough that we do not need to specify any code dependencies.
 
-We can run this job using the `run-pyspark` script in `$SPARK_HOME/pyspark`:
+We can run this job using the `pyspark` script:
 
 {% highlight python %}
 $ cd $SPARK_HOME
-$ ./pyspark/run-pyspark SimpleJob.py
+$ ./pyspark SimpleJob.py
 ...
 Lines with a: 8422, Lines with b: 1836
 {% endhighlight python %}

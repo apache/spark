@@ -1,33 +1,17 @@
 """
 An interactive shell.
-"""
-import optparse  # I prefer argparse, but it's not included with Python < 2.7
-import code
-import sys
 
+This fle is designed to be launched as a PYTHONSTARTUP script.
+"""
+import os
 from pyspark.context import SparkContext
 
 
-def main(master='local', ipython=False):
-    sc = SparkContext(master, 'PySparkShell')
-    user_ns = {'sc' : sc}
-    banner = "Spark context avaiable as sc."
-    if ipython:
-        import IPython
-        IPython.embed(user_ns=user_ns, banner2=banner)
-    else:
-        print banner
-        code.interact(local=user_ns)
+sc = SparkContext(os.environ.get("MASTER", "local"), "PySparkShell")
+print "Spark context avaiable as sc."
 
-
-if __name__ == '__main__':
-    usage = "usage: %prog [options] master"
-    parser = optparse.OptionParser(usage=usage)
-    parser.add_option("-i", "--ipython", help="Run IPython shell",
-                      action="store_true")
-    (options, args) = parser.parse_args()
-    if len(sys.argv) > 1:
-        master = args[0]
-    else:
-        master = 'local'
-    main(master, options.ipython)
+# The ./pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
+# which allows us to execute the user's PYTHONSTARTUP file:
+_pythonstartup = os.environ.get('OLD_PYTHONSTARTUP')
+if _pythonstartup and os.path.isfile(_pythonstartup):
+        execfile(_pythonstartup)

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# Figure out where the Scala framework is installed
+FWDIR="$(cd `dirname $0`; cd ../; pwd)"
+
+$FWDIR/pyspark pyspark/rdd.py
+$FWDIR/pyspark -m doctest pyspark/broadcast.py
+
+# TODO: in the long-run, it would be nice to use a test runner like `nose`.

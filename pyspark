@@ -20,6 +20,10 @@ export PYSPARK_PYTHON
 # Add the PySpark classes to the Python path:
 export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
 
+# Load the PySpark shell.py script when ./pyspark is used interactively:
+export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
+export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
+
 # Launch with `scala` by default:
 if [[ "$SPARK_LAUNCH_WITH_SCALA" != "0" ]] ; then
     export SPARK_LAUNCH_WITH_SCALA=1
