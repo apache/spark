@@ -97,13 +97,13 @@ private[streaming] object SparkFlumeEvent {
 private[streaming]
 class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
   override def append(event : AvroFlumeEvent) : Status = {
-    receiver.dataHandler += SparkFlumeEvent.fromAvroFlumeEvent(event)
+    receiver.blockGenerator += SparkFlumeEvent.fromAvroFlumeEvent(event)
     Status.OK
   }
 
   override def appendBatch(events : java.util.List[AvroFlumeEvent]) : Status = {
     events.foreach (event =>
-      receiver.dataHandler += SparkFlumeEvent.fromAvroFlumeEvent(event))
+      receiver.blockGenerator += SparkFlumeEvent.fromAvroFlumeEvent(event))
     Status.OK
   }
 }
@@ -118,19 +118,19 @@ class FlumeReceiver(
     storageLevel: StorageLevel
   ) extends NetworkReceiver[SparkFlumeEvent](streamId) {
 
-  lazy val dataHandler = new BufferingBlockCreator(this, storageLevel)
+  lazy val blockGenerator = new BlockGenerator(storageLevel)
 
   protected override def onStart() {
     val responder = new SpecificResponder(
       classOf[AvroSourceProtocol], new FlumeEventServer(this));
     val server = new NettyServer(responder, new InetSocketAddress(host, port));
-    dataHandler.start()
+    blockGenerator.start()
     server.start()
     logInfo("Flume receiver started")
   }
 
   protected override def onStop() {
-    dataHandler.stop()
+    blockGenerator.stop()
     logInfo("Flume receiver stopped")
   }
 

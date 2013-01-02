@@ -29,7 +29,7 @@ class SocketReceiver[T: ClassManifest](
     storageLevel: StorageLevel
   ) extends NetworkReceiver[T](streamId) {
 
-  lazy protected val dataHandler = new BufferingBlockCreator(this, storageLevel)
+  lazy protected val blockGenerator = new BlockGenerator(storageLevel)
 
   override def getLocationPreference = None
 
@@ -37,16 +37,16 @@ class SocketReceiver[T: ClassManifest](
     logInfo("Connecting to " + host + ":" + port)
     val socket = new Socket(host, port)
     logInfo("Connected to " + host + ":" + port)
-    dataHandler.start()
+    blockGenerator.start()
     val iterator = bytesToObjects(socket.getInputStream())
     while(iterator.hasNext) {
       val obj = iterator.next
-      dataHandler += obj
+      blockGenerator += obj
     }
   }
 
   protected def onStop() {
-    dataHandler.stop()
+    blockGenerator.stop()
   }
 
 }
