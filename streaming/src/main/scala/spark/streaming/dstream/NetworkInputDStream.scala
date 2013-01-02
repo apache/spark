@@ -1,11 +1,12 @@
-package spark.streaming
+package spark.streaming.dstream
 
-import scala.collection.mutable.ArrayBuffer
+import spark.streaming.{Time, StreamingContext, AddBlocks, RegisterReceiver, DeregisterReceiver}
 
 import spark.{Logging, SparkEnv, RDD}
 import spark.rdd.BlockRDD
-import spark.streaming.util.{RecurringTimer, SystemClock}
 import spark.storage.StorageLevel
+
+import scala.collection.mutable.ArrayBuffer
 
 import java.nio.ByteBuffer
 
@@ -40,10 +41,10 @@ abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : Streaming
 }
 
 
-sealed trait NetworkReceiverMessage
-case class StopReceiver(msg: String) extends NetworkReceiverMessage
-case class ReportBlock(blockId: String, metadata: Any) extends NetworkReceiverMessage
-case class ReportError(msg: String) extends NetworkReceiverMessage
+private[streaming] sealed trait NetworkReceiverMessage
+private[streaming] case class StopReceiver(msg: String) extends NetworkReceiverMessage
+private[streaming] case class ReportBlock(blockId: String, metadata: Any) extends NetworkReceiverMessage
+private[streaming] case class ReportError(msg: String) extends NetworkReceiverMessage
 
 abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Serializable with Logging {
 

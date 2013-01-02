@@ -209,7 +209,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     val expectedOutput = bigGroupByOutput.map(_.map(x => (x._1, x._2.toSet)))
     val windowTime = Seconds(2)
     val slideTime = Seconds(1)
-    val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
+    val numBatches = expectedOutput.size * (slideTime / batchDuration).toInt
     val operation = (s: DStream[(String, Int)]) => {
       s.groupByKeyAndWindow(windowTime, slideTime)
        .map(x => (x._1, x._2.toSet))
@@ -223,7 +223,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     val expectedOutput = Seq( Seq(1), Seq(2), Seq(3), Seq(3), Seq(1), Seq(0))
     val windowTime = Seconds(2)
     val slideTime = Seconds(1)
-    val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
+    val numBatches = expectedOutput.size * (slideTime / batchDuration).toInt
     val operation = (s: DStream[Int]) => s.countByWindow(windowTime, slideTime)
     testOperation(input, operation, expectedOutput, numBatches, true)
   }
@@ -233,7 +233,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     val expectedOutput = Seq( Seq(("a", 1)), Seq(("a", 1), ("b", 2)), Seq(("a", 1), ("b", 3)))
     val windowTime = Seconds(2)
     val slideTime = Seconds(1)
-    val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
+    val numBatches = expectedOutput.size * (slideTime / batchDuration).toInt
     val operation = (s: DStream[(String, Int)]) => {
       s.countByKeyAndWindow(windowTime, slideTime).map(x => (x._1, x._2.toInt))
     }
@@ -251,7 +251,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     slideTime: Time = Seconds(1)
     ) {
     test("window - " + name) {
-      val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
+      val numBatches = expectedOutput.size * (slideTime / batchDuration).toInt
       val operation = (s: DStream[Int]) => s.window(windowTime, slideTime)
       testOperation(input, operation, expectedOutput, numBatches, true)
     }
@@ -265,7 +265,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     slideTime: Time = Seconds(1)
     ) {
     test("reduceByKeyAndWindow - " + name) {
-      val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
+      val numBatches = expectedOutput.size * (slideTime / batchDuration).toInt
       val operation = (s: DStream[(String, Int)]) => {
         s.reduceByKeyAndWindow(_ + _, windowTime, slideTime).persist()
       }
@@ -281,7 +281,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     slideTime: Time = Seconds(1)
   ) {
     test("reduceByKeyAndWindowInv - " + name) {
-      val numBatches = expectedOutput.size * (slideTime.millis / batchDuration.millis).toInt
+      val numBatches = expectedOutput.size * (slideTime / batchDuration).toInt
       val operation = (s: DStream[(String, Int)]) => {
         s.reduceByKeyAndWindow(_ + _, _ - _, windowTime, slideTime)
          .persist()

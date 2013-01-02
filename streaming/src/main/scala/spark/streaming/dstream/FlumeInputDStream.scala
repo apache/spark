@@ -1,17 +1,23 @@
-package spark.streaming
+package spark.streaming.dstream
 
-import java.io.{ObjectInput, ObjectOutput, Externalizable}
+import spark.streaming.StreamingContext
+
+import spark.Utils
 import spark.storage.StorageLevel
+
 import org.apache.flume.source.avro.AvroSourceProtocol
 import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.flume.source.avro.Status
 import org.apache.avro.ipc.specific.SpecificResponder
 import org.apache.avro.ipc.NettyServer
+
+import scala.collection.JavaConversions._
+
 import java.net.InetSocketAddress
-import collection.JavaConversions._
-import spark.Utils
+import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
 
+private[streaming]
 class FlumeInputDStream[T: ClassManifest](
   @transient ssc_ : StreamingContext,
   host: String,
@@ -79,7 +85,7 @@ class SparkFlumeEvent() extends Externalizable {
   }
 }
 
-object SparkFlumeEvent {
+private[streaming] object SparkFlumeEvent {
   def fromAvroFlumeEvent(in : AvroFlumeEvent) : SparkFlumeEvent = {
     val event = new SparkFlumeEvent
     event.event = in
@@ -88,6 +94,7 @@ object SparkFlumeEvent {
 }
 
 /** A simple server that implements Flume's Avro protocol. */
+private[streaming]
 class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
   override def append(event : AvroFlumeEvent) : Status = {
     receiver.dataHandler += SparkFlumeEvent.fromAvroFlumeEvent(event)
@@ -103,12 +110,13 @@ class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
 
 /** A NetworkReceiver which listens for events using the
   * Flume Avro interface.*/
+private[streaming]
 class FlumeReceiver(
-      streamId: Int,
-      host: String,
-      port: Int,
-      storageLevel: StorageLevel
-      ) extends NetworkReceiver[SparkFlumeEvent](streamId) {
+    streamId: Int,
+    host: String,
+    port: Int,
+    storageLevel: StorageLevel
+  ) extends NetworkReceiver[SparkFlumeEvent](streamId) {
 
   lazy val dataHandler = new BufferingBlockCreator(this, storageLevel)
 

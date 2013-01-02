@@ -1,5 +1,6 @@
 package spark.streaming
 
+private[streaming]
 case class Interval(beginTime: Time, endTime: Time) {
   def this(beginMs: Long, endMs: Long) = this(Time(beginMs), new Time(endMs))
   

@@ -1,12 +1,12 @@
-package spark.streaming
+package spark.streaming.dstream
 
 import spark.RDD
-import spark.rdd.BlockRDD
 import spark.Partitioner
-import spark.rdd.MapPartitionsRDD
 import spark.SparkContext._
 import spark.storage.StorageLevel
+import spark.streaming.{Time, DStream}
 
+private[streaming]
 class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManifest](
     parent: DStream[(K, V)],
     updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],

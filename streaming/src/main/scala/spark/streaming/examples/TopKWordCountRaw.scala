@@ -34,11 +34,11 @@ object TopKWordCountRaw {
     val lines = (1 to numStreams).map(_ => {
         ssc.rawNetworkStream[String]("localhost", port, StorageLevel.MEMORY_ONLY_SER_2)
     })
-    val union = new UnionDStream(lines.toArray)
+    val union = ssc.union(lines)
     val counts = union.mapPartitions(splitAndCountPartitions)
     val windowedCounts = counts.reduceByKeyAndWindow(add _, subtract _, Seconds(30), Seconds(1), 10)
     val partialTopKWindowedCounts = windowedCounts.mapPartitions(topK(_, k))
-    partialTopKWindowedCounts.foreachRDD(rdd => {
+    partialTopKWindowedCounts.foreach(rdd => {
       val collectedCounts = rdd.collect
       println("Collected " + collectedCounts.size + " words from partial top words") 
       println("Top " + k + " words are " + topK(collectedCounts.toIterator, k).mkString(","))

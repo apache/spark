@@ -1,30 +1,36 @@
-package spark.streaming
+package spark.streaming.dstream
+
+import spark.Logging
+import spark.storage.StorageLevel
+import spark.streaming.{Time, DStreamCheckpointData, StreamingContext}
 
 import java.util.Properties
 import java.util.concurrent.Executors
+
 import kafka.consumer._
 import kafka.message.{Message, MessageSet, MessageAndMetadata}
 import kafka.serializer.StringDecoder
 import kafka.utils.{Utils, ZKGroupTopicDirs}
 import kafka.utils.ZkUtils._
+
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
-import spark._
-import spark.RDD
-import spark.storage.StorageLevel
+
 
 // Key for a specific Kafka Partition: (broker, topic, group, part)
 case class KafkaPartitionKey(brokerId: Int, topic: String, groupId: String, partId: Int)
 // NOT USED - Originally intended for fault-tolerance
 // Metadata for a Kafka Stream that it sent to the Master
+private[streaming]
 case class KafkaInputDStreamMetadata(timestamp: Long, data: Map[KafkaPartitionKey, Long])
 // NOT USED - Originally intended for fault-tolerance
 // Checkpoint data specific to a KafkaInputDstream
-case class KafkaDStreamCheckpointData(kafkaRdds: HashMap[Time, Any], 
+private[streaming]
+case class KafkaDStreamCheckpointData(kafkaRdds: HashMap[Time, Any],
   savedOffsets: Map[KafkaPartitionKey, Long]) extends DStreamCheckpointData(kafkaRdds)
 
 /**
- * Input stream that pulls messages form a Kafka Broker.
+ * Input stream that pulls messages from a Kafka Broker.
  * 
  * @param host Zookeper hostname.
  * @param port Zookeper port.
@@ -35,6 +41,7 @@ case class KafkaDStreamCheckpointData(kafkaRdds: HashMap[Time, Any],
  * By default the value is pulled from zookeper.
  * @param storageLevel RDD storage level.
  */
+private[streaming]
 class KafkaInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
     host: String,
@@ -94,6 +101,7 @@ class KafkaInputDStream[T: ClassManifest](
   }
 }
 
+private[streaming]
 class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String, 
   topics: Map[String, Int], initialOffsets: Map[KafkaPartitionKey, Long], 
   storageLevel: StorageLevel) extends NetworkReceiver[Any](streamId) {

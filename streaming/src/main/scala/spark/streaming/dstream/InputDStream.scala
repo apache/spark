@@ -1,0 +1,19 @@
+package spark.streaming.dstream
+
+import spark.streaming.{StreamingContext, DStream}
+
+abstract class InputDStream[T: ClassManifest] (@transient ssc_ : StreamingContext)
+  extends DStream[T](ssc_) {
+
+  override def dependencies = List()
+
+  override def slideTime = {
+    if (ssc == null) throw new Exception("ssc is null")
+    if (ssc.graph.batchDuration == null) throw new Exception("batchDuration is null")
+    ssc.graph.batchDuration
+  }
+
+  def start()
+
+  def stop()
+}

@@ -2,6 +2,7 @@ package spark.streaming
 
 import java.util.concurrent.atomic.AtomicLong
 
+private[streaming]
 class Job(val time: Time, func: () => _) {
   val id = Job.getNewId()
   def run(): Long = {
@@ -14,6 +15,7 @@ class Job(val time: Time, func: () => _) {
   override def toString = "streaming job " + id + " @ " + time 
 }
 
+private[streaming]
 object Job {
   val id = new AtomicLong(0)
 

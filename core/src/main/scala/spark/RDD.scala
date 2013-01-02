@@ -101,7 +101,6 @@ abstract class RDD[T: ClassManifest](
   val partitioner: Option[Partitioner] = None
 
 
-
   // =======================================================================
   // Methods and fields available on all RDDs
   // =======================================================================

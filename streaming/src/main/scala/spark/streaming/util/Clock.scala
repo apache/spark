@@ -1,13 +1,12 @@
 package spark.streaming.util
 
-import spark.streaming._
-
-trait Clock {  
+private[streaming]
+trait Clock {
   def currentTime(): Long 
   def waitTillTime(targetTime: Long): Long
 }
 
-
+private[streaming]
 class SystemClock() extends Clock {
   
   val minPollTime = 25L
@@ -54,6 +53,7 @@ class SystemClock() extends Clock {
   }
 }
 
+private[streaming]
 class ManualClock() extends Clock {
   
   var time = 0L

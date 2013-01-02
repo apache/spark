@@ -1,7 +1,8 @@
-package spark.streaming
+package spark.streaming.dstream
 
 import spark.RDD
 import spark.rdd.UnionRDD
+import spark.streaming.{StreamingContext, Time}
 
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.conf.Configuration
@@ -9,7 +10,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import scala.collection.mutable.HashSet
 
-
+private[streaming]
 class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] : ClassManifest](
     @transient ssc_ : StreamingContext,
     directory: String,

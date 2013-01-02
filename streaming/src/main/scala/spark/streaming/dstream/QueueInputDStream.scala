@@ -1,10 +1,11 @@
-package spark.streaming
+package spark.streaming.dstream
 
 import spark.RDD
 import spark.rdd.UnionRDD
 
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
+import spark.streaming.{Time, StreamingContext}
 
 class QueueInputDStream[T: ClassManifest](
     @transient ssc: StreamingContext,

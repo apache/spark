@@ -1,12 +1,15 @@
-package spark.streaming
+package spark.streaming.dstream
+
+import spark.{DaemonThread, Logging}
+import spark.storage.StorageLevel
+import spark.streaming.StreamingContext
 
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, SocketChannel}
 import java.io.EOFException
 import java.util.concurrent.ArrayBlockingQueue
-import spark._
-import spark.storage.StorageLevel
+
 
 /**
  * An input stream that reads blocks of serialized objects from a given network address.
@@ -14,6 +17,7 @@ import spark.storage.StorageLevel
  * data into Spark Streaming, though it requires the sender to batch data and serialize it
  * in the format that the system is configured with.
  */
+private[streaming]
 class RawInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
     host: String,
@@ -26,6 +30,7 @@ class RawInputDStream[T: ClassManifest](
   }
 }
 
+private[streaming]
 class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: StorageLevel)
   extends NetworkReceiver[Any](streamId) {
 

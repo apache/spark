@@ -1,17 +1,17 @@
-package spark.streaming
+package spark.streaming.dstream
 
 import spark.streaming.StreamingContext._
 
 import spark.RDD
-import spark.rdd.UnionRDD
 import spark.rdd.CoGroupedRDD
 import spark.Partitioner
 import spark.SparkContext._
 import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
-import collection.SeqProxy
+import spark.streaming.{Interval, Time, DStream}
 
+private[streaming]
 class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     parent: DStream[(K, V)],
     reduceFunc: (V, V) => V,

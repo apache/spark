@@ -1,12 +1,16 @@
 package spark.streaming
 
+import spark.streaming.dstream.{InputDStream, ForEachDStream}
+import spark.streaming.util.ManualClock
+
 import spark.{RDD, Logging}
-import util.ManualClock
+
 import collection.mutable.ArrayBuffer
-import org.scalatest.FunSuite
 import collection.mutable.SynchronizedBuffer
+
 import java.io.{ObjectInputStream, IOException}
 
+import org.scalatest.FunSuite
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -35,7 +39,7 @@ class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[
  * ArrayBuffer. This buffer is wiped clean on being restored from checkpoint.
  */
 class TestOutputStream[T: ClassManifest](parent: DStream[T], val output: ArrayBuffer[Seq[T]])
-  extends PerRDDForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
+  extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
   }) {
@@ -70,6 +74,10 @@ trait TestSuiteBase extends FunSuite with Logging {
 
   def actuallyWait = false
 
+  /**
+   * Set up required DStreams to test the DStream operation using the two sequences
+   * of input collections.
+   */
   def setupStreams[U: ClassManifest, V: ClassManifest](
       input: Seq[Seq[U]],
       operation: DStream[U] => DStream[V]
@@ -90,6 +98,10 @@ trait TestSuiteBase extends FunSuite with Logging {
     ssc
   }
 
+  /**
+   * Set up required DStreams to test the binary operation using the sequence
+   * of input collections.
+   */
   def setupStreams[U: ClassManifest, V: ClassManifest, W: ClassManifest](
       input1: Seq[Seq[U]],
       input2: Seq[Seq[V]],
@@ -173,6 +185,11 @@ trait TestSuiteBase extends FunSuite with Logging {
     output
   }
 
+  /**
+   * Verify whether the output values after running a DStream operation
+   * is same as the expected output values, by comparing the output
+   * collections either as lists (order matters) or sets (order does not matter)
+   */
   def verifyOutput[V: ClassManifest](
       output: Seq[Seq[V]],
       expectedOutput: Seq[Seq[V]],
@@ -199,6 +216,10 @@ trait TestSuiteBase extends FunSuite with Logging {
     logInfo("Output verified successfully")
   }
 
+  /**
+   * Test unary DStream operation with a list of inputs, with number of
+   * batches to run same as the number of expected output values
+   */
   def testOperation[U: ClassManifest, V: ClassManifest](
       input: Seq[Seq[U]],
       operation: DStream[U] => DStream[V],
@@ -208,6 +229,15 @@ trait TestSuiteBase extends FunSuite with Logging {
     testOperation[U, V](input, operation, expectedOutput, -1, useSet)
   }
 
+  /**
+   * Test unary DStream operation with a list of inputs
+   * @param input      Sequence of input collections
+   * @param operation  Binary DStream operation to be applied to the 2 inputs
+   * @param expectedOutput Sequence of expected output collections
+   * @param numBatches Number of batches to run the operation for
+   * @param useSet     Compare the output values with the expected output values
+   *                   as sets (order matters) or as lists (order does not matter)
+   */
   def testOperation[U: ClassManifest, V: ClassManifest](
       input: Seq[Seq[U]],
       operation: DStream[U] => DStream[V],
@@ -221,6 +251,10 @@ trait TestSuiteBase extends FunSuite with Logging {
     verifyOutput[V](output, expectedOutput, useSet)
   }
 
+  /**
+   * Test binary DStream operation with two lists of inputs, with number of
+   * batches to run same as the number of expected output values
+   */
   def testOperation[U: ClassManifest, V: ClassManifest, W: ClassManifest](
       input1: Seq[Seq[U]],
       input2: Seq[Seq[V]],
@@ -231,6 +265,16 @@ trait TestSuiteBase extends FunSuite with Logging {
     testOperation[U, V, W](input1, input2, operation, expectedOutput, -1, useSet)
   }
 
+  /**
+   * Test binary DStream operation with two lists of inputs
+   * @param input1     First sequence of input collections
+   * @param input2     Second sequence of input collections
+   * @param operation  Binary DStream operation to be applied to the 2 inputs
+   * @param expectedOutput Sequence of expected output collections
+   * @param numBatches Number of batches to run the operation for
+   * @param useSet     Compare the output values with the expected output values
+   *                   as sets (order matters) or as lists (order does not matter)
+   */
   def testOperation[U: ClassManifest, V: ClassManifest, W: ClassManifest](
       input1: Seq[Seq[U]],
       input2: Seq[Seq[V]],

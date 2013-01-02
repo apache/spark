@@ -8,6 +8,7 @@ import org.apache.hadoop.conf.Configuration
 import java.io._
 
 
+private[streaming]
 class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   extends Logging with Serializable {
   val master = ssc.sc.master
@@ -30,6 +31,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
 /**
  * Convenience class to speed up the writing of graph checkpoint to file
  */
+private[streaming]
 class CheckpointWriter(checkpointDir: String) extends Logging {
   val file = new Path(checkpointDir, "graph")
   val conf = new Configuration()
@@ -65,7 +67,7 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
 }
 
 
-
+private[streaming]
 object CheckpointReader extends Logging {
 
   def read(path: String): Checkpoint = {
@@ -103,6 +105,7 @@ object CheckpointReader extends Logging {
   }
 }
 
+private[streaming]
 class ObjectInputStreamWithLoader(inputStream_ : InputStream, loader: ClassLoader) extends ObjectInputStream(inputStream_) {
   override def resolveClass(desc: ObjectStreamClass): Class[_] = {
     try {

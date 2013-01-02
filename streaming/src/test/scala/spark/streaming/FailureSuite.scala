@@ -133,7 +133,7 @@ class FailureSuite extends TestSuiteBase with BeforeAndAfter {
     // Get the output buffer
     val outputStream = ssc.graph.getOutputStreams.head.asInstanceOf[TestOutputStream[V]]
     val output = outputStream.output
-    val waitTime = (batchDuration.millis * (numBatches.toDouble + 0.5)).toLong
+    val waitTime = (batchDuration.milliseconds * (numBatches.toDouble + 0.5)).toLong
     val startTime = System.currentTimeMillis()
 
     try {
