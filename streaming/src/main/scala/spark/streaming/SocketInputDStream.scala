@@ -32,7 +32,7 @@ class SocketReceiver[T: ClassManifest](
     storageLevel: StorageLevel
   ) extends NetworkReceiver[T](streamId) {
 
-  lazy protected val dataHandler = new DataHandler(this, storageLevel)
+  lazy protected val dataHandler = new BufferingBlockCreator(this, storageLevel)
 
   override def getLocationPreference = None
 

@@ -102,7 +102,7 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
   val ZK_TIMEOUT = 10000
 
   // Handles pushing data into the BlockManager
-  lazy protected val dataHandler = new DataHandler(this, storageLevel)
+  lazy protected val dataHandler = new BufferingBlockCreator(this, storageLevel)
   // Keeps track of the current offsets. Maps from (broker, topic, group, part) -> Offset
   lazy val offsets = HashMap[KafkaPartitionKey, Long]()
   // Connection to Kafka
@@ -114,7 +114,6 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
 
   def onStart() {
 
-    // Starting the DataHandler that buffers blocks and pushes them into them BlockManager
     dataHandler.start()
 
     // In case we are using multiple Threads to handle Kafka Messages
@@ -181,7 +180,7 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
 
   // NOT USED - Originally intended for fault-tolerance
   // class KafkaDataHandler(receiver: KafkaReceiver, storageLevel: StorageLevel) 
-  // extends DataHandler[Any](receiver, storageLevel) {
+  // extends BufferingBlockCreator[Any](receiver, storageLevel) {
 
   //   override def createBlock(blockId: String, iterator: Iterator[Any]) : Block = {
   //     // Creates a new Block with Kafka-specific Metadata

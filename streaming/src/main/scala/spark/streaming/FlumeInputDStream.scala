@@ -110,7 +110,7 @@ class FlumeReceiver(
       storageLevel: StorageLevel
       ) extends NetworkReceiver[SparkFlumeEvent](streamId) {
 
-  lazy val dataHandler = new DataHandler(this, storageLevel)
+  lazy val dataHandler = new BufferingBlockCreator(this, storageLevel)
 
   protected override def onStart() {
     val responder = new SpecificResponder(
