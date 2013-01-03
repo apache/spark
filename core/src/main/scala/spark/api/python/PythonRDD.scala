@@ -10,6 +10,7 @@ import spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import spark.broadcast.Broadcast
 import spark._
 import spark.rdd.PipedRDD
+import java.util
 
 
 private[spark] class PythonRDD[T: ClassManifest](
@@ -216,6 +217,9 @@ private[spark] object PythonRDD {
     }
     file.close()
   }
+
+  def takePartition[T](rdd: RDD[T], partition: Int): java.util.Iterator[T] =
+    rdd.context.runJob(rdd, ((x: Iterator[T]) => x), Seq(partition), true).head
 }
 
 private object Pickle {

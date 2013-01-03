@@ -328,18 +328,17 @@ class RDD(object):
         a lot of partitions are required. In that case, use L{collect} to get
         the whole RDD instead.
 
-        >>> sc.parallelize([2, 3, 4, 5, 6]).take(2)
+        >>> sc.parallelize([2, 3, 4, 5, 6]).cache().take(2)
         [2, 3]
         >>> sc.parallelize([2, 3, 4, 5, 6]).take(10)
         [2, 3, 4, 5, 6]
         """
         items = []
-        splits = self._jrdd.splits()
-        taskContext = self.ctx.jvm.spark.TaskContext(0, 0, 0)
-        while len(items) < num and splits:
-            split = splits.pop(0)
-            iterator = self._jrdd.iterator(split, taskContext)
+        for partition in range(self._jrdd.splits().size()):
+            iterator = self.ctx._takePartition(self._jrdd.rdd(), partition)
             items.extend(self._collect_iterator_through_file(iterator))
+            if len(items) >= num:
+                break
         return items[:num]
 
     def first(self):

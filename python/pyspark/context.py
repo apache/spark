@@ -21,6 +21,7 @@ class SparkContext(object):
     jvm = gateway.jvm
     _readRDDFromPickleFile = jvm.PythonRDD.readRDDFromPickleFile
     _writeIteratorToPickleFile = jvm.PythonRDD.writeIteratorToPickleFile
+    _takePartition = jvm.PythonRDD.takePartition
 
     def __init__(self, master, jobName, sparkHome=None, pyFiles=None,
         environment=None, batchSize=1024):
