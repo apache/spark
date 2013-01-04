@@ -1,6 +1,7 @@
 package spark.streaming.api.java
 
 import scala.collection.JavaConversions._
+import java.util.{List => JList}
 
 import spark.streaming._
 import dstream.SparkFlumeEvent
