@@ -67,31 +67,4 @@ public class JavaAPISuite implements Serializable {
     Assert.assertTrue(result.equals(
         Arrays.asList(Arrays.asList(5, 5), Arrays.asList(9, 4))));
   }
-
-  public static void main(String[] args) {
-    JavaStreamingContext sc = new JavaStreamingContext("local[2]", "test", new Time(1000));
-
-    sc.networkTextStream("localhost", 12345).map(new Function<String, Integer>() {
-        @Override
-        public Integer call(String s) throws Exception {
-            return s.length();
-        }
-    }).reduce(new Function2<Integer, Integer, Integer>() {
-        @Override
-        public Integer call(Integer i1, Integer i2) throws Exception {
-            return i1 + i2;
-        }
-    }).foreach(new Function2<JavaRDD<Integer>, Time, Void>() {
-        @Override
-        public Void call(JavaRDD<Integer> integerJavaRDD, Time t) throws Exception {
-            System.out.println("Contents @ " + t.toFormattedString());
-            for (int i: integerJavaRDD.collect()) {
-              System.out.println(i + "\n");
-            }
-            return null;
-        }
-    });
-
-    sc.start();
-  }
 }
