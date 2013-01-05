@@ -35,7 +35,7 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
 
   def context(): StreamingContext = dstream.context()
 
-  def window(windowTime: Time) = {
+  def window(windowTime: Time): JavaDStream[T] = {
     dstream.window(windowTime)
   }
 
