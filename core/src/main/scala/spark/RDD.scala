@@ -330,6 +330,13 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   def toArray(): Array[T] = collect()
 
   /**
+   * Return an RDD that contains all matching values by applying `f`.
+   */
+  def collect[U: ClassManifest](f: PartialFunction[T, U]): RDD[U] = {
+    filter(f.isDefinedAt).map(f)
+  }
+
+  /**
    * Reduces the elements of this RDD using the specified associative binary operator.
    */
   def reduce(f: (T, T) => T): T = {
