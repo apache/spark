@@ -45,8 +45,8 @@ public class JavaAPISuite implements Serializable {
     JavaTestUtils.attachTestOutputStream(count);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 3, 3);
 
-    Assert.assertTrue(result.equals(
-            Arrays.asList(Arrays.asList(4), Arrays.asList(3), Arrays.asList(1))));
+    Assert.assertEquals(result,
+        Arrays.asList(Arrays.asList(4), Arrays.asList(3), Arrays.asList(1)));
   }
 
   @Test
@@ -64,7 +64,6 @@ public class JavaAPISuite implements Serializable {
     JavaTestUtils.attachTestOutputStream(letterCount);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 2, 2);
 
-    Assert.assertTrue(result.equals(
-        Arrays.asList(Arrays.asList(5, 5), Arrays.asList(9, 4))));
+    Assert.assertEquals(result,  Arrays.asList(Arrays.asList(5, 5), Arrays.asList(9, 4)));
   }
 }
