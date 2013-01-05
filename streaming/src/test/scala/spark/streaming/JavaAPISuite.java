@@ -7,6 +7,7 @@ import org.junit.Before;
 import org.junit.Test;
 import spark.api.java.function.FlatMapFunction;
 import spark.api.java.function.Function;
+import spark.api.java.function.Function2;
 import spark.streaming.JavaTestUtils;
 import spark.streaming.api.java.JavaDStream;
 import spark.streaming.api.java.JavaStreamingContext;
@@ -92,8 +93,8 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(7,8,9));
 
     JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
-    JavaDStream windowedRDD = stream.window(new Time(2000));
-    JavaTestUtils.attachTestOutputStream(windowedRDD);
+    JavaDStream windowed = stream.window(new Time(2000));
+    JavaTestUtils.attachTestOutputStream(windowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 4, 4);
 
     assertOrderInvariantEquals(expected, result);
@@ -116,8 +117,8 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(13,14,15,16,17,18));
 
     JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
-    JavaDStream windowedRDD = stream.window(new Time(4000), new Time(2000));
-    JavaTestUtils.attachTestOutputStream(windowedRDD);
+    JavaDStream windowed = stream.window(new Time(4000), new Time(2000));
+    JavaTestUtils.attachTestOutputStream(windowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 8, 4);
 
     assertOrderInvariantEquals(expected, result);
@@ -139,8 +140,8 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(13,14,15,16,17,18));
 
     JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
-    JavaDStream windowedRDD = stream.tumble(new Time(2000));
-    JavaTestUtils.attachTestOutputStream(windowedRDD);
+    JavaDStream windowed = stream.tumble(new Time(2000));
+    JavaTestUtils.attachTestOutputStream(windowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 6, 3);
 
     assertOrderInvariantEquals(expected, result);
@@ -210,6 +211,62 @@ public class JavaAPISuite implements Serializable {
     });
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<List<String>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  private class IntegerSum extends Function2<Integer, Integer, Integer> {
+    @Override
+    public Integer call(Integer i1, Integer i2) throws Exception {
+      return i1 + i2;
+    }
+  }
+
+  private class IntegerDifference extends Function2<Integer, Integer, Integer> {
+    @Override
+    public Integer call(Integer i1, Integer i2) throws Exception {
+      return i1 - i2;
+    }
+  }
+
+  @Test
+  public void testReduce() {
+    List<List<Integer>> inputData = Arrays.asList(
+        Arrays.asList(1,2,3),
+        Arrays.asList(4,5,6),
+        Arrays.asList(7,8,9));
+
+    List<List<Integer>> expected = Arrays.asList(
+        Arrays.asList(6),
+        Arrays.asList(15),
+        Arrays.asList(24));
+
+    JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaDStream reduced = stream.reduce(new IntegerSum());
+    JavaTestUtils.attachTestOutputStream(reduced);
+    List<List<Integer>> result = JavaTestUtils.runStreams(sc, 3, 3);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testReduceByWindow() {
+    List<List<Integer>> inputData = Arrays.asList(
+        Arrays.asList(1,2,3),
+        Arrays.asList(4,5,6),
+        Arrays.asList(7,8,9));
+
+    List<List<Integer>> expected = Arrays.asList(
+        Arrays.asList(6),
+        Arrays.asList(21),
+        Arrays.asList(39),
+        Arrays.asList(24));
+
+    JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaDStream reducedWindowed = stream.reduceByWindow(new IntegerSum(),
+        new IntegerDifference(), new Time(2000), new Time(1000));
+    JavaTestUtils.attachTestOutputStream(reducedWindowed);
+    List<List<Integer>> result = JavaTestUtils.runStreams(sc, 4, 4);
 
     Assert.assertEquals(expected, result);
   }
