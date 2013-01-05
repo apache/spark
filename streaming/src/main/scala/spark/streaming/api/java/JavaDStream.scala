@@ -86,6 +86,20 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
   def foreach(foreachFunc: JFunction2[JavaRDD[T], Time, Void]) = {
     dstream.foreach((rdd, time) => foreachFunc.call(new JavaRDD(rdd), time))
   }
+
+  def transform[U](transformFunc: JFunction[JavaRDD[T], JavaRDD[U]]): JavaDStream[U] = {
+    implicit val cm: ClassManifest[U] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[U]]
+    def scalaTransform (in: RDD[T]): RDD[U] = {
+      transformFunc.call(new JavaRDD[T](in)).rdd
+    }
+    dstream.transform(scalaTransform(_))
+  }
+  // TODO: transform with time
+
+  def union(that: JavaDStream[T]): JavaDStream[T] = {
+    dstream.union(that.dstream)
+  }
 }
 
 object JavaDStream {

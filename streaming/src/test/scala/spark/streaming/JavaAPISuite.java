@@ -5,6 +5,7 @@ import org.junit.Assert;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import spark.api.java.JavaRDD;
 import spark.api.java.function.FlatMapFunction;
 import spark.api.java.function.Function;
 import spark.api.java.function.Function2;
@@ -13,10 +14,7 @@ import spark.streaming.api.java.JavaDStream;
 import spark.streaming.api.java.JavaStreamingContext;
 
 import java.io.Serializable;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -269,6 +267,62 @@ public class JavaAPISuite implements Serializable {
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 4, 4);
 
     Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testTransform() {
+    List<List<Integer>> inputData = Arrays.asList(
+        Arrays.asList(1,2,3),
+        Arrays.asList(4,5,6),
+        Arrays.asList(7,8,9));
+
+    List<List<Integer>> expected = Arrays.asList(
+        Arrays.asList(3,4,5),
+        Arrays.asList(6,7,8),
+        Arrays.asList(9,10,11));
+
+    JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaDStream transformed = stream.transform(new Function<JavaRDD<Integer>, JavaRDD<Integer>>() {
+      @Override
+      public JavaRDD<Integer> call(JavaRDD<Integer> in) throws Exception {
+        return in.map(new Function<Integer, Integer>() {
+          @Override
+          public Integer call(Integer i) throws Exception {
+            return i + 2;
+          }
+        });
+      }});
+    JavaTestUtils.attachTestOutputStream(transformed);
+    List<List<Integer>> result = JavaTestUtils.runStreams(sc, 3, 3);
+
+    assertOrderInvariantEquals(expected, result);
+  }
+
+  @Test
+  public void testUnion() {
+    List<List<Integer>> inputData1 = Arrays.asList(
+        Arrays.asList(1,1),
+        Arrays.asList(2,2),
+        Arrays.asList(3,3));
+
+    List<List<Integer>> inputData2 = Arrays.asList(
+        Arrays.asList(4,4),
+        Arrays.asList(5,5),
+        Arrays.asList(6,6));
+
+    List<List<Integer>> expected = Arrays.asList(
+        Arrays.asList(1,1,4,4),
+        Arrays.asList(2,2,5,5),
+        Arrays.asList(3,3,6,6));
+
+    JavaDStream stream1 = JavaTestUtils.attachTestInputStream(sc, inputData1, 2);
+    JavaDStream stream2 = JavaTestUtils.attachTestInputStream(sc, inputData2, 2);
+
+    JavaDStream unioned = stream1.union(stream2);
+    JavaTestUtils.attachTestOutputStream(unioned);
+    List<List<Integer>> result = JavaTestUtils.runStreams(sc, 3, 3);
+
+    assertOrderInvariantEquals(expected, result);
   }
 
   /*
