@@ -586,7 +586,7 @@ public class JavaAPISuite implements Serializable {
   public void accumulators() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
 
-    final Accumulator<Integer> intAccum = sc.intAccumulator(10);
+    final Accumulator<Integer> intAccum = sc.accumulator(10);
     rdd.foreach(new VoidFunction<Integer>() {
       public void call(Integer x) {
         intAccum.add(x);
@@ -594,7 +594,7 @@ public class JavaAPISuite implements Serializable {
     });
     Assert.assertEquals((Integer) 25, intAccum.value());
 
-    final Accumulator<Double> doubleAccum = sc.doubleAccumulator(10.0);
+    final Accumulator<Double> doubleAccum = sc.accumulator(10.0);
     rdd.foreach(new VoidFunction<Integer>() {
       public void call(Integer x) {
         doubleAccum.add((double) x);
