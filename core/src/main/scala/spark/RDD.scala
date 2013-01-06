@@ -511,9 +511,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   }
 
   /**
-   * Tuples the elements of this RDD by applying `f`.
+   * Creates tuples of the elements in this RDD by applying `f`.
    */
-  def tupleBy[K](f: T => K): RDD[(K, T)] = {
+  def keyBy[K](f: T => K): RDD[(K, T)] = {
     map(x => (f(x), x))
   }
 
