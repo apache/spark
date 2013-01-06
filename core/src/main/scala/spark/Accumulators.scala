@@ -39,12 +39,26 @@ class Accumulable[R, T] (
   def += (term: T) { value_ = param.addAccumulator(value_, term) }
 
   /**
+   * Add more data to this accumulator / accumulable
+   * @param term the data to add
+   */
+  def add(term: T) { value_ = param.addAccumulator(value_, term) }
+
+  /**
    * Merge two accumulable objects together
-   * 
+   *
    * Normally, a user will not want to use this version, but will instead call `+=`.
-   * @param term the other Accumulable that will get merged with this
+   * @param term the other `R` that will get merged with this
    */
   def ++= (term: R) { value_ = param.addInPlace(value_, term)}
+
+  /**
+   * Merge two accumulable objects together
+   *
+   * Normally, a user will not want to use this version, but will instead call `add`.
+   * @param term the other `R` that will get merged with this
+   */
+  def merge(term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
    * Access the accumulator's current value; only allowed on master.
