@@ -14,7 +14,7 @@ private[streaming]
 class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] : ClassManifest](
     @transient ssc_ : StreamingContext,
     directory: String,
-    filter: PathFilter = FileInputDStream.defaultPathFilter,
+    filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true) 
   extends InputDStream[(K, V)](ssc_) {
 
@@ -60,7 +60,7 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
       val latestModTimeFiles = new HashSet[String]()
 
       def accept(path: Path): Boolean = {
-        if (!filter.accept(path)) {
+        if (!filter(path)) {
           return false
         } else {
           val modTime = fs.getFileStatus(path).getModificationTime()
@@ -95,16 +95,8 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
   }
 }
 
+private[streaming]
 object FileInputDStream {
-  val defaultPathFilter = new PathFilter with Serializable {
-    def accept(path: Path): Boolean = {
-      val file = path.getName()
-      if (file.startsWith(".") || file.endsWith("_tmp")) {
-        return false
-      } else {
-        return true
-      }
-    }
-  }
+  def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 }
 

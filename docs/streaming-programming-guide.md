@@ -187,8 +187,8 @@ Conversely, the computation can be stopped by using
 ssc.stop()
 {% endhighlight %}
 
-# Example - WordCountNetwork.scala
-A good example to start off is the spark.streaming.examples.WordCountNetwork. This example counts the words received from a network server every second. Given below is the relevant sections of the source code. You can find the full source code in <Spark repo>/streaming/src/main/scala/spark/streaming/examples/WordCountNetwork.scala.
+# Example - NetworkWordCount.scala
+A good example to start off is the spark.streaming.examples.NetworkWordCount. This example counts the words received from a network server every second. Given below is the relevant sections of the source code. You can find the full source code in <Spark repo>/streaming/src/main/scala/spark/streaming/examples/WordCountNetwork.scala.
 
 {% highlight scala %}
 import spark.streaming.{Seconds, StreamingContext}
@@ -196,7 +196,7 @@ import spark.streaming.StreamingContext._
 ...
 
 // Create the context and set up a network input stream to receive from a host:port
-val ssc = new StreamingContext(args(0), "WordCountNetwork", Seconds(1))
+val ssc = new StreamingContext(args(0), "NetworkWordCount", Seconds(1))
 val lines = ssc.networkTextStream(args(1), args(2).toInt)
 
 // Split the lines into words, count them, and print some of the counts on the master
@@ -214,13 +214,13 @@ To run this example on your local machine, you need to first run a Netcat server
 $ nc -lk 9999
 {% endhighlight %}
 
-Then, in a different terminal, you can start WordCountNetwork by using
+Then, in a different terminal, you can start NetworkWordCount by using
 
 {% highlight bash %}
-$ ./run spark.streaming.examples.WordCountNetwork local[2] localhost 9999
+$ ./run spark.streaming.examples.NetworkWordCount local[2] localhost 9999
 {% endhighlight %}
 
-This will make WordCountNetwork connect to the netcat server. Any lines typed in the terminal running the netcat server will be counted and printed on screen.
+This will make NetworkWordCount connect to the netcat server. Any lines typed in the terminal running the netcat server will be counted and printed on screen.
 
 <table>
 <td>
@@ -240,7 +240,7 @@ hello world
 </td>
 <td>
 {% highlight bash %}
-# TERMINAL 2: RUNNING WordCountNetwork
+# TERMINAL 2: RUNNING NetworkWordCount
 ...
 2012-12-31 18:47:10,446 INFO SparkContext: Job finished: run at ThreadPoolExecutor.java:886, took 0.038817 s
 -------------------------------------------

@@ -5,7 +5,7 @@ import spark.storage.StorageLevel
 import spark.streaming._
 
 /**
- *  Produce a streaming count of events received from Flume.
+ *  Produces a count of events received from Flume.
  *
  *  This should be used in conjunction with an AvroSink in Flume. It will start
  *  an Avro server on at the request host:port address and listen for requests.

@@ -65,7 +65,7 @@ extends Logging with Serializable {
       cpRDD = Some(newRDD)
       rdd.changeDependencies(newRDD)
       cpState = Checkpointed
-      RDDCheckpointData.checkpointCompleted()
+      RDDCheckpointData.clearTaskCaches()
       logInfo("Done checkpointing RDD " + rdd.id + ", new parent is RDD " + newRDD.id)
     }
   }
@@ -90,7 +90,7 @@ extends Logging with Serializable {
 }
 
 private[spark] object RDDCheckpointData {
-  def checkpointCompleted() {
+  def clearTaskCaches() {
     ShuffleMapTask.clearCache()
     ResultTask.clearCache()
   }
