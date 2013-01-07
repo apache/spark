@@ -318,7 +318,7 @@ class TestServer(port: Int) extends Logging {
               }
             }
           } catch {
-            case e: SocketException => logInfo(e)
+            case e: SocketException => logError("TestServer error", e)
           } finally {
             logInfo("Connection closed")
             if (!clientSocket.isClosed) clientSocket.close()
