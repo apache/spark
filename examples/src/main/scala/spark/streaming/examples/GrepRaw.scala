@@ -4,7 +4,6 @@ import spark.util.IntParam
 import spark.storage.StorageLevel
 
 import spark.streaming._
-import spark.streaming.StreamingContext._
 import spark.streaming.util.RawTextHelper._
 
 object GrepRaw {
