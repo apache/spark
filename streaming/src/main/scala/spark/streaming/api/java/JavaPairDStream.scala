@@ -6,7 +6,7 @@ import scala.collection.JavaConversions._
 
 import spark.streaming._
 import spark.streaming.StreamingContext._
-import spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
+import spark.api.java.function.{Function => JFunction, Function2 => JFunction2, FlatMapFunction}
 import spark.Partitioner
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
@@ -113,6 +113,47 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   def countByKeyAndWindow(windowTime: Time, slideTime: Time, numPartitions: Int)
       : JavaPairDStream[K, Long] = {
     dstream.countByKeyAndWindow(windowTime, slideTime, numPartitions)
+  }
+
+  def mapValues[U](f: JFunction[V, U]): JavaPairDStream[K, U] = {
+    implicit val cm: ClassManifest[U] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[U]]
+    dstream.mapValues(f)
+  }
+
+  def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairDStream[K, U] = {
+    import scala.collection.JavaConverters._
+    def fn = (x: V) => f.apply(x).asScala
+    implicit val cm: ClassManifest[U] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[U]]
+    dstream.flatMapValues(fn)
+  }
+
+  def cogroup[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (JList[V], JList[W])] = {
+    implicit val cm: ClassManifest[W] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+    dstream.cogroup(other.dstream).mapValues(t => (seqAsJavaList(t._1), seqAsJavaList((t._2))))
+  }
+
+  def cogroup[W](other: JavaPairDStream[K, W], partitioner: Partitioner)
+      : JavaPairDStream[K, (JList[V], JList[W])] = {
+    implicit val cm: ClassManifest[W] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+    dstream.cogroup(other.dstream, partitioner)
+        .mapValues(t => (seqAsJavaList(t._1), seqAsJavaList((t._2))))
+  }
+
+  def join[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (V, W)] = {
+    implicit val cm: ClassManifest[W] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+    dstream.join(other.dstream)
+  }
+
+  def join[W](other: JavaPairDStream[K, W], partitioner: Partitioner)
+      : JavaPairDStream[K, (V, W)] = {
+    implicit val cm: ClassManifest[W] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+    dstream.join(other.dstream, partitioner)
   }
 
   override val classManifest: ClassManifest[(K, V)] =
