@@ -39,7 +39,7 @@ private[spark] class CacheTrackerActor extends Actor with Logging {
   private val slaveCapacity = new HashMap[String, Long]
   private val slaveUsage = new HashMap[String, Long]
 
-  private val metadataCleaner = new MetadataCleaner("CacheTrackerActor", locs.cleanup)
+  private val metadataCleaner = new MetadataCleaner("CacheTrackerActor", locs.clearOldValues)
 
   private def getCacheUsage(host: String): Long = slaveUsage.getOrElse(host, 0L)
   private def getCacheCapacity(host: String): Long = slaveCapacity.getOrElse(host, 0L)
@@ -120,7 +120,7 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
   // Remembers which splits are currently being loaded (on worker nodes)
   val loading = new HashSet[String]
 
-  val metadataCleaner = new MetadataCleaner("CacheTracker", registeredRddIds.cleanup)
+  val metadataCleaner = new MetadataCleaner("CacheTracker", registeredRddIds.clearOldValues)
 
   // Send a message to the trackerActor and get its result within a default timeout, or
   // throw a SparkException if this fails.

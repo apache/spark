@@ -178,8 +178,8 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
   }
 
   def cleanup(cleanupTime: Long) {
-    mapStatuses.cleanup(cleanupTime)
-    cachedSerializedStatuses.cleanup(cleanupTime)
+    mapStatuses.clearOldValues(cleanupTime)
+    cachedSerializedStatuses.clearOldValues(cleanupTime)
   }
 
   def stop() {

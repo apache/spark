@@ -7,7 +7,7 @@ import scala.collection.mutable.Map
 /**
  * This is a custom implementation of scala.collection.mutable.Map which stores the insertion
  * time stamp along with each key-value pair. Key-value pairs that are older than a particular
- * threshold time can them be removed using the cleanup method. This is intended to be a drop-in
+ * threshold time can them be removed using the clearOldValues method. This is intended to be a drop-in
  * replacement of scala.collection.mutable.HashMap.
  */
 class TimeStampedHashMap[A, B] extends Map[A, B]() with spark.Logging {
@@ -74,7 +74,10 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() with spark.Logging {
     }
   }
 
-  def cleanup(threshTime: Long) {
+  /**
+   * Removes old key-value pairs that have timestamp earlier than `threshTime`
+   */
+  def clearOldValues(threshTime: Long) {
     val iterator = internalMap.entrySet().iterator()
     while(iterator.hasNext) {
       val entry = iterator.next()
