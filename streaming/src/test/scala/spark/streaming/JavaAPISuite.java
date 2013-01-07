@@ -5,12 +5,15 @@ import org.junit.Assert;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import scala.Tuple2;
 import spark.api.java.JavaRDD;
 import spark.api.java.function.FlatMapFunction;
 import spark.api.java.function.Function;
 import spark.api.java.function.Function2;
+import spark.api.java.function.PairFunction;
 import spark.streaming.JavaTestUtils;
 import spark.streaming.api.java.JavaDStream;
+import spark.streaming.api.java.JavaPairDStream;
 import spark.streaming.api.java.JavaStreamingContext;
 
 import java.io.Serializable;
@@ -340,4 +343,109 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(expected, actual);
   }
 
+
+  // PairDStream Functions
+  @Test
+  public void testPairFilter() {
+    List<List<String>> inputData = Arrays.asList(
+        Arrays.asList("giants", "dodgers"),
+        Arrays.asList("yankees", "red socks"));
+
+    List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, Integer>("giants", 6)),
+        Arrays.asList(new Tuple2<String, Integer>("yankees", 7)));
+
+    JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = stream.map(
+        new PairFunction<String, String, Integer>() {
+          @Override
+          public Tuple2 call(String in) throws Exception {
+            return new Tuple2<String, Integer>(in, in.length());
+          }
+        });
+
+    JavaPairDStream<String, Integer> filtered = pairStream.filter(
+        new Function<Tuple2<String, Integer>, Boolean>() {
+      @Override
+      public Boolean call(Tuple2<String, Integer> in) throws Exception {
+        return in._1().contains("a");
+      }
+    });
+    JavaTestUtils.attachTestOutputStream(filtered);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testPairGroupByKey() {
+    List<List<Tuple2<String, String>>> inputData = Arrays.asList(
+        Arrays.asList(new Tuple2<String, String>("california", "dodgers"),
+                      new Tuple2<String, String>("california", "giants"),
+                      new Tuple2<String, String>("new york", "yankees"),
+                      new Tuple2<String, String>("new york", "mets")),
+        Arrays.asList(new Tuple2<String, String>("california", "sharks"),
+                      new Tuple2<String, String>("california", "ducks"),
+                      new Tuple2<String, String>("new york", "rangers"),
+                      new Tuple2<String, String>("new york", "islanders")));
+
+
+    List<List<Tuple2<String, List<String>>>> expected = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, List<String>>("california", Arrays.asList("dodgers", "giants")),
+            new Tuple2<String, List<String>>("new york", Arrays.asList("yankees", "mets"))),
+        Arrays.asList(
+            new Tuple2<String, List<String>>("california", Arrays.asList("sharks", "ducks")),
+            new Tuple2<String, List<String>>("new york", Arrays.asList("rangers", "islanders"))));
+
+    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, List<String>> grouped = pairStream.groupByKey();
+    JavaTestUtils.attachTestOutputStream(grouped);
+    List<List<Tuple2<String, List<String>>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testPairReduceByKey() {
+    List<List<Tuple2<String, Integer>>> inputData = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, Integer>("california", 1),
+            new Tuple2<String, Integer>("california", 3),
+            new Tuple2<String, Integer>("new york", 4),
+            new Tuple2<String, Integer>("new york", 1)),
+        Arrays.asList(
+            new Tuple2<String, Integer>("california", 5),
+            new Tuple2<String, Integer>("california", 5),
+            new Tuple2<String, Integer>("new york", 3),
+            new Tuple2<String, Integer>("new york", 1)));
+
+
+    List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, Integer>("california", 4),
+            new Tuple2<String, Integer>("new york", 5)),
+        Arrays.asList(
+            new Tuple2<String, Integer>("california", 10),
+            new Tuple2<String, Integer>("new york", 4)));
+
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(
+        sc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, Integer> reduced = pairStream.reduceByKey(
+        new Function2<Integer, Integer, Integer>() {
+          @Override
+          public Integer call(Integer i1, Integer i2) throws Exception {
+            return i1 + i2;
+          }
+        });
+
+    JavaTestUtils.attachTestOutputStream(reduced);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
 }
