@@ -624,5 +624,9 @@ public class JavaAPISuite implements Serializable {
       }
     });
     Assert.assertEquals((Float) 25.0f, floatAccum.value());
+
+    // Test the setValue method
+    floatAccum.setValue(5.0f);
+    Assert.assertEquals((Float) 5.0f, floatAccum.value());
   }
 }
