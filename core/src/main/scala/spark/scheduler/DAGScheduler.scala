@@ -599,15 +599,15 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
   def cleanup(cleanupTime: Long) {
     var sizeBefore = idToStage.size
-    idToStage.cleanup(cleanupTime)
+    idToStage.clearOldValues(cleanupTime)
     logInfo("idToStage " + sizeBefore + " --> " + idToStage.size)
 
     sizeBefore = shuffleToMapStage.size
-    shuffleToMapStage.cleanup(cleanupTime)
+    shuffleToMapStage.clearOldValues(cleanupTime)
     logInfo("shuffleToMapStage " + sizeBefore + " --> " + shuffleToMapStage.size)
     
     sizeBefore = pendingTasks.size
-    pendingTasks.cleanup(cleanupTime)
+    pendingTasks.clearOldValues(cleanupTime)
     logInfo("pendingTasks " + sizeBefore + " --> " + pendingTasks.size)
   }
 

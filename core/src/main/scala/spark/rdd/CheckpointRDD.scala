@@ -13,6 +13,10 @@ private[spark] class CheckpointRDDSplit(idx: Int, val splitFile: String) extends
   override val index: Int = idx
 }
 
+/**
+ * This RDD represents a RDD checkpoint file (similar to HadoopRDD).
+ */
+private[spark]
 class CheckpointRDD[T: ClassManifest](sc: SparkContext, checkpointPath: String)
   extends RDD[T](sc, Nil) {
 

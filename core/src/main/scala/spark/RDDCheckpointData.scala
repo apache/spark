@@ -14,15 +14,23 @@ private[spark] object CheckpointState extends Enumeration {
 }
 
 /**
- * This class contains all the information of the regarding RDD checkpointing.
+ * This class contains all the information related to RDD checkpointing. Each instance of this class
+ * is associated with a RDD. It manages process of checkpointing of the associated RDD, as well as,
+ * manages the post-checkpoint state by providing the updated splits, iterator and preferred locations
+ * of the checkpointed RDD.
  */
 private[spark] class RDDCheckpointData[T: ClassManifest](rdd: RDD[T])
 extends Logging with Serializable {
 
   import CheckpointState._
 
+  // The checkpoint state of the associated RDD.
   var cpState = Initialized
+
+  // The file to which the associated RDD has been checkpointed to
   @transient var cpFile: Option[String] = None
+
+  // The CheckpointRDD created from the checkpoint file, that is, the new parent the associated RDD.
   @transient var cpRDD: Option[RDD[T]] = None
 
   // Mark the RDD for checkpointing
@@ -65,7 +73,7 @@ extends Logging with Serializable {
       cpRDD = Some(newRDD)
       rdd.changeDependencies(newRDD)
       cpState = Checkpointed
-      RDDCheckpointData.checkpointCompleted()
+      RDDCheckpointData.clearTaskCaches()
       logInfo("Done checkpointing RDD " + rdd.id + ", new parent is RDD " + newRDD.id)
     }
   }
@@ -90,7 +98,7 @@ extends Logging with Serializable {
 }
 
 private[spark] object RDDCheckpointData {
-  def checkpointCompleted() {
+  def clearTaskCaches() {
     ShuffleMapTask.clearCache()
     ResultTask.clearCache()
   }

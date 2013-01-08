@@ -12,7 +12,7 @@ private[spark] object ResultTask {
   // expensive on the master node if it needs to launch thousands of tasks.
   val serializedInfoCache = new TimeStampedHashMap[Int, Array[Byte]]
 
-  val metadataCleaner = new MetadataCleaner("ResultTask", serializedInfoCache.cleanup)
+  val metadataCleaner = new MetadataCleaner("ResultTask", serializedInfoCache.clearOldValues)
 
   def serializeInfo(stageId: Int, rdd: RDD[_], func: (TaskContext, Iterator[_]) => _): Array[Byte] = {
     synchronized {

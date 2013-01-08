@@ -52,7 +52,10 @@ class TimeStampedHashSet[A] extends Set[A] {
     }
   }
 
-  def cleanup(threshTime: Long) {
+  /**
+   * Removes old values that have timestamp earlier than `threshTime`
+   */
+  def clearOldValues(threshTime: Long) {
     val iterator = internalMap.entrySet().iterator()
     while(iterator.hasNext) {
       val entry = iterator.next()

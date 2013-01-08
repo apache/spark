@@ -154,7 +154,7 @@ class StreamingContext private (
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
     ): DStream[T] = {
     val inputStream = new KafkaInputDStream[T](this, hostname, port, groupId, topics, initialOffsets, storageLevel)
-    graph.addInputStream(inputStream)
+    registerInputStream(inputStream)
     inputStream
   }
 
@@ -192,7 +192,7 @@ class StreamingContext private (
       storageLevel: StorageLevel
     ): DStream[T] = {
     val inputStream = new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
-    graph.addInputStream(inputStream)
+    registerInputStream(inputStream)
     inputStream
   }
 
@@ -208,7 +208,7 @@ class StreamingContext private (
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream(this, hostname, port, storageLevel)
-    graph.addInputStream(inputStream)
+    registerInputStream(inputStream)
     inputStream
   }
 
@@ -228,13 +228,14 @@ class StreamingContext private (
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[T] = {
     val inputStream = new RawInputDStream[T](this, hostname, port, storageLevel)
-    graph.addInputStream(inputStream)
+    registerInputStream(inputStream)
     inputStream
   }
 
   /**
    * Creates a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
+   * File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
@@ -244,16 +245,37 @@ class StreamingContext private (
     K: ClassManifest,
     V: ClassManifest,
     F <: NewInputFormat[K, V]: ClassManifest
-  ](directory: String): DStream[(K, V)] = {
+  ] (directory: String): DStream[(K, V)] = {
     val inputStream = new FileInputDStream[K, V, F](this, directory)
-    graph.addInputStream(inputStream)
+    registerInputStream(inputStream)
     inputStream
   }
 
   /**
    * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them using the given key-value types and input format.
+   * @param directory HDFS directory to monitor for new file
+   * @param filter Function to filter paths to process
+   * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @tparam K Key type for reading HDFS file
+   * @tparam V Value type for reading HDFS file
+   * @tparam F Input format for reading HDFS file
+   */
+  def fileStream[
+    K: ClassManifest,
+    V: ClassManifest,
+    F <: NewInputFormat[K, V]: ClassManifest
+  ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): DStream[(K, V)] = {
+    val inputStream = new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
+    registerInputStream(inputStream)
+    inputStream
+  }
+
+
+  /**
+   * Creates a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
-   * as Text and input format as TextInputFormat).
+   * as Text and input format as TextInputFormat). File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): DStream[String] = {
@@ -274,7 +296,7 @@ class StreamingContext private (
       defaultRDD: RDD[T] = null
     ): DStream[T] = {
     val inputStream = new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
-    graph.addInputStream(inputStream)
+    registerInputStream(inputStream)
     inputStream
   }
 

@@ -23,7 +23,7 @@ object SparkBuild extends Build {
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn (core)
 
-  lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core)
+  lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core) dependsOn (streaming)
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
 
