@@ -1,7 +1,7 @@
-package spark.streaming.examples
+package spark.streaming.examples.twitter
 
+import spark.streaming.{Seconds, StreamingContext}
 import spark.streaming.StreamingContext._
-import spark.streaming.{TwitterInputDStream, Seconds, StreamingContext}
 
 object TwitterBasic {
   def main(args: Array[String]) {
@@ -24,19 +24,16 @@ object TwitterBasic {
     // Word count over hashtags
     val counts = hashTags.map((_, 1)).reduceByKeyAndWindow(_ + _, Seconds(60))
     // TODO: Sorts on one node - should do with global sorting once streaming supports it
-    val topCounts = counts.collect().map(_.sortBy(-_._2).take(5))
-
-    // Print popular hashtags
-    topCounts.foreachRDD(rdd => {
-      if (rdd.count() != 0) {
-        val topList = rdd.take(1)(0)
+    counts.foreach(rdd => {
+      val topList = rdd.collect().sortBy(-_._2).take(5)
+      if (!topList.isEmpty) {
         println("\nPopular topics in last 60 seconds:")
         topList.foreach{case (tag, count) => println("%s (%s tweets)".format(tag, count))}
       }
     })
 
     // Print number of tweets in the window
-    stream.window(Seconds(60)).count().foreachRDD(rdd =>
+    stream.window(Seconds(60)).count().foreach(rdd =>
       if (rdd.count() != 0) {
         println("Window size: %s tweets".format(rdd.take(1)(0)))
       }

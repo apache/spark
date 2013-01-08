@@ -1,6 +1,10 @@
-package spark.streaming
+package spark.streaming.examples.twitter
 
 import spark.RDD
+import spark.streaming._
+import spark.streaming.dstream.InputDStream
+import spark.streaming.StreamingContext._
+
 import twitter4j._
 import twitter4j.auth.BasicAuthorization
 import collection.mutable.ArrayBuffer
