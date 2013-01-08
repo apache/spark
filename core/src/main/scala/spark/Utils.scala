@@ -306,7 +306,7 @@ private object Utils extends Logging {
    * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
-    return " " + (System.currentTimeMillis - startTimeMs) + " ms "
+    return " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**

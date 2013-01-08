@@ -14,6 +14,7 @@ import akka.util.duration._
 
 import spark.storage.BlockManager
 import spark.storage.StorageLevel
+import util.{TimeStampedHashSet, MetadataCleaner, TimeStampedHashMap}
 
 private[spark] sealed trait CacheTrackerMessage
 
@@ -30,13 +31,15 @@ private[spark] case object StopCacheTracker extends CacheTrackerMessage
 
 private[spark] class CacheTrackerActor extends Actor with Logging {
   // TODO: Should probably store (String, CacheType) tuples
-  private val locs = new HashMap[Int, Array[List[String]]]
+  private val locs = new TimeStampedHashMap[Int, Array[List[String]]]
 
   /**
    * A map from the slave's host name to its cache size.
    */
   private val slaveCapacity = new HashMap[String, Long]
   private val slaveUsage = new HashMap[String, Long]
+
+  private val metadataCleaner = new MetadataCleaner("CacheTrackerActor", locs.clearOldValues)
 
   private def getCacheUsage(host: String): Long = slaveUsage.getOrElse(host, 0L)
   private def getCacheCapacity(host: String): Long = slaveCapacity.getOrElse(host, 0L)
@@ -86,6 +89,7 @@ private[spark] class CacheTrackerActor extends Actor with Logging {
     case StopCacheTracker =>
       logInfo("Stopping CacheTrackerActor")
       sender ! true
+      metadataCleaner.cancel()
       context.stop(self)
   }
 }
@@ -109,10 +113,14 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
     actorSystem.actorFor(url)
   }
 
-  val registeredRddIds = new HashSet[Int]
+  // TODO: Consider removing this HashSet completely as locs CacheTrackerActor already
+  // keeps track of registered RDDs
+  val registeredRddIds = new TimeStampedHashSet[Int]
 
   // Remembers which splits are currently being loaded (on worker nodes)
   val loading = new HashSet[String]
+
+  val metadataCleaner = new MetadataCleaner("CacheTracker", registeredRddIds.clearOldValues)
 
   // Send a message to the trackerActor and get its result within a default timeout, or
   // throw a SparkException if this fails.
@@ -202,26 +210,20 @@ private[spark] class CacheTracker(actorSystem: ActorSystem, isMaster: Boolean, b
             loading.add(key)
           }
         }
-        // If we got here, we have to load the split
-        // Tell the master that we're doing so
-        //val host = System.getProperty("spark.hostname", Utils.localHostName)
-        //val future = trackerActor !! AddedToCache(rdd.id, split.index, host)
-        // TODO: fetch any remote copy of the split that may be available
-        // TODO: also register a listener for when it unloads
-        logInfo("Computing partition " + split)
-        val elements = new ArrayBuffer[Any]
-        elements ++= rdd.compute(split, context)
         try {
+          // If we got here, we have to load the split
+          val elements = new ArrayBuffer[Any]
+          logInfo("Computing partition " + split)
+          elements ++= rdd.compute(split, context)
           // Try to put this block in the blockManager
           blockManager.put(key, elements, storageLevel, true)
-          //future.apply() // Wait for the reply from the cache tracker
+          return elements.iterator.asInstanceOf[Iterator[T]]
         } finally {
           loading.synchronized {
             loading.remove(key)
             loading.notifyAll()
           }
         }
-        return elements.iterator.asInstanceOf[Iterator[T]]
     }
   }
 

@@ -2,10 +2,13 @@ package spark.rdd
 
 import spark.{OneToOneDependency, RDD, Split, TaskContext}
 
+private[spark] class FilteredRDD[T: ClassManifest](
+    prev: RDD[T],
+    f: T => Boolean)
+  extends RDD[T](prev) {
 
-private[spark]
-class FilteredRDD[T: ClassManifest](prev: RDD[T], f: T => Boolean) extends RDD[T](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split, context: TaskContext) = prev.iterator(split, context).filter(f)
+  override def getSplits = firstParent[T].splits
+
+  override def compute(split: Split, context: TaskContext) =
+    firstParent[T].iterator(split, context).filter(f)
 }

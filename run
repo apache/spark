@@ -63,6 +63,7 @@ CORE_DIR="$FWDIR/core"
 REPL_DIR="$FWDIR/repl"
 EXAMPLES_DIR="$FWDIR/examples"
 BAGEL_DIR="$FWDIR/bagel"
+STREAMING_DIR="$FWDIR/streaming"
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH"
@@ -74,6 +75,7 @@ fi
 CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH+=":$STREAMING_DIR/target/scala-$SCALA_VERSION/classes"
 if [ -e "$FWDIR/lib_managed" ]; then
   for jar in `find "$FWDIR/lib_managed/jars" -name '*jar'`; do
     CLASSPATH+=":$jar"

@@ -74,10 +74,23 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     assert(result.toSet === Set(("a", 6), ("b", 2), ("c", 5)))
   }
 
-  test("checkpointing") {
+  test("basic checkpointing") {
+    import java.io.File
+    val checkpointDir = File.createTempFile("temp", "")
+    checkpointDir.delete()
+
     sc = new SparkContext("local", "test")
-    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).flatMap(x => 1 to x).checkpoint()
-    assert(rdd.collect().toList === List(1, 1, 2, 1, 2, 3, 1, 2, 3, 4))
+    sc.setCheckpointDir(checkpointDir.toString)
+    val parCollection = sc.makeRDD(1 to 4)
+    val flatMappedRDD = parCollection.flatMap(x => 1 to x)
+    flatMappedRDD.checkpoint()
+    assert(flatMappedRDD.dependencies.head.rdd == parCollection)
+    val result = flatMappedRDD.collect()
+    Thread.sleep(1000)
+    assert(flatMappedRDD.dependencies.head.rdd != parCollection)
+    assert(flatMappedRDD.collect() === result)
+
+    checkpointDir.deleteOnExit()
   }
 
   test("basic caching") {
@@ -85,6 +98,29 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
     assert(rdd.collect().toList === List(1, 2, 3, 4))
     assert(rdd.collect().toList === List(1, 2, 3, 4))
+    assert(rdd.collect().toList === List(1, 2, 3, 4))
+  }
+
+  test("caching with failures") {
+    sc = new SparkContext("local", "test") 
+    val onlySplit = new Split { override def index: Int = 0 }
+    var shouldFail = true
+    val rdd = new RDD[Int](sc, Nil) {
+      override def getSplits: Array[Split] = Array(onlySplit)
+      override val getDependencies = List[Dependency[_]]()
+      override def compute(split: Split, context: TaskContext): Iterator[Int] = {
+        if (shouldFail) {
+          throw new Exception("injected failure")
+        } else {
+          return Array(1, 2, 3, 4).iterator
+        }
+      }
+    }.cache()
+    val thrown = intercept[Exception]{
+      rdd.collect()
+    }
+    assert(thrown.getMessage.contains("injected failure"))
+    shouldFail = false
     assert(rdd.collect().toList === List(1, 2, 3, 4))
   }
 
@@ -98,8 +134,8 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
       List(List(1, 2, 3, 4, 5), List(6, 7, 8, 9, 10)))
 
     // Check that the narrow dependency is also specified correctly
-    assert(coalesced1.dependencies.head.getParents(0).toList === List(0, 1, 2, 3, 4))
-    assert(coalesced1.dependencies.head.getParents(1).toList === List(5, 6, 7, 8, 9))
+    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(0).toList === List(0, 1, 2, 3, 4))
+    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(1).toList === List(5, 6, 7, 8, 9))
 
     val coalesced2 = new CoalescedRDD(data, 3)
     assert(coalesced2.collect().toList === (1 to 10).toList)
