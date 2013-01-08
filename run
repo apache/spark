@@ -86,15 +86,11 @@ fi
 CLASSPATH+=":$CORE_DIR/src/main/resources"
 CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
-for jar in `find $FWDIR/lib_managed/jars -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
-for jar in `find $FWDIR/lib_managed/bundles -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
-for jar in `find $REPL_DIR/lib -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
+if [ -e "$FWDIR/lib_managed" ]; then
+  CLASSPATH+=":$FWDIR/lib_managed/jars/*"
+  CLASSPATH+=":$FWDIR/lib_managed/bundles/*"
+fi
+CLASSPATH+=":$REPL_DIR/lib/*"
 CLASSPATH+=":$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
 export CLASSPATH # Needed for spark-shell
 
