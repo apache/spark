@@ -135,8 +135,11 @@ extends Connection(SocketChannel.open, selector_) {
           val chunk = message.getChunkForSending(defaultChunkSize)
           if (chunk.isDefined) {
             messages += message  // this is probably incorrect, it wont work as fifo
-            if (!message.started) logDebug("Starting to send [" + message + "]")
-            message.started = true
+            if (!message.started) {
+		logDebug("Starting to send [" + message + "]")
+ 		message.started = true
+	 	message.startTime = System.currentTimeMillis
+	    }
             return chunk 
           } else {
             /*logInfo("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "]")*/

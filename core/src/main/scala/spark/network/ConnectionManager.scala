@@ -43,12 +43,12 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   }
   
   val selector = SelectorProvider.provider.openSelector()
-  val handleMessageExecutor = Executors.newFixedThreadPool(4) 
+  val handleMessageExecutor = Executors.newFixedThreadPool(20) 
   val serverChannel = ServerSocketChannel.open()
   val connectionsByKey = new HashMap[SelectionKey, Connection] with SynchronizedMap[SelectionKey, Connection] 
   val connectionsById = new HashMap[ConnectionManagerId, SendingConnection] with SynchronizedMap[ConnectionManagerId, SendingConnection]
   val messageStatuses = new HashMap[Int, MessageStatus] 
-  val connectionRequests = new SynchronizedQueue[SendingConnection]
+  val connectionRequests = new HashMap[ConnectionManagerId, SendingConnection] with SynchronizedMap[ConnectionManagerId, SendingConnection] 
   val keyInterestChangeRequests = new SynchronizedQueue[(SelectionKey, Int)]
   val sendMessageRequests = new Queue[(Message, SendingConnection)]
 
@@ -78,11 +78,12 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
   def run() {
     try {
-      while(!selectorThread.isInterrupted) {
-        while(!connectionRequests.isEmpty) {
-          val sendingConnection = connectionRequests.dequeue
+      while(!selectorThread.isInterrupted) {   
+        for( (connectionManagerId, sendingConnection) <- connectionRequests) {
+          //val sendingConnection = connectionRequests.dequeue
           sendingConnection.connect() 
           addConnection(sendingConnection)
+          connectionRequests -= connectionManagerId
         }
         sendMessageRequests.synchronized {
           while(!sendMessageRequests.isEmpty) {
@@ -300,8 +301,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   private def sendMessage(connectionManagerId: ConnectionManagerId, message: Message) {
     def startNewConnection(): SendingConnection = {
       val inetSocketAddress = new InetSocketAddress(connectionManagerId.host, connectionManagerId.port)
-      val newConnection = new SendingConnection(inetSocketAddress, selector)
-      connectionRequests += newConnection
+      val newConnection = connectionRequests.getOrElseUpdate(connectionManagerId, new SendingConnection(inetSocketAddress, selector))
       newConnection   
     }
     val lookupKey = ConnectionManagerId.fromSocketAddress(connectionManagerId.toSocketAddress)
@@ -465,7 +465,7 @@ private[spark] object ConnectionManager {
           val bufferMessage = Message.createBufferMessage(buffer.duplicate)
           manager.sendMessageReliably(manager.id, bufferMessage)
         }).foreach(f => {
-          val g = Await.result(f, 1 second)
+          val g = Await.result(f, 10 second)
           if (!g.isDefined) println("Failed")
         })
       val finishTime = System.currentTimeMillis
@@ -473,6 +473,7 @@ private[spark] object ConnectionManager {
       val mb = size * count / 1024.0 / 1024.0
       val ms = finishTime - startTime
       val tput = mb * 1000.0 / ms
+      println("Sent " + mb + " MB in " + ms + " ms (" + tput + " MB/s)")
       println("--------------------------")
       println()
     }

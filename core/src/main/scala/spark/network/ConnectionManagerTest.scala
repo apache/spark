@@ -13,8 +13,8 @@ import akka.util.duration._
 
 private[spark] object ConnectionManagerTest extends Logging{
   def main(args: Array[String]) {
-    if (args.length < 2) {
-      println("Usage: ConnectionManagerTest <mesos cluster> <slaves file>")
+    if (args.length < 5) {
+      println("Usage: ConnectionManagerTest <mesos cluster> <slaves file> <num of tasks> <size of msg> <count>")
       System.exit(1)
     }
     
@@ -29,16 +29,16 @@ private[spark] object ConnectionManagerTest extends Logging{
 
     /*println("Slaves")*/
     /*slaves.foreach(println)*/
-   
-    val slaveConnManagerIds = sc.parallelize(0 until slaves.length, slaves.length).map(
+    val tasknum = args(2).toInt
+    val slaveConnManagerIds = sc.parallelize(0 until tasknum, tasknum).map(
         i => SparkEnv.get.connectionManager.id).collect()
     println("\nSlave ConnectionManagerIds")
     slaveConnManagerIds.foreach(println)
     println
 
-    val count = 10
+    val count = args(4).toInt
     (0 until count).foreach(i => {
-      val resultStrs = sc.parallelize(0 until slaves.length, slaves.length).map(i => {
+      val resultStrs = sc.parallelize(0 until tasknum, tasknum).map(i => {
         val connManager = SparkEnv.get.connectionManager
         val thisConnManagerId = connManager.id 
         connManager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => { 
@@ -46,7 +46,7 @@ private[spark] object ConnectionManagerTest extends Logging{
           None
         })
 
-        val size =  100 * 1024  * 1024 
+        val size = (args(3).toInt) * 1024  * 1024 
         val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
         buffer.flip
         
@@ -56,13 +56,13 @@ private[spark] object ConnectionManagerTest extends Logging{
           logInfo("Sending [" + bufferMessage + "] to [" + slaveConnManagerId + "]")
           connManager.sendMessageReliably(slaveConnManagerId, bufferMessage)
         })
-        val results = futures.map(f => Await.result(f, 1.second))
+        val results = futures.map(f => Await.result(f, 999.second))
         val finishTime = System.currentTimeMillis
         Thread.sleep(5000)
         
         val mb = size * results.size / 1024.0 / 1024.0
         val ms = finishTime - startTime
-        val resultStr = "Sent " + mb + " MB in " + ms + " ms at " + (mb / ms * 1000.0) + " MB/s"
+        val resultStr = thisConnManagerId + " Sent " + mb + " MB in " + ms + " ms at " + (mb / ms * 1000.0) + " MB/s"
         logInfo(resultStr)
         resultStr
       }).collect()
