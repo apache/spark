@@ -45,6 +45,9 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>

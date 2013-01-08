@@ -481,6 +481,9 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
       </properties>

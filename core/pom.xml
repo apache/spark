@@ -159,6 +159,9 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>

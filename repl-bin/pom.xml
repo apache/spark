@@ -70,6 +70,9 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <properties>
         <classifier>hadoop1</classifier>
       </properties>
