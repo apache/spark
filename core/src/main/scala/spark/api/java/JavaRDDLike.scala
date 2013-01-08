@@ -298,4 +298,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Save this RDD as a SequenceFile of serialized objects.
    */
   def saveAsObjectFile(path: String) = rdd.saveAsObjectFile(path)
+
+  /**
+   * Creates tuples of the elements in this RDD by applying `f`.
+   */
+  def keyBy[K](f: JFunction[T, K]): JavaPairRDD[K, T] = {
+    implicit val kcm: ClassManifest[K] = implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[K]]
+    JavaPairRDD.fromRDD(rdd.keyBy(f))
+  }
 }
