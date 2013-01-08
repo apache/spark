@@ -1,13 +1,11 @@
 package spark.streaming.examples.twitter
 
-import spark.RDD
+import spark._
 import spark.streaming._
-import spark.streaming.dstream.InputDStream
-import spark.streaming.StreamingContext._
-
+import dstream.{NetworkReceiver, NetworkInputDStream}
+import storage.StorageLevel
 import twitter4j._
 import twitter4j.auth.BasicAuthorization
-import collection.mutable.ArrayBuffer
 import collection.JavaConversions._
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
@@ -20,17 +18,31 @@ class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
     username: String,
     password: String,
-    filters: Seq[String]
-    ) extends InputDStream[Status](ssc_)  {
-  val statuses: ArrayBuffer[Status] = ArrayBuffer()
-  var twitterStream: TwitterStream = _
+    filters: Seq[String],
+    storageLevel: StorageLevel
+    ) extends NetworkInputDStream[Status](ssc_)  {
 
-  override def start() = {
+  override def createReceiver(): NetworkReceiver[Status] = {
+    new TwitterReceiver(id, username, password, filters, storageLevel)
+  }
+}
+
+class TwitterReceiver(streamId: Int,
+                      username: String,
+                      password: String,
+                      filters: Seq[String],
+                      storageLevel: StorageLevel
+    ) extends NetworkReceiver[Status](streamId) {
+  var twitterStream: TwitterStream = _
+  lazy val blockGenerator = new BlockGenerator(storageLevel)
+
+  protected override def onStart() {
+    blockGenerator.start()
     twitterStream = new TwitterStreamFactory()
       .getInstance(new BasicAuthorization(username, password))
     twitterStream.addListener(new StatusListener {
       def onStatus(status: Status) = {
-        statuses += status
+        blockGenerator += status
       }
       // Unimplemented
       def onDeletionNotice(statusDeletionNotice: StatusDeletionNotice) {}
@@ -47,16 +59,12 @@ class TwitterInputDStream(
     } else {
       twitterStream.sample()
     }
+    logInfo("Twitter receiver started")
   }
 
-  override def stop() = {
+  protected override def onStop() {
+    blockGenerator.stop()
     twitterStream.shutdown()
-  }
-
-  override def compute(validTime: Time): Option[RDD[Status]] = {
-    // Flush the current tweet buffer
-    val rdd = Some(ssc.sc.parallelize(statuses))
-    statuses.foreach(x => statuses -= x)
-    rdd
+    logInfo("Twitter receiver stopped")
   }
 }
