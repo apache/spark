@@ -71,7 +71,9 @@
     <profile>
       <id>hadoop1</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
+        <property>
+          <name>!hadoop</name>
+        </property>
       </activation>
       <properties>
         <classifier>hadoop1</classifier>
