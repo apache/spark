@@ -489,7 +489,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-core</artifactId>
-            <version>0.20.205.0</version>
+            <version>1.0.3</version>
           </dependency>
         </dependencies>
       </dependencyManagement>

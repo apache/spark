@@ -10,7 +10,7 @@ import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import spark.{Accumulator, AccumulatorParam, RDD, SparkContext}
+import spark.{Accumulable, AccumulableParam, Accumulator, AccumulatorParam, RDD, SparkContext}
 import spark.SparkContext.IntAccumulatorParam
 import spark.SparkContext.DoubleAccumulatorParam
 import spark.broadcast.Broadcast
@@ -265,24 +265,44 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /**
    * Create an [[spark.Accumulator]] integer variable, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `add` method. Only the master can access the accumulator's `value`.
    */
-  def intAccumulator(initialValue: Int): Accumulator[Int] =
-    sc.accumulator(initialValue)(IntAccumulatorParam)
+  def intAccumulator(initialValue: Int): Accumulator[java.lang.Integer] =
+    sc.accumulator(initialValue)(IntAccumulatorParam).asInstanceOf[Accumulator[java.lang.Integer]]
 
   /**
    * Create an [[spark.Accumulator]] double variable, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `add` method. Only the master can access the accumulator's `value`.
    */
-  def doubleAccumulator(initialValue: Double): Accumulator[Double] =
-    sc.accumulator(initialValue)(DoubleAccumulatorParam)
+  def doubleAccumulator(initialValue: Double): Accumulator[java.lang.Double] =
+    sc.accumulator(initialValue)(DoubleAccumulatorParam).asInstanceOf[Accumulator[java.lang.Double]]
+
+  /**
+   * Create an [[spark.Accumulator]] integer variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   */
+  def accumulator(initialValue: Int): Accumulator[java.lang.Integer] = intAccumulator(initialValue)
+
+  /**
+   * Create an [[spark.Accumulator]] double variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   */
+  def accumulator(initialValue: Double): Accumulator[java.lang.Double] =
+    doubleAccumulator(initialValue)
 
   /**
    * Create an [[spark.Accumulator]] variable of a given type, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `add` method. Only the master can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T, accumulatorParam: AccumulatorParam[T]): Accumulator[T] =
     sc.accumulator(initialValue)(accumulatorParam)
+
+  /**
+   * Create an [[spark.Accumulable]] shared variable of the given type, to which tasks can
+   * "add" values with `add`. Only the master can access the accumuable's `value`.
+   */
+  def accumulable[T, R](initialValue: T, param: AccumulableParam[T, R]): Accumulable[T, R] =
+    sc.accumulable(initialValue)(param)
 
   /**
    * Broadcast a read-only variable to the cluster, returning a [[spark.Broadcast]] object for

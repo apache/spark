@@ -581,4 +581,52 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, Double> zipped = rdd.zip(doubles);
     zipped.count();
   }
+
+  @Test
+  public void accumulators() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
+
+    final Accumulator<Integer> intAccum = sc.accumulator(10);
+    rdd.foreach(new VoidFunction<Integer>() {
+      public void call(Integer x) {
+        intAccum.add(x);
+      }
+    });
+    Assert.assertEquals((Integer) 25, intAccum.value());
+
+    final Accumulator<Double> doubleAccum = sc.accumulator(10.0);
+    rdd.foreach(new VoidFunction<Integer>() {
+      public void call(Integer x) {
+        doubleAccum.add((double) x);
+      }
+    });
+    Assert.assertEquals((Double) 25.0, doubleAccum.value());
+
+    // Try a custom accumulator type
+    AccumulatorParam<Float> floatAccumulatorParam = new AccumulatorParam<Float>() {
+      public Float addInPlace(Float r, Float t) {
+        return r + t;
+      }
+
+      public Float addAccumulator(Float r, Float t) {
+        return r + t;
+      }
+
+      public Float zero(Float initialValue) {
+        return 0.0f;
+      }
+    };
+
+    final Accumulator<Float> floatAccum = sc.accumulator((Float) 10.0f, floatAccumulatorParam);
+    rdd.foreach(new VoidFunction<Integer>() {
+      public void call(Integer x) {
+        floatAccum.add((float) x);
+      }
+    });
+    Assert.assertEquals((Float) 25.0f, floatAccum.value());
+
+    // Test the setValue method
+    floatAccum.setValue(5.0f);
+    Assert.assertEquals((Float) 5.0f, floatAccum.value());
+  }
 }
