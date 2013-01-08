@@ -18,39 +18,16 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This]] extends Serializable 
 
   def print() = dstream.print()
 
-  // TODO move to type-specific implementations
-  def cache() : JavaDStream[T] = {
-    dstream.cache()
-  }
-
-  def count() : JavaDStream[Int] = {
-    dstream.count()
-  }
+  def count(): JavaDStream[Int] = dstream.count()
 
   def countByWindow(windowTime: Time, slideTime: Time) : JavaDStream[Int] = {
     dstream.countByWindow(windowTime, slideTime)
   }
 
-  def compute(validTime: Time): JavaRDD[T] = {
-    dstream.compute(validTime) match {
-      case Some(rdd) => new JavaRDD(rdd)
-      case None => null
-    }
-  }
+  def glom(): JavaDStream[JList[T]] =
+    new JavaDStream(dstream.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
 
   def context(): StreamingContext = dstream.context()
-
-  def window(windowTime: Time): JavaDStream[T] = {
-    dstream.window(windowTime)
-  }
-
-  def window(windowTime: Time, slideTime: Time): JavaDStream[T] = {
-    dstream.window(windowTime, slideTime)
-  }
-
-  def tumble(batchTime: Time): JavaDStream[T] = {
-    dstream.tumble(batchTime)
-  }
 
   def map[R](f: JFunction[T, R]): JavaDStream[R] = {
     new JavaDStream(dstream.map(f)(f.returnType()))(f.returnType())
@@ -59,10 +36,6 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This]] extends Serializable 
   def map[K, V](f: PairFunction[T, K, V]): JavaPairDStream[K, V] = {
     def cm = implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[Tuple2[K, V]]]
     new JavaPairDStream(dstream.map(f)(cm))(f.keyType(), f.valueType())
-  }
-
-  def glom(): JavaDStream[JList[T]] = {
-    new JavaDStream(dstream.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
   }
 
   // TODO: Other map partitions
@@ -85,11 +58,11 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This]] extends Serializable 
     new util.ArrayList(dstream.slice(fromTime, toTime).map(new JavaRDD(_)).toSeq)
   }
 
-  def foreach(foreachFunc: JFunction[JavaRDD[T], Void]) = {
+  def foreach(foreachFunc: JFunction[JavaRDD[T], Void]) {
     dstream.foreach(rdd => foreachFunc.call(new JavaRDD(rdd)))
   }
 
-  def foreach(foreachFunc: JFunction2[JavaRDD[T], Time, Void]) = {
+  def foreach(foreachFunc: JFunction2[JavaRDD[T], Time, Void]) {
     dstream.foreach((rdd, time) => foreachFunc.call(new JavaRDD(rdd), time))
   }
 
@@ -102,8 +75,4 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This]] extends Serializable 
     dstream.transform(scalaTransform(_))
   }
   // TODO: transform with time
-
-  def union(that: JavaDStream[T]): JavaDStream[T] = {
-    dstream.union(that.dstream)
-  }
 }
