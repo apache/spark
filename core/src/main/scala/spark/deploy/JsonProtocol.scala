@@ -1,14 +1,12 @@
 package spark.deploy
 
 import master.{JobInfo, WorkerInfo}
-import spray.json._
+import cc.spray.json._
 
 /**
  * spray-json helper class containing implicit conversion to json for marshalling responses
  */
 private[spark] object JsonProtocol extends DefaultJsonProtocol {
-  import cc.spray.json._
-
   implicit object WorkerInfoJsonFormat extends RootJsonWriter[WorkerInfo] {
     def write(obj: WorkerInfo) = JsObject(
       "id" -> JsString(obj.id),
