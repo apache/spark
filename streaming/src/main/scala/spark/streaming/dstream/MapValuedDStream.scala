@@ -12,7 +12,7 @@ class MapValuedDStream[K: ClassManifest, V: ClassManifest, U: ClassManifest](
 
   override def dependencies = List(parent)
 
-  override def slideTime: Duration = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K, U)]] = {
     parent.getOrCompute(validTime).map(_.mapValues[U](mapValueFunc))

@@ -96,7 +96,7 @@ class StreamingContext private (
     }
   }
 
-  protected[streaming] var checkpointInterval: Duration = if (isCheckpointPresent) cp_.checkpointInterval else null
+  protected[streaming] var checkpointDuration: Duration = if (isCheckpointPresent) cp_.checkpointDuration else null
   protected[streaming] var receiverJobThread: Thread = null
   protected[streaming] var scheduler: Scheduler = null
 
@@ -121,10 +121,10 @@ class StreamingContext private (
     if (directory != null) {
       sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
       checkpointDir = directory
-      checkpointInterval = interval
+      checkpointDuration = interval
     } else {
       checkpointDir = null
-      checkpointInterval = null
+      checkpointDuration = null
     }
   }
 
@@ -327,7 +327,7 @@ class StreamingContext private (
     graph.validate()
 
     assert(
-      checkpointDir == null || checkpointInterval != null,
+      checkpointDir == null || checkpointDuration != null,
       "Checkpoint directory has been set, but the graph checkpointing interval has " +
         "not been set. Please use StreamingContext.checkpoint() to set the interval."
     )
@@ -337,8 +337,8 @@ class StreamingContext private (
    * Starts the execution of the streams.
    */
   def start() {
-    if (checkpointDir != null && checkpointInterval == null && graph != null) {
-      checkpointInterval = graph.batchDuration
+    if (checkpointDir != null && checkpointDuration == null && graph != null) {
+      checkpointDuration = graph.batchDuration
     }
 
     validate()

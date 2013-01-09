@@ -11,7 +11,7 @@ class ForEachDStream[T: ClassManifest] (
 
   override def dependencies = List(parent)
 
-  override def slideTime: Duration = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[Unit]] = None
 

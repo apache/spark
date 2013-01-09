@@ -7,7 +7,7 @@ abstract class InputDStream[T: ClassManifest] (@transient ssc_ : StreamingContex
 
   override def dependencies = List()
 
-  override def slideTime: Duration = {
+  override def slideDuration: Duration = {
     if (ssc == null) throw new Exception("ssc is null")
     if (ssc.graph.batchDuration == null) throw new Exception("batchDuration is null")
     ssc.graph.batchDuration

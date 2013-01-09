@@ -47,7 +47,7 @@ abstract class DStream[T: ClassManifest] (
   // =======================================================================
 
   /** Time interval after which the DStream generates a RDD */
-  def slideTime: Duration
+  def slideDuration: Duration
 
   /** List of parent DStreams on which this DStream depends on */
   def dependencies: List[DStream[_]]
@@ -74,7 +74,7 @@ abstract class DStream[T: ClassManifest] (
 
   // Checkpoint details
   protected[streaming] val mustCheckpoint = false
-  protected[streaming] var checkpointInterval: Duration = null
+  protected[streaming] var checkpointDuration: Duration = null
   protected[streaming] var checkpointData = new DStreamCheckpointData(HashMap[Time, Any]())
 
   // Reference to whole DStream graph
@@ -114,7 +114,7 @@ abstract class DStream[T: ClassManifest] (
         "Cannot change checkpoint interval of an DStream after streaming context has started")
     }
     persist()
-    checkpointInterval = interval
+    checkpointDuration = interval
     this
   }
 
@@ -130,16 +130,16 @@ abstract class DStream[T: ClassManifest] (
     }
     zeroTime = time
 
-    // Set the checkpoint interval to be slideTime or 10 seconds, which ever is larger
-    if (mustCheckpoint && checkpointInterval == null) {
-      checkpointInterval = slideTime.max(Seconds(10))
-      logInfo("Checkpoint interval automatically set to " + checkpointInterval)
+    // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
+    if (mustCheckpoint && checkpointDuration == null) {
+      checkpointDuration = slideDuration.max(Seconds(10))
+      logInfo("Checkpoint interval automatically set to " + checkpointDuration)
     }
 
     // Set the minimum value of the rememberDuration if not already set
-    var minRememberDuration = slideTime
-    if (checkpointInterval != null && minRememberDuration <= checkpointInterval) {
-      minRememberDuration = checkpointInterval * 2  // times 2 just to be sure that the latest checkpoint is not forgetten
+    var minRememberDuration = slideDuration
+    if (checkpointDuration != null && minRememberDuration <= checkpointDuration) {
+      minRememberDuration = checkpointDuration * 2  // times 2 just to be sure that the latest checkpoint is not forgetten
     }
     if (rememberDuration == null || rememberDuration < minRememberDuration) {
       rememberDuration = minRememberDuration
@@ -153,37 +153,37 @@ abstract class DStream[T: ClassManifest] (
     assert(rememberDuration != null, "Remember duration is set to null")
 
     assert(
-      !mustCheckpoint || checkpointInterval != null,
+      !mustCheckpoint || checkpointDuration != null,
       "The checkpoint interval for " + this.getClass.getSimpleName + " has not been set. " +
         " Please use DStream.checkpoint() to set the interval."
     )
 
     assert(
-      checkpointInterval == null || checkpointInterval >= slideTime,
+      checkpointDuration == null || checkpointDuration >= slideDuration,
       "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
-        checkpointInterval + " which is lower than its slide time (" + slideTime + "). " +
-        "Please set it to at least " + slideTime + "."
+        checkpointDuration + " which is lower than its slide time (" + slideDuration + "). " +
+        "Please set it to at least " + slideDuration + "."
     )
 
     assert(
-      checkpointInterval == null || checkpointInterval.isMultipleOf(slideTime),
+      checkpointDuration == null || checkpointDuration.isMultipleOf(slideDuration),
       "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
-        checkpointInterval + " which not a multiple of its slide time (" + slideTime + "). " +
-        "Please set it to a multiple " + slideTime + "."
+        checkpointDuration + " which not a multiple of its slide time (" + slideDuration + "). " +
+        "Please set it to a multiple " + slideDuration + "."
     )
 
     assert(
-      checkpointInterval == null || storageLevel != StorageLevel.NONE,
+      checkpointDuration == null || storageLevel != StorageLevel.NONE,
       "" + this.getClass.getSimpleName + " has been marked for checkpointing but the storage " +
         "level has not been set to enable persisting. Please use DStream.persist() to set the " +
         "storage level to use memory for better checkpointing performance."
     )
 
     assert(
-      checkpointInterval == null || rememberDuration > checkpointInterval,
+      checkpointDuration == null || rememberDuration > checkpointDuration,
       "The remember duration for " + this.getClass.getSimpleName + " has been set to " +
         rememberDuration + " which is not more than the checkpoint interval (" +
-        checkpointInterval + "). Please set it to higher than " + checkpointInterval + "."
+        checkpointDuration + "). Please set it to higher than " + checkpointDuration + "."
     )
 
     val metadataCleanerDelay = spark.util.MetadataCleaner.getDelaySeconds
@@ -200,9 +200,9 @@ abstract class DStream[T: ClassManifest] (
 
     dependencies.foreach(_.validate())
 
-    logInfo("Slide time = " + slideTime)
+    logInfo("Slide time = " + slideDuration)
     logInfo("Storage level = " + storageLevel)
-    logInfo("Checkpoint interval = " + checkpointInterval)
+    logInfo("Checkpoint interval = " + checkpointDuration)
     logInfo("Remember duration = " + rememberDuration)
     logInfo("Initialized and validated " + this)
   }
@@ -232,11 +232,11 @@ abstract class DStream[T: ClassManifest] (
     dependencies.foreach(_.remember(parentRememberDuration))
   }
 
-  /** This method checks whether the 'time' is valid wrt slideTime for generating RDD */
+  /** This method checks whether the 'time' is valid wrt slideDuration for generating RDD */
   protected def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
       throw new Exception (this + " has not been initialized")
-    } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideTime)) {
+    } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
       false
     } else {
       true
@@ -266,7 +266,7 @@ abstract class DStream[T: ClassManifest] (
                 newRDD.persist(storageLevel)
                 logInfo("Persisting RDD " + newRDD.id + " for time " + time + " to " + storageLevel + " at time " + time)
               }
-              if (checkpointInterval != null && (time - zeroTime).isMultipleOf(checkpointInterval)) {
+              if (checkpointDuration != null && (time - zeroTime).isMultipleOf(checkpointDuration)) {
                 newRDD.checkpoint()
                 logInfo("Marking RDD " + newRDD.id + " for time " + time + " for checkpointing at time " + time)
               }
@@ -528,21 +528,21 @@ abstract class DStream[T: ClassManifest] (
   /**
    * Return a new DStream which is computed based on windowed batches of this DStream.
    * The new DStream generates RDDs with the same interval as this DStream.
-   * @param windowTime width of the window; must be a multiple of this DStream's interval.
+   * @param windowDuration width of the window; must be a multiple of this DStream's interval.
    * @return
    */
-  def window(windowTime: Duration): DStream[T] = window(windowTime, this.slideTime)
+  def window(windowDuration: Duration): DStream[T] = window(windowDuration, this.slideDuration)
 
   /**
    * Return a new DStream which is computed based on windowed batches of this DStream.
-   * @param windowTime duration (i.e., width) of the window;
+   * @param windowDuration duration (i.e., width) of the window;
    *                   must be a multiple of this DStream's interval
-   * @param slideTime  sliding interval of the window (i.e., the interval after which
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                   the new DStream will generate RDDs); must be a multiple of this
    *                   DStream's interval
    */
-  def window(windowTime: Duration, slideTime: Duration): DStream[T] = {
-    new WindowedDStream(this, windowTime, slideTime)
+  def window(windowDuration: Duration, slideDuration: Duration): DStream[T] = {
+    new WindowedDStream(this, windowDuration, slideDuration)
   }
 
   /**
@@ -554,36 +554,36 @@ abstract class DStream[T: ClassManifest] (
 
   /**
    * Returns a new DStream in which each RDD has a single element generated by reducing all
-   * elements in a window over this DStream. windowTime and slideTime are as defined in the
-   * window() operation. This is equivalent to window(windowTime, slideTime).reduce(reduceFunc)
+   * elements in a window over this DStream. windowDuration and slideDuration are as defined in the
+   * window() operation. This is equivalent to window(windowDuration, slideDuration).reduce(reduceFunc)
    */
-  def reduceByWindow(reduceFunc: (T, T) => T, windowTime: Duration, slideTime: Duration): DStream[T] = {
-    this.window(windowTime, slideTime).reduce(reduceFunc)
+  def reduceByWindow(reduceFunc: (T, T) => T, windowDuration: Duration, slideDuration: Duration): DStream[T] = {
+    this.window(windowDuration, slideDuration).reduce(reduceFunc)
   }
 
   def reduceByWindow(
       reduceFunc: (T, T) => T,
       invReduceFunc: (T, T) => T,
-      windowTime: Duration,
-      slideTime: Duration
+      windowDuration: Duration,
+      slideDuration: Duration
     ): DStream[T] = {
       this.map(x => (1, x))
-          .reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowTime, slideTime, 1)
+          .reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration, 1)
           .map(_._2)
   }
 
   /**
    * Returns a new DStream in which each RDD has a single element generated by counting the number
-   * of elements in a window over this DStream. windowTime and slideTime are as defined in the
-   * window() operation. This is equivalent to window(windowTime, slideTime).count()
+   * of elements in a window over this DStream. windowDuration and slideDuration are as defined in the
+   * window() operation. This is equivalent to window(windowDuration, slideDuration).count()
    */
-  def countByWindow(windowTime: Duration, slideTime: Duration): DStream[Int] = {
-    this.map(_ => 1).reduceByWindow(_ + _, _ - _, windowTime, slideTime)
+  def countByWindow(windowDuration: Duration, slideDuration: Duration): DStream[Int] = {
+    this.map(_ => 1).reduceByWindow(_ + _, _ - _, windowDuration, slideDuration)
   }
 
   /**
    * Returns a new DStream by unifying data of another DStream with this DStream.
-   * @param that Another DStream having the same interval (i.e., slideTime) as this DStream.
+   * @param that Another DStream having the same slideDuration as this DStream.
    */
   def union(that: DStream[T]): DStream[T] = new UnionDStream[T](Array(this, that))
 
@@ -599,13 +599,13 @@ abstract class DStream[T: ClassManifest] (
    */
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = {
     val rdds = new ArrayBuffer[RDD[T]]()
-    var time = toTime.floor(slideTime)
+    var time = toTime.floor(slideDuration)
     while (time >= zeroTime && time >= fromTime) {
       getOrCompute(time) match {
         case Some(rdd) => rdds += rdd
         case None => //throw new Exception("Could not get RDD for time " + time)
       }
-      time -= slideTime
+      time -= slideDuration
     }
     rdds.toSeq
   }

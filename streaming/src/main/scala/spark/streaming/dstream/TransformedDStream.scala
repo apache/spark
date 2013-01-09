@@ -11,7 +11,7 @@ class TransformedDStream[T: ClassManifest, U: ClassManifest] (
 
   override def dependencies = List(parent)
 
-  override def slideTime: Duration = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
     parent.getOrCompute(validTime).map(transformFunc(_, validTime))

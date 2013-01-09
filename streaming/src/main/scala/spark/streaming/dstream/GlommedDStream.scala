@@ -9,7 +9,7 @@ class GlommedDStream[T: ClassManifest](parent: DStream[T])
 
   override def dependencies = List(parent)
 
-  override def slideTime: Duration = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[Array[T]]] = {
     parent.getOrCompute(validTime).map(_.glom())

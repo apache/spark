@@ -18,14 +18,14 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
 
   override def dependencies = List(parent)
 
-  override def slideTime: Duration = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override val mustCheckpoint = true
 
   override def compute(validTime: Time): Option[RDD[(K, S)]] = {
 
     // Try to get the previous state RDD
-    getOrCompute(validTime - slideTime) match {
+    getOrCompute(validTime - slideDuration) match {
 
       case Some(prevStateRDD) => {    // If previous state RDD exists
 

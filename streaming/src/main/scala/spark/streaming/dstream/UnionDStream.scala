@@ -17,13 +17,13 @@ class UnionDStream[T: ClassManifest](parents: Array[DStream[T]])
     throw new IllegalArgumentException("Array of parents have different StreamingContexts")
   }
 
-  if (parents.map(_.slideTime).distinct.size > 1) {
+  if (parents.map(_.slideDuration).distinct.size > 1) {
     throw new IllegalArgumentException("Array of parents have different slide times")
   }
 
   override def dependencies = parents.toList
 
-  override def slideTime: Duration = parents.head.slideTime
+  override def slideDuration: Duration = parents.head.slideDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
     val rdds = new ArrayBuffer[RDD[T]]()

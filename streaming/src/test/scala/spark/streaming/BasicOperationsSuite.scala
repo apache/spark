@@ -196,18 +196,18 @@ class BasicOperationsSuite extends TestSuiteBase {
     // MappedStream should remember till 7 seconds:    10, 9, 8, 7, 6, 5, 4, 3, 2
 
     // WindowedStream2
-    assert(windowedStream2.generatedRDDs.contains(Seconds(10)))
-    assert(windowedStream2.generatedRDDs.contains(Seconds(8)))
-    assert(!windowedStream2.generatedRDDs.contains(Seconds(6)))
+    assert(windowedStream2.generatedRDDs.contains(Time(10000)))
+    assert(windowedStream2.generatedRDDs.contains(Time(8000)))
+    assert(!windowedStream2.generatedRDDs.contains(Time(6000)))
 
     // WindowedStream1
-    assert(windowedStream1.generatedRDDs.contains(Seconds(10)))
-    assert(windowedStream1.generatedRDDs.contains(Seconds(4)))
-    assert(!windowedStream1.generatedRDDs.contains(Seconds(3)))
+    assert(windowedStream1.generatedRDDs.contains(Time(10000)))
+    assert(windowedStream1.generatedRDDs.contains(Time(4000)))
+    assert(!windowedStream1.generatedRDDs.contains(Time(3000)))
 
     // MappedStream
-    assert(mappedStream.generatedRDDs.contains(Seconds(10)))
-    assert(mappedStream.generatedRDDs.contains(Seconds(2)))
-    assert(!mappedStream.generatedRDDs.contains(Seconds(1)))
+    assert(mappedStream.generatedRDDs.contains(Time(10000)))
+    assert(mappedStream.generatedRDDs.contains(Time(2000)))
+    assert(!mappedStream.generatedRDDs.contains(Time(1000)))
   }
 }

@@ -1,6 +1,6 @@
 package spark.streaming
 
-class Duration (private val millis: Long) {
+case class Duration (private val millis: Long) {
 
   def < (that: Duration): Boolean = (this.millis < that.millis)
 

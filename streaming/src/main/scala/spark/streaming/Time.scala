@@ -1,14 +1,15 @@
 package spark.streaming
 
 /**
- * This is a simple class that represents time. Internally, it represents time as UTC.
- * The recommended way to create instances of Time is to use helper objects
- * [[spark.streaming.Milliseconds]], [[spark.streaming.Seconds]], and [[spark.streaming.Minutes]].
- * @param millis Time in UTC.
+ * This is a simple class that represents an absolute instant of time.
+ * Internally, it represents time as the difference, measured in milliseconds, between the current
+ * time and midnight, January 1, 1970 UTC. This is the same format as what is returned by
+ * System.currentTimeMillis.
  */
+case class Time(private val millis: Long) {
 
-class Time(private val millis: Long) {
-  
+  def milliseconds: Long = millis
+
   def < (that: Time): Boolean = (this.millis < that.millis)
 
   def <= (that: Time): Boolean = (this.millis <= that.millis)
@@ -38,11 +39,4 @@ class Time(private val millis: Long) {
 
   override def toString: String = (millis.toString + " ms")
 
-  def milliseconds: Long = millis
 }
-
-/*private[streaming] object Time {
-  implicit def toTime(long: Long) = Time(long)
-}
-*/
-

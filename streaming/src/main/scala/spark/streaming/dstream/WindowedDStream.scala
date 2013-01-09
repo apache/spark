@@ -8,30 +8,30 @@ import spark.streaming.{Duration, Interval, Time, DStream}
 private[streaming]
 class WindowedDStream[T: ClassManifest](
     parent: DStream[T],
-    _windowTime: Duration,
-    _slideTime: Duration)
+    _windowDuration: Duration,
+    _slideDuration: Duration)
   extends DStream[T](parent.ssc) {
 
-  if (!_windowTime.isMultipleOf(parent.slideTime))
-    throw new Exception("The window duration of WindowedDStream (" + _slideTime + ") " +
-    "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
+  if (!_windowDuration.isMultipleOf(parent.slideDuration))
+    throw new Exception("The window duration of WindowedDStream (" + _slideDuration + ") " +
+    "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")")
 
-  if (!_slideTime.isMultipleOf(parent.slideTime))
-    throw new Exception("The slide duration of WindowedDStream (" + _slideTime + ") " +
-    "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")")
+  if (!_slideDuration.isMultipleOf(parent.slideDuration))
+    throw new Exception("The slide duration of WindowedDStream (" + _slideDuration + ") " +
+    "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")")
 
   parent.persist(StorageLevel.MEMORY_ONLY_SER)
 
-  def windowTime: Duration =  _windowTime
+  def windowDuration: Duration =  _windowDuration
 
   override def dependencies = List(parent)
 
-  override def slideTime: Duration = _slideTime
+  override def slideDuration: Duration = _slideDuration
 
-  override def parentRememberDuration: Duration = rememberDuration + windowTime
+  override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val currentWindow = new Interval(validTime - windowTime + parent.slideTime, validTime)
+    val currentWindow = new Interval(validTime - windowDuration + parent.slideDuration, validTime)
     Some(new UnionRDD(ssc.sc, parent.slice(currentWindow)))
   }
 }
