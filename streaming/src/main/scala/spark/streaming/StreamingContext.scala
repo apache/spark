@@ -26,7 +26,7 @@ import java.util.UUID
 class StreamingContext private (
     sc_ : SparkContext,
     cp_ : Checkpoint,
-    batchDur_ : Time
+    batchDur_ : Duration
   ) extends Logging {
 
   /**
@@ -34,7 +34,7 @@ class StreamingContext private (
    * @param sparkContext Existing SparkContext
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
-  def this(sparkContext: SparkContext, batchDuration: Time) = this(sparkContext, null, batchDuration)
+  def this(sparkContext: SparkContext, batchDuration: Duration) = this(sparkContext, null, batchDuration)
 
   /**
    * Creates a StreamingContext by providing the details necessary for creating a new SparkContext.
@@ -42,7 +42,7 @@ class StreamingContext private (
    * @param frameworkName A name for your job, to display on the cluster web UI
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
-  def this(master: String, frameworkName: String, batchDuration: Time) =
+  def this(master: String, frameworkName: String, batchDuration: Duration) =
     this(StreamingContext.createNewSparkContext(master, frameworkName), null, batchDuration)
 
   /**
@@ -96,7 +96,7 @@ class StreamingContext private (
     }
   }
 
-  protected[streaming] var checkpointInterval: Time = if (isCheckpointPresent) cp_.checkpointInterval else null
+  protected[streaming] var checkpointInterval: Duration = if (isCheckpointPresent) cp_.checkpointInterval else null
   protected[streaming] var receiverJobThread: Thread = null
   protected[streaming] var scheduler: Scheduler = null
 
@@ -107,7 +107,7 @@ class StreamingContext private (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
-  def remember(duration: Time) {
+  def remember(duration: Duration) {
     graph.remember(duration)
   }
 
@@ -117,7 +117,7 @@ class StreamingContext private (
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
    * @param interval checkpoint interval
    */
-  def checkpoint(directory: String, interval: Time = null) {
+  def checkpoint(directory: String, interval: Duration = null) {
     if (directory != null) {
       sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
       checkpointDir = directory

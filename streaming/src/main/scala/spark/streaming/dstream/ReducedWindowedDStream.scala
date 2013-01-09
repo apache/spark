@@ -9,15 +9,15 @@ import spark.SparkContext._
 import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
-import spark.streaming.{Interval, Time, DStream}
+import spark.streaming.{Duration, Interval, Time, DStream}
 
 private[streaming]
 class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     parent: DStream[(K, V)],
     reduceFunc: (V, V) => V,
     invReduceFunc: (V, V) => V, 
-    _windowTime: Time,
-    _slideTime: Time,
+    _windowTime: Duration,
+    _slideTime: Duration,
     partitioner: Partitioner
   ) extends DStream[(K,V)](parent.ssc) {
 
@@ -39,15 +39,15 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
   super.persist(StorageLevel.MEMORY_ONLY_SER)
   reducedStream.persist(StorageLevel.MEMORY_ONLY_SER)
 
-  def windowTime: Time =  _windowTime
+  def windowTime: Duration =  _windowTime
 
   override def dependencies = List(reducedStream)
 
-  override def slideTime: Time = _slideTime
+  override def slideTime: Duration = _slideTime
 
   override val mustCheckpoint = true
 
-  override def parentRememberDuration: Time = rememberDuration + windowTime
+  override def parentRememberDuration: Duration = rememberDuration + windowTime
 
   override def persist(storageLevel: StorageLevel): DStream[(K,V)] = {
     super.persist(storageLevel)
@@ -55,7 +55,7 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     this
   }
 
-  override def checkpoint(interval: Time): DStream[(K, V)] = {
+  override def checkpoint(interval: Duration): DStream[(K, V)] = {
     super.checkpoint(interval)
     //reducedStream.checkpoint(interval)
     this
@@ -66,7 +66,7 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     val invReduceF = invReduceFunc
 
     val currentTime = validTime
-    val currentWindow = Interval(currentTime - windowTime + parent.slideTime, currentTime)
+    val currentWindow = new Interval(currentTime - windowTime + parent.slideTime, currentTime)
     val previousWindow = currentWindow - slideTime
 
     logDebug("Window time = " + windowTime)

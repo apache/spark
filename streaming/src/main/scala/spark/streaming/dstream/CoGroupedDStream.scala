@@ -2,7 +2,7 @@ package spark.streaming.dstream
 
 import spark.{RDD, Partitioner}
 import spark.rdd.CoGroupedRDD
-import spark.streaming.{Time, DStream}
+import spark.streaming.{Time, DStream, Duration}
 
 private[streaming]
 class CoGroupedDStream[K : ClassManifest](
@@ -24,7 +24,7 @@ class CoGroupedDStream[K : ClassManifest](
 
   override def dependencies = parents.toList
 
-  override def slideTime = parents.head.slideTime
+  override def slideTime: Duration = parents.head.slideTime
 
   override def compute(validTime: Time): Option[RDD[(K, Seq[Seq[_]])]] = {
     val part = partitioner
