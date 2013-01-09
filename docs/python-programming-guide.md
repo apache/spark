@@ -19,7 +19,6 @@ There are a few key differences between the Python and Scala APIs:
     - Accumulators
     - Special functions on RDDs of doubles, such as `mean` and `stdev`
     - `lookup`
-    - `mapPartitionsWithSplit`
     - `persist` at storage levels other than `MEMORY_ONLY`
     - `sample`
     - `sort`

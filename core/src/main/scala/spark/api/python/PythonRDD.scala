@@ -65,6 +65,9 @@ private[spark] class PythonRDD[T: ClassManifest](
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
         val dOut = new DataOutputStream(proc.getOutputStream)
+        // Split index
+        dOut.writeInt(split.index)
+        // Broadcast variables
         dOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
           dOut.writeLong(broadcast.id)
@@ -72,10 +75,12 @@ private[spark] class PythonRDD[T: ClassManifest](
           dOut.write(broadcast.value)
           dOut.flush()
         }
+        // Serialized user code
         for (elem <- command) {
           out.println(elem)
         }
         out.flush()
+        // Data values
         for (elem <- parent.iterator(split, context)) {
           PythonRDD.writeAsPickle(elem, dOut)
         }

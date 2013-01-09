@@ -21,6 +21,7 @@ def load_obj():
 
 
 def main():
+    split_index = read_int(sys.stdin)
     num_broadcast_variables = read_int(sys.stdin)
     for _ in range(num_broadcast_variables):
         bid = read_long(sys.stdin)
@@ -32,7 +33,8 @@ def main():
         dumps = lambda x: x
     else:
         dumps = dump_pickle
-    for obj in func(read_from_pickle_file(sys.stdin)):
+    iterator = read_from_pickle_file(sys.stdin)
+    for obj in func(split_index, iterator):
         write_with_length(dumps(obj), old_stdout)
 
 
