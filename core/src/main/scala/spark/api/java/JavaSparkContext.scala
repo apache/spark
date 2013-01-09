@@ -355,6 +355,13 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def clearFiles() {
     sc.clearFiles()
   }
+
+  /**
+   * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
+   */
+  def hadoopConfiguration() {
+    sc.hadoopConfiguration
+  }
 }
 
 object JavaSparkContext {
