@@ -21,14 +21,14 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Direct
   
   val handler = {
     get {
-      (path("") & parameters('json ?)) {
-        case Some(js) => {
+      (path("") & parameters('format ?)) {
+        case Some(js) if js.equalsIgnoreCase("json") => {
           val future = worker ? RequestWorkerState
           respondWithMediaType(MediaTypes.`application/json`) { ctx =>
             ctx.complete(future.mapTo[WorkerState])
           }
         }
-        case None =>
+        case _ =>
           completeWith{
             val future = worker ? RequestWorkerState
             future.map { workerState =>

@@ -22,13 +22,13 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
   
   val handler = {
     get {
-      (path("") & parameters('json ?)) {
-        case Some(js) =>
+      (path("") & parameters('format ?)) {
+        case Some(js) if js.equalsIgnoreCase("json") =>
           val future = master ? RequestMasterState
           respondWithMediaType(MediaTypes.`application/json`) { ctx =>
             ctx.complete(future.mapTo[MasterState])
           }
-        case None =>
+        case _ =>
           completeWith {
             val future = master ? RequestMasterState
             future.map {
