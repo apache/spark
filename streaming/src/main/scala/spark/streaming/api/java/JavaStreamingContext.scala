@@ -62,7 +62,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
       converter: JFunction[InputStream, java.lang.Iterable[T]],
       storageLevel: StorageLevel)
   : JavaDStream[T] = {
-    import scala.collection.JavaConverters._
     def fn = (x: InputStream) => converter.apply(x).toIterator
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]

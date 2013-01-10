@@ -1,8 +1,8 @@
 package spark.streaming;
 
 import com.google.common.collect.Lists;
-import org.junit.Assert;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import scala.Tuple2;
@@ -12,10 +12,10 @@ import spark.api.java.function.FlatMapFunction;
 import spark.api.java.function.Function;
 import spark.api.java.function.Function2;
 import spark.api.java.function.PairFunction;
-import spark.streaming.JavaTestUtils;
 import spark.streaming.api.java.JavaDStream;
 import spark.streaming.api.java.JavaPairDStream;
 import spark.streaming.api.java.JavaStreamingContext;
+import spark.streaming.JavaTestUtils;
 
 import java.io.Serializable;
 import java.util.*;
