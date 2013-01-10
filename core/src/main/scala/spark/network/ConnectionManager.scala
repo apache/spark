@@ -43,12 +43,12 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   }
   
   val selector = SelectorProvider.provider.openSelector()
-  val handleMessageExecutor = Executors.newFixedThreadPool(20) 
+  val handleMessageExecutor = Executors.newFixedThreadPool(System.getProperty("spark.core.connection.handler.threads","20").toInt)
   val serverChannel = ServerSocketChannel.open()
   val connectionsByKey = new HashMap[SelectionKey, Connection] with SynchronizedMap[SelectionKey, Connection] 
   val connectionsById = new HashMap[ConnectionManagerId, SendingConnection] with SynchronizedMap[ConnectionManagerId, SendingConnection]
   val messageStatuses = new HashMap[Int, MessageStatus] 
-  val connectionRequests = new HashMap[ConnectionManagerId, SendingConnection] with SynchronizedMap[ConnectionManagerId, SendingConnection] 
+  val connectionRequests = new HashMap[ConnectionManagerId, SendingConnection] with SynchronizedMap[ConnectionManagerId, SendingConnection]
   val keyInterestChangeRequests = new SynchronizedQueue[(SelectionKey, Int)]
   val sendMessageRequests = new Queue[(Message, SendingConnection)]
 
@@ -78,9 +78,8 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
   def run() {
     try {
-      while(!selectorThread.isInterrupted) {   
+      while(!selectorThread.isInterrupted) {
         for( (connectionManagerId, sendingConnection) <- connectionRequests) {
-          //val sendingConnection = connectionRequests.dequeue
           sendingConnection.connect() 
           addConnection(sendingConnection)
           connectionRequests -= connectionManagerId
@@ -465,7 +464,7 @@ private[spark] object ConnectionManager {
           val bufferMessage = Message.createBufferMessage(buffer.duplicate)
           manager.sendMessageReliably(manager.id, bufferMessage)
         }).foreach(f => {
-          val g = Await.result(f, 10 second)
+          val g = Await.result(f, 1 second)
           if (!g.isDefined) println("Failed")
         })
       val finishTime = System.currentTimeMillis
