@@ -7,6 +7,7 @@ import java.net.{URI, URLClassLoader}
 import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.JavaConversions._
 
 import akka.actor.Actor
 import akka.actor.Actor._
@@ -198,7 +199,7 @@ class SparkContext(
       conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
     }
     // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-    for (key <- System.getProperties.keys.asInstanceOf[Set[String]] if key.startsWith("spark.hadoop.")) {
+    for (key <- System.getProperties.toMap[String, String].keys if key.startsWith("spark.hadoop.")) {
       conf.set(key.substring("spark.hadoop.".length), System.getProperty(key))
     }
     val bufferSize = System.getProperty("spark.buffer.size", "65536")
