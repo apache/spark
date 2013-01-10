@@ -52,7 +52,7 @@ class SparkContext(object):
         self._jsc = self.jvm.JavaSparkContext(master, jobName, sparkHome,
                                               empty_string_array)
 
-        self.pythonExec = os.environ.get("PYSPARK_PYTHON_EXEC", 'python')
+        self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
