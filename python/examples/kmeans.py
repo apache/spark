@@ -33,7 +33,9 @@ if __name__ == "__main__":
     K = int(sys.argv[3])
     convergeDist = float(sys.argv[4])
 
-    kPoints = data.takeSample(False, K, 34)
+    # TODO: change this after we port takeSample()
+    #kPoints = data.takeSample(False, K, 34)
+    kPoints = data.take(K)
     tempDist = 1.0
 
     while tempDist > convergeDist:
