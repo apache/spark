@@ -12,18 +12,31 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.conf.Configuration
 import spark.api.java.{JavaPairRDD, JavaRDD}
+import spark.storage.StorageLevel
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val kManifiest: ClassManifest[K],
     implicit val vManifest: ClassManifest[V])
     extends JavaDStreamLike[(K, V), JavaPairDStream[K, V]] {
 
-  // Common to all DStream's
+  // =======================================================================
+  // Methods common to all DStream's
+  // =======================================================================
+
+  /** Returns a new DStream containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[(K, V), java.lang.Boolean]): JavaPairDStream[K, V] =
     dstream.filter((x => f(x).booleanValue()))
 
+  /** Persists RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
   def cache(): JavaPairDStream[K, V] = dstream.cache()
 
+  /** Persists RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
+  def persist(): JavaPairDStream[K, V] = dstream.cache()
+
+  /** Persists the RDDs of this DStream with the given storage level */
+  def persist(storageLevel: StorageLevel): JavaPairDStream[K, V] = dstream.persist(storageLevel)
+
+  /** Method that generates a RDD for the given time */
   def compute(validTime: Time): JavaPairRDD[K, V] = {
     dstream.compute(validTime) match {
       case Some(rdd) => new JavaPairRDD(rdd)
@@ -31,19 +44,45 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     }
   }
 
+  /**
+   * Return a new DStream which is computed based on windowed batches of this DStream.
+   * The new DStream generates RDDs with the same interval as this DStream.
+   * @param windowTime width of the window; must be a multiple of this DStream's interval.
+   * @return
+   */
   def window(windowTime: Time): JavaPairDStream[K, V] =
     dstream.window(windowTime)
 
+  /**
+   * Return a new DStream which is computed based on windowed batches of this DStream.
+   * @param windowTime duration (i.e., width) of the window;
+   *                   must be a multiple of this DStream's interval
+   * @param slideTime  sliding interval of the window (i.e., the interval after which
+   *                   the new DStream will generate RDDs); must be a multiple of this
+   *                   DStream's interval
+   */
   def window(windowTime: Time, slideTime: Time): JavaPairDStream[K, V] =
     dstream.window(windowTime, slideTime)
 
+  /**
+   * Returns a new DStream which computed based on tumbling window on this DStream.
+   * This is equivalent to window(batchTime, batchTime).
+   * @param batchTime tumbling window duration; must be a multiple of this DStream's interval
+   */
   def tumble(batchTime: Time): JavaPairDStream[K, V] =
     dstream.tumble(batchTime)
 
+  /**
+   * Returns a new DStream by unifying data of another DStream with this DStream.
+   * @param that Another DStream having the same interval (i.e., slideTime) as this DStream.
+   */
   def union(that: JavaPairDStream[K, V]): JavaPairDStream[K, V] =
     dstream.union(that.dstream)
 
-  // Only for PairDStreams...
+  // =======================================================================
+  // Methods only for PairDStream's
+  // =======================================================================
+
   def groupByKey(): JavaPairDStream[K, JList[V]] =
     dstream.groupByKey().mapValues(seqAsJavaList _)
 
@@ -59,8 +98,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   def reduceByKey(func: JFunction2[V, V, V], numPartitions: Int): JavaPairDStream[K, V] =
     dstream.reduceByKey(func, numPartitions)
 
-  // TODO: TEST BELOW
-  def combineByKey[C](createCombiner: Function[V, C],
+  def combineByKey[C](createCombiner: JFunction[V, C],
     mergeValue: JFunction2[C, V, C],
     mergeCombiners: JFunction2[C, C, C],
     partitioner: Partitioner): JavaPairDStream[K, C] = {

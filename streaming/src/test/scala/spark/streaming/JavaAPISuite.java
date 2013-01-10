@@ -6,6 +6,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import scala.Tuple2;
+import spark.HashPartitioner;
 import spark.api.java.JavaRDD;
 import spark.api.java.function.FlatMapFunction;
 import spark.api.java.function.Function;
@@ -377,18 +378,31 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(expected, result);
   }
 
+  List<List<Tuple2<String, String>>> stringStringKVStream = Arrays.asList(
+      Arrays.asList(new Tuple2<String, String>("california", "dodgers"),
+          new Tuple2<String, String>("california", "giants"),
+          new Tuple2<String, String>("new york", "yankees"),
+          new Tuple2<String, String>("new york", "mets")),
+      Arrays.asList(new Tuple2<String, String>("california", "sharks"),
+          new Tuple2<String, String>("california", "ducks"),
+          new Tuple2<String, String>("new york", "rangers"),
+          new Tuple2<String, String>("new york", "islanders")));
+
+  List<List<Tuple2<String, Integer>>> stringIntKVStream = Arrays.asList(
+      Arrays.asList(
+          new Tuple2<String, Integer>("california", 1),
+          new Tuple2<String, Integer>("california", 3),
+          new Tuple2<String, Integer>("new york", 4),
+          new Tuple2<String, Integer>("new york", 1)),
+      Arrays.asList(
+          new Tuple2<String, Integer>("california", 5),
+          new Tuple2<String, Integer>("california", 5),
+          new Tuple2<String, Integer>("new york", 3),
+          new Tuple2<String, Integer>("new york", 1)));
+
   @Test
   public void testPairGroupByKey() {
-    List<List<Tuple2<String, String>>> inputData = Arrays.asList(
-        Arrays.asList(new Tuple2<String, String>("california", "dodgers"),
-                      new Tuple2<String, String>("california", "giants"),
-                      new Tuple2<String, String>("new york", "yankees"),
-                      new Tuple2<String, String>("new york", "mets")),
-        Arrays.asList(new Tuple2<String, String>("california", "sharks"),
-                      new Tuple2<String, String>("california", "ducks"),
-                      new Tuple2<String, String>("new york", "rangers"),
-                      new Tuple2<String, String>("new york", "islanders")));
-
+    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
 
     List<List<Tuple2<String, List<String>>>> expected = Arrays.asList(
         Arrays.asList(
@@ -410,18 +424,7 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void testPairReduceByKey() {
-    List<List<Tuple2<String, Integer>>> inputData = Arrays.asList(
-        Arrays.asList(
-            new Tuple2<String, Integer>("california", 1),
-            new Tuple2<String, Integer>("california", 3),
-            new Tuple2<String, Integer>("new york", 4),
-            new Tuple2<String, Integer>("new york", 1)),
-        Arrays.asList(
-            new Tuple2<String, Integer>("california", 5),
-            new Tuple2<String, Integer>("california", 5),
-            new Tuple2<String, Integer>("new york", 3),
-            new Tuple2<String, Integer>("new york", 1)));
-
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
 
     List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
         Arrays.asList(
@@ -435,16 +438,322 @@ public class JavaAPISuite implements Serializable {
         sc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, Integer> reduced = pairStream.reduceByKey(
-        new Function2<Integer, Integer, Integer>() {
-          @Override
-          public Integer call(Integer i1, Integer i2) throws Exception {
-            return i1 + i2;
-          }
-        });
+    JavaPairDStream<String, Integer> reduced = pairStream.reduceByKey(new IntegerSum());
 
     JavaTestUtils.attachTestOutputStream(reduced);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testCombineByKey() {
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
+
+    List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, Integer>("california", 4),
+            new Tuple2<String, Integer>("new york", 5)),
+        Arrays.asList(
+            new Tuple2<String, Integer>("california", 10),
+            new Tuple2<String, Integer>("new york", 4)));
+
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(
+        sc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, Integer> combined = pairStream.<Integer>combineByKey(
+        new Function<Integer, Integer>() {
+          @Override
+          public Integer call(Integer i) throws Exception {
+            return i;
+          }
+        }, new IntegerSum(), new IntegerSum(), new HashPartitioner(2));
+
+    JavaTestUtils.attachTestOutputStream(combined);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testCountByKey() {
+    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+
+    List<List<Tuple2<String, Long>>> expected = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, Long>("california", 2L),
+            new Tuple2<String, Long>("new york", 2L)),
+        Arrays.asList(
+            new Tuple2<String, Long>("california", 2L),
+            new Tuple2<String, Long>("new york", 2L)));
+
+    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(
+        sc, inputData, 1);
+    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    // TODO: Below fails with compile error with <String, Long>... wtf?
+    JavaPairDStream<String, Object> counted = pairStream.countByKey();
+    JavaTestUtils.attachTestOutputStream(counted);
+    List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testGroupByKeyAndWindow() {
+    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+
+    List<List<Tuple2<String, List<String>>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, List<String>>("california", Arrays.asList("dodgers", "giants")),
+          new Tuple2<String, List<String>>("new york", Arrays.asList("yankees", "mets"))),
+        Arrays.asList(new Tuple2<String, List<String>>("california",
+            Arrays.asList("sharks", "ducks", "dodgers", "giants")),
+            new Tuple2<String, List<String>>("new york", Arrays.asList("rangers", "islanders", "yankees", "mets"))),
+        Arrays.asList(new Tuple2<String, List<String>>("california", Arrays.asList("sharks", "ducks")),
+            new Tuple2<String, List<String>>("new york", Arrays.asList("rangers", "islanders"))));
+
+    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, List<String>> groupWindowed =
+        pairStream.groupByKeyAndWindow(new Time(2000), new Time(1000));
+    JavaTestUtils.attachTestOutputStream(groupWindowed);
+    List<List<Tuple2<String, List<String>>>> result = JavaTestUtils.runStreams(sc, 3, 3);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testReduceByKeyAndWindow() {
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
+
+    List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, Integer>("california", 4),
+            new Tuple2<String, Integer>("new york", 5)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 14),
+            new Tuple2<String, Integer>("new york", 9)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 10),
+            new Tuple2<String, Integer>("new york", 4)));
+
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, Integer> reduceWindowed =
+        pairStream.reduceByKeyAndWindow(new IntegerSum(), new Time(2000), new Time(1000));
+    JavaTestUtils.attachTestOutputStream(reduceWindowed);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 3, 3);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testReduceByKeyAndWindowWithInverse() {
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
+
+    List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, Integer>("california", 4),
+            new Tuple2<String, Integer>("new york", 5)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 14),
+            new Tuple2<String, Integer>("new york", 9)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 10),
+            new Tuple2<String, Integer>("new york", 4)));
+
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, Integer> reduceWindowed =
+        pairStream.reduceByKeyAndWindow(new IntegerSum(), new IntegerDifference(), new Time(2000), new Time(1000));
+    JavaTestUtils.attachTestOutputStream(reduceWindowed);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 3, 3);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testCountByKeyAndWindow() {
+    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+
+    List<List<Tuple2<String, Long>>> expected = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, Long>("california", 2L),
+            new Tuple2<String, Long>("new york", 2L)),
+        Arrays.asList(
+            new Tuple2<String, Long>("california", 4L),
+            new Tuple2<String, Long>("new york", 4L)),
+        Arrays.asList(
+            new Tuple2<String, Long>("california", 2L),
+            new Tuple2<String, Long>("new york", 2L)));
+
+    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(
+        sc, inputData, 1);
+    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    // TODO: Below fails with compile error with <String, Long>... wtf?
+    JavaPairDStream<String, Object> counted = pairStream.countByKeyAndWindow(new Time(2000), new Time(1000));
+    JavaTestUtils.attachTestOutputStream(counted);
+    List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(sc, 3, 3);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testMapValues() {
+    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+
+    List<List<Tuple2<String, String>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, String>("california", "DODGERS"),
+            new Tuple2<String, String>("california", "GIANTS"),
+            new Tuple2<String, String>("new york", "YANKEES"),
+            new Tuple2<String, String>("new york", "METS")),
+        Arrays.asList(new Tuple2<String, String>("california", "SHARKS"),
+            new Tuple2<String, String>("california", "DUCKS"),
+            new Tuple2<String, String>("new york", "RANGERS"),
+            new Tuple2<String, String>("new york", "ISLANDERS")));
+
+    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(
+        sc, inputData, 1);
+    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, String> mapped = pairStream.mapValues(new Function<String, String>() {
+      @Override
+      public String call(String s) throws Exception {
+        return s.toUpperCase();
+      }
+    });
+
+    JavaTestUtils.attachTestOutputStream(mapped);
+    List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testFlatMapValues() {
+    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+
+    List<List<Tuple2<String, String>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, String>("california", "dodgers1"),
+            new Tuple2<String, String>("california", "dodgers2"),
+            new Tuple2<String, String>("california", "giants1"),
+            new Tuple2<String, String>("california", "giants2"),
+            new Tuple2<String, String>("new york", "yankees1"),
+            new Tuple2<String, String>("new york", "yankees2"),
+            new Tuple2<String, String>("new york", "mets1"),
+            new Tuple2<String, String>("new york", "mets2")),
+        Arrays.asList(new Tuple2<String, String>("california", "sharks1"),
+            new Tuple2<String, String>("california", "sharks2"),
+            new Tuple2<String, String>("california", "ducks1"),
+            new Tuple2<String, String>("california", "ducks2"),
+            new Tuple2<String, String>("new york", "rangers1"),
+            new Tuple2<String, String>("new york", "rangers2"),
+            new Tuple2<String, String>("new york", "islanders1"),
+            new Tuple2<String, String>("new york", "islanders2")));
+
+    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(
+        sc, inputData, 1);
+    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+
+    JavaPairDStream<String, String> flatMapped = pairStream.flatMapValues(
+        new Function<String, Iterable<String>>() {
+          @Override
+          public Iterable<String> call(String in) {
+            List<String> out = new ArrayList<String>();
+            out.add(in + "1");
+            out.add(in + "2");
+            return out;
+          }
+        });
+
+    JavaTestUtils.attachTestOutputStream(flatMapped);
+    List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testCoGroup() {
+    List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
+        Arrays.asList(new Tuple2<String, String>("california", "dodgers"),
+            new Tuple2<String, String>("new york", "yankees")),
+        Arrays.asList(new Tuple2<String, String>("california", "sharks"),
+            new Tuple2<String, String>("new york", "rangers")));
+
+    List<List<Tuple2<String, String>>> stringStringKVStream2 = Arrays.asList(
+        Arrays.asList(new Tuple2<String, String>("california", "giants"),
+            new Tuple2<String, String>("new york", "mets")),
+        Arrays.asList(new Tuple2<String, String>("california", "ducks"),
+            new Tuple2<String, String>("new york", "islanders")));
+
+
+    List<List<Tuple2<String, Tuple2<List<String>, List<String>>>>> expected = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, Tuple2<List<String>, List<String>>>("california",
+                new Tuple2<List<String>, List<String>>(Arrays.asList("dodgers"), Arrays.asList("giants"))),
+            new Tuple2<String, Tuple2<List<String>, List<String>>>("new york",
+                new Tuple2<List<String>, List<String>>(Arrays.asList("yankees"), Arrays.asList("mets")))),
+        Arrays.asList(
+            new Tuple2<String, Tuple2<List<String>, List<String>>>("california",
+                new Tuple2<List<String>, List<String>>(Arrays.asList("sharks"), Arrays.asList("ducks"))),
+            new Tuple2<String, Tuple2<List<String>, List<String>>>("new york",
+                new Tuple2<List<String>, List<String>>(Arrays.asList("rangers"), Arrays.asList("islanders")))));
+
+
+    JavaDStream<Tuple2<String, String>> stream1 = JavaTestUtils.attachTestInputStream(
+        sc, stringStringKVStream1, 1);
+    JavaPairDStream<String, String> pairStream1 = JavaPairDStream.fromJavaDStream(stream1);
+
+    JavaDStream<Tuple2<String, String>> stream2 = JavaTestUtils.attachTestInputStream(
+        sc, stringStringKVStream2, 1);
+    JavaPairDStream<String, String> pairStream2 = JavaPairDStream.fromJavaDStream(stream2);
+
+    JavaPairDStream<String, Tuple2<List<String>, List<String>>> grouped = pairStream1.cogroup(pairStream2);
+    JavaTestUtils.attachTestOutputStream(grouped);
+    List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(sc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testJoin() {
+    List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
+        Arrays.asList(new Tuple2<String, String>("california", "dodgers"),
+            new Tuple2<String, String>("new york", "yankees")),
+        Arrays.asList(new Tuple2<String, String>("california", "sharks"),
+            new Tuple2<String, String>("new york", "rangers")));
+
+    List<List<Tuple2<String, String>>> stringStringKVStream2 = Arrays.asList(
+        Arrays.asList(new Tuple2<String, String>("california", "giants"),
+            new Tuple2<String, String>("new york", "mets")),
+        Arrays.asList(new Tuple2<String, String>("california", "ducks"),
+            new Tuple2<String, String>("new york", "islanders")));
+
+
+    List<List<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, Tuple2<String, String>>("california",
+                new Tuple2<String, String>("dodgers", "giants")),
+            new Tuple2<String, Tuple2<String, String>>("new york",
+                new Tuple2<String, String>("yankees", "mets"))),
+        Arrays.asList(
+            new Tuple2<String, Tuple2<String, String>>("california",
+                new Tuple2<String, String>("sharks", "ducks")),
+            new Tuple2<String, Tuple2<String, String>>("new york",
+                new Tuple2<String, String>("rangers", "islanders"))));
+
+
+    JavaDStream<Tuple2<String, String>> stream1 = JavaTestUtils.attachTestInputStream(
+        sc, stringStringKVStream1, 1);
+    JavaPairDStream<String, String> pairStream1 = JavaPairDStream.fromJavaDStream(stream1);
+
+    JavaDStream<Tuple2<String, String>> stream2 = JavaTestUtils.attachTestInputStream(
+        sc, stringStringKVStream2, 1);
+    JavaPairDStream<String, String> pairStream2 = JavaPairDStream.fromJavaDStream(stream2);
+
+    JavaPairDStream<String, Tuple2<String, String>> joined = pairStream1.join(pairStream2);
+    JavaTestUtils.attachTestOutputStream(joined);
+    List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(sc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
