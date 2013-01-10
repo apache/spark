@@ -190,9 +190,16 @@ class SparkContext(
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
     val conf = new Configuration()
-    // Copy any "hadoop.foo=bar" system properties into conf as "foo=bar"
-    for (key <- System.getProperties.keys.asInstanceOf[Set[String]] if key.startsWith("hadoop.")) {
-      conf.set(key.substring("hadoop.".length), System.getProperty(key))
+    // Explicitly check for S3 environment variables
+    if (System.getenv("AWS_ACCESS_KEY_ID") != null && System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
+      conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
+      conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
+      conf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+      conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+    }
+    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
+    for (key <- System.getProperties.keys.asInstanceOf[Set[String]] if key.startsWith("spark.hadoop.")) {
+      conf.set(key.substring("spark.hadoop.".length), System.getProperty(key))
     }
     val bufferSize = System.getProperty("spark.buffer.size", "65536")
     conf.set("io.file.buffer.size", bufferSize)
