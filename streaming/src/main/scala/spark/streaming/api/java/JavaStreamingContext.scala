@@ -2,6 +2,7 @@ package spark.streaming.api.java
 
 import scala.collection.JavaConversions._
 import java.util.{List => JList}
+import java.lang.{Long => JLong, Integer => JInt}
 
 import spark.streaming._
 import dstream._
@@ -18,9 +19,26 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   // TODOs:
   // - Test StreamingContext functions
   // - Test to/from Hadoop functions
-  // - Support registering InputStreams
-  // - Add Kafka Stream
+  // - Support creating and registering InputStreams
 
+  /**
+   * Create an input stream that pulls messages form a Kafka Broker.
+   * @param hostname Zookeper hostname.
+   * @param port Zookeper port.
+   * @param groupId The group id for this consumer.
+   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   * in its own thread.
+   */
+  def kafkaStream[T](
+    hostname: String,
+    port: Int,
+    groupId: String,
+    topics: JMap[String, JInt])
+  : JavaDStream[T] = {
+    implicit val cmt: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    ssc.kafkaStream[T](hostname, port, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
+  }
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
@@ -31,18 +49,54 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * in its own thread.
    * @param initialOffsets Optional initial offsets for each of the partitions to consume.
    * By default the value is pulled from zookeper.
-   * @param storageLevel RDD storage level. Defaults to memory-only.
    */
   def kafkaStream[T](
     hostname: String,
     port: Int,
     groupId: String,
-    topics: JMap[String, Int])
-  : DStream[T] = {
+    topics: JMap[String, JInt],
+    initialOffsets: JMap[KafkaPartitionKey, JLong])
+  : JavaDStream[T] = {
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    ssc.kafkaStream(hostname, port, groupId, Map(topics.toSeq: _*))
+    ssc.kafkaStream[T](
+      hostname,
+      port,
+      groupId,
+      Map(topics.mapValues(_.intValue()).toSeq: _*),
+      Map(initialOffsets.mapValues(_.longValue()).toSeq: _*))
   }
+
+  /**
+   * Create an input stream that pulls messages form a Kafka Broker.
+   * @param hostname Zookeper hostname.
+   * @param port Zookeper port.
+   * @param groupId The group id for this consumer.
+   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   * in its own thread.
+   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
+   * By default the value is pulled from zookeper.
+   * @param storageLevel RDD storage level. Defaults to memory-only
+   */
+  def kafkaStream[T](
+    hostname: String,
+    port: Int,
+    groupId: String,
+    topics: JMap[String, JInt],
+    initialOffsets: JMap[KafkaPartitionKey, JLong],
+    storageLevel: StorageLevel)
+  : JavaDStream[T] = {
+    implicit val cmt: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    ssc.kafkaStream[T](
+      hostname,
+      port,
+      groupId,
+      Map(topics.mapValues(_.intValue()).toSeq: _*),
+      Map(initialOffsets.mapValues(_.longValue()).toSeq: _*),
+      storageLevel)
+  }
+
   /**
    * Create a input stream from network source hostname:port. Data is received using
    * a TCP socket and the receive bytes is interpreted as UTF8 encoded \n delimited
@@ -174,8 +228,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   JavaDStream[SparkFlumeEvent] = {
     ssc.flumeStream(hostname, port)
   }
-
-  // NOT SUPPORTED: registerInputStream
 
   /**
    * Registers an output stream that will be computed every interval

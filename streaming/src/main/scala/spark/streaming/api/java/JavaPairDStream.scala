@@ -283,7 +283,8 @@ object JavaPairDStream {
     new JavaPairDStream[K, V](dstream.dstream)
   }
 
-  def scalaToJavaLong[K: ClassManifest](dstream: JavaPairDStream[K, Long]): JavaPairDStream[K, JLong] = {
+  def scalaToJavaLong[K: ClassManifest](dstream: JavaPairDStream[K, Long])
+  : JavaPairDStream[K, JLong] = {
     StreamingContext.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
   }
 }

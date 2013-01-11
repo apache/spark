@@ -2,6 +2,7 @@ package spark.streaming;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -13,12 +14,15 @@ import spark.api.java.function.FlatMapFunction;
 import spark.api.java.function.Function;
 import spark.api.java.function.Function2;
 import spark.api.java.function.PairFunction;
+import spark.storage.StorageLevel;
 import spark.streaming.api.java.JavaDStream;
 import spark.streaming.api.java.JavaPairDStream;
 import spark.streaming.api.java.JavaStreamingContext;
 import spark.streaming.JavaTestUtils;
+import spark.streaming.dstream.KafkaPartitionKey;
+import sun.org.mozilla.javascript.annotations.JSFunction;
 
-import java.io.Serializable;
+import java.io.*;
 import java.util.*;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
@@ -756,5 +760,68 @@ public class JavaAPISuite implements Serializable {
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(sc, 2, 2);
 
     Assert.assertEquals(expected, result);
+  }
+
+  // Input stream tests. These mostly just test that we can instantiate a given InputStream with
+  // Java arguments and assign it to a JavaDStream without producing type errors. Testing of the
+  // InputStream functionality is deferred to the existing Scala tests.
+  @Test
+  public void testKafkaStream() {
+    HashMap<String, Integer> topics = Maps.newHashMap();
+    HashMap<KafkaPartitionKey, Long> offsets = Maps.newHashMap();
+    JavaDStream test1 = sc.kafkaStream("localhost", 12345, "group", topics);
+    JavaDStream test2 = sc.kafkaStream("localhost", 12345, "group", topics, offsets);
+    JavaDStream test3 = sc.kafkaStream("localhost", 12345, "group", topics, offsets,
+      StorageLevel.MEMORY_AND_DISK());
+  }
+
+  @Test
+  public void testNetworkTextStream() {
+    JavaDStream test = sc.networkTextStream("localhost", 12345);
+  }
+
+  @Test
+  public void testNetworkString() {
+    class Converter extends Function<InputStream, Iterable<String>> {
+      public Iterable<String> call(InputStream in) {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+        List<String> out = new ArrayList<String>();
+        try {
+          while (true) {
+            String line = reader.readLine();
+            if (line == null) { break; }
+            out.add(line);
+          }
+        } catch (IOException e) { }
+        return out;
+      }
+    }
+
+    JavaDStream test = sc.networkStream(
+      "localhost",
+      12345,
+      new Converter(),
+      StorageLevel.MEMORY_ONLY());
+  }
+
+  @Test
+  public void testTextFileStream() {
+    JavaDStream test = sc.textFileStream("/tmp/foo");
+  }
+
+  @Test
+  public void testRawNetworkStream() {
+    JavaDStream test = sc.rawNetworkStream("localhost", 12345);
+  }
+
+  @Test
+  public void testFlumeStream() {
+    JavaDStream test = sc.flumeStream("localhost", 12345);
+  }
+
+  @Test
+  public void testFileStream() {
+    JavaPairDStream<String, String> foo =
+      sc.<String, String, SequenceFileInputFormat>fileStream("/tmp/foo");
   }
 }
