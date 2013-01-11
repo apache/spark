@@ -1,7 +1,8 @@
 package spark.rdd
 
+import java.util.{HashMap => JHashMap}
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
+import scala.collection.JavaConversions._
 
 import spark.{Aggregator, Logging, Partitioner, RDD, SparkEnv, Split, TaskContext}
 import spark.{Dependency, OneToOneDependency, ShuffleDependency}
@@ -71,7 +72,7 @@ class CoGroupedRDD[K](@transient rdds: Seq[RDD[(_, _)]], part: Partitioner)
   override def compute(s: Split, context: TaskContext): Iterator[(K, Seq[Seq[_]])] = {
     val split = s.asInstanceOf[CoGroupSplit]
     val numRdds = split.deps.size
-    val map = new HashMap[K, Seq[ArrayBuffer[Any]]]
+    val map = new JHashMap[K, Seq[ArrayBuffer[Any]]]
     def getSeq(k: K): Seq[ArrayBuffer[Any]] = {
       map.getOrElseUpdate(k, Array.fill(numRdds)(new ArrayBuffer[Any]))
     }
