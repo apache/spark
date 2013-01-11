@@ -97,10 +97,11 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This]] extends Serializable 
    * window() operation. This is equivalent to window(windowDuration, slideDuration).reduce(reduceFunc)
    */
   def reduceByWindow(
-    reduceFunc: JFunction2[T, T, T],
-    invReduceFunc: JFunction2[T, T, T],
-    windowDuration: Duration,
-    slideDuration: Duration): JavaDStream[T] = {
+      reduceFunc: JFunction2[T, T, T],
+      invReduceFunc: JFunction2[T, T, T],
+      windowDuration: Duration,
+      slideDuration: Duration
+    ): JavaDStream[T] = {
     dstream.reduceByWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration)
   }
 
