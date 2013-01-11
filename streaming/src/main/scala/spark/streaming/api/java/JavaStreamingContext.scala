@@ -12,7 +12,7 @@ import java.io.InputStream
 import java.util.{Map => JMap}
 
 class JavaStreamingContext(val ssc: StreamingContext) {
-  def this(master: String, frameworkName: String, batchDuration: Time) =
+  def this(master: String, frameworkName: String, batchDuration: Duration) =
     this(new StreamingContext(master, frameworkName, batchDuration))
 
   // TODOs:
@@ -190,18 +190,18 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
    * @param interval checkpoint interval
    */
-  def checkpoint(directory: String, interval: Time = null) {
+  def checkpoint(directory: String, interval: Duration = null) {
     ssc.checkpoint(directory, interval)
   }
 
   /**
    * Sets each DStreams in this context to remember RDDs it generated in the last given duration.
-   * DStreams remember RDDs only for a limited duration of time and releases them for garbage
+   * DStreams remember RDDs only for a limited duration of duration and releases them for garbage
    * collection. This method allows the developer to specify how to long to remember the RDDs (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
-  def remember(duration: Time) {
+  def remember(duration: Duration) {
     ssc.remember(duration)
   }
 

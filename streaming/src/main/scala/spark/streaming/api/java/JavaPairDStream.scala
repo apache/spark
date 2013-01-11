@@ -38,7 +38,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   /** Persists the RDDs of this DStream with the given storage level */
   def persist(storageLevel: StorageLevel): JavaPairDStream[K, V] = dstream.persist(storageLevel)
 
-  /** Method that generates a RDD for the given time */
+  /** Method that generates a RDD for the given Duration */
   def compute(validTime: Time): JavaPairRDD[K, V] = {
     dstream.compute(validTime) match {
       case Some(rdd) => new JavaPairRDD(rdd)
@@ -49,34 +49,34 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   /**
    * Return a new DStream which is computed based on windowed batches of this DStream.
    * The new DStream generates RDDs with the same interval as this DStream.
-   * @param windowTime width of the window; must be a multiple of this DStream's interval.
+   * @param windowDuration width of the window; must be a multiple of this DStream's interval.
    * @return
    */
-  def window(windowTime: Time): JavaPairDStream[K, V] =
-    dstream.window(windowTime)
+  def window(windowDuration: Duration): JavaPairDStream[K, V] =
+    dstream.window(windowDuration)
 
   /**
    * Return a new DStream which is computed based on windowed batches of this DStream.
-   * @param windowTime duration (i.e., width) of the window;
+   * @param windowDuration duration (i.e., width) of the window;
    *                   must be a multiple of this DStream's interval
-   * @param slideTime  sliding interval of the window (i.e., the interval after which
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                   the new DStream will generate RDDs); must be a multiple of this
    *                   DStream's interval
    */
-  def window(windowTime: Time, slideTime: Time): JavaPairDStream[K, V] =
-    dstream.window(windowTime, slideTime)
+  def window(windowDuration: Duration, slideDuration: Duration): JavaPairDStream[K, V] =
+    dstream.window(windowDuration, slideDuration)
 
   /**
    * Returns a new DStream which computed based on tumbling window on this DStream.
-   * This is equivalent to window(batchTime, batchTime).
-   * @param batchTime tumbling window duration; must be a multiple of this DStream's interval
+   * This is equivalent to window(batchDuration, batchDuration).
+   * @param batchDuration tumbling window duration; must be a multiple of this DStream's interval
    */
-  def tumble(batchTime: Time): JavaPairDStream[K, V] =
-    dstream.tumble(batchTime)
+  def tumble(batchDuration: Duration): JavaPairDStream[K, V] =
+    dstream.tumble(batchDuration)
 
   /**
    * Returns a new DStream by unifying data of another DStream with this DStream.
-   * @param that Another DStream having the same interval (i.e., slideTime) as this DStream.
+   * @param that Another DStream having the same interval (i.e., slideDuration) as this DStream.
    */
   def union(that: JavaPairDStream[K, V]): JavaPairDStream[K, V] =
     dstream.union(that.dstream)
@@ -117,66 +117,66 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     JavaPairDStream.scalaToJavaLong(dstream.countByKey());
   }
 
-  def groupByKeyAndWindow(windowTime: Time, slideTime: Time): JavaPairDStream[K, JList[V]] = {
-    dstream.groupByKeyAndWindow(windowTime, slideTime).mapValues(seqAsJavaList _)
+  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration): JavaPairDStream[K, JList[V]] = {
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration).mapValues(seqAsJavaList _)
   }
 
-  def groupByKeyAndWindow(windowTime: Time, slideTime: Time, numPartitions: Int)
+  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration, numPartitions: Int)
   :JavaPairDStream[K, JList[V]] = {
-    dstream.groupByKeyAndWindow(windowTime, slideTime, numPartitions).mapValues(seqAsJavaList _)
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration, numPartitions).mapValues(seqAsJavaList _)
   }
 
-  def groupByKeyAndWindow(windowTime: Time, slideTime: Time, partitioner: Partitioner)
+  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration, partitioner: Partitioner)
   :JavaPairDStream[K, JList[V]] = {
-    dstream.groupByKeyAndWindow(windowTime, slideTime, partitioner).mapValues(seqAsJavaList _)
+    dstream.groupByKeyAndWindow(windowDuration, slideDuration, partitioner).mapValues(seqAsJavaList _)
   }
 
-  def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], windowTime: Time)
+  def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], windowDuration: Duration)
   :JavaPairDStream[K, V] = {
-    dstream.reduceByKeyAndWindow(reduceFunc, windowTime)
+    dstream.reduceByKeyAndWindow(reduceFunc, windowDuration)
   }
 
-  def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], windowTime: Time, slideTime: Time)
+  def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], windowDuration: Duration, slideDuration: Duration)
   :JavaPairDStream[K, V] = {
-    dstream.reduceByKeyAndWindow(reduceFunc, windowTime, slideTime)
+    dstream.reduceByKeyAndWindow(reduceFunc, windowDuration, slideDuration)
   }
 
   def reduceByKeyAndWindow(
     reduceFunc: Function2[V, V, V],
-    windowTime: Time,
-    slideTime: Time,
+    windowDuration: Duration,
+    slideDuration: Duration,
     numPartitions: Int): JavaPairDStream[K, V] = {
-    dstream.reduceByKeyAndWindow(reduceFunc, windowTime, slideTime, numPartitions)
+    dstream.reduceByKeyAndWindow(reduceFunc, windowDuration, slideDuration, numPartitions)
   }
 
-  def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], windowTime: Time, slideTime: Time,
+  def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], windowDuration: Duration, slideDuration: Duration,
       partitioner: Partitioner): JavaPairDStream[K, V] = {
-    dstream.reduceByKeyAndWindow(reduceFunc, windowTime, slideTime, partitioner)
+    dstream.reduceByKeyAndWindow(reduceFunc, windowDuration, slideDuration, partitioner)
   }
 
   def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], invReduceFunc: Function2[V, V, V],
-      windowTime: Time, slideTime: Time): JavaPairDStream[K, V] = {
-    dstream.reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowTime, slideTime)
+      windowDuration: Duration, slideDuration: Duration): JavaPairDStream[K, V] = {
+    dstream.reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration)
   }
 
   def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], invReduceFunc: Function2[V, V, V],
-      windowTime: Time, slideTime: Time, numPartitions: Int): JavaPairDStream[K, V] = {
-    dstream.reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowTime, slideTime, numPartitions)
+      windowDuration: Duration, slideDuration: Duration, numPartitions: Int): JavaPairDStream[K, V] = {
+    dstream.reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration, numPartitions)
   }
 
   def reduceByKeyAndWindow(reduceFunc: Function2[V, V, V], invReduceFunc: Function2[V, V, V],
-      windowTime: Time, slideTime: Time, partitioner: Partitioner)
+      windowDuration: Duration, slideDuration: Duration, partitioner: Partitioner)
       : JavaPairDStream[K, V] = {
-    dstream.reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowTime, slideTime, partitioner)
+    dstream.reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration, partitioner)
   }
 
-  def countByKeyAndWindow(windowTime: Time, slideTime: Time): JavaPairDStream[K, JLong] = {
-    JavaPairDStream.scalaToJavaLong(dstream.countByKeyAndWindow(windowTime, slideTime))
+  def countByKeyAndWindow(windowDuration: Duration, slideDuration: Duration): JavaPairDStream[K, JLong] = {
+    JavaPairDStream.scalaToJavaLong(dstream.countByKeyAndWindow(windowDuration, slideDuration))
   }
 
-  def countByKeyAndWindow(windowTime: Time, slideTime: Time, numPartitions: Int)
+  def countByKeyAndWindow(windowDuration: Duration, slideDuration: Duration, numPartitions: Int)
       : JavaPairDStream[K, Long] = {
-    dstream.countByKeyAndWindow(windowTime, slideTime, numPartitions)
+    dstream.countByKeyAndWindow(windowDuration, slideDuration, numPartitions)
   }
 
   def mapValues[U](f: JFunction[V, U]): JavaPairDStream[K, U] = {

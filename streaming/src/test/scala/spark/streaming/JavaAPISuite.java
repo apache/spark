@@ -29,7 +29,7 @@ public class JavaAPISuite implements Serializable {
 
   @Before
   public void setUp() {
-    sc = new JavaStreamingContext("local[2]", "test", new Time(1000));
+    sc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
   }
 
   @After
@@ -96,7 +96,7 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(7,8,9));
 
     JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
-    JavaDStream windowed = stream.window(new Time(2000));
+    JavaDStream windowed = stream.window(new Duration(2000));
     JavaTestUtils.attachTestOutputStream(windowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 4, 4);
 
@@ -104,7 +104,7 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void testWindowWithSlideTime() {
+  public void testWindowWithSlideDuration() {
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,2,3),
         Arrays.asList(4,5,6),
@@ -120,7 +120,7 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(13,14,15,16,17,18));
 
     JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
-    JavaDStream windowed = stream.window(new Time(4000), new Time(2000));
+    JavaDStream windowed = stream.window(new Duration(4000), new Duration(2000));
     JavaTestUtils.attachTestOutputStream(windowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 8, 4);
 
@@ -143,7 +143,7 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(13,14,15,16,17,18));
 
     JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
-    JavaDStream windowed = stream.tumble(new Time(2000));
+    JavaDStream windowed = stream.tumble(new Duration(2000));
     JavaTestUtils.attachTestOutputStream(windowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 6, 3);
 
@@ -267,7 +267,7 @@ public class JavaAPISuite implements Serializable {
 
     JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
     JavaDStream reducedWindowed = stream.reduceByWindow(new IntegerSum(),
-        new IntegerDifference(), new Time(2000), new Time(1000));
+        new IntegerDifference(), new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reducedWindowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(sc, 4, 4);
 
@@ -517,7 +517,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, List<String>> groupWindowed =
-        pairStream.groupByKeyAndWindow(new Time(2000), new Time(1000));
+        pairStream.groupByKeyAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(groupWindowed);
     List<List<Tuple2<String, List<String>>>> result = JavaTestUtils.runStreams(sc, 3, 3);
 
@@ -540,7 +540,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> reduceWindowed =
-        pairStream.reduceByKeyAndWindow(new IntegerSum(), new Time(2000), new Time(1000));
+        pairStream.reduceByKeyAndWindow(new IntegerSum(), new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 3, 3);
 
@@ -563,7 +563,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> reduceWindowed =
-        pairStream.reduceByKeyAndWindow(new IntegerSum(), new IntegerDifference(), new Time(2000), new Time(1000));
+        pairStream.reduceByKeyAndWindow(new IntegerSum(), new IntegerDifference(), new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 3, 3);
 
@@ -590,7 +590,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Long> counted =
-        pairStream.countByKeyAndWindow(new Time(2000), new Time(1000));
+        pairStream.countByKeyAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(sc, 3, 3);
 

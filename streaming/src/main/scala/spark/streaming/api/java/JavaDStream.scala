@@ -1,6 +1,6 @@
 package spark.streaming.api.java
 
-import spark.streaming.{Time, DStream}
+import spark.streaming.{Duration, Time, DStream}
 import spark.api.java.function.{Function => JFunction}
 import spark.api.java.JavaRDD
 import java.util.{List => JList}
@@ -22,7 +22,7 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
   /** Persists the RDDs of this DStream with the given storage level */
   def persist(storageLevel: StorageLevel): JavaDStream[T] = dstream.persist(storageLevel)
 
-  /** Method that generates a RDD for the given time */
+  /** Method that generates a RDD for the given duration */
   def compute(validTime: Time): JavaRDD[T] = {
     dstream.compute(validTime) match {
       case Some(rdd) => new JavaRDD(rdd)
@@ -33,34 +33,34 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
   /**
    * Return a new DStream which is computed based on windowed batches of this DStream.
    * The new DStream generates RDDs with the same interval as this DStream.
-   * @param windowTime width of the window; must be a multiple of this DStream's interval.
+   * @param windowDuration width of the window; must be a multiple of this DStream's interval.
    * @return
    */
-  def window(windowTime: Time): JavaDStream[T] =
-    dstream.window(windowTime)
+  def window(windowDuration: Duration): JavaDStream[T] =
+    dstream.window(windowDuration)
 
   /**
    * Return a new DStream which is computed based on windowed batches of this DStream.
-   * @param windowTime duration (i.e., width) of the window;
+   * @param windowDuration duration (i.e., width) of the window;
    *                   must be a multiple of this DStream's interval
-   * @param slideTime  sliding interval of the window (i.e., the interval after which
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                   the new DStream will generate RDDs); must be a multiple of this
    *                   DStream's interval
    */
-  def window(windowTime: Time, slideTime: Time): JavaDStream[T] =
-    dstream.window(windowTime, slideTime)
+  def window(windowDuration: Duration, slideDuration: Duration): JavaDStream[T] =
+    dstream.window(windowDuration, slideDuration)
 
   /**
    * Returns a new DStream which computed based on tumbling window on this DStream.
-   * This is equivalent to window(batchTime, batchTime).
-   * @param batchTime tumbling window duration; must be a multiple of this DStream's interval
+   * This is equivalent to window(batchDuration, batchDuration).
+   * @param batchDuration tumbling window duration; must be a multiple of this DStream's interval
    */
-  def tumble(batchTime: Time): JavaDStream[T] =
-    dstream.tumble(batchTime)
+  def tumble(batchDuration: Duration): JavaDStream[T] =
+    dstream.tumble(batchDuration)
 
   /**
    * Returns a new DStream by unifying data of another DStream with this DStream.
-   * @param that Another DStream having the same interval (i.e., slideTime) as this DStream.
+   * @param that Another DStream having the same interval (i.e., slideDuration) as this DStream.
    */
   def union(that: JavaDStream[T]): JavaDStream[T] =
     dstream.union(that.dstream)
