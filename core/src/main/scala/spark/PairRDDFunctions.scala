@@ -557,7 +557,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf) {
+      conf: JobConf = new JobConf(self.context.hadoopConfiguration)) {
     conf.setOutputKeyClass(keyClass)
     conf.setOutputValueClass(valueClass)
     // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
