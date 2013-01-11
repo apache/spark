@@ -294,7 +294,7 @@ class SparkContext(
         fm.erasure.asInstanceOf[Class[F]],
         km.erasure.asInstanceOf[Class[K]],
         vm.erasure.asInstanceOf[Class[V]],
-        hadoopConfiguration)
+        new Configuration(hadoopConfiguration))
   }
 
   /**
