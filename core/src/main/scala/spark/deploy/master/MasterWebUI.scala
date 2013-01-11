@@ -9,6 +9,9 @@ import cc.spray.Directives
 import cc.spray.directives._
 import cc.spray.typeconversion.TwirlSupport._
 import spark.deploy._
+import cc.spray.http.MediaTypes
+import JsonProtocol._
+import cc.spray.typeconversion.SprayJsonSupport._
 
 private[spark]
 class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Directives {
@@ -19,13 +22,19 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
   
   val handler = {
     get {
-      path("") {
-        completeWith {
+      (path("") & parameters('format ?)) {
+        case Some(js) if js.equalsIgnoreCase("json") =>
           val future = master ? RequestMasterState
-          future.map { 
-            masterState => spark.deploy.master.html.index.render(masterState.asInstanceOf[MasterState])
+          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+            ctx.complete(future.mapTo[MasterState])
           }
-        }
+        case _ =>
+          completeWith {
+            val future = master ? RequestMasterState
+            future.map {
+              masterState => spark.deploy.master.html.index.render(masterState.asInstanceOf[MasterState])
+            }
+          }
       } ~
       path("job") {
         parameter("jobId") { jobId =>
