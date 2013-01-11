@@ -200,6 +200,16 @@ To build the job, we also write a Maven `pom.xml` file that lists Spark as a dep
   <name>Simple Project</name>
   <packaging>jar</packaging>
   <version>1.0</version>
+  <repositories>
+    <repository>
+      <id>Spray.cc repository</id>
+      <url>http://repo.spray.cc</url>
+    </repository>
+    <repository>
+      <id>Typesafe repository</id>
+      <url>http://repo.typesafe.com/typesafe/releases</url>
+    </repository>
+  </repositories>
   <dependencies>
     <dependency> <!-- Spark dependency -->
       <groupId>org.spark-project</groupId>
