@@ -1,8 +1,10 @@
 package spark.util
 
 import java.io.OutputStream
+import java.util.concurrent.TimeUnit._
 
 class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends OutputStream {
+  val SyncIntervalNs = NANOSECONDS.convert(10, SECONDS)
   var lastSyncTime = System.nanoTime()
   var bytesWrittenSinceSync: Long = 0
 
@@ -28,20 +30,21 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
 
   def waitToWrite(numBytes: Int) {
     while (true) {
-      val now = System.nanoTime()
-      val elapsed = math.max(now - lastSyncTime, 1)
-      val rate = bytesWrittenSinceSync.toDouble / (elapsed / 1.0e9)
+      val now = System.nanoTime
+      val elapsedSecs = SECONDS.convert(max(now - lastSyncTime, 1), NANOSECONDS)
+      val rate = bytesWrittenSinceSync.toDouble / elapsedSecs
       if (rate < bytesPerSec) {
         // It's okay to write; just update some variables and return
         bytesWrittenSinceSync += numBytes
-        if (now > lastSyncTime + (1e10).toLong) {
-          // Ten seconds have passed since lastSyncTime; let's resync
+        if (now > lastSyncTime + SyncIntervalNs) {
+          // Sync interval has passed; let's resync
           lastSyncTime = now
           bytesWrittenSinceSync = numBytes
         }
-        return
       } else {
-        Thread.sleep(5)
+        // Calculate how much time we should sleep to bring ourselves to the desired rate.
+        val sleepTime = MILLISECONDS.convert((bytesWrittenSinceSync / bytesPerSec - elapsedSecs), SECONDS)
+        if (sleepTime > 0) Thread.sleep(sleepTime)
       }
     }
   }
