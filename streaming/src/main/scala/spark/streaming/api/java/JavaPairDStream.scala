@@ -1,6 +1,7 @@
 package spark.streaming.api.java
 
 import java.util.{List => JList}
+import java.lang.{Long => JLong}
 
 import scala.collection.JavaConversions._
 
@@ -13,6 +14,7 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.conf.Configuration
 import spark.api.java.JavaPairRDD
 import spark.storage.StorageLevel
+import java.lang
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val kManifiest: ClassManifest[K],
@@ -107,12 +109,12 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.combineByKey(createCombiner, mergeValue, mergeCombiners, partitioner)
   }
 
-  def countByKey(numPartitions: Int): JavaPairDStream[K, Long] = {
-    dstream.countByKey(numPartitions);
+  def countByKey(numPartitions: Int): JavaPairDStream[K, JLong] = {
+    JavaPairDStream.scalaToJavaLong(dstream.countByKey(numPartitions));
   }
 
-  def countByKey(): JavaPairDStream[K, Long] = {
-    dstream.countByKey();
+  def countByKey(): JavaPairDStream[K, JLong] = {
+    JavaPairDStream.scalaToJavaLong(dstream.countByKey());
   }
 
   def groupByKeyAndWindow(windowTime: Time, slideTime: Time): JavaPairDStream[K, JList[V]] = {
@@ -168,8 +170,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowTime, slideTime, partitioner)
   }
 
-  def countByKeyAndWindow(windowTime: Time, slideTime: Time): JavaPairDStream[K, Long] = {
-    dstream.countByKeyAndWindow(windowTime, slideTime)
+  def countByKeyAndWindow(windowTime: Time, slideTime: Time): JavaPairDStream[K, JLong] = {
+    JavaPairDStream.scalaToJavaLong(dstream.countByKeyAndWindow(windowTime, slideTime))
   }
 
   def countByKeyAndWindow(windowTime: Time, slideTime: Time, numPartitions: Int)
@@ -279,5 +281,9 @@ object JavaPairDStream {
     implicit val cmv: ClassManifest[V] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[V]]
     new JavaPairDStream[K, V](dstream.dstream)
+  }
+
+  def scalaToJavaLong[K: ClassManifest](dstream: JavaPairDStream[K, Long]): JavaPairDStream[K, JLong] = {
+    StreamingContext.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
   }
 }

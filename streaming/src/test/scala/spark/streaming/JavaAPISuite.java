@@ -1,6 +1,7 @@
 package spark.streaming;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -492,8 +493,7 @@ public class JavaAPISuite implements Serializable {
         sc, inputData, 1);
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    // TODO: Below fails with compile error with <String, Long>... wtf?
-    JavaPairDStream<String, Object> counted = pairStream.countByKey();
+    JavaPairDStream<String, Long> counted = pairStream.countByKey();
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(sc, 2, 2);
 
@@ -589,8 +589,8 @@ public class JavaAPISuite implements Serializable {
         sc, inputData, 1);
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    // TODO: Below fails with compile error with <String, Long>... wtf?
-    JavaPairDStream<String, Object> counted = pairStream.countByKeyAndWindow(new Time(2000), new Time(1000));
+    JavaPairDStream<String, Long> counted =
+        pairStream.countByKeyAndWindow(new Time(2000), new Time(1000));
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(sc, 3, 3);
 
