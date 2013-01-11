@@ -502,6 +502,12 @@
 
     <profile>
       <id>hadoop2</id>
+      <activation>
+        <property>
+          <name>hadoop</name>
+          <value>2</value>
+        </property>
+      </activation>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
       </properties>

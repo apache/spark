@@ -121,6 +121,12 @@
     </profile>
     <profile>
       <id>hadoop2</id>
+      <activation>
+        <property>
+          <name>hadoop</name>
+          <value>2</value>
+        </property>
+      </activation>
       <properties>
         <classifier>hadoop2</classifier>
       </properties>
