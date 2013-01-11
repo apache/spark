@@ -7,10 +7,11 @@ import akka.util.Timeout
 import akka.util.duration._
 import cc.spray.Directives
 import cc.spray.typeconversion.TwirlSupport._
-import spark.deploy.{JsonProtocol, WorkerState, RequestWorkerState}
 import cc.spray.http.MediaTypes
-import JsonProtocol._
 import cc.spray.typeconversion.SprayJsonSupport._
+
+import spark.deploy.{WorkerState, RequestWorkerState}
+import spark.deploy.JsonProtocol._
 
 private[spark]
 class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Directives {

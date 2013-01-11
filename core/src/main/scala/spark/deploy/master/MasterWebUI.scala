@@ -8,10 +8,11 @@ import akka.util.duration._
 import cc.spray.Directives
 import cc.spray.directives._
 import cc.spray.typeconversion.TwirlSupport._
-import spark.deploy._
 import cc.spray.http.MediaTypes
-import JsonProtocol._
 import cc.spray.typeconversion.SprayJsonSupport._
+
+import spark.deploy._
+import spark.deploy.JsonProtocol._
 
 private[spark]
 class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Directives {
