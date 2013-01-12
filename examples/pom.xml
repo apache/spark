@@ -47,7 +47,7 @@
       <id>hadoop1</id>
       <activation>
         <property>
-          <name>!hadoop</name>
+          <name>!hadoopVersion</name>
         </property>
       </activation>
       <dependencies>
@@ -79,7 +79,7 @@
       <id>hadoop2</id>
       <activation>
         <property>
-          <name>hadoop</name>
+          <name>hadoopVersion</name>
           <value>2</value>
         </property>
       </activation>

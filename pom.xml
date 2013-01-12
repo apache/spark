@@ -483,9 +483,10 @@
       <id>hadoop1</id>
       <activation>
         <property>
-          <name>!hadoop</name>
+          <name>!hadoopVersion</name>
         </property>
       </activation>
+
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
       </properties>
@@ -504,7 +505,7 @@
       <id>hadoop2</id>
       <activation>
         <property>
-          <name>hadoop</name>
+          <name>hadoopVersion</name>
           <value>2</value>
         </property>
       </activation>
