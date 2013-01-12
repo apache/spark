@@ -41,6 +41,7 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
           lastSyncTime = now
           bytesWrittenSinceSync = numBytes
         }
+        return
       } else {
         // Calculate how much time we should sleep to bring ourselves to the desired rate.
         val sleepTime = MILLISECONDS.convert((bytesWrittenSinceSync / bytesPerSec - elapsedSecs), SECONDS)
