@@ -44,6 +44,7 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
         return
       } else {
         // Calculate how much time we should sleep to bring ourselves to the desired rate.
+        // Based on throttler in Kafka (https://github.com/kafka-dev/kafka/blob/master/core/src/main/scala/kafka/utils/Throttler.scala)
         val sleepTime = MILLISECONDS.convert((bytesWrittenSinceSync / bytesPerSec - elapsedSecs), SECONDS)
         if (sleepTime > 0) Thread.sleep(sleepTime)
       }
