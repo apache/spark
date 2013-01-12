@@ -31,7 +31,7 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
   def waitToWrite(numBytes: Int) {
     while (true) {
       val now = System.nanoTime
-      val elapsedSecs = SECONDS.convert(max(now - lastSyncTime, 1), NANOSECONDS)
+      val elapsedSecs = SECONDS.convert(math.max(now - lastSyncTime, 1), NANOSECONDS)
       val rate = bytesWrittenSinceSync.toDouble / elapsedSecs
       if (rate < bytesPerSec) {
         // It's okay to write; just update some variables and return
