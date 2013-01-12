@@ -14,8 +14,8 @@ class RateLimitedOutputStreamSuite extends FunSuite {
 
   test("write") {
     val underlying = new ByteArrayOutputStream
-    val data = "X" * 1000
-    val stream = new RateLimitedOutputStream(underlying, 100)
+    val data = "X" * 41000
+    val stream = new RateLimitedOutputStream(underlying, 10000)
     val elapsedNs = benchmark { stream.write(data.getBytes("UTF-8")) }
     assert(SECONDS.convert(elapsedNs, NANOSECONDS) == 4)
   }
