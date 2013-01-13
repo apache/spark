@@ -6,8 +6,8 @@ import java.io.OutputStream
 import java.util.concurrent.TimeUnit._
 
 class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends OutputStream {
-  val SyncIntervalNs = NANOSECONDS.convert(10, SECONDS)
-  val ChunkSize = 8192
+  val SYNC_INTERVAL = NANOSECONDS.convert(10, SECONDS)
+  val CHUNK_SIZE = 8192
   var lastSyncTime = System.nanoTime
   var bytesWrittenSinceSync: Long = 0
 
@@ -22,7 +22,7 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
 
   @tailrec
   override final def write(bytes: Array[Byte], offset: Int, length: Int) {
-    val writeSize = math.min(length - offset, ChunkSize)
+    val writeSize = math.min(length - offset, CHUNK_SIZE)
     if (writeSize > 0) {
       waitToWrite(writeSize)
       out.write(bytes, offset, writeSize)
@@ -46,7 +46,7 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
     if (rate < bytesPerSec) {
       // It's okay to write; just update some variables and return
       bytesWrittenSinceSync += numBytes
-      if (now > lastSyncTime + SyncIntervalNs) {
+      if (now > lastSyncTime + SYNC_INTERVAL) {
         // Sync interval has passed; let's resync
         lastSyncTime = now
         bytesWrittenSinceSync = numBytes
