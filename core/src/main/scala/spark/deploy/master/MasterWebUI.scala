@@ -38,20 +38,36 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
           }
       } ~
       path("job") {
-        parameter("jobId") { jobId =>
-          completeWith {
+        parameters("jobId", 'format ?) {
+          case (jobId, Some(js)) if (js.equalsIgnoreCase("json")) =>
             val future = master ? RequestMasterState
-            future.map { state => 
-              val masterState = state.asInstanceOf[MasterState]
-              
-              // A bit ugly an inefficient, but we won't have a number of jobs 
-              // so large that it will make a significant difference.
-              (masterState.activeJobs ++ masterState.completedJobs).find(_.id == jobId) match {
-                case Some(job) => spark.deploy.master.html.job_details.render(job)
-                case _ => null
+            val jobInfo = for (masterState <- future.mapTo[MasterState]) yield {
+              masterState.activeJobs.find(_.id == jobId) match {
+                case Some(job) => job
+                case _ => masterState.completedJobs.find(_.id == jobId) match {
+                  case Some(job) => job
+                  case _ => null
+                }
               }
             }
-          }
+            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+              ctx.complete(jobInfo.mapTo[JobInfo])
+            }
+          case (jobId, _) =>
+            completeWith {
+              val future = master ? RequestMasterState
+              future.map { state =>
+                val masterState = state.asInstanceOf[MasterState]
+
+                masterState.activeJobs.find(_.id == jobId) match {
+                  case Some(job) => spark.deploy.master.html.job_details.render(job)
+                  case _ => masterState.completedJobs.find(_.id == jobId) match {
+                    case Some(job) => spark.deploy.master.html.job_details.render(job)
+                    case _ => null
+                  }
+                }
+              }
+            }
         }
       } ~
       pathPrefix("static") {

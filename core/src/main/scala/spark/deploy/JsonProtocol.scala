@@ -1,6 +1,7 @@
 package spark.deploy
 
 import master.{JobInfo, WorkerInfo}
+import worker.ExecutorRunner
 import cc.spray.json._
 
 /**
@@ -30,6 +31,24 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
       "submitdate" -> JsString(obj.submitDate.toString))
   }
 
+  implicit object JobDescriptionJsonFormat extends RootJsonWriter[JobDescription] {
+    def write(obj: JobDescription) = JsObject(
+      "name" -> JsString(obj.name),
+      "cores" -> JsNumber(obj.cores),
+      "memoryperslave" -> JsNumber(obj.memoryPerSlave),
+      "user" -> JsString(obj.user)
+    )
+  }
+
+  implicit object ExecutorRunnerJsonFormat extends RootJsonWriter[ExecutorRunner] {
+    def write(obj: ExecutorRunner) = JsObject(
+      "id" -> JsNumber(obj.execId),
+      "memory" -> JsNumber(obj.memory),
+      "jobid" -> JsString(obj.jobId),
+      "jobdesc" -> obj.jobDesc.toJson.asJsObject
+    )
+  }
+
   implicit object MasterStateJsonFormat extends RootJsonWriter[MasterState] {
     def write(obj: MasterState) = JsObject(
       "url" -> JsString("spark://" + obj.uri),
@@ -51,7 +70,9 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
       "cores" -> JsNumber(obj.cores),
       "coresused" -> JsNumber(obj.coresUsed),
       "memory" -> JsNumber(obj.memory),
-      "memoryused" -> JsNumber(obj.memoryUsed)
+      "memoryused" -> JsNumber(obj.memoryUsed),
+      "executors" -> JsArray(obj.executors.toList.map(_.toJson)),
+      "finishedexecutors" -> JsArray(obj.finishedExecutors.toList.map(_.toJson))
     )
   }
 }
