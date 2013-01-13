@@ -2,7 +2,7 @@ package spark.streaming.dstream
 
 import spark.{RDD, Partitioner}
 import spark.SparkContext._
-import spark.streaming.{DStream, Time}
+import spark.streaming.{Duration, DStream, Time}
 
 private[streaming]
 class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
@@ -15,7 +15,7 @@ class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
 
   override def dependencies = List(parent)
 
-  override def slideTime: Time = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K,C)]] = {
     parent.getOrCompute(validTime) match {

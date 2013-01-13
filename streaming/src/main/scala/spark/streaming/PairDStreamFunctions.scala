@@ -21,13 +21,9 @@ extends Serializable {
  
   def ssc = self.ssc
 
-  def defaultPartitioner(numPartitions: Int = self.ssc.sc.defaultParallelism) = {
+  private[streaming] def defaultPartitioner(numPartitions: Int = self.ssc.sc.defaultParallelism) = {
     new HashPartitioner(numPartitions)
   }
-
-  /* ---------------------------------- */
-  /* DStream operations for key-value pairs */
-  /* ---------------------------------- */
 
   def groupByKey(): DStream[(K, Seq[V])] = {
     groupByKey(defaultPartitioner())
@@ -69,59 +65,59 @@ extends Serializable {
     self.map(x => (x._1, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
   }
 
-  def groupByKeyAndWindow(windowTime: Time, slideTime: Time): DStream[(K, Seq[V])] = {
-    groupByKeyAndWindow(windowTime, slideTime, defaultPartitioner())
+  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration): DStream[(K, Seq[V])] = {
+    groupByKeyAndWindow(windowDuration, slideDuration, defaultPartitioner())
   }
 
   def groupByKeyAndWindow(
-      windowTime: Time, 
-      slideTime: Time, 
+      windowDuration: Duration,
+      slideDuration: Duration,
       numPartitions: Int
     ): DStream[(K, Seq[V])] = {
-    groupByKeyAndWindow(windowTime, slideTime, defaultPartitioner(numPartitions))
+    groupByKeyAndWindow(windowDuration, slideDuration, defaultPartitioner(numPartitions))
   }
 
   def groupByKeyAndWindow(
-      windowTime: Time,
-      slideTime: Time,
+      windowDuration: Duration,
+      slideDuration: Duration,
       partitioner: Partitioner
     ): DStream[(K, Seq[V])] = {
-    self.window(windowTime, slideTime).groupByKey(partitioner)
+    self.window(windowDuration, slideDuration).groupByKey(partitioner)
   }
 
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V,
-      windowTime: Time
+      windowDuration: Duration
     ): DStream[(K, V)] = {
-    reduceByKeyAndWindow(reduceFunc, windowTime, self.slideTime, defaultPartitioner())
+    reduceByKeyAndWindow(reduceFunc, windowDuration, self.slideDuration, defaultPartitioner())
   }
 
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V, 
-      windowTime: Time, 
-      slideTime: Time
+      windowDuration: Duration,
+      slideDuration: Duration
     ): DStream[(K, V)] = {
-    reduceByKeyAndWindow(reduceFunc, windowTime, slideTime, defaultPartitioner())
+    reduceByKeyAndWindow(reduceFunc, windowDuration, slideDuration, defaultPartitioner())
   }
 
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V, 
-      windowTime: Time, 
-      slideTime: Time, 
+      windowDuration: Duration,
+      slideDuration: Duration,
       numPartitions: Int
     ): DStream[(K, V)] = {
-    reduceByKeyAndWindow(reduceFunc, windowTime, slideTime, defaultPartitioner(numPartitions))
+    reduceByKeyAndWindow(reduceFunc, windowDuration, slideDuration, defaultPartitioner(numPartitions))
   }
 
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V,
-      windowTime: Time,
-      slideTime: Time,
+      windowDuration: Duration,
+      slideDuration: Duration,
       partitioner: Partitioner
     ): DStream[(K, V)] = {
     val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
     self.reduceByKey(cleanedReduceFunc, partitioner)
-        .window(windowTime, slideTime)
+        .window(windowDuration, slideDuration)
         .reduceByKey(cleanedReduceFunc, partitioner)
   }
 
@@ -134,51 +130,51 @@ extends Serializable {
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V,
       invReduceFunc: (V, V) => V,
-      windowTime: Time,
-      slideTime: Time
+      windowDuration: Duration,
+      slideDuration: Duration
     ): DStream[(K, V)] = {
 
     reduceByKeyAndWindow(
-      reduceFunc, invReduceFunc, windowTime, slideTime, defaultPartitioner())
+      reduceFunc, invReduceFunc, windowDuration, slideDuration, defaultPartitioner())
   }
 
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V,
       invReduceFunc: (V, V) => V,
-      windowTime: Time,
-      slideTime: Time,
+      windowDuration: Duration,
+      slideDuration: Duration,
       numPartitions: Int
     ): DStream[(K, V)] = {
 
     reduceByKeyAndWindow(
-      reduceFunc, invReduceFunc, windowTime, slideTime, defaultPartitioner(numPartitions))
+      reduceFunc, invReduceFunc, windowDuration, slideDuration, defaultPartitioner(numPartitions))
   }
 
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V,
       invReduceFunc: (V, V) => V,
-      windowTime: Time,
-      slideTime: Time,
+      windowDuration: Duration,
+      slideDuration: Duration,
       partitioner: Partitioner
     ): DStream[(K, V)] = {
 
     val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
     val cleanedInvReduceFunc = ssc.sc.clean(invReduceFunc)
     new ReducedWindowedDStream[K, V](
-      self, cleanedReduceFunc, cleanedInvReduceFunc, windowTime, slideTime, partitioner)
+      self, cleanedReduceFunc, cleanedInvReduceFunc, windowDuration, slideDuration, partitioner)
   }
 
   def countByKeyAndWindow(
-      windowTime: Time,
-      slideTime: Time,
+      windowDuration: Duration,
+      slideDuration: Duration,
       numPartitions: Int = self.ssc.sc.defaultParallelism
     ): DStream[(K, Long)] = {
 
     self.map(x => (x._1, 1L)).reduceByKeyAndWindow(
       (x: Long, y: Long) => x + y,
       (x: Long, y: Long) => x - y,
-      windowTime,
-      slideTime,
+      windowDuration,
+      slideDuration,
       numPartitions
     )
   }

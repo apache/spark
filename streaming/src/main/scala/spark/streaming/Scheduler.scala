@@ -14,7 +14,7 @@ class Scheduler(ssc: StreamingContext) extends Logging {
   val concurrentJobs = System.getProperty("spark.streaming.concurrentJobs", "1").toInt
   val jobManager = new JobManager(ssc, concurrentJobs)
 
-  val checkpointWriter = if (ssc.checkpointInterval != null && ssc.checkpointDir != null) {
+  val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
     new CheckpointWriter(ssc.checkpointDir)
   } else {
     null
@@ -22,7 +22,8 @@ class Scheduler(ssc: StreamingContext) extends Logging {
 
   val clockClass = System.getProperty("spark.streaming.clock", "spark.streaming.util.SystemClock")
   val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
-  val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds, generateRDDs(_))
+  val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
+    longTime => generateRDDs(new Time(longTime)))
 
   def start() {
     // If context was started from checkpoint, then restart timer such that
@@ -41,7 +42,7 @@ class Scheduler(ssc: StreamingContext) extends Logging {
       timer.restart(graph.zeroTime.milliseconds)
       logInfo("Scheduler's timer restarted")
     } else {
-      val firstTime = Time(timer.start())
+      val firstTime = new Time(timer.start())
       graph.start(firstTime - ssc.graph.batchDuration)
       logInfo("Scheduler's timer started")
     }
@@ -64,7 +65,7 @@ class Scheduler(ssc: StreamingContext) extends Logging {
   }
 
   private def doCheckpoint(time: Time) {
-    if (ssc.checkpointInterval != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointInterval)) {
+    if (ssc.checkpointDuration != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
       val startTime = System.currentTimeMillis()
       ssc.graph.updateCheckpointData(time)
       checkpointWriter.write(new Checkpoint(ssc, time))

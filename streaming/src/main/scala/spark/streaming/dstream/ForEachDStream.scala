@@ -1,7 +1,7 @@
 package spark.streaming.dstream
 
 import spark.RDD
-import spark.streaming.{DStream, Job, Time}
+import spark.streaming.{Duration, DStream, Job, Time}
 
 private[streaming]
 class ForEachDStream[T: ClassManifest] (
@@ -11,7 +11,7 @@ class ForEachDStream[T: ClassManifest] (
 
   override def dependencies = List(parent)
 
-  override def slideTime: Time = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[Unit]] = None
 

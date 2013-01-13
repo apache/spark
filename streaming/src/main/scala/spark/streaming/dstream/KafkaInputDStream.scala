@@ -110,20 +110,19 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
   val ZK_TIMEOUT = 10000
 
   // Handles pushing data into the BlockManager
-  lazy protected val dataHandler = new DataHandler(this, storageLevel)
+  lazy protected val blockGenerator = new BlockGenerator(storageLevel)
   // Keeps track of the current offsets. Maps from (broker, topic, group, part) -> Offset
   lazy val offsets = HashMap[KafkaPartitionKey, Long]()
   // Connection to Kafka
   var consumerConnector : ZookeeperConsumerConnector = null
 
   def onStop() {
-    dataHandler.stop()
+    blockGenerator.stop()
   }
 
   def onStart() {
 
-    // Starting the DataHandler that buffers blocks and pushes them into them BlockManager
-    dataHandler.start()
+    blockGenerator.start()
 
     // In case we are using multiple Threads to handle Kafka Messages
     val executorPool = Executors.newFixedThreadPool(topics.values.reduce(_ + _))
@@ -171,8 +170,8 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
   private class MessageHandler(stream: KafkaStream[String]) extends Runnable {
     def run() {
       logInfo("Starting MessageHandler.")
-      stream.takeWhile { msgAndMetadata => 
-        dataHandler += msgAndMetadata.message
+      stream.takeWhile { msgAndMetadata =>
+        blockGenerator += msgAndMetadata.message
 
         // Updating the offet. The key is (broker, topic, group, partition).
         val key = KafkaPartitionKey(msgAndMetadata.topicInfo.brokerId, msgAndMetadata.topic, 
@@ -189,7 +188,7 @@ class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String,
 
   // NOT USED - Originally intended for fault-tolerance
   // class KafkaDataHandler(receiver: KafkaReceiver, storageLevel: StorageLevel) 
-  // extends DataHandler[Any](receiver, storageLevel) {
+  // extends BufferingBlockCreator[Any](receiver, storageLevel) {
 
   //   override def createBlock(blockId: String, iterator: Iterator[Any]) : Block = {
   //     // Creates a new Block with Kafka-specific Metadata

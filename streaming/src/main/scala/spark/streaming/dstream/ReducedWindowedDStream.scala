@@ -9,26 +9,26 @@ import spark.SparkContext._
 import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
-import spark.streaming.{Interval, Time, DStream}
+import spark.streaming.{Duration, Interval, Time, DStream}
 
 private[streaming]
 class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     parent: DStream[(K, V)],
     reduceFunc: (V, V) => V,
     invReduceFunc: (V, V) => V, 
-    _windowTime: Time,
-    _slideTime: Time,
+    _windowDuration: Duration,
+    _slideDuration: Duration,
     partitioner: Partitioner
   ) extends DStream[(K,V)](parent.ssc) {
 
-  assert(_windowTime.isMultipleOf(parent.slideTime),
-    "The window duration of ReducedWindowedDStream (" + _slideTime + ") " +
-      "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")"
+  assert(_windowDuration.isMultipleOf(parent.slideDuration),
+    "The window duration of ReducedWindowedDStream (" + _slideDuration + ") " +
+      "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
-  assert(_slideTime.isMultipleOf(parent.slideTime),
-    "The slide duration of ReducedWindowedDStream (" + _slideTime + ") " +
-      "must be multiple of the slide duration of parent DStream (" + parent.slideTime + ")"
+  assert(_slideDuration.isMultipleOf(parent.slideDuration),
+    "The slide duration of ReducedWindowedDStream (" + _slideDuration + ") " +
+      "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
   // Reduce each batch of data using reduceByKey which will be further reduced by window 
@@ -39,15 +39,15 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
   super.persist(StorageLevel.MEMORY_ONLY_SER)
   reducedStream.persist(StorageLevel.MEMORY_ONLY_SER)
 
-  def windowTime: Time =  _windowTime
+  def windowDuration: Duration =  _windowDuration
 
   override def dependencies = List(reducedStream)
 
-  override def slideTime: Time = _slideTime
+  override def slideDuration: Duration = _slideDuration
 
   override val mustCheckpoint = true
 
-  override def parentRememberDuration: Time = rememberDuration + windowTime
+  override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
   override def persist(storageLevel: StorageLevel): DStream[(K,V)] = {
     super.persist(storageLevel)
@@ -55,7 +55,7 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     this
   }
 
-  override def checkpoint(interval: Time): DStream[(K, V)] = {
+  override def checkpoint(interval: Duration): DStream[(K, V)] = {
     super.checkpoint(interval)
     //reducedStream.checkpoint(interval)
     this
@@ -66,11 +66,11 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     val invReduceF = invReduceFunc
 
     val currentTime = validTime
-    val currentWindow = Interval(currentTime - windowTime + parent.slideTime, currentTime)
-    val previousWindow = currentWindow - slideTime
+    val currentWindow = new Interval(currentTime - windowDuration + parent.slideDuration, currentTime)
+    val previousWindow = currentWindow - slideDuration
 
-    logDebug("Window time = " + windowTime)
-    logDebug("Slide time = " + slideTime)
+    logDebug("Window time = " + windowDuration)
+    logDebug("Slide time = " + slideDuration)
     logDebug("ZeroTime = " + zeroTime)
     logDebug("Current window = " + currentWindow)
     logDebug("Previous window = " + previousWindow)
@@ -87,11 +87,11 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     //
 
     // Get the RDDs of the reduced values in "old time steps"
-    val oldRDDs = reducedStream.slice(previousWindow.beginTime, currentWindow.beginTime - parent.slideTime)
+    val oldRDDs = reducedStream.slice(previousWindow.beginTime, currentWindow.beginTime - parent.slideDuration)
     logDebug("# old RDDs = " + oldRDDs.size)
 
     // Get the RDDs of the reduced values in "new time steps"
-    val newRDDs = reducedStream.slice(previousWindow.endTime + parent.slideTime, currentWindow.endTime)
+    val newRDDs = reducedStream.slice(previousWindow.endTime + parent.slideDuration, currentWindow.endTime)
     logDebug("# new RDDs = " + newRDDs.size)
 
     // Get the RDD of the reduced value of the previous window

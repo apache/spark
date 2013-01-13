@@ -1,6 +1,6 @@
 package spark.streaming.dstream
 
-import spark.streaming.{DStream, Time}
+import spark.streaming.{Duration, DStream, Time}
 import spark.RDD
 import spark.SparkContext._
 
@@ -12,7 +12,7 @@ class MapValuedDStream[K: ClassManifest, V: ClassManifest, U: ClassManifest](
 
   override def dependencies = List(parent)
 
-  override def slideTime: Time = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[(K, U)]] = {
     parent.getOrCompute(validTime).map(_.mapValues[U](mapValueFunc))

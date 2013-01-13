@@ -4,7 +4,7 @@ import spark.RDD
 import spark.Partitioner
 import spark.SparkContext._
 import spark.storage.StorageLevel
-import spark.streaming.{Time, DStream}
+import spark.streaming.{Duration, Time, DStream}
 
 private[streaming]
 class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManifest](
@@ -18,14 +18,14 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S <: AnyRef : ClassManife
 
   override def dependencies = List(parent)
 
-  override def slideTime = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override val mustCheckpoint = true
 
   override def compute(validTime: Time): Option[RDD[(K, S)]] = {
 
     // Try to get the previous state RDD
-    getOrCompute(validTime - slideTime) match {
+    getOrCompute(validTime - slideDuration) match {
 
       case Some(prevStateRDD) => {    // If previous state RDD exists
 

@@ -1,6 +1,6 @@
 package spark.streaming.dstream
 
-import spark.streaming.{DStream, Time}
+import spark.streaming.{Duration, DStream, Time}
 import spark.RDD
 
 private[streaming]
@@ -11,7 +11,7 @@ class FlatMappedDStream[T: ClassManifest, U: ClassManifest](
 
   override def dependencies = List(parent)
 
-  override def slideTime: Time = parent.slideTime
+  override def slideDuration: Duration = parent.slideDuration
 
   override def compute(validTime: Time): Option[RDD[U]] = {
     parent.getOrCompute(validTime).map(_.flatMap(flatMapFunc))

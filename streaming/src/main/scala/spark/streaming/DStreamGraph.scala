@@ -12,8 +12,8 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   private val outputStreams = new ArrayBuffer[DStream[_]]()
 
   private[streaming] var zeroTime: Time = null
-  private[streaming] var batchDuration: Time = null
-  private[streaming] var rememberDuration: Time = null
+  private[streaming] var batchDuration: Duration = null
+  private[streaming] var rememberDuration: Duration = null
   private[streaming] var checkpointInProgress = false
 
   private[streaming] def start(time: Time) {
@@ -41,7 +41,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  private[streaming] def setBatchDuration(duration: Time) {
+  private[streaming] def setBatchDuration(duration: Duration) {
     this.synchronized {
       if (batchDuration != null) {
         throw new Exception("Batch duration already set as " + batchDuration +
@@ -51,7 +51,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     batchDuration = duration
   }
 
-  private[streaming] def remember(duration: Time) {
+  private[streaming] def remember(duration: Duration) {
     this.synchronized {
       if (rememberDuration != null) {
         throw new Exception("Batch duration already set as " + batchDuration +
