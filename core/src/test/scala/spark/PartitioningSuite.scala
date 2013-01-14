@@ -106,6 +106,11 @@ class PartitioningSuite extends FunSuite with BeforeAndAfter {
     assert(grouped2.leftOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.rightOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.cogroup(reduced2).partitioner === grouped2.partitioner)
+
+    assert(grouped2.map(_ => 1).partitioner === None)
+    assert(grouped2.mapValues(_ => 1).partitioner === grouped2.partitioner)
+    assert(grouped2.flatMapValues(_ => Seq(1)).partitioner === grouped2.partitioner)
+    assert(grouped2.filter(_._1 > 4).partitioner === grouped2.partitioner)
   }
 
   test("partitioning Java arrays should fail") {
