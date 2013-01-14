@@ -441,8 +441,10 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * key in both RDDs. HashPartitioner is used to partition each generated RDD into default number
    * of partitions.
    */
-  def cogroup[W: ClassManifest](other: DStream[(K, W)]): DStream[(K, (Seq[V], Seq[W]))] = {
-    dstream.cogroup(other)
+  def cogroup[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (JList[V], JList[W])] = {
+    implicit val cm: ClassManifest[W] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+    dstream.cogroup(other.dstream).mapValues(t => (seqAsJavaList(t._1), seqAsJavaList((t._2))))
   }
 
   /**
