@@ -38,9 +38,9 @@ public class JavaFlumeEventCount {
 
     flumeStream.count();
 
-    flumeStream.count().map(new Function<Integer, String>() {
+    flumeStream.count().map(new Function<Long, String>() {
       @Override
-      public String call(Integer in) {
+      public String call(Long in) {
         return "Received " + in + " flume events.";
       }
     }).print();
