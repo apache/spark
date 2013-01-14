@@ -16,18 +16,17 @@ class SocketInputDStream[T: ClassManifest](
   ) extends NetworkInputDStream[T](ssc_) {
 
   def createReceiver(): NetworkReceiver[T] = {
-    new SocketReceiver(id, host, port, bytesToObjects, storageLevel)
+    new SocketReceiver(host, port, bytesToObjects, storageLevel)
   }
 }
 
 private[streaming]
 class SocketReceiver[T: ClassManifest](
-    streamId: Int,
     host: String,
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[T](streamId) {
+  ) extends NetworkReceiver[T] {
 
   lazy protected val blockGenerator = new BlockGenerator(storageLevel)
 

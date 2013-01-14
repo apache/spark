@@ -17,6 +17,15 @@ import akka.util.duration._
 import spark.streaming.util.{RecurringTimer, SystemClock}
 import java.util.concurrent.ArrayBlockingQueue
 
+/**
+ * Abstract class for defining any InputDStream that has to start a receiver on worker
+ * nodes to receive external data. Specific implementations of NetworkInputDStream must
+ * define the createReceiver() function that creates the receiver object of type
+ * [[spark.streaming.dstream.NetworkReceiver]] that will be sent to the workers to receive
+ * data.
+ * @param ssc_ Streaming context that will execute this input stream
+ * @tparam T Class type of the object of this stream
+ */
 abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
@@ -25,7 +34,7 @@ abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : Streaming
   val id = ssc.getNewNetworkStreamId()
 
   /**
-   * This method creates the receiver object that will be sent to the workers
+   * Creates the receiver object that will be sent to the worker nodes
    * to receive data. This method needs to defined by any specific implementation
    * of a NetworkInputDStream.
    */
@@ -48,7 +57,11 @@ private[streaming] case class StopReceiver(msg: String) extends NetworkReceiverM
 private[streaming] case class ReportBlock(blockId: String, metadata: Any) extends NetworkReceiverMessage
 private[streaming] case class ReportError(msg: String) extends NetworkReceiverMessage
 
-abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Serializable with Logging {
+/**
+ * Abstract class of a receiver that can be run on worker nodes to receive external data. See
+ * [[spark.streaming.dstream.NetworkInputDStream]] for an explanation.
+ */
+abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Logging {
 
   initLogging()
 
@@ -59,17 +72,22 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
 
   lazy protected val receivingThread = Thread.currentThread()
 
-  /** This method will be called to start receiving data. */
+  protected var streamId: Int = -1
+
+  /**
+   * This method will be called to start receiving data. All your receiver
+   * starting code should be implemented by defining this function.
+   */
   protected def onStart()
 
   /** This method will be called to stop receiving data. */
   protected def onStop()
 
-  /** This method conveys a placement preference (hostname) for this receiver. */
+  /** Conveys a placement preference (hostname) for this receiver. */
   def getLocationPreference() : Option[String] = None
 
   /**
-   * This method starts the receiver. First is accesses all the lazy members to
+   * Starts the receiver. First is accesses all the lazy members to
    * materialize them. Then it calls the user-defined onStart() method to start
    * other threads, etc required to receiver the data.
    */
@@ -92,7 +110,7 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
   }
 
   /**
-   * This method stops the receiver. First it interrupts the main receiving thread,
+   * Stops the receiver. First it interrupts the main receiving thread,
    * that is, the thread that called receiver.start(). Then it calls the user-defined
    * onStop() method to stop other threads and/or do cleanup.
    */
@@ -103,7 +121,7 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
   }
 
   /**
-   * This method stops the receiver and reports to exception to the tracker.
+   * Stops the receiver and reports to exception to the tracker.
    * This should be called whenever an exception has happened on any thread
    * of the receiver.
    */
@@ -115,7 +133,7 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
 
 
   /**
-   * This method pushes a block (as iterator of values) into the block manager.
+   * Pushes a block (as iterator of values) into the block manager.
    */
   def pushBlock(blockId: String, iterator: Iterator[T], metadata: Any, level: StorageLevel) {
     val buffer = new ArrayBuffer[T] ++ iterator
@@ -125,7 +143,7 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
   }
 
   /**
-   * This method pushes a block (as bytes) into the block manager.
+   * Pushes a block (as bytes) into the block manager.
    */
   def pushBlock(blockId: String, bytes: ByteBuffer, metadata: Any, level: StorageLevel) {
     env.blockManager.putBytes(blockId, bytes, level)
@@ -155,6 +173,10 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
         stop()
         tracker ! DeregisterReceiver(streamId, msg)
     }
+  }
+
+  protected[streaming] def setStreamId(id: Int) {
+    streamId = id
   }
 
   /**
@@ -202,7 +224,7 @@ abstract class NetworkReceiver[T: ClassManifest](val streamId: Int) extends Seri
         val newBlockBuffer = currentBuffer
         currentBuffer = new ArrayBuffer[T]
         if (newBlockBuffer.size > 0) {
-          val blockId = "input-" + NetworkReceiver.this.streamId + "- " + (time - blockInterval)
+          val blockId = "input-" + NetworkReceiver.this.streamId + "-" + (time - blockInterval)
           val newBlock = createBlock(blockId, newBlockBuffer.toIterator)
           blocksForPushing.add(newBlock)
         }

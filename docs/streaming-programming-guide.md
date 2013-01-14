@@ -43,7 +43,7 @@ A complete list of input sources is available in the [StreamingContext API docum
 
 
 # DStream Operations
-Once an input stream has been created, you can transform it using _stream operators_. Most of these operators return new DStreams which you can further transform. Eventually, you'll need to call an _output operator_, which forces evaluation of the stream by writing data out to an external source.
+Once an input DStream has been created, you can transform it using _DStream operators_. Most of these operators return new DStreams which you can further transform. Eventually, you'll need to call an _output operator_, which forces evaluation of the DStream by writing data out to an external source.
 
 ## Transformations
 
@@ -53,11 +53,11 @@ DStreams support many of the transformations available on normal Spark RDD's:
 <tr><th style="width:25%">Transformation</th><th>Meaning</th></tr>
 <tr>
   <td> <b>map</b>(<i>func</i>) </td>
-  <td> Return a new stream formed by passing each element of the source through a function <i>func</i>. </td>
+  <td> Returns a new DStream formed by passing each element of the source through a function <i>func</i>. </td>
 </tr>
 <tr>
   <td> <b>filter</b>(<i>func</i>) </td>
-  <td> Return a new stream formed by selecting those elements of the source on which <i>func</i> returns true. </td>
+  <td> Returns a new stream formed by selecting those elements of the source on which <i>func</i> returns true. </td>
 </tr>
 <tr>
   <td> <b>flatMap</b>(<i>func</i>) </td>
@@ -88,55 +88,60 @@ DStreams support many of the transformations available on normal Spark RDD's:
 </tr>
 <tr>
   <td> <b>cogroup</b>(<i>otherStream</i>, [<i>numTasks</i>]) </td>
-  <td> When called on streams of type (K, V) and (K, W), returns a stream of (K, Seq[V], Seq[W]) tuples. This operation is also called <code>groupWith</code>. </td>
+  <td> When called on DStream of type (K, V) and (K, W), returns a DStream of (K, Seq[V], Seq[W]) tuples.</td>
 </tr>
 <tr>
   <td> <b>reduce</b>(<i>func</i>) </td>
-  <td> Create a new single-element stream by aggregating the elements of the stream using a function func (which takes two arguments and returns one). The function should be associative so that it can be computed correctly in parallel. </td>
+  <td> Returns a new DStream of single-element RDDs by aggregating the elements of the stream using a function func (which takes two arguments and returns one). The function should be associative so that it can be computed correctly in parallel. </td>
+</tr>
+<tr>
+  <td> <b>transform</b>(<i>func</i>) </td>
+  <td> Returns a new DStream by applying func (a RDD-to-RDD function) to every RDD of the stream. This can be used to do arbitrary RDD operations on the DStream. </td>
 </tr>
 </table>
 
-Spark Streaming features windowed computations, which allow you to report statistics over a sliding window of data. All window functions take a <i>windowTime</i>, which represents the width of the window and a <i>slideTime</i>, which represents the frequency during which the window is calculated. 
+Spark Streaming features windowed computations, which allow you to report statistics over a sliding window of data. All window functions take a <i>windowDuration</i>, which represents the width of the window and a <i>slideTime</i>, which represents the frequency during which the window is calculated.
 
 <table class="table">
 <tr><th style="width:25%">Transformation</th><th>Meaning</th></tr>
 <tr>
-  <td> <b>window</b>(<i>windowTime</i>, </i>slideTime</i>) </td>
-  <td> Return a new stream which is computed based on windowed batches of the source stream. <i>windowTime</i> is the width of the window and <i>slideTime</i> is the frequency during which the window is calculated. Both times must be multiples of the batch interval.
+  <td> <b>window</b>(<i>windowDuration</i>, </i>slideTime</i>) </td>
+  <td> Return a new stream which is computed based on windowed batches of the source stream. <i>windowDuration</i> is the width of the window and <i>slideTime</i> is the frequency during which the window is calculated. Both times must be multiples of the batch interval.
   </td>
 </tr>
 <tr>
-  <td> <b>countByWindow</b>(<i>windowTime</i>, </i>slideTime</i>) </td>
-  <td> Return a sliding count of elements in the stream. <i>windowTime</i> and <i>slideTime</i> are exactly as defined in <code>window()</code>.
+  <td> <b>countByWindow</b>(<i>windowDuration</i>, </i>slideTime</i>) </td>
+  <td> Return a sliding count of elements in the stream. <i>windowDuration</i> and <i>slideDuration</i> are exactly as defined in <code>window()</code>.
   </td>
 </tr>
 <tr>
-  <td> <b>reduceByWindow</b>(<i>func</i>, <i>windowTime</i>, </i>slideTime</i>) </td>
-  <td> Return a new single-element stream, created by aggregating elements in the stream over a sliding interval using <i>func</i>. The function should be associative so that it can be computed correctly in parallel. <i>windowTime</i> and <i>slideTime</i> are exactly as defined in <code>window()</code>.
+  <td> <b>reduceByWindow</b>(<i>func</i>, <i>windowDuration</i>, </i>slideDuration</i>) </td>
+  <td> Return a new single-element stream, created by aggregating elements in the stream over a sliding interval using <i>func</i>. The function should be associative so that it can be computed correctly in parallel. <i>windowDuration</i> and <i>slideDuration</i> are exactly as defined in <code>window()</code>.
   </td>
 </tr>
 <tr>
-  <td> <b>groupByKeyAndWindow</b>(windowTime, slideTime, [<i>numTasks</i>]) 
+  <td> <b>groupByKeyAndWindow</b>(windowDuration, slideDuration, [<i>numTasks</i>])
   </td>
   <td> When called on a stream of (K, V) pairs, returns a stream of (K, Seq[V]) pairs over a sliding window. <br />
-<b>Note:</b> By default, this uses only 8 parallel tasks to do the grouping. You can pass an optional <code>numTasks</code> argument to set a different number of tasks. <i>windowTime</i> and <i>slideTime</i> are exactly as defined in <code>window()</code>.
+<b>Note:</b> By default, this uses only 8 parallel tasks to do the grouping. You can pass an optional <code>numTasks</code> argument to set a different number of tasks. <i>windowDuration</i> and <i>slideDuration</i> are exactly as defined in <code>window()</code>.
 </td>
 </tr>
 <tr>
   <td> <b>reduceByKeyAndWindow</b>(<i>func</i>, [<i>numTasks</i>]) </td>
   <td> When called on a stream of (K, V) pairs, returns a stream of (K, V) pairs where the values for each key are aggregated using the given reduce function over batches within a sliding window. Like in <code>groupByKeyAndWindow</code>, the number of reduce tasks is configurable through an optional second argument. 
- <i>windowTime</i> and <i>slideTime</i> are exactly as defined in <code>window()</code>.
+ <i>windowDuration</i> and <i>slideDuration</i> are exactly as defined in <code>window()</code>.
 </td> 
 </tr>
 <tr>
   <td> <b>countByKeyAndWindow</b>([<i>numTasks</i>]) </td>
   <td> When called on a stream of (K, V) pairs, returns a stream of (K, Int) pairs where the values for each key are the count within a sliding window. Like in <code>countByKeyAndWindow</code>, the number of reduce tasks is configurable through an optional second argument. 
- <i>windowTime</i> and <i>slideTime</i> are exactly as defined in <code>window()</code>.
+ <i>windowDuration</i> and <i>slideDuration</i> are exactly as defined in <code>window()</code>.
 </td> 
 </tr>
 
 </table>
 
+A complete list of DStream operations is available in the API documentation of [DStream](api/streaming/index.html#spark.streaming.DStream) and [PairDStreamFunctions](api/streaming/index.html#spark.streaming.PairDStreamFunctions).
 
 ## Output Operations
 When an output operator is called, it triggers the computation of a stream. Currently the following output operators are defined:
@@ -144,7 +149,7 @@ When an output operator is called, it triggers the computation of a stream. Curr
 <table class="table">
 <tr><th style="width:25%">Operator</th><th>Meaning</th></tr>
 <tr>
-  <td> <b>foreachRDD</b>(<i>func</i>) </td>
+  <td> <b>foreach</b>(<i>func</i>) </td>
   <td> The fundamental output operator. Applies a function, <i>func</i>, to each RDD generated from the stream. This function should have side effects, such as printing output, saving the RDD to external files, or writing it over the network to an external system. </td>
 </tr>
 
@@ -155,18 +160,18 @@ When an output operator is called, it triggers the computation of a stream. Curr
 
 <tr>
   <td> <b>saveAsObjectFiles</b>(<i>prefix</i>, [<i>suffix</i>]) </td>
-  <td> Save this DStream's contents as a <code>SequenceFile</code> of serialized objects. The file name at each batch interval is calculated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>.
+  <td> Save this DStream's contents as a <code>SequenceFile</code> of serialized objects. The file name at each batch interval is generated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>.
   </td>
 </tr>
 
 <tr>
   <td> <b>saveAsTextFiles</b>(<i>prefix</i>, [<i>suffix</i>]) </td>
-  <td> Save this DStream's contents as a text files. The file name at each batch interval is calculated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>. </td>
+  <td> Save this DStream's contents as a text files. The file name at each batch interval is generated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>. </td>
 </tr>
 
 <tr>
   <td> <b>saveAsHadoopFiles</b>(<i>prefix</i>, [<i>suffix</i>]) </td>
-  <td> Save this DStream's contents as a Hadoop file. The file name at each batch interval is calculated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>. </td>
+  <td> Save this DStream's contents as a Hadoop file. The file name at each batch interval is generated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>. </td>
 </tr>
 
 </table>

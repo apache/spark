@@ -26,13 +26,13 @@ class RawInputDStream[T: ClassManifest](
   ) extends NetworkInputDStream[T](ssc_ ) with Logging {
 
   def createReceiver(): NetworkReceiver[T] = {
-    new RawNetworkReceiver(id, host, port, storageLevel).asInstanceOf[NetworkReceiver[T]]
+    new RawNetworkReceiver(host, port, storageLevel).asInstanceOf[NetworkReceiver[T]]
   }
 }
 
 private[streaming]
-class RawNetworkReceiver(streamId: Int, host: String, port: Int, storageLevel: StorageLevel)
-  extends NetworkReceiver[Any](streamId) {
+class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
+  extends NetworkReceiver[Any] {
 
   var blockPushingThread: Thread = null
 

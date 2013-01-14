@@ -96,15 +96,15 @@ class KafkaInputDStream[T: ClassManifest](
   } */
 
   def createReceiver(): NetworkReceiver[T] = {
-    new KafkaReceiver(id, host, port,  groupId, topics, initialOffsets, storageLevel)
+    new KafkaReceiver(host, port,  groupId, topics, initialOffsets, storageLevel)
         .asInstanceOf[NetworkReceiver[T]]
   }
 }
 
 private[streaming]
-class KafkaReceiver(streamId: Int, host: String, port: Int, groupId: String, 
+class KafkaReceiver(host: String, port: Int, groupId: String,
   topics: Map[String, Int], initialOffsets: Map[KafkaPartitionKey, Long], 
-  storageLevel: StorageLevel) extends NetworkReceiver[Any](streamId) {
+  storageLevel: StorageLevel) extends NetworkReceiver[Any] {
 
   // Timeout for establishing a connection to Zookeper in ms.
   val ZK_TIMEOUT = 10000

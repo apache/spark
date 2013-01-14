@@ -224,7 +224,9 @@ class WindowOperationsSuite extends TestSuiteBase {
     val windowDuration = Seconds(2)
     val slideDuration = Seconds(1)
     val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
-    val operation = (s: DStream[Int]) => s.countByWindow(windowDuration, slideDuration)
+    val operation = (s: DStream[Int]) => {
+      s.countByWindow(windowDuration, slideDuration).map(_.toInt)
+    }
     testOperation(input, operation, expectedOutput, numBatches, true)
   }
 

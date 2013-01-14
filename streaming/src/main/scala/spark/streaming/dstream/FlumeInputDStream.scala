@@ -26,7 +26,7 @@ class FlumeInputDStream[T: ClassManifest](
 ) extends NetworkInputDStream[SparkFlumeEvent](ssc_) {
 
   override def createReceiver(): NetworkReceiver[SparkFlumeEvent] = {
-    new FlumeReceiver(id, host, port, storageLevel)
+    new FlumeReceiver(host, port, storageLevel)
   }
 }
 
@@ -112,11 +112,10 @@ class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
   * Flume Avro interface.*/
 private[streaming]
 class FlumeReceiver(
-    streamId: Int,
     host: String,
     port: Int,
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[SparkFlumeEvent](streamId) {
+  ) extends NetworkReceiver[SparkFlumeEvent] {
 
   lazy val blockGenerator = new BlockGenerator(storageLevel)
 
