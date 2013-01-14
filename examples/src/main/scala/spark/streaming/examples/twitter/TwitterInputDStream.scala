@@ -23,16 +23,17 @@ class TwitterInputDStream(
     ) extends NetworkInputDStream[Status](ssc_)  {
 
   override def createReceiver(): NetworkReceiver[Status] = {
-    new TwitterReceiver(id, username, password, filters, storageLevel)
+    new TwitterReceiver(username, password, filters, storageLevel)
   }
 }
 
-class TwitterReceiver(streamId: Int,
-                      username: String,
-                      password: String,
-                      filters: Seq[String],
-                      storageLevel: StorageLevel
-    ) extends NetworkReceiver[Status](streamId) {
+class TwitterReceiver(
+    username: String,
+    password: String,
+    filters: Seq[String],
+    storageLevel: StorageLevel
+  ) extends NetworkReceiver[Status] {
+
   var twitterStream: TwitterStream = _
   lazy val blockGenerator = new BlockGenerator(storageLevel)
 

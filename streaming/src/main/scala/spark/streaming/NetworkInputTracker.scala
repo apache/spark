@@ -18,7 +18,10 @@ private[streaming] case class RegisterReceiver(streamId: Int, receiverActor: Act
 private[streaming] case class AddBlocks(streamId: Int, blockIds: Seq[String], metadata: Any) extends NetworkInputTrackerMessage
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String) extends NetworkInputTrackerMessage
 
-
+/**
+ * This class manages the execution of the receivers of NetworkInputDStreams.
+ */
+private[streaming]
 class NetworkInputTracker(
     @transient ssc: StreamingContext, 
     @transient networkInputStreams: Array[NetworkInputDStream[_]])
@@ -32,16 +35,20 @@ class NetworkInputTracker(
 
   var currentTime: Time = null
 
+  /** Start the actor and receiver execution thread. */
   def start() {
     ssc.env.actorSystem.actorOf(Props(new NetworkInputTrackerActor), "NetworkInputTracker")
     receiverExecutor.start()
   }
 
+  /** Stop the receiver execution thread. */
   def stop() {
+    // TODO: stop the actor as well
     receiverExecutor.interrupt()
     receiverExecutor.stopReceivers()
   }
 
+  /** Return all the blocks received from a receiver. */
   def getBlockIds(receiverId: Int, time: Time): Array[String] = synchronized {
     val queue =  receivedBlockIds.synchronized {
       receivedBlockIds.getOrElse(receiverId, new Queue[String]())
@@ -53,6 +60,7 @@ class NetworkInputTracker(
     result.toArray
   }
 
+  /** Actor to receive messages from the receivers. */
   private class NetworkInputTrackerActor extends Actor {
     def receive = {
       case RegisterReceiver(streamId, receiverActor) => {
@@ -83,7 +91,8 @@ class NetworkInputTracker(
       }
     }
   }
-  
+
+  /** This thread class runs all the receivers on the cluster.  */
   class ReceiverExecutor extends Thread {
     val env = ssc.env
         
@@ -97,13 +106,22 @@ class NetworkInputTracker(
         stopReceivers()
       }
     }
-    
+
+    /**
+     * Get the receivers from the NetworkInputDStreams, distributes them to the
+     * worker nodes as a parallel collection, and runs them.
+     */
     def startReceivers() {
-      val receivers = networkInputStreams.map(_.createReceiver())
+      val receivers = networkInputStreams.map(nis => {
+        val rcvr = nis.createReceiver()
+        rcvr.setStreamId(nis.id)
+        rcvr
+      })
 
       // Right now, we only honor preferences if all receivers have them
       val hasLocationPreferences = receivers.map(_.getLocationPreference().isDefined).reduce(_ && _)
 
+      // Create the parallel collection of receivers to distributed them on the worker nodes
       val tempRDD =
         if (hasLocationPreferences) {
           val receiversWithPreferences = receivers.map(r => (r, Seq(r.getLocationPreference().toString)))
@@ -113,21 +131,21 @@ class NetworkInputTracker(
           ssc.sc.makeRDD(receivers, receivers.size)
         }
 
+      // Function to start the receiver on the worker node
       val startReceiver = (iterator: Iterator[NetworkReceiver[_]]) => {
         if (!iterator.hasNext) {
           throw new Exception("Could not start receiver as details not found.")
         }
         iterator.next().start()
       }
+      // Distribute the receivers and start them
       ssc.sc.runJob(tempRDD, startReceiver)
     }
     
+    /** Stops the receivers. */
     def stopReceivers() {
-      //implicit val ec = env.actorSystem.dispatcher
+      // Signal the receivers to stop
       receiverInfo.values.foreach(_ ! StopReceiver)
-      //val listOfFutures = receiverInfo.values.map(_.ask(StopReceiver)(timeout)).toList
-      //val futureOfList = Future.sequence(listOfFutures)
-      //Await.result(futureOfList, timeout)
     }
   }
 }
