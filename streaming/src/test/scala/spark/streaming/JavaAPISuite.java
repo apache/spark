@@ -1,5 +1,6 @@
 package spark.streaming;
 
+import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
@@ -546,6 +547,38 @@ public class JavaAPISuite implements Serializable {
     JavaPairDStream<String, Integer> reduceWindowed =
         pairStream.reduceByKeyAndWindow(new IntegerSum(), new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 3, 3);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
+  public void testUpdateStateByKey() {
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
+
+    List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, Integer>("california", 4),
+            new Tuple2<String, Integer>("new york", 5)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 14),
+            new Tuple2<String, Integer>("new york", 9)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 10),
+            new Tuple2<String, Integer>("new york", 4)));
+
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, Integer> updated = pairStream.updateStateByKey(
+      new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>(){
+        @Override
+        public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
+          int out = 0;
+          for (Integer v: values) {
+            out = out + v;
+          }
+          return Optional.of(out);
+        }
+      });
+    JavaTestUtils.attachTestOutputStream(updated);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(sc, 3, 3);
 
     Assert.assertEquals(expected, result);

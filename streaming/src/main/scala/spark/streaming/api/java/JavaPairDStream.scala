@@ -15,6 +15,7 @@ import org.apache.hadoop.conf.Configuration
 import spark.api.java.JavaPairRDD
 import spark.storage.StorageLevel
 import java.lang
+import com.google.common.base.Optional
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val kManifiest: ClassManifest[K],
@@ -419,7 +420,33 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.countByKeyAndWindow(windowDuration, slideDuration, numPartitions)
   }
 
-  // TODO: Update State
+  /**
+   * Create a new "state" DStream where the state for each key is updated by applying
+   * the given function on the previous state of the key and the new values of each key.
+   * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
+   * @param updateFunc State update function. If `this` function returns None, then
+   *                   corresponding state key-value pair will be eliminated.
+   * @tparam S State type
+   */
+  def updateStateByKey[S](updateFunc: JFunction2[JList[V], Optional[S], Optional[S]])
+  : JavaPairDStream[K, S] = {
+    implicit val cm: ClassManifest[S] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[S]]
+
+    def scalaFunc(values: Seq[V], state: Option[S]): Option[S] = {
+      val list: JList[V] = values
+      val scalaState: Optional[S] = state match {
+        case Some(s) => Optional.of(s)
+        case _ => Optional.absent()
+      }
+      val result: Optional[S] = updateFunc.apply(list, scalaState)
+      result.isPresent match {
+        case true => Some(result.get())
+        case _ => None
+      }
+    }
+    dstream.updateStateByKey(scalaFunc _)
+  }
 
   def mapValues[U](f: JFunction[V, U]): JavaPairDStream[K, U] = {
     implicit val cm: ClassManifest[U] =
