@@ -9,20 +9,20 @@ import spark.storage.StorageLevel
 class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassManifest[T])
     extends JavaDStreamLike[T, JavaDStream[T]] {
 
-  /** Returns a new DStream containing only the elements that satisfy a predicate. */
+  /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaDStream[T] =
     dstream.filter((x => f(x).booleanValue()))
 
-  /** Persists RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
+  /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
   def cache(): JavaDStream[T] = dstream.cache()
 
-  /** Persists RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
+  /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
   def persist(): JavaDStream[T] = dstream.cache()
 
-  /** Persists the RDDs of this DStream with the given storage level */
+  /** Persist the RDDs of this DStream with the given storage level */
   def persist(storageLevel: StorageLevel): JavaDStream[T] = dstream.persist(storageLevel)
 
-  /** Method that generates a RDD for the given duration */
+  /** Generate an RDD for the given duration */
   def compute(validTime: Time): JavaRDD[T] = {
     dstream.compute(validTime) match {
       case Some(rdd) => new JavaRDD(rdd)
@@ -51,7 +51,7 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
     dstream.window(windowDuration, slideDuration)
 
   /**
-   * Returns a new DStream which computed based on tumbling window on this DStream.
+   * Return a new DStream which computed based on tumbling window on this DStream.
    * This is equivalent to window(batchDuration, batchDuration).
    * @param batchDuration tumbling window duration; must be a multiple of this DStream's interval
    */
@@ -59,7 +59,7 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
     dstream.tumble(batchDuration)
 
   /**
-   * Returns a new DStream by unifying data of another DStream with this DStream.
+   * Return a new DStream by unifying data of another DStream with this DStream.
    * @param that Another DStream having the same interval (i.e., slideDuration) as this DStream.
    */
   def union(that: JavaDStream[T]): JavaDStream[T] =
