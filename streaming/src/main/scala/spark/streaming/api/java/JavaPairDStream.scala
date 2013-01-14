@@ -419,7 +419,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.countByKeyAndWindow(windowDuration, slideDuration, numPartitions)
   }
 
-
   // TODO: Update State
 
   def mapValues[U](f: JFunction[V, U]): JavaPairDStream[K, U] = {
@@ -443,7 +442,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * of partitions.
    */
   def cogroup[W: ClassManifest](other: DStream[(K, W)]): DStream[(K, (Seq[V], Seq[W]))] = {
-    cogroup(other, defaultPartitioner())
+    dstream.cogroup(other)
   }
 
   /**
