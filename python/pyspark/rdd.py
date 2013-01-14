@@ -33,6 +33,7 @@ class RDD(object):
         self._jrdd = jrdd
         self.is_cached = False
         self.ctx = ctx
+        self._partitionFunc = None
 
     @property
     def context(self):
@@ -497,7 +498,7 @@ class RDD(object):
         return python_right_outer_join(self, other, numSplits)
 
     # TODO: add option to control map-side combining
-    def partitionBy(self, numSplits, hashFunc=hash):
+    def partitionBy(self, numSplits, partitionFunc=hash):
         """
         Return a copy of the RDD partitioned using the specified partitioner.
 
@@ -514,17 +515,21 @@ class RDD(object):
         def add_shuffle_key(split, iterator):
             buckets = defaultdict(list)
             for (k, v) in iterator:
-                buckets[hashFunc(k) % numSplits].append((k, v))
+                buckets[partitionFunc(k) % numSplits].append((k, v))
             for (split, items) in buckets.iteritems():
                 yield str(split)
                 yield dump_pickle(Batch(items))
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
         pairRDD = self.ctx.jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
-        partitioner = self.ctx.jvm.spark.api.python.PythonPartitioner(numSplits)
-        jrdd = pairRDD.partitionBy(partitioner)
-        jrdd = jrdd.map(self.ctx.jvm.ExtractValue())
-        return RDD(jrdd, self.ctx)
+        partitioner = self.ctx.jvm.PythonPartitioner(numSplits,
+                                                     id(partitionFunc))
+        jrdd = pairRDD.partitionBy(partitioner).values()
+        rdd = RDD(jrdd, self.ctx)
+        # This is required so that id(partitionFunc) remains unique, even if
+        # partitionFunc is a lambda:
+        rdd._partitionFunc = partitionFunc
+        return rdd
 
     # TODO: add control over map-side aggregation
     def combineByKey(self, createCombiner, mergeValue, mergeCombiners,
