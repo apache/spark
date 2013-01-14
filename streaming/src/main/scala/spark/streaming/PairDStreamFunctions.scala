@@ -363,7 +363,7 @@ extends Serializable {
    *                   corresponding state key-value pair will be eliminated.
    * @tparam S State type
    */
-  def updateStateByKey[S <: AnyRef : ClassManifest](
+  def updateStateByKey[S: ClassManifest](
       updateFunc: (Seq[V], Option[S]) => Option[S]
     ): DStream[(K, S)] = {
     updateStateByKey(updateFunc, defaultPartitioner())
@@ -378,7 +378,7 @@ extends Serializable {
    * @param numPartitions Number of partitions of each RDD in the new DStream.
    * @tparam S State type
    */
-  def updateStateByKey[S <: AnyRef : ClassManifest](
+  def updateStateByKey[S: ClassManifest](
       updateFunc: (Seq[V], Option[S]) => Option[S],
       numPartitions: Int
     ): DStream[(K, S)] = {
@@ -394,7 +394,7 @@ extends Serializable {
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new DStream.
    * @tparam S State type
    */
-  def updateStateByKey[S <: AnyRef : ClassManifest](
+  def updateStateByKey[S: ClassManifest](
       updateFunc: (Seq[V], Option[S]) => Option[S],
       partitioner: Partitioner
     ): DStream[(K, S)] = {
@@ -417,7 +417,7 @@ extends Serializable {
    * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
    * @tparam S State type
    */
-  def updateStateByKey[S <: AnyRef : ClassManifest](
+  def updateStateByKey[S: ClassManifest](
       updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
       partitioner: Partitioner,
       rememberPartitioner: Boolean
