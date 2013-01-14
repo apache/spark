@@ -5,20 +5,19 @@ import org.scalatest.FunSuite
 import scala.collection.mutable.HashMap
 
 import akka.actor._
-import akka.dispatch._
-import akka.pattern.ask
+import scala.concurrent.{Await, Future}
 import akka.remote._
-import akka.util.Duration
+import scala.concurrent.duration.Duration
 import akka.util.Timeout
-import akka.util.duration._
+import scala.concurrent.duration._
 
 class CacheTrackerSuite extends FunSuite {
   // Send a message to an actor and wait for a reply, in a blocking manner
   private def ask(actor: ActorRef, message: Any): Any = {
     try {
       val timeout = 10.seconds
-      val future = actor.ask(message)(timeout)
-      return Await.result(future, timeout)
+      val future: Future[Any] = akka.pattern.ask(actor, message)(timeout)
+      Await.result(future, timeout)
     } catch {
       case e: Exception =>
         throw new SparkException("Error communicating with actor", e)

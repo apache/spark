@@ -5,12 +5,12 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
 import akka.actor._
-import akka.dispatch._
+import scala.concurrent.Await
 import akka.pattern.ask
 import akka.remote._
-import akka.util.Duration
+import scala.concurrent.duration.Duration
 import akka.util.Timeout
-import akka.util.duration._
+import scala.concurrent.duration._
 
 import spark.storage.BlockManager
 import spark.storage.StorageLevel

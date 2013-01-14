@@ -2,7 +2,7 @@ package spark.deploy
 
 import master.{JobInfo, WorkerInfo}
 import worker.ExecutorRunner
-import cc.spray.json._
+import spray.json._
 
 /**
  * spray-json helper class containing implicit conversion to json for marshalling responses
