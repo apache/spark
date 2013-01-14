@@ -81,7 +81,7 @@ object RawTextHelper {
    * before real workload starts.
    */
   def warmUp(sc: SparkContext) {
-    for(i <- 0 to 4) {
+    for(i <- 0 to 1) {
       sc.parallelize(1 to 200000, 1000)
         .map(_ % 1331).map(_.toString)
         .mapPartitions(splitAndCountPartitions).reduceByKey(_ + _, 10)
