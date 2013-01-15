@@ -1,7 +1,6 @@
 package spark
 
 import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
 import org.scalatest.prop.Checkers
 
 import scala.collection.mutable.ArrayBuffer
@@ -23,18 +22,7 @@ object FailureSuiteState {
   }
 }
 
-class FailureSuite extends FunSuite with BeforeAndAfter {
-  
-  var sc: SparkContext = _
-    
-  after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-  }
+class FailureSuite extends FunSuite with LocalSparkContext {
   
   // Run a 3-task map job in which task 1 deterministically fails once, and check
   // whether the job completes successfully and we ran 4 tasks in total.
