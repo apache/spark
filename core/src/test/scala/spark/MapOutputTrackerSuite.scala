@@ -81,6 +81,7 @@ class MapOutputTrackerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("remote fetch") {
+    System.clearProperty("spark.master.host")
     val (actorSystem, boundPort) =
       AkkaUtils.createActorSystem("test", "localhost", 0)
     System.setProperty("spark.master.port", boundPort.toString)
@@ -107,6 +108,7 @@ class MapOutputTrackerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("simulatenous fetch fails") {
+    System.clearProperty("spark.master.host")
     val dummyActorSystem = ActorSystem("testDummy")
     val dummyTracker = new MapOutputTracker(dummyActorSystem, true)
     dummyTracker.registerShuffle(10, 1)
