@@ -1,8 +1,8 @@
 package spark.api.java.function;
 
 import scala.Tuple2;
-import scala.reflect.ClassManifest;
-import scala.reflect.ClassManifest$;
+import scala.reflect.ClassTag;
+import scala.reflect.ClassTag$;
 import scala.runtime.AbstractFunction1;
 
 import java.io.Serializable;
@@ -18,11 +18,11 @@ public abstract class PairFunction<T, K, V>
 
   public abstract Tuple2<K, V> call(T t) throws Exception;
 
-  public ClassManifest<K> keyType() {
-    return (ClassManifest<K>) ClassManifest$.MODULE$.fromClass(Object.class);
+  public ClassTag<K> keyType() {
+    return (ClassTag<K>) ClassTag$.MODULE$.apply(Object.class);
   }
 
-  public ClassManifest<V> valueType() {
-    return (ClassManifest<V>) ClassManifest$.MODULE$.fromClass(Object.class);
+  public ClassTag<V> valueType() {
+    return (ClassTag<V>) ClassTag$.MODULE$.apply(Object.class);
   }
 }

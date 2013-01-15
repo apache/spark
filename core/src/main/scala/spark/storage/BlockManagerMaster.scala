@@ -4,10 +4,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.dispatch.Await
+import scala.concurrent.Await
 import akka.pattern.ask
-import akka.util.{Duration, Timeout}
-import akka.util.duration._
+import scala.concurrent.duration._
 
 import spark.{Logging, SparkException, Utils}
 

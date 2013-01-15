@@ -14,9 +14,9 @@ import scala.collection.mutable.SynchronizedQueue
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 
-import akka.dispatch.{Await, Promise, ExecutionContext, Future}
-import akka.util.Duration
-import akka.util.duration._
+import scala.concurrent.{Await, Promise, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
 
 private[spark] case class ConnectionManagerId(host: String, port: Int) {
   def toSocketAddress() = new InetSocketAddress(host, port)

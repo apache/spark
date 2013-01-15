@@ -3,11 +3,11 @@ package spark.scheduler.cluster
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import akka.actor._
-import akka.util.duration._
+import scala.concurrent.duration._
 import akka.pattern.ask
 
 import spark.{SparkException, Logging, TaskState}
-import akka.dispatch.Await
+import scala.concurrent.Await
 import java.util.concurrent.atomic.AtomicInteger
 import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
 

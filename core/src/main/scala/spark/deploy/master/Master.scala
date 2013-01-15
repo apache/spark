@@ -49,7 +49,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
   }
 
   def startWebUi() {
-    val webUi = new MasterWebUI(context.system, self)
+    val webUi = new MasterWebUI(self)
     try {
       AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
     } catch {
