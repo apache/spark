@@ -39,19 +39,36 @@ class Accumulable[R, T] (
   def += (term: T) { value_ = param.addAccumulator(value_, term) }
 
   /**
+   * Add more data to this accumulator / accumulable
+   * @param term the data to add
+   */
+  def add(term: T) { value_ = param.addAccumulator(value_, term) }
+
+  /**
    * Merge two accumulable objects together
-   * 
+   *
    * Normally, a user will not want to use this version, but will instead call `+=`.
-   * @param term the other Accumulable that will get merged with this
+   * @param term the other `R` that will get merged with this
    */
   def ++= (term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
+   * Merge two accumulable objects together
+   *
+   * Normally, a user will not want to use this version, but will instead call `add`.
+   * @param term the other `R` that will get merged with this
+   */
+  def merge(term: R) { value_ = param.addInPlace(value_, term)}
+
+  /**
    * Access the accumulator's current value; only allowed on master.
    */
-  def value = {
-    if (!deserialized) value_
-    else throw new UnsupportedOperationException("Can't read accumulator value in task")
+  def value: R = {
+    if (!deserialized) {
+      value_
+    } else {
+      throw new UnsupportedOperationException("Can't read accumulator value in task")
+    }
   }
 
   /**
@@ -68,9 +85,16 @@ class Accumulable[R, T] (
   /**
    * Set the accumulator's value; only allowed on master.
    */
-  def value_= (r: R) {
-    if (!deserialized) value_ = r
+  def value_= (newValue: R) {
+    if (!deserialized) value_ = newValue
     else throw new UnsupportedOperationException("Can't assign accumulator value in task")
+  }
+
+  /**
+   * Set the accumulator's value; only allowed on master
+   */
+  def setValue(newValue: R) {
+    this.value = newValue
   }
  
   // Called by Java when deserializing an object

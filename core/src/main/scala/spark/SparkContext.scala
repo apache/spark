@@ -396,11 +396,12 @@ class SparkContext(
     new Accumulator(initialValue, param)
 
   /**
-   * Create an [[spark.Accumulable]] shared variable, with a `+=` method
+   * Create an [[spark.Accumulable]] shared variable, to which tasks can add values with `+=`.
+   * Only the master can access the accumuable's `value`.
    * @tparam T accumulator type
    * @tparam R type that can be added to the accumulator
    */
-  def accumulable[T,R](initialValue: T)(implicit param: AccumulableParam[T,R]) =
+  def accumulable[T, R](initialValue: T)(implicit param: AccumulableParam[T, R]) =
     new Accumulable(initialValue, param)
 
   /**
@@ -418,7 +419,7 @@ class SparkContext(
    * Broadcast a read-only variable to the cluster, returning a [[spark.Broadcast]] object for
    * reading it in distributed functions. The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T] (value, isLocal)
+  def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
 
   /**
    * Add a file to be downloaded into the working directory of this Spark job on every node.

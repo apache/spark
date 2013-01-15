@@ -216,6 +216,13 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
     // Test that a shuffle on the file works, because this used to be a bug
     assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
   }
+
+  test("keys and values") {
+    sc = new SparkContext("local", "test")
+    val rdd = sc.parallelize(Array((1, "a"), (2, "b")))
+    assert(rdd.keys.collect().toList === List(1, 2))
+    assert(rdd.values.collect().toList === List("a", "b"))
+  }
 }
 
 object ShuffleSuite {

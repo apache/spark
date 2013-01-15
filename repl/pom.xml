@@ -72,6 +72,11 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+      <activation>
+        <property>
+          <name>!hadoopVersion</name>
+        </property>
+      </activation>
       <properties>
         <classifier>hadoop1</classifier>
       </properties>
@@ -116,6 +121,12 @@
     </profile>
     <profile>
       <id>hadoop2</id>
+      <activation>
+        <property>
+          <name>hadoopVersion</name>
+          <value>2</value>
+        </property>
+      </activation>
       <properties>
         <classifier>hadoop2</classifier>
       </properties>

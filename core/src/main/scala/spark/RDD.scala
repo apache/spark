@@ -349,6 +349,13 @@ abstract class RDD[T: ClassManifest](
   def toArray(): Array[T] = collect()
 
   /**
+   * Return an RDD that contains all matching values by applying `f`.
+   */
+  def collect[U: ClassManifest](f: PartialFunction[T, U]): RDD[U] = {
+    filter(f.isDefinedAt).map(f)
+  }
+
+  /**
    * Reduces the elements of this RDD using the specified associative binary operator.
    */
   def reduce(f: (T, T) => T): T = {
@@ -527,6 +534,13 @@ abstract class RDD[T: ClassManifest](
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
       .saveAsSequenceFile(path)
+  }
+
+  /**
+   * Creates tuples of the elements in this RDD by applying `f`.
+   */
+  def keyBy[K](f: T => K): RDD[(K, T)] = {
+    map(x => (f(x), x))
   }
 
   /** A private method for tests, to look at the contents of each partition */

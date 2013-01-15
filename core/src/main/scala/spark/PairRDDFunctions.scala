@@ -615,6 +615,16 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     writer.cleanup()
   }
 
+  /**
+   * Return an RDD with the keys of each tuple.
+   */
+  def keys: RDD[K] = self.map(_._1)
+  
+  /**
+   * Return an RDD with the values of each tuple.
+   */
+  def values: RDD[V] = self.map(_._2)
+
   private[spark] def getKeyClass() = implicitly[ClassManifest[K]].erasure
 
   private[spark] def getValueClass() = implicitly[ClassManifest[V]].erasure

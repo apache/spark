@@ -201,7 +201,11 @@ private[spark] class TaskSetManager(
           val taskId = sched.newTaskId()
           // Figure out whether this should count as a preferred launch
           val preferred = isPreferredLocation(task, host)
-          val prefStr = if (preferred) "preferred" else "non-preferred"
+          val prefStr = if (preferred) {
+            "preferred"
+          } else {
+            "non-preferred, not one of " + task.preferredLocations.mkString(", ")
+          }
           logInfo("Starting task %s:%d as TID %s on slave %s: %s (%s)".format(
             taskSet.id, index, taskId, slaveId, host, prefStr))
           // Do various bookkeeping
