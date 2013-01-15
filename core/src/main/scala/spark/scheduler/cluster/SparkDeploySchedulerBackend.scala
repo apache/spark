@@ -23,12 +23,11 @@ private[spark] class SparkDeploySchedulerBackend(
 
   // Memory used by each executor (in megabytes)
   val executorMemory = {
-    if (System.getenv("SPARK_MEM") != null) {
-      Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
-      // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    } else {
-      512
-    }
+    // TODO: Might need to add some extra memory for the non-heap parts of the JVM
+    Option(System.getProperty("spark.executor.memory"))
+      .orElse(Option(System.getenv("SPARK_MEM")))
+      .map(Utils.memoryStringToMb)
+      .getOrElse(512)
   }
 
   override def start() {
