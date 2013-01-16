@@ -52,15 +52,15 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(3,4,5),
         Arrays.asList(3));
 
-    List<List<Integer>> expected = Arrays.asList(
-        Arrays.asList(4),
-        Arrays.asList(3),
-        Arrays.asList(1));
+    List<List<Long>> expected = Arrays.asList(
+        Arrays.asList(4L),
+        Arrays.asList(3L),
+        Arrays.asList(1L));
 
     JavaDStream stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
     JavaDStream count = stream.count();
     JavaTestUtils.attachTestOutputStream(count);
-    List<List<Integer>> result = JavaTestUtils.runStreams(sc, 3, 3);
+    List<List<Long>> result = JavaTestUtils.runStreams(sc, 3, 3);
     assertOrderInvariantEquals(expected, result);
   }
 
@@ -561,8 +561,8 @@ public class JavaAPISuite implements Serializable {
             new Tuple2<String, Integer>("new york", 5)),
         Arrays.asList(new Tuple2<String, Integer>("california", 14),
             new Tuple2<String, Integer>("new york", 9)),
-        Arrays.asList(new Tuple2<String, Integer>("california", 10),
-            new Tuple2<String, Integer>("new york", 4)));
+        Arrays.asList(new Tuple2<String, Integer>("california", 14),
+            new Tuple2<String, Integer>("new york", 9)));
 
     JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(sc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
@@ -572,6 +572,9 @@ public class JavaAPISuite implements Serializable {
         @Override
         public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
           int out = 0;
+          if (state.isPresent()) {
+            out = out + state.get();
+          }
           for (Integer v: values) {
             out = out + v;
           }

@@ -433,7 +433,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val cm: ClassManifest[S] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[S]]
 
-    def scalaFunc(values: Seq[V], state: Option[S]): Option[S] = {
+    val scalaFunc: (Seq[V], Option[S]) => Option[S] = (values, state) => {
       val list: JList[V] = values
       val scalaState: Optional[S] = state match {
         case Some(s) => Optional.of(s)
@@ -445,7 +445,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
         case _ => None
       }
     }
-    dstream.updateStateByKey(scalaFunc _)
+    dstream.updateStateByKey(scalaFunc)
   }
 
   def mapValues[U](f: JFunction[V, U]): JavaPairDStream[K, U] = {
