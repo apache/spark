@@ -142,8 +142,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
               case e: InterruptedException =>
             }
           }
-          return mapStatuses(shuffleId).map(status =>
-            (status.address, MapOutputTracker.decompressSize(status.compressedSizes(reduceId))))
+          return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, mapStatuses(shuffleId))
         } else {
           fetching += shuffleId
         }
@@ -159,21 +158,15 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
         fetchedStatuses = deserializeStatuses(fetchedBytes)
         logInfo("Got the output locations")
         mapStatuses.put(shuffleId, fetchedStatuses)
-        if (fetchedStatuses.contains(null)) {
-          throw new FetchFailedException(null, shuffleId, -1, reduceId,
-            new Exception("Missing an output location for shuffle " + shuffleId))
-        }
       } finally {
         fetching.synchronized {
           fetching -= shuffleId
           fetching.notifyAll()
         }
       }
-      return fetchedStatuses.map(s =>
-        (s.address, MapOutputTracker.decompressSize(s.compressedSizes(reduceId))))
+      return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
     } else {
-      return statuses.map(s =>
-        (s.address, MapOutputTracker.decompressSize(s.compressedSizes(reduceId))))
+      return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses)
     }
   }
 
@@ -266,6 +259,28 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
 
 private[spark] object MapOutputTracker {
   private val LOG_BASE = 1.1
+
+  // Convert an array of MapStatuses to locations and sizes for a given reduce ID. If
+  // any of the statuses is null (indicating a missing location due to a failed mapper),
+  // throw a FetchFailedException.
+  def convertMapStatuses(
+        shuffleId: Int,
+        reduceId: Int,
+        statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
+    if (statuses == null) {
+      throw new FetchFailedException(null, shuffleId, -1, reduceId,
+        new Exception("Missing all output locations for shuffle " + shuffleId))
+    }
+    statuses.map {
+      status => 
+        if (status == null) {
+          throw new FetchFailedException(null, shuffleId, -1, reduceId,
+            new Exception("Missing an output location for shuffle " + shuffleId))
+        } else {
+          (status.address, decompressSize(status.compressedSizes(reduceId)))
+        }
+    }
+  }
 
   /**
    * Compress a size in bytes to 8 bits for efficient reporting of map output sizes.
