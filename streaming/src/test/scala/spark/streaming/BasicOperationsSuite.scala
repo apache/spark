@@ -151,10 +151,10 @@ class BasicOperationsSuite extends TestSuiteBase {
       )
 
     val updateStateOperation = (s: DStream[String]) => {
-      val updateFunc = (values: Seq[Int], state: Option[RichInt]) => {
-        Some(new RichInt(values.foldLeft(0)(_ + _) + state.map(_.self).getOrElse(0)))
+      val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+        Some(values.foldLeft(0)(_ + _) + state.getOrElse(0))
       }
-      s.map(x => (x, 1)).updateStateByKey[RichInt](updateFunc).map(t => (t._1, t._2.self))
+      s.map(x => (x, 1)).updateStateByKey[Int](updateFunc)
     }
 
     testOperation(inputData, updateStateOperation, outputData, true)
