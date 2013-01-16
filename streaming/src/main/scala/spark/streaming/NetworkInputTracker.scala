@@ -23,7 +23,7 @@ private[streaming] case class DeregisterReceiver(streamId: Int, msg: String) ext
  */
 private[streaming]
 class NetworkInputTracker(
-    @transient ssc: StreamingContext, 
+    @transient ssc: StreamingContext,
     @transient networkInputStreams: Array[NetworkInputDStream[_]])
   extends Logging {
 
@@ -65,12 +65,12 @@ class NetworkInputTracker(
     def receive = {
       case RegisterReceiver(streamId, receiverActor) => {
         if (!networkInputStreamMap.contains(streamId)) {
-          throw new Exception("Register received for unexpected id " + streamId)        
+          throw new Exception("Register received for unexpected id " + streamId)
         }
         receiverInfo += ((streamId, receiverActor))
         logInfo("Registered receiver for network stream " + streamId + " from " + sender.path.address)
         sender ! true
-      } 
+      }
       case AddBlocks(streamId, blockIds, metadata) => {
         val tmp = receivedBlockIds.synchronized {
           if (!receivedBlockIds.contains(streamId)) {
@@ -95,8 +95,8 @@ class NetworkInputTracker(
   /** This thread class runs all the receivers on the cluster.  */
   class ReceiverExecutor extends Thread {
     val env = ssc.env
-        
-    override def run() {      
+
+    override def run() {
       try {
         SparkEnv.set(env)
         startReceivers()
@@ -113,7 +113,7 @@ class NetworkInputTracker(
      */
     def startReceivers() {
       val receivers = networkInputStreams.map(nis => {
-        val rcvr = nis.createReceiver()
+        val rcvr = nis.getReceiver()
         rcvr.setStreamId(nis.id)
         rcvr
       })
@@ -141,7 +141,7 @@ class NetworkInputTracker(
       // Distribute the receivers and start them
       ssc.sc.runJob(tempRDD, startReceiver)
     }
-    
+
     /** Stops the receivers. */
     def stopReceivers() {
       // Signal the receivers to stop

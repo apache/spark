@@ -20,7 +20,7 @@ import java.util.concurrent.ArrayBlockingQueue
 /**
  * Abstract class for defining any InputDStream that has to start a receiver on worker
  * nodes to receive external data. Specific implementations of NetworkInputDStream must
- * define the createReceiver() function that creates the receiver object of type
+ * define the getReceiver() function that gets the receiver object of type
  * [[spark.streaming.dstream.NetworkReceiver]] that will be sent to the workers to receive
  * data.
  * @param ssc_ Streaming context that will execute this input stream
@@ -34,11 +34,11 @@ abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : Streaming
   val id = ssc.getNewNetworkStreamId()
 
   /**
-   * Creates the receiver object that will be sent to the worker nodes
+   * Gets the receiver object that will be sent to the worker nodes
    * to receive data. This method needs to defined by any specific implementation
    * of a NetworkInputDStream.
    */
-  def createReceiver(): NetworkReceiver[T]
+  def getReceiver(): NetworkReceiver[T]
 
   // Nothing to start or stop as both taken care of by the NetworkInputTracker.
   def start() {}
@@ -46,7 +46,7 @@ abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : Streaming
   def stop() {}
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val blockIds = ssc.networkInputTracker.getBlockIds(id, validTime)    
+    val blockIds = ssc.networkInputTracker.getBlockIds(id, validTime)
     Some(new BlockRDD[T](ssc.sc, blockIds))
   }
 }

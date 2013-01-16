@@ -31,7 +31,7 @@ case class KafkaDStreamCheckpointData(kafkaRdds: HashMap[Time, Any],
 
 /**
  * Input stream that pulls messages from a Kafka Broker.
- * 
+ *
  * @param host Zookeper hostname.
  * @param port Zookeper port.
  * @param groupId The group id for this consumer.
@@ -54,13 +54,13 @@ class KafkaInputDStream[T: ClassManifest](
 
   // Metadata that keeps track of which messages have already been consumed.
   var savedOffsets = HashMap[Long, Map[KafkaPartitionKey, Long]]()
-  
+
   /* NOT USED - Originally intended for fault-tolerance
- 
+
   // In case of a failure, the offets for a particular timestamp will be restored.
   @transient var restoredOffsets : Map[KafkaPartitionKey, Long] = null
 
- 
+
   override protected[streaming] def addMetadata(metadata: Any) {
     metadata match {
       case x : KafkaInputDStreamMetadata =>
@@ -88,14 +88,14 @@ class KafkaInputDStream[T: ClassManifest](
   override protected[streaming] def restoreCheckpointData() {
     super.restoreCheckpointData()
     logInfo("Restoring KafkaDStream checkpoint data.")
-    checkpointData match { 
-      case x : KafkaDStreamCheckpointData => 
+    checkpointData match {
+      case x : KafkaDStreamCheckpointData =>
         restoredOffsets = x.savedOffsets
         logInfo("Restored KafkaDStream offsets: " + savedOffsets)
     }
   } */
 
-  def createReceiver(): NetworkReceiver[T] = {
+  def getReceiver(): NetworkReceiver[T] = {
     new KafkaReceiver(host, port,  groupId, topics, initialOffsets, storageLevel)
         .asInstanceOf[NetworkReceiver[T]]
   }
@@ -103,7 +103,7 @@ class KafkaInputDStream[T: ClassManifest](
 
 private[streaming]
 class KafkaReceiver(host: String, port: Int, groupId: String,
-  topics: Map[String, Int], initialOffsets: Map[KafkaPartitionKey, Long], 
+  topics: Map[String, Int], initialOffsets: Map[KafkaPartitionKey, Long],
   storageLevel: StorageLevel) extends NetworkReceiver[Any] {
 
   // Timeout for establishing a connection to Zookeper in ms.
@@ -130,7 +130,7 @@ class KafkaReceiver(host: String, port: Int, groupId: String,
     val zooKeeperEndPoint = host + ":" + port
     logInfo("Starting Kafka Consumer Stream with group: " + groupId)
     logInfo("Initial offsets: " + initialOffsets.toString)
-    
+
     // Zookeper connection properties
     val props = new Properties()
     props.put("zk.connect", zooKeeperEndPoint)
@@ -161,7 +161,7 @@ class KafkaReceiver(host: String, port: Int, groupId: String,
     offsets.foreach { case(key, offset) =>
       val topicDirs = new ZKGroupTopicDirs(key.groupId, key.topic)
       val partitionName = key.brokerId + "-" + key.partId
-      updatePersistentPath(consumerConnector.zkClient, 
+      updatePersistentPath(consumerConnector.zkClient,
         topicDirs.consumerOffsetDir + "/" + partitionName, offset.toString)
     }
   }
@@ -174,7 +174,7 @@ class KafkaReceiver(host: String, port: Int, groupId: String,
         blockGenerator += msgAndMetadata.message
 
         // Updating the offet. The key is (broker, topic, group, partition).
-        val key = KafkaPartitionKey(msgAndMetadata.topicInfo.brokerId, msgAndMetadata.topic, 
+        val key = KafkaPartitionKey(msgAndMetadata.topicInfo.brokerId, msgAndMetadata.topic,
           groupId, msgAndMetadata.topicInfo.partition.partId)
         val offset = msgAndMetadata.topicInfo.getConsumeOffset
         offsets.put(key, offset)
@@ -182,12 +182,12 @@ class KafkaReceiver(host: String, port: Int, groupId: String,
 
         // Keep on handling messages
         true
-      }  
+      }
     }
   }
 
   // NOT USED - Originally intended for fault-tolerance
-  // class KafkaDataHandler(receiver: KafkaReceiver, storageLevel: StorageLevel) 
+  // class KafkaDataHandler(receiver: KafkaReceiver, storageLevel: StorageLevel)
   // extends BufferingBlockCreator[Any](receiver, storageLevel) {
 
   //   override def createBlock(blockId: String, iterator: Iterator[Any]) : Block = {
