@@ -49,6 +49,40 @@ class RDD(object):
         self._jrdd.cache()
         return self
 
+    def checkpoint(self):
+        """
+        Mark this RDD for checkpointing. The RDD will be saved to a file inside
+        `checkpointDir` (set using setCheckpointDir()) and all references to
+        its parent RDDs will be removed.  This is used to truncate very long
+        lineages.  In the current implementation, Spark will save this RDD to
+        a file (using saveAsObjectFile()) after the first job using this RDD is
+        done.  Hence, it is strongly recommended to use checkpoint() on RDDs
+        when
+
+        (i) checkpoint() is called before the any job has been executed on this
+        RDD.
+
+        (ii) This RDD has been made to persist in memory. Otherwise saving it
+        on a file will require recomputation.
+        """
+        self._jrdd.rdd().checkpoint()
+
+    def isCheckpointed(self):
+        """
+        Return whether this RDD has been checkpointed or not
+        """
+        return self._jrdd.rdd().isCheckpointed()
+
+    def getCheckpointFile(self):
+        """
+        Gets the name of the file to which this RDD was checkpointed
+        """
+        checkpointFile = self._jrdd.rdd().getCheckpointFile()
+        if checkpointFile.isDefined():
+            return checkpointFile.get()
+        else:
+            return None
+
     # TODO persist(self, storageLevel)
 
     def map(self, f, preservesPartitioning=False):

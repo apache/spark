@@ -195,3 +195,12 @@ class SparkContext(object):
         filename = path.split("/")[-1]
         os.environ["PYTHONPATH"] = \
             "%s:%s" % (filename, os.environ["PYTHONPATH"])
+
+    def setCheckpointDir(self, dirName, useExisting=False):
+        """
+        Set the directory under which RDDs are going to be checkpointed. This
+        method will create this directory and will throw an exception of the
+        path already exists (to avoid overwriting existing files may be
+        overwritten). The directory will be deleted on exit if indicated.
+        """
+        self._jsc.sc().setCheckpointDir(dirName, useExisting)
