@@ -7,6 +7,7 @@ import cern.jet.math._
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
 import spark._
+import scala.Option
 
 object SparkALS {
   // Parameters set through command line arguments
@@ -97,21 +98,27 @@ object SparkALS {
   def main(args: Array[String]) {
     var host = ""
     var slices = 0
-    args match {
-      case Array(m, u, f, iters, slices_, host_) => {
-        M = m.toInt
-        U = u.toInt
-        F = f.toInt
-        ITERATIONS = iters.toInt
-        slices = slices_.toInt
-        host = host_
+
+    (1 to 6).map(i => {
+      i match {
+        case a if a < args.length => Option(args(a))
+        case _ => Option(null)
+      }
+    }).toArray match {
+      case Array(host_, m, u, f, iters, slices_) => {
+        host = host_ getOrElse "local"
+        M = (m getOrElse "100").toInt
+        U = (u getOrElse "500").toInt
+        F = (f getOrElse "10").toInt
+        ITERATIONS = (iters getOrElse "5").toInt
+        slices = (slices_ getOrElse "2").toInt
       }
       case _ => {
-        System.err.println("Usage: SparkALS <M> <U> <F> <iters> <slices> <master>")
+        System.err.println("Usage: SparkALS [<master> <M> <U> <F> <iters> <slices>]")
         System.exit(1)
       }
     }
-    printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS);
+    printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
     val spark = new SparkContext(host, "SparkALS")
     
     val R = generateR()
