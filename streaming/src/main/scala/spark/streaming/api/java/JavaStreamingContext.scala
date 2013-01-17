@@ -13,13 +13,28 @@ import java.io.InputStream
 import java.util.{Map => JMap}
 
 class JavaStreamingContext(val ssc: StreamingContext) {
-  def this(master: String, frameworkName: String, batchDuration: Duration) =
-    this(new StreamingContext(master, frameworkName, batchDuration))
 
   // TODOs:
   // - Test StreamingContext functions
   // - Test to/from Hadoop functions
   // - Support creating and registering InputStreams
+
+
+  /**
+   * Creates a StreamingContext.
+   * @param master Name of the Spark Master
+   * @param frameworkName Name to be used when registering with the scheduler
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(master: String, frameworkName: String, batchDuration: Duration) =
+    this(new StreamingContext(master, frameworkName, batchDuration))
+
+  /**
+   * Re-creates a StreamingContext from a checkpoint file.
+   * @param path Path either to the directory that was specified as the checkpoint directory, or
+   *             to the checkpoint file 'graph' or 'graph.bk'.
+   */
+  def this(path: String) = this (new StreamingContext(path))
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.

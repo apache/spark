@@ -3,6 +3,7 @@ package spark.streaming;
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.io.Files;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.junit.After;
 import org.junit.Assert;
@@ -17,6 +18,7 @@ import spark.streaming.api.java.JavaDStream;
 import spark.streaming.api.java.JavaPairDStream;
 import spark.streaming.api.java.JavaStreamingContext;
 import spark.streaming.JavaTestUtils;
+import spark.streaming.JavaCheckpointTestUtils;
 import spark.streaming.dstream.KafkaPartitionKey;
 import sun.org.mozilla.javascript.annotations.JSFunction;
 
@@ -870,6 +872,72 @@ public class JavaAPISuite implements Serializable {
 
     Assert.assertEquals(expected, result);
   }
+
+  @Test
+  public void testCheckpointMasterRecovery() throws InterruptedException {
+    List<List<String>> inputData = Arrays.asList(
+        Arrays.asList("this", "is"),
+        Arrays.asList("a", "test"),
+        Arrays.asList("counting", "letters"));
+
+    List<List<Integer>> expectedInitial = Arrays.asList(
+        Arrays.asList(4,2));
+    List<List<Integer>> expectedFinal = Arrays.asList(
+        Arrays.asList(1,4),
+        Arrays.asList(8,7));
+
+
+    File tempDir = Files.createTempDir();
+    sc.checkpoint(tempDir.getAbsolutePath(), new Duration(1000));
+
+    JavaDStream stream = JavaCheckpointTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaDStream letterCount = stream.map(new Function<String, Integer>() {
+      @Override
+      public Integer call(String s) throws Exception {
+        return s.length();
+      }
+    });
+    JavaCheckpointTestUtils.attachTestOutputStream(letterCount);
+    List<List<Integer>> initialResult = JavaTestUtils.runStreams(sc, 1, 1);
+
+    assertOrderInvariantEquals(expectedInitial, initialResult);
+    Thread.sleep(1000);
+
+    sc.stop();
+    sc = new JavaStreamingContext(tempDir.getAbsolutePath());
+    sc.start();
+    List<List<Integer>> finalResult = JavaCheckpointTestUtils.runStreams(sc, 2, 2);
+    assertOrderInvariantEquals(expectedFinal, finalResult);
+  }
+
+  /** TEST DISABLED: Pending a discussion about checkpoint() semantics with TD
+  @Test
+  public void testCheckpointofIndividualStream() throws InterruptedException {
+    List<List<String>> inputData = Arrays.asList(
+        Arrays.asList("this", "is"),
+        Arrays.asList("a", "test"),
+        Arrays.asList("counting", "letters"));
+
+    List<List<Integer>> expected = Arrays.asList(
+        Arrays.asList(4,2),
+        Arrays.asList(1,4),
+        Arrays.asList(8,7));
+
+    JavaDStream stream = JavaCheckpointTestUtils.attachTestInputStream(sc, inputData, 1);
+    JavaDStream letterCount = stream.map(new Function<String, Integer>() {
+      @Override
+      public Integer call(String s) throws Exception {
+        return s.length();
+      }
+    });
+    JavaCheckpointTestUtils.attachTestOutputStream(letterCount);
+
+    letterCount.checkpoint(new Duration(1000));
+
+    List<List<Integer>> result1 = JavaCheckpointTestUtils.runStreams(sc, 3, 3);
+    assertOrderInvariantEquals(expected, result1);
+  }
+  */
 
   // Input stream tests. These mostly just test that we can instantiate a given InputStream with
   // Java arguments and assign it to a JavaDStream without producing type errors. Testing of the

@@ -8,7 +8,7 @@ import java.util.ArrayList
 import collection.JavaConversions._
 
 /** Exposes streaming test functionality in a Java-friendly way. */
-object JavaTestUtils extends TestSuiteBase {
+trait JavaTestBase extends TestSuiteBase {
 
   /**
    * Create a [[spark.streaming.TestInputStream]] and attach it to the supplied context.
@@ -56,3 +56,10 @@ object JavaTestUtils extends TestSuiteBase {
   }
 }
 
+object JavaTestUtils extends JavaTestBase {
+
+}
+
+object JavaCheckpointTestUtils extends JavaTestBase {
+  override def actuallyWait = true
+}
