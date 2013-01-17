@@ -9,6 +9,7 @@ import spark.api.java.JavaPairRDD._
 import spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
 import spark.partial.{PartialResult, BoundedDouble}
 import spark.storage.StorageLevel
+import com.google.common.base.Optional
 
 
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
@@ -298,4 +299,31 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Save this RDD as a SequenceFile of serialized objects.
    */
   def saveAsObjectFile(path: String) = rdd.saveAsObjectFile(path)
+
+  /**
+   * Mark this RDD for checkpointing. The RDD will be saved to a file inside `checkpointDir`
+   * (set using setCheckpointDir()) and all references to its parent RDDs will be removed.
+   * This is used to truncate very long lineages. In the current implementation, Spark will save
+   * this RDD to a file (using saveAsObjectFile()) after the first job using this RDD is done.
+   * Hence, it is strongly recommended to use checkpoint() on RDDs when
+   * (i) checkpoint() is called before the any job has been executed on this RDD.
+   * (ii) This RDD has been made to persist in memory. Otherwise saving it on a file will
+   * require recomputation.
+   */
+  def checkpoint() = rdd.checkpoint()
+
+  /**
+   * Return whether this RDD has been checkpointed or not
+   */
+  def isCheckpointed(): Boolean = rdd.isCheckpointed()
+
+  /**
+   * Gets the name of the file to which this RDD was checkpointed
+   */
+  def getCheckpointFile(): Optional[String] = {
+    rdd.getCheckpointFile match {
+      case Some(file) => Optional.of(file)
+      case _ => Optional.absent()
+    }
+  }
 }
