@@ -6,6 +6,7 @@ import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, Remote
 
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.io.File
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -172,7 +173,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
         for (pos <- 0 until numUsable) {
           if (assigned(pos) > 0) {
             val exec = job.addExecutor(usableWorkers(pos), assigned(pos))
-            launchExecutor(usableWorkers(pos), exec)
+            launchExecutor(usableWorkers(pos), exec, job.desc.sparkHome)
             job.state = JobState.RUNNING
           }
         }
@@ -185,7 +186,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
             val coresToUse = math.min(worker.coresFree, job.coresLeft)
             if (coresToUse > 0) {
               val exec = job.addExecutor(worker, coresToUse)
-              launchExecutor(worker, exec)
+              launchExecutor(worker, exec, job.desc.sparkHome)
               job.state = JobState.RUNNING
             }
           }
@@ -194,10 +195,10 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     }
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo) {
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo, sparkHome: File) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
-    worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc, exec.cores, exec.memory)
+    worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc, exec.cores, exec.memory, sparkHome)
     exec.job.actor ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
   }
 

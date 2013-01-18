@@ -3,6 +3,7 @@ package spark.deploy.client
 import spark.util.AkkaUtils
 import spark.{Logging, Utils}
 import spark.deploy.{Command, JobDescription}
+import java.io.File
 
 private[spark] object TestClient {
 
@@ -25,7 +26,7 @@ private[spark] object TestClient {
     val url = args(0)
     val (actorSystem, port) = AkkaUtils.createActorSystem("spark", Utils.localIpAddress, 0)
     val desc = new JobDescription(
-      "TestClient", 1, 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()))
+      "TestClient", 1, 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()), new File("dummy-spark-home"))
     val listener = new TestListener
     val client = new Client(actorSystem, url, desc, listener)
     client.start()
