@@ -39,7 +39,7 @@ private[spark] class SparkDeploySchedulerBackend(
       StandaloneSchedulerBackend.ACTOR_NAME)
     val args = Seq(masterUrl, "{{SLAVEID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
-    val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, new File(sc.sparkHome))
+    val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, new File(sc.getSparkHome()))
 
     client = new Client(sc.env.actorSystem, master, jobDesc, this)
     client.start()
