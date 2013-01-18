@@ -12,7 +12,7 @@ import spark.streaming.dstream.SparkFlumeEvent;
  *  an Avro server on at the request host:port address and listen for requests.
  *  Your Flume AvroSink should be pointed to this address.
  *
- *  Usage: FlumeEventCount <master> <host> <port>
+ *  Usage: JavaFlumeEventCount <master> <host> <port>
  *
  *    <master> is a Spark master URL
  *    <host> is the host the Flume receiver will be started on - a receiver
