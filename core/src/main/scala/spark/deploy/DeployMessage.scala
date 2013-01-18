@@ -5,6 +5,7 @@ import spark.deploy.master.{WorkerInfo, JobInfo}
 import spark.deploy.worker.ExecutorRunner
 import scala.collection.immutable.List
 import scala.collection.mutable.HashMap
+import java.io.File
 
 
 private[spark] sealed trait DeployMessage extends Serializable
@@ -42,7 +43,8 @@ private[spark] case class LaunchExecutor(
     execId: Int,
     jobDesc: JobDescription,
     cores: Int,
-    memory: Int)
+    memory: Int,
+    sparkHome: File)
   extends DeployMessage
 
 
