@@ -89,7 +89,7 @@ private object HttpBroadcast extends Logging {
   }
 
   private def createServer() {
-    broadcastDir = Utils.createTempDir(System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
+    broadcastDir = Utils.createTempDir(Utils.getLocalDir)
     server = new HttpServer(broadcastDir)
     server.start()
     serverUri = server.uri

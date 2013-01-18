@@ -175,6 +175,15 @@ private object Utils extends Logging {
   }
 
   /**
+   * Get a temporary directory using Spark's spark.local.dir property, if set. This will always
+   * return a single directory, even though the spark.local.dir property might be a list of
+   * multiple paths.
+   */
+  def getLocalDir: String = {
+    System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")).split(',')(0)
+  }
+
+  /**
    * Shuffle the elements of a collection into a random order, returning the
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
