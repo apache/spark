@@ -12,10 +12,14 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import java.io.InputStream
 import java.util.{Map => JMap}
 
+/**
+ * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
+ * information (such as, cluster URL and job name) to internally create a SparkContext, it provides
+ * methods used to create DStream from various input sources.
+ */
 class JavaStreamingContext(val ssc: StreamingContext) {
 
   // TODOs:
-  // - Test StreamingContext functions
   // - Test to/from Hadoop functions
   // - Support creating and registering InputStreams
 

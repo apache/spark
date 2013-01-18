@@ -14,7 +14,6 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.conf.Configuration
 import spark.api.java.JavaPairRDD
 import spark.storage.StorageLevel
-import java.lang
 import com.google.common.base.Optional
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
