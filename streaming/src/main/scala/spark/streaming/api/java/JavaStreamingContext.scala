@@ -10,6 +10,7 @@ import spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import java.io.InputStream
 import java.util.{Map => JMap}
+import spark.api.java.{JavaSparkContext, JavaRDD}
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -38,6 +39,9 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    *             to the checkpoint file 'graph' or 'graph.bk'.
    */
   def this(path: String) = this (new StreamingContext(path))
+
+  /** The underlying SparkContext */
+  val sc: JavaSparkContext = new JavaSparkContext(ssc.sc)
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
@@ -252,6 +256,60 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    */
   def registerOutputStream(outputStream: JavaDStreamLike[_, _]) {
     ssc.registerOutputStream(outputStream.dstream)
+  }
+
+  /**
+   * Creates a input stream from an queue of RDDs. In each batch,
+   * it will process either one or all of the RDDs returned by the queue.
+   *
+   * NOTE: changes to the queue after the stream is created will not be recognized.
+   * @param queue      Queue of RDDs
+   * @tparam T         Type of objects in the RDD
+   */
+  def queueStream[T](queue: java.util.Queue[JavaRDD[T]]): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    val sQueue = new scala.collection.mutable.Queue[spark.RDD[T]]
+    sQueue.enqueue(queue.map(_.rdd).toSeq: _*)
+    ssc.queueStream(sQueue)
+  }
+
+  /**
+   * Creates a input stream from an queue of RDDs. In each batch,
+   * it will process either one or all of the RDDs returned by the queue.
+   *
+   * NOTE: changes to the queue after the stream is created will not be recognized.
+   * @param queue      Queue of RDDs
+   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
+   * @tparam T         Type of objects in the RDD
+   */
+  def queueStream[T](queue: java.util.Queue[JavaRDD[T]], oneAtATime: Boolean): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    val sQueue = new scala.collection.mutable.Queue[spark.RDD[T]]
+    sQueue.enqueue(queue.map(_.rdd).toSeq: _*)
+    ssc.queueStream(sQueue, oneAtATime)
+  }
+
+  /**
+   * Creates a input stream from an queue of RDDs. In each batch,
+   * it will process either one or all of the RDDs returned by the queue.
+   *
+   * NOTE: changes to the queue after the stream is created will not be recognized.
+   * @param queue      Queue of RDDs
+   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
+   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty
+   * @tparam T         Type of objects in the RDD
+   */
+  def queueStream[T](
+      queue: java.util.Queue[JavaRDD[T]],
+      oneAtATime: Boolean,
+      defaultRDD: JavaRDD[T]): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    val sQueue = new scala.collection.mutable.Queue[spark.RDD[T]]
+    sQueue.enqueue(queue.map(_.rdd).toSeq: _*)
+    ssc.queueStream(sQueue, oneAtATime, defaultRDD.rdd)
   }
 
   /**

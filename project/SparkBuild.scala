@@ -162,8 +162,7 @@ object SparkBuild extends Build {
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
     libraryDependencies ++= Seq(
-      "com.github.sgroschupf" % "zkclient" % "0.1",
-      "junit" % "junit" % "4.8.1")
+      "com.github.sgroschupf" % "zkclient" % "0.1")
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
