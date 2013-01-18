@@ -3,7 +3,6 @@ package spark.streaming.api.java
 import spark.streaming.{Duration, Time, DStream}
 import spark.api.java.function.{Function => JFunction}
 import spark.api.java.JavaRDD
-import java.util.{List => JList}
 import spark.storage.StorageLevel
 
 /**

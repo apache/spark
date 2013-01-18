@@ -1,7 +1,6 @@
 package spark.streaming.api.java
 
 import scala.collection.JavaConversions._
-import java.util.{List => JList}
 import java.lang.{Long => JLong, Integer => JInt}
 
 import spark.streaming._

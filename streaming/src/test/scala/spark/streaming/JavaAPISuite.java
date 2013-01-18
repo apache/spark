@@ -20,7 +20,6 @@ import spark.streaming.api.java.JavaStreamingContext;
 import spark.streaming.JavaTestUtils;
 import spark.streaming.JavaCheckpointTestUtils;
 import spark.streaming.dstream.KafkaPartitionKey;
-import sun.org.mozilla.javascript.annotations.JSFunction;
 
 import java.io.*;
 import java.util.*;
