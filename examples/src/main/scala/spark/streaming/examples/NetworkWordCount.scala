@@ -22,7 +22,7 @@ object NetworkWordCount {
       System.exit(1)
     }
 
-    // Create the context and set the batch size
+    // Create the context with a 1 second batch size
     val ssc = new StreamingContext(args(0), "NetworkWordCount", Seconds(1))
 
     // Create a NetworkInputDStream on target ip:port and count the
