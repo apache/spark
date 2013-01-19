@@ -75,6 +75,14 @@ class StorageLevel(
     "StorageLevel(%b, %b, %b, %d)".format(useDisk, useMemory, deserialized, replication)
 
   override def hashCode(): Int = toInt * 41 + replication
+  def description : String = {
+    var result = ""
+    result += (if (useDisk) "Disk " else "")
+    result += (if (useMemory) "Memory " else "")
+    result += (if (deserialized) "Deserialized " else "Serialized")
+    result += "%sx Replicated".format(replication)
+    result
+  }
 }
 
 

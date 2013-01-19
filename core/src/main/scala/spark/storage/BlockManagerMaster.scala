@@ -1,6 +1,10 @@
 package spark.storage
 
-import scala.collection.mutable.ArrayBuffer
+import java.io._
+import java.util.{HashMap => JHashMap}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}

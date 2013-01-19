@@ -88,6 +88,9 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
   // Methods available on all RDDs:
 
+  // A friendly name for this RDD
+  var name: String = null
+  
   /** Record user function generating this RDD. */
   private[spark] val origin = Utils.getSparkCallSite
 
@@ -107,8 +110,14 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
 
   // Variables relating to persistence
   private var storageLevel: StorageLevel = StorageLevel.NONE
+  
+  /* Assign a name to this RDD */
+  def setName(_name: String) = {
+    name = _name
+    this
+  }
 
-  /**
+  /** 
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. Can only be called once on each RDD.
    */
@@ -119,6 +128,8 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
     storageLevel = newLevel
+    // Register the RDD with the SparkContext
+    sc.persistentRdds(id) = this
     this
   }
 

@@ -1,6 +1,7 @@
 package spark
 
 import java.io._
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.{URI, URLClassLoader}
 
@@ -102,9 +103,16 @@ class SparkContext(
     isLocal)
   SparkEnv.set(env)
 
+  // Start the BlockManager UI
+  spark.storage.BlockManagerUI.start(SparkEnv.get.actorSystem, 
+    SparkEnv.get.blockManager.master.masterActor, this)
+
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
+
+  // Keeps track of all persisted RDDs
+  private[spark] val persistentRdds = new ConcurrentHashMap[Int, RDD[_]]()
 
   // Add each JAR given through the constructor
   jars.foreach { addJar(_) }

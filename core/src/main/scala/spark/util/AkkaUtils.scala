@@ -53,12 +53,13 @@ private[spark] object AkkaUtils {
    * Creates a Spray HTTP server bound to a given IP and port with a given Spray Route object to
    * handle requests. Throws a SparkException if this fails.
    */
-  def startSprayServer(actorSystem: ActorSystem, ip: String, port: Int, route: Route) {
+  def startSprayServer(actorSystem: ActorSystem, ip: String, port: Int, route: Route, 
+    name: String = "HttpServer") {
     val ioWorker = new IoWorker(actorSystem).start()
     val httpService = actorSystem.actorOf(Props(new HttpService(route)))
     val rootService = actorSystem.actorOf(Props(new SprayCanRootService(httpService)))
     val server = actorSystem.actorOf(
-      Props(new HttpServer(ioWorker, SingletonHandler(rootService))), name = "HttpServer")
+      Props(new HttpServer(ioWorker, SingletonHandler(rootService))), name = name)
     actorSystem.registerOnTermination { ioWorker.stop() }
     val timeout = 3.seconds
     val future = server.ask(HttpServer.Bind(ip, port))(timeout)
