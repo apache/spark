@@ -23,8 +23,7 @@ case class KafkaPartitionKey(brokerId: Int, topic: String, groupId: String, part
 /**
  * Input stream that pulls messages from a Kafka Broker.
  * 
- * @param host Zookeper hostname.
- * @param port Zookeper port.
+ * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
  * @param groupId The group id for this consumer.
  * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
  * in its own thread.
@@ -35,8 +34,7 @@ case class KafkaPartitionKey(brokerId: Int, topic: String, groupId: String, part
 private[streaming]
 class KafkaInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
-    host: String,
-    port: Int,
+    zkQuorum: String,
     groupId: String,
     topics: Map[String, Int],
     initialOffsets: Map[KafkaPartitionKey, Long],
@@ -44,13 +42,13 @@ class KafkaInputDStream[T: ClassManifest](
   ) extends NetworkInputDStream[T](ssc_ ) with Logging {
 
   def createReceiver(): NetworkReceiver[T] = {
-    new KafkaReceiver(host, port,  groupId, topics, initialOffsets, storageLevel)
+    new KafkaReceiver(zkQuorum,  groupId, topics, initialOffsets, storageLevel)
         .asInstanceOf[NetworkReceiver[T]]
   }
 }
 
 private[streaming]
-class KafkaReceiver(host: String, port: Int, groupId: String,
+class KafkaReceiver(zkQuorum: String, groupId: String,
   topics: Map[String, Int], initialOffsets: Map[KafkaPartitionKey, Long], 
   storageLevel: StorageLevel) extends NetworkReceiver[Any] {
 
@@ -73,21 +71,20 @@ class KafkaReceiver(host: String, port: Int, groupId: String,
     // In case we are using multiple Threads to handle Kafka Messages
     val executorPool = Executors.newFixedThreadPool(topics.values.reduce(_ + _))
 
-    val zooKeeperEndPoint = host + ":" + port
     logInfo("Starting Kafka Consumer Stream with group: " + groupId)
     logInfo("Initial offsets: " + initialOffsets.toString)
     
     // Zookeper connection properties
     val props = new Properties()
-    props.put("zk.connect", zooKeeperEndPoint)
+    props.put("zk.connect", zkQuorum)
     props.put("zk.connectiontimeout.ms", ZK_TIMEOUT.toString)
     props.put("groupid", groupId)
 
     // Create the connection to the cluster
-    logInfo("Connecting to Zookeper: " + zooKeeperEndPoint)
+    logInfo("Connecting to Zookeper: " + zkQuorum)
     val consumerConfig = new ConsumerConfig(props)
     consumerConnector = Consumer.create(consumerConfig).asInstanceOf[ZookeeperConsumerConnector]
-    logInfo("Connected to " + zooKeeperEndPoint)
+    logInfo("Connected to " + zkQuorum)
 
     // If specified, set the topic offset
     setOffsets(initialOffsets)
