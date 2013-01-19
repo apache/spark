@@ -1,10 +1,15 @@
 package spark.streaming
 
+import akka.actor.Props
+
 import spark.streaming.dstream._
 
 import spark.{RDD, Logging, SparkEnv, SparkContext}
 import spark.storage.StorageLevel
 import spark.util.MetadataCleaner
+import spark.streaming.receivers.ActorReceiver
+import spark.streaming.receivers.Settings
+
 
 import scala.collection.mutable.Queue
 
@@ -133,6 +138,30 @@ class StreamingContext private (
   }
 
   protected[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
+
+  /**
+   * Create an input stream with any arbitrary user implemented network receiver.
+   * @param receiver Custom implementation of NetworkReceiver
+   */
+  def pluggableNetworkStream[T: ClassManifest](
+    receiver: NetworkReceiver[T]): DStream[T] = {
+    val inputStream = new PluggableInputDStream[T](this,
+      receiver)
+    graph.addInputStream(inputStream)
+    inputStream
+  }
+
+  /**
+   * Create an input stream with any arbitrary user implemented akka actor receiver.
+   * @param props Props object defining creation of the actor
+   * @param name Name of the actor
+   * @param storageLevel RDD storage level. Defaults to memory-only.
+   */
+  def pluggableActorStream[T: ClassManifest](
+    props: Props, name: String, 
+    storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2): DStream[T] = {
+    pluggableNetworkStream(new ActorReceiver(Settings(props, name, storageLevel)))
+  }                 	                                                                  
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
