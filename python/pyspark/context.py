@@ -123,6 +123,10 @@ class SparkContext(object):
         jrdd = self._jsc.textFile(name, minSplits)
         return RDD(jrdd, self)
 
+    def _checkpointFile(self, name):
+        jrdd = self._jsc.checkpointFile(name)
+        return RDD(jrdd, self)
+
     def union(self, rdds):
         """
         Build the union of a list of RDDs.
@@ -145,7 +149,7 @@ class SparkContext(object):
     def accumulator(self, value, accum_param=None):
         """
         Create an C{Accumulator} with the given initial value, using a given
-        AccumulatorParam helper object to define how to add values of the data 
+        AccumulatorParam helper object to define how to add values of the data
         type if provided. Default AccumulatorParams are used for integers and
         floating-point numbers if you do not provide one. For other types, the
         AccumulatorParam must implement two methods:

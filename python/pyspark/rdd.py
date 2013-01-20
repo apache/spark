@@ -32,6 +32,7 @@ class RDD(object):
     def __init__(self, jrdd, ctx):
         self._jrdd = jrdd
         self.is_cached = False
+        self.is_checkpointed = False
         self.ctx = ctx
 
     @property
@@ -65,6 +66,7 @@ class RDD(object):
         (ii) This RDD has been made to persist in memory. Otherwise saving it
         on a file will require recomputation.
         """
+        self.is_checkpointed = True
         self._jrdd.rdd().checkpoint()
 
     def isCheckpointed(self):
@@ -696,7 +698,7 @@ class PipelinedRDD(RDD):
     20
     """
     def __init__(self, prev, func, preservesPartitioning=False):
-        if isinstance(prev, PipelinedRDD) and not prev.is_cached:
+        if isinstance(prev, PipelinedRDD) and prev._is_pipelinable:
             prev_func = prev.func
             def pipeline_func(split, iterator):
                 return func(split, prev_func(split, iterator))
@@ -709,6 +711,7 @@ class PipelinedRDD(RDD):
             self.preservesPartitioning = preservesPartitioning
             self._prev_jrdd = prev._jrdd
         self.is_cached = False
+        self.is_checkpointed = False
         self.ctx = prev.ctx
         self.prev = prev
         self._jrdd_val = None
@@ -740,6 +743,10 @@ class PipelinedRDD(RDD):
             broadcast_vars, self.ctx._javaAccumulator, class_manifest)
         self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
+
+    @property
+    def _is_pipelinable(self):
+        return not (self.is_cached or self.is_checkpointed)
 
 
 def _test():
