@@ -6,6 +6,13 @@ FWDIR="$(cd `dirname $0`; pwd)"
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
+# Exit if the user hasn't compiled Spark
+if [ ! -e "$SPARK_HOME/repl/target" ]; then
+  echo "Failed to find Spark classes in $SPARK_HOME/repl/target" >&2
+  echo "You need to compile Spark before running this program" >&2
+  exit 1
+fi
+
 # Load environment variables from conf/spark-env.sh, if it exists
 if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh

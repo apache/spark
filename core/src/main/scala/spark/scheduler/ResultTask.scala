@@ -15,9 +15,11 @@ private[spark] class ResultTask[T, U](
 
   override def run(attemptId: Long): U = {
     val context = new TaskContext(stageId, partition, attemptId)
-    val result = func(context, rdd.iterator(split, context))
-    context.executeOnCompleteCallbacks()
-    result
+    try {
+      func(context, rdd.iterator(split, context))
+    } finally {
+      context.executeOnCompleteCallbacks()
+    }
   }
 
   override def preferredLocations: Seq[String] = locs
