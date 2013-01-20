@@ -44,16 +44,16 @@
       <artifactId>kryo-serializers</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-actor</artifactId>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-actors</artifactId>
     </dependency>
     <dependency>
       <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-remote</artifactId>
+      <artifactId>akka-remote_${scala.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-slf4j</artifactId>
+      <artifactId>akka-slf4j_${scala.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>it.unimi.dsi</groupId>
@@ -64,15 +64,19 @@
       <artifactId>colt</artifactId>
     </dependency>
     <dependency>
-      <groupId>cc.spray</groupId>
+      <groupId>io.spray</groupId>
       <artifactId>spray-can</artifactId>
     </dependency>
     <dependency>
-      <groupId>cc.spray</groupId>
-      <artifactId>spray-server</artifactId>
+      <groupId>io.spray</groupId>
+      <artifactId>spray-routing</artifactId>
     </dependency>
     <dependency>
-      <groupId>cc.spray</groupId>
+      <groupId>io.spray</groupId>
+      <artifactId>spray-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.spray</groupId>
       <artifactId>spray-json_${scala.version}</artifactId>
     </dependency>
     <dependency>

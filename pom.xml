@@ -41,8 +41,8 @@
     <module>core</module>
     <module>bagel</module>
     <module>examples</module>
-    <module>repl</module>
-    <module>repl-bin</module>
+    <!--<module>repl</module>
+    <module>repl-bin</module>-->
   </modules>
 
   <properties>
@@ -50,16 +50,27 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
     <java.version>1.5</java.version>
-    <scala.version>2.9.2</scala.version>
+    <scala.version>2.10</scala.version>
     <mesos.version>0.9.0-incubating</mesos.version>
-    <akka.version>2.0.3</akka.version>
-    <spray.version>1.0-M2.1</spray.version>
-    <spray.json.version>1.1.1</spray.json.version>
+    <akka.version>2.1.0</akka.version>
+    <spray.version>1.1-M7</spray.version>
+    <spray.json.version>1.2.3</spray.json.version>
     <slf4j.version>1.6.1</slf4j.version>
     <cdh.version>4.1.2</cdh.version>
   </properties>
 
   <repositories>
+    <repository>
+      <id>typesafe-repo</id>
+      <name>Typesafe Repository</name>
+      <url>http://repo.typesafe.com/typesafe/releases/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
@@ -75,17 +86,6 @@
       <id>cloudera-repo</id>
       <name>Cloudera Repository</name>
       <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>typesafe-repo</id>
-      <name>Typesafe Repository</name>
-      <url>http://repo.typesafe.com/typesafe/releases/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -189,18 +189,18 @@
         <version>0.20</version>
       </dependency>
       <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-actors</artifactId>
+        <version>2.10.0</version>
+      </dependency>
+      <dependency>
         <groupId>com.typesafe.akka</groupId>
-        <artifactId>akka-actor</artifactId>
+        <artifactId>akka-remote_${scala.version}</artifactId>
         <version>${akka.version}</version>
       </dependency>
       <dependency>
         <groupId>com.typesafe.akka</groupId>
-        <artifactId>akka-remote</artifactId>
-        <version>${akka.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.typesafe.akka</groupId>
-        <artifactId>akka-slf4j</artifactId>
+        <artifactId>akka-slf4j_${scala.version}</artifactId>
         <version>${akka.version}</version>
       </dependency>
       <dependency>
@@ -214,17 +214,22 @@
         <version>1.2.0</version>
       </dependency>
       <dependency>
-        <groupId>cc.spray</groupId>
+        <groupId>io.spray</groupId>
         <artifactId>spray-can</artifactId>
         <version>${spray.version}</version>
       </dependency>
       <dependency>
-        <groupId>cc.spray</groupId>
-        <artifactId>spray-server</artifactId>
+        <groupId>io.spray</groupId>
+        <artifactId>spray-routing</artifactId>
         <version>${spray.version}</version>
       </dependency>
       <dependency>
-        <groupId>cc.spray</groupId>
+        <groupId>io.spray</groupId>
+        <artifactId>spray-io</artifactId>
+        <version>${spray.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.spray</groupId>
         <artifactId>spray-json_${scala.version}</artifactId>
         <version>${spray.json.version}</version>
       </dependency>
@@ -258,13 +263,13 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.version}</artifactId>
-        <version>1.8</version>
+        <version>1.9.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.version}</artifactId>
-        <version>1.9</version>
+        <version>1.10.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>

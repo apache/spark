@@ -65,6 +65,13 @@ EXAMPLES_DIR="$FWDIR/examples"
 BAGEL_DIR="$FWDIR/bagel"
 PYSPARK_DIR="$FWDIR/python"
 
+# Exit if the user hasn't compiled Spark
+if [ ! -e "$REPL_DIR/target" ]; then
+  echo "Failed to find Spark classes in $REPL_DIR/target" >&2
+  echo "You need to compile Spark before running this program" >&2
+  exit 1
+fi
+
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH"
 CLASSPATH+=":$FWDIR/conf"
