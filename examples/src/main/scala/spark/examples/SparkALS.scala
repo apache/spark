@@ -7,6 +7,7 @@ import cern.jet.math._
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
 import spark._
+import scala.Option
 
 object SparkALS {
   // Parameters set through command line arguments
@@ -42,7 +43,7 @@ object SparkALS {
     return sqrt(sumSqs / (M * U))
   }
 
-  def updateMovie(i: Int, m: DoubleMatrix1D, us: Array[DoubleMatrix1D],
+  def update(i: Int, m: DoubleMatrix1D, us: Array[DoubleMatrix1D],
     R: DoubleMatrix2D) : DoubleMatrix1D =
   {
     val U = us.size
@@ -68,50 +69,30 @@ object SparkALS {
     return solved2D.viewColumn(0)
   }
 
-  def updateUser(j: Int, u: DoubleMatrix1D, ms: Array[DoubleMatrix1D],
-    R: DoubleMatrix2D) : DoubleMatrix1D =
-  {
-    val M = ms.size
-    val F = ms(0).size
-    val XtX = factory2D.make(F, F)
-    val Xty = factory1D.make(F)
-    // For each movie that the user rated
-    for (i <- 0 until M) {
-      val m = ms(i)
-      // Add m * m^t to XtX
-      blas.dger(1, m, m, XtX)
-      // Add m * rating to Xty
-      blas.daxpy(R.get(i, j), m, Xty)
-    }
-    // Add regularization coefs to diagonal terms
-    for (d <- 0 until F) {
-      XtX.set(d, d, XtX.get(d, d) + LAMBDA * M)
-    }
-    // Solve it with Cholesky
-    val ch = new CholeskyDecomposition(XtX)
-    val Xty2D = factory2D.make(Xty.toArray, F)
-    val solved2D = ch.solve(Xty2D)
-    return solved2D.viewColumn(0)
-  }
-
   def main(args: Array[String]) {
     var host = ""
     var slices = 0
-    args match {
-      case Array(m, u, f, iters, slices_, host_) => {
-        M = m.toInt
-        U = u.toInt
-        F = f.toInt
-        ITERATIONS = iters.toInt
-        slices = slices_.toInt
-        host = host_
+
+    (0 to 5).map(i => {
+      i match {
+        case a if a < args.length => Option(args(a))
+        case _ => Option(null)
+      }
+    }).toArray match {
+      case Array(host_, m, u, f, iters, slices_) => {
+        host = host_ getOrElse "local"
+        M = (m getOrElse "100").toInt
+        U = (u getOrElse "500").toInt
+        F = (f getOrElse "10").toInt
+        ITERATIONS = (iters getOrElse "5").toInt
+        slices = (slices_ getOrElse "2").toInt
       }
       case _ => {
-        System.err.println("Usage: SparkALS <M> <U> <F> <iters> <slices> <master>")
+        System.err.println("Usage: SparkALS [<master> <M> <U> <F> <iters> <slices>]")
         System.exit(1)
       }
     }
-    printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS);
+    printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
     val spark = new SparkContext(host, "SparkALS")
     
     val R = generateR()
@@ -127,11 +108,11 @@ object SparkALS {
     for (iter <- 1 to ITERATIONS) {
       println("Iteration " + iter + ":")
       ms = spark.parallelize(0 until M, slices)
-                .map(i => updateMovie(i, msc.value(i), usc.value, Rc.value))
+                .map(i => update(i, msc.value(i), usc.value, Rc.value))
                 .toArray
       msc = spark.broadcast(ms) // Re-broadcast ms because it was updated
       us = spark.parallelize(0 until U, slices)
-                .map(i => updateUser(i, usc.value(i), msc.value, Rc.value))
+                .map(i => update(i, usc.value(i), msc.value, algebra.transpose(Rc.value)))
                 .toArray
       usc = spark.broadcast(us) // Re-broadcast us because it was updated
       println("RMSE = " + rmse(R, ms, us))
