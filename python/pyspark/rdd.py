@@ -691,7 +691,7 @@ class PipelinedRDD(RDD):
     20
     """
     def __init__(self, prev, func, preservesPartitioning=False):
-        if isinstance(prev, PipelinedRDD) and prev._is_pipelinable:
+        if isinstance(prev, PipelinedRDD) and prev._is_pipelinable():
             prev_func = prev.func
             def pipeline_func(split, iterator):
                 return func(split, prev_func(split, iterator))
@@ -737,7 +737,6 @@ class PipelinedRDD(RDD):
         self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
 
-    @property
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
 
