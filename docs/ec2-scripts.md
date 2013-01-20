@@ -96,8 +96,9 @@ permissions on your private key file, you can run `launch` with the
     `spark-ec2` to attach a persistent EBS volume to each node for
     storing the persistent HDFS.
 -   Finally, if you get errors while running your jobs, look at the slave's logs
-    for that job inside of the Mesos work directory (/mnt/mesos-work). Mesos errors 
-    can be found using the Mesos web UI (`http://<master-hostname>:8080`).
+    for that job inside of the Mesos work directory (/mnt/mesos-work). You can
+    also view the status of the cluster using the Mesos web UI 
+    (`http://<master-hostname>:8080`).
 
 # Configuration
 
