@@ -5,9 +5,10 @@ import sys
 from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
+from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
-from pyspark.serializers import write_with_length, read_with_length, \
+from pyspark.serializers import write_with_length, read_with_length, write_int, \
     read_long, read_int, dump_pickle, load_pickle, read_from_pickle_file
 
 
@@ -36,6 +37,10 @@ def main():
     iterator = read_from_pickle_file(sys.stdin)
     for obj in func(split_index, iterator):
         write_with_length(dumps(obj), old_stdout)
+    # Mark the beginning of the accumulators section of the output
+    write_int(-1, old_stdout)
+    for aid, accum in _accumulatorRegistry.items():
+        write_with_length(dump_pickle((aid, accum._value)), old_stdout)
 
 
 if __name__ == '__main__':

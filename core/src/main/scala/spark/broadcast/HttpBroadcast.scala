@@ -95,7 +95,7 @@ private object HttpBroadcast extends Logging {
   }
 
   private def createServer() {
-    broadcastDir = Utils.createTempDir()
+    broadcastDir = Utils.createTempDir(Utils.getLocalDir)
     server = new HttpServer(broadcastDir)
     server.start()
     serverUri = server.uri

@@ -703,7 +703,7 @@ class PipelinedRDD(RDD):
         env = MapConverter().convert(env, self.ctx.gateway._gateway_client)
         python_rdd = self.ctx.jvm.PythonRDD(self._prev_jrdd.rdd(),
             pipe_command, env, self.preservesPartitioning, self.ctx.pythonExec,
-            broadcast_vars, class_manifest)
+            broadcast_vars, self.ctx._javaAccumulator, class_manifest)
         self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
 

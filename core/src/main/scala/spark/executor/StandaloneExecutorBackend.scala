@@ -24,9 +24,6 @@ private[spark] class StandaloneExecutorBackend(
   with ExecutorBackend
   with Logging {
 
-  val threadPool = new ThreadPoolExecutor(
-    1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
-
   var master: ActorRef = null
 
   override def preStart() {
