@@ -154,8 +154,14 @@ abstract class DStream[T: ClassManifest] (
 
     assert(
       !mustCheckpoint || checkpointDuration != null,
-      "The checkpoint interval for " + this.getClass.getSimpleName + " has not been set. " +
+      "The checkpoint interval for " + this.getClass.getSimpleName + " has not been set." +
         " Please use DStream.checkpoint() to set the interval."
+    )
+
+    assert(
+     checkpointDuration == null || ssc.sc.checkpointDir.isDefined,
+      "The checkpoint directory has not been set. Please use StreamingContext.checkpoint()" +
+      " or SparkContext.checkpoint() to set the checkpoint directory."
     )
 
     assert(

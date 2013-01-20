@@ -63,7 +63,7 @@ extends Logging with Serializable {
     }
 
     // Save to file, and reload it as an RDD
-    val path = new Path(rdd.context.checkpointDir, "rdd-" + rdd.id).toString
+    val path = new Path(rdd.context.checkpointDir.get, "rdd-" + rdd.id).toString
     rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path) _)
     val newRDD = new CheckpointRDD[T](rdd.context, path)
 
