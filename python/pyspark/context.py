@@ -202,9 +202,12 @@ class SparkContext(object):
 
     def setCheckpointDir(self, dirName, useExisting=False):
         """
-        Set the directory under which RDDs are going to be checkpointed. This
-        method will create this directory and will throw an exception of the
-        path already exists (to avoid overwriting existing files may be
-        overwritten). The directory will be deleted on exit if indicated.
+        Set the directory under which RDDs are going to be checkpointed. The
+        directory must be a HDFS path if running on a cluster.
+
+        If the directory does not exist, it will be created. If the directory
+        exists and C{useExisting} is set to true, then the exisiting directory
+        will be used.  Otherwise an exception will be thrown to prevent
+        accidental overriding of checkpoint files in the existing directory.
         """
         self._jsc.sc().setCheckpointDir(dirName, useExisting)
