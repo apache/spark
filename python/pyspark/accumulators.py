@@ -11,6 +11,12 @@
 >>> a.value
 7
 
+>>> sc.accumulator(1.0).value
+1.0
+
+>>> sc.accumulator(1j).value
+1j
+
 >>> rdd = sc.parallelize([1,2,3])
 >>> def f(x):
 ...     global a
@@ -124,6 +130,9 @@ class Accumulator(object):
     def __str__(self):
         return str(self._value)
 
+    def __repr__(self):
+        return "Accumulator<id=%i, value=%s>" % (self.aid, self._value)
+
 
 class AddingAccumulatorParam(object):
     """
@@ -145,7 +154,7 @@ class AddingAccumulatorParam(object):
 
 # Singleton accumulator params for some standard types
 INT_ACCUMULATOR_PARAM = AddingAccumulatorParam(0)
-DOUBLE_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0)
+FLOAT_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0)
 COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)
 
 
