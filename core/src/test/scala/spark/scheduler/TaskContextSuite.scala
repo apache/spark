@@ -23,9 +23,8 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter {
   test("Calls executeOnCompleteCallbacks after failure") {
     var completed = false
     sc = new SparkContext("local", "test")
-    val rdd = new RDD[String](sc) {
-      override val splits = Array[Split](StubSplit(0))
-      override val dependencies = List()
+    val rdd = new RDD[String](sc, List()) {
+      override def getSplits = Array[Split](StubSplit(0))
       override def compute(split: Split, context: TaskContext) = {
         context.addOnCompleteCallback(() => completed = true)
         sys.error("failed")

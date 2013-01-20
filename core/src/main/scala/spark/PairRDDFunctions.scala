@@ -199,9 +199,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   }
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce.
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
     this.cogroup(other, partitioner).flatMapValues {
@@ -661,24 +661,23 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
 }
 
 private[spark]
-class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override val partitioner = prev.partitioner
-  override def compute(split: Split, taskContext: TaskContext) =
-    prev.iterator(split, taskContext).map{case (k, v) => (k, f(v))}
+class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U)
+  extends RDD[(K, U)](prev) {
+
+  override def getSplits = firstParent[(K, V)].splits
+  override val partitioner = firstParent[(K, V)].partitioner
+  override def compute(split: Split, context: TaskContext) =
+    firstParent[(K, V)].iterator(split, context).map{ case (k, v) => (k, f(v)) }
 }
 
 private[spark]
 class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U])
-  extends RDD[(K, U)](prev.context) {
+  extends RDD[(K, U)](prev) {
 
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override val partitioner = prev.partitioner
-
-  override def compute(split: Split, taskContext: TaskContext) = {
-    prev.iterator(split, taskContext).flatMap { case (k, v) => f(v).map(x => (k, x)) }
+  override def getSplits = firstParent[(K, V)].splits
+  override val partitioner = firstParent[(K, V)].partitioner
+  override def compute(split: Split, context: TaskContext) = {
+    firstParent[(K, V)].iterator(split, context).flatMap { case (k, v) => f(v).map(x => (k, x)) }
   }
 }
 

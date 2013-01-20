@@ -21,7 +21,7 @@ private[spark] class PythonRDD[T: ClassManifest](
     pythonExec: String,
     broadcastVars: JList[Broadcast[Array[Byte]]],
     accumulator: Accumulator[JList[Array[Byte]]])
-  extends RDD[Array[Byte]](parent.context) {
+  extends RDD[Array[Byte]](parent) {
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
@@ -32,9 +32,7 @@ private[spark] class PythonRDD[T: ClassManifest](
     this(parent, PipedRDD.tokenize(command), envVars, preservePartitoning, pythonExec,
       broadcastVars, accumulator)
 
-  override def splits = parent.splits
-
-  override val dependencies = List(new OneToOneDependency(parent))
+  override def getSplits = parent.splits
 
   override val partitioner = if (preservePartitoning) parent.partitioner else None
 
@@ -137,6 +135,8 @@ private[spark] class PythonRDD[T: ClassManifest](
     }
   }
 
+  override def checkpoint() { }
+
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
 
@@ -145,14 +145,14 @@ private[spark] class PythonRDD[T: ClassManifest](
  * This is used by PySpark's shuffle operations.
  */
 private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
-  RDD[(Array[Byte], Array[Byte])](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
+  RDD[(Array[Byte], Array[Byte])](prev) {
+  override def getSplits = prev.splits
   override def compute(split: Split, context: TaskContext) =
     prev.iterator(split, context).grouped(2).map {
       case Seq(a, b) => (a, b)
       case x          => throw new Exception("PairwiseRDD: unexpected value: " + x)
     }
+  override def checkpoint() { }
   val asJavaPairRDD : JavaPairRDD[Array[Byte], Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
 

@@ -3,6 +3,7 @@ package spark
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.{URI, URLClassLoader}
+import java.lang.ref.WeakReference
 
 import scala.collection.Map
 import scala.collection.generic.Growable
@@ -36,12 +37,8 @@ import spark.broadcast._
 import spark.deploy.LocalSparkCluster
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.rdd.HadoopRDD
-import spark.rdd.NewHadoopRDD
-import spark.rdd.UnionRDD
-import spark.scheduler.ShuffleMapTask
-import spark.scheduler.DAGScheduler
-import spark.scheduler.TaskScheduler
+import rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD}
+import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
@@ -58,10 +55,10 @@ import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend
  * @param environment Environment variables to set on worker nodes.
  */
 class SparkContext(
-    master: String,
-    jobName: String,
+    val master: String,
+    val jobName: String,
     val sparkHome: String,
-    jars: Seq[String],
+    val jars: Seq[String],
     environment: Map[String, String])
   extends Logging {
 
@@ -187,16 +184,26 @@ class SparkContext(
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
 
+  private[spark] var checkpointDir: Option[String] = None
+
   // Methods for creating RDDs
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
-    new ParallelCollection[T](this, seq, numSlices)
+    new ParallelCollection[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
   /** Distribute a local Scala collection to form an RDD. */
   def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     parallelize(seq, numSlices)
+  }
+
+  /** Distribute a local Scala collection to form an RDD, with one or more
+    * location preferences (hostnames of Spark nodes) for each object.
+    * Create a new partition for each collection item. */
+   def makeRDD[T: ClassManifest](seq: Seq[(T, Seq[String])]): RDD[T] = {
+    val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
+    new ParallelCollection[T](this, seq.map(_._1), seq.size, indexToPrefs)
   }
 
   /**
@@ -365,6 +372,13 @@ class SparkContext(
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
 
+
+  protected[spark] def checkpointFile[T: ClassManifest](
+      path: String
+    ): RDD[T] = {
+    new CheckpointRDD[T](this, path)
+  }
+
   /** Build the union of a list of RDDs. */
   def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
 
@@ -471,17 +485,22 @@ class SparkContext(
 
   /** Shut down the SparkContext. */
   def stop() {
-    dagScheduler.stop()
-    dagScheduler = null
-    taskScheduler = null
-    // TODO: Cache.stop()?
-    env.stop()
-    // Clean up locally linked files
-    clearFiles()
-    clearJars()
-    SparkEnv.set(null)
-    ShuffleMapTask.clearCache()
-    logInfo("Successfully stopped SparkContext")
+    if (dagScheduler != null) {
+      dagScheduler.stop()
+      dagScheduler = null
+      taskScheduler = null
+      // TODO: Cache.stop()?
+      env.stop()
+      // Clean up locally linked files
+      clearFiles()
+      clearJars()
+      SparkEnv.set(null)
+      ShuffleMapTask.clearCache()
+      ResultTask.clearCache()
+      logInfo("Successfully stopped SparkContext")
+    } else {
+      logInfo("SparkContext already stopped")
+    }
   }
 
   /**
@@ -518,6 +537,7 @@ class SparkContext(
     val start = System.nanoTime
     val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    rdd.doCheckpoint()
     result
   }
 
@@ -574,6 +594,26 @@ class SparkContext(
     return f
   }
 
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists and useExisting is set to true, then the
+   * exisiting directory will be used. Otherwise an exception will be thrown to
+   * prevent accidental overriding of checkpoint files in the existing directory.
+   */
+  def setCheckpointDir(dir: String, useExisting: Boolean = false) {
+    val path = new Path(dir)
+    val fs = path.getFileSystem(new Configuration())
+    if (!useExisting) {
+      if (fs.exists(path)) {
+        throw new Exception("Checkpoint directory '" + path + "' already exists.")
+      } else {
+        fs.mkdirs(path)
+      }
+    }
+    checkpointDir = Some(dir)
+  }
+
   /** Default level of parallelism to use when not given by user (e.g. for reduce tasks) */
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
@@ -595,6 +635,7 @@ class SparkContext(
  * various Spark features.
  */
 object SparkContext {
+
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0

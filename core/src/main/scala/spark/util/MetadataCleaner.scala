@@ -4,9 +4,10 @@ import java.util.concurrent.{TimeUnit, ScheduledFuture, Executors}
 import java.util.{TimerTask, Timer}
 import spark.Logging
 
+
 class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging {
 
-  val delaySeconds = (System.getProperty("spark.cleanup.delay", "-100").toDouble * 60).toInt
+  val delaySeconds = MetadataCleaner.getDelaySeconds
   val periodSeconds = math.max(10, delaySeconds / 10)
   val timer = new Timer(name + " cleanup timer", true)
 
@@ -22,6 +23,7 @@ class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging
       }
     }
   }
+
   if (periodSeconds > 0) {
     logInfo(
       "Starting metadata cleaner for " + name + " with delay of " + delaySeconds + " seconds and "
@@ -33,3 +35,10 @@ class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging
     timer.cancel()
   }
 }
+
+
+object MetadataCleaner {
+  def getDelaySeconds = (System.getProperty("spark.cleaner.delay", "-100").toDouble * 60).toInt
+  def setDelaySeconds(delay: Long) { System.setProperty("spark.cleaner.delay", delay.toString) }
+}
+
