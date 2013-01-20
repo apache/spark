@@ -22,6 +22,9 @@ class FailureSuite extends TestSuiteBase with BeforeAndAfter {
   after {
     FailureSuite.reset()
     FileUtils.deleteDirectory(new File(checkpointDir))
+
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
 
   override def framework = "CheckpointSuite"

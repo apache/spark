@@ -11,6 +11,11 @@ class WindowOperationsSuite extends TestSuiteBase {
 
   override def batchDuration = Seconds(1)
 
+  after {
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
+  }
+
   val largerSlideInput = Seq(
     Seq(("a", 1)),
     Seq(("a", 2)),  // 1st window from here

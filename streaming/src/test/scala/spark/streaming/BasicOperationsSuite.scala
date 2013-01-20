@@ -8,6 +8,11 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   override def framework() = "BasicOperationsSuite"
 
+  after {
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
+  }
+
   test("map") {
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     testOperation(
