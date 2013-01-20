@@ -7,6 +7,10 @@ Public classes:
         Main entry point for Spark functionality.
     - L{RDD<pyspark.rdd.RDD>}
         A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
+    - L{Broadcast<pyspark.broadcast.Broadcast>}
+        A broadcast variable that gets reused across tasks.
+    - L{Accumulator<pyspark.accumulators.Accumulator>}
+        An "add-only" shared variable that tasks can only add values to.
 """
 import sys
 import os

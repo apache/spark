@@ -52,8 +52,13 @@ def read_int(stream):
         raise EOFError
     return struct.unpack("!i", length)[0]
 
+
+def write_int(value, stream):
+    stream.write(struct.pack("!i", value))
+
+
 def write_with_length(obj, stream):
-    stream.write(struct.pack("!i", len(obj)))
+    write_int(len(obj), stream)
     stream.write(obj)
 
 
