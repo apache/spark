@@ -1,9 +1,9 @@
 package spark.rdd
 
 import java.io.{ObjectOutputStream, IOException}
-
+import java.util.{HashMap => JHashMap}
+import scala.collection.JavaConversions
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
 
 import spark.{Aggregator, Logging, Partitioner, RDD, SparkEnv, Split, TaskContext}
 import spark.{Dependency, OneToOneDependency, ShuffleDependency}
@@ -86,9 +86,16 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
   override def compute(s: Split, context: TaskContext): Iterator[(K, Seq[Seq[_]])] = {
     val split = s.asInstanceOf[CoGroupSplit]
     val numRdds = split.deps.size
-    val map = new HashMap[K, Seq[ArrayBuffer[Any]]]
+    val map = new JHashMap[K, Seq[ArrayBuffer[Any]]]
     def getSeq(k: K): Seq[ArrayBuffer[Any]] = {
-      map.getOrElseUpdate(k, Array.fill(numRdds)(new ArrayBuffer[Any]))
+      val seq = map.get(k)
+      if (seq != null) {
+        seq
+      } else {
+        val seq = Array.fill(numRdds)(new ArrayBuffer[Any])
+        map.put(k, seq)
+        seq
+      }
     }
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, itsSplitIndex, itsSplit) => {
@@ -108,7 +115,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
         fetcher.fetch[K, Seq[Any]](shuffleId, split.index).foreach(mergePair)
       }
     }
-    map.iterator
+    JavaConversions.mapAsScalaMap(map).iterator
   }
 
   override def clearDependencies() {

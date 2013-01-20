@@ -278,6 +278,19 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.accumulator(initialValue)(DoubleAccumulatorParam).asInstanceOf[Accumulator[java.lang.Double]]
 
   /**
+   * Create an [[spark.Accumulator]] integer variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   */
+  def accumulator(initialValue: Int): Accumulator[java.lang.Integer] = intAccumulator(initialValue)
+
+  /**
+   * Create an [[spark.Accumulator]] double variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   */
+  def accumulator(initialValue: Double): Accumulator[java.lang.Double] =
+    doubleAccumulator(initialValue)
+
+  /**
    * Create an [[spark.Accumulator]] variable of a given type, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */

@@ -63,9 +63,12 @@ class Accumulable[R, T] (
   /**
    * Access the accumulator's current value; only allowed on master.
    */
-  def value = {
-    if (!deserialized) value_
-    else throw new UnsupportedOperationException("Can't read accumulator value in task")
+  def value: R = {
+    if (!deserialized) {
+      value_
+    } else {
+      throw new UnsupportedOperationException("Can't read accumulator value in task")
+    }
   }
 
   /**
@@ -82,9 +85,16 @@ class Accumulable[R, T] (
   /**
    * Set the accumulator's value; only allowed on master.
    */
-  def value_= (r: R) {
-    if (!deserialized) value_ = r
+  def value_= (newValue: R) {
+    if (!deserialized) value_ = newValue
     else throw new UnsupportedOperationException("Can't assign accumulator value in task")
+  }
+
+  /**
+   * Set the accumulator's value; only allowed on master
+   */
+  def setValue(newValue: R) {
+    this.value = newValue
   }
  
   // Called by Java when deserializing an object

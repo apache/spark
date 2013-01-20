@@ -15,9 +15,11 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   after {
-
     if (ssc != null) ssc.stop()
     FileUtils.deleteDirectory(new File(checkpointDir))
+
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
 
   var ssc: StreamingContext = null
@@ -25,8 +27,6 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
   override def framework = "CheckpointSuite"
 
   override def batchDuration = Milliseconds(500)
-
-  override def checkpointDir = "checkpoint"
 
   override def checkpointInterval = batchDuration
 

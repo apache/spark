@@ -471,6 +471,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
     fromRDD(new OrderedRDDFunctions(rdd).sortByKey(ascending))
   }
+
+  /**
+   * Return an RDD with the keys of each tuple.
+   */
+  def keys(): JavaRDD[K] = JavaRDD.fromRDD[K](rdd.map(_._1))
+
+  /**
+   * Return an RDD with the values of each tuple.
+   */
+  def values(): JavaRDD[V] = JavaRDD.fromRDD[V](rdd.map(_._2))
 }
 
 object JavaPairRDD {

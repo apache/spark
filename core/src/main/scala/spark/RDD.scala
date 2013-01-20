@@ -349,6 +349,13 @@ abstract class RDD[T: ClassManifest](
   def toArray(): Array[T] = collect()
 
   /**
+   * Return an RDD that contains all matching values by applying `f`.
+   */
+  def collect[U: ClassManifest](f: PartialFunction[T, U]): RDD[U] = {
+    filter(f.isDefinedAt).map(f)
+  }
+
+  /**
    * Reduces the elements of this RDD using the specified associative binary operator.
    */
   def reduce(f: (T, T) => T): T = {
@@ -529,23 +536,29 @@ abstract class RDD[T: ClassManifest](
       .saveAsSequenceFile(path)
   }
 
+  /**
+   * Creates tuples of the elements in this RDD by applying `f`.
+   */
+  def keyBy[K](f: T => K): RDD[(K, T)] = {
+    map(x => (f(x), x))
+  }
+
   /** A private method for tests, to look at the contents of each partition */
   private[spark] def collectPartitions(): Array[Array[T]] = {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
   }
 
   /**
-   * Mark this RDD for checkpointing. The RDD will be saved to a file inside `checkpointDir`
-   * (set using setCheckpointDir()) and all references to its parent RDDs will be removed.
-   * This is used to truncate very long lineages. In the current implementation, Spark will save
-   * this RDD to a file (using saveAsObjectFile()) after the first job using this RDD is done.
-   * Hence, it is strongly recommended to use checkpoint() on RDDs when
-   * (i) checkpoint() is called before the any job has been executed on this RDD.
-   * (ii) This RDD has been made to persist in memory. Otherwise saving it on a file will
-   * require recomputation.
+   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
+   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * RDDs will be removed. This function must be called before any job has been
+   * executed on this RDD. It is strongly recommended that this RDD is persisted in
+   * memory, otherwise saving it on a file will require recomputation.
    */
   def checkpoint() {
-    if (checkpointData.isEmpty) {
+    if (context.checkpointDir.isEmpty) {
+      throw new Exception("Checkpoint directory has not been set in the SparkContext")
+    } else if (checkpointData.isEmpty) {
       checkpointData = Some(new RDDCheckpointData(this))
       checkpointData.get.markForCheckpoint()
     }

@@ -42,7 +42,13 @@ class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : Cla
       if (classOf[Writable].isAssignableFrom(classManifest[T].erasure)) { 
         classManifest[T].erasure
       } else {
-        implicitly[T => Writable].getClass.getMethods()(0).getReturnType
+        // We get the type of the Writable class by looking at the apply method which converts
+        // from T to Writable. Since we have two apply methods we filter out the one which
+        // is of the form "java.lang.Object apply(java.lang.Object)"
+        implicitly[T => Writable].getClass.getDeclaredMethods().filter(
+            m => m.getReturnType().toString != "java.lang.Object" &&
+                 m.getName() == "apply")(0).getReturnType
+
       }
        // TODO: use something like WritableConverter to avoid reflection
     }

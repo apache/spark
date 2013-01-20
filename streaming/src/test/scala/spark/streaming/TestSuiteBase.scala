@@ -10,7 +10,7 @@ import collection.mutable.SynchronizedBuffer
 
 import java.io.{ObjectInputStream, IOException}
 
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfter, FunSuite}
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -56,7 +56,7 @@ class TestOutputStream[T: ClassManifest](parent: DStream[T], val output: ArrayBu
  * This is the base trait for Spark Streaming testsuites. This provides basic functionality
  * to run user-defined set of input on user-defined stream operations, and verify the output.
  */
-trait TestSuiteBase extends FunSuite with Logging {
+trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
   def framework = "TestSuiteBase"
 
@@ -64,7 +64,7 @@ trait TestSuiteBase extends FunSuite with Logging {
 
   def batchDuration = Seconds(1)
 
-  def checkpointDir = null.asInstanceOf[String]
+  def checkpointDir = "checkpoint"
 
   def checkpointInterval = batchDuration
 

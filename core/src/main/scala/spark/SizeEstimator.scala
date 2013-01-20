@@ -9,7 +9,6 @@ import java.util.Random
 
 import javax.management.MBeanServer
 import java.lang.management.ManagementFactory
-import com.sun.management.HotSpotDiagnosticMXBean
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -76,12 +75,20 @@ private[spark] object SizeEstimator extends Logging {
     if (System.getProperty("spark.test.useCompressedOops") != null) {
       return System.getProperty("spark.test.useCompressedOops").toBoolean 
     }
+
     try {
       val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic"
       val server = ManagementFactory.getPlatformMBeanServer()
+
+      // NOTE: This should throw an exception in non-Sun JVMs
+      val hotSpotMBeanClass = Class.forName("com.sun.management.HotSpotDiagnosticMXBean")
+      val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption",
+          Class.forName("java.lang.String"))
+
       val bean = ManagementFactory.newPlatformMXBeanProxy(server, 
-        hotSpotMBeanName, classOf[HotSpotDiagnosticMXBean])
-      return bean.getVMOption("UseCompressedOops").getValue.toBoolean
+        hotSpotMBeanName, hotSpotMBeanClass)
+      // TODO: We could use reflection on the VMOption returned ?
+      return getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
     } catch {
       case e: Exception => {
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB

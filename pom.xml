@@ -54,6 +54,7 @@
     <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.0.3</akka.version>
     <spray.version>1.0-M2.1</spray.version>
+    <spray.json.version>1.1.1</spray.json.version>
     <slf4j.version>1.6.1</slf4j.version>
     <cdh.version>4.1.2</cdh.version>
   </properties>
@@ -221,6 +222,11 @@
         <groupId>cc.spray</groupId>
         <artifactId>spray-server</artifactId>
         <version>${spray.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>cc.spray</groupId>
+        <artifactId>spray-json_${scala.version}</artifactId>
+        <version>${spray.json.version}</version>
       </dependency>
       <dependency>
         <groupId>org.tomdz.twirl</groupId>
@@ -481,6 +487,12 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+      <activation>
+        <property>
+          <name>!hadoopVersion</name>
+        </property>
+      </activation>
+
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
       </properties>
@@ -489,7 +501,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-core</artifactId>
-            <version>0.20.205.0</version>
+            <version>1.0.3</version>
           </dependency>
         </dependencies>
       </dependencyManagement>
@@ -497,6 +509,12 @@
 
     <profile>
       <id>hadoop2</id>
+      <activation>
+        <property>
+          <name>hadoopVersion</name>
+          <value>2</value>
+        </property>
+      </activation>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
       </properties>

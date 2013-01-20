@@ -64,6 +64,7 @@ REPL_DIR="$FWDIR/repl"
 EXAMPLES_DIR="$FWDIR/examples"
 BAGEL_DIR="$FWDIR/bagel"
 STREAMING_DIR="$FWDIR/streaming"
+PYSPARK_DIR="$FWDIR/python"
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH"
@@ -77,20 +78,17 @@ CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
 CLASSPATH+=":$STREAMING_DIR/target/scala-$SCALA_VERSION/classes"
 if [ -e "$FWDIR/lib_managed" ]; then
-  for jar in `find "$FWDIR/lib_managed/jars" -name '*jar'`; do
-    CLASSPATH+=":$jar"
-  done
-  for jar in `find "$FWDIR/lib_managed/bundles" -name '*jar'`; do
-    CLASSPATH+=":$jar"
-  done
+  CLASSPATH+=":$FWDIR/lib_managed/jars/*"
+  CLASSPATH+=":$FWDIR/lib_managed/bundles/*"
 fi
-for jar in `find "$REPL_DIR/lib" -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
+CLASSPATH+=":$REPL_DIR/lib/*"
 for jar in `find "$REPL_DIR/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
   CLASSPATH+=":$jar"
 done
 CLASSPATH+=":$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
+for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
+  CLASSPATH+=":$jar"
+done
 export CLASSPATH # Needed for spark-shell
 
 # Figure out whether to run our class with java or with the scala launcher.

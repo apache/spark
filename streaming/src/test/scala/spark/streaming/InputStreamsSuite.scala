@@ -40,6 +40,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       FileUtils.deleteDirectory(testDir)
       testDir = null
     }
+
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.master.port")
   }
 
   test("network input stream") {
