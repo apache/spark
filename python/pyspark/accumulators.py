@@ -61,6 +61,7 @@ Traceback (most recent call last):
 Exception:...
 """
 
+from abc import ABCMeta, abstractmethod
 import struct
 import SocketServer
 import threading
@@ -90,8 +91,7 @@ class Accumulator(object):
 
     While C{SparkContext} supports accumulators for primitive data types like C{int} and
     C{float}, users can also define accumulators for custom types by providing a custom
-    C{AccumulatorParam} object with a C{zero} and C{addInPlace} method. Refer to the doctest
-    of this module for an example.
+    L{AccumulatorParam} object. Refer to the doctest of this module for an example.
     """
 
     def __init__(self, aid, value, accum_param):
@@ -134,7 +134,30 @@ class Accumulator(object):
         return "Accumulator<id=%i, value=%s>" % (self.aid, self._value)
 
 
-class AddingAccumulatorParam(object):
+class AccumulatorParam(object):
+    """
+    Helper object that defines how to accumulate values of a given type.
+    """
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def zero(self, value):
+        """
+        Provide a "zero value" for the type, compatible in dimensions with the
+        provided C{value} (e.g., a zero vector)
+        """
+        return
+
+    @abstractmethod
+    def addInPlace(self, value1, value2):
+        """
+        Add two values of the accumulator's data type, returning a new value;
+        for efficiency, can also update C{value1} in place and return it.
+        """
+        return
+
+
+class AddingAccumulatorParam(AccumulatorParam):
     """
     An AccumulatorParam that uses the + operators to add values. Designed for simple types
     such as integers, floats, and lists. Requires the zero value for the underlying type
