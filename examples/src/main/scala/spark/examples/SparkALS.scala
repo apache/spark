@@ -75,8 +75,8 @@ object SparkALS {
 
     (0 to 5).map(i => {
       i match {
-        case a if a < args.length => Option(args(a))
-        case _ => Option(null)
+        case a if a < args.length => Some(args(a))
+        case _ => None
       }
     }).toArray match {
       case Array(host_, m, u, f, iters, slices_) => {
