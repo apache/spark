@@ -76,6 +76,18 @@ def _deserialize_accumulator(aid, zero_value, accum_param):
 
 
 class Accumulator(object):
+    """
+    A shared variable that can be accumulated, i.e., has a commutative and associative "add"
+    operation. Worker tasks on a Spark cluster can add values to an Accumulator with the C{+=}
+    operator, but only the driver program is allowed to access its value, using C{value}.
+    Updates from the workers get propagated automatically to the driver program.
+
+    While C{SparkContext} supports accumulators for primitive data types like C{int} and
+    C{float}, users can also define accumulators for custom types by providing a custom
+    C{AccumulatorParam} object with a C{zero} and C{addInPlace} method. Refer to the doctest
+    of this module for an example.
+    """
+
     def __init__(self, aid, value, accum_param):
         """Create a new Accumulator with a given initial value and AccumulatorParam object"""
         from pyspark.accumulators import _accumulatorRegistry
