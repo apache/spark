@@ -293,8 +293,7 @@ class SparkContext(
         path,
         fm.erasure.asInstanceOf[Class[F]],
         km.erasure.asInstanceOf[Class[K]],
-        vm.erasure.asInstanceOf[Class[V]],
-        new Configuration(hadoopConfiguration))
+        vm.erasure.asInstanceOf[Class[V]])
   }
 
   /**
@@ -306,7 +305,7 @@ class SparkContext(
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration): RDD[(K, V)] = {
+      conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
@@ -318,7 +317,7 @@ class SparkContext(
    * and extra configuration options to pass to the input format.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
-      conf: Configuration,
+      conf: Configuration = hadoopConfiguration,
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V]): RDD[(K, V)] = {
