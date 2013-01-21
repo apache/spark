@@ -43,7 +43,7 @@ private[spark] case class LaunchExecutor(
     jobDesc: JobDescription,
     cores: Int,
     memory: Int,
-    sparkHome: File)
+    sparkHome: String)
   extends DeployMessage
 
 
