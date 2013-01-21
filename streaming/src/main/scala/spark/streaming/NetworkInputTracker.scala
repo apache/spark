@@ -113,7 +113,7 @@ class NetworkInputTracker(
      */
     def startReceivers() {
       val receivers = networkInputStreams.map(nis => {
-        val rcvr = nis.createReceiver()
+        val rcvr = nis.getReceiver()
         rcvr.setStreamId(nis.id)
         rcvr
       })

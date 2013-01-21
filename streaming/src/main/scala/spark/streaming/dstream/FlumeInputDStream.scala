@@ -25,7 +25,7 @@ class FlumeInputDStream[T: ClassManifest](
   storageLevel: StorageLevel
 ) extends NetworkInputDStream[SparkFlumeEvent](ssc_) {
 
-  override def createReceiver(): NetworkReceiver[SparkFlumeEvent] = {
+  override def getReceiver(): NetworkReceiver[SparkFlumeEvent] = {
     new FlumeReceiver(host, port, storageLevel)
   }
 }

@@ -95,7 +95,7 @@ class KafkaInputDStream[T: ClassManifest](
     }
   } */
 
-  def createReceiver(): NetworkReceiver[T] = {
+  def getReceiver(): NetworkReceiver[T] = {
     new KafkaReceiver(host, port,  groupId, topics, initialOffsets, storageLevel)
         .asInstanceOf[NetworkReceiver[T]]
   }

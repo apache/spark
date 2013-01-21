@@ -22,7 +22,7 @@ class TwitterInputDStream(
     storageLevel: StorageLevel
     ) extends NetworkInputDStream[Status](ssc_)  {
 
-  override def createReceiver(): NetworkReceiver[Status] = {
+  override def getReceiver(): NetworkReceiver[Status] = {
     new TwitterReceiver(username, password, filters, storageLevel)
   }
 }

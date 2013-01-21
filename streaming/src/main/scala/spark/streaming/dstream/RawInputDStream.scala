@@ -25,7 +25,7 @@ class RawInputDStream[T: ClassManifest](
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[T](ssc_ ) with Logging {
 
-  def createReceiver(): NetworkReceiver[T] = {
+  def getReceiver(): NetworkReceiver[T] = {
     new RawNetworkReceiver(host, port, storageLevel).asInstanceOf[NetworkReceiver[T]]
   }
 }
