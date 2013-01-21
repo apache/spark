@@ -9,15 +9,18 @@
   </parent>
 
   <groupId>org.spark-project</groupId>
-  <artifactId>spark-repl</artifactId>
+  <artifactId>spark-streaming</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project REPL</name>
+  <name>Spark Project Streaming</name>
   <url>http://spark-project.org/</url>
 
-  <properties>
-    <deb.install.path>/usr/share/spark</deb.install.path>
-    <deb.user>root</deb.user>
-  </properties>
+  <repositories>
+    <!-- A repository in the local filesystem for the Kafka JAR, which we modified for Scala 2.9 -->
+    <repository>
+      <id>lib</id>
+      <url>file://${project.basedir}/lib</url>
+    </repository>
+  </repositories>
 
   <dependencies>
     <dependency>
@@ -25,20 +28,24 @@
       <artifactId>jetty-server</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scala-compiler</artifactId>
+      <groupId>org.codehaus.jackson</groupId>
+      <artifactId>jackson-mapper-asl</artifactId>
+      <version>1.9.11</version>
     </dependency>
     <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>jline</artifactId>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka</artifactId>
+      <version>0.7.2-spark</version>  <!-- Comes from our in-project repository -->
     </dependency>
     <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>jul-to-slf4j</artifactId>
+      <groupId>org.apache.flume</groupId>
+      <artifactId>flume-ng-sdk</artifactId>
+      <version>1.2.0</version>
     </dependency>
     <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-log4j12</artifactId>
+      <groupId>com.github.sgroschupf</groupId>
+      <artifactId>zkclient</artifactId>
+      <version>0.1</version>
     </dependency>
 
     <dependency>
@@ -51,6 +58,16 @@
       <artifactId>scalacheck_${scala.version}</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.novocode</groupId>
+      <artifactId>junit-interface</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-log4j12</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
@@ -59,12 +76,6 @@
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
-        <configuration>
-          <environmentVariables>
-            <SPARK_HOME>${basedir}/..</SPARK_HOME>
-            <SPARK_TESTING>1</SPARK_TESTING>
-          </environmentVariables>
-        </configuration>
       </plugin>
     </plugins>
   </build>
@@ -77,36 +88,12 @@
           <name>!hadoopVersion</name>
         </property>
       </activation>
-      <properties>
-        <classifier>hadoop1</classifier>
-      </properties>
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
           <artifactId>spark-core</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop1</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-streaming</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
         </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
@@ -134,36 +121,12 @@
           <value>2</value>
         </property>
       </activation>
-      <properties>
-        <classifier>hadoop2</classifier>
-      </properties>
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
           <artifactId>spark-core</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-streaming</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
         </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
