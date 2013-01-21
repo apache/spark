@@ -4,8 +4,6 @@ import spark.deploy.ExecutorState.ExecutorState
 import spark.deploy.master.{WorkerInfo, JobInfo}
 import spark.deploy.worker.ExecutorRunner
 import scala.collection.immutable.List
-import scala.collection.mutable.HashMap
-import java.io.File
 
 
 private[spark] sealed trait DeployMessage extends Serializable
