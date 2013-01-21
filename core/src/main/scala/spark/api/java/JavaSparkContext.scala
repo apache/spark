@@ -359,8 +359,35 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   /**
    * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
    */
-  def hadoopConfiguration() {
+  def hadoopConfiguration(): Configuration = {
     sc.hadoopConfiguration
+  }
+
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists and useExisting is set to true, then the
+   * exisiting directory will be used. Otherwise an exception will be thrown to
+   * prevent accidental overriding of checkpoint files in the existing directory.
+   */
+  def setCheckpointDir(dir: String, useExisting: Boolean) {
+    sc.setCheckpointDir(dir, useExisting)
+  }
+
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists, an exception will be thrown to prevent accidental
+   * overriding of checkpoint files.
+   */
+  def setCheckpointDir(dir: String) {
+    sc.setCheckpointDir(dir)
+  }
+
+  protected def checkpointFile[T](path: String): JavaRDD[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    new JavaRDD(sc.checkpointFile(path))
   }
 }
 

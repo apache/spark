@@ -7,7 +7,11 @@ import akka.util.Timeout
 import akka.util.duration._
 import cc.spray.Directives
 import cc.spray.typeconversion.TwirlSupport._
+import cc.spray.http.MediaTypes
+import cc.spray.typeconversion.SprayJsonSupport._
+
 import spark.deploy.{WorkerState, RequestWorkerState}
+import spark.deploy.JsonProtocol._
 
 private[spark]
 class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Directives {
@@ -18,13 +22,20 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Direct
   
   val handler = {
     get {
-      path("") {
-        completeWith{
+      (path("") & parameters('format ?)) {
+        case Some(js) if js.equalsIgnoreCase("json") => {
           val future = worker ? RequestWorkerState
-          future.map { workerState =>
-            spark.deploy.worker.html.index(workerState.asInstanceOf[WorkerState])
+          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+            ctx.complete(future.mapTo[WorkerState])
           }
         }
+        case _ =>
+          completeWith{
+            val future = worker ? RequestWorkerState
+            future.map { workerState =>
+              spark.deploy.worker.html.index(workerState.asInstanceOf[WorkerState])
+            }
+          }
       } ~
       path("log") {
         parameters("jobId", "executorId", "logType") { (jobId, executorId, logType) =>

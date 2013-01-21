@@ -1,16 +1,16 @@
 package spark.util
 
 import java.util.concurrent.ConcurrentHashMap
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, Map}
+import scala.collection.JavaConversions
+import scala.collection.mutable.Map
 
 /**
  * This is a custom implementation of scala.collection.mutable.Map which stores the insertion
  * time stamp along with each key-value pair. Key-value pairs that are older than a particular
- * threshold time can them be removed using the cleanup method. This is intended to be a drop-in
+ * threshold time can them be removed using the clearOldValues method. This is intended to be a drop-in
  * replacement of scala.collection.mutable.HashMap.
  */
-class TimeStampedHashMap[A, B] extends Map[A, B]() {
+class TimeStampedHashMap[A, B] extends Map[A, B]() with spark.Logging {
   val internalMap = new ConcurrentHashMap[A, (B, Long)]()
 
   def get(key: A): Option[B] = {
@@ -20,7 +20,7 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() {
 
   def iterator: Iterator[(A, B)] = {
     val jIterator = internalMap.entrySet().iterator()
-    jIterator.map(kv => (kv.getKey, kv.getValue._1))
+    JavaConversions.asScalaIterator(jIterator).map(kv => (kv.getKey, kv.getValue._1))
   }
 
   override def + [B1 >: B](kv: (A, B1)): Map[A, B1] = {
@@ -31,8 +31,10 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() {
   }
 
   override def - (key: A): Map[A, B] = {
-    internalMap.remove(key)
-    this
+    val newMap = new TimeStampedHashMap[A, B]
+    newMap.internalMap.putAll(this.internalMap)
+    newMap.internalMap.remove(key)
+    newMap
   }
 
   override def += (kv: (A, B)): this.type = {
@@ -56,7 +58,7 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() {
   }
 
   override def filter(p: ((A, B)) => Boolean): Map[A, B] = {
-    internalMap.map(kv => (kv._1, kv._2._1)).filter(p)
+    JavaConversions.asScalaConcurrentMap(internalMap).map(kv => (kv._1, kv._2._1)).filter(p)
   }
 
   override def empty: Map[A, B] = new TimeStampedHashMap[A, B]()
@@ -72,11 +74,15 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() {
     }
   }
 
-  def cleanup(threshTime: Long) {
+  /**
+   * Removes old key-value pairs that have timestamp earlier than `threshTime`
+   */
+  def clearOldValues(threshTime: Long) {
     val iterator = internalMap.entrySet().iterator()
     while(iterator.hasNext) {
       val entry = iterator.next()
       if (entry.getValue._2 < threshTime) {
+        logDebug("Removing key " + entry.getKey)
         iterator.remove()
       }
     }

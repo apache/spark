@@ -134,7 +134,7 @@ private object Utils extends Logging {
    */
   def fetchFile(url: String, targetDir: File) {
     val filename = url.split("/").last
-    val tempDir = System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir"))
+    val tempDir = getLocalDir
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
@@ -202,6 +202,15 @@ private object Utils extends Logging {
     }
     // Make the file executable - That's necessary for scripts
     FileUtil.chmod(filename, "a+x")
+  }
+
+  /**
+   * Get a temporary directory using Spark's spark.local.dir property, if set. This will always
+   * return a single directory, even though the spark.local.dir property might be a list of
+   * multiple paths.
+   */
+  def getLocalDir: String = {
+    System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")).split(',')(0)
   }
 
   /**
@@ -306,7 +315,7 @@ private object Utils extends Logging {
    * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
-    return " " + (System.currentTimeMillis - startTimeMs) + " ms "
+    return " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**
