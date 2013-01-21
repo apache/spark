@@ -45,8 +45,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
 
   val aggr = new CoGroupAggregator
 
-  @transient
-  var deps_ = {
+  @transient var deps_ = {
     val deps = new ArrayBuffer[Dependency[_]]
     for ((rdd, index) <- rdds.zipWithIndex) {
       if (rdd.partitioner == Some(part)) {
@@ -63,8 +62,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
 
   override def getDependencies = deps_
 
-  @transient
-  var splits_ : Array[Split] = {
+  @transient var splits_ : Array[Split] = {
     val array = new Array[Split](part.numPartitions)
     for (i <- 0 until array.size) {
       array(i) = new CoGroupSplit(i, rdds.zipWithIndex.map { case (r, j) =>

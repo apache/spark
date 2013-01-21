@@ -23,39 +23,34 @@ private[spark] class ParallelCollectionSplit[T: ClassManifest](
 }
 
 private[spark] class ParallelCollection[T: ClassManifest](
-    @transient sc : SparkContext,
+    @transient sc: SparkContext,
     @transient data: Seq[T],
     numSlices: Int,
-    locationPrefs : Map[Int,Seq[String]])
+    locationPrefs: Map[Int,Seq[String]])
   extends RDD[T](sc, Nil) {
   // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
   // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
   // instead.
   // UPDATE: A parallel collection can be checkpointed to HDFS, which achieves this goal.
 
-  @transient
-  var splits_ : Array[Split] = {
+  @transient var splits_ : Array[Split] = {
     val slices = ParallelCollection.slice(data, numSlices).toArray
     slices.indices.map(i => new ParallelCollectionSplit(id, i, slices(i))).toArray
   }
 
-  override def getSplits = splits_.asInstanceOf[Array[Split]]
+  override def getSplits = splits_
 
   override def compute(s: Split, context: TaskContext) =
     s.asInstanceOf[ParallelCollectionSplit[T]].iterator
 
   override def getPreferredLocations(s: Split): Seq[String] = {
-    locationPrefs.get(s.index) match {
-      case Some(s) => s
-      case _ => Nil
-    }
+    locationPrefs.get(s.index) getOrElse Nil
   }
 
   override def clearDependencies() {
     splits_ = null
   }
 }
-
 
 private object ParallelCollection {
   /**

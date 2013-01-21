@@ -9,8 +9,8 @@ import SparkContext._
 class FileServerSuite extends FunSuite with BeforeAndAfter {
 
   @transient var sc: SparkContext = _
-  @transient var tmpFile : File = _
-  @transient var testJarFile : File = _
+  @transient var tmpFile: File = _
+  @transient var testJarFile: File = _
 
   before {
     // Create a sample text file

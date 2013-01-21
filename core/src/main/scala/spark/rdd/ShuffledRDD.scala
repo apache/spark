@@ -22,8 +22,7 @@ class ShuffledRDD[K, V](
 
   override val partitioner = Some(part)
 
-  @transient
-  var splits_ = Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))
+  @transient var splits_ = Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))
 
   override def getSplits = splits_
 
