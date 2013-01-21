@@ -3,8 +3,6 @@ package spark.scheduler.cluster
 import spark.{Utils, Logging, SparkContext}
 import spark.deploy.client.{Client, ClientListener}
 import spark.deploy.{Command, JobDescription}
-import scala.collection.mutable.HashMap
-import java.io.File
 
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: ClusterScheduler,
@@ -40,7 +38,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val args = Seq(masterUrl, "{{SLAVEID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(throw new IllegalArgumentException("must supply spark home for spark standalone"))
-    val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, new File(sparkHome))
+    val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, sparkHome)
 
     client = new Client(sc.env.actorSystem, master, jobDesc, this)
     client.start()

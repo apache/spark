@@ -6,7 +6,6 @@ import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, Remote
 
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.io.File
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -195,10 +194,10 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     }
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo, sparkHome: File) {
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo, sparkHome: String) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
-    worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc, exec.cores, exec.memory, sparkHome.getAbsolutePath)
+    worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc, exec.cores, exec.memory, sparkHome)
     exec.job.actor ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
   }
 
