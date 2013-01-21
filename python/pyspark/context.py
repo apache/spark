@@ -123,6 +123,10 @@ class SparkContext(object):
         jrdd = self._jsc.textFile(name, minSplits)
         return RDD(jrdd, self)
 
+    def _checkpointFile(self, name):
+        jrdd = self._jsc.checkpointFile(name)
+        return RDD(jrdd, self)
+
     def union(self, rdds):
         """
         Build the union of a list of RDDs.
@@ -145,7 +149,7 @@ class SparkContext(object):
     def accumulator(self, value, accum_param=None):
         """
         Create an C{Accumulator} with the given initial value, using a given
-        AccumulatorParam helper object to define how to add values of the data 
+        AccumulatorParam helper object to define how to add values of the data
         type if provided. Default AccumulatorParams are used for integers and
         floating-point numbers if you do not provide one. For other types, the
         AccumulatorParam must implement two methods:
@@ -195,3 +199,15 @@ class SparkContext(object):
         filename = path.split("/")[-1]
         os.environ["PYTHONPATH"] = \
             "%s:%s" % (filename, os.environ["PYTHONPATH"])
+
+    def setCheckpointDir(self, dirName, useExisting=False):
+        """
+        Set the directory under which RDDs are going to be checkpointed. The
+        directory must be a HDFS path if running on a cluster.
+
+        If the directory does not exist, it will be created. If the directory
+        exists and C{useExisting} is set to true, then the exisiting directory
+        will be used.  Otherwise an exception will be thrown to prevent
+        accidental overriding of checkpoint files in the existing directory.
+        """
+        self._jsc.sc().setCheckpointDir(dirName, useExisting)

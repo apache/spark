@@ -307,16 +307,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     implicit val kcm: ClassManifest[K] = implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[K]]
     JavaPairRDD.fromRDD(rdd.keyBy(f))
   }
-  
+
   /**
-   * Mark this RDD for checkpointing. The RDD will be saved to a file inside `checkpointDir`
-   * (set using setCheckpointDir()) and all references to its parent RDDs will be removed.
-   * This is used to truncate very long lineages. In the current implementation, Spark will save
-   * this RDD to a file (using saveAsObjectFile()) after the first job using this RDD is done.
-   * Hence, it is strongly recommended to use checkpoint() on RDDs when
-   * (i) checkpoint() is called before the any job has been executed on this RDD.
-   * (ii) This RDD has been made to persist in memory. Otherwise saving it on a file will
-   * require recomputation.
+   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
+   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * RDDs will be removed. This function must be called before any job has been
+   * executed on this RDD. It is strongly recommended that this RDD is persisted in
+   * memory, otherwise saving it on a file will require recomputation.
    */
   def checkpoint() = rdd.checkpoint()
 
