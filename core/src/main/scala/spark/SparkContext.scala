@@ -8,6 +8,7 @@ import java.lang.ref.WeakReference
 import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.JavaConversions._
 
 import akka.actor.Actor
 import akka.actor.Actor._
@@ -184,6 +185,25 @@ class SparkContext(
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
 
+  /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
+  val hadoopConfiguration = {
+    val conf = new Configuration()
+    // Explicitly check for S3 environment variables
+    if (System.getenv("AWS_ACCESS_KEY_ID") != null && System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
+      conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
+      conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
+      conf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+      conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+    }
+    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
+    for (key <- System.getProperties.toMap[String, String].keys if key.startsWith("spark.hadoop.")) {
+      conf.set(key.substring("spark.hadoop.".length), System.getProperty(key))
+    }
+    val bufferSize = System.getProperty("spark.buffer.size", "65536")
+    conf.set("io.file.buffer.size", bufferSize)
+    conf
+  }
+
   private[spark] var checkpointDir: Option[String] = None
 
   // Methods for creating RDDs
@@ -238,10 +258,8 @@ class SparkContext(
       valueClass: Class[V],
       minSplits: Int = defaultMinSplits
       ) : RDD[(K, V)] = {
-    val conf = new JobConf()
+    val conf = new JobConf(hadoopConfiguration)
     FileInputFormat.setInputPaths(conf, path)
-    val bufferSize = System.getProperty("spark.buffer.size", "65536")
-    conf.set("io.file.buffer.size", bufferSize)
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
   }
 
@@ -282,8 +300,7 @@ class SparkContext(
         path,
         fm.erasure.asInstanceOf[Class[F]],
         km.erasure.asInstanceOf[Class[K]],
-        vm.erasure.asInstanceOf[Class[V]],
-        new Configuration)
+        vm.erasure.asInstanceOf[Class[V]])
   }
 
   /**
@@ -295,7 +312,7 @@ class SparkContext(
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration): RDD[(K, V)] = {
+      conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
@@ -307,7 +324,7 @@ class SparkContext(
    * and extra configuration options to pass to the input format.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
-      conf: Configuration,
+      conf: Configuration = hadoopConfiguration,
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V]): RDD[(K, V)] = {
