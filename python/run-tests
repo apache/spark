@@ -8,6 +8,9 @@ FAILED=0
 $FWDIR/pyspark pyspark/rdd.py
 FAILED=$(($?||$FAILED))
 
+$FWDIR/pyspark pyspark/context.py
+FAILED=$(($?||$FAILED))
+
 $FWDIR/pyspark -m doctest pyspark/broadcast.py
 FAILED=$(($?||$FAILED))
 

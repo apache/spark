@@ -111,20 +111,6 @@ private object Utils extends Logging {
     }
   }
 
-  /** Copy a file on the local file system */
-  def copyFile(source: File, dest: File) {
-    val in = new FileInputStream(source)
-    val out = new FileOutputStream(dest)
-    copyStream(in, out, true)
-  }
-
-  /** Download a file from a given URL to the local filesystem */
-  def downloadFile(url: URL, localPath: String) {
-    val in = url.openStream()
-    val out = new FileOutputStream(localPath)
-    Utils.copyStream(in, out, true)
-  }
-
   /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
@@ -201,7 +187,7 @@ private object Utils extends Logging {
       Utils.execute(Seq("tar", "-xf", filename), targetDir)
     }
     // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(filename, "a+x")
+    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
   }
 
   /**

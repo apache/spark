@@ -323,9 +323,10 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def getSparkHome(): Option[String] = sc.getSparkHome()
 
   /**
-   * Add a file to be downloaded into the working directory of this Spark job on every node.
+   * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), or an HTTP, HTTPS or FTP URI.
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(path)` to find its download location.
    */
   def addFile(path: String) {
     sc.addFile(path)
