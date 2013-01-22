@@ -1,7 +1,7 @@
 """
 An interactive shell.
 
-This fle is designed to be launched as a PYTHONSTARTUP script.
+This file is designed to be launched as a PYTHONSTARTUP script.
 """
 import os
 from pyspark.context import SparkContext
@@ -14,4 +14,4 @@ print "Spark context avaiable as sc."
 # which allows us to execute the user's PYTHONSTARTUP file:
 _pythonstartup = os.environ.get('OLD_PYTHONSTARTUP')
 if _pythonstartup and os.path.isfile(_pythonstartup):
-        execfile(_pythonstartup)
+    execfile(_pythonstartup)

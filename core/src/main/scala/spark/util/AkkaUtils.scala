@@ -32,6 +32,7 @@ private[spark] object AkkaUtils {
       akka.event-handlers = ["akka.event.slf4j.Slf4jEventHandler"]
       akka.actor.provider = "akka.remote.RemoteActorRefProvider"
       akka.remote.transport = "akka.remote.netty.NettyRemoteTransport"
+      akka.remote.log-remote-lifecycle-events = on
       akka.remote.netty.hostname = "%s"
       akka.remote.netty.port = %d
       akka.remote.netty.connection-timeout = %ds

@@ -11,6 +11,12 @@ FAILED=$(($?||$FAILED))
 $FWDIR/pyspark -m doctest pyspark/broadcast.py
 FAILED=$(($?||$FAILED))
 
+$FWDIR/pyspark -m doctest pyspark/accumulators.py
+FAILED=$(($?||$FAILED))
+
+$FWDIR/pyspark -m unittest pyspark.tests
+FAILED=$(($?||$FAILED))
+
 if [[ $FAILED != 0 ]]; then
     echo -en "\033[31m"  # Red
     echo "Had test failures; see logs."

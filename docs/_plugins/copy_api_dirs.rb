@@ -2,7 +2,7 @@ require 'fileutils'
 include FileUtils
 
 if ENV['SKIP_SCALADOC'] != '1'
-  projects = ["core", "examples", "repl", "bagel"]
+  projects = ["core", "examples", "repl", "bagel", "streaming"]
 
   puts "Moving to project root and building scaladoc."
   curr_dir = pwd
@@ -11,7 +11,7 @@ if ENV['SKIP_SCALADOC'] != '1'
   puts "Running sbt/sbt doc from " + pwd + "; this may take a few minutes..."
   puts `sbt/sbt doc`
 
-  puts "moving back into docs dir."
+  puts "Moving back into docs dir."
   cd("docs")
 
   # Copy over the scaladoc from each project into the docs directory.

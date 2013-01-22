@@ -41,6 +41,7 @@
     <module>core</module>
     <module>bagel</module>
     <module>examples</module>
+    <module>streaming</module>
     <module>repl</module>
     <module>repl-bin</module>
   </modules>
@@ -97,6 +98,17 @@
       <id>spray-repo</id>
       <name>Spray Repository</name>
       <url>http://repo.spray.cc/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>twitter4j-repo</id>
+      <name>Twitter4J Repository</name>
+      <url>http://twitter4j.org/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>

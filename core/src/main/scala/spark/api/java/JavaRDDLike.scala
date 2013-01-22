@@ -9,6 +9,7 @@ import spark.api.java.JavaPairRDD._
 import spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
 import spark.partial.{PartialResult, BoundedDouble}
 import spark.storage.StorageLevel
+import com.google.common.base.Optional
 
 
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
@@ -305,5 +306,29 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def keyBy[K](f: JFunction[T, K]): JavaPairRDD[K, T] = {
     implicit val kcm: ClassManifest[K] = implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[K]]
     JavaPairRDD.fromRDD(rdd.keyBy(f))
+  }
+
+  /**
+   * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
+   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * RDDs will be removed. This function must be called before any job has been
+   * executed on this RDD. It is strongly recommended that this RDD is persisted in
+   * memory, otherwise saving it on a file will require recomputation.
+   */
+  def checkpoint() = rdd.checkpoint()
+
+  /**
+   * Return whether this RDD has been checkpointed or not
+   */
+  def isCheckpointed(): Boolean = rdd.isCheckpointed()
+
+  /**
+   * Gets the name of the file to which this RDD was checkpointed
+   */
+  def getCheckpointFile(): Optional[String] = {
+    rdd.getCheckpointFile match {
+      case Some(file) => Optional.of(file)
+      case _ => Optional.absent()
+    }
   }
 }
