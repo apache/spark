@@ -32,3 +32,5 @@ logs/
 log/
 spark-tests.log
 dependency-reduced-pom.xml
+.ensime
+.ensime_lucene
