@@ -44,7 +44,7 @@ private[spark] class ParallelCollection[T: ClassManifest](
     s.asInstanceOf[ParallelCollectionSplit[T]].iterator
 
   override def getPreferredLocations(s: Split): Seq[String] = {
-    locationPrefs.get(s.index) getOrElse Nil
+    locationPrefs.getOrElse(s.index, Nil)
   }
 
   override def clearDependencies() {
