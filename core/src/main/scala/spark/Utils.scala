@@ -10,6 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.io.Source
 import com.google.common.io.Files
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 /**
  * Various utility methods used by Spark.
@@ -287,29 +288,14 @@ private object Utils extends Logging {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
   }
 
-  /**
-   * Returns a standard ThreadFactory except all threads are daemons.
-   */
-  private def newDaemonThreadFactory: ThreadFactory = {
-    new ThreadFactory {
-      def newThread(r: Runnable): Thread = {
-        var t = Executors.defaultThreadFactory.newThread (r)
-        t.setDaemon (true)
-        return t
-      }
-    }
-  }
+  private[spark] val daemonThreadFactory: ThreadFactory =
+    new ThreadFactoryBuilder().setDaemon(true).build()
 
   /**
    * Wrapper over newCachedThreadPool.
    */
-  def newDaemonCachedThreadPool(): ThreadPoolExecutor = {
-    var threadPool = Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory (newDaemonThreadFactory)
-
-    return threadPool
-  }
+  def newDaemonCachedThreadPool(): ThreadPoolExecutor =
+    Executors.newCachedThreadPool(daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
   /**
    * Return the string to tell how long has passed in seconds. The passing parameter should be in
@@ -322,13 +308,8 @@ private object Utils extends Logging {
   /**
    * Wrapper over newFixedThreadPool.
    */
-  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
-    var threadPool = Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory(newDaemonThreadFactory)
-
-    return threadPool
-  }
+  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor =
+    Executors.newFixedThreadPool(nThreads, daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
   /**
    * Delete a file or directory and its contents recursively.

@@ -20,7 +20,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
   with Logging {
 
   var attemptId = new AtomicInteger(0)
-  var threadPool = Executors.newFixedThreadPool(threads, DaemonThreadFactory)
+  var threadPool = Utils.newDaemonFixedThreadPool(threads)
   val env = SparkEnv.get
   var listener: TaskSchedulerListener = null
 
