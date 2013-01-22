@@ -12,7 +12,7 @@ import scala.collection.mutable.HashMap
 
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
 
 /**
@@ -75,7 +75,7 @@ abstract class DStream[T: ClassManifest] (
   // Checkpoint details
   protected[streaming] val mustCheckpoint = false
   protected[streaming] var checkpointDuration: Duration = null
-  protected[streaming] var checkpointData = new DStreamCheckpointData(HashMap[Time, Any]())
+  protected[streaming] val checkpointData = new DStreamCheckpointData(this)
 
   // Reference to whole DStream graph
   protected[streaming] var graph: DStreamGraph = null
@@ -85,10 +85,10 @@ abstract class DStream[T: ClassManifest] (
   // Duration for which the DStream requires its parent DStream to remember each RDD created
   protected[streaming] def parentRememberDuration = rememberDuration
 
-  /** Returns the StreamingContext associated with this DStream */
+  /** Return the StreamingContext associated with this DStream */
   def context() = ssc
 
-  /** Persists the RDDs of this DStream with the given storage level */
+  /** Persist the RDDs of this DStream with the given storage level */
   def persist(level: StorageLevel): DStream[T] = {
     if (this.isInitialized) {
       throw new UnsupportedOperationException(
@@ -342,40 +342,10 @@ abstract class DStream[T: ClassManifest] (
    */
   protected[streaming] def updateCheckpointData(currentTime: Time) {
     logInfo("Updating checkpoint data for time " + currentTime)
-
-    // Get the checkpointed RDDs from the generated RDDs
-    val newRdds = generatedRDDs.filter(_._2.getCheckpointFile.isDefined)
-                               .map(x => (x._1, x._2.getCheckpointFile.get))
-
-    // Make a copy of the existing checkpoint data (checkpointed RDDs)
-    val oldRdds = checkpointData.rdds.clone()
-
-    // If the new checkpoint data has checkpoints then replace existing with the new one
-    if (newRdds.size > 0) {
-      checkpointData.rdds.clear()
-      checkpointData.rdds ++= newRdds
-    }
-
-    // Make parent DStreams update their checkpoint data
+    checkpointData.update()
     dependencies.foreach(_.updateCheckpointData(currentTime))
-
-    // TODO: remove this, this is just for debugging
-    newRdds.foreach {
-      case (time, data) => { logInfo("Added checkpointed RDD for time " + time + " to stream checkpoint") }
-    }
-
-    if (newRdds.size > 0) {
-      (oldRdds -- newRdds.keySet).foreach {
-        case (time, data) => {
-          val path = new Path(data.toString)
-          val fs = path.getFileSystem(new Configuration())
-          fs.delete(path, true)
-          logInfo("Deleted checkpoint file '" + path + "' for time " + time)
-        }
-      }
-    }
-    logInfo("Updated checkpoint data for time " + currentTime + ", " + checkpointData.rdds.size + " checkpoints, " 
-      + "[" + checkpointData.rdds.mkString(",") + "]")
+    checkpointData.cleanup()
+    logDebug("Updated checkpoint data for time " + currentTime + ": " + checkpointData)
   }
 
   /**
@@ -386,14 +356,8 @@ abstract class DStream[T: ClassManifest] (
    */
   protected[streaming] def restoreCheckpointData() {
     // Create RDDs from the checkpoint data
-    logInfo("Restoring checkpoint data from " + checkpointData.rdds.size + " checkpointed RDDs")
-    checkpointData.rdds.foreach {
-      case(time, data) => {
-        logInfo("Restoring checkpointed RDD for time " + time + " from file '" + data.toString + "'")
-        val rdd = ssc.sc.checkpointFile[T](data.toString)
-        generatedRDDs += ((time, rdd))
-      }
-    }
+    logInfo("Restoring checkpoint data from " + checkpointData.checkpointFiles.size + " checkpointed RDDs")
+    checkpointData.restore()
     dependencies.foreach(_.restoreCheckpointData())
     logInfo("Restored checkpoint data")
   }
@@ -651,7 +615,3 @@ abstract class DStream[T: ClassManifest] (
     ssc.registerOutputStream(this)
   }
 }
-
-private[streaming]
-case class DStreamCheckpointData(rdds: HashMap[Time, Any])
-
