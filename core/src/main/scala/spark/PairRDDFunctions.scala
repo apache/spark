@@ -493,18 +493,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
-    saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass)
-  }
-
-  /**
-   * Output the RDD to any Hadoop-supported file system, using a new Hadoop API `OutputFormat`
-   * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
-   */
-  def saveAsNewAPIHadoopFile(
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
       conf: Configuration = self.context.hadoopConfiguration) {
     val job = new NewAPIHadoopJob(conf)
