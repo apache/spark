@@ -103,8 +103,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
               val e = new SparkException("Job %s wth ID %s failed %d times.".format(
                 jobInfo.desc.name, jobInfo.id, jobInfo.retryCount))
               logError(e.getMessage, e)
-              throw e
-              //System.exit(1)
+              removeJob(jobInfo)
             }
           }
         }
