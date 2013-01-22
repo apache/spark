@@ -1,6 +1,7 @@
 package spark.storage
 
 import spark.SparkContext
+import BlockManagerMasterActor.BlockStatus
 
 private[spark]
 case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long, 
@@ -20,8 +21,8 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
 
 }
 
-case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel, 
-  numPartitions: Int, memSize: Long, diskSize: Long, locations: Array[BlockManagerId])
+case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
+  numPartitions: Int, memSize: Long, diskSize: Long)
 
 
 /* Helper methods for storage-related objects */
@@ -58,8 +59,7 @@ object StorageUtils {
       val rddName = Option(sc.persistentRdds.get(rddId).name).getOrElse(rddKey)
       val rddStorageLevel = sc.persistentRdds.get(rddId).getStorageLevel
       
-      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, memSize, diskSize,
-        rddBlocks.map(_.blockManagerId))
+      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, memSize, diskSize)
     }.toArray
   }
 
