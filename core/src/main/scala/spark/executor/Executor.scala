@@ -159,22 +159,24 @@ private[spark] class Executor extends Logging {
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
-    // Fetch missing dependencies
-    for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name + " with timestamp " + timestamp)
-      Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
-      currentFiles(name) = timestamp
-    }
-    for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name + " with timestamp " + timestamp)
-      Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
-      currentJars(name) = timestamp
-      // Add it to our class loader
-      val localName = name.split("/").last
-      val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
-      if (!urlClassLoader.getURLs.contains(url)) {
-        logInfo("Adding " + url + " to class loader")
-        urlClassLoader.addURL(url)
+    synchronized {
+      // Fetch missing dependencies
+      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
+        currentFiles(name) = timestamp
+      }
+      for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
+        currentJars(name) = timestamp
+        // Add it to our class loader
+        val localName = name.split("/").last
+        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
+        if (!urlClassLoader.getURLs.contains(url)) {
+          logInfo("Adding " + url + " to class loader")
+          urlClassLoader.addURL(url)
+        }
       }
     }
   }
