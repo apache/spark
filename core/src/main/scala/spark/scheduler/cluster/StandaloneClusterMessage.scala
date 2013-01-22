@@ -6,7 +6,7 @@ import spark.util.SerializableBuffer
 
 private[spark] sealed trait StandaloneClusterMessage extends Serializable
 
-// Master to slaves
+// Driver to executors
 private[spark]
 case class LaunchTask(task: TaskDescription) extends StandaloneClusterMessage
 
@@ -16,7 +16,7 @@ case class RegisteredSlave(sparkProperties: Seq[(String, String)]) extends Stand
 private[spark]
 case class RegisterSlaveFailed(message: String) extends StandaloneClusterMessage
 
-// Slaves to master
+// Executors to driver
 private[spark]
 case class RegisterSlave(slaveId: String, host: String, cores: Int) extends StandaloneClusterMessage
 
@@ -32,6 +32,6 @@ object StatusUpdate {
   }
 }
 
-// Internal messages in master
+// Internal messages in driver
 private[spark] case object ReviveOffers extends StandaloneClusterMessage
-private[spark] case object StopMaster extends StandaloneClusterMessage
+private[spark] case object StopDriver extends StandaloneClusterMessage
