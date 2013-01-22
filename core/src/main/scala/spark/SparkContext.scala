@@ -58,26 +58,10 @@ import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend
 class SparkContext(
     val master: String,
     val jobName: String,
-    val sparkHome: String,
-    val jars: Seq[String],
-    environment: Map[String, String])
+    val sparkHome: String = null,
+    val jars: Seq[String] = Nil,
+    environment: Map[String, String] = Map())
   extends Logging {
-
-  /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
-   * @param sparkHome Location where Spark is installed on cluster nodes.
-   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
-   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
-   */
-  def this(master: String, jobName: String, sparkHome: String, jars: Seq[String]) =
-    this(master, jobName, sparkHome, jars, Map())
-
-  /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
-   */
-  def this(master: String, jobName: String) = this(master, jobName, null, Nil, Map())
 
   // Ensure logging is initialized before we spawn any threads
   initLogging()
