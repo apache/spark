@@ -1,8 +1,13 @@
 package spark.streaming
 
+import akka.actor.Props
+import akka.actor.SupervisorStrategy
+
 import spark.streaming.dstream._
 
 import spark.{RDD, Logging, SparkEnv, SparkContext}
+import spark.streaming.receivers.ActorReceiver
+import spark.streaming.receivers.ReceiverSupervisorStrategy
 import spark.storage.StorageLevel
 import spark.util.MetadataCleaner
 
@@ -133,6 +138,36 @@ class StreamingContext private (
   }
 
   protected[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
+
+  /**
+   * Create an input stream with any arbitrary user implemented network receiver.
+   * @param receiver Custom implementation of NetworkReceiver
+   */
+  def pluggableNetworkStream[T: ClassManifest](
+    receiver: NetworkReceiver[T]): DStream[T] = {
+    val inputStream = new PluggableInputDStream[T](this,
+      receiver)
+    graph.addInputStream(inputStream)
+    inputStream
+  }
+
+  /**
+   * Create an input stream with any arbitrary user implemented actor receiver.
+   * @param props Props object defining creation of the actor
+   * @param name Name of the actor
+   * @param storageLevel RDD storage level. Defaults to memory-only.
+   * 
+   * @note An important point to note:
+   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
+   *       to ensure the type safety, i.e parametrized type of data received and actorStream
+   *       should be same.
+   */
+  def actorStream[T: ClassManifest](
+    props: Props, name: String,
+    storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
+    supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy): DStream[T] = {
+    pluggableNetworkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
+  }                 	                                                                  
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
