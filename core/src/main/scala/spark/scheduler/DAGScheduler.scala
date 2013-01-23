@@ -441,9 +441,16 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
               logInfo("waiting: " + waiting)
               logInfo("failed: " + failed)
               if (stage.shuffleDep != None) {
+                // We supply true to increment the generation number here in case this is a
+                // recomputation of the map outputs. In that case, some nodes may have cached
+                // locations with holes (from when we detected the error) and will need the
+                // generation incremented to refetch them.
+                // TODO: Only increment the generation number if this is not the first time
+                //       we registered these map outputs.
                 mapOutputTracker.registerMapOutputs(
                   stage.shuffleDep.get.shuffleId,
-                  stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray)
+                  stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+                  true)
               }
               updateCacheLocs()
               if (stage.outputLocs.count(_ == Nil) != 0) {
