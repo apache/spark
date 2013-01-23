@@ -8,6 +8,7 @@ from base64 import standard_b64decode
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
+from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, read_with_length, write_int, \
     read_long, read_int, dump_pickle, load_pickle, read_from_pickle_file
 
@@ -23,6 +24,10 @@ def load_obj():
 
 def main():
     split_index = read_int(sys.stdin)
+    spark_files_dir = load_pickle(read_with_length(sys.stdin))
+    SparkFiles._root_directory = spark_files_dir
+    SparkFiles._is_running_on_worker = True
+    sys.path.append(spark_files_dir)
     num_broadcast_variables = read_int(sys.stdin)
     for _ in range(num_broadcast_variables):
         bid = read_long(sys.stdin)

@@ -28,13 +28,9 @@ class SparkEnv (
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
-    val httpFileServer: HttpFileServer
+    val httpFileServer: HttpFileServer,
+    val sparkFilesDir: String
   ) {
-
-  /** No-parameter constructor for unit tests. */
-  def this() = {
-    this(null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
-  }
 
   def stop() {
     httpFileServer.stop()
@@ -112,6 +108,15 @@ object SparkEnv extends Logging {
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
 
+    // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
+    // this is a temporary directory; in distributed mode, this is the executor's current working
+    // directory.
+    val sparkFilesDir: String = if (isMaster) {
+      Utils.createTempDir().getAbsolutePath
+    } else {
+      "."
+    }
+
     // Warn about deprecated spark.cache.class property
     if (System.getProperty("spark.cache.class") != null) {
       logWarning("The spark.cache.class property is no longer being used! Specify storage " +
@@ -128,6 +133,7 @@ object SparkEnv extends Logging {
       broadcastManager,
       blockManager,
       connectionManager,
-      httpFileServer)
+      httpFileServer,
+      sparkFilesDir)
   }
 }

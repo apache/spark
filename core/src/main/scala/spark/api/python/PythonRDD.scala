@@ -67,6 +67,8 @@ private[spark] class PythonRDD[T: ClassManifest](
         val dOut = new DataOutputStream(proc.getOutputStream)
         // Split index
         dOut.writeInt(split.index)
+        // sparkFilesDir
+        PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dOut)
         // Broadcast variables
         dOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
