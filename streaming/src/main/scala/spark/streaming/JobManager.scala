@@ -3,6 +3,8 @@ package spark.streaming
 import spark.Logging 
 import spark.SparkEnv
 import java.util.concurrent.Executors
+import collection.mutable.HashMap
+import collection.mutable.ArrayBuffer
 
 
 private[streaming]
@@ -19,15 +21,41 @@ class JobManager(ssc: StreamingContext, numThreads: Int = 1) extends Logging {
         case e: Exception =>
           logError("Running " + job + " failed", e)
       }
+      clearJob(job)
     }
   }
 
   initLogging()
 
   val jobExecutor = Executors.newFixedThreadPool(numThreads) 
-  
+  val jobs = new HashMap[Time, ArrayBuffer[Job]]
+
   def runJob(job: Job) {
+    jobs.synchronized {
+      jobs.getOrElseUpdate(job.time, new ArrayBuffer[Job]) += job
+    }
     jobExecutor.execute(new JobHandler(ssc, job))
     logInfo("Added " + job + " to queue")
+  }
+
+  private def clearJob(job: Job) {
+    jobs.synchronized {
+      val jobsOfTime = jobs.get(job.time)
+      if (jobsOfTime.isDefined) {
+        jobsOfTime.get -= job
+        if (jobsOfTime.get.isEmpty) {
+          jobs -= job.time
+        }
+      } else {
+        throw new Exception("Job finished for time " + job.time +
+          " but time does not exist in jobs")
+      }
+    }
+  }
+
+  def getPendingTimes(): Array[Time] = {
+    jobs.synchronized {
+      jobs.keySet.toArray
+    }
   }
 }

@@ -133,7 +133,7 @@ class StreamingContext private (
     }
   }
 
-  protected[streaming] def getInitialCheckpoint(): Checkpoint = {
+  protected[streaming] def initialCheckpoint: Checkpoint = {
     if (isCheckpointPresent) cp_ else null
   }
 
@@ -367,7 +367,7 @@ class StreamingContext private (
   }
 
   /**
-   * Sstops the execution of the streams.
+   * Stops the execution of the streams.
    */
   def stop() {
     try {

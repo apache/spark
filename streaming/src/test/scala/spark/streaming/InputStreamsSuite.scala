@@ -44,7 +44,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.master.port")
   }
-
+  /*
   test("network input stream") {
     // Start the server
     testServer = new TestServer(testPort)
@@ -236,8 +236,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       assert(output(i).head.toString === expectedOutput(i))
     }
   }
-
-  test("file input stream with checkpoint") {
+  */
+  test("file input stream with master failure") {
     // Create a temporary directory
     testDir = {
       var temp = File.createTempFile(".temp.", Random.nextInt().toString)
@@ -251,11 +251,17 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     var ssc = new StreamingContext(master, framework, batchDuration)
     ssc.checkpoint(checkpointDir, checkpointInterval)
     val fileStream = ssc.textFileStream(testDir.toString)
-    val outputBuffer = new ArrayBuffer[Seq[Int]]
-    // Reduced over a large window to ensure that recovery from master failure
+    // Making value 3 take large time to process, to ensure that the master
+    // shuts down in the middle of processing the 3rd batch
+    val mappedStream = fileStream.map(s => {
+      val i = s.toInt
+      if (i == 3) Thread.sleep(1000)
+      i
+    })
+    // Reducing over a large window to ensure that recovery from master failure
     // requires reprocessing of all the files seen before the failure
-    val reducedStream = fileStream.map(_.toInt)
-      .reduceByWindow(_ + _, batchDuration * 30, batchDuration)
+    val reducedStream = mappedStream.reduceByWindow(_ + _, batchDuration * 30, batchDuration)
+    val outputBuffer = new ArrayBuffer[Seq[Int]]
     var outputStream = new TestOutputStream(reducedStream, outputBuffer)
     ssc.registerOutputStream(outputStream)
     ssc.start()
@@ -275,6 +281,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     assert(outputStream.output.size > 0, "No files processed before restart")
     ssc.stop()
 
+    // Create files while the master is down
     for (i <- Seq(4, 5, 6)) {
       FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
       Thread.sleep(1000)
@@ -293,6 +300,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       Thread.sleep(500)
     }
     Thread.sleep(1000)
+    logInfo("Output = " + outputStream.output.mkString(","))
     assert(outputStream.output.size > 0, "No files processed after restart")
     ssc.stop()
 
@@ -316,6 +324,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       assert(outputBuffer(i).head === expectedOutput(i))
     }
   }
+
 }
 
 

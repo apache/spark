@@ -35,10 +35,13 @@ class Scheduler(ssc: StreamingContext) extends Logging {
       // either set the manual clock to the last checkpointed time,
       // or if the property is defined set it to that time
       if (clock.isInstanceOf[ManualClock]) {
-        val lastTime = ssc.getInitialCheckpoint.checkpointTime.milliseconds
+        val lastTime = ssc.initialCheckpoint.checkpointTime.milliseconds
         val jumpTime = System.getProperty("spark.streaming.manualClock.jump", "0").toLong
         clock.asInstanceOf[ManualClock].setTime(lastTime + jumpTime)
       }
+      // Reschedule the batches that were received but not processed before failure
+      ssc.initialCheckpoint.pendingTimes.foreach(time => generateRDDs(time))
+      // Restart the timer
       timer.restart(graph.zeroTime.milliseconds)
       logInfo("Scheduler's timer restarted")
     } else {
