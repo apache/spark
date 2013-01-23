@@ -191,7 +191,7 @@ class BlockManager(
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
-          val storageLevel = new StorageLevel(onDisk, inMem, level.deserialized, level.replication)
+          val storageLevel = StorageLevel(onDisk, inMem, level.deserialized, level.replication)
           val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
           val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
           (storageLevel, memSize, diskSize, info.tellMaster)
@@ -760,8 +760,7 @@ class BlockManager(
    */
   var cachedPeers: Seq[BlockManagerId] = null
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
-    val tLevel: StorageLevel =
-      new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
+    val tLevel = StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
     if (cachedPeers == null) {
       cachedPeers = master.getPeers(blockManagerId, level.replication - 1)
     }
