@@ -148,7 +148,7 @@ private[spark] class Worker(
           logInfo("Asked to kill executor " + fullId)
           executor.kill()
         case None =>
-          logInfo("Asked to kill non-existent existent " + fullId)
+          logInfo("Asked to kill unknown executor " + fullId)
       }
 
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
