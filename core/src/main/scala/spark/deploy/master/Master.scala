@@ -100,9 +100,8 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
             if (jobInfo.incrementRetryCount <= JobState.MAX_NUM_RETRY) {
               schedule()
             } else {
-              val e = new SparkException("Job %s wth ID %s failed %d times.".format(
+              logError("Job %s wth ID %s failed %d times, removing it".format(
                 jobInfo.desc.name, jobInfo.id, jobInfo.retryCount))
-              logError(e.getMessage, e)
               removeJob(jobInfo)
             }
           }
