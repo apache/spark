@@ -218,7 +218,6 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, true), 2)
-      val singleton = sc.parallelize(Seq(false), 1)
       assert(data.count === 2)
       assert(data.map(markNodeIfIdentity).collect.size === 2)
       // This relies on mergeCombiners being used to perform the actual reduce for this
