@@ -7,6 +7,8 @@ import org.scalatest.BeforeAndAfter
 import org.apache.commons.io.FileUtils
 import collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import util.{Clock, ManualClock}
+import scala.util.Random
+import com.google.common.io.Files
 
 class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
 
@@ -32,7 +34,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
 
   override def actuallyWait = true
 
-  test("basic stream+rdd recovery") {
+  test("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
     assert(checkpointInterval === batchDuration, "checkpointInterval for this test much be same as batchDuration")
@@ -117,7 +119,10 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     ssc = null
   }
 
-  test("map and reduceByKey") {
+  // This tests whether the systm can recover from a master failure with simple
+  // non-stateful operations. This assumes as reliable, replayable input
+  // source - TestInputDStream.
+  test("recovery with map and reduceByKey operations") {
     testCheckpointedOperation(
       Seq( Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq() ),
       (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _),
@@ -126,7 +131,11 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     )
   }
 
-  test("reduceByKeyAndWindowInv") {
+
+  // This tests whether the ReduceWindowedDStream's RDD checkpoints works correctly such
+  // that the system can recover from a master failure. This assumes as reliable,
+  // replayable input source - TestInputDStream.
+  test("recovery with invertible reduceByKeyAndWindow operation") {
     val n = 10
     val w = 4
     val input = (1 to n).map(_ => Seq("a")).toSeq
@@ -139,7 +148,11 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     testCheckpointedOperation(input, operation, output, 7)
   }
 
-  test("updateStateByKey") {
+
+  // This tests whether the StateDStream's RDD checkpoints works correctly such
+  // that the system can recover from a master failure. This assumes as reliable,
+  // replayable input source - TestInputDStream.
+  test("recovery with updateStateByKey operation") {
     val input = (1 to 10).map(_ => Seq("a")).toSeq
     val output = (1 to 10).map(x => Seq(("a", x))).toSeq
     val operation = (st: DStream[String]) => {
@@ -154,11 +167,99 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     testCheckpointedOperation(input, operation, output, 7)
   }
 
+  // This tests whether file input stream remembers what files were seen before
+  // the master failure and uses them again to process a large window operatoin.
+  // It also tests whether batches, whose processing was incomplete due to the
+  // failure, are re-processed or not.
+  test("recovery with file input stream") {
+    // Set up the streaming context and input streams
+    val testDir = Files.createTempDir()
+    var ssc = new StreamingContext(master, framework, batchDuration)
+    ssc.checkpoint(checkpointDir, checkpointInterval)
+    val fileStream = ssc.textFileStream(testDir.toString)
+    // Making value 3 take large time to process, to ensure that the master
+    // shuts down in the middle of processing the 3rd batch
+    val mappedStream = fileStream.map(s => {
+      val i = s.toInt
+      if (i == 3) Thread.sleep(1000)
+      i
+    })
+    // Reducing over a large window to ensure that recovery from master failure
+    // requires reprocessing of all the files seen before the failure
+    val reducedStream = mappedStream.reduceByWindow(_ + _, batchDuration * 30, batchDuration)
+    val outputBuffer = new ArrayBuffer[Seq[Int]]
+    var outputStream = new TestOutputStream(reducedStream, outputBuffer)
+    ssc.registerOutputStream(outputStream)
+    ssc.start()
+
+    // Create files and advance manual clock to process them
+    var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    Thread.sleep(1000)
+    for (i <- Seq(1, 2, 3)) {
+      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
+      // wait to make sure that the file is written such that it gets shown in the file listings
+      Thread.sleep(500)
+      clock.addToTime(batchDuration.milliseconds)
+      // wait to make sure that FileInputDStream picks up this file only and not any other file
+      Thread.sleep(500)
+    }
+    logInfo("Output = " + outputStream.output.mkString(","))
+    assert(outputStream.output.size > 0, "No files processed before restart")
+    ssc.stop()
+
+    // Create files while the master is down
+    for (i <- Seq(4, 5, 6)) {
+      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
+      Thread.sleep(1000)
+    }
+
+    // Restart stream computation from checkpoint and create more files to see whether
+    // they are being processed
+    logInfo("*********** RESTARTING ************")
+    ssc = new StreamingContext(checkpointDir)
+    ssc.start()
+    clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    for (i <- Seq(7, 8, 9)) {
+      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
+      Thread.sleep(500)
+      clock.addToTime(batchDuration.milliseconds)
+      Thread.sleep(500)
+    }
+    Thread.sleep(1000)
+    logInfo("Output = " + outputStream.output.mkString(","))
+    assert(outputStream.output.size > 0, "No files processed after restart")
+    ssc.stop()
+
+    // Append the new output to the old buffer
+    outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
+    outputBuffer ++= outputStream.output
+
+    // Verify whether data received by Spark Streaming was as expected
+    val expectedOutput = Seq(1, 3, 6, 28, 36, 45)
+    logInfo("--------------------------------")
+    logInfo("output, size = " + outputBuffer.size)
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output, size = " + expectedOutput.size)
+    expectedOutput.foreach(x => logInfo("[" + x + "]"))
+    logInfo("--------------------------------")
+
+    // Verify whether all the elements received are as expected
+    assert(outputBuffer.size === expectedOutput.size)
+    for (i <- 0 until outputBuffer.size) {
+      assert(outputBuffer(i).size === 1)
+      assert(outputBuffer(i).head === expectedOutput(i))
+    }
+  }
+
+
   /**
-   * Tests a streaming operation under checkpointing, by restart the operation
+   * Tests a streaming operation under checkpointing, by restarting the operation
    * from checkpoint file and verifying whether the final output is correct.
    * The output is assumed to have come from a reliable queue which an replay
    * data as required.
+   *
+   * NOTE: This takes into consideration that the last batch processed before
+   * master failure will be re-processed after restart/recovery.
    */
   def testCheckpointedOperation[U: ClassManifest, V: ClassManifest](
     input: Seq[Seq[U]],
@@ -172,7 +273,8 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     val totalNumBatches = input.size
     val nextNumBatches = totalNumBatches - initialNumBatches
     val initialNumExpectedOutputs = initialNumBatches
-    val nextNumExpectedOutputs = expectedOutput.size - initialNumExpectedOutputs
+    val nextNumExpectedOutputs = expectedOutput.size - initialNumExpectedOutputs + 1
+    // because the last batch will be processed again
 
     // Do the computation for initial number of batches, create checkpoint file and quit
     ssc = setupStreams[U, V](input, operation)
@@ -188,6 +290,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     )
     ssc = new StreamingContext(checkpointDir)
     val outputNew = runStreams[V](ssc, nextNumBatches, nextNumExpectedOutputs)
+    // the first element will be re-processed data of the last batch before restart
     verifyOutput[V](outputNew, expectedOutput.takeRight(nextNumExpectedOutputs), true)
     ssc = null
   }

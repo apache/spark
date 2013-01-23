@@ -19,35 +19,24 @@ import org.apache.avro.ipc.specific.SpecificRequestor
 import java.nio.ByteBuffer
 import collection.JavaConversions._
 import java.nio.charset.Charset
+import com.google.common.io.Files
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     
   System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
 
-  val testPort = 9999
-  var testServer: TestServer = null
-  var testDir: File = null
-
   override def checkpointDir = "checkpoint"
 
   after {
-    FileUtils.deleteDirectory(new File(checkpointDir))
-    if (testServer != null) {
-      testServer.stop()
-      testServer = null
-    }
-    if (testDir != null && testDir.exists()) {
-      FileUtils.deleteDirectory(testDir)
-      testDir = null
-    }
-
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.master.port")
   }
-  /*
+
+
   test("network input stream") {
     // Start the server
-    testServer = new TestServer(testPort)
+    val testPort = 9999
+    val testServer = new TestServer(testPort)
     testServer.start()
 
     // Set up the streaming context and input streams
@@ -93,46 +82,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  test("network input stream with checkpoint") {
-    // Start the server
-    testServer = new TestServer(testPort)
-    testServer.start()
-
-    // Set up the streaming context and input streams
-    var ssc = new StreamingContext(master, framework, batchDuration)
-    ssc.checkpoint(checkpointDir, checkpointInterval)
-    val networkStream = ssc.networkTextStream("localhost", testPort, StorageLevel.MEMORY_AND_DISK)
-    var outputStream = new TestOutputStream(networkStream, new ArrayBuffer[Seq[String]])
-    ssc.registerOutputStream(outputStream)
-    ssc.start()
-
-    // Feed data to the server to send to the network receiver
-    var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    for (i <- Seq(1, 2, 3)) {
-      testServer.send(i.toString + "\n")
-      Thread.sleep(100)
-      clock.addToTime(batchDuration.milliseconds)
-    }
-    Thread.sleep(500)
-    assert(outputStream.output.size > 0)
-    ssc.stop()
-
-    // Restart stream computation from checkpoint and feed more data to see whether
-    // they are being received and processed
-    logInfo("*********** RESTARTING ************")
-    ssc = new StreamingContext(checkpointDir)
-    ssc.start()
-    clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    for (i <- Seq(4, 5, 6)) {
-      testServer.send(i.toString + "\n")
-      Thread.sleep(100)
-      clock.addToTime(batchDuration.milliseconds)
-    }
-    Thread.sleep(500)
-    outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[String]]
-    assert(outputStream.output.size > 0)
-    ssc.stop()
-  }
 
   test("flume input stream") {
     // Set up the streaming context and input streams
@@ -182,18 +131,10 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
+
   test("file input stream") {
-
-    // Create a temporary directory
-    testDir = {
-      var temp = File.createTempFile(".temp.", Random.nextInt().toString)
-      temp.delete()
-      temp.mkdirs()
-      logInfo("Created temp dir " + temp)
-      temp
-    }
-
     // Set up the streaming context and input streams
+    val testDir = Files.createTempDir()
     val ssc = new StreamingContext(master, framework, batchDuration)
     val filestream = ssc.textFileStream(testDir.toString)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -235,96 +176,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       assert(output(i).size === 1)
       assert(output(i).head.toString === expectedOutput(i))
     }
+    FileUtils.deleteDirectory(testDir)
   }
-  */
-  test("file input stream with master failure") {
-    // Create a temporary directory
-    testDir = {
-      var temp = File.createTempFile(".temp.", Random.nextInt().toString)
-      temp.delete()
-      temp.mkdirs()
-      logInfo("Created temp dir " + temp)
-      temp
-    }
-
-    // Set up the streaming context and input streams
-    var ssc = new StreamingContext(master, framework, batchDuration)
-    ssc.checkpoint(checkpointDir, checkpointInterval)
-    val fileStream = ssc.textFileStream(testDir.toString)
-    // Making value 3 take large time to process, to ensure that the master
-    // shuts down in the middle of processing the 3rd batch
-    val mappedStream = fileStream.map(s => {
-      val i = s.toInt
-      if (i == 3) Thread.sleep(1000)
-      i
-    })
-    // Reducing over a large window to ensure that recovery from master failure
-    // requires reprocessing of all the files seen before the failure
-    val reducedStream = mappedStream.reduceByWindow(_ + _, batchDuration * 30, batchDuration)
-    val outputBuffer = new ArrayBuffer[Seq[Int]]
-    var outputStream = new TestOutputStream(reducedStream, outputBuffer)
-    ssc.registerOutputStream(outputStream)
-    ssc.start()
-
-    // Create files and advance manual clock to process them
-    var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    Thread.sleep(1000)
-    for (i <- Seq(1, 2, 3)) {
-      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
-      // wait to make sure that the file is written such that it gets shown in the file listings
-      Thread.sleep(500)
-      clock.addToTime(batchDuration.milliseconds)
-      // wait to make sure that FileInputDStream picks up this file only and not any other file
-      Thread.sleep(500)
-    }
-    logInfo("Output = " + outputStream.output.mkString(","))
-    assert(outputStream.output.size > 0, "No files processed before restart")
-    ssc.stop()
-
-    // Create files while the master is down
-    for (i <- Seq(4, 5, 6)) {
-      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
-      Thread.sleep(1000)
-    }
-
-    // Restart stream computation from checkpoint and create more files to see whether
-    // they are being processed
-    logInfo("*********** RESTARTING ************")
-    ssc = new StreamingContext(checkpointDir)
-    ssc.start()
-    clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    for (i <- Seq(7, 8, 9)) {
-      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
-      Thread.sleep(500)
-      clock.addToTime(batchDuration.milliseconds)
-      Thread.sleep(500)
-    }
-    Thread.sleep(1000)
-    logInfo("Output = " + outputStream.output.mkString(","))
-    assert(outputStream.output.size > 0, "No files processed after restart")
-    ssc.stop()
-
-    // Append the new output to the old buffer
-    outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
-    outputBuffer ++= outputStream.output
-
-    // Verify whether data received by Spark Streaming was as expected
-    val expectedOutput = Seq(1, 3, 6, 28, 36, 45)
-    logInfo("--------------------------------")
-    logInfo("output, size = " + outputBuffer.size)
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("expected output, size = " + expectedOutput.size)
-    expectedOutput.foreach(x => logInfo("[" + x + "]"))
-    logInfo("--------------------------------")
-
-    // Verify whether all the elements received are as expected
-    assert(outputBuffer.size === expectedOutput.size)
-    for (i <- 0 until outputBuffer.size) {
-      assert(outputBuffer(i).size === 1)
-      assert(outputBuffer(i).head === expectedOutput(i))
-    }
-  }
-
 }
 
 
