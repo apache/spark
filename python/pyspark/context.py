@@ -215,8 +215,6 @@ class SparkContext(object):
         """
         self.addFile(path)
         filename = path.split("/")[-1]
-        os.environ["PYTHONPATH"] = \
-            "%s:%s" % (filename, os.environ["PYTHONPATH"])
 
     def setCheckpointDir(self, dirName, useExisting=False):
         """

@@ -26,6 +26,7 @@ def main():
     split_index = read_int(sys.stdin)
     spark_files_dir = load_pickle(read_with_length(sys.stdin))
     SparkFiles._root_directory = spark_files_dir
+    sys.path.append(spark_files_dir)
     num_broadcast_variables = read_int(sys.stdin)
     for _ in range(num_broadcast_variables):
         bid = read_long(sys.stdin)
