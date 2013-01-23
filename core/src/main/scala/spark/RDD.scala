@@ -176,7 +176,7 @@ abstract class RDD[T: ClassManifest](
     if (isCheckpointed) {
       checkpointData.get.iterator(split, context)
     } else if (storageLevel != StorageLevel.NONE) {
-      SparkEnv.get.cacheTracker.getOrCompute[T](this, split, context, storageLevel)
+      SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
     } else {
       compute(split, context)
     }

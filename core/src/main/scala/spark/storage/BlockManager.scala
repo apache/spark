@@ -16,7 +16,7 @@ import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
-import spark.{CacheTracker, Logging, SizeEstimator, SparkEnv, SparkException, Utils}
+import spark.{Logging, SizeEstimator, SparkEnv, SparkException, Utils}
 import spark.network._
 import spark.serializer.Serializer
 import spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStampedHashMap}
@@ -70,9 +70,6 @@ class BlockManager(
 
   val connectionManagerId = connectionManager.id
   val blockManagerId = BlockManagerId(connectionManagerId.host, connectionManagerId.port)
-
-  // TODO: This will be removed after cacheTracker is removed from the code base.
-  var cacheTracker: CacheTracker = null
 
   // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
   // for receiving shuffle outputs)
@@ -662,10 +659,6 @@ class BlockManager(
 
     BlockManager.dispose(bytesAfterPut)
 
-    // TODO: This code will be removed when CacheTracker is gone.
-    if (blockId.startsWith("rdd")) {
-      notifyCacheTracker(blockId)
-    }
     logDebug("Put block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs))
 
     return size
@@ -733,11 +726,6 @@ class BlockManager(
       }
     }
 
-    // TODO: This code will be removed when CacheTracker is gone.
-    if (blockId.startsWith("rdd")) {
-      notifyCacheTracker(blockId)
-    }
-
     // If replication had started, then wait for it to finish
     if (level.replication > 1) {
       if (replicationFuture == null) {
@@ -776,16 +764,6 @@ class BlockManager(
       logDebug("Replicated BlockId " + blockId + " once used " +
         (System.nanoTime - start) / 1e6 + " s; The size of the data is " +
         data.limit() + " bytes.")
-    }
-  }
-
-  // TODO: This code will be removed when CacheTracker is gone.
-  private def notifyCacheTracker(key: String) {
-    if (cacheTracker != null) {
-      val rddInfo = key.split("_")
-      val rddId: Int = rddInfo(1).toInt
-      val partition: Int = rddInfo(2).toInt
-      cacheTracker.notifyFromBlockManager(spark.AddedToCache(rddId, partition, host))
     }
   }
 
