@@ -69,7 +69,7 @@ class BlockManager(
   implicit val futureExecContext = connectionManager.futureExecContext
 
   val connectionManagerId = connectionManager.id
-  val blockManagerId = new BlockManagerId(connectionManagerId.host, connectionManagerId.port)
+  val blockManagerId = BlockManagerId(connectionManagerId.host, connectionManagerId.port)
 
   // TODO: This will be removed after cacheTracker is removed from the code base.
   var cacheTracker: CacheTracker = null
