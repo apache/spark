@@ -11,14 +11,17 @@ import spark.Logging
 private[streaming]
 class DStreamCheckpointData[T: ClassManifest] (dstream: DStream[T])
   extends Serializable with Logging {
-  private[streaming] val checkpointFiles = new HashMap[Time, String]()
-  @transient private lazy val fileSystem =
-    new Path(dstream.context.checkpointDir).getFileSystem(new Configuration())
+  protected val data = new HashMap[Time, AnyRef]()
+
+  @transient private var fileSystem : FileSystem = null
   @transient private var lastCheckpointFiles: HashMap[Time, String] = null
 
+  protected[streaming] def checkpointFiles = data.asInstanceOf[HashMap[Time, String]]
+
   /**
-   * Update the checkpoint data of the DStream. Default implementation records the checkpoint files to
-   * which the generate RDDs of the DStream has been saved.
+   * Updates the checkpoint data of the DStream. This gets called every time
+   * the graph checkpoint is initiated. Default implementation records the
+   * checkpoint files to which the generate RDDs of the DStream has been saved.
    */
   def update() {
 
@@ -42,7 +45,9 @@ class DStreamCheckpointData[T: ClassManifest] (dstream: DStream[T])
   }
 
   /**
-   * Cleanup old checkpoint data. Default implementation, cleans up old checkpoint files.
+   * Cleanup old checkpoint data. This gets called every time the graph
+   * checkpoint is initiated, but after `update` is called. Default
+   * implementation, cleans up old checkpoint files.
    */
   def cleanup() {
     // If there is at least on checkpoint file in the current checkpoint files,
@@ -52,6 +57,9 @@ class DStreamCheckpointData[T: ClassManifest] (dstream: DStream[T])
         case (time, file) => {
           try {
             val path = new Path(file)
+            if (fileSystem == null) {
+              fileSystem = path.getFileSystem(new Configuration())
+            }
             fileSystem.delete(path, true)
             logInfo("Deleted checkpoint file '" + file + "' for time " + time)
           } catch {
@@ -64,15 +72,16 @@ class DStreamCheckpointData[T: ClassManifest] (dstream: DStream[T])
   }
 
   /**
-   * Restore the checkpoint data. Default implementation restores the RDDs from their
-   * checkpoint files.
+   * Restore the checkpoint data. This gets called once when the DStream graph
+   * (along with its DStreams) are being restored from a graph checkpoint file.
+   * Default implementation restores the RDDs from their checkpoint files.
    */
   def restore() {
     // Create RDDs from the checkpoint data
     checkpointFiles.foreach {
       case(time, file) => {
         logInfo("Restoring checkpointed RDD for time " + time + " from file '" + file + "'")
-        dstream.generatedRDDs += ((time, dstream.context.sc.checkpointFile[T](file)))
+        dstream.generatedRDDs += ((time, dstream.context.sparkContext.checkpointFile[T](file)))
       }
     }
   }

@@ -214,10 +214,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       //Thread.sleep(100)
     }
     val startTime = System.currentTimeMillis()
-    /*while (output.size < expectedOutput.size && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
-      logInfo("output.size = " + output.size + ", expectedOutput.size = " + expectedOutput.size)
-      Thread.sleep(100)
-    }*/
     Thread.sleep(1000)
     val timeTaken = System.currentTimeMillis() - startTime
     assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
@@ -226,11 +222,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Verify whether data received by Spark Streaming was as expected
     logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
-    logInfo("output")
+    logInfo("output, size = " + outputBuffer.size)
     outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("expected output.size = " + expectedOutput.size)
-    logInfo("expected output")
+    logInfo("expected output, size = " + expectedOutput.size)
     expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
     logInfo("--------------------------------")
 
@@ -256,8 +250,13 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // Set up the streaming context and input streams
     var ssc = new StreamingContext(master, framework, batchDuration)
     ssc.checkpoint(checkpointDir, checkpointInterval)
-    val filestream = ssc.textFileStream(testDir.toString)
-    var outputStream = new TestOutputStream(filestream, new ArrayBuffer[Seq[String]])
+    val fileStream = ssc.textFileStream(testDir.toString)
+    val outputBuffer = new ArrayBuffer[Seq[Int]]
+    // Reduced over a large window to ensure that recovery from master failure
+    // requires reprocessing of all the files seen before the failure
+    val reducedStream = fileStream.map(_.toInt)
+      .reduceByWindow(_ + _, batchDuration * 30, batchDuration)
+    var outputStream = new TestOutputStream(reducedStream, outputBuffer)
     ssc.registerOutputStream(outputStream)
     ssc.start()
 
@@ -266,13 +265,20 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     Thread.sleep(1000)
     for (i <- Seq(1, 2, 3)) {
       FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
-      Thread.sleep(100)
+      // wait to make sure that the file is written such that it gets shown in the file listings
+      Thread.sleep(500)
       clock.addToTime(batchDuration.milliseconds)
+      // wait to make sure that FileInputDStream picks up this file only and not any other file
+      Thread.sleep(500)
     }
-    Thread.sleep(500)
     logInfo("Output = " + outputStream.output.mkString(","))
-    assert(outputStream.output.size > 0)
+    assert(outputStream.output.size > 0, "No files processed before restart")
     ssc.stop()
+
+    for (i <- Seq(4, 5, 6)) {
+      FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
+      Thread.sleep(1000)
+    }
 
     // Restart stream computation from checkpoint and create more files to see whether
     // they are being processed
@@ -280,17 +286,35 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     ssc = new StreamingContext(checkpointDir)
     ssc.start()
     clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    Thread.sleep(500)
-    for (i <- Seq(4, 5, 6)) {
+    for (i <- Seq(7, 8, 9)) {
       FileUtils.writeStringToFile(new File(testDir, i.toString), i.toString + "\n")
-      Thread.sleep(100)
+      Thread.sleep(500)
       clock.addToTime(batchDuration.milliseconds)
+      Thread.sleep(500)
     }
-    Thread.sleep(500)
-    outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[String]]
-    logInfo("Output = " + outputStream.output.mkString(","))
-    assert(outputStream.output.size > 0)
+    Thread.sleep(1000)
+    assert(outputStream.output.size > 0, "No files processed after restart")
     ssc.stop()
+
+    // Append the new output to the old buffer
+    outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
+    outputBuffer ++= outputStream.output
+
+    // Verify whether data received by Spark Streaming was as expected
+    val expectedOutput = Seq(1, 3, 6, 28, 36, 45)
+    logInfo("--------------------------------")
+    logInfo("output, size = " + outputBuffer.size)
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output, size = " + expectedOutput.size)
+    expectedOutput.foreach(x => logInfo("[" + x + "]"))
+    logInfo("--------------------------------")
+
+    // Verify whether all the elements received are as expected
+    assert(outputBuffer.size === expectedOutput.size)
+    for (i <- 0 until outputBuffer.size) {
+      assert(outputBuffer(i).size === 1)
+      assert(outputBuffer(i).head === expectedOutput(i))
+    }
   }
 }
 

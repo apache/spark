@@ -87,7 +87,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   private[streaming] def forgetOldRDDs(time: Time) {
     this.synchronized {
-      outputStreams.foreach(_.forgetOldRDDs(time))
+      outputStreams.foreach(_.forgetOldMetadata(time))
     }
   }
 

@@ -61,7 +61,7 @@ class StreamingContext private (
 
   protected[streaming] val isCheckpointPresent = (cp_ != null)
 
-  val sc: SparkContext = {
+  protected[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
       new SparkContext(cp_.master, cp_.framework, cp_.sparkHome, cp_.jars)
     } else {
@@ -99,6 +99,11 @@ class StreamingContext private (
   protected[streaming] var checkpointDuration: Duration = if (isCheckpointPresent) cp_.checkpointDuration else null
   protected[streaming] var receiverJobThread: Thread = null
   protected[streaming] var scheduler: Scheduler = null
+
+  /**
+   * Returns the associated Spark context
+   */
+  def sparkContext = sc
 
   /**
    * Sets each DStreams in this context to remember RDDs it generated in the last given duration.
