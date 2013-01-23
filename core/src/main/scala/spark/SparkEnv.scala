@@ -22,7 +22,7 @@ class SparkEnv (
     val actorSystem: ActorSystem,
     val serializer: Serializer,
     val closureSerializer: Serializer,
-    val cacheTracker: CacheTracker,
+    val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
     val broadcastManager: BroadcastManager,
@@ -39,7 +39,6 @@ class SparkEnv (
   def stop() {
     httpFileServer.stop()
     mapOutputTracker.stop()
-    cacheTracker.stop()
     shuffleFetcher.stop()
     broadcastManager.stop()
     blockManager.stop()
@@ -100,8 +99,7 @@ object SparkEnv extends Logging {
     val closureSerializer = instantiateClass[Serializer](
       "spark.closure.serializer", "spark.JavaSerializer")
 
-    val cacheTracker = new CacheTracker(actorSystem, isMaster, blockManager)
-    blockManager.cacheTracker = cacheTracker
+    val cacheManager = new CacheManager(blockManager)
 
     val mapOutputTracker = new MapOutputTracker(actorSystem, isMaster)
 
@@ -122,7 +120,7 @@ object SparkEnv extends Logging {
       actorSystem,
       serializer,
       closureSerializer,
-      cacheTracker,
+      cacheManager,
       mapOutputTracker,
       shuffleFetcher,
       broadcastManager,

@@ -69,8 +69,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
   val env = SparkEnv.get
-  val cacheTracker = env.cacheTracker
   val mapOutputTracker = env.mapOutputTracker
+  val blockManagerMaster = env.blockManager.master
 
   val deadHosts = new HashSet[String]  // TODO: The code currently assumes these can't come back;
                                        // that's not going to be a realistic assumption in general
@@ -95,11 +95,17 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   }.start()
 
   def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
+    if (!cacheLocs.contains(rdd.id)) {
+      val blockIds = rdd.splits.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
+      cacheLocs(rdd.id) = blockManagerMaster.getLocations(blockIds).map {
+        locations => locations.map(_.ip).toList
+      }.toArray
+    }
     cacheLocs(rdd.id)
   }
 
-  def updateCacheLocs() {
-    cacheLocs = cacheTracker.getLocationsSnapshot()
+  def clearCacheLocs() {
+    cacheLocs.clear
   }
 
   /**
@@ -126,7 +132,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     // Kind of ugly: need to register RDDs with the cache and map output tracker here
     // since we can't do it in the RDD constructor because # of splits is unknown
     logInfo("Registering RDD " + rdd.id + " (" + rdd.origin + ")")
-    cacheTracker.registerRDD(rdd.id, rdd.splits.size)
     if (shuffleDep != None) {
       mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.splits.size)
     }
@@ -148,8 +153,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         visited += r
         // Kind of ugly: need to register RDDs with the cache here since
         // we can't do it in its constructor because # of splits is unknown
-        logInfo("Registering parent RDD " + r.id + " (" + r.origin + ")")
-        cacheTracker.registerRDD(r.id, r.splits.size)
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_,_] =>
@@ -250,7 +253,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
           val runId = nextRunId.getAndIncrement()
           val finalStage = newStage(finalRDD, None, runId)
           val job = new ActiveJob(runId, finalStage, func, partitions, callSite, listener)
-          updateCacheLocs()
+          clearCacheLocs()
           logInfo("Got job " + job.runId + " (" + callSite + ") with " + partitions.length +
                   " output partitions")
           logInfo("Final stage: " + finalStage + " (" + finalStage.origin + ")")
@@ -293,7 +296,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       // on the failed node.
       if (failed.size > 0 && time > lastFetchFailureTime + RESUBMIT_TIMEOUT) {
         logInfo("Resubmitting failed stages")
-        updateCacheLocs()
+        clearCacheLocs()
         val failed2 = failed.toArray
         failed.clear()
         for (stage <- failed2.sortBy(_.priority)) {
@@ -443,7 +446,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
                   stage.shuffleDep.get.shuffleId,
                   stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray)
               }
-              updateCacheLocs()
+              clearCacheLocs()
               if (stage.outputLocs.count(_ == Nil) != 0) {
                 // Some tasks had failed; let's resubmit this stage
                 // TODO: Lower-level scheduler should also deal with this
@@ -519,8 +522,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
         mapOutputTracker.registerMapOutputs(shuffleId, locs, true)
       }
-      cacheTracker.cacheLost(host)
-      updateCacheLocs()
+      clearCacheLocs()
     }
   }
 
