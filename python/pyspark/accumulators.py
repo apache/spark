@@ -25,7 +25,8 @@
 >>> a.value
 13
 
->>> class VectorAccumulatorParam(object):
+>>> from pyspark.accumulators import AccumulatorParam
+>>> class VectorAccumulatorParam(AccumulatorParam):
 ...     def zero(self, value):
 ...         return [0.0] * len(value)
 ...     def addInPlace(self, val1, val2):
@@ -61,7 +62,6 @@ Traceback (most recent call last):
 Exception:...
 """
 
-from abc import ABCMeta, abstractmethod
 import struct
 import SocketServer
 import threading
@@ -138,23 +138,20 @@ class AccumulatorParam(object):
     """
     Helper object that defines how to accumulate values of a given type.
     """
-    __metaclass__ = ABCMeta
 
-    @abstractmethod
     def zero(self, value):
         """
         Provide a "zero value" for the type, compatible in dimensions with the
         provided C{value} (e.g., a zero vector)
         """
-        return
+        raise NotImplementedError
 
-    @abstractmethod
     def addInPlace(self, value1, value2):
         """
         Add two values of the accumulator's data type, returning a new value;
         for efficiency, can also update C{value1} in place and return it.
         """
-        return
+        raise NotImplementedError
 
 
 class AddingAccumulatorParam(AccumulatorParam):
