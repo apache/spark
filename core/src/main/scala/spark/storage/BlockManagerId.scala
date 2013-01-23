@@ -16,9 +16,7 @@ private[spark] class BlockManagerId private (
     private var port_ : Int
   ) extends Externalizable {
 
-  private def this(in: ObjectInput) = this(in.readUTF(), in.readInt())
-
-  def this() = this(null, 0)  // For deserialization only
+  private def this() = this(null, 0)  // For deserialization only
 
   def ip = ip_
 
@@ -53,8 +51,11 @@ private[spark] object BlockManagerId {
   def apply(ip: String, port: Int) =
     getCachedBlockManagerId(new BlockManagerId(ip, port))
 
-  def apply(in: ObjectInput) =
-    getCachedBlockManagerId(new BlockManagerId(in))
+  def apply(in: ObjectInput) = {
+    val obj = new BlockManagerId()
+    obj.readExternal(in)
+    getCachedBlockManagerId(obj)
+  }
 
   val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
 

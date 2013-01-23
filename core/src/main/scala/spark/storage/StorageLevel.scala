@@ -104,6 +104,13 @@ object StorageLevel {
   def apply(flags: Int, replication: Int) =
     getCachedStorageLevel(new StorageLevel(flags, replication))
 
+  /** Read StorageLevel object from ObjectInput stream */
+  def apply(in: ObjectInput) = {
+    val obj = new StorageLevel()
+    obj.readExternal(in)
+    getCachedStorageLevel(obj)
+  }
+
   private[spark]
   val storageLevelCache = new java.util.concurrent.ConcurrentHashMap[StorageLevel, StorageLevel]()
 
