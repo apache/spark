@@ -37,11 +37,9 @@ class NewHadoopRDD[K, V](
     formatter.format(new Date())
   }
 
-  @transient
-  private val jobId = new JobID(jobtrackerId, id)
+  @transient private val jobId = new JobID(jobtrackerId, id)
 
-  @transient
-  private val splits_ : Array[Split] = {
+  @transient private val splits_ : Array[Split] = {
     val inputFormat = inputFormatClass.newInstance
     val jobContext = newJobContext(conf, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray

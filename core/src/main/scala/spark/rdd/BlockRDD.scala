@@ -11,13 +11,11 @@ private[spark]
 class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[String])
   extends RDD[T](sc, Nil) {
 
-  @transient
-  var splits_ : Array[Split] = (0 until blockIds.size).map(i => {
+  @transient var splits_ : Array[Split] = (0 until blockIds.size).map(i => {
     new BlockRDDSplit(blockIds(i), i).asInstanceOf[Split]
   }).toArray
 
-  @transient
-  lazy val locations_  = {
+  @transient lazy val locations_  = {
     val blockManager = SparkEnv.get.blockManager
     /*val locations = blockIds.map(id => blockManager.getLocations(id))*/
     val locations = blockManager.getLocations(blockIds)
