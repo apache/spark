@@ -76,7 +76,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   // sent with every task. When we detect a node failing, we note the current generation number
   // and failed host, increment it for new tasks, and use this to ignore stray ShuffleMapTask
   // results.
-  // TODO: Garbage collect information about failure generations when new stages start.
+  // TODO: Garbage collect information about failure generations when we know there are no more
+  //       stray messages to detect.
   val failedGeneration = new HashMap[String, Long]
 
   val waiting = new HashSet[Stage] // Stages we need to run whose parents aren't done
