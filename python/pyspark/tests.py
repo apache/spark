@@ -4,22 +4,26 @@ individual modules.
 """
 import os
 import shutil
+import sys
 from tempfile import NamedTemporaryFile
 import time
 import unittest
 
 from pyspark.context import SparkContext
+from pyspark.files import SparkFiles
 from pyspark.java_gateway import SPARK_HOME
 
 
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
+        self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         self.sc = SparkContext('local[4]', class_name , batchSize=2)
 
     def tearDown(self):
         self.sc.stop()
+        sys.path = self._old_sys_path
         # To avoid Akka rebinding to the same port, since it doesn't unbind
         # immediately on shutdown
         self.sc.jvm.System.clearProperty("spark.master.port")
@@ -83,6 +87,25 @@ class TestAddFile(PySparkTestCase):
         self.sc.addPyFile(path)
         res = self.sc.parallelize(range(2)).map(func).first()
         self.assertEqual("Hello World!", res)
+
+    def test_add_file_locally(self):
+        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        self.sc.addFile(path)
+        download_path = SparkFiles.get("hello.txt")
+        self.assertNotEqual(path, download_path)
+        with open(download_path) as test_file:
+            self.assertEquals("Hello World!\n", test_file.readline())
+
+    def test_add_py_file_locally(self):
+        # To ensure that we're actually testing addPyFile's effects, check that
+        # this fails due to `userlibrary` not being on the Python path:
+        def func():
+            from userlibrary import UserClass
+        self.assertRaises(ImportError, func)
+        path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
+        self.sc.addFile(path)
+        from userlibrary import UserClass
+        self.assertEqual("Hello World!", UserClass().hello())
 
 
 if __name__ == "__main__":
