@@ -207,7 +207,7 @@ class KryoSerializer extends spark.serializer.Serializer with Logging {
   }
 
   def newInstance(): SerializerInstance = {
-    this.kryo.setClassLoader(Thread.currentThread().getContextClassLoader)
+    this.kryo.get().setClassLoader(Thread.currentThread().getContextClassLoader)
     new KryoSerializerInstance(this)
   }
 }
