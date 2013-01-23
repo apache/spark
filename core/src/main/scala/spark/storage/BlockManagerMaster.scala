@@ -118,6 +118,10 @@ private[spark] class BlockManagerMaster(
     askMasterWithRetry[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
   }
 
+  def getStorageStatus: Array[StorageStatus] = {
+    askMasterWithRetry[ArrayBuffer[StorageStatus]](GetStorageStatus).toArray
+  }
+
   /** Stop the master actor, called only on the Spark master node */
   def stop() {
     if (masterActor != null) {

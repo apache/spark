@@ -56,9 +56,11 @@ object StorageUtils {
       // Find the id of the RDD, e.g. rdd_1 => 1
       val rddId = rddKey.split("_").last.toInt
       // Get the friendly name for the rdd, if available.
-      val rddName = Option(sc.persistentRdds(rddId).name).getOrElse(rddKey)
-      val rddStorageLevel = sc.persistentRdds(rddId).getStorageLevel
-      
+      val rdd = sc.persistentRdds(rddId)
+      val rddName = Option(rdd.name).getOrElse(rddKey)
+      val rddStorageLevel = rdd.getStorageLevel
+      //TODO get total number of partitions in rdd
+
       RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, memSize, diskSize)
     }.toArray
   }

@@ -46,6 +46,7 @@ import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, C
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import storage.BlockManagerUI
 import util.{MetadataCleaner, TimeStampedHashMap}
+import storage.{StorageStatus, StorageUtils, RDDInfo}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -471,6 +472,21 @@ class SparkContext(
     env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
       (blockManagerId.ip + ":" + blockManagerId.port, mem)
     }
+  }
+
+  /**
+   * Return information about what RDDs are cached, if they are in mem or on disk, how much space
+   * they take, etc.
+   */
+  def getRDDStorageInfo : Array[RDDInfo] = {
+    StorageUtils.rddInfoFromStorageStatus(getSlavesStorageStatus, this)
+  }
+
+  /**
+   * Return information about blocks stored in all of the slaves
+   */
+  def getSlavesStorageStatus : Array[StorageStatus] = {
+    env.blockManager.master.getStorageStatus
   }
 
   /**
