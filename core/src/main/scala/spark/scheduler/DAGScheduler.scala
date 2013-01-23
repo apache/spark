@@ -524,7 +524,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     val currentGeneration = maybeGeneration.getOrElse(mapOutputTracker.getGeneration)
     if (!failedGeneration.contains(host) || failedGeneration(host) < currentGeneration) {
       failedGeneration(host) = currentGeneration
-      logInfo("Host lost: " + host)
+      logInfo("Host lost: " + host + " (generation " + currentGeneration + ")")
       env.blockManager.master.notifyADeadHost(host)
       // TODO: This will be really slow if we keep accumulating shuffle map stages
       for ((shuffleId, stage) <- shuffleToMapStage) {
@@ -537,6 +537,9 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       }
       cacheTracker.cacheLost(host)
       updateCacheLocs()
+    } else {
+      logDebug("Additional host lost message for " + host +
+               "(generation " + currentGeneration + ")")
     }
   }
   
