@@ -194,7 +194,6 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(Seq(true, true), 2)
-    val singleton = sc.parallelize(Seq(true), 1)
     assert(data.count === 2) // force executors to start
     val masterId = SparkEnv.get.blockManager.blockManagerId
     assert(data.map(markNodeIfIdentity).collect.size === 2)
@@ -207,7 +206,6 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, false), 2)
-      val singleton = sc.parallelize(Seq(false), 1)
       assert(data.count === 2)
       assert(data.map(markNodeIfIdentity).collect.size === 2)
       assert(data.map(failOnMarkedIdentity).map(x => x -> x).groupByKey.count === 2)
