@@ -112,6 +112,8 @@ class SparkContext(
     val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """(spark://.*)""".r
+    //Regular expression for connection to Mesos cluster
+    val MESOS_REGEX = """(mesos://.*)""".r
 
     master match {
       case "local" =>
@@ -152,6 +154,9 @@ class SparkContext(
         scheduler
 
       case _ =>
+        if (MESOS_REGEX.findFirstIn(master).isEmpty) {
+          logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
+        }
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
