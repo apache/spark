@@ -3,7 +3,7 @@ package spark
 import scala.collection.mutable.HashMap
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import spark.SparkContext._
-import spark.rdd.CoalescedRDD
+import spark.rdd.{CoalescedRDD, PartitionPruningRDD}
 
 class RDDSuite extends FunSuite with BeforeAndAfter {
 
@@ -169,11 +169,11 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     }
   }
 
-  test("split pruning") {
+  test("partition pruning") {
     sc = new SparkContext("local", "test")
     val data = sc.parallelize(1 to 10, 10)
     // Note that split number starts from 0, so > 8 means only 10th partition left.
-    val prunedRdd = data.pruneSplits(splitNum => splitNum > 8)
+    val prunedRdd = new PartitionPruningRDD(data, splitNum => splitNum > 8)
     assert(prunedRdd.splits.size === 1)
     val prunedData = prunedRdd.collect
     assert(prunedData.size === 1)

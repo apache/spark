@@ -40,7 +40,6 @@ import spark.rdd.MapPartitionsRDD
 import spark.rdd.MapPartitionsWithSplitRDD
 import spark.rdd.PipedRDD
 import spark.rdd.SampledRDD
-import spark.rdd.SplitsPruningRDD
 import spark.rdd.UnionRDD
 import spark.rdd.ZippedRDD
 import spark.storage.StorageLevel
@@ -543,15 +542,6 @@ abstract class RDD[T: ClassManifest](
   def keyBy[K](f: T => K): RDD[(K, T)] = {
     map(x => (f(x), x))
   }
-
-  /**
-   * Prune splits (partitions) so Spark can avoid launching tasks on
-   * all splits. An example use case: If we know the RDD is partitioned by range,
-   * and the execution DAG has a filter on the key, we can avoid launching tasks
-   * on splits that don't have the range covering the key.
-   */
-  def pruneSplits(splitsFilterFunc: Int => Boolean): RDD[T] =
-    new SplitsPruningRDD(this, splitsFilterFunc)
 
   /** A private method for tests, to look at the contents of each partition */
   private[spark] def collectPartitions(): Array[Array[T]] = {
