@@ -1,0 +1,42 @@
+package spark.streaming
+
+/**
+ * This is a simple class that represents an absolute instant of time.
+ * Internally, it represents time as the difference, measured in milliseconds, between the current
+ * time and midnight, January 1, 1970 UTC. This is the same format as what is returned by
+ * System.currentTimeMillis.
+ */
+case class Time(private val millis: Long) {
+
+  def milliseconds: Long = millis
+
+  def < (that: Time): Boolean = (this.millis < that.millis)
+
+  def <= (that: Time): Boolean = (this.millis <= that.millis)
+
+  def > (that: Time): Boolean = (this.millis > that.millis)
+  
+  def >= (that: Time): Boolean = (this.millis >= that.millis)
+
+  def + (that: Duration): Time = new Time(millis + that.milliseconds)
+
+  def - (that: Time): Duration = new Duration(millis - that.millis)
+
+  def - (that: Duration): Time = new Time(millis - that.milliseconds)
+
+  def floor(that: Duration): Time = {
+    val t = that.milliseconds
+    val m = math.floor(this.millis / t).toLong 
+    new Time(m * t)
+  }
+
+  def isMultipleOf(that: Duration): Boolean =
+    (this.millis % that.milliseconds == 0)
+
+  def min(that: Time): Time = if (this < that) this else that
+
+  def max(that: Time): Time = if (this > that) this else that
+
+  override def toString: String = (millis.toString + " ms")
+
+}

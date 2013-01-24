@@ -20,7 +20,7 @@ private[spark] class MapStatus(var address: BlockManagerId, var compressedSizes:
   }
 
   def readExternal(in: ObjectInput) {
-    address = new BlockManagerId(in)
+    address = BlockManagerId(in)
     compressedSizes = new Array[Byte](in.readInt())
     in.readFully(compressedSizes)
   }

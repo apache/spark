@@ -1,14 +1,15 @@
 package spark.rdd
 
-import spark.{OneToOneDependency, RDD, Split, TaskContext}
+import spark.{RDD, Split, TaskContext}
 
 private[spark]
 class MappedRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
     f: T => U)
-  extends RDD[U](prev.context) {
+  extends RDD[U](prev) {
 
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split, context: TaskContext) = prev.iterator(split, context).map(f)
+  override def getSplits = firstParent[T].splits
+
+  override def compute(split: Split, context: TaskContext) =
+    firstParent[T].iterator(split, context).map(f)
 }

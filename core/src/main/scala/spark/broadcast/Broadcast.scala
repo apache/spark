@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import spark._
 
-abstract class Broadcast[T](id: Long) extends Serializable {
+abstract class Broadcast[T](private[spark] val id: Long) extends Serializable {
   def value: T
 
   // We cannot have an abstract readObject here due to some weird issues with

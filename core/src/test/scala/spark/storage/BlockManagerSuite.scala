@@ -7,6 +7,10 @@ import akka.actor._
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts._
+import org.scalatest.matchers.ShouldMatchers._
+import org.scalatest.time.SpanSugar._
 
 import spark.KryoSerializer
 import spark.SizeEstimator
@@ -20,15 +24,16 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   var oldArch: String = null
   var oldOops: String = null
   var oldHeartBeat: String = null
-  
-  // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test 
+
+  // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
+  System.setProperty("spark.kryoserializer.buffer.mb", "1")
   val serializer = new KryoSerializer
 
   before {
     actorSystem = ActorSystem("test")
-    master = new BlockManagerMaster(actorSystem, true, true)
+    master = new BlockManagerMaster(actorSystem, true, true, "localhost", 7077)
 
-    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case 
+    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     oldArch = System.setProperty("os.arch", "amd64")
     oldOops = System.setProperty("spark.test.useCompressedOops", "true")
     oldHeartBeat = System.setProperty("spark.storage.disableBlockManagerHeartBeat", "true")
@@ -63,7 +68,41 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     }
   }
 
-  test("manager-master interaction") {
+  test("StorageLevel object caching") {
+    val level1 = StorageLevel(false, false, false, 3)
+    val level2 = StorageLevel(false, false, false, 3) // this should return the same object as level1
+    val level3 = StorageLevel(false, false, false, 2) // this should return a different object
+    assert(level2 === level1, "level2 is not same as level1")
+    assert(level2.eq(level1), "level2 is not the same object as level1")
+    assert(level3 != level1, "level3 is same as level1")
+    val bytes1 = spark.Utils.serialize(level1)
+    val level1_ = spark.Utils.deserialize[StorageLevel](bytes1)
+    val bytes2 = spark.Utils.serialize(level2)
+    val level2_ = spark.Utils.deserialize[StorageLevel](bytes2)
+    assert(level1_ === level1, "Deserialized level1 not same as original level1")
+    assert(level1_.eq(level1), "Deserialized level1 not the same object as original level2")
+    assert(level2_ === level2, "Deserialized level2 not same as original level2")
+    assert(level2_.eq(level1), "Deserialized level2 not the same object as original level1")
+  }
+
+  test("BlockManagerId object caching") {
+    val id1 = BlockManagerId("XXX", 1)
+    val id2 = BlockManagerId("XXX", 1) // this should return the same object as id1
+    val id3 = BlockManagerId("XXX", 2) // this should return a different object
+    assert(id2 === id1, "id2 is not same as id1")
+    assert(id2.eq(id1), "id2 is not the same object as id1")
+    assert(id3 != id1, "id3 is same as id1")
+    val bytes1 = spark.Utils.serialize(id1)
+    val id1_ = spark.Utils.deserialize[BlockManagerId](bytes1)
+    val bytes2 = spark.Utils.serialize(id2)
+    val id2_ = spark.Utils.deserialize[BlockManagerId](bytes2)
+    assert(id1_ === id1, "Deserialized id1 is not same as original id1")
+    assert(id1_.eq(id1), "Deserialized id1 is not the same object as original id1")
+    assert(id2_ === id2, "Deserialized id2 is not same as original id2")
+    assert(id2_.eq(id1), "Deserialized id2 is not the same object as original id1")
+  }
+
+  test("master + 1 manager interaction") {
     store = new BlockManager(actorSystem, master, serializer, 2000)
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
@@ -74,23 +113,87 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY, false)
 
-    // Checking whether blocks are in memory 
+    // Checking whether blocks are in memory
     assert(store.getSingle("a1") != None, "a1 was not in store")
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") != None, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
-    assert(master.mustGetLocations(GetLocations("a2")).size > 0, "master was not told about a2")
-    assert(master.mustGetLocations(GetLocations("a3")).size === 0, "master was told about a3")
-    
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
+    assert(master.getLocations("a2").size > 0, "master was not told about a2")
+    assert(master.getLocations("a3").size === 0, "master was told about a3")
+
     // Drop a1 and a2 from memory; this should be reported back to the master
     store.dropFromMemory("a1", null)
     store.dropFromMemory("a2", null)
     assert(store.getSingle("a1") === None, "a1 not removed from store")
     assert(store.getSingle("a2") === None, "a2 not removed from store")
-    assert(master.mustGetLocations(GetLocations("a1")).size === 0, "master did not remove a1")
-    assert(master.mustGetLocations(GetLocations("a2")).size === 0, "master did not remove a2")
+    assert(master.getLocations("a1").size === 0, "master did not remove a1")
+    assert(master.getLocations("a2").size === 0, "master did not remove a2")
+  }
+
+  test("master + 2 managers interaction") {
+    store = new BlockManager(actorSystem, master, serializer, 2000)
+    store2 = new BlockManager(actorSystem, master, new KryoSerializer, 2000)
+
+    val peers = master.getPeers(store.blockManagerId, 1)
+    assert(peers.size === 1, "master did not return the other manager as a peer")
+    assert(peers.head === store2.blockManagerId, "peer returned by master is not the other manager")
+
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_2)
+    store2.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_2)
+    assert(master.getLocations("a1").size === 2, "master did not report 2 locations for a1")
+    assert(master.getLocations("a2").size === 2, "master did not report 2 locations for a2")
+  }
+
+  test("removing block") {
+    store = new BlockManager(actorSystem, master, serializer, 2000)
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    val a3 = new Array[Byte](400)
+
+    // Putting a1, a2 and a3 in memory and telling master only about a1 and a2
+    store.putSingle("a1-to-remove", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle("a2-to-remove", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingle("a3-to-remove", a3, StorageLevel.MEMORY_ONLY, false)
+
+    // Checking whether blocks are in memory and memory size
+    val memStatus = master.getMemoryStatus.head._2
+    assert(memStatus._1 == 2000L, "total memory " + memStatus._1 + " should equal 2000")
+    assert(memStatus._2 <= 1200L, "remaining memory " + memStatus._2 + " should <= 1200")
+    assert(store.getSingle("a1-to-remove") != None, "a1 was not in store")
+    assert(store.getSingle("a2-to-remove") != None, "a2 was not in store")
+    assert(store.getSingle("a3-to-remove") != None, "a3 was not in store")
+
+    // Checking whether master knows about the blocks or not
+    assert(master.getLocations("a1-to-remove").size > 0, "master was not told about a1")
+    assert(master.getLocations("a2-to-remove").size > 0, "master was not told about a2")
+    assert(master.getLocations("a3-to-remove").size === 0, "master was told about a3")
+
+    // Remove a1 and a2 and a3. Should be no-op for a3.
+    master.removeBlock("a1-to-remove")
+    master.removeBlock("a2-to-remove")
+    master.removeBlock("a3-to-remove")
+
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("a1-to-remove") should be (None)
+      master.getLocations("a1-to-remove") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("a2-to-remove") should be (None)
+      master.getLocations("a2-to-remove") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("a3-to-remove") should not be (None)
+      master.getLocations("a3-to-remove") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      val memStatus = master.getMemoryStatus.head._2
+      memStatus._1 should equal (2000L)
+      memStatus._2 should equal (2000L)
+    }
   }
 
   test("reregistration on heart beat") {
@@ -101,14 +204,13 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
 
     assert(store.getSingle("a1") != None, "a1 was not in store")
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.notifyADeadHost(store.blockManagerId.ip)
-    assert(master.mustGetLocations(GetLocations("a1")).size == 0, "a1 was not removed from master")
+    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
     store invokePrivate heartBeat()
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0,
-           "a1 was not reregistered with master")
+    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
   }
 
   test("reregistration on block update") {
@@ -118,39 +220,15 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
 
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
+    assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.notifyADeadHost(store.blockManagerId.ip)
-    assert(master.mustGetLocations(GetLocations("a1")).size == 0, "a1 was not removed from master")
-    
+    assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
+
     store.putSingle("a2", a1, StorageLevel.MEMORY_ONLY)
 
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0,
-        "a1 was not reregistered with master")
-    assert(master.mustGetLocations(GetLocations("a2")).size > 0,
-        "master was not told about a2")
-  }
-
-  test("deregistration on duplicate") {
-    val heartBeat = PrivateMethod[Unit]('heartBeat)
-    store = new BlockManager(actorSystem, master, serializer, 2000)
-    val a1 = new Array[Byte](400)
-
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
-
-    store2 = new BlockManager(actorSystem, master, serializer, 2000)
-
-    assert(master.mustGetLocations(GetLocations("a1")).size == 0, "a1 was not removed from master")
-
-    store invokePrivate heartBeat()
-    
-    assert(master.mustGetLocations(GetLocations("a1")).size > 0, "master was not told about a1")
-
-    store2 invokePrivate heartBeat()
-    
-    assert(master.mustGetLocations(GetLocations("a1")).size == 0, "a2 was not removed from master")
+    assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
+    assert(master.getLocations("a2").size > 0, "master was not told about a2")
   }
 
   test("in-memory LRU storage") {
@@ -171,7 +249,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.getSingle("a2") != None, "a2 was not in store")
     assert(store.getSingle("a3") === None, "a3 was in store")
   }
-  
+
   test("in-memory LRU storage with serialization") {
     store = new BlockManager(actorSystem, master, serializer, 1200)
     val a1 = new Array[Byte](400)

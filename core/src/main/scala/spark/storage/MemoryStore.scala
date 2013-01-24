@@ -17,7 +17,6 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   private val entries = new LinkedHashMap[String, Entry](32, 0.75f, true)
   private var currentMemory = 0L
-
   // Object used to ensure that only one thread is putting blocks and if necessary, dropping
   // blocks from the memory store.
   private val putLock = new Object()
@@ -90,7 +89,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def remove(blockId: String) {
+  override def remove(blockId: String): Boolean = {
     entries.synchronized {
       val entry = entries.get(blockId)
       if (entry != null) {
@@ -98,8 +97,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         currentMemory -= entry.size
         logInfo("Block %s of size %d dropped from memory (free %d)".format(
           blockId, entry.size, freeMemory))
+        true
       } else {
-        logWarning("Block " + blockId + " could not be removed as it does not exist")
+        false
       }
     }
   }

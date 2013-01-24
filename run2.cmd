@@ -1,6 +1,6 @@
 @echo off
 
-set SCALA_VERSION=2.9.1
+set SCALA_VERSION=2.9.2
 
 rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0
@@ -34,6 +34,7 @@ set CORE_DIR=%FWDIR%core
 set REPL_DIR=%FWDIR%repl
 set EXAMPLES_DIR=%FWDIR%examples
 set BAGEL_DIR=%FWDIR%bagel
+set PYSPARK_DIR=%FWDIR%python
 
 rem Build up classpath
 set CLASSPATH=%SPARK_CLASSPATH%;%MESOS_CLASSPATH%;%FWDIR%conf;%CORE_DIR%\target\scala-%SCALA_VERSION%\classes
@@ -42,6 +43,7 @@ set CLASSPATH=%CLASSPATH%;%REPL_DIR%\target\scala-%SCALA_VERSION%\classes;%EXAMP
 for /R "%FWDIR%\lib_managed\jars" %%j in (*.jar) do set CLASSPATH=!CLASSPATH!;%%j
 for /R "%FWDIR%\lib_managed\bundles" %%j in (*.jar) do set CLASSPATH=!CLASSPATH!;%%j
 for /R "%REPL_DIR%\lib" %%j in (*.jar) do set CLASSPATH=!CLASSPATH!;%%j
+for /R "%PYSPARK_DIR%\lib" %%j in (*.jar) do set CLASSPATH=!CLASSPATH!;%%j
 set CLASSPATH=%CLASSPATH%;%BAGEL_DIR%\target\scala-%SCALA_VERSION%\classes
 
 rem Figure out whether to run our class with java or with the scala launcher.

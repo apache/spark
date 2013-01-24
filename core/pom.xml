@@ -72,6 +72,10 @@
       <artifactId>spray-server</artifactId>
     </dependency>
     <dependency>
+      <groupId>cc.spray</groupId>
+      <artifactId>spray-json_${scala.version}</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.tomdz.twirl</groupId>
       <artifactId>twirl-api</artifactId>
     </dependency>
@@ -159,6 +163,11 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+      <activation>
+        <property>
+          <name>!hadoopVersion</name>
+        </property>
+      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
@@ -211,6 +220,12 @@
     </profile>
     <profile>
       <id>hadoop2</id>
+      <activation>
+        <property>
+          <name>hadoopVersion</name>
+          <value>2</value>
+        </property>
+      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>

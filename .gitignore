@@ -12,6 +12,7 @@ third_party/libmesos.so
 third_party/libmesos.dylib
 conf/java-opts
 conf/spark-env.sh
+conf/streaming-env.sh
 conf/log4j.properties
 docs/_site
 docs/api
@@ -31,6 +32,7 @@ project/plugins/src_managed/
 logs/
 log/
 spark-tests.log
+streaming-tests.log
 dependency-reduced-pom.xml
 .ensime
 .ensime_lucene

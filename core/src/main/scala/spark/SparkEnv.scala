@@ -22,24 +22,19 @@ class SparkEnv (
     val actorSystem: ActorSystem,
     val serializer: Serializer,
     val closureSerializer: Serializer,
-    val cacheTracker: CacheTracker,
+    val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
-    val httpFileServer: HttpFileServer
+    val httpFileServer: HttpFileServer,
+    val sparkFilesDir: String
   ) {
-
-  /** No-parameter constructor for unit tests. */
-  def this() = {
-    this(null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
-  }
 
   def stop() {
     httpFileServer.stop()
     mapOutputTracker.stop()
-    cacheTracker.stop()
     shuffleFetcher.stop()
     broadcastManager.stop()
     blockManager.stop()
@@ -86,10 +81,13 @@ object SparkEnv extends Logging {
     }
 
     val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
-    
-    val blockManagerMaster = new BlockManagerMaster(actorSystem, isMaster, isLocal)
+
+    val masterIp: String = System.getProperty("spark.master.host", "localhost")
+    val masterPort: Int = System.getProperty("spark.master.port", "7077").toInt
+    val blockManagerMaster = new BlockManagerMaster(
+      actorSystem, isMaster, isLocal, masterIp, masterPort)
     val blockManager = new BlockManager(actorSystem, blockManagerMaster, serializer)
-    
+
     val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isMaster)
@@ -97,17 +95,25 @@ object SparkEnv extends Logging {
     val closureSerializer = instantiateClass[Serializer](
       "spark.closure.serializer", "spark.JavaSerializer")
 
-    val cacheTracker = new CacheTracker(actorSystem, isMaster, blockManager)
-    blockManager.cacheTracker = cacheTracker
+    val cacheManager = new CacheManager(blockManager)
 
     val mapOutputTracker = new MapOutputTracker(actorSystem, isMaster)
 
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
-    
+
     val httpFileServer = new HttpFileServer()
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
+
+    // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
+    // this is a temporary directory; in distributed mode, this is the executor's current working
+    // directory.
+    val sparkFilesDir: String = if (isMaster) {
+      Utils.createTempDir().getAbsolutePath
+    } else {
+      "."
+    }
 
     // Warn about deprecated spark.cache.class property
     if (System.getProperty("spark.cache.class") != null) {
@@ -119,12 +125,13 @@ object SparkEnv extends Logging {
       actorSystem,
       serializer,
       closureSerializer,
-      cacheTracker,
+      cacheManager,
       mapOutputTracker,
       shuffleFetcher,
       broadcastManager,
       blockManager,
       connectionManager,
-      httpFileServer)
+      httpFileServer,
+      sparkFilesDir)
   }
 }

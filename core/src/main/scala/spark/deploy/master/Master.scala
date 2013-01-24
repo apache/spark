@@ -156,7 +156,8 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     if (spreadOutJobs) {
       // Try to spread out each job among all the nodes, until it has all its cores
       for (job <- waitingJobs if job.coresLeft > 0) {
-        val usableWorkers = workers.toArray.filter(canUse(job, _)).sortBy(_.coresFree).reverse
+        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+          .filter(canUse(job, _)).sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(job.coresLeft, usableWorkers.map(_.coresFree).sum)
@@ -172,7 +173,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
         for (pos <- 0 until numUsable) {
           if (assigned(pos) > 0) {
             val exec = job.addExecutor(usableWorkers(pos), assigned(pos))
-            launchExecutor(usableWorkers(pos), exec)
+            launchExecutor(usableWorkers(pos), exec, job.desc.sparkHome)
             job.state = JobState.RUNNING
           }
         }
@@ -185,7 +186,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
             val coresToUse = math.min(worker.coresFree, job.coresLeft)
             if (coresToUse > 0) {
               val exec = job.addExecutor(worker, coresToUse)
-              launchExecutor(worker, exec)
+              launchExecutor(worker, exec, job.desc.sparkHome)
               job.state = JobState.RUNNING
             }
           }
@@ -194,15 +195,17 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     }
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo) {
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo, sparkHome: String) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
-    worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc, exec.cores, exec.memory)
+    worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc, exec.cores, exec.memory, sparkHome)
     exec.job.actor ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
   }
 
   def addWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int,
     publicAddress: String): WorkerInfo = {
+    // There may be one or more refs to dead workers on this same node (w/ different ID's), remove them.
+    workers.filter(w => (w.host == host) && (w.state == WorkerState.DEAD)).foreach(workers -= _)
     val worker = new WorkerInfo(id, host, port, cores, memory, sender, webUiPort, publicAddress)
     workers += worker
     idToWorker(worker.id) = worker
@@ -213,7 +216,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
 
   def removeWorker(worker: WorkerInfo) {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
-    workers -= worker
+    worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
     actorToWorker -= worker.actor
     addressToWorker -= worker.actor.path.address

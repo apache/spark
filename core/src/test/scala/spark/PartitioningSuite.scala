@@ -106,5 +106,31 @@ class PartitioningSuite extends FunSuite with BeforeAndAfter {
     assert(grouped2.leftOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.rightOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.cogroup(reduced2).partitioner === grouped2.partitioner)
+
+    assert(grouped2.map(_ => 1).partitioner === None)
+    assert(grouped2.mapValues(_ => 1).partitioner === grouped2.partitioner)
+    assert(grouped2.flatMapValues(_ => Seq(1)).partitioner === grouped2.partitioner)
+    assert(grouped2.filter(_._1 > 4).partitioner === grouped2.partitioner)
+  }
+
+  test("partitioning Java arrays should fail") {
+    sc = new SparkContext("local", "test")
+    val arrs: RDD[Array[Int]] = sc.parallelize(Array(1, 2, 3, 4), 2).map(x => Array(x))
+    val arrPairs: RDD[(Array[Int], Int)] =
+      sc.parallelize(Array(1, 2, 3, 4), 2).map(x => (Array(x), x))
+
+    assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("array"))
+    // We can't catch all usages of arrays, since they might occur inside other collections:
+    //assert(fails { arrPairs.distinct() })
+    assert(intercept[SparkException]{ arrPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.join(arrPairs) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.leftOuterJoin(arrPairs) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.rightOuterJoin(arrPairs) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.groupByKey() }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.countByKey() }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.countByKeyApprox(1) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.cogroup(arrPairs) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("array"))
   }
 }

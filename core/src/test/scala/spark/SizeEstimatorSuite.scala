@@ -3,7 +3,6 @@ package spark
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.PrivateMethodTester
-import org.scalatest.matchers.ShouldMatchers
 
 class DummyClass1 {}
 
@@ -20,8 +19,17 @@ class DummyClass4(val d: DummyClass3) {
   val x: Int = 0
 }
 
+object DummyString {
+  def apply(str: String) : DummyString = new DummyString(str.toArray)
+}
+class DummyString(val arr: Array[Char]) {
+  override val hashCode: Int = 0
+  // JDK-7 has an extra hash32 field http://hg.openjdk.java.net/jdk7u/jdk7u6/jdk/rev/11987e85555f
+  @transient val hash32: Int = 0
+}
+
 class SizeEstimatorSuite
-  extends FunSuite with BeforeAndAfterAll with PrivateMethodTester with ShouldMatchers {
+  extends FunSuite with BeforeAndAfterAll with PrivateMethodTester {
 
   var oldArch: String = _
   var oldOops: String = _
@@ -45,15 +53,13 @@ class SizeEstimatorSuite
     expect(48)(SizeEstimator.estimate(new DummyClass4(new DummyClass3)))
   }
 
-  // NOTE: The String class definition changed in JDK 7 to exclude the int fields count and length.
-  // This means that the size of strings will be lesser by 8 bytes in JDK 7 compared to JDK 6.
-  // http://mail.openjdk.java.net/pipermail/core-libs-dev/2012-May/010257.html
-  // Work around to check for either.
+  // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
+  // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("strings") {
-    SizeEstimator.estimate("") should (equal (48) or equal (40))
-    SizeEstimator.estimate("a") should (equal (56) or equal (48))
-    SizeEstimator.estimate("ab") should (equal (56) or equal (48))
-    SizeEstimator.estimate("abcdefgh") should (equal(64) or equal(56))
+    expect(40)(SizeEstimator.estimate(DummyString("")))
+    expect(48)(SizeEstimator.estimate(DummyString("a")))
+    expect(48)(SizeEstimator.estimate(DummyString("ab")))
+    expect(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
   }
 
   test("primitive arrays") {
@@ -105,18 +111,16 @@ class SizeEstimatorSuite
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
-    expect(40)(SizeEstimator.estimate(""))
-    expect(48)(SizeEstimator.estimate("a"))
-    expect(48)(SizeEstimator.estimate("ab"))
-    expect(56)(SizeEstimator.estimate("abcdefgh"))
+    expect(40)(SizeEstimator.estimate(DummyString("")))
+    expect(48)(SizeEstimator.estimate(DummyString("a")))
+    expect(48)(SizeEstimator.estimate(DummyString("ab")))
+    expect(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
 
     resetOrClear("os.arch", arch)
   }
 
-  // NOTE: The String class definition changed in JDK 7 to exclude the int fields count and length.
-  // This means that the size of strings will be lesser by 8 bytes in JDK 7 compared to JDK 6.
-  // http://mail.openjdk.java.net/pipermail/core-libs-dev/2012-May/010257.html
-  // Work around to check for either.
+  // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
+  // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("64-bit arch with no compressed oops") {
     val arch = System.setProperty("os.arch", "amd64")
     val oops = System.setProperty("spark.test.useCompressedOops", "false")
@@ -124,10 +128,10 @@ class SizeEstimatorSuite
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
-    SizeEstimator.estimate("") should (equal (64) or equal (56))
-    SizeEstimator.estimate("a") should (equal (72) or equal (64))
-    SizeEstimator.estimate("ab") should (equal (72) or equal (64))
-    SizeEstimator.estimate("abcdefgh") should (equal (80) or equal (72))
+    expect(56)(SizeEstimator.estimate(DummyString("")))
+    expect(64)(SizeEstimator.estimate(DummyString("a")))
+    expect(64)(SizeEstimator.estimate(DummyString("ab")))
+    expect(72)(SizeEstimator.estimate(DummyString("abcdefgh")))
 
     resetOrClear("os.arch", arch)
     resetOrClear("spark.test.useCompressedOops", oops)

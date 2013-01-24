@@ -72,6 +72,11 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+      <activation>
+        <property>
+          <name>!hadoopVersion</name>
+        </property>
+      </activation>
       <properties>
         <classifier>hadoop1</classifier>
       </properties>
@@ -97,6 +102,13 @@
           <scope>runtime</scope>
         </dependency>
         <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-streaming</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop1</classifier>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
           <scope>provided</scope>
@@ -116,6 +128,12 @@
     </profile>
     <profile>
       <id>hadoop2</id>
+      <activation>
+        <property>
+          <name>hadoopVersion</name>
+          <value>2</value>
+        </property>
+      </activation>
       <properties>
         <classifier>hadoop2</classifier>
       </properties>
@@ -141,6 +159,13 @@
           <scope>runtime</scope>
         </dependency>
         <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-streaming</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop2</classifier>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
           <scope>provided</scope>
@@ -148,6 +173,16 @@
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-client</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro-ipc</artifactId>
           <scope>provided</scope>
         </dependency>
       </dependencies>
