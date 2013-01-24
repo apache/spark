@@ -14,11 +14,16 @@ class PartitionPruningRDD[T: ClassManifest](
   extends RDD[T](prev.context, List(new PruneDependency(prev, partitionFilterFunc))) {
 
   @transient
-  val partitions_ : Array[Split] = dependencies_.head.asInstanceOf[PruneDependency[T]].partitions
+  var partitions_ : Array[Split] = dependencies_.head.asInstanceOf[PruneDependency[T]].partitions
 
   override def compute(split: Split, context: TaskContext) = firstParent[T].iterator(split, context)
 
   override protected def getSplits = partitions_
 
   override val partitioner = firstParent[T].partitioner
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    partitions_ = null
+  }
 }
