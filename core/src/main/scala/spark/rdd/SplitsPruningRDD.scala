@@ -9,7 +9,7 @@ import spark.{PruneDependency, RDD, SparkEnv, Split, TaskContext}
  * on splits that don't have the range covering the key.
  */
 class SplitsPruningRDD[T: ClassManifest](
-    prev: RDD[T],
+    @transient prev: RDD[T],
     @transient splitsFilterFunc: Int => Boolean)
   extends RDD[T](prev.context, List(new PruneDependency(prev, splitsFilterFunc))) {
 
@@ -20,5 +20,5 @@ class SplitsPruningRDD[T: ClassManifest](
 
   override protected def getSplits = _splits
 
-  override val partitioner = prev.partitioner
+  override val partitioner = firstParent[T].partitioner
 }
