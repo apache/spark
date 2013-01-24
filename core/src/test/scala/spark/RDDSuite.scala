@@ -174,9 +174,9 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     val data = sc.parallelize(1 to 10, 10)
     // Note that split number starts from 0, so > 8 means only 10th partition left.
     val prunedRdd = data.pruneSplits(splitNum => splitNum > 8)
-    assert(prunedRdd.splits.size == 1)
+    assert(prunedRdd.splits.size === 1)
     val prunedData = prunedRdd.collect
-    assert(prunedData.size == 1)
-    assert(prunedData(0) == 10)
+    assert(prunedData.size === 1)
+    assert(prunedData(0) === 10)
   }
 }
