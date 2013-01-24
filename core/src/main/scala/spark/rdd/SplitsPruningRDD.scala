@@ -1,6 +1,6 @@
 package spark.rdd
 
-import spark.{OneToOneDependency, RDD, SparkEnv, Split, TaskContext}
+import spark.{PruneDependency, RDD, SparkEnv, Split, TaskContext}
 
 /**
  * A RDD used to prune RDD splits so we can avoid launching tasks on
@@ -11,12 +11,12 @@ import spark.{OneToOneDependency, RDD, SparkEnv, Split, TaskContext}
 class SplitsPruningRDD[T: ClassManifest](
     prev: RDD[T],
     @transient splitsFilterFunc: Int => Boolean)
-  extends RDD[T](prev) {
+  extends RDD[T](prev.context, List(new PruneDependency(prev, splitsFilterFunc))) {
 
   @transient
-  val _splits: Array[Split] = prev.splits.filter(s => splitsFilterFunc(s.index))
+  val _splits: Array[Split] = dependencies_.head.asInstanceOf[PruneDependency[T]].splits
 
-  override def compute(split: Split, context: TaskContext) = prev.iterator(split, context)
+  override def compute(split: Split, context: TaskContext) = firstParent[T].iterator(split, context)
 
   override protected def getSplits = _splits
 
