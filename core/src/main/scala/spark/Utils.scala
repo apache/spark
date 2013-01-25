@@ -10,6 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.io.Source
 import com.google.common.io.Files
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 /**
  * Various utility methods used by Spark.
@@ -111,20 +112,6 @@ private object Utils extends Logging {
     }
   }
 
-  /** Copy a file on the local file system */
-  def copyFile(source: File, dest: File) {
-    val in = new FileInputStream(source)
-    val out = new FileOutputStream(dest)
-    copyStream(in, out, true)
-  }
-
-  /** Download a file from a given URL to the local filesystem */
-  def downloadFile(url: URL, localPath: String) {
-    val in = url.openStream()
-    val out = new FileOutputStream(localPath)
-    Utils.copyStream(in, out, true)
-  }
-
   /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
@@ -201,7 +188,7 @@ private object Utils extends Logging {
       Utils.execute(Seq("tar", "-xf", filename), targetDir)
     }
     // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(filename, "a+x")
+    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
   }
 
   /**
@@ -287,29 +274,14 @@ private object Utils extends Logging {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
   }
 
-  /**
-   * Returns a standard ThreadFactory except all threads are daemons.
-   */
-  private def newDaemonThreadFactory: ThreadFactory = {
-    new ThreadFactory {
-      def newThread(r: Runnable): Thread = {
-        var t = Executors.defaultThreadFactory.newThread (r)
-        t.setDaemon (true)
-        return t
-      }
-    }
-  }
+  private[spark] val daemonThreadFactory: ThreadFactory =
+    new ThreadFactoryBuilder().setDaemon(true).build()
 
   /**
    * Wrapper over newCachedThreadPool.
    */
-  def newDaemonCachedThreadPool(): ThreadPoolExecutor = {
-    var threadPool = Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory (newDaemonThreadFactory)
-
-    return threadPool
-  }
+  def newDaemonCachedThreadPool(): ThreadPoolExecutor =
+    Executors.newCachedThreadPool(daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
   /**
    * Return the string to tell how long has passed in seconds. The passing parameter should be in
@@ -322,13 +294,8 @@ private object Utils extends Logging {
   /**
    * Wrapper over newFixedThreadPool.
    */
-  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
-    var threadPool = Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory(newDaemonThreadFactory)
-
-    return threadPool
-  }
+  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor =
+    Executors.newFixedThreadPool(nThreads, daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
   /**
    * Delete a file or directory and its contents recursively.

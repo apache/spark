@@ -54,11 +54,9 @@ class UpdateBlockInfo(
   }
 
   override def readExternal(in: ObjectInput) {
-    blockManagerId = new BlockManagerId()
-    blockManagerId.readExternal(in)
+    blockManagerId = BlockManagerId(in)
     blockId = in.readUTF()
-    storageLevel = new StorageLevel()
-    storageLevel.readExternal(in)
+    storageLevel = StorageLevel(in)
     memSize = in.readInt()
     diskSize = in.readInt()
   }

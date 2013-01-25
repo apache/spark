@@ -112,6 +112,8 @@ class SparkContext(
     val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """(spark://.*)""".r
+    //Regular expression for connection to Mesos cluster
+    val MESOS_REGEX = """(mesos://.*)""".r
 
     master match {
       case "local" =>
@@ -152,6 +154,9 @@ class SparkContext(
         scheduler
 
       case _ =>
+        if (MESOS_REGEX.findFirstIn(master).isEmpty) {
+          logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
+        }
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
@@ -423,9 +428,10 @@ class SparkContext(
   def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
 
   /**
-   * Add a file to be downloaded into the working directory of this Spark job on every node.
+   * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), or an HTTP, HTTPS or FTP URI.
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(path)` to find its download location.
    */
   def addFile(path: String) {
     val uri = new URI(path)
@@ -438,7 +444,7 @@ class SparkContext(
     // Fetch the file locally in case a job is executed locally.
     // Jobs that run through LocalScheduler will already fetch the required dependencies,
     // but jobs run in DAGScheduler.runLocally() will not so we must fetch the files here.
-    Utils.fetchFile(path, new File("."))
+    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory))
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
   }

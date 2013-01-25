@@ -1,10 +1,15 @@
 import os
 import atexit
+import shutil
+import sys
+import tempfile
+from threading import Lock
 from tempfile import NamedTemporaryFile
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
+from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import dump_pickle, write_with_length, batched
 from pyspark.rdd import RDD
@@ -25,6 +30,8 @@ class SparkContext(object):
     _writeIteratorToPickleFile = jvm.PythonRDD.writeIteratorToPickleFile
     _takePartition = jvm.PythonRDD.takePartition
     _next_accum_id = 0
+    _active_spark_context = None
+    _lock = Lock()
 
     def __init__(self, master, jobName, sparkHome=None, pyFiles=None,
         environment=None, batchSize=1024):
@@ -44,6 +51,11 @@ class SparkContext(object):
                Java object.  Set 1 to disable batching or -1 to use an
                unlimited batch size.
         """
+        with SparkContext._lock:
+            if SparkContext._active_spark_context:
+                raise ValueError("Cannot run multiple SparkContexts at once")
+            else:
+                SparkContext._active_spark_context = self
         self.master = master
         self.jobName = jobName
         self.sparkHome = sparkHome or None # None becomes null in Py4J
@@ -73,6 +85,8 @@ class SparkContext(object):
         # Deploy any code dependencies specified in the constructor
         for path in (pyFiles or []):
             self.addPyFile(path)
+        SparkFiles._sc = self
+        sys.path.append(SparkFiles.getRootDirectory())
 
     @property
     def defaultParallelism(self):
@@ -83,17 +97,20 @@ class SparkContext(object):
         return self._jsc.sc().defaultParallelism()
 
     def __del__(self):
-        if self._jsc:
-            self._jsc.stop()
-        if self._accumulatorServer:
-            self._accumulatorServer.shutdown()
+        self.stop()
 
     def stop(self):
         """
         Shut down the SparkContext.
         """
-        self._jsc.stop()
-        self._jsc = None
+        if self._jsc:
+            self._jsc.stop()
+            self._jsc = None
+        if self._accumulatorServer:
+            self._accumulatorServer.shutdown()
+            self._accumulatorServer = None
+        with SparkContext._lock:
+            SparkContext._active_spark_context = None
 
     def parallelize(self, c, numSlices=None):
         """
@@ -148,16 +165,11 @@ class SparkContext(object):
 
     def accumulator(self, value, accum_param=None):
         """
-        Create an C{Accumulator} with the given initial value, using a given
-        AccumulatorParam helper object to define how to add values of the data
-        type if provided. Default AccumulatorParams are used for integers and
-        floating-point numbers if you do not provide one. For other types, the
-        AccumulatorParam must implement two methods:
-        - C{zero(value)}: provide a "zero value" for the type, compatible in
-          dimensions with the provided C{value} (e.g., a zero vector).
-        - C{addInPlace(val1, val2)}: add two values of the accumulator's data
-          type, returning a new value; for efficiency, can also update C{val1}
-          in place and return it.
+        Create an L{Accumulator} with the given initial value, using a given
+        L{AccumulatorParam} helper object to define how to add values of the
+        data type if provided. Default AccumulatorParams are used for integers
+        and floating-point numbers if you do not provide one. For other types,
+        a custom AccumulatorParam can be used.
         """
         if accum_param == None:
             if isinstance(value, int):
@@ -173,10 +185,26 @@ class SparkContext(object):
 
     def addFile(self, path):
         """
-        Add a file to be downloaded into the working directory of this Spark
-        job on every node. The C{path} passed can be either a local file,
-        a file in HDFS (or other Hadoop-supported filesystems), or an HTTP,
-        HTTPS or FTP URI.
+        Add a file to be downloaded with this Spark job on every node.
+        The C{path} passed can be either a local file, a file in HDFS
+        (or other Hadoop-supported filesystems), or an HTTP, HTTPS or
+        FTP URI.
+
+        To access the file in Spark jobs, use
+        L{SparkFiles.get(path)<pyspark.files.SparkFiles.get>} to find its
+        download location.
+
+        >>> from pyspark import SparkFiles
+        >>> path = os.path.join(tempdir, "test.txt")
+        >>> with open(path, "w") as testFile:
+        ...    testFile.write("100")
+        >>> sc.addFile(path)
+        >>> def func(iterator):
+        ...    with open(SparkFiles.get("test.txt")) as testFile:
+        ...        fileVal = int(testFile.readline())
+        ...        return [x * 100 for x in iterator]
+        >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
+        [100, 200, 300, 400]
         """
         self._jsc.sc().addFile(path)
 
@@ -197,8 +225,6 @@ class SparkContext(object):
         """
         self.addFile(path)
         filename = path.split("/")[-1]
-        os.environ["PYTHONPATH"] = \
-            "%s:%s" % (filename, os.environ["PYTHONPATH"])
 
     def setCheckpointDir(self, dirName, useExisting=False):
         """
@@ -211,3 +237,17 @@ class SparkContext(object):
         accidental overriding of checkpoint files in the existing directory.
         """
         self._jsc.sc().setCheckpointDir(dirName, useExisting)
+
+
+def _test():
+    import doctest
+    globs = globals().copy()
+    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    globs['tempdir'] = tempfile.mkdtemp()
+    atexit.register(lambda: shutil.rmtree(globs['tempdir']))
+    doctest.testmod(globs=globs)
+    globs['sc'].stop()
+
+
+if __name__ == "__main__":
+    _test()

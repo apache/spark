@@ -19,13 +19,12 @@ class SampledRDD[T: ClassManifest](
     seed: Int)
   extends RDD[T](prev) {
 
-  @transient
-  var splits_ : Array[Split] = {
+  @transient var splits_ : Array[Split] = {
     val rg = new Random(seed)
     firstParent[T].splits.map(x => new SampledRDDSplit(x, rg.nextInt))
   }
 
-  override def getSplits = splits_.asInstanceOf[Array[Split]]
+  override def getSplits = splits_
 
   override def getPreferredLocations(split: Split) =
     firstParent[T].preferredLocations(split.asInstanceOf[SampledRDDSplit].prev)

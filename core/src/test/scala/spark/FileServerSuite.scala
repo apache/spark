@@ -7,8 +7,8 @@ import SparkContext._
 
 class FileServerSuite extends FunSuite with LocalSparkContext {
 
-  @transient var tmpFile : File = _
-  @transient var testJarFile : File = _
+  @transient var tmpFile: File = _
+  @transient var testJarFile: File = _
 
   override def beforeEach() {
     super.beforeEach()
@@ -34,7 +34,8 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     sc.addFile(tmpFile.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
-      val in  = new BufferedReader(new FileReader("FileServerSuite.txt"))
+      val path = SparkFiles.get("FileServerSuite.txt")
+      val in  = new BufferedReader(new FileReader(path))
       val fileVal = in.readLine().toInt
       in.close()
       _ * fileVal + _ * fileVal
@@ -48,7 +49,8 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     sc.addFile((new File(tmpFile.toString)).toURL.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
-      val in  = new BufferedReader(new FileReader("FileServerSuite.txt"))
+      val path = SparkFiles.get("FileServerSuite.txt")
+      val in  = new BufferedReader(new FileReader(path))
       val fileVal = in.readLine().toInt
       in.close()
       _ * fileVal + _ * fileVal
@@ -77,7 +79,8 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     sc.addFile(tmpFile.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
-      val in  = new BufferedReader(new FileReader("FileServerSuite.txt"))
+      val path = SparkFiles.get("FileServerSuite.txt")
+      val in  = new BufferedReader(new FileReader(path))
       val fileVal = in.readLine().toInt
       in.close()
       _ * fileVal + _ * fileVal

@@ -2,9 +2,8 @@ package spark
 
 import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
-
-import spark.rdd.CoalescedRDD
-import SparkContext._
+import spark.SparkContext._
+import spark.rdd.{CoalescedRDD, PartitionPruningRDD}
 
 class RDDSuite extends FunSuite with LocalSparkContext {
 
@@ -92,7 +91,7 @@ class RDDSuite extends FunSuite with LocalSparkContext {
   }
 
   test("caching with failures") {
-    sc = new SparkContext("local", "test") 
+    sc = new SparkContext("local", "test")
     val onlySplit = new Split { override def index: Int = 0 }
     var shouldFail = true
     val rdd = new RDD[Int](sc, Nil) {
@@ -124,8 +123,10 @@ class RDDSuite extends FunSuite with LocalSparkContext {
       List(List(1, 2, 3, 4, 5), List(6, 7, 8, 9, 10)))
 
     // Check that the narrow dependency is also specified correctly
-    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(0).toList === List(0, 1, 2, 3, 4))
-    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(1).toList === List(5, 6, 7, 8, 9))
+    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(0).toList ===
+      List(0, 1, 2, 3, 4))
+    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(1).toList ===
+      List(5, 6, 7, 8, 9))
 
     val coalesced2 = new CoalescedRDD(data, 3)
     assert(coalesced2.collect().toList === (1 to 10).toList)
@@ -155,5 +156,16 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     intercept[IllegalArgumentException] {
       nums.zip(sc.parallelize(1 to 4, 1)).collect()
     }
+  }
+
+  test("partition pruning") {
+    sc = new SparkContext("local", "test")
+    val data = sc.parallelize(1 to 10, 10)
+    // Note that split number starts from 0, so > 8 means only 10th partition left.
+    val prunedRdd = new PartitionPruningRDD(data, splitNum => splitNum > 8)
+    assert(prunedRdd.splits.size === 1)
+    val prunedData = prunedRdd.collect
+    assert(prunedData.size === 1)
+    assert(prunedData(0) === 10)
   }
 }

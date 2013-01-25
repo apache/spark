@@ -52,9 +52,8 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   val keyInterestChangeRequests = new SynchronizedQueue[(SelectionKey, Int)]
   val sendMessageRequests = new Queue[(Message, SendingConnection)]
 
-  implicit val futureExecContext = ExecutionContext.fromExecutor(
-    Executors.newCachedThreadPool(DaemonThreadFactory))
-  
+  implicit val futureExecContext = ExecutionContext.fromExecutor(Utils.newDaemonCachedThreadPool())
+
   var onReceiveCallback: (BufferMessage, ConnectionManagerId) => Option[Message]= null
 
   serverChannel.configureBlocking(false)

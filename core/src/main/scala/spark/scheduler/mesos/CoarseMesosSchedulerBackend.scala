@@ -64,13 +64,9 @@ private[spark] class CoarseMesosSchedulerBackend(
   val taskIdToSlaveId = new HashMap[Int, String]
   val failuresBySlaveId = new HashMap[String, Int] // How many times tasks on each slave failed
 
-  val sparkHome = sc.getSparkHome() match {
-    case Some(path) =>
-      path
-    case None =>
-      throw new SparkException("Spark home is not set; set it through the spark.home system " +
-        "property, the SPARK_HOME environment variable or the SparkContext constructor")
-  }
+  val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
+    "Spark home is not set; set it through the spark.home system " +
+    "property, the SPARK_HOME environment variable or the SparkContext constructor"))
 
   val extraCoresPerSlave = System.getProperty("spark.mesos.extra.cores", "0").toInt
 
@@ -184,7 +180,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /** Helper function to pull out a resource from a Mesos Resources protobuf */
-  def getResource(res: JList[Resource], name: String): Double = {
+  private def getResource(res: JList[Resource], name: String): Double = {
     for (r <- res if r.getName == name) {
       return r.getScalar.getValue
     }
@@ -193,7 +189,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /** Build a Mesos resource protobuf object */
-  def createResource(resourceName: String, quantity: Double): Protos.Resource = {
+  private def createResource(resourceName: String, quantity: Double): Protos.Resource = {
     Resource.newBuilder()
       .setName(resourceName)
       .setType(Value.Type.SCALAR)
@@ -202,7 +198,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /** Check whether a Mesos task state represents a finished task */
-  def isFinished(state: MesosTaskState) = {
+  private def isFinished(state: MesosTaskState) = {
     state == MesosTaskState.TASK_FINISHED ||
       state == MesosTaskState.TASK_FAILED ||
       state == MesosTaskState.TASK_KILLED ||

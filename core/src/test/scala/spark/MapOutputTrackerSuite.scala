@@ -43,13 +43,13 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val compressedSize10000 = MapOutputTracker.compressSize(10000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     val size10000 = MapOutputTracker.decompressSize(compressedSize10000)
-    tracker.registerMapOutput(10, 0, new MapStatus(new BlockManagerId("hostA", 1000),
+    tracker.registerMapOutput(10, 0, new MapStatus(BlockManagerId("hostA", 1000),
         Array(compressedSize1000, compressedSize10000)))
-    tracker.registerMapOutput(10, 1, new MapStatus(new BlockManagerId("hostB", 1000),
+    tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("hostB", 1000),
         Array(compressedSize10000, compressedSize1000)))
     val statuses = tracker.getServerStatuses(10, 0)
-    assert(statuses.toSeq === Seq((new BlockManagerId("hostA", 1000), size1000),
-                                  (new BlockManagerId("hostB", 1000), size10000)))
+    assert(statuses.toSeq === Seq((BlockManagerId("hostA", 1000), size1000),
+                                  (BlockManagerId("hostB", 1000), size10000)))
     tracker.stop()
   }
 
@@ -61,14 +61,14 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val compressedSize10000 = MapOutputTracker.compressSize(10000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     val size10000 = MapOutputTracker.decompressSize(compressedSize10000)
-    tracker.registerMapOutput(10, 0, new MapStatus(new BlockManagerId("hostA", 1000),
+    tracker.registerMapOutput(10, 0, new MapStatus(BlockManagerId("hostA", 1000),
         Array(compressedSize1000, compressedSize1000, compressedSize1000)))
-    tracker.registerMapOutput(10, 1, new MapStatus(new BlockManagerId("hostB", 1000),
+    tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("hostB", 1000),
         Array(compressedSize10000, compressedSize1000, compressedSize1000)))
 
     // As if we had two simulatenous fetch failures
-    tracker.unregisterMapOutput(10, 0, new BlockManagerId("hostA", 1000))
-    tracker.unregisterMapOutput(10, 0, new BlockManagerId("hostA", 1000))
+    tracker.unregisterMapOutput(10, 0, BlockManagerId("hostA", 1000))
+    tracker.unregisterMapOutput(10, 0, BlockManagerId("hostA", 1000))
 
     // The remaining reduce task might try to grab the output dispite the shuffle failure;
     // this should cause it to fail, and the scheduler will ignore the failure due to the
@@ -90,13 +90,13 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     masterTracker.registerMapOutput(10, 0, new MapStatus(
-      new BlockManagerId("hostA", 1000), Array(compressedSize1000)))
+      BlockManagerId("hostA", 1000), Array(compressedSize1000)))
     masterTracker.incrementGeneration()
     slaveTracker.updateGeneration(masterTracker.getGeneration)
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq((new BlockManagerId("hostA", 1000), size1000)))
+           Seq((BlockManagerId("hostA", 1000), size1000)))
 
-    masterTracker.unregisterMapOutput(10, 0, new BlockManagerId("hostA", 1000))
+    masterTracker.unregisterMapOutput(10, 0, BlockManagerId("hostA", 1000))
     masterTracker.incrementGeneration()
     slaveTracker.updateGeneration(masterTracker.getGeneration)
     intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }

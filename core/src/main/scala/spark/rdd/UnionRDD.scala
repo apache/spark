@@ -28,8 +28,7 @@ class UnionRDD[T: ClassManifest](
     @transient var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil) {  // Nil, so the dependencies_ var does not refer to parent RDDs
 
-  @transient
-  var splits_ : Array[Split] = {
+  @transient var splits_ : Array[Split] = {
     val array = new Array[Split](rdds.map(_.splits.size).sum)
     var pos = 0
     for (rdd <- rdds; split <- rdd.splits) {

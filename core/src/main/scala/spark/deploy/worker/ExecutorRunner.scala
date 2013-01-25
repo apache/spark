@@ -106,11 +106,6 @@ private[spark] class ExecutorRunner(
         throw new IOException("Failed to create directory " + executorDir)
       }
 
-      // Download the files it depends on into it (disabled for now)
-      //for (url <- jobDesc.fileUrls) {
-      //  fetchFile(url, executorDir)
-      //}
-
       // Launch the process
       val command = buildCommandSeq()
       val builder = new ProcessBuilder(command: _*).directory(executorDir)

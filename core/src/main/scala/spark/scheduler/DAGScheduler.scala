@@ -69,11 +69,16 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
   val env = SparkEnv.get
-  val cacheTracker = env.cacheTracker
   val mapOutputTracker = env.mapOutputTracker
+  val blockManagerMaster = env.blockManager.master
 
-  val deadHosts = new HashSet[String]  // TODO: The code currently assumes these can't come back;
-                                       // that's not going to be a realistic assumption in general
+  // For tracking failed nodes, we use the MapOutputTracker's generation number, which is
+  // sent with every task. When we detect a node failing, we note the current generation number
+  // and failed host, increment it for new tasks, and use this to ignore stray ShuffleMapTask
+  // results.
+  // TODO: Garbage collect information about failure generations when we know there are no more
+  //       stray messages to detect.
+  val failedGeneration = new HashMap[String, Long]
 
   val waiting = new HashSet[Stage] // Stages we need to run whose parents aren't done
   val running = new HashSet[Stage] // Stages we are running right now
@@ -95,11 +100,17 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   }.start()
 
   def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
+    if (!cacheLocs.contains(rdd.id)) {
+      val blockIds = rdd.splits.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
+      cacheLocs(rdd.id) = blockManagerMaster.getLocations(blockIds).map {
+        locations => locations.map(_.ip).toList
+      }.toArray
+    }
     cacheLocs(rdd.id)
   }
 
-  def updateCacheLocs() {
-    cacheLocs = cacheTracker.getLocationsSnapshot()
+  def clearCacheLocs() {
+    cacheLocs.clear
   }
 
   /**
@@ -126,7 +137,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     // Kind of ugly: need to register RDDs with the cache and map output tracker here
     // since we can't do it in the RDD constructor because # of splits is unknown
     logInfo("Registering RDD " + rdd.id + " (" + rdd.origin + ")")
-    cacheTracker.registerRDD(rdd.id, rdd.splits.size)
     if (shuffleDep != None) {
       mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.splits.size)
     }
@@ -148,8 +158,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         visited += r
         // Kind of ugly: need to register RDDs with the cache here since
         // we can't do it in its constructor because # of splits is unknown
-        logInfo("Registering parent RDD " + r.id + " (" + r.origin + ")")
-        cacheTracker.registerRDD(r.id, r.splits.size)
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_,_] =>
@@ -250,7 +258,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
           val runId = nextRunId.getAndIncrement()
           val finalStage = newStage(finalRDD, None, runId)
           val job = new ActiveJob(runId, finalStage, func, partitions, callSite, listener)
-          updateCacheLocs()
+          clearCacheLocs()
           logInfo("Got job " + job.runId + " (" + callSite + ") with " + partitions.length +
                   " output partitions")
           logInfo("Final stage: " + finalStage + " (" + finalStage.origin + ")")
@@ -293,7 +301,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       // on the failed node.
       if (failed.size > 0 && time > lastFetchFailureTime + RESUBMIT_TIMEOUT) {
         logInfo("Resubmitting failed stages")
-        updateCacheLocs()
+        clearCacheLocs()
         val failed2 = failed.toArray
         failed.clear()
         for (stage <- failed2.sortBy(_.priority)) {
@@ -429,7 +437,9 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
             val status = event.result.asInstanceOf[MapStatus]
             val host = status.address.ip
             logInfo("ShuffleMapTask finished with host " + host)
-            if (!deadHosts.contains(host)) {   // TODO: Make sure hostnames are consistent with Mesos
+            if (failedGeneration.contains(host) && smt.generation <= failedGeneration(host)) {
+              logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + host)
+            } else {
               stage.addOutputLoc(smt.partition, status)
             }
             if (running.contains(stage) && pendingTasks(stage).isEmpty) {
@@ -439,11 +449,18 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
               logInfo("waiting: " + waiting)
               logInfo("failed: " + failed)
               if (stage.shuffleDep != None) {
+                // We supply true to increment the generation number here in case this is a
+                // recomputation of the map outputs. In that case, some nodes may have cached
+                // locations with holes (from when we detected the error) and will need the
+                // generation incremented to refetch them.
+                // TODO: Only increment the generation number if this is not the first time
+                //       we registered these map outputs.
                 mapOutputTracker.registerMapOutputs(
                   stage.shuffleDep.get.shuffleId,
-                  stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray)
+                  stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+                  true)
               }
-              updateCacheLocs()
+              clearCacheLocs()
               if (stage.outputLocs.count(_ == Nil) != 0) {
                 // Some tasks had failed; let's resubmit this stage
                 // TODO: Lower-level scheduler should also deal with this
@@ -495,7 +512,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         lastFetchFailureTime = System.currentTimeMillis() // TODO: Use pluggable clock
         // TODO: mark the host as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
-          handleHostLost(bmAddress.ip)
+          handleHostLost(bmAddress.ip, Some(task.generation))
         }
 
       case other =>
@@ -507,11 +524,15 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   /**
    * Responds to a host being lost. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use hostLost() to post a host lost event from outside.
+   *
+   * Optionally the generation during which the failure was caught can be passed to avoid allowing
+   * stray fetch failures from possibly retriggering the detection of a node as lost.
    */
-  def handleHostLost(host: String) {
-    if (!deadHosts.contains(host)) {
-      logInfo("Host lost: " + host)
-      deadHosts += host
+  def handleHostLost(host: String, maybeGeneration: Option[Long] = None) {
+    val currentGeneration = maybeGeneration.getOrElse(mapOutputTracker.getGeneration)
+    if (!failedGeneration.contains(host) || failedGeneration(host) < currentGeneration) {
+      failedGeneration(host) = currentGeneration
+      logInfo("Host lost: " + host + " (generation " + currentGeneration + ")")
       env.blockManager.master.notifyADeadHost(host)
       // TODO: This will be really slow if we keep accumulating shuffle map stages
       for ((shuffleId, stage) <- shuffleToMapStage) {
@@ -519,8 +540,13 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
         mapOutputTracker.registerMapOutputs(shuffleId, locs, true)
       }
-      cacheTracker.cacheLost(host)
-      updateCacheLocs()
+      if (shuffleToMapStage.isEmpty) {
+        mapOutputTracker.incrementGeneration()
+      }
+      clearCacheLocs()
+    } else {
+      logDebug("Additional host lost message for " + host +
+               "(generation " + currentGeneration + ")")
     }
   }
 

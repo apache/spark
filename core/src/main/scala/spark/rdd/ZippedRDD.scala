@@ -34,8 +34,7 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
 
   // TODO: FIX THIS.
 
-  @transient
-  var splits_ : Array[Split] = {
+  @transient var splits_ : Array[Split] = {
     if (rdd1.splits.size != rdd2.splits.size) {
       throw new IllegalArgumentException("Can't zip RDDs with unequal numbers of partitions")
     }

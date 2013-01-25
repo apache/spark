@@ -76,13 +76,9 @@ private[spark] class MesosSchedulerBackend(
   }
 
   def createExecutorInfo(): ExecutorInfo = {
-    val sparkHome = sc.getSparkHome() match {
-      case Some(path) =>
-        path
-      case None =>
-        throw new SparkException("Spark home is not set; set it through the spark.home system " +
-          "property, the SPARK_HOME environment variable or the SparkContext constructor")
-    }
+    val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
+      "Spark home is not set; set it through the spark.home system " +
+      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>

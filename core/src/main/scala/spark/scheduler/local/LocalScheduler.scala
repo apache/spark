@@ -20,7 +20,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
   with Logging {
 
   var attemptId = new AtomicInteger(0)
-  var threadPool = Executors.newFixedThreadPool(threads, DaemonThreadFactory)
+  var threadPool = Utils.newDaemonFixedThreadPool(threads)
   val env = SparkEnv.get
   var listener: TaskSchedulerListener = null
 
@@ -116,16 +116,16 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File("."))
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File("."))
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last
-        val url = new File(".", localName).toURI.toURL
+        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
         if (!classLoader.getURLs.contains(url)) {
           logInfo("Adding " + url + " to class loader")
           classLoader.addURL(url)
