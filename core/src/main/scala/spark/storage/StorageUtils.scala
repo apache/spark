@@ -56,8 +56,8 @@ object StorageUtils {
       // Find the id of the RDD, e.g. rdd_1 => 1
       val rddId = rddKey.split("_").last.toInt
       // Get the friendly name for the rdd, if available.
-      val rddName = Option(sc.persistentRdds.get(rddId).name).getOrElse(rddKey)
-      val rddStorageLevel = sc.persistentRdds.get(rddId).getStorageLevel
+      val rddName = Option(sc.persistentRdds(rddId).name).getOrElse(rddKey)
+      val rddStorageLevel = sc.persistentRdds(rddId).getStorageLevel
       
       RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, memSize, diskSize)
     }.toArray
