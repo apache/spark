@@ -40,7 +40,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     eventQueue.put(HostLost(host))
   }
 
-  // Called by TaskScheduler to cancel an entier TaskSet due to repeated failures.
+  // Called by TaskScheduler to cancel an entire TaskSet due to repeated failures.
   override def taskSetFailed(taskSet: TaskSet, reason: String) {
     eventQueue.put(TaskSetFailed(taskSet, reason))
   }
@@ -53,8 +53,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   // The time, in millis, to wake up between polls of the completion queue in order to potentially
   // resubmit failed stages
   val POLL_TIMEOUT = 10L
-
-  private val lock = new Object          // Used for access to the entire DAGScheduler
 
   private val eventQueue = new LinkedBlockingQueue[DAGSchedulerEvent]
 
@@ -337,9 +335,12 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
           val rdd = job.finalStage.rdd
           val split = rdd.splits(job.partitions(0))
           val taskContext = new TaskContext(job.finalStage.id, job.partitions(0), 0)
-          val result = job.func(taskContext, rdd.iterator(split, taskContext))
-          taskContext.executeOnCompleteCallbacks()
-          job.listener.taskSucceeded(0, result)
+          try {
+            val result = job.func(taskContext, rdd.iterator(split, taskContext))
+            job.listener.taskSucceeded(0, result)
+          } finally {
+            taskContext.executeOnCompleteCallbacks()
+          }
         } catch {
           case e: Exception =>
             job.listener.jobFailed(e)
