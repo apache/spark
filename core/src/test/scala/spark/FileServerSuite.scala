@@ -2,17 +2,16 @@ package spark
 
 import com.google.common.io.Files
 import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
 import java.io.{File, PrintWriter, FileReader, BufferedReader}
 import SparkContext._
 
-class FileServerSuite extends FunSuite with BeforeAndAfter {
+class FileServerSuite extends FunSuite with LocalSparkContext {
 
-  @transient var sc: SparkContext = _
   @transient var tmpFile: File = _
   @transient var testJarFile: File = _
 
-  before {
+  override def beforeEach() {
+    super.beforeEach()
     // Create a sample text file
     val tmpdir = new File(Files.createTempDir(), "test")
     tmpdir.mkdir()
@@ -22,17 +21,12 @@ class FileServerSuite extends FunSuite with BeforeAndAfter {
     pw.close()
   }
 
-  after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
+  override def afterEach() {
+    super.afterEach()
     // Clean up downloaded file
     if (tmpFile.exists) {
       tmpFile.delete()
     }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
   }
 
   test("Distributing files locally") {

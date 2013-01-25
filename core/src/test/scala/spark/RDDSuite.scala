@@ -1,22 +1,11 @@
 package spark
 
 import scala.collection.mutable.HashMap
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.FunSuite
 import spark.SparkContext._
 import spark.rdd.{CoalescedRDD, PartitionPruningRDD}
 
-class RDDSuite extends FunSuite with BeforeAndAfter {
-
-  var sc: SparkContext = _
-
-  after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-  }
+class RDDSuite extends FunSuite with LocalSparkContext {
 
   test("basic operations") {
     sc = new SparkContext("local", "test")

@@ -1,34 +1,27 @@
 package spark
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.FunSuite
 import java.io.File
 import spark.rdd._
 import spark.SparkContext._
 import storage.StorageLevel
 
-class CheckpointSuite extends FunSuite with BeforeAndAfter with Logging {
+class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   initLogging()
 
-  var sc: SparkContext = _
   var checkpointDir: File = _
   val partitioner = new HashPartitioner(2)
 
-  before {
+  override def beforeEach() {
+    super.beforeEach()
     checkpointDir = File.createTempFile("temp", "")
     checkpointDir.delete()
-
     sc = new SparkContext("local", "test")
     sc.setCheckpointDir(checkpointDir.toString)
   }
 
-  after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-
+  override def afterEach() {
+    super.afterEach()
     if (checkpointDir != null) {
       checkpointDir.delete()
     }

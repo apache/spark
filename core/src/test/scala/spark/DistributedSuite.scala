@@ -15,41 +15,28 @@ import scala.collection.mutable.ArrayBuffer
 import SparkContext._
 import storage.StorageLevel
 
-class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
+class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"
 
-  @transient var sc: SparkContext = _
-
   after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
     System.clearProperty("spark.reducer.maxMbInFlight")
     System.clearProperty("spark.storage.memoryFraction")
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
   }
 
   test("local-cluster format") {
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[2, 1, 512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
-    sc = null
+    resetSparkContext()
   }
 
   test("simple groupByKey") {
