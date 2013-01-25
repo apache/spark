@@ -84,12 +84,18 @@ class SampleActorReceiver[T: ClassManifest](urlOfPublisher: String)
 /**
  * A sample word count program demonstrating the use of plugging in
  * Actor as Receiver
+ * Usage: ActorWordCount <master> <hostname> <port>
+ *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
+ *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder would work on.
+ * 
+ * and then run the example
+ *    `$ ./run spark.streaming.examples.ActorWordCount local[2] 127.0.1.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {
     if (args.length < 3) {
       System.err.println(
-        "Usage: ActorWordCount <master> <host> <port>" +
+        "Usage: ActorWordCount <master> <hostname> <port>" +
           "In local mode, <master> should be 'local[n]' with n > 1")
       System.exit(1)
     }
