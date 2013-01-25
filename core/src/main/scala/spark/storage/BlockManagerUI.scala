@@ -57,7 +57,8 @@ class BlockManagerUIDirectives(val actorSystem: ActorSystem, master: ActorRef,
 
         val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
 
-        spark.storage.html.index.render(maxMem, remainingMem, diskSpaceUsed, rdds, storageStatusList)
+        spark.storage.html.index.
+          render(maxMem, remainingMem, diskSpaceUsed, rdds, storageStatusList)
       }
     }}} ~
     get { path("rdd") { parameter("id") { id => { completeWith {
@@ -67,9 +68,10 @@ class BlockManagerUIDirectives(val actorSystem: ActorSystem, master: ActorRef,
 
 
         val storageStatusList = status.asInstanceOf[ArrayBuffer[StorageStatus]].toArray
-        val filteredStorageStatusList = StorageUtils.filterStorageStatusByPrefix(storageStatusList, prefix)
+        val filteredStorageStatusList = StorageUtils.
+          filterStorageStatusByPrefix(storageStatusList, prefix)
 
-        val rddInfo = StorageUtils.rddInfoFromStorageStatus(filteredStorageStatusList, sc).first
+        val rddInfo = StorageUtils.rddInfoFromStorageStatus(filteredStorageStatusList, sc).head
 
         spark.storage.html.rdd.render(rddInfo, filteredStorageStatusList)
 

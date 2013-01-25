@@ -94,7 +94,7 @@ abstract class RDD[T: ClassManifest](
   /** How this RDD depends on any parent RDDs. */
   protected def getDependencies(): List[Dependency[_]] = dependencies_
 
-  // A friendly name for this RDD
+  /** A friendly name for this RDD */
   var name: String = null
   
   /** Optionally overridden by subclasses to specify placement preferences. */
@@ -111,7 +111,7 @@ abstract class RDD[T: ClassManifest](
   /** A unique ID for this RDD (within its SparkContext). */
   val id = sc.newRddId()
 
-  /* Assign a name to this RDD */
+  /** Assign a name to this RDD */
   def setName(_name: String) = {
     name = _name
     this
