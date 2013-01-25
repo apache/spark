@@ -44,6 +44,7 @@ import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
+import util.TimeStampedHashMap
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -110,7 +111,7 @@ class SparkContext(
   private[spark] val addedJars = HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
-  private[spark] val persistentRdds = new ConcurrentHashMap[Int, RDD[_]]()
+  private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]()
 
   // Add each JAR given through the constructor
   jars.foreach { addJar(_) }
