@@ -183,7 +183,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
     if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
       logInfo("Got Register Msg from master node, don't register it")
-    } else {
+    } else if (!blockManagerInfo.contains(blockManagerId)) {
       blockManagerIdByHost.get(blockManagerId.ip) match {
         case Some(managers) =>
           // A block manager of the same host name already exists.
