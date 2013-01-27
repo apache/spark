@@ -358,25 +358,31 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
 def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_key):
-  print "Deploying files to master..."
-  deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes, zoo_nodes)
+  if opts.cluster_type == "mesos":
+    modules = ['ephemeral-hdfs', 'persistent-hdfs', 'mesos']
+  elif opts.cluster_type == "standalone":
+    modules = ['ephemeral-hdfs', 'persistent-hdfs', 'spark-standalone']
+
   master = master_nodes[0].public_dns_name
   if deploy_ssh_key:
     print "Copying SSH key %s to master..." % opts.identity_file
     ssh(master, opts, 'mkdir -p ~/.ssh')
     scp(master, opts, opts.identity_file, '~/.ssh/id_rsa')
     ssh(master, opts, 'chmod 600 ~/.ssh/id_rsa')
+
+  # NOTE: We should clone the repository before running deploy_files to prevent
+  # ec2-variables.sh from being overwritten
+  ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/shivaram/spark-ec2.git")
+  print "Deploying files to master..."
+  deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes,
+          zoo_nodes, modules)
   print "Running setup on master..."
-  if opts.cluster_type == "mesos":
-    setup_mesos_cluster(master, opts)
-  elif opts.cluster_type == "standalone":
-    setup_standalone_cluster(master, slave_nodes, opts)
+  setup_spark_cluster(master, opts)
   print "Done!"
 
-def setup_mesos_cluster(master, opts):
-  ssh(master, opts, "chmod u+x mesos-ec2/setup")
-  ssh(master, opts, "mesos-ec2/setup %s %s %s %s" %
-      ("generic", "none", "master", opts.swap))
+def setup_spark_cluster(master, opts):
+  ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
+  ssh(master, opts, "spark-ec2/setup.sh")
 
 def setup_standalone_cluster(master, slave_nodes, opts):
   slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
@@ -427,7 +433,8 @@ def get_num_disks(instance_type):
 # cluster (e.g. lists of masters and slaves). Files are only deployed to
 # the first master instance in the cluster, and we expect the setup
 # script to be run on that instance to copy them to other nodes.
-def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes):
+def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes,
+        modules):
   active_master = master_nodes[0].public_dns_name
 
   num_disks = get_num_disks(opts.instance_type)
@@ -459,7 +466,9 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes):
     "cluster_url": cluster_url,
     "hdfs_data_dirs": hdfs_data_dirs,
     "mapred_local_dirs": mapred_local_dirs,
-    "spark_local_dirs": spark_local_dirs
+    "spark_local_dirs": spark_local_dirs,
+    "swap": str(opts.swap),
+    "modules": '\n'.join(modules)
   }
 
   # Create a temp directory in which we will place all the files to be
