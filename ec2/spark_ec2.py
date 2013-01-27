@@ -84,6 +84,9 @@ def parse_args():
             "maximum price (in dollars)")
   parser.add_option("-c", "--cluster-type", default="mesos",
       help="'mesos' for a mesos cluster, 'standalone' for a standalone spark cluster (default: mesos)")
+  parser.add_option("-g", "--ganglia", action="store_true", default=False,
+      help="Setup ganglia monitoring for the cluster. NOTE: The ganglia " +
+      "monitoring page will be publicly accessible")
   parser.add_option("-u", "--user", default="root",
       help="The ssh user you want to connect as (default: root)")
   parser.add_option("--delete-groups", action="store_true", default=False,
@@ -164,22 +167,23 @@ def launch_cluster(conn, opts, cluster_name):
     master_group.authorize(src_group=zoo_group)
     master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
     master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
+    master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
+    master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
+    master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
     if opts.cluster_type == "mesos":
-      master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
-      master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
-      master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
       master_group.authorize('tcp', 38090, 38090, '0.0.0.0/0')
+    if opts.ganglia:
+      master_group.authorize('tcp', 80, 80, '0.0.0.0/0')
   if slave_group.rules == []: # Group was just now created
     slave_group.authorize(src_group=master_group)
     slave_group.authorize(src_group=slave_group)
     slave_group.authorize(src_group=zoo_group)
     slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
     slave_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-    if opts.cluster_type == "mesos":
-      slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
-      slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
-      slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
-      slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
+    slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
+    slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
+    slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
+    slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
   if zoo_group.rules == []: # Group was just now created
     zoo_group.authorize(src_group=master_group)
     zoo_group.authorize(src_group=slave_group)
@@ -362,6 +366,9 @@ def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_k
     modules = ['ephemeral-hdfs', 'persistent-hdfs', 'mesos']
   elif opts.cluster_type == "standalone":
     modules = ['ephemeral-hdfs', 'persistent-hdfs', 'spark-standalone']
+
+  if opts.ganglia:
+    modules.append('ganglia')
 
   master = master_nodes[0].public_dns_name
   if deploy_ssh_key:
