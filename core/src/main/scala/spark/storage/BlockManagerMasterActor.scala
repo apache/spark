@@ -68,6 +68,9 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     case GetMemoryStatus =>
       getMemoryStatus
 
+    case GetStorageStatus =>
+      getStorageStatus
+
     case RemoveBlock(blockId) =>
       removeBlock(blockId)
 
@@ -174,6 +177,14 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     val res = blockManagerInfo.map { case(blockManagerId, info) =>
       (blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
+    sender ! res
+  }
+
+  private def getStorageStatus() {
+    val res = blockManagerInfo.map { case(blockManagerId, info) =>
+      import collection.JavaConverters._
+      StorageStatus(blockManagerId, info.maxMem, info.blocks.asScala.toMap)
+    }
     sender ! res
   }
 
