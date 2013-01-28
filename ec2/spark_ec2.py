@@ -87,6 +87,9 @@ def parse_args():
   parser.add_option("-g", "--ganglia", action="store_true", default=False,
       help="Setup ganglia monitoring for the cluster. NOTE: The ganglia " +
       "monitoring page will be publicly accessible")
+  parser.add_option("--mesos-scripts", action="store_true", default=False,
+      help="Use older mesos-ec2 scripts to setup the cluster. NOTE: Ganglia " +
+      "will not be setup with this option")
   parser.add_option("-u", "--user", default="root",
       help="The ssh user you want to connect as (default: root)")
   parser.add_option("--delete-groups", action="store_true", default=False,
@@ -362,6 +365,13 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
 # Deploy configuration files and run setup scripts on a newly launched
 # or started EC2 cluster.
 def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_key):
+  master = master_nodes[0].public_dns_name
+  if deploy_ssh_key:
+    print "Copying SSH key %s to master..." % opts.identity_file
+    ssh(master, opts, 'mkdir -p ~/.ssh')
+    scp(master, opts, opts.identity_file, '~/.ssh/id_rsa')
+    ssh(master, opts, 'chmod 600 ~/.ssh/id_rsa')
+
   if opts.cluster_type == "mesos":
     modules = ['ephemeral-hdfs', 'persistent-hdfs', 'mesos']
   elif opts.cluster_type == "standalone":
@@ -370,32 +380,39 @@ def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_k
   if opts.ganglia:
     modules.append('ganglia')
 
-  master = master_nodes[0].public_dns_name
-  if deploy_ssh_key:
-    print "Copying SSH key %s to master..." % opts.identity_file
-    ssh(master, opts, 'mkdir -p ~/.ssh')
-    scp(master, opts, opts.identity_file, '~/.ssh/id_rsa')
-    ssh(master, opts, 'chmod 600 ~/.ssh/id_rsa')
+  if not opts.mesos_scripts:
+    # NOTE: We should clone the repository before running deploy_files to
+    # prevent ec2-variables.sh from being overwritten
+    ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/shivaram/spark-ec2.git")
 
-  # NOTE: We should clone the repository before running deploy_files to prevent
-  # ec2-variables.sh from being overwritten
-  ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/shivaram/spark-ec2.git")
   print "Deploying files to master..."
   deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes,
           zoo_nodes, modules)
+
   print "Running setup on master..."
-  setup_spark_cluster(master, opts)
+  if opts.mesos_scripts:
+    if opts.cluster_type == "mesos":
+      setup_mesos_cluster(master, opts)
+    elif opts.cluster_type == "standalone":
+      setup_standalone_cluster(master, slave_nodes, opts)
+  else:
+    setup_spark_cluster(master, opts)
   print "Done!"
 
-def setup_spark_cluster(master, opts):
-  ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
-  ssh(master, opts, "spark-ec2/setup.sh")
+def setup_mesos_cluster(master, opts):
+  ssh(master, opts, "chmod u+x mesos-ec2/setup")
+  ssh(master, opts, "mesos-ec2/setup %s %s %s %s" %
+      ("generic", "none", "master", opts.swap))
 
 def setup_standalone_cluster(master, slave_nodes, opts):
   slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
   ssh(master, opts, "echo \"%s\" > spark/conf/slaves" % (slave_ips))
   ssh(master, opts, "/root/spark/bin/start-all.sh")
   
+def setup_spark_cluster(master, opts):
+  ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
+  ssh(master, opts, "spark-ec2/setup.sh")
+
 
 # Wait for a whole cluster (masters, slaves and ZooKeeper) to start up
 def wait_for_cluster(conn, wait_secs, master_nodes, slave_nodes, zoo_nodes):
