@@ -1,5 +1,6 @@
 package spark.scheduler
 
+import cluster.TaskInfo
 import scala.collection.mutable.Map
 
 import spark._
@@ -25,7 +26,8 @@ private[spark] case class CompletionEvent(
     task: Task[_],
     reason: TaskEndReason,
     result: Any,
-    accumUpdates: Map[Long, Any])
+    accumUpdates: Map[Long, Any],
+    taskInfo: TaskInfo)
   extends DAGSchedulerEvent
 
 private[spark] case class ExecutorLost(execId: String) extends DAGSchedulerEvent

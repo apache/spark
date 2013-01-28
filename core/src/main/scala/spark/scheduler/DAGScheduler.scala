@@ -1,5 +1,6 @@
 package spark.scheduler
 
+import cluster.TaskInfo
 import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Future
@@ -31,8 +32,9 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Map[Long, Any]) {
-    eventQueue.put(CompletionEvent(task, reason, result, accumUpdates))
+      accumUpdates: Map[Long, Any],
+      taskInfo: TaskInfo) {
+    eventQueue.put(CompletionEvent(task, reason, result, accumUpdates, taskInfo))
   }
 
   // Called by TaskScheduler when an executor fails.
@@ -63,6 +65,10 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   val idToStage = new TimeStampedHashMap[Int, Stage]
 
   val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
+
+  private val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
+
+  private val sparkListeners = Traversable[SparkListener]()
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
@@ -141,6 +147,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     val id = nextStageId.getAndIncrement()
     val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd, priority), priority)
     idToStage(id) = stage
+    stageToInfos(stage) = StageInfo(stage)
     stage
   }
 
@@ -414,6 +421,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
         }
         pendingTasks(stage) -= task
+        stageToInfos(stage).taskInfos += event.taskInfo
         task match {
           case rt: ResultTask[_, _] =>
             resultStageToJob.get(stage) match {
@@ -427,6 +435,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
                     activeJobs -= job
                     resultStageToJob -= stage
                     running -= stage
+                    val stageComp = StageCompleted(stageToInfos(stage))
+                    sparkListeners.foreach{_.onStageCompleted(stageComp)}
                   }
                 }
               case None =>
@@ -446,6 +456,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
             if (running.contains(stage) && pendingTasks(stage).isEmpty) {
               logInfo(stage + " (" + stage.origin + ") finished; looking for newly runnable stages")
               running -= stage
+              val stageComp = StageCompleted(stageToInfos(stage))
+              sparkListeners.foreach{_.onStageCompleted(stageComp)}
               logInfo("running: " + running)
               logInfo("waiting: " + waiting)
               logInfo("failed: " + failed)

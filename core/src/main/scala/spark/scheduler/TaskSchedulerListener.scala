@@ -1,5 +1,6 @@
 package spark.scheduler
 
+import cluster.TaskInfo
 import scala.collection.mutable.Map
 
 import spark.TaskEndReason
@@ -9,7 +10,7 @@ import spark.TaskEndReason
  */
 private[spark] trait TaskSchedulerListener {
   // A task has finished or failed.
-  def taskEnded(task: Task[_], reason: TaskEndReason, result: Any, accumUpdates: Map[Long, Any]): Unit
+  def taskEnded(task: Task[_], reason: TaskEndReason, result: Any, accumUpdates: Map[Long, Any], taskInfo: TaskInfo): Unit
 
   // A node was lost from the cluster.
   def executorLost(execId: String): Unit

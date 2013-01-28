@@ -262,7 +262,7 @@ private[spark] class TaskSetManager(
         tid, info.duration, tasksFinished, numTasks))
       // Deserialize task result and pass it to the scheduler
       val result = ser.deserialize[TaskResult[_]](serializedData, getClass.getClassLoader)
-      sched.listener.taskEnded(tasks(index), Success, result.value, result.accumUpdates)
+      sched.listener.taskEnded(tasks(index), Success, result.value, result.accumUpdates, info)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
       if (tasksFinished == numTasks) {
@@ -293,7 +293,7 @@ private[spark] class TaskSetManager(
         reason match {
           case fetchFailed: FetchFailed =>
             logInfo("Loss was due to fetch failure from " + fetchFailed.bmAddress)
-            sched.listener.taskEnded(tasks(index), fetchFailed, null, null)
+            sched.listener.taskEnded(tasks(index), fetchFailed, null, null, info)
             finished(index) = true
             tasksFinished += 1
             sched.taskSetFinished(this)
@@ -381,7 +381,7 @@ private[spark] class TaskSetManager(
           addPendingTask(index)
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
-          sched.listener.taskEnded(tasks(index), Resubmitted, null, null)
+          sched.listener.taskEnded(tasks(index), Resubmitted, null, null, info)
         }
       }
     }
