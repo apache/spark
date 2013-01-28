@@ -24,9 +24,9 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
   var totalCoreCount = new AtomicInteger(0)
 
   class MasterActor(sparkProperties: Seq[(String, String)]) extends Actor {
-    val slaveActor = new HashMap[String, ActorRef]
-    val slaveAddress = new HashMap[String, Address]
-    val slaveHost = new HashMap[String, String]
+    val executorActor = new HashMap[String, ActorRef]
+    val executorAddress = new HashMap[String, Address]
+    val executorHost = new HashMap[String, String]
     val freeCores = new HashMap[String, Int]
     val actorToExecutorId = new HashMap[ActorRef, String]
     val addressToExecutorId = new HashMap[Address, String]
@@ -37,17 +37,17 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     }
 
     def receive = {
-      case RegisterSlave(executorId, host, cores) =>
-        if (slaveActor.contains(executorId)) {
-          sender ! RegisterSlaveFailed("Duplicate executor ID: " + executorId)
+      case RegisterExecutor(executorId, host, cores) =>
+        if (executorActor.contains(executorId)) {
+          sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
-          sender ! RegisteredSlave(sparkProperties)
+          sender ! RegisteredExecutor(sparkProperties)
           context.watch(sender)
-          slaveActor(executorId) = sender
-          slaveHost(executorId) = host
+          executorActor(executorId) = sender
+          executorHost(executorId) = host
           freeCores(executorId) = cores
-          slaveAddress(executorId) = sender.path.address
+          executorAddress(executorId) = sender.path.address
           actorToExecutorId(sender) = executorId
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
@@ -69,45 +69,45 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         context.stop(self)
 
       case Terminated(actor) =>
-        actorToExecutorId.get(actor).foreach(removeSlave(_, "Akka actor terminated"))
+        actorToExecutorId.get(actor).foreach(removeExecutor(_, "Akka actor terminated"))
 
       case RemoteClientDisconnected(transport, address) =>
-        addressToExecutorId.get(address).foreach(removeSlave(_, "remote Akka client disconnected"))
+        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client disconnected"))
 
       case RemoteClientShutdown(transport, address) =>
-        addressToExecutorId.get(address).foreach(removeSlave(_, "remote Akka client shutdown"))
+        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client shutdown"))
     }
 
-    // Make fake resource offers on all slaves
+    // Make fake resource offers on all executors
     def makeOffers() {
       launchTasks(scheduler.resourceOffers(
-        slaveHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
+        executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
     }
 
-    // Make fake resource offers on just one slave
+    // Make fake resource offers on just one executor
     def makeOffers(executorId: String) {
       launchTasks(scheduler.resourceOffers(
-        Seq(new WorkerOffer(executorId, slaveHost(executorId), freeCores(executorId)))))
+        Seq(new WorkerOffer(executorId, executorHost(executorId), freeCores(executorId)))))
     }
 
     // Launch tasks returned by a set of resource offers
     def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
         freeCores(task.executorId) -= 1
-        slaveActor(task.executorId) ! LaunchTask(task)
+        executorActor(task.executorId) ! LaunchTask(task)
       }
     }
 
     // Remove a disconnected slave from the cluster
-    def removeSlave(executorId: String, reason: String) {
+    def removeExecutor(executorId: String, reason: String) {
       logInfo("Slave " + executorId + " disconnected, so removing it")
       val numCores = freeCores(executorId)
-      actorToExecutorId -= slaveActor(executorId)
-      addressToExecutorId -= slaveAddress(executorId)
-      slaveActor -= executorId
-      slaveHost -= executorId
+      actorToExecutorId -= executorActor(executorId)
+      addressToExecutorId -= executorAddress(executorId)
+      executorActor -= executorId
+      executorHost -= executorId
       freeCores -= executorId
-      slaveHost -= executorId
+      executorHost -= executorId
       totalCoreCount.addAndGet(-numCores)
       scheduler.executorLost(executorId, SlaveLost(reason))
     }

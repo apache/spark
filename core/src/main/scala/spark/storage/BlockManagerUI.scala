@@ -21,6 +21,8 @@ object BlockManagerUI extends Logging {
   def start(actorSystem : ActorSystem, masterActor: ActorRef, sc: SparkContext) {
     val webUIDirectives = new BlockManagerUIDirectives(actorSystem, masterActor, sc)
     try {
+      // TODO: This needs to find a random free port to bind to. Unfortunately, there's no way
+      // in spray to do that, so we'll have to rely on something like new ServerSocket()
       val boundPort = AkkaUtils.startSprayServer(actorSystem, "0.0.0.0",
         Option(System.getenv("BLOCKMANAGER_UI_PORT")).getOrElse("9080").toInt,
         webUIDirectives.handler, "BlockManagerHTTPServer")

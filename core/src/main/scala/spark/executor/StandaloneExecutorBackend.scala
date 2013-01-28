@@ -8,10 +8,10 @@ import akka.actor.{ActorRef, Actor, Props}
 import java.util.concurrent.{TimeUnit, ThreadPoolExecutor, SynchronousQueue}
 import akka.remote.RemoteClientLifeCycleEvent
 import spark.scheduler.cluster._
-import spark.scheduler.cluster.RegisteredSlave
+import spark.scheduler.cluster.RegisteredExecutor
 import spark.scheduler.cluster.LaunchTask
-import spark.scheduler.cluster.RegisterSlaveFailed
-import spark.scheduler.cluster.RegisterSlave
+import spark.scheduler.cluster.RegisterExecutorFailed
+import spark.scheduler.cluster.RegisterExecutor
 
 
 private[spark] class StandaloneExecutorBackend(
@@ -30,7 +30,7 @@ private[spark] class StandaloneExecutorBackend(
     try {
       logInfo("Connecting to master: " + masterUrl)
       master = context.actorFor(masterUrl)
-      master ! RegisterSlave(executorId, hostname, cores)
+      master ! RegisterExecutor(executorId, hostname, cores)
       context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
       context.watch(master) // Doesn't work with remote actors, but useful for testing
     } catch {
@@ -41,11 +41,11 @@ private[spark] class StandaloneExecutorBackend(
   }
 
   override def receive = {
-    case RegisteredSlave(sparkProperties) =>
+    case RegisteredExecutor(sparkProperties) =>
       logInfo("Successfully registered with master")
       executor.initialize(executorId, hostname, sparkProperties)
 
-    case RegisterSlaveFailed(message) =>
+    case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
       System.exit(1)
 
