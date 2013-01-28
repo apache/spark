@@ -86,7 +86,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
   val activeJobs = new HashSet[ActiveJob]
   val resultStageToJob = new HashMap[Stage, ActiveJob]
-  val stageSubmissionTimes = new HashMap[Stage, Long]
 
   val metadataCleaner = new MetadataCleaner("DAGScheduler", this.cleanup)
 
@@ -394,8 +393,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       logDebug("New pending tasks: " + myPending)
       taskSched.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.priority))
-      if (!stageSubmissionTimes.contains(stage)) {
-        stageSubmissionTimes.put(stage, System.currentTimeMillis())
+      if (!stage.submissionTime.isDefined) {
+        stage.submissionTime = Some(System.currentTimeMillis())
       }
     } else {
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
@@ -413,7 +412,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     val stage = idToStage(task.stageId)
 
     def markStageAsFinished(stage: Stage) = {
-      val serviceTime = stageSubmissionTimes.remove(stage) match {
+      val serviceTime = stage.submissionTime match {
         case Some(t) => (System.currentTimeMillis() - t).toString
         case _ => "Unkown"
       }
