@@ -1,6 +1,6 @@
 package spark.storage
 
-import spark.SparkContext
+import spark.{Utils, SparkContext}
 import BlockManagerMasterActor.BlockStatus
 
 private[spark]
@@ -22,8 +22,14 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
 }
 
 case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
-  numPartitions: Int, memSize: Long, diskSize: Long)
-
+  numPartitions: Int, memSize: Long, diskSize: Long) {
+  override def toString = {
+    import Utils.memoryBytesToString
+    import java.lang.{Integer => JInt}
+    String.format("RDD \"%s\" (%d) Storage: %s; Partitions: %d; MemorySize: %s; DiskSize: %s", name, id.asInstanceOf[JInt],
+      storageLevel.toString, numPartitions.asInstanceOf[JInt], memoryBytesToString(memSize), memoryBytesToString(diskSize))
+  }
+}
 
 /* Helper methods for storage-related objects */
 private[spark]
