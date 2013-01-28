@@ -44,6 +44,7 @@ import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
+import storage.BlockManagerUI
 import util.{MetadataCleaner, TimeStampedHashMap}
 
 /**
@@ -88,8 +89,9 @@ class SparkContext(
   SparkEnv.set(env)
 
   // Start the BlockManager UI
-  spark.storage.BlockManagerUI.start(SparkEnv.get.actorSystem, 
-    SparkEnv.get.blockManager.master.masterActor, this)
+  private[spark] val ui = new BlockManagerUI(
+    env.actorSystem, env.blockManager.master.masterActor, this)
+  ui.start()
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
@@ -97,7 +99,6 @@ class SparkContext(
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]()
-
   private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
 
 

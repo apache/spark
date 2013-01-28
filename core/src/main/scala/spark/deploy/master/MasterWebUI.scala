@@ -14,12 +14,15 @@ import cc.spray.typeconversion.SprayJsonSupport._
 import spark.deploy._
 import spark.deploy.JsonProtocol._
 
+/**
+ * Web UI server for the standalone master.
+ */
 private[spark]
 class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/master/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
   
-  implicit val timeout = Timeout(1 seconds)
+  implicit val timeout = Timeout(10 seconds)
   
   val handler = {
     get {
@@ -76,5 +79,4 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
       getFromResourceDirectory(RESOURCE_DIR)
     }
   }
-
 }
