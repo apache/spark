@@ -1,17 +1,13 @@
 package spark
 
 import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
 
 import akka.actor._
 import spark.scheduler.MapStatus
 import spark.storage.BlockManagerId
 import spark.util.AkkaUtils
 
-class MapOutputTrackerSuite extends FunSuite with BeforeAndAfter {
-  after {
-    System.clearProperty("spark.master.port")
-  }
+class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
  
   test("compressSize") {
     assert(MapOutputTracker.compressSize(0L) === 0)
@@ -81,7 +77,6 @@ class MapOutputTrackerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("remote fetch") {
-    System.clearProperty("spark.master.host")
     val (actorSystem, boundPort) =
       AkkaUtils.createActorSystem("test", "localhost", 0)
     System.setProperty("spark.master.port", boundPort.toString)

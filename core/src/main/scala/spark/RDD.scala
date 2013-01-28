@@ -94,6 +94,9 @@ abstract class RDD[T: ClassManifest](
   /** How this RDD depends on any parent RDDs. */
   protected def getDependencies(): List[Dependency[_]] = dependencies_
 
+  /** A friendly name for this RDD */
+  var name: String = null
+  
   /** Optionally overridden by subclasses to specify placement preferences. */
   protected def getPreferredLocations(split: Split): Seq[String] = Nil
 
@@ -108,7 +111,13 @@ abstract class RDD[T: ClassManifest](
   /** A unique ID for this RDD (within its SparkContext). */
   val id = sc.newRddId()
 
-  /**
+  /** Assign a name to this RDD */
+  def setName(_name: String) = {
+    name = _name
+    this
+  }
+
+  /** 
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. Can only be called once on each RDD.
    */
@@ -119,6 +128,8 @@ abstract class RDD[T: ClassManifest](
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
     storageLevel = newLevel
+    // Register the RDD with the SparkContext
+    sc.persistentRdds(id) = this
     this
   }
 

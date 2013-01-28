@@ -68,6 +68,9 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     case GetMemoryStatus =>
       getMemoryStatus
 
+    case GetStorageStatus =>
+      getStorageStatus
+
     case RemoveBlock(blockId) =>
       removeBlock(blockId)
 
@@ -177,13 +180,21 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     sender ! res
   }
 
+  private def getStorageStatus() {
+    val res = blockManagerInfo.map { case(blockManagerId, info) =>
+      import collection.JavaConverters._
+      StorageStatus(blockManagerId, info.maxMem, info.blocks.asScala.toMap)
+    }
+    sender ! res
+  }
+
   private def register(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     val startTimeMs = System.currentTimeMillis()
     val tmp = " " + blockManagerId + " "
 
     if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
       logInfo("Got Register Msg from master node, don't register it")
-    } else {
+    } else if (!blockManagerInfo.contains(blockManagerId)) {
       blockManagerIdByHost.get(blockManagerId.ip) match {
         case Some(managers) =>
           // A block manager of the same host name already exists.

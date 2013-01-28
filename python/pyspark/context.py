@@ -165,16 +165,11 @@ class SparkContext(object):
 
     def accumulator(self, value, accum_param=None):
         """
-        Create an C{Accumulator} with the given initial value, using a given
-        AccumulatorParam helper object to define how to add values of the data
-        type if provided. Default AccumulatorParams are used for integers and
-        floating-point numbers if you do not provide one. For other types, the
-        AccumulatorParam must implement two methods:
-        - C{zero(value)}: provide a "zero value" for the type, compatible in
-          dimensions with the provided C{value} (e.g., a zero vector).
-        - C{addInPlace(val1, val2)}: add two values of the accumulator's data
-          type, returning a new value; for efficiency, can also update C{val1}
-          in place and return it.
+        Create an L{Accumulator} with the given initial value, using a given
+        L{AccumulatorParam} helper object to define how to add values of the
+        data type if provided. Default AccumulatorParams are used for integers
+        and floating-point numbers if you do not provide one. For other types,
+        a custom AccumulatorParam can be used.
         """
         if accum_param == None:
             if isinstance(value, int):

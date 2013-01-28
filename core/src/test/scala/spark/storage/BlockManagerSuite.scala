@@ -219,16 +219,54 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val a2 = new Array[Byte](400)
 
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.notifyADeadHost(store.blockManagerId.ip)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
     store.putSingle("a2", a1, StorageLevel.MEMORY_ONLY)
+    store.waitForAsyncReregister()
 
     assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
     assert(master.getLocations("a2").size > 0, "master was not told about a2")
+  }
+
+  test("reregistration doesn't dead lock") {
+    val heartBeat = PrivateMethod[Unit]('heartBeat)
+    store = new BlockManager(actorSystem, master, serializer, 2000)
+    val a1 = new Array[Byte](400)
+    val a2 = List(new Array[Byte](400))
+
+    // try many times to trigger any deadlocks
+    for (i <- 1 to 100) {
+      master.notifyADeadHost(store.blockManagerId.ip)
+      val t1 = new Thread {
+        override def run = {
+          store.put("a2", a2.iterator, StorageLevel.MEMORY_ONLY, true)
+        }
+      }
+      val t2 = new Thread {
+        override def run = {
+          store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
+        }
+      }
+      val t3 = new Thread {
+        override def run = {
+          store invokePrivate heartBeat()
+        }
+      }
+
+      t1.start
+      t2.start
+      t3.start
+      t1.join
+      t2.join
+      t3.join
+ 
+      store.dropFromMemory("a1", null)
+      store.dropFromMemory("a2", null)
+      store.waitForAsyncReregister()
+    }
   }
 
   test("in-memory LRU storage") {
