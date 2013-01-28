@@ -28,8 +28,8 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     val slaveAddress = new HashMap[String, Address]
     val slaveHost = new HashMap[String, String]
     val freeCores = new HashMap[String, Int]
-    val actorToSlaveId = new HashMap[ActorRef, String]
-    val addressToSlaveId = new HashMap[Address, String]
+    val actorToExecutorId = new HashMap[ActorRef, String]
+    val addressToExecutorId = new HashMap[Address, String]
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -37,28 +37,28 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     }
 
     def receive = {
-      case RegisterSlave(slaveId, host, cores) =>
-        if (slaveActor.contains(slaveId)) {
-          sender ! RegisterSlaveFailed("Duplicate slave ID: " + slaveId)
+      case RegisterSlave(executorId, host, cores) =>
+        if (slaveActor.contains(executorId)) {
+          sender ! RegisterSlaveFailed("Duplicate executor ID: " + executorId)
         } else {
-          logInfo("Registered slave: " + sender + " with ID " + slaveId)
+          logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredSlave(sparkProperties)
           context.watch(sender)
-          slaveActor(slaveId) = sender
-          slaveHost(slaveId) = host
-          freeCores(slaveId) = cores
-          slaveAddress(slaveId) = sender.path.address
-          actorToSlaveId(sender) = slaveId
-          addressToSlaveId(sender.path.address) = slaveId
+          slaveActor(executorId) = sender
+          slaveHost(executorId) = host
+          freeCores(executorId) = cores
+          slaveAddress(executorId) = sender.path.address
+          actorToExecutorId(sender) = executorId
+          addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           makeOffers()
         }
 
-      case StatusUpdate(slaveId, taskId, state, data) =>
+      case StatusUpdate(executorId, taskId, state, data) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
-          freeCores(slaveId) += 1
-          makeOffers(slaveId)
+          freeCores(executorId) += 1
+          makeOffers(executorId)
         }
 
       case ReviveOffers =>
@@ -69,13 +69,13 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         context.stop(self)
 
       case Terminated(actor) =>
-        actorToSlaveId.get(actor).foreach(removeSlave(_, "Akka actor terminated"))
+        actorToExecutorId.get(actor).foreach(removeSlave(_, "Akka actor terminated"))
 
       case RemoteClientDisconnected(transport, address) =>
-        addressToSlaveId.get(address).foreach(removeSlave(_, "remote Akka client disconnected"))
+        addressToExecutorId.get(address).foreach(removeSlave(_, "remote Akka client disconnected"))
 
       case RemoteClientShutdown(transport, address) =>
-        addressToSlaveId.get(address).foreach(removeSlave(_, "remote Akka client shutdown"))
+        addressToExecutorId.get(address).foreach(removeSlave(_, "remote Akka client shutdown"))
     }
 
     // Make fake resource offers on all slaves
@@ -85,31 +85,31 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     }
 
     // Make fake resource offers on just one slave
-    def makeOffers(slaveId: String) {
+    def makeOffers(executorId: String) {
       launchTasks(scheduler.resourceOffers(
-        Seq(new WorkerOffer(slaveId, slaveHost(slaveId), freeCores(slaveId)))))
+        Seq(new WorkerOffer(executorId, slaveHost(executorId), freeCores(executorId)))))
     }
 
     // Launch tasks returned by a set of resource offers
     def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        freeCores(task.slaveId) -= 1
-        slaveActor(task.slaveId) ! LaunchTask(task)
+        freeCores(task.executorId) -= 1
+        slaveActor(task.executorId) ! LaunchTask(task)
       }
     }
 
     // Remove a disconnected slave from the cluster
-    def removeSlave(slaveId: String, reason: String) {
-      logInfo("Slave " + slaveId + " disconnected, so removing it")
-      val numCores = freeCores(slaveId)
-      actorToSlaveId -= slaveActor(slaveId)
-      addressToSlaveId -= slaveAddress(slaveId)
-      slaveActor -= slaveId
-      slaveHost -= slaveId
-      freeCores -= slaveId
-      slaveHost -= slaveId
+    def removeSlave(executorId: String, reason: String) {
+      logInfo("Slave " + executorId + " disconnected, so removing it")
+      val numCores = freeCores(executorId)
+      actorToExecutorId -= slaveActor(executorId)
+      addressToExecutorId -= slaveAddress(executorId)
+      slaveActor -= executorId
+      slaveHost -= executorId
+      freeCores -= executorId
+      slaveHost -= executorId
       totalCoreCount.addAndGet(-numCores)
-      scheduler.slaveLost(slaveId, SlaveLost(reason))
+      scheduler.executorLost(executorId, SlaveLost(reason))
     }
   }
 

@@ -138,10 +138,11 @@ private[spark] class TaskSetManager(
   // attempt running on this host, in case the host is slow. In addition, if localOnly is set, the
   // task must have a preference for this host (or no preferred locations at all).
   def findSpeculativeTask(host: String, localOnly: Boolean): Option[Int] = {
+    val hostsAlive = sched.hostsAlive
     speculatableTasks.retain(index => !finished(index)) // Remove finished tasks from set
     val localTask = speculatableTasks.find {
         index =>
-          val locations = tasks(index).preferredLocations.toSet & sched.hostsAlive
+          val locations = tasks(index).preferredLocations.toSet & hostsAlive
           val attemptLocs = taskAttempts(index).map(_.host)
           (locations.size == 0 || locations.contains(host)) && !attemptLocs.contains(host)
       }
@@ -189,7 +190,7 @@ private[spark] class TaskSetManager(
   }
 
   // Respond to an offer of a single slave from the scheduler by finding a task
-  def slaveOffer(slaveId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
+  def slaveOffer(execId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
       val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
@@ -206,11 +207,11 @@ private[spark] class TaskSetManager(
           } else {
             "non-preferred, not one of " + task.preferredLocations.mkString(", ")
           }
-          logInfo("Starting task %s:%d as TID %s on slave %s: %s (%s)".format(
-            taskSet.id, index, taskId, slaveId, host, prefStr))
+          logInfo("Starting task %s:%d as TID %s on executor %s: %s (%s)".format(
+            taskSet.id, index, taskId, execId, host, prefStr))
           // Do various bookkeeping
           copiesRunning(index) += 1
-          val info = new TaskInfo(taskId, index, time, host)
+          val info = new TaskInfo(taskId, index, time, execId, host)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           if (preferred) {
@@ -224,7 +225,7 @@ private[spark] class TaskSetManager(
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
-          return Some(new TaskDescription(taskId, slaveId, taskName, serializedTask))
+          return Some(new TaskDescription(taskId, execId, taskName, serializedTask))
         }
         case _ =>
       }
@@ -356,19 +357,22 @@ private[spark] class TaskSetManager(
     sched.taskSetFinished(this)
   }
 
-  def hostLost(hostname: String) {
-    logInfo("Re-queueing tasks for " + hostname + " from TaskSet " + taskSet.id)
-    // If some task has preferred locations only on hostname, put it in the no-prefs list
-    // to avoid the wait from delay scheduling
-    for (index <- getPendingTasksForHost(hostname)) {
-      val newLocs = tasks(index).preferredLocations.toSet & sched.hostsAlive
-      if (newLocs.isEmpty) {
-        pendingTasksWithNoPrefs += index
+  def executorLost(execId: String, hostname: String) {
+    logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
+    val newHostsAlive = sched.hostsAlive
+    // If some task has preferred locations only on hostname, and there are no more executors there,
+    // put it in the no-prefs list to avoid the wait from delay scheduling
+    if (!newHostsAlive.contains(hostname)) {
+      for (index <- getPendingTasksForHost(hostname)) {
+        val newLocs = tasks(index).preferredLocations.toSet & newHostsAlive
+        if (newLocs.isEmpty) {
+          pendingTasksWithNoPrefs += index
+        }
       }
     }
-    // Re-enqueue any tasks that ran on the failed host if this is a shuffle map stage
+    // Re-enqueue any tasks that ran on the failed executor if this is a shuffle map stage
     if (tasks(0).isInstanceOf[ShuffleMapTask]) {
-      for ((tid, info) <- taskInfos if info.host == hostname) {
+      for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
         if (finished(index)) {
           finished(index) = false
@@ -382,7 +386,7 @@ private[spark] class TaskSetManager(
       }
     }
     // Also re-enqueue any tasks that were running on the node
-    for ((tid, info) <- taskInfos if info.running && info.host == hostname) {
+    for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
       taskLost(tid, TaskState.KILLED, null)
     }
   }

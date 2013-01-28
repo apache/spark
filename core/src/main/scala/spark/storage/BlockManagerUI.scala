@@ -11,6 +11,7 @@ import cc.spray.typeconversion.TwirlSupport._
 import scala.collection.mutable.ArrayBuffer
 import spark.{Logging, SparkContext, SparkEnv}
 import spark.util.AkkaUtils
+import spark.Utils
 
 
 private[spark]
@@ -20,10 +21,10 @@ object BlockManagerUI extends Logging {
   def start(actorSystem : ActorSystem, masterActor: ActorRef, sc: SparkContext) {
     val webUIDirectives = new BlockManagerUIDirectives(actorSystem, masterActor, sc)
     try {
-      logInfo("Starting BlockManager WebUI.")
-      val port = Option(System.getenv("BLOCKMANAGER_UI_PORT")).getOrElse("9080").toInt
-      AkkaUtils.startSprayServer(actorSystem, "0.0.0.0", port, 
+      val boundPort = AkkaUtils.startSprayServer(actorSystem, "0.0.0.0",
+        Option(System.getenv("BLOCKMANAGER_UI_PORT")).getOrElse("9080").toInt,
         webUIDirectives.handler, "BlockManagerHTTPServer")
+      logInfo("Started BlockManager web UI at %s:%d".format(Utils.localHostName(), boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to create BlockManager WebUI", e)

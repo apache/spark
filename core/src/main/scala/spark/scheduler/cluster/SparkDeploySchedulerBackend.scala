@@ -37,7 +37,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val masterUrl = "akka://spark@%s:%s/user/%s".format(
       System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
       StandaloneSchedulerBackend.ACTOR_NAME)
-    val args = Seq(masterUrl, "{{SLAVEID}}", "{{HOSTNAME}}", "{{CORES}}")
+    val args = Seq(masterUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(throw new IllegalArgumentException("must supply spark home for spark standalone"))
     val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, sparkHome)
@@ -81,7 +81,7 @@ private[spark] class SparkDeploySchedulerBackend(
     executorIdToSlaveId.get(id) match {
       case Some(slaveId) => 
         executorIdToSlaveId.remove(id)
-        scheduler.slaveLost(slaveId, reason)
+        scheduler.executorLost(slaveId, reason)
       case None =>
         logInfo("No slave ID known for executor %s".format(id))
     }

@@ -30,6 +30,7 @@ extends Exception(message)
 
 private[spark]
 class BlockManager(
+    executorId: String,
     actorSystem: ActorSystem,
     val master: BlockManagerMaster,
     val serializer: Serializer,
@@ -68,8 +69,8 @@ class BlockManager(
   val connectionManager = new ConnectionManager(0)
   implicit val futureExecContext = connectionManager.futureExecContext
 
-  val connectionManagerId = connectionManager.id
-  val blockManagerId = BlockManagerId(connectionManagerId.host, connectionManagerId.port)
+  val blockManagerId = BlockManagerId(
+    executorId, connectionManager.id.host, connectionManager.id.port)
 
   // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
   // for receiving shuffle outputs)
@@ -109,8 +110,9 @@ class BlockManager(
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
    */
-  def this(actorSystem: ActorSystem, master: BlockManagerMaster, serializer: Serializer) = {
-    this(actorSystem, master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
+  def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
+           serializer: Serializer) = {
+    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
   }
 
   /**

@@ -67,7 +67,7 @@ private[spark] class ExecutorRunner(
 
   /** Replace variables such as {{SLAVEID}} and {{CORES}} in a command argument passed to us */
   def substituteVariables(argument: String): String = argument match {
-    case "{{SLAVEID}}" => workerId
+    case "{{EXECUTOR_ID}}" => execId.toString
     case "{{HOSTNAME}}" => hostname
     case "{{CORES}}" => cores.toString
     case other => other

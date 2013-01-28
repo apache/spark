@@ -80,6 +80,7 @@ class SparkContext(
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createFromSystemProperties(
+    "<driver>",
     System.getProperty("spark.master.host"),
     System.getProperty("spark.master.port").toInt,
     true,
@@ -97,7 +98,7 @@ class SparkContext(
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]()
 
-  private[spark] val metadataCleaner = new MetadataCleaner("DAGScheduler", this.cleanup)
+  private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
 
 
   // Add each JAR given through the constructor
@@ -649,10 +650,9 @@ class SparkContext(
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
+  /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
   private[spark] def cleanup(cleanupTime: Long) {
-    var sizeBefore = persistentRdds.size
     persistentRdds.clearOldValues(cleanupTime)
-    logInfo("idToStage " + sizeBefore + " --> " + persistentRdds.size)
   }
 }
 
