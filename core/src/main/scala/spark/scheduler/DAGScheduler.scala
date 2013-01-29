@@ -413,10 +413,10 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
     def markStageAsFinished(stage: Stage) = {
       val serviceTime = stage.submissionTime match {
-        case Some(t) => (System.currentTimeMillis() - t).toString
+        case Some(t) => "%.03f".format((System.currentTimeMillis() - t) / 1000.0)
         case _ => "Unkown"
       }
-      logInfo("%s (%s) finished in %s ms".format(stage, stage.origin, serviceTime))
+      logInfo("%s (%s) finished in %s s".format(stage, stage.origin, serviceTime))
       running -= stage
     }
     event.reason match {
