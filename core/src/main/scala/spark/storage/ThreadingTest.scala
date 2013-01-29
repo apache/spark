@@ -78,7 +78,8 @@ private[spark] object ThreadingTest {
     val masterIp: String = System.getProperty("spark.master.host", "localhost")
     val masterPort: Int = System.getProperty("spark.master.port", "7077").toInt
     val blockManagerMaster = new BlockManagerMaster(actorSystem, true, true, masterIp, masterPort)
-    val blockManager = new BlockManager(actorSystem, blockManagerMaster, serializer, 1024 * 1024)
+    val blockManager = new BlockManager(
+      "<driver>", actorSystem, blockManagerMaster, serializer, 1024 * 1024)
     val producers = (1 to numProducers).map(i => new ProducerThread(blockManager, i))
     val consumers = producers.map(p => new ConsumerThread(blockManager, p.queue))
     producers.foreach(_.start)

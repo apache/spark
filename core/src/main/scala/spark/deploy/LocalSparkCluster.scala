@@ -9,6 +9,12 @@ import spark.{Logging, Utils}
 
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * Testing class that creates a Spark standalone process in-cluster (that is, running the
+ * spark.deploy.master.Master and spark.deploy.worker.Workers in the same JVMs). Executors launched
+ * by the Workers still run in separate JVMs. This can be used to test distributed operation and
+ * fault recovery without spinning up a lot of processes.
+ */
 private[spark]
 class LocalSparkCluster(numSlaves: Int, coresPerSlave: Int, memoryPerSlave: Int) extends Logging {
   
@@ -35,16 +41,12 @@ class LocalSparkCluster(numSlaves: Int, coresPerSlave: Int, memoryPerSlave: Int)
 
     /* Start the Slaves */
     for (slaveNum <- 1 to numSlaves) {
-      /* We can pretend to test distributed stuff by giving the slaves distinct hostnames.
-         All of 127/8 should be a loopback, we use 127.100.*.* in hopes that it is
-         sufficiently distinctive. */
-      val slaveIpAddress = "127.100.0." + (slaveNum % 256)
       val (actorSystem, boundPort) = 
-        AkkaUtils.createActorSystem("sparkWorker" + slaveNum, slaveIpAddress, 0)
+        AkkaUtils.createActorSystem("sparkWorker" + slaveNum, localIpAddress, 0)
       slaveActorSystems += actorSystem
       val actor = actorSystem.actorOf(
-        Props(new Worker(slaveIpAddress, boundPort, 0, coresPerSlave, memoryPerSlave, masterUrl)),
-        name = "Worker")
+        Props(new Worker(localIpAddress, boundPort, 0, coresPerSlave, memoryPerSlave, masterUrl)),
+              name = "Worker")
       slaveActors += actor
     }
 

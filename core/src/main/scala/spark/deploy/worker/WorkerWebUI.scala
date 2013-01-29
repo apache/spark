@@ -13,12 +13,15 @@ import cc.spray.typeconversion.SprayJsonSupport._
 import spark.deploy.{WorkerState, RequestWorkerState}
 import spark.deploy.JsonProtocol._
 
+/**
+ * Web UI server for the standalone worker.
+ */
 private[spark]
 class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/worker/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
   
-  implicit val timeout = Timeout(1 seconds)
+  implicit val timeout = Timeout(10 seconds)
   
   val handler = {
     get {
@@ -50,5 +53,4 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Direct
       getFromResourceDirectory(RESOURCE_DIR)
     }
   }
-  
 }

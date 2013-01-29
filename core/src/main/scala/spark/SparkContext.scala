@@ -44,6 +44,7 @@ import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
+import storage.BlockManagerUI
 import util.{MetadataCleaner, TimeStampedHashMap}
 
 /**
@@ -80,6 +81,7 @@ class SparkContext(
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createFromSystemProperties(
+    "<driver>",
     System.getProperty("spark.master.host"),
     System.getProperty("spark.master.port").toInt,
     true,
@@ -87,8 +89,9 @@ class SparkContext(
   SparkEnv.set(env)
 
   // Start the BlockManager UI
-  spark.storage.BlockManagerUI.start(SparkEnv.get.actorSystem, 
-    SparkEnv.get.blockManager.master.masterActor, this)
+  private[spark] val ui = new BlockManagerUI(
+    env.actorSystem, env.blockManager.master.masterActor, this)
+  ui.start()
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
@@ -96,8 +99,7 @@ class SparkContext(
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]()
-
-  private[spark] val metadataCleaner = new MetadataCleaner("DAGScheduler", this.cleanup)
+  private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
 
 
   // Add each JAR given through the constructor
@@ -649,10 +651,9 @@ class SparkContext(
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
+  /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
   private[spark] def cleanup(cleanupTime: Long) {
-    var sizeBefore = persistentRdds.size
     persistentRdds.clearOldValues(cleanupTime)
-    logInfo("idToStage " + sizeBefore + " --> " + persistentRdds.size)
   }
 }
 

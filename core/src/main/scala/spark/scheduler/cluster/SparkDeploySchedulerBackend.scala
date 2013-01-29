@@ -19,7 +19,6 @@ private[spark] class SparkDeploySchedulerBackend(
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = System.getProperty("spark.cores.max", Int.MaxValue.toString).toInt
-  val executorIdToSlaveId = new HashMap[String, String]
 
   // Memory used by each executor (in megabytes)
   val executorMemory = {
@@ -37,7 +36,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val masterUrl = "akka://spark@%s:%s/user/%s".format(
       System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
       StandaloneSchedulerBackend.ACTOR_NAME)
-    val args = Seq(masterUrl, "{{SLAVEID}}", "{{HOSTNAME}}", "{{CORES}}")
+    val args = Seq(masterUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(throw new IllegalArgumentException("must supply spark home for spark standalone"))
     val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, sparkHome)
@@ -47,7 +46,7 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   override def stop() {
-    stopping = true;
+    stopping = true
     super.stop()
     client.stop()
     if (shutdownCallback != null) {
@@ -67,23 +66,16 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   def executorAdded(id: String, workerId: String, host: String, cores: Int, memory: Int) {
-    executorIdToSlaveId += id -> workerId
     logInfo("Granted executor ID %s on host %s with %d cores, %s RAM".format(
        id, host, cores, Utils.memoryMegabytesToString(memory)))
   }
 
-  def executorRemoved(id: String, message: String, exitStatus: Option[Int]) {
+  def executorRemoved(executorId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code)
       case None => SlaveLost(message)
     }
-    logInfo("Executor %s removed: %s".format(id, message))
-    executorIdToSlaveId.get(id) match {
-      case Some(slaveId) => 
-        executorIdToSlaveId.remove(id)
-        scheduler.slaveLost(slaveId, reason)
-      case None =>
-        logInfo("No slave ID known for executor %s".format(id))
-    }
+    logInfo("Executor %s removed: %s".format(executorId, message))
+    scheduler.executorLost(executorId, reason)
   }
 }

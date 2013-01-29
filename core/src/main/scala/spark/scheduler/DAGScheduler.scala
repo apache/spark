@@ -35,9 +35,9 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     eventQueue.put(CompletionEvent(task, reason, result, accumUpdates))
   }
 
-  // Called by TaskScheduler when a host fails.
-  override def hostLost(host: String) {
-    eventQueue.put(HostLost(host))
+  // Called by TaskScheduler when an executor fails.
+  override def executorLost(execId: String) {
+    eventQueue.put(ExecutorLost(execId))
   }
 
   // Called by TaskScheduler to cancel an entire TaskSet due to repeated failures.
@@ -72,7 +72,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
   // For tracking failed nodes, we use the MapOutputTracker's generation number, which is
   // sent with every task. When we detect a node failing, we note the current generation number
-  // and failed host, increment it for new tasks, and use this to ignore stray ShuffleMapTask
+  // and failed executor, increment it for new tasks, and use this to ignore stray ShuffleMapTask
   // results.
   // TODO: Garbage collect information about failure generations when we know there are no more
   //       stray messages to detect.
@@ -108,7 +108,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   }
 
   def clearCacheLocs() {
-    cacheLocs.clear
+    cacheLocs.clear()
   }
 
   /**
@@ -271,8 +271,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
             submitStage(finalStage)
           }
 
-        case HostLost(host) =>
-          handleHostLost(host)
+        case ExecutorLost(execId) =>
+          handleExecutorLost(execId)
 
         case completion: CompletionEvent =>
           handleTaskCompletion(completion)
@@ -436,10 +436,10 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
           case smt: ShuffleMapTask =>
             val stage = idToStage(smt.stageId)
             val status = event.result.asInstanceOf[MapStatus]
-            val host = status.address.ip
-            logInfo("ShuffleMapTask finished with host " + host)
-            if (failedGeneration.contains(host) && smt.generation <= failedGeneration(host)) {
-              logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + host)
+            val execId = status.location.executorId
+            logDebug("ShuffleMapTask finished on " + execId)
+            if (failedGeneration.contains(execId) && smt.generation <= failedGeneration(execId)) {
+              logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
               stage.addOutputLoc(smt.partition, status)
             }
@@ -511,9 +511,9 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
         // Remember that a fetch failed now; this is used to resubmit the broken
         // stages later, after a small wait (to give other tasks the chance to fail)
         lastFetchFailureTime = System.currentTimeMillis() // TODO: Use pluggable clock
-        // TODO: mark the host as failed only if there were lots of fetch failures on it
+        // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
-          handleHostLost(bmAddress.ip, Some(task.generation))
+          handleExecutorLost(bmAddress.executorId, Some(task.generation))
         }
 
       case other =>
@@ -523,21 +523,21 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   }
 
   /**
-   * Responds to a host being lost. This is called inside the event loop so it assumes that it can
-   * modify the scheduler's internal state. Use hostLost() to post a host lost event from outside.
+   * Responds to an executor being lost. This is called inside the event loop, so it assumes it can
+   * modify the scheduler's internal state. Use executorLost() to post a loss event from outside.
    *
    * Optionally the generation during which the failure was caught can be passed to avoid allowing
    * stray fetch failures from possibly retriggering the detection of a node as lost.
    */
-  def handleHostLost(host: String, maybeGeneration: Option[Long] = None) {
+  def handleExecutorLost(execId: String, maybeGeneration: Option[Long] = None) {
     val currentGeneration = maybeGeneration.getOrElse(mapOutputTracker.getGeneration)
-    if (!failedGeneration.contains(host) || failedGeneration(host) < currentGeneration) {
-      failedGeneration(host) = currentGeneration
-      logInfo("Host lost: " + host + " (generation " + currentGeneration + ")")
-      env.blockManager.master.notifyADeadHost(host)
+    if (!failedGeneration.contains(execId) || failedGeneration(execId) < currentGeneration) {
+      failedGeneration(execId) = currentGeneration
+      logInfo("Executor lost: %s (generation %d)".format(execId, currentGeneration))
+      env.blockManager.master.removeExecutor(execId)
       // TODO: This will be really slow if we keep accumulating shuffle map stages
       for ((shuffleId, stage) <- shuffleToMapStage) {
-        stage.removeOutputsOnHost(host)
+        stage.removeOutputsOnExecutor(execId)
         val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
         mapOutputTracker.registerMapOutputs(shuffleId, locs, true)
       }
@@ -546,7 +546,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       }
       clearCacheLocs()
     } else {
-      logDebug("Additional host lost message for " + host +
+      logDebug("Additional executor lost message for " + execId +
                "(generation " + currentGeneration + ")")
     }
   }
