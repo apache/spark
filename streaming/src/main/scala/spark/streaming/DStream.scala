@@ -198,10 +198,10 @@ abstract class DStream[T: ClassManifest] (
       metadataCleanerDelay < 0 || rememberDuration.milliseconds < metadataCleanerDelay * 1000,
       "It seems you are doing some DStream window operation or setting a checkpoint interval " +
         "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
-        "than " + rememberDuration.milliseconds + " milliseconds. But the Spark's metadata cleanup" +
-        "delay is set to " + (metadataCleanerDelay / 60.0) + " minutes, which is not sufficient. Please set " +
-        "the Java property 'spark.cleaner.delay' to more than " +
-        math.ceil(rememberDuration.milliseconds.toDouble / 60000.0).toInt + " minutes."
+        "than " + rememberDuration.milliseconds / 1000 + " seconds. But Spark's metadata cleanup" +
+        "delay is set to " + metadataCleanerDelay + " seconds, which is not sufficient. Please " +
+        "set the Java property 'spark.cleaner.delay' to more than " +
+        math.ceil(rememberDuration.milliseconds / 1000.0).toInt + " seconds."
     )
 
     dependencies.foreach(_.validate())
