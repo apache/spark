@@ -40,13 +40,16 @@ import spark.deploy.LocalSparkCluster
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 import rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD}
-import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
+import scheduler._
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import storage.BlockManagerUI
+import storage.RDDInfo
+import storage.StorageStatus
 import util.{MetadataCleaner, TimeStampedHashMap}
 import storage.{StorageStatus, StorageUtils, RDDInfo}
+import scala.Some
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -480,6 +483,10 @@ class SparkContext(
    */
   def getRDDStorageInfo : Array[RDDInfo] = {
     StorageUtils.rddInfoFromStorageStatus(getSlavesStorageStatus, this)
+  }
+
+  def getStageInfo: Map[Stage,StageInfo] = {
+    dagScheduler.stageToInfos
   }
 
   /**

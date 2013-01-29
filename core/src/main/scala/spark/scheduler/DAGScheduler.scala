@@ -66,7 +66,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
   val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
 
-  private val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
+  private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
   private val sparkListeners = Traversable[SparkListener]()
 
