@@ -115,7 +115,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   }
 
   def expireDeadHosts() {
-    logDebug("Checking for hosts with no recent heart beats in BlockManagerMaster.")
+    logTrace("Checking for hosts with no recent heart beats in BlockManagerMaster.")
     val now = System.currentTimeMillis()
     val minSeenTime = now - slaveTimeout
     val toRemove = new HashSet[BlockManagerId]

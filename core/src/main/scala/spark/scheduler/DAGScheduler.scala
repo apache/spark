@@ -308,10 +308,10 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       } else {
         // TODO: We might want to run this less often, when we are sure that something has become
         // runnable that wasn't before.
-        logDebug("Checking for newly runnable parent stages")
-        logDebug("running: " + running)
-        logDebug("waiting: " + waiting)
-        logDebug("failed: " + failed)
+        logTrace("Checking for newly runnable parent stages")
+        logTrace("running: " + running)
+        logTrace("waiting: " + waiting)
+        logTrace("failed: " + failed)
         val waiting2 = waiting.toArray
         waiting.clear()
         for (stage <- waiting2.sortBy(_.priority)) {
