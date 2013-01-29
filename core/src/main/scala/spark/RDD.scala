@@ -648,5 +648,10 @@ abstract class RDD[T: ClassManifest](
     debugString(this).mkString("\n")
   }
 
-  override def toString() = "%s[%d] at %s".format(getClass.getSimpleName, id, origin)
+  override def toString(): String = "%s%s[%d] at %s".format(
+    Option(name).map(_ + " ").getOrElse(""),
+    getClass.getSimpleName,
+    id,
+    origin)
+
 }
