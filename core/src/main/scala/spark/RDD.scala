@@ -642,7 +642,8 @@ abstract class RDD[T: ClassManifest](
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString(): String = {
     def debugString(rdd: RDD[_], prefix: String = ""): Seq[String] = {
-      Seq(prefix + rdd) ++ rdd.dependencies.flatMap(d => debugString(d.rdd, prefix + "  "))
+      Seq(prefix + rdd + " (" + rdd.splits.size + " splits)") ++
+        rdd.dependencies.flatMap(d => debugString(d.rdd, prefix + "  "))
     }
     debugString(this).mkString("\n")
   }
