@@ -30,7 +30,7 @@ private[spark] class Executor extends Logging {
 
   initLogging()
 
-  def initialize(slaveHostname: String, properties: Seq[(String, String)]) {
+  def initialize(executorId: String, slaveHostname: String, properties: Seq[(String, String)]) {
     // Make sure the local hostname we report matches the cluster scheduler's name for this host
     Utils.setCustomHostname(slaveHostname)
 
@@ -64,7 +64,7 @@ private[spark] class Executor extends Logging {
     )
 
     // Initialize Spark environment (using system properties read above)
-    env = SparkEnv.createFromSystemProperties(slaveHostname, 0, false, false)
+    env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
     SparkEnv.set(env)
 
     // Start worker thread pool

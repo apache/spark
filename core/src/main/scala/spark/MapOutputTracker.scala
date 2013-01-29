@@ -114,7 +114,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isDriver: Boolea
     var array = mapStatuses(shuffleId)
     if (array != null) {
       array.synchronized {
-        if (array(mapId) != null && array(mapId).address == bmAddress) {
+        if (array(mapId) != null && array(mapId).location == bmAddress) {
           array(mapId) = null
         }
       }
@@ -277,7 +277,7 @@ private[spark] object MapOutputTracker {
           throw new FetchFailedException(null, shuffleId, -1, reduceId,
             new Exception("Missing an output location for shuffle " + shuffleId))
         } else {
-          (status.address, decompressSize(status.compressedSizes(reduceId)))
+          (status.location, decompressSize(status.compressedSizes(reduceId)))
         }
     }
   }

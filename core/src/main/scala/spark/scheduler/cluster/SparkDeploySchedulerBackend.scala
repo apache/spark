@@ -19,7 +19,6 @@ private[spark] class SparkDeploySchedulerBackend(
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = System.getProperty("spark.cores.max", Int.MaxValue.toString).toInt
-  val executorIdToWorkerId = new HashMap[String, String]
 
   // Memory used by each executor (in megabytes)
   val executorMemory = {
@@ -38,7 +37,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val driverUrl = "akka://spark@%s:%s/user/%s".format(
       System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
       StandaloneSchedulerBackend.ACTOR_NAME)
-    val args = Seq(driverUrl, "{{SLAVEID}}", "{{HOSTNAME}}", "{{CORES}}")
+    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(throw new IllegalArgumentException("must supply spark home for spark standalone"))
     val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, sparkHome)
@@ -48,7 +47,7 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   override def stop() {
-    stopping = true;
+    stopping = true
     super.stop()
     client.stop()
     if (shutdownCallback != null) {
@@ -67,24 +66,17 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def executorAdded(fullId: String, workerId: String, host: String, cores: Int, memory: Int) {
-    executorIdToWorkerId += fullId -> workerId
+  override def executorAdded(executorId: String, workerId: String, host: String, cores: Int, memory: Int) {
     logInfo("Granted executor ID %s on host %s with %d cores, %s RAM".format(
-       fullId, host, cores, Utils.memoryMegabytesToString(memory)))
+       executorId, host, cores, Utils.memoryMegabytesToString(memory)))
   }
 
-  override def executorRemoved(fullId: String, message: String, exitStatus: Option[Int]) {
+  override def executorRemoved(executorId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code)
       case None => SlaveLost(message)
     }
-    logInfo("Executor %s removed: %s".format(fullId, message))
-    executorIdToWorkerId.get(fullId) match {
-      case Some(workerId) => 
-        executorIdToWorkerId.remove(fullId)
-        scheduler.slaveLost(workerId, reason)
-      case None =>
-        logInfo("No worker ID known for executor %s".format(fullId))
-    }
+    logInfo("Executor %s removed: %s".format(executorId, message))
+    scheduler.executorLost(executorId, reason)
   }
 }

@@ -51,18 +51,18 @@ private[spark] class Stage(
 
   def removeOutputLoc(partition: Int, bmAddress: BlockManagerId) {
     val prevList = outputLocs(partition)
-    val newList = prevList.filterNot(_.address == bmAddress)
+    val newList = prevList.filterNot(_.location == bmAddress)
     outputLocs(partition) = newList
     if (prevList != Nil && newList == Nil) {
       numAvailableOutputs -= 1
     }
   }
  
-  def removeOutputsOnHost(host: String) {
+  def removeOutputsOnExecutor(execId: String) {
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {
       val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.address.ip == host)
+      val newList = prevList.filterNot(_.location.executorId == execId)
       outputLocs(partition) = newList
       if (prevList != Nil && newList == Nil) {
         becameUnavailable = true
@@ -70,7 +70,8 @@ private[spark] class Stage(
       }
     }
     if (becameUnavailable) {
-      logInfo("%s is now unavailable on %s (%d/%d, %s)".format(this, host, numAvailableOutputs, numPartitions, isAvailable))
+      logInfo("%s is now unavailable on executor %s (%d/%d, %s)".format(
+        this, execId, numAvailableOutputs, numPartitions, isAvailable))
     }
   }
 
@@ -82,7 +83,7 @@ private[spark] class Stage(
 
   def origin: String = rdd.origin
 
-  override def toString = "Stage " + id // + ": [RDD = " + rdd.id + ", isShuffle = " + isShuffleMap + "]"
+  override def toString = "Stage " + id
 
   override def hashCode(): Int = id
 }

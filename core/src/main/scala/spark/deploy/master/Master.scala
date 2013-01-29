@@ -97,10 +97,10 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
             exec.worker.removeExecutor(exec)
 
             // Only retry certain number of times so we don't go into an infinite loop.
-            if (jobInfo.incrementRetryCount <= JobState.MAX_NUM_RETRY) {
+            if (jobInfo.incrementRetryCount < JobState.MAX_NUM_RETRY) {
               schedule()
             } else {
-              val e = new SparkException("Job %s wth ID %s failed %d times.".format(
+              val e = new SparkException("Job %s with ID %s failed %d times.".format(
                 jobInfo.desc.name, jobInfo.id, jobInfo.retryCount))
               logError(e.getMessage, e)
               throw e

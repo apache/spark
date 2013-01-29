@@ -1,6 +1,7 @@
 package spark
 
 import java.io._
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.{URI, URLClassLoader}
 import java.lang.ref.WeakReference
@@ -43,6 +44,8 @@ import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
+import storage.BlockManagerUI
+import util.{MetadataCleaner, TimeStampedHashMap}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -78,15 +81,26 @@ class SparkContext(
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createFromSystemProperties(
+    "<driver>",
     System.getProperty("spark.driver.host"),
     System.getProperty("spark.driver.port").toInt,
     true,
     isLocal)
   SparkEnv.set(env)
 
+  // Start the BlockManager UI
+  private[spark] val ui = new BlockManagerUI(
+    env.actorSystem, env.blockManager.master.driverActor, this)
+  ui.start()
+
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
+
+  // Keeps track of all persisted RDDs
+  private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]()
+  private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
+
 
   // Add each JAR given through the constructor
   jars.foreach { addJar(_) }
@@ -493,6 +507,7 @@ class SparkContext(
   /** Shut down the SparkContext. */
   def stop() {
     if (dagScheduler != null) {
+      metadataCleaner.cancel()
       dagScheduler.stop()
       dagScheduler = null
       taskScheduler = null
@@ -635,6 +650,11 @@ class SparkContext(
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+
+  /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
+  private[spark] def cleanup(cleanupTime: Long) {
+    persistentRdds.clearOldValues(cleanupTime)
+  }
 }
 
 /**

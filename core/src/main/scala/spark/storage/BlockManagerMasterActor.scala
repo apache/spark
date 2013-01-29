@@ -23,9 +23,8 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   private val blockManagerInfo =
     new HashMap[BlockManagerId, BlockManagerMasterActor.BlockManagerInfo]
 
-  // Mapping from host name to block manager id. We allow multiple block managers
-  // on the same host name (ip).
-  private val blockManagerIdByHost = new HashMap[String, ArrayBuffer[BlockManagerId]]
+  // Mapping from executor ID to block manager ID.
+  private val blockManagerIdByExecutor = new HashMap[String, BlockManagerId]
 
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[String, Pair[Int, HashSet[BlockManagerId]]]
@@ -68,11 +67,14 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     case GetMemoryStatus =>
       getMemoryStatus
 
+    case GetStorageStatus =>
+      getStorageStatus
+
     case RemoveBlock(blockId) =>
       removeBlock(blockId)
 
-    case RemoveHost(host) =>
-      removeHost(host)
+    case RemoveExecutor(execId) =>
+      removeExecutor(execId)
       sender ! true
 
     case StopBlockManagerMaster =>
@@ -96,16 +98,12 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   def removeBlockManager(blockManagerId: BlockManagerId) {
     val info = blockManagerInfo(blockManagerId)
 
-    // Remove the block manager from blockManagerIdByHost. If the list of block
-    // managers belonging to the IP is empty, remove the entry from the hash map.
-    blockManagerIdByHost.get(blockManagerId.ip).foreach { managers: ArrayBuffer[BlockManagerId] =>
-      managers -= blockManagerId
-      if (managers.size == 0) blockManagerIdByHost.remove(blockManagerId.ip)
-    }
+    // Remove the block manager from blockManagerIdByExecutor.
+    blockManagerIdByExecutor -= blockManagerId.executorId
 
     // Remove it from blockManagerInfo and remove all the blocks.
     blockManagerInfo.remove(blockManagerId)
-    var iterator = info.blocks.keySet.iterator
+    val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
       val locations = blockLocations.get(blockId)._2
@@ -130,17 +128,15 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     toRemove.foreach(removeBlockManager)
   }
 
-  def removeHost(host: String) {
-    logInfo("Trying to remove the host: " + host + " from BlockManagerMaster.")
-    logInfo("Previous hosts: " + blockManagerInfo.keySet.toSeq)
-    blockManagerIdByHost.get(host).foreach(_.foreach(removeBlockManager))
-    logInfo("Current hosts: " + blockManagerInfo.keySet.toSeq)
+  def removeExecutor(execId: String) {
+    logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
+    blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
     sender ! true
   }
 
   def heartBeat(blockManagerId: BlockManagerId) {
     if (!blockManagerInfo.contains(blockManagerId)) {
-      if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
+      if (blockManagerId.executorId == "<driver>" && !isLocal) {
         sender ! true
       } else {
         sender ! false
@@ -177,24 +173,28 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     sender ! res
   }
 
-  private def register(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
-    val startTimeMs = System.currentTimeMillis()
-    val tmp = " " + blockManagerId + " "
+  private def getStorageStatus() {
+    val res = blockManagerInfo.map { case(blockManagerId, info) =>
+      import collection.JavaConverters._
+      StorageStatus(blockManagerId, info.maxMem, info.blocks.asScala.toMap)
+    }
+    sender ! res
+  }
 
-    if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
-      logInfo("Got Register Msg from master node, don't register it")
-    } else {
-      blockManagerIdByHost.get(blockManagerId.ip) match {
-        case Some(managers) =>
-          // A block manager of the same host name already exists.
-          logInfo("Got another registration for host " + blockManagerId)
-          managers += blockManagerId
+  private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+    if (id.executorId == "<driver>" && !isLocal) {
+      // Got a register message from the master node; don't register it
+    } else if (!blockManagerInfo.contains(id)) {
+      blockManagerIdByExecutor.get(id.executorId) match {
+        case Some(manager) =>
+          // A block manager of the same host name already exists
+          logError("Got two different block manager registrations on " + id.executorId)
+          System.exit(1)
         case None =>
-          blockManagerIdByHost += (blockManagerId.ip -> ArrayBuffer(blockManagerId))
+          blockManagerIdByExecutor(id.executorId) = id
       }
-
-      blockManagerInfo += (blockManagerId -> new BlockManagerMasterActor.BlockManagerInfo(
-        blockManagerId, System.currentTimeMillis(), maxMemSize, slaveActor))
+      blockManagerInfo(id) = new BlockManagerMasterActor.BlockManagerInfo(
+        id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
     sender ! true
   }
@@ -206,11 +206,8 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       memSize: Long,
       diskSize: Long) {
 
-    val startTimeMs = System.currentTimeMillis()
-    val tmp = " " + blockManagerId + " " + blockId + " "
-
     if (!blockManagerInfo.contains(blockManagerId)) {
-      if (blockManagerId.ip == Utils.localHostName() && !isLocal) {
+      if (blockManagerId.executorId == "<driver>" && !isLocal) {
         // We intentionally do not register the master (except in local mode),
         // so we should not indicate failure.
         sender ! true
@@ -342,8 +339,8 @@ object BlockManagerMasterActor {
       _lastSeenMs = System.currentTimeMillis()
     }
 
-    def updateBlockInfo(blockId: String, storageLevel: StorageLevel, memSize: Long, diskSize: Long)
-      : Unit = synchronized {
+    def updateBlockInfo(blockId: String, storageLevel: StorageLevel, memSize: Long,
+                        diskSize: Long) {
 
       updateLastSeenMs()
 

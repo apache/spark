@@ -1,6 +1,10 @@
 package spark.storage
 
-import scala.collection.mutable.ArrayBuffer
+import java.io._
+import java.util.{HashMap => JHashMap}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
@@ -19,7 +23,7 @@ private[spark] class BlockManagerMaster(
     driverPort: Int)
   extends Logging {
 
-  val AKKA_RETRY_ATTEMPS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
+  val AKKA_RETRY_ATTEMPTS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
   val AKKA_RETRY_INTERVAL_MS: Int = System.getProperty("spark.akka.retry.wait", "3000").toInt
 
   val DRIVER_AKKA_ACTOR_NAME = "BlockMasterManager"
@@ -40,10 +44,10 @@ private[spark] class BlockManagerMaster(
     }
   }
 
-  /** Remove a dead host from the driver actor. This is only called on the driver side. */
-  def notifyADeadHost(host: String) {
-    tell(RemoveHost(host))
-    logInfo("Removed " + host + " successfully in notifyADeadHost")
+  /** Remove a dead executor from the driver actor. This is only called on the driver side. */
+  def removeExecutor(execId: String) {
+    tell(RemoveExecutor(execId))
+    logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
   /**
@@ -141,7 +145,7 @@ private[spark] class BlockManagerMaster(
     }
     var attempts = 0
     var lastException: Exception = null
-    while (attempts < AKKA_RETRY_ATTEMPS) {
+    while (attempts < AKKA_RETRY_ATTEMPTS) {
       attempts += 1
       try {
         val future = driverActor.ask(message)(timeout)

@@ -19,6 +19,7 @@ import spark.util.AkkaUtils
  * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
  */
 class SparkEnv (
+    val executorId: String,
     val actorSystem: ActorSystem,
     val serializer: Serializer,
     val closureSerializer: Serializer,
@@ -58,11 +59,12 @@ object SparkEnv extends Logging {
   }
 
   def createFromSystemProperties(
+      executorId: String,
       hostname: String,
       port: Int,
       isDriver: Boolean,
-      isLocal: Boolean
-    ) : SparkEnv = {
+      isLocal: Boolean): SparkEnv = {
+
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port)
 
     // Bit of a hack: If this is the driver and our port was 0 (meaning bind to any free port),
@@ -86,7 +88,7 @@ object SparkEnv extends Logging {
     val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
     val blockManagerMaster = new BlockManagerMaster(
       actorSystem, isDriver, isLocal, driverIp, driverPort)
-    val blockManager = new BlockManager(actorSystem, blockManagerMaster, serializer)
+    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, serializer)
 
     val connectionManager = blockManager.connectionManager
 
@@ -122,6 +124,7 @@ object SparkEnv extends Logging {
     }
 
     new SparkEnv(
+      executorId,
       actorSystem,
       serializer,
       closureSerializer,

@@ -1,6 +1,6 @@
 package spark.util
 
-import akka.actor.{Props, ActorSystemImpl, ActorSystem}
+import akka.actor.{ActorRef, Props, ActorSystemImpl, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import akka.util.duration._
 import akka.pattern.ask
@@ -52,21 +52,22 @@ private[spark] object AkkaUtils {
 
   /**
    * Creates a Spray HTTP server bound to a given IP and port with a given Spray Route object to
-   * handle requests. Throws a SparkException if this fails.
+   * handle requests. Returns the bound port or throws a SparkException on failure.
    */
-  def startSprayServer(actorSystem: ActorSystem, ip: String, port: Int, route: Route) {
+  def startSprayServer(actorSystem: ActorSystem, ip: String, port: Int, route: Route, 
+      name: String = "HttpServer"): ActorRef = {
     val ioWorker = new IoWorker(actorSystem).start()
     val httpService = actorSystem.actorOf(Props(new HttpService(route)))
     val rootService = actorSystem.actorOf(Props(new SprayCanRootService(httpService)))
     val server = actorSystem.actorOf(
-      Props(new HttpServer(ioWorker, SingletonHandler(rootService))), name = "HttpServer")
+      Props(new HttpServer(ioWorker, SingletonHandler(rootService))), name = name)
     actorSystem.registerOnTermination { ioWorker.stop() }
     val timeout = 3.seconds
     val future = server.ask(HttpServer.Bind(ip, port))(timeout)
     try {
       Await.result(future, timeout) match {
         case bound: HttpServer.Bound =>
-          return
+          return server
         case other: Any =>
           throw new SparkException("Failed to bind web UI to port " + port + ": " + other)
       }
