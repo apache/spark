@@ -638,4 +638,14 @@ abstract class RDD[T: ClassManifest](
   protected[spark] def clearDependencies() {
     dependencies_ = null
   }
+
+  /** A description of this RDD and its recursive dependencies for debugging. */
+  def toDebugString(): String = {
+    def debugString(rdd: RDD[_], prefix: String = ""): Seq[String] = {
+      Seq(prefix + rdd) ++ rdd.dependencies.flatMap(d => debugString(d.rdd, prefix + "  "))
+    }
+    debugString(this).mkString("\n")
+  }
+
+  override def toString() = "%s[%d] at %s".format(getClass.getSimpleName, id, origin)
 }
