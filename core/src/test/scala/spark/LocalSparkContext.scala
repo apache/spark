@@ -26,7 +26,7 @@ object LocalSparkContext {
   def stop(sc: SparkContext) {
     sc.stop()
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
+    System.clearProperty("spark.driver.port")
   }
 
   /** Runs `f` by passing in `sc` and ensures that `sc` is stopped. */

@@ -31,7 +31,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
   @transient var totalBlocks = -1
   @transient var hasBlocks = new AtomicInteger(0)
 
-  // Used ONLY by Master to track how many unique blocks have been sent out
+  // Used ONLY by driver to track how many unique blocks have been sent out
   @transient var sentBlocks = new AtomicInteger(0)
 
   @transient var listenPortLock = new Object
@@ -42,7 +42,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
 
   @transient var serveMR: ServeMultipleRequests = null
 
-  // Used only in Master
+  // Used only in driver
   @transient var guideMR: GuideMultipleRequests = null
 
   // Used only in Workers
@@ -99,14 +99,14 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
     }
 
     // Must always come AFTER listenPort is created
-    val masterSource =
+    val driverSource =
       SourceInfo(hostAddress, listenPort, totalBlocks, totalBytes)
     hasBlocksBitVector.synchronized {
-      masterSource.hasBlocksBitVector = hasBlocksBitVector
+      driverSource.hasBlocksBitVector = hasBlocksBitVector
     }
 
     // In the beginning, this is the only known source to Guide
-    listOfSources += masterSource
+    listOfSources += driverSource
 
     // Register with the Tracker
     MultiTracker.registerBroadcast(id,
@@ -122,7 +122,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
 
         case None =>
           logInfo("Started reading broadcast variable " + id)
-          // Initializing everything because Master will only send null/0 values
+          // Initializing everything because driver will only send null/0 values
           // Only the 1st worker in a node can be here. Others will get from cache
           initializeWorkerVariables()
 
@@ -151,7 +151,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
     }
   }
 
-  // Initialize variables in the worker node. Master sends everything as 0/null
+  // Initialize variables in the worker node. Driver sends everything as 0/null
   private def initializeWorkerVariables() {
     arrayOfBlocks = null
     hasBlocksBitVector = null
@@ -248,7 +248,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
       // Receive source information from Guide
       var suitableSources =
         oisGuide.readObject.asInstanceOf[ListBuffer[SourceInfo]]
-      logDebug("Received suitableSources from Master " + suitableSources)
+      logDebug("Received suitableSources from Driver " + suitableSources)
 
       addToListOfSources(suitableSources)
 
@@ -532,7 +532,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
               oosSource.writeObject(blockToAskFor)
               oosSource.flush()
 
-              // CHANGED: Master might send some other block than the one
+              // CHANGED: Driver might send some other block than the one
               // requested to ensure fast spreading of all blocks.
               val recvStartTime = System.currentTimeMillis
               val bcBlock = oisSource.readObject.asInstanceOf[BroadcastBlock]
@@ -982,9 +982,9 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
             // Receive which block to send
             var blockToSend = ois.readObject.asInstanceOf[Int]
 
-            // If it is master AND at least one copy of each block has not been
+            // If it is driver AND at least one copy of each block has not been
             // sent out already, MODIFY blockToSend
-            if (MultiTracker.isMaster && sentBlocks.get < totalBlocks) {
+            if (MultiTracker.isDriver && sentBlocks.get < totalBlocks) {
               blockToSend = sentBlocks.getAndIncrement
             }
 
@@ -1031,7 +1031,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
 
 private[spark] class BitTorrentBroadcastFactory
 extends BroadcastFactory {
-  def initialize(isMaster: Boolean) { MultiTracker.initialize(isMaster) }
+  def initialize(isDriver: Boolean) { MultiTracker.initialize(isDriver) }
 
   def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
     new BitTorrentBroadcast[T](value_, isLocal, id)

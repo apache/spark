@@ -16,7 +16,7 @@ import spark.scheduler.cluster.RegisterExecutor
 
 private[spark] class StandaloneExecutorBackend(
     executor: Executor,
-    masterUrl: String,
+    driverUrl: String,
     executorId: String,
     hostname: String,
     cores: Int)
@@ -24,25 +24,25 @@ private[spark] class StandaloneExecutorBackend(
   with ExecutorBackend
   with Logging {
 
-  var master: ActorRef = null
+  var driver: ActorRef = null
 
   override def preStart() {
     try {
-      logInfo("Connecting to master: " + masterUrl)
-      master = context.actorFor(masterUrl)
-      master ! RegisterExecutor(executorId, hostname, cores)
+      logInfo("Connecting to driver: " + driverUrl)
+      driver = context.actorFor(driverUrl)
+      driver ! RegisterExecutor(executorId, hostname, cores)
       context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-      context.watch(master) // Doesn't work with remote actors, but useful for testing
+      context.watch(driver) // Doesn't work with remote actors, but useful for testing
     } catch {
       case e: Exception =>
-        logError("Failed to connect to master", e)
+        logError("Failed to connect to driver", e)
         System.exit(1)
     }
   }
 
   override def receive = {
     case RegisteredExecutor(sparkProperties) =>
-      logInfo("Successfully registered with master")
+      logInfo("Successfully registered with driver")
       executor.initialize(executorId, hostname, sparkProperties)
 
     case RegisterExecutorFailed(message) =>
@@ -55,24 +55,24 @@ private[spark] class StandaloneExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
-    master ! StatusUpdate(executorId, taskId, state, data)
+    driver ! StatusUpdate(executorId, taskId, state, data)
   }
 }
 
 private[spark] object StandaloneExecutorBackend {
-  def run(masterUrl: String, executorId: String, hostname: String, cores: Int) {
+  def run(driverUrl: String, executorId: String, hostname: String, cores: Int) {
     // Create a new ActorSystem to run the backend, because we can't create a SparkEnv / Executor
     // before getting started with all our system properties, etc
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0)
     val actor = actorSystem.actorOf(
-      Props(new StandaloneExecutorBackend(new Executor, masterUrl, executorId, hostname, cores)),
+      Props(new StandaloneExecutorBackend(new Executor, driverUrl, executorId, hostname, cores)),
       name = "Executor")
     actorSystem.awaitTermination()
   }
 
   def main(args: Array[String]) {
     if (args.length != 4) {
-      System.err.println("Usage: StandaloneExecutorBackend <master> <executorId> <hostname> <cores>")
+      System.err.println("Usage: StandaloneExecutorBackend <driverUrl> <executorId> <hostname> <cores>")
       System.exit(1)
     }
     run(args(0), args(1), args(2), args(3).toInt)
