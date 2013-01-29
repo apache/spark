@@ -9,7 +9,6 @@ import spark.Logging
  * Runs a timer task to periodically clean up metadata (e.g. old files or hashtable entries)
  */
 class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging {
-
   val delaySeconds = MetadataCleaner.getDelaySeconds
   val periodSeconds = math.max(10, delaySeconds / 10)
   val timer = new Timer(name + " cleanup timer", true)
@@ -27,8 +26,8 @@ class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging
 
   if (delaySeconds > 0) {
     logDebug(
-      "Starting metadata cleaner for " + name + " with delay of " + delaySeconds + " seconds and "
-      + "period of " + periodSeconds + " secs")
+      "Starting metadata cleaner for " + name + " with delay of " + delaySeconds + " seconds " +
+      "and period of " + periodSeconds + " secs")
     timer.schedule(task, periodSeconds * 1000, periodSeconds * 1000)
   }
 
@@ -39,7 +38,7 @@ class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging
 
 
 object MetadataCleaner {
-  def getDelaySeconds = (System.getProperty("spark.cleaner.delay", "-100").toDouble * 60).toInt
-  def setDelaySeconds(delay: Long) { System.setProperty("spark.cleaner.delay", delay.toString) }
+  def getDelaySeconds = System.getProperty("spark.cleaner.delay", "-1").toInt
+  def setDelaySeconds(delay: Int) { System.setProperty("spark.cleaner.delay", delay.toString) }
 }
 

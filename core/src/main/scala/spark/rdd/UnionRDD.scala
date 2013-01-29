@@ -26,9 +26,9 @@ private[spark] class UnionSplit[T: ClassManifest](idx: Int, rdd: RDD[T], splitIn
 class UnionRDD[T: ClassManifest](
     sc: SparkContext,
     @transient var rdds: Seq[RDD[T]])
-  extends RDD[T](sc, Nil) {  // Nil, so the dependencies_ var does not refer to parent RDDs
+  extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
-  @transient var splits_ : Array[Split] = {
+  override def getSplits: Array[Split] = {
     val array = new Array[Split](rdds.map(_.splits.size).sum)
     var pos = 0
     for (rdd <- rdds; split <- rdd.splits) {
@@ -38,19 +38,15 @@ class UnionRDD[T: ClassManifest](
     array
   }
 
-  override def getSplits = splits_
-
-  @transient var deps_ = {
+  override def getDependencies: Seq[Dependency[_]] = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for (rdd <- rdds) {
       deps += new RangeDependency(rdd, 0, pos, rdd.splits.size)
       pos += rdd.splits.size
     }
-    deps.toList
+    deps
   }
-
-  override def getDependencies = deps_
 
   override def compute(s: Split, context: TaskContext): Iterator[T] =
     s.asInstanceOf[UnionSplit[T]].iterator(context)
@@ -59,8 +55,6 @@ class UnionRDD[T: ClassManifest](
     s.asInstanceOf[UnionSplit[T]].preferredLocations()
 
   override def clearDependencies() {
-    deps_ = null
-    splits_ = null
     rdds = null
   }
 }

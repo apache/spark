@@ -389,7 +389,7 @@ object StreamingContext {
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second interval.
     if (MetadataCleaner.getDelaySeconds < 0) {
-      MetadataCleaner.setDelaySeconds(60)
+      MetadataCleaner.setDelaySeconds(3600)
     }
     new SparkContext(master, frameworkName)
   }

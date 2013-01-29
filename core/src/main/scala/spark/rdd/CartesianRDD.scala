@@ -1,7 +1,7 @@
 package spark.rdd
 
 import java.io.{ObjectOutputStream, IOException}
-import spark.{OneToOneDependency, NarrowDependency, RDD, SparkContext, Split, TaskContext}
+import spark._
 
 
 private[spark]
@@ -35,7 +35,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
 
   val numSplitsInRdd2 = rdd2.splits.size
 
-  @transient var splits_ = {
+  override def getSplits: Array[Split] = {
     // create the cross product split
     val array = new Array[Split](rdd1.splits.size * rdd2.splits.size)
     for (s1 <- rdd1.splits; s2 <- rdd2.splits) {
@@ -44,8 +44,6 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     }
     array
   }
-
-  override def getSplits = splits_
 
   override def getPreferredLocations(split: Split) = {
     val currSplit = split.asInstanceOf[CartesianSplit]
@@ -58,7 +56,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
       y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
   }
 
-  var deps_ = List(
+  override def getDependencies: Seq[Dependency[_]] = List(
     new NarrowDependency(rdd1) {
       def getParents(id: Int): Seq[Int] = List(id / numSplitsInRdd2)
     },
@@ -67,11 +65,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     }
   )
 
-  override def getDependencies = deps_
-
   override def clearDependencies() {
-    deps_ = Nil
-    splits_ = null
     rdd1 = null
     rdd2 = null
   }

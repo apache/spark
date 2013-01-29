@@ -649,9 +649,7 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
 }
 
 private[spark]
-class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U)
-  extends RDD[(K, U)](prev) {
-
+class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)](prev) {
   override def getSplits = firstParent[(K, V)].splits
   override val partitioner = firstParent[(K, V)].partitioner
   override def compute(split: Split, context: TaskContext) =

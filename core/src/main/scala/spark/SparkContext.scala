@@ -689,6 +689,16 @@ object SparkContext {
     def zero(initialValue: Int) = 0
   }
 
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+    def addInPlace(t1: Long, t2: Long) = t1 + t2
+    def zero(initialValue: Long) = 0l
+  }
+
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+    def addInPlace(t1: Float, t2: Float) = t1 + t2
+    def zero(initialValue: Float) = 0f
+  }
+
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
   implicit def rddToPairRDDFunctions[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =

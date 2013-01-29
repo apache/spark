@@ -99,7 +99,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     // the parent RDD has been checkpointed and parent splits have been changed to HadoopSplits.
     // Note that this test is very specific to the current implementation of CartesianRDD.
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
-    ones.checkpoint // checkpoint that MappedRDD
+    ones.checkpoint() // checkpoint that MappedRDD
     val cartesian = new CartesianRDD(sc, ones, ones)
     val splitBeforeCheckpoint =
       serializeDeserialize(cartesian.splits.head.asInstanceOf[CartesianSplit])
@@ -125,7 +125,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     // the parent RDD has been checkpointed and parent splits have been changed to HadoopSplits.
     // Note that this test is very specific to the current implementation of CoalescedRDDSplits
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
-    ones.checkpoint // checkpoint that MappedRDD
+    ones.checkpoint() // checkpoint that MappedRDD
     val coalesced = new CoalescedRDD(ones, 2)
     val splitBeforeCheckpoint =
       serializeDeserialize(coalesced.splits.head.asInstanceOf[CoalescedRDDSplit])
@@ -160,7 +160,6 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     // so only the RDD will reduce in serialized size, not the splits.
     testParentCheckpointing(
       rdd => new ZippedRDD(sc, rdd, rdd.map(x => x)), true, false)
-
   }
 
   /**
@@ -176,7 +175,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
       testRDDSplitSize: Boolean = false
     ) {
     // Generate the final RDD using given RDD operation
-    val baseRDD = generateLongLineageRDD
+    val baseRDD = generateLongLineageRDD()
     val operatedRDD = op(baseRDD)
     val parentRDD = operatedRDD.dependencies.headOption.orNull
     val rddType = operatedRDD.getClass.getSimpleName
@@ -245,11 +244,15 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
       testRDDSplitSize: Boolean
     ) {
     // Generate the final RDD using given RDD operation
-    val baseRDD = generateLongLineageRDD
+    val baseRDD = generateLongLineageRDD()
     val operatedRDD = op(baseRDD)
     val parentRDD = operatedRDD.dependencies.head.rdd
     val rddType = operatedRDD.getClass.getSimpleName
     val parentRDDType = parentRDD.getClass.getSimpleName
+
+    // Get the splits and dependencies of the parent in case they're lazily computed
+    parentRDD.dependencies
+    parentRDD.splits
 
     // Find serialized sizes before and after the checkpoint
     val (rddSizeBeforeCheckpoint, splitSizeBeforeCheckpoint) = getSerializedSizes(operatedRDD)
@@ -267,7 +270,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     if (testRDDSize) {
       assert(
         rddSizeAfterCheckpoint < rddSizeBeforeCheckpoint,
-        "Size of " + rddType + " did not reduce after parent checkpointing parent " + parentRDDType +
+        "Size of " + rddType + " did not reduce after checkpointing parent " + parentRDDType +
           "[" + rddSizeBeforeCheckpoint + " --> " + rddSizeAfterCheckpoint + "]"
       )
     }
@@ -318,10 +321,12 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   }
 
   /**
-   * Get serialized sizes of the RDD and its splits
+   * Get serialized sizes of the RDD and its splits, in order to test whether the size shrinks
+   * upon checkpointing. Ignores the checkpointData field, which may grow when we checkpoint.
    */
   def getSerializedSizes(rdd: RDD[_]): (Int, Int) = {
-    (Utils.serialize(rdd).size, Utils.serialize(rdd.splits).size)
+    (Utils.serialize(rdd).length - Utils.serialize(rdd.checkpointData).length,
+     Utils.serialize(rdd.splits).length)
   }
 
   /**
