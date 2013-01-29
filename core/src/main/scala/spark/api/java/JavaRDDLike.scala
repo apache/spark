@@ -330,4 +330,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends PairFlatMapWorkaround
       case _ => Optional.absent()
     }
   }
+
+  /** A description of this RDD and its recursive dependencies for debugging. */
+  def toDebugString(): String = {
+    rdd.toDebugString()
+  }
 }
