@@ -187,6 +187,7 @@ class SparkContext(
   taskScheduler.start()
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
+  dagScheduler.start()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {

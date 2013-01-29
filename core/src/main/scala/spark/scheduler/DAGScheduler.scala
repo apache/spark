@@ -23,7 +23,14 @@ import util.{MetadataCleaner, TimeStampedHashMap}
  * and to report fetch failures (the submitTasks method, and code to add CompletionEvents).
  */
 private[spark]
-class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with Logging {
+class DAGScheduler(taskSched: TaskScheduler, 
+                   mapOutputTracker: MapOutputTracker,
+                   blockManagerMaster: BlockManagerMaster,
+                   env: SparkEnv)
+                      extends TaskSchedulerListener with Logging {
+  def this(taskSched: TaskScheduler) {
+    this(taskSched, SparkEnv.get.mapOutputTracker, SparkEnv.get.blockManager.master, SparkEnv.get)
+  }
   taskSched.setListener(this)
 
   // Called by TaskScheduler to report task completions or failures.
@@ -66,10 +73,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
-  val env = SparkEnv.get
-  val mapOutputTracker = env.mapOutputTracker
-  val blockManagerMaster = env.blockManager.master
-
   // For tracking failed nodes, we use the MapOutputTracker's generation number, which is
   // sent with every task. When we detect a node failing, we note the current generation number
   // and failed executor, increment it for new tasks, and use this to ignore stray ShuffleMapTask
@@ -90,12 +93,14 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   val metadataCleaner = new MetadataCleaner("DAGScheduler", this.cleanup)
 
   // Start a thread to run the DAGScheduler event loop
-  new Thread("DAGScheduler") {
-    setDaemon(true)
-    override def run() {
-      DAGScheduler.this.run()
-    }
-  }.start()
+  def start() {
+    new Thread("DAGScheduler") {
+      setDaemon(true)
+      override def run() {
+        DAGScheduler.this.run()
+      }
+    }.start()
+  }
 
   def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
     if (!cacheLocs.contains(rdd.id)) {
@@ -546,7 +551,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     if (!failedGeneration.contains(execId) || failedGeneration(execId) < currentGeneration) {
       failedGeneration(execId) = currentGeneration
       logInfo("Executor lost: %s (generation %d)".format(execId, currentGeneration))
-      env.blockManager.master.removeExecutor(execId)
+      blockManagerMaster.removeExecutor(execId)
       // TODO: This will be really slow if we keep accumulating shuffle map stages
       for ((shuffleId, stage) <- shuffleToMapStage) {
         stage.removeOutputsOnExecutor(execId)
