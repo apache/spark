@@ -26,8 +26,8 @@ class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging
 
   if (delaySeconds > 0) {
     logDebug(
-      "Starting metadata cleaner for " + name + " with delay of " + delaySeconds + " seconds and "
-      + "period of " + periodSeconds + " secs")
+      "Starting metadata cleaner for " + name + " with delay of " + delaySeconds + " seconds " +
+      "and period of " + periodSeconds + " secs")
     timer.schedule(task, periodSeconds * 1000, periodSeconds * 1000)
   }
 
