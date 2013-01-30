@@ -67,8 +67,14 @@ The script automatically adds the `pyspark` package to the `PYTHONPATH`.
 
 # Interactive Use
 
-The `pyspark` script launches a Python interpreter that is configured to run PySpark jobs.
-When run without any input files, `pyspark` launches a shell that can be used explore data interactively, which is a simple way to learn the API:
+The `pyspark` script launches a Python interpreter that is configured to run PySpark jobs. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
+
+{% highlight bash %}
+$ sbt/sbt package
+$ ./pyspark
+{% endhighlight %}
+
+The Python shell can be used explore data interactively and is a simple way to learn the API:
 
 {% highlight python %}
 >>> words = sc.textFile("/usr/share/dict/words")
