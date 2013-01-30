@@ -33,7 +33,7 @@ private[spark] class MesosExecutorBackend(executor: Executor)
     this.driver = driver
     val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
     executor.initialize(
-      slaveInfo.getId.getValue + "-" + executorInfo.getExecutorId.getValue,
+      executorInfo.getExecutorId.getValue,
       slaveInfo.getHostname,
       properties
     )
