@@ -102,6 +102,7 @@ class DAGSchedulerSuite extends FunSuite
     if (schedulerException != null) {
       throw new Exception("Exception caught from scheduler thread", schedulerException)
     }
+    System.clearProperty("spark.master.port")
   }
 
   // Type of RDD we use for testing. Note that we should never call the real RDD compute methods.
