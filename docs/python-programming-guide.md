@@ -80,6 +80,7 @@ The Python shell can be used explore data interactively and is a simple way to l
 >>> words = sc.textFile("/usr/share/dict/words")
 >>> words.filter(lambda w: w.startswith("spar")).take(5)
 [u'spar', u'sparable', u'sparada', u'sparadrap', u'sparagrass']
+>>> help(pyspark) # Show all pyspark functions
 {% endhighlight %}
 
 By default, the `pyspark` shell creates SparkContext that runs jobs locally.
