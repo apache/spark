@@ -134,7 +134,9 @@ private[spark] class Worker(
       val fullId = jobId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         val executor = executors(fullId)
-        logInfo("Executor " + fullId + " finished with state " + state)
+        logInfo("Executor " + fullId + " finished with state " + state +
+          message.map(" message " + _).getOrElse("") +
+          exitStatus.map(" exitStatus " + _).getOrElse(""))
         finishedExecutors(fullId) = executor
         executors -= fullId
         coresUsed -= executor.cores
