@@ -300,7 +300,8 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   private def sendMessage(connectionManagerId: ConnectionManagerId, message: Message) {
     def startNewConnection(): SendingConnection = {
       val inetSocketAddress = new InetSocketAddress(connectionManagerId.host, connectionManagerId.port)
-      val newConnection = connectionRequests.getOrElseUpdate(connectionManagerId, new SendingConnection(inetSocketAddress, selector))
+      val newConnection = connectionRequests.getOrElseUpdate(connectionManagerId,
+          new SendingConnection(inetSocketAddress, selector, connectionManagerId))
       newConnection   
     }
     val lookupKey = ConnectionManagerId.fromSocketAddress(connectionManagerId.toSocketAddress)
