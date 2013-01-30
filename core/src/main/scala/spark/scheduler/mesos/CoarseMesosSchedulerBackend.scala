@@ -104,11 +104,11 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
     val runScript = new File(sparkHome, "run").getCanonicalPath
-    val masterUrl = "akka://spark@%s:%s/user/%s".format(
-      System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
+    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+      System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
       StandaloneSchedulerBackend.ACTOR_NAME)
     val command = "\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
-      runScript, masterUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
+      runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()

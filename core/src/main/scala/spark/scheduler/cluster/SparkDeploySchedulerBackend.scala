@@ -33,10 +33,11 @@ private[spark] class SparkDeploySchedulerBackend(
   override def start() {
     super.start()
 
-    val masterUrl = "akka://spark@%s:%s/user/%s".format(
-      System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
+    // The endpoint for executors to talk to us
+    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+      System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
       StandaloneSchedulerBackend.ACTOR_NAME)
-    val args = Seq(masterUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
+    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(throw new IllegalArgumentException("must supply spark home for spark standalone"))
     val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, sparkHome)
@@ -54,23 +55,23 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  def connected(jobId: String) {
+  override def connected(jobId: String) {
     logInfo("Connected to Spark cluster with job ID " + jobId)
   }
 
-  def disconnected() {
+  override def disconnected() {
     if (!stopping) {
       logError("Disconnected from Spark cluster!")
       scheduler.error("Disconnected from Spark cluster")
     }
   }
 
-  def executorAdded(id: String, workerId: String, host: String, cores: Int, memory: Int) {
+  override def executorAdded(executorId: String, workerId: String, host: String, cores: Int, memory: Int) {
     logInfo("Granted executor ID %s on host %s with %d cores, %s RAM".format(
-       id, host, cores, Utils.memoryMegabytesToString(memory)))
+       executorId, host, cores, Utils.memoryMegabytesToString(memory)))
   }
 
-  def executorRemoved(executorId: String, message: String, exitStatus: Option[Int]) {
+  override def executorRemoved(executorId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code)
       case None => SlaveLost(message)

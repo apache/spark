@@ -319,7 +319,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends PairFlatMapWorkaround
   /**
    * Return whether this RDD has been checkpointed or not
    */
-  def isCheckpointed(): Boolean = rdd.isCheckpointed()
+  def isCheckpointed: Boolean = rdd.isCheckpointed
 
   /**
    * Gets the name of the file to which this RDD was checkpointed
@@ -329,5 +329,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends PairFlatMapWorkaround
       case Some(file) => Optional.of(file)
       case _ => Optional.absent()
     }
+  }
+
+  /** A description of this RDD and its recursive dependencies for debugging. */
+  def toDebugString(): String = {
+    rdd.toDebugString()
   }
 }

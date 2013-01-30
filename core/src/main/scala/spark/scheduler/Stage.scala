@@ -32,6 +32,9 @@ private[spark] class Stage(
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
 
+  /** When first task was submitted to scheduler. */
+  var submissionTime: Option[Long] = None
+
   private var nextAttemptId = 0
 
   def isAvailable: Boolean = {

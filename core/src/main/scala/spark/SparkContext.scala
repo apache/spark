@@ -69,12 +69,12 @@ class SparkContext(
   // Ensure logging is initialized before we spawn any threads
   initLogging()
 
-  // Set Spark master host and port system properties
-  if (System.getProperty("spark.master.host") == null) {
-    System.setProperty("spark.master.host", Utils.localIpAddress)
+  // Set Spark driver host and port system properties
+  if (System.getProperty("spark.driver.host") == null) {
+    System.setProperty("spark.driver.host", Utils.localIpAddress)
   }
-  if (System.getProperty("spark.master.port") == null) {
-    System.setProperty("spark.master.port", "0")
+  if (System.getProperty("spark.driver.port") == null) {
+    System.setProperty("spark.driver.port", "0")
   }
 
   private val isLocal = (master == "local" || master.startsWith("local["))
@@ -82,15 +82,15 @@ class SparkContext(
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createFromSystemProperties(
     "<driver>",
-    System.getProperty("spark.master.host"),
-    System.getProperty("spark.master.port").toInt,
+    System.getProperty("spark.driver.host"),
+    System.getProperty("spark.driver.port").toInt,
     true,
     isLocal)
   SparkEnv.set(env)
 
   // Start the BlockManager UI
   private[spark] val ui = new BlockManagerUI(
-    env.actorSystem, env.blockManager.master.masterActor, this)
+    env.actorSystem, env.blockManager.master.driverActor, this)
   ui.start()
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
@@ -410,14 +410,14 @@ class SparkContext(
 
   /**
    * Create an [[spark.Accumulator]] variable of a given type, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
 
   /**
    * Create an [[spark.Accumulable]] shared variable, to which tasks can add values with `+=`.
-   * Only the master can access the accumuable's `value`.
+   * Only the driver can access the accumuable's `value`.
    * @tparam T accumulator type
    * @tparam R type that can be added to the accumulator
    */
@@ -545,7 +545,7 @@ class SparkContext(
   /**
    * Run a function on a given set of partitions in an RDD and return the results. This is the main
    * entry point to the scheduler, by which all actions get launched. The allowLocal flag specifies
-   * whether the scheduler can run the computation on the master rather than shipping it out to the
+   * whether the scheduler can run the computation on the driver rather than shipping it out to the
    * cluster, for short actions like first().
    */
   def runJob[T, U: ClassManifest](
@@ -671,6 +671,16 @@ object SparkContext {
   implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
+  }
+
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+    def addInPlace(t1: Long, t2: Long) = t1 + t2
+    def zero(initialValue: Long) = 0l
+  }
+
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+    def addInPlace(t1: Float, t2: Float) = t1 + t2
+    def zero(initialValue: Float) = 0f
   }
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings

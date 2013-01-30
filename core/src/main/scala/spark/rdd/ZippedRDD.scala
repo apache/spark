@@ -32,9 +32,7 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
   extends RDD[(T, U)](sc, List(new OneToOneDependency(rdd1), new OneToOneDependency(rdd2)))
   with Serializable {
 
-  // TODO: FIX THIS.
-
-  @transient var splits_ : Array[Split] = {
+  override def getSplits: Array[Split] = {
     if (rdd1.splits.size != rdd2.splits.size) {
       throw new IllegalArgumentException("Can't zip RDDs with unequal numbers of partitions")
     }
@@ -44,8 +42,6 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
     }
     array
   }
-
-  override def getSplits = splits_
 
   override def compute(s: Split, context: TaskContext): Iterator[(T, U)] = {
     val (split1, split2) = s.asInstanceOf[ZippedSplit[T, U]].splits
@@ -58,7 +54,6 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
   }
 
   override def clearDependencies() {
-    splits_ = null
     rdd1 = null
     rdd2 = null
   }

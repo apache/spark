@@ -26,7 +26,7 @@ class PySparkTestCase(unittest.TestCase):
         sys.path = self._old_sys_path
         # To avoid Akka rebinding to the same port, since it doesn't unbind
         # immediately on shutdown
-        self.sc.jvm.System.clearProperty("spark.master.port")
+        self.sc.jvm.System.clearProperty("spark.driver.port")
 
 
 class TestCheckpoint(PySparkTestCase):

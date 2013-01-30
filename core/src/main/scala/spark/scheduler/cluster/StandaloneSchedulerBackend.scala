@@ -23,7 +23,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
 
-  class MasterActor(sparkProperties: Seq[(String, String)]) extends Actor {
+  class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     val executorActor = new HashMap[String, ActorRef]
     val executorAddress = new HashMap[String, Address]
     val executorHost = new HashMap[String, String]
@@ -64,7 +64,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
       case ReviveOffers =>
         makeOffers()
 
-      case StopMaster =>
+      case StopDriver =>
         sender ! true
         context.stop(self)
 
@@ -113,10 +113,10 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     }
   }
 
-  var masterActor: ActorRef = null
+  var driverActor: ActorRef = null
   val taskIdsOnSlave = new HashMap[String, HashSet[String]]
 
-  def start() {
+  override def start() {
     val properties = new ArrayBuffer[(String, String)]
     val iterator = System.getProperties.entrySet.iterator
     while (iterator.hasNext) {
@@ -126,15 +126,15 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         properties += ((key, value))
       }
     }
-    masterActor = actorSystem.actorOf(
-      Props(new MasterActor(properties)), name = StandaloneSchedulerBackend.ACTOR_NAME)
+    driverActor = actorSystem.actorOf(
+      Props(new DriverActor(properties)), name = StandaloneSchedulerBackend.ACTOR_NAME)
   }
 
-  def stop() {
+  override def stop() {
     try {
-      if (masterActor != null) {
+      if (driverActor != null) {
         val timeout = 5.seconds
-        val future = masterActor.ask(StopMaster)(timeout)
+        val future = driverActor.ask(StopDriver)(timeout)
         Await.result(future, timeout)
       }
     } catch {
@@ -143,11 +143,11 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     }
   }
 
-  def reviveOffers() {
-    masterActor ! ReviveOffers
+  override def reviveOffers() {
+    driverActor ! ReviveOffers
   }
 
-  def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
+  override def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
 }
 
 private[spark] object StandaloneSchedulerBackend {
