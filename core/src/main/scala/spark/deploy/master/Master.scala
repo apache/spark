@@ -88,7 +88,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       execOption match {
         case Some(exec) => {
           exec.state = state
-          exec.job.actor ! ExecutorUpdated(execId, state, message, exitStatus)
+          exec.job.driver ! ExecutorUpdated(execId, state, message, exitStatus)
           if (ExecutorState.isFinished(state)) {
             val jobInfo = idToJob(jobId)
             // Remove this executor from the worker and job
@@ -100,11 +100,9 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
             if (jobInfo.incrementRetryCount < JobState.MAX_NUM_RETRY) {
               schedule()
             } else {
-              val e = new SparkException("Job %s with ID %s failed %d times.".format(
+              logError("Job %s with ID %s failed %d times, removing it".format(
                 jobInfo.desc.name, jobInfo.id, jobInfo.retryCount))
-              logError(e.getMessage, e)
-              throw e
-              //System.exit(1)
+              removeJob(jobInfo)
             }
           }
         }
@@ -199,7 +197,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc, exec.cores, exec.memory, sparkHome)
-    exec.job.actor ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
+    exec.job.driver ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
   }
 
   def addWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int,
@@ -221,19 +219,19 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     actorToWorker -= worker.actor
     addressToWorker -= worker.actor.path.address
     for (exec <- worker.executors.values) {
-      exec.job.actor ! ExecutorStateChanged(exec.job.id, exec.id, ExecutorState.LOST, None, None)
+      exec.job.driver ! ExecutorStateChanged(exec.job.id, exec.id, ExecutorState.LOST, None, None)
       exec.job.executors -= exec.id
     }
   }
 
-  def addJob(desc: JobDescription, actor: ActorRef): JobInfo = {
+  def addJob(desc: JobDescription, driver: ActorRef): JobInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    val job = new JobInfo(now, newJobId(date), desc, date, actor)
+    val job = new JobInfo(now, newJobId(date), desc, date, driver)
     jobs += job
     idToJob(job.id) = job
-    actorToJob(sender) = job
-    addressToJob(sender.path.address) = job
+    actorToJob(driver) = job
+    addressToJob(driver.path.address) = job
     return job
   }
 
@@ -242,8 +240,8 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       logInfo("Removing job " + job.id)
       jobs -= job
       idToJob -= job.id
-      actorToJob -= job.actor
-      addressToWorker -= job.actor.path.address
+      actorToJob -= job.driver
+      addressToWorker -= job.driver.path.address
       completedJobs += job   // Remember it in our history
       waitingJobs -= job
       for (exec <- job.executors.values) {

@@ -134,7 +134,9 @@ private[spark] class Worker(
       val fullId = jobId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         val executor = executors(fullId)
-        logInfo("Executor " + fullId + " finished with state " + state)
+        logInfo("Executor " + fullId + " finished with state " + state +
+          message.map(" message " + _).getOrElse("") +
+          exitStatus.map(" exitStatus " + _).getOrElse(""))
         finishedExecutors(fullId) = executor
         executors -= fullId
         coresUsed -= executor.cores
@@ -143,9 +145,13 @@ private[spark] class Worker(
 
     case KillExecutor(jobId, execId) =>
       val fullId = jobId + "/" + execId
-      val executor = executors(fullId)
-      logInfo("Asked to kill executor " + fullId)
-      executor.kill()
+      executors.get(fullId) match {
+        case Some(executor) =>
+          logInfo("Asked to kill executor " + fullId)
+          executor.kill()
+        case None =>
+          logInfo("Asked to kill unknown executor " + fullId)
+      }
 
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       masterDisconnected()
