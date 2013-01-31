@@ -45,7 +45,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
       path("") {
         completeWith {
           // Request the current storage status from the Master
-          val storageStatusList = sc.getSlavesStorageStatus
+          val storageStatusList = sc.getExecutorStorageStatus
           // Calculate macro-level statistics
           val maxMem = storageStatusList.map(_.maxMem).reduce(_+_)
           val remainingMem = storageStatusList.map(_.memRemaining).reduce(_+_)
@@ -60,7 +60,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
         parameter("id") { id =>
           completeWith {
             val prefix = "rdd_" + id.toString
-            val storageStatusList = sc.getSlavesStorageStatus
+            val storageStatusList = sc.getExecutorStorageStatus
             val filteredStorageStatusList = StorageUtils.
               filterStorageStatusByPrefix(storageStatusList, prefix)
             val rddInfo = StorageUtils.rddInfoFromStorageStatus(filteredStorageStatusList, sc).head

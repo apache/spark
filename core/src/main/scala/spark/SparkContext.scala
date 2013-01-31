@@ -468,7 +468,7 @@ class SparkContext(
    * Return a map from the slave to the max memory available for caching and the remaining
    * memory available for caching.
    */
-  def getSlavesMemoryStatus: Map[String, (Long, Long)] = {
+  def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
     env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
       (blockManagerId.ip + ":" + blockManagerId.port, mem)
     }
@@ -479,13 +479,13 @@ class SparkContext(
    * they take, etc.
    */
   def getRDDStorageInfo : Array[RDDInfo] = {
-    StorageUtils.rddInfoFromStorageStatus(getSlavesStorageStatus, this)
+    StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
   }
 
   /**
    * Return information about blocks stored in all of the slaves
    */
-  def getSlavesStorageStatus : Array[StorageStatus] = {
+  def getExecutorStorageStatus : Array[StorageStatus] = {
     env.blockManager.master.getStorageStatus
   }
 
