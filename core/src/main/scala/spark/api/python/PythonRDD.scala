@@ -122,8 +122,8 @@ private[spark] class PythonRDD[T: ClassManifest](
                 val update = new Array[Byte](len2)
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
-                new Array[Byte](0)
               }
+              new Array[Byte](0)
           }
         } catch {
           case eof: EOFException => {
