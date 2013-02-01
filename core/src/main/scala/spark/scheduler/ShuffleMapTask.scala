@@ -127,7 +127,6 @@ private[spark] class ShuffleMapTask(
         val bucketId = dep.partitioner.getPartition(pair._1)
         buckets(bucketId) += pair
       }
-      val bucketIterators = buckets.map(_.iterator)
 
       val compressedSizes = new Array[Byte](numOutputSplits)
 
@@ -135,7 +134,7 @@ private[spark] class ShuffleMapTask(
       for (i <- 0 until numOutputSplits) {
         val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
         // Get a Scala iterator from Java map
-        val iter: Iterator[(Any, Any)] = bucketIterators(i)
+        val iter: Iterator[(Any, Any)] = buckets(i).iterator
         val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
         compressedSizes(i) = MapOutputTracker.compressSize(size)
       }

@@ -86,7 +86,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
   }
 
-  def submitTasks(taskSet: TaskSet) {
+  override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
