@@ -11,7 +11,11 @@
           <strong>Storage Level:</strong> 
           @(rddInfo.storageLevel.description)
         <li>
-          <strong>Partitions:</strong>
+          <strong>Cached Partitions:</strong>
+          @(rddInfo.numCachedPartitions)
+        </li>
+        <li>
+          <strong>Total Partitions:</strong>
           @(rddInfo.numPartitions)
         </li>
         <li>
