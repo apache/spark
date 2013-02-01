@@ -43,8 +43,6 @@ object StorageUtils {
   /* Given a list of BlockStatus objets, returns information for each RDD */ 
   def rddInfoFromBlockStatusList(infos: Map[String, BlockStatus], 
     sc: SparkContext) : Array[RDDInfo] = {
-    // Find all RDD Blocks (ignore broadcast variables)
-    val rddBlocks = infos.filterKeys(_.startsWith("rdd"))
 
     // Group by rddId, ignore the partition name
     val groupedRddBlocks = infos.groupBy { case(k, v) =>
