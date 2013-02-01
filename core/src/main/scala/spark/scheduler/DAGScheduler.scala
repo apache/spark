@@ -177,18 +177,17 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       if (!visited(rdd)) {
         visited += rdd
         val locs = getCacheLocs(rdd)
-        for (p <- 0 until rdd.splits.size) {
-          if (locs(p) == Nil) {
-            for (dep <- rdd.dependencies) {
-              dep match {
-                case shufDep: ShuffleDependency[_,_] =>
-                  val mapStage = getShuffleMapStage(shufDep, stage.priority)
-                  if (!mapStage.isAvailable) {
-                    missing += mapStage
-                  }
-                case narrowDep: NarrowDependency[_] =>
-                  visit(narrowDep.rdd)
-              }
+        val atLeastOneMissing = (0 until rdd.splits.size).exists(locs(_) == Nil)
+        if (atLeastOneMissing) {
+          for (dep <- rdd.dependencies) {
+            dep match {
+              case shufDep: ShuffleDependency[_,_] =>
+                val mapStage = getShuffleMapStage(shufDep, stage.priority)
+                if (!mapStage.isAvailable) {
+                  missing += mapStage
+                }
+              case narrowDep: NarrowDependency[_] =>
+                visit(narrowDep.rdd)
             }
           }
         }
