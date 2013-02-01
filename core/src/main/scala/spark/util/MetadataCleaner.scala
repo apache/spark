@@ -9,12 +9,12 @@ import spark.Logging
  * Runs a timer task to periodically clean up metadata (e.g. old files or hashtable entries)
  */
 class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging {
-  val delaySeconds = MetadataCleaner.getDelaySeconds
-  val periodSeconds = math.max(10, delaySeconds / 10)
-  val timer = new Timer(name + " cleanup timer", true)
+  private val delaySeconds = MetadataCleaner.getDelaySeconds
+  private val periodSeconds = math.max(10, delaySeconds / 10)
+  private val timer = new Timer(name + " cleanup timer", true)
 
-  val task = new TimerTask {
-    def run() {
+  private val task = new TimerTask {
+    override def run() {
       try {
         cleanupFunc(System.currentTimeMillis() - (delaySeconds * 1000))
         logInfo("Ran metadata cleaner for " + name)
