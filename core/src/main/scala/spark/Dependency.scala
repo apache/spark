@@ -61,25 +61,3 @@ class RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
     }
   }
 }
-
-
-/**
- * Represents a dependency between the PartitionPruningRDD and its parent. In this
- * case, the child RDD contains a subset of partitions of the parents'.
- */
-class PruneDependency[T](rdd: RDD[T], @transient partitionFilterFunc: Int => Boolean)
-  extends NarrowDependency[T](rdd) {
-
-  @transient
-  val partitions: Array[Split] = rdd.splits.filter(s => partitionFilterFunc(s.index))
-    .zipWithIndex
-    .map { case(split, idx) => new PruneDependency.PartitionPruningRDDSplit(idx, split) : Split }
-
-  override def getParents(partitionId: Int) = List(partitions(partitionId).index)
-}
-
-object PruneDependency {
-  class PartitionPruningRDDSplit(idx: Int, val parentSplit: Split) extends Split {
-    override val index = idx
-  }
-}
