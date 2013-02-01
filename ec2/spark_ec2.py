@@ -84,7 +84,7 @@ def parse_args():
             "maximum price (in dollars)")
   parser.add_option("-c", "--cluster-type", default="mesos",
       help="'mesos' for a mesos cluster, 'standalone' for a standalone spark cluster (default: mesos)")
-  parser.add_option("-g", "--ganglia", action="store_true", default=False,
+  parser.add_option("-g", "--ganglia", action="store_true", default=True,
       help="Setup ganglia monitoring for the cluster. NOTE: The ganglia " +
       "monitoring page will be publicly accessible")
   parser.add_option("--mesos-scripts", action="store_true", default=False,
