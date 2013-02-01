@@ -385,7 +385,7 @@ abstract class RDD[T: ClassManifest](
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext) {
         Some(iter.reduceLeft(cleanF))
-      }else {
+      } else {
         None
       }
     }
