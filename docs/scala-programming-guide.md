@@ -19,7 +19,7 @@ This guide shows each of these features and walks through some samples. It assum
 
 To write a Spark application, you will need to add both Spark and its dependencies to your CLASSPATH. If you use sbt or Maven, Spark is available through Maven Central at:
 
-    groupId = org.spark_project
+    groupId = org.spark-project
     artifactId = spark-core_{{site.SCALA_VERSION}}
     version = {{site.SPARK_VERSION}} 
 
