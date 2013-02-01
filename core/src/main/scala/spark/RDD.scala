@@ -389,16 +389,18 @@ abstract class RDD[T: ClassManifest](
         None
       }
     }
-    val options = sc.runJob(this, reducePartition)
-    val results = new ArrayBuffer[T]
-    for (opt <- options; elem <- opt) {
-      results += elem
+    var jobResult: Option[T] = None
+    val mergeResult = (index: Int, taskResult: Option[T]) => {
+      if (taskResult != None) {
+        jobResult = jobResult match {
+          case Some(value) => Some(f(value, taskResult.get))
+          case None => taskResult
+        }
+      }
     }
-    if (results.size == 0) {
-      throw new UnsupportedOperationException("empty collection")
-    } else {
-      return results.reduceLeft(cleanF)
-    }
+    sc.runJob(this, reducePartition, mergeResult)
+    // Get the final result out of our Option, or throw an exception if the RDD was empty
+    jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
   }
 
   /**
@@ -408,9 +410,13 @@ abstract class RDD[T: ClassManifest](
    * modify t2.
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = {
+    // Clone the zero value since we will also be serializing it as part of tasks
+    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
     val cleanOp = sc.clean(op)
-    val results = sc.runJob(this, (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp))
-    return results.fold(zeroValue)(cleanOp)
+    val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp)
+    val mergeResult = (index: Int, taskResult: T) => jobResult = op(jobResult, taskResult)
+    sc.runJob(this, foldPartition, mergeResult)
+    jobResult
   }
 
   /**
@@ -422,11 +428,14 @@ abstract class RDD[T: ClassManifest](
    * allocation.
    */
   def aggregate[U: ClassManifest](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = {
+    // Clone the zero value since we will also be serializing it as part of tasks
+    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
-    val results = sc.runJob(this,
-        (iter: Iterator[T]) => iter.aggregate(zeroValue)(cleanSeqOp, cleanCombOp))
-    return results.fold(zeroValue)(cleanCombOp)
+    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+    val mergeResult = (index: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
+    sc.runJob(this, aggregatePartition, mergeResult)
+    jobResult
   }
 
   /**
@@ -437,7 +446,7 @@ abstract class RDD[T: ClassManifest](
       var result = 0L
       while (iter.hasNext) {
         result += 1L
-        iter.next
+        iter.next()
       }
       result
     }).sum
@@ -452,7 +461,7 @@ abstract class RDD[T: ClassManifest](
       var result = 0L
       while (iter.hasNext) {
         result += 1L
-        iter.next
+        iter.next()
       }
       result
     }

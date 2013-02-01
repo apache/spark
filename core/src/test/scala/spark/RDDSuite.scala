@@ -12,9 +12,9 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
     val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
-    assert(dups.distinct.count === 4)
-    assert(dups.distinct().collect === dups.distinct.collect)
-    assert(dups.distinct(2).collect === dups.distinct.collect)
+    assert(dups.distinct().count === 4)
+    assert(dups.distinct().collect === dups.distinct().collect)
+    assert(dups.distinct(2).collect === dups.distinct().collect)
     assert(nums.reduce(_ + _) === 10)
     assert(nums.fold(0)(_ + _) === 10)
     assert(nums.map(_.toString).collect().toList === List("1", "2", "3", "4"))
@@ -31,6 +31,10 @@ class RDDSuite extends FunSuite with LocalSparkContext {
       case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
     }
     assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))
+
+    intercept[UnsupportedOperationException] {
+      nums.filter(_ > 5).reduce(_ + _)
+    }
   }
 
   test("SparkContext.union") {
@@ -164,7 +168,7 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     // Note that split number starts from 0, so > 8 means only 10th partition left.
     val prunedRdd = new PartitionPruningRDD(data, splitNum => splitNum > 8)
     assert(prunedRdd.splits.size === 1)
-    val prunedData = prunedRdd.collect
+    val prunedData = prunedRdd.collect()
     assert(prunedData.size === 1)
     assert(prunedData(0) === 10)
   }

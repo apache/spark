@@ -203,18 +203,17 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       callSite: String,
-      allowLocal: Boolean)
-    : Array[U] =
+      allowLocal: Boolean,
+      resultHandler: (Int, U) => Unit)
   {
     if (partitions.size == 0) {
-      return new Array[U](0)
+      return
     }
-    val waiter = new JobWaiter(partitions.size)
+    val waiter = new JobWaiter(partitions.size, resultHandler)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     eventQueue.put(JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter))
-    waiter.getResult() match {
-      case JobSucceeded(results: Seq[_]) =>
-        return results.asInstanceOf[Seq[U]].toArray
+    waiter.awaitResult() match {
+      case JobSucceeded => {}
       case JobFailed(exception: Exception) =>
         logInfo("Failed to run " + callSite)
         throw exception
@@ -233,7 +232,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.splits.size).toArray
     eventQueue.put(JobSubmitted(rdd, func2, partitions, false, callSite, listener))
-    return listener.getResult()    // Will throw an exception if the job fails
+    return listener.awaitResult()    // Will throw an exception if the job fails
   }
 
   /**

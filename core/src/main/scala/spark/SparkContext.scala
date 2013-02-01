@@ -543,10 +543,30 @@ class SparkContext(
   }
 
   /**
-   * Run a function on a given set of partitions in an RDD and return the results. This is the main
-   * entry point to the scheduler, by which all actions get launched. The allowLocal flag specifies
-   * whether the scheduler can run the computation on the driver rather than shipping it out to the
-   * cluster, for short actions like first().
+   * Run a function on a given set of partitions in an RDD and pass the results to the given
+   * handler function. This is the main entry point for all actions in Spark. The allowLocal
+   * flag specifies whether the scheduler can run the computation on the driver rather than
+   * shipping it out to the cluster, for short actions like first().
+   */
+  def runJob[T, U: ClassManifest](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      allowLocal: Boolean,
+      resultHandler: (Int, U) => Unit) {
+    val callSite = Utils.getSparkCallSite
+    logInfo("Starting job: " + callSite)
+    val start = System.nanoTime
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler)
+    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    rdd.doCheckpoint()
+    result
+  }
+
+  /**
+   * Run a function on a given set of partitions in an RDD and return the results as an array. The
+   * allowLocal flag specifies whether the scheduler can run the computation on the driver rather
+   * than shipping it out to the cluster, for short actions like first().
    */
   def runJob[T, U: ClassManifest](
       rdd: RDD[T],
@@ -554,13 +574,9 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean
       ): Array[U] = {
-    val callSite = Utils.getSparkCallSite
-    logInfo("Starting job: " + callSite)
-    val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal)
-    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
-    rdd.doCheckpoint()
-    result
+    val results = new Array[U](partitions.size)
+    runJob[T, U](rdd, func, partitions, allowLocal, (index, res) => results(index) = res)
+    results
   }
 
   /**
@@ -588,6 +604,29 @@ class SparkContext(
    */
   def runJob[T, U: ClassManifest](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
     runJob(rdd, func, 0 until rdd.splits.size, false)
+  }
+
+  /**
+   * Run a job on all partitions in an RDD and pass the results to a handler function.
+   */
+  def runJob[T, U: ClassManifest](
+    rdd: RDD[T],
+    processPartition: (TaskContext, Iterator[T]) => U,
+    resultHandler: (Int, U) => Unit)
+  {
+    runJob[T, U](rdd, processPartition, 0 until rdd.splits.size, false, resultHandler)
+  }
+
+  /**
+   * Run a job on all partitions in an RDD and pass the results to a handler function.
+   */
+  def runJob[T, U: ClassManifest](
+      rdd: RDD[T],
+      processPartition: Iterator[T] => U,
+      resultHandler: (Int, U) => Unit)
+  {
+    val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
+    runJob[T, U](rdd, processFunc, 0 until rdd.splits.size, false, resultHandler)
   }
 
   /**
