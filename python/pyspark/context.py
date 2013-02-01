@@ -1,8 +1,6 @@
 import os
-import atexit
 import shutil
 import sys
-import tempfile
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
@@ -94,6 +92,11 @@ class SparkContext(object):
         SparkFiles._sc = self
         sys.path.append(SparkFiles.getRootDirectory())
 
+        # Create a temporary directory inside spark.local.dir:
+        local_dir = self._jvm.spark.Utils.getLocalDir()
+        self._temp_dir = \
+            self._jvm.spark.Utils.createTempDir(local_dir).getAbsolutePath()
+
     @property
     def defaultParallelism(self):
         """
@@ -126,8 +129,7 @@ class SparkContext(object):
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
-        tempFile = NamedTemporaryFile(delete=False)
-        atexit.register(lambda: os.unlink(tempFile.name))
+        tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
         if self.batchSize != 1:
             c = batched(c, self.batchSize)
         for x in c:
@@ -247,7 +249,9 @@ class SparkContext(object):
 
 
 def _test():
+    import atexit
     import doctest
+    import tempfile
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     globs['tempdir'] = tempfile.mkdtemp()
