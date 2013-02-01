@@ -118,7 +118,7 @@ private[spark] class BlockManagerMaster(
   }
 
   def getStorageStatus: Array[StorageStatus] = {
-    askMasterWithRetry[ArrayBuffer[StorageStatus]](GetStorageStatus).toArray
+    askDriverWithReply[ArrayBuffer[StorageStatus]](GetStorageStatus).toArray
   }
 
   /** Stop the driver actor, called only on the Spark driver node */
