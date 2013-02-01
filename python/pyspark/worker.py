@@ -2,6 +2,7 @@
 Worker that receives input from Piped RDD.
 """
 import sys
+import traceback
 from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
@@ -40,8 +41,13 @@ def main():
     else:
         dumps = dump_pickle
     iterator = read_from_pickle_file(sys.stdin)
-    for obj in func(split_index, iterator):
-        write_with_length(dumps(obj), old_stdout)
+    try:
+        for obj in func(split_index, iterator):
+           write_with_length(dumps(obj), old_stdout)
+    except Exception as e:
+        write_int(-2, old_stdout)
+        write_with_length(traceback.format_exc(), old_stdout)
+        sys.exit(-1)
     # Mark the beginning of the accumulators section of the output
     write_int(-1, old_stdout)
     for aid, accum in _accumulatorRegistry.items():
