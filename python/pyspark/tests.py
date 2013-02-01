@@ -108,5 +108,14 @@ class TestAddFile(PySparkTestCase):
         self.assertEqual("Hello World!", UserClass().hello())
 
 
+class TestIO(PySparkTestCase):
+
+    def test_stdout_redirection(self):
+        import subprocess
+        def func(x):
+            subprocess.check_call('ls', shell=True)
+        self.sc.parallelize([1]).foreach(func)
+
+
 if __name__ == "__main__":
     unittest.main()
