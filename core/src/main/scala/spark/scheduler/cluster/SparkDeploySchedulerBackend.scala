@@ -20,15 +20,6 @@ private[spark] class SparkDeploySchedulerBackend(
 
   val maxCores = System.getProperty("spark.cores.max", Int.MaxValue.toString).toInt
 
-  // Memory used by each executor (in megabytes)
-  val executorMemory = {
-    // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    Option(System.getProperty("spark.executor.memory"))
-      .orElse(Option(System.getenv("SPARK_MEM")))
-      .map(Utils.memoryStringToMb)
-      .getOrElse(512)
-  }
-
   override def start() {
     super.start()
 
