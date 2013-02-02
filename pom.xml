@@ -41,6 +41,7 @@
     <module>core</module>
     <module>bagel</module>
     <module>examples</module>
+    <module>streaming</module>
     <module>repl</module>
     <module>repl-bin</module>
   </modules>
@@ -97,6 +98,17 @@
       <id>spray-repo</id>
       <name>Spray Repository</name>
       <url>http://repo.spray.cc/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>twitter4j-repo</id>
+      <name>Twitter4J Repository</name>
+      <url>http://twitter4j.org/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -487,11 +499,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <activation>
-        <property>
-          <name>!hadoopVersion</name>
-        </property>
-      </activation>
 
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
@@ -509,12 +516,6 @@
 
     <profile>
       <id>hadoop2</id>
-      <activation>
-        <property>
-          <name>hadoopVersion</name>
-          <value>2</value>
-        </property>
-      </activation>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
       </properties>
@@ -529,6 +530,17 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
             <version>2.0.0-mr1-cdh${cdh.version}</version>
+          </dependency>
+          <!-- Specify Avro version because Kafka also has it as a dependency -->
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>1.7.1.cloudera.2</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-ipc</artifactId>
+            <version>1.7.1.cloudera.2</version>
           </dependency>
         </dependencies>
       </dependencyManagement>

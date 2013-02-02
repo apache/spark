@@ -1,6 +1,5 @@
 package spark
 
-import org.scalatest.BeforeAndAfter
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 import collection.mutable
@@ -9,18 +8,7 @@ import scala.math.exp
 import scala.math.signum
 import spark.SparkContext._
 
-class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
-
-  var sc: SparkContext = null
-
-  after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-  }
+class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
 
   test ("basic accumulation"){
     sc = new SparkContext("local", "test")
@@ -29,6 +17,12 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     val d = sc.parallelize(1 to 20)
     d.foreach{x => acc += x}
     acc.value should be (210)
+
+
+    val longAcc = sc.accumulator(0l)
+    val maxInt = Integer.MAX_VALUE.toLong
+    d.foreach{x => longAcc += maxInt + x}
+    longAcc.value should be (210l + maxInt * 20)
   }
 
   test ("value not assignable from tasks") {
@@ -53,10 +47,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       for (i <- 1 to maxI) {
         v should contain(i)
       }
-      sc.stop()
-      sc = null
-      // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-      System.clearProperty("spark.master.port")
+      resetSparkContext()
     }
   }
 
@@ -86,10 +77,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
           x => acc.value += x
         }
       } should produce [SparkException]
-      sc.stop()
-      sc = null
-      // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-      System.clearProperty("spark.master.port")
+      resetSparkContext()
     }
   }
 
@@ -115,10 +103,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
         bufferAcc.value should contain(i)
         mapAcc.value should contain (i -> i.toString)
       }
-      sc.stop()
-      sc = null
-      // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-      System.clearProperty("spark.master.port")
+      resetSparkContext()
     }
   }
 
@@ -134,8 +119,7 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
         x => acc.localValue ++= x
       }
       acc.value should be ( (0 to maxI).toSet)
-      sc.stop()
-      sc = null      
+      resetSparkContext()
     }
   }
 

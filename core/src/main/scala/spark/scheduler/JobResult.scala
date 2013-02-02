@@ -5,5 +5,5 @@ package spark.scheduler
  */
 private[spark] sealed trait JobResult
 
-private[spark] case class JobSucceeded(results: Seq[_]) extends JobResult
+private[spark] case object JobSucceeded extends JobResult
 private[spark] case class JobFailed(exception: Exception) extends JobResult

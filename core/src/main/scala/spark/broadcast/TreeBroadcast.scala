@@ -98,7 +98,7 @@ extends Broadcast[T](id) with Logging with Serializable {
 
         case None =>
           logInfo("Started reading broadcast variable " + id)
-          // Initializing everything because Master will only send null/0 values
+          // Initializing everything because Driver will only send null/0 values
           // Only the 1st worker in a node can be here. Others will get from cache
           initializeWorkerVariables()
 
@@ -157,55 +157,55 @@ extends Broadcast[T](id) with Logging with Serializable {
       listenPortLock.synchronized { listenPortLock.wait() }
     }
 
-    var clientSocketToMaster: Socket = null
-    var oosMaster: ObjectOutputStream = null
-    var oisMaster: ObjectInputStream = null
+    var clientSocketToDriver: Socket = null
+    var oosDriver: ObjectOutputStream = null
+    var oisDriver: ObjectInputStream = null
 
     // Connect and receive broadcast from the specified source, retrying the
     // specified number of times in case of failures
     var retriesLeft = MultiTracker.MaxRetryCount
     do {
-      // Connect to Master and send this worker's Information
-      clientSocketToMaster = new Socket(MultiTracker.MasterHostAddress, gInfo.listenPort)
-      oosMaster = new ObjectOutputStream(clientSocketToMaster.getOutputStream)
-      oosMaster.flush()
-      oisMaster = new ObjectInputStream(clientSocketToMaster.getInputStream)
+      // Connect to Driver and send this worker's Information
+      clientSocketToDriver = new Socket(MultiTracker.DriverHostAddress, gInfo.listenPort)
+      oosDriver = new ObjectOutputStream(clientSocketToDriver.getOutputStream)
+      oosDriver.flush()
+      oisDriver = new ObjectInputStream(clientSocketToDriver.getInputStream)
 
-      logDebug("Connected to Master's guiding object")
+      logDebug("Connected to Driver's guiding object")
 
       // Send local source information
-      oosMaster.writeObject(SourceInfo(hostAddress, listenPort))
-      oosMaster.flush()
+      oosDriver.writeObject(SourceInfo(hostAddress, listenPort))
+      oosDriver.flush()
 
-      // Receive source information from Master
-      var sourceInfo = oisMaster.readObject.asInstanceOf[SourceInfo]
+      // Receive source information from Driver
+      var sourceInfo = oisDriver.readObject.asInstanceOf[SourceInfo]
       totalBlocks = sourceInfo.totalBlocks
       arrayOfBlocks = new Array[BroadcastBlock](totalBlocks)
       totalBlocksLock.synchronized { totalBlocksLock.notifyAll() }
       totalBytes = sourceInfo.totalBytes
 
-      logDebug("Received SourceInfo from Master:" + sourceInfo + " My Port: " + listenPort)
+      logDebug("Received SourceInfo from Driver:" + sourceInfo + " My Port: " + listenPort)
 
       val start = System.nanoTime
       val receptionSucceeded = receiveSingleTransmission(sourceInfo)
       val time = (System.nanoTime - start) / 1e9
 
-      // Updating some statistics in sourceInfo. Master will be using them later
+      // Updating some statistics in sourceInfo. Driver will be using them later
       if (!receptionSucceeded) {
         sourceInfo.receptionFailed = true
       }
 
-      // Send back statistics to the Master
-      oosMaster.writeObject(sourceInfo)
+      // Send back statistics to the Driver
+      oosDriver.writeObject(sourceInfo)
 
-      if (oisMaster != null) {
-        oisMaster.close()
+      if (oisDriver != null) {
+        oisDriver.close()
       }
-      if (oosMaster != null) {
-        oosMaster.close()
+      if (oosDriver != null) {
+        oosDriver.close()
       }
-      if (clientSocketToMaster != null) {
-        clientSocketToMaster.close()
+      if (clientSocketToDriver != null) {
+        clientSocketToDriver.close()
       }
 
       retriesLeft -= 1
@@ -552,7 +552,7 @@ extends Broadcast[T](id) with Logging with Serializable {
       }
 
       private def sendObject() {
-        // Wait till receiving the SourceInfo from Master
+        // Wait till receiving the SourceInfo from Driver
         while (totalBlocks == -1) {
           totalBlocksLock.synchronized { totalBlocksLock.wait() }
         }
@@ -576,7 +576,7 @@ extends Broadcast[T](id) with Logging with Serializable {
 
 private[spark] class TreeBroadcastFactory
 extends BroadcastFactory {
-  def initialize(isMaster: Boolean) { MultiTracker.initialize(isMaster) }
+  def initialize(isDriver: Boolean) { MultiTracker.initialize(isDriver) }
 
   def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
     new TreeBroadcast[T](value_, isLocal, id)

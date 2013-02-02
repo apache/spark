@@ -30,7 +30,7 @@ private[spark] class Executor extends Logging {
 
   initLogging()
 
-  def initialize(slaveHostname: String, properties: Seq[(String, String)]) {
+  def initialize(executorId: String, slaveHostname: String, properties: Seq[(String, String)]) {
     // Make sure the local hostname we report matches the cluster scheduler's name for this host
     Utils.setCustomHostname(slaveHostname)
 
@@ -64,7 +64,7 @@ private[spark] class Executor extends Logging {
     )
 
     // Initialize Spark environment (using system properties read above)
-    env = SparkEnv.createFromSystemProperties(slaveHostname, 0, false, false)
+    env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
     SparkEnv.set(env)
 
     // Start worker thread pool
@@ -159,22 +159,24 @@ private[spark] class Executor extends Logging {
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
-    // Fetch missing dependencies
-    for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name + " with timestamp " + timestamp)
-      Utils.fetchFile(name, new File("."))
-      currentFiles(name) = timestamp
-    }
-    for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name + " with timestamp " + timestamp)
-      Utils.fetchFile(name, new File("."))
-      currentJars(name) = timestamp
-      // Add it to our class loader
-      val localName = name.split("/").last
-      val url = new File(".", localName).toURI.toURL
-      if (!urlClassLoader.getURLs.contains(url)) {
-        logInfo("Adding " + url + " to class loader")
-        urlClassLoader.addURL(url)
+    synchronized {
+      // Fetch missing dependencies
+      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
+        currentFiles(name) = timestamp
+      }
+      for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
+        currentJars(name) = timestamp
+        // Add it to our class loader
+        val localName = name.split("/").last
+        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
+        if (!urlClassLoader.getURLs.contains(url)) {
+          logInfo("Adding " + url + " to class loader")
+          urlClassLoader.addURL(url)
+        }
       }
     }
   }

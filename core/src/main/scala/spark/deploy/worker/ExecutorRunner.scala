@@ -65,9 +65,9 @@ private[spark] class ExecutorRunner(
     }
   }
 
-  /** Replace variables such as {{SLAVEID}} and {{CORES}} in a command argument passed to us */
+  /** Replace variables such as {{EXECUTOR_ID}} and {{CORES}} in a command argument passed to us */
   def substituteVariables(argument: String): String = argument match {
-    case "{{SLAVEID}}" => workerId
+    case "{{EXECUTOR_ID}}" => execId.toString
     case "{{HOSTNAME}}" => hostname
     case "{{CORES}}" => cores.toString
     case other => other
@@ -105,11 +105,6 @@ private[spark] class ExecutorRunner(
       if (!executorDir.mkdirs()) {
         throw new IOException("Failed to create directory " + executorDir)
       }
-
-      // Download the files it depends on into it (disabled for now)
-      //for (url <- jobDesc.fileUrls) {
-      //  fetchFile(url, executorDir)
-      //}
 
       // Launch the process
       val command = buildCommandSeq()

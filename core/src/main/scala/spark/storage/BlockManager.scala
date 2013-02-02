@@ -16,7 +16,7 @@ import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
-import spark.{CacheTracker, Logging, SizeEstimator, SparkEnv, SparkException, Utils}
+import spark.{Logging, SizeEstimator, SparkEnv, SparkException, Utils}
 import spark.network._
 import spark.serializer.Serializer
 import spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStampedHashMap}
@@ -30,6 +30,7 @@ extends Exception(message)
 
 private[spark]
 class BlockManager(
+    executorId: String,
     actorSystem: ActorSystem,
     val master: BlockManagerMaster,
     val serializer: Serializer,
@@ -68,11 +69,8 @@ class BlockManager(
   val connectionManager = new ConnectionManager(0)
   implicit val futureExecContext = connectionManager.futureExecContext
 
-  val connectionManagerId = connectionManager.id
-  val blockManagerId = new BlockManagerId(connectionManagerId.host, connectionManagerId.port)
-
-  // TODO: This will be removed after cacheTracker is removed from the code base.
-  var cacheTracker: CacheTracker = null
+  val blockManagerId = BlockManagerId(
+    executorId, connectionManager.id.host, connectionManager.id.port)
 
   // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
   // for receiving shuffle outputs)
@@ -93,7 +91,10 @@ class BlockManager(
   val slaveActor = master.actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
     name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
 
-  @volatile private var shuttingDown = false
+  // Pending reregistration action being executed asynchronously or null if none
+  // is pending. Accesses should synchronize on asyncReregisterLock.
+  var asyncReregisterTask: Future[Unit] = null
+  val asyncReregisterLock = new Object
 
   private def heartBeat() {
     if (!master.sendHeartBeat(blockManagerId)) {
@@ -109,8 +110,9 @@ class BlockManager(
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
    */
-  def this(actorSystem: ActorSystem, master: BlockManagerMaster, serializer: Serializer) = {
-    this(actorSystem, master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
+  def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
+           serializer: Serializer) = {
+    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
   }
 
   /**
@@ -150,12 +152,40 @@ class BlockManager(
   /**
    * Reregister with the master and report all blocks to it. This will be called by the heart beat
    * thread if our heartbeat to the block amnager indicates that we were not registered.
+   *
+   * Note that this method must be called without any BlockInfo locks held.
    */
   def reregister() {
     // TODO: We might need to rate limit reregistering.
     logInfo("BlockManager reregistering with master")
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
     reportAllBlocks()
+  }
+
+  /**
+   * Reregister with the master sometime soon.
+   */
+  def asyncReregister() {
+    asyncReregisterLock.synchronized {
+      if (asyncReregisterTask == null) {
+        asyncReregisterTask = Future[Unit] {
+          reregister()
+          asyncReregisterLock.synchronized {
+            asyncReregisterTask = null
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * For testing. Wait for any pending asynchronous reregistration; otherwise, do nothing.
+   */
+  def waitForAsyncReregister() {
+    val task = asyncReregisterTask
+    if (task != null) {
+      Await.ready(task, Duration.Inf)
+    }
   }
 
   /**
@@ -173,7 +203,7 @@ class BlockManager(
     if (needReregister) {
       logInfo("Got told to reregister updating block " + blockId)
       // Reregistering will report our new block for free.
-      reregister()
+      asyncReregister()
     }
     logDebug("Told master about block " + blockId)
   }
@@ -191,7 +221,7 @@ class BlockManager(
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
-          val storageLevel = new StorageLevel(onDisk, inMem, level.deserialized, level.replication)
+          val storageLevel = StorageLevel(onDisk, inMem, level.deserialized, level.replication)
           val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
           val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
           (storageLevel, memSize, diskSize, info.tellMaster)
@@ -213,7 +243,7 @@ class BlockManager(
     val startTimeMs = System.currentTimeMillis
     var managers = master.getLocations(blockId)
     val locations = managers.map(_.ip)
-    logDebug("Get block locations in " + Utils.getUsedTimeMs(startTimeMs))
+    logDebug("Got block locations in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
 
@@ -223,7 +253,7 @@ class BlockManager(
   def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
     val startTimeMs = System.currentTimeMillis
     val locations = master.getLocations(blockIds).map(_.map(_.ip).toSeq).toArray
-    logDebug("Get multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
+    logDebug("Got multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
 
@@ -615,7 +645,7 @@ class BlockManager(
     var size = 0L
 
     myInfo.synchronized {
-      logDebug("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
+      logTrace("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
         + " to get into synchronized block")
 
       if (level.useMemory) {
@@ -647,8 +677,10 @@ class BlockManager(
     }
     logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))
 
+
     // Replicate block if required
     if (level.replication > 1) {
+      val remoteStartTime = System.currentTimeMillis
       // Serialize the block if not already done
       if (bytesAfterPut == null) {
         if (valuesAfterPut == null) {
@@ -658,15 +690,9 @@ class BlockManager(
         bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
       }
       replicate(blockId, bytesAfterPut, level)
+      logDebug("Put block " + blockId + " remotely took " + Utils.getUsedTimeMs(remoteStartTime))
     }
-
     BlockManager.dispose(bytesAfterPut)
-
-    // TODO: This code will be removed when CacheTracker is gone.
-    if (blockId.startsWith("rdd")) {
-      notifyCacheTracker(blockId)
-    }
-    logDebug("Put block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs))
 
     return size
   }
@@ -733,11 +759,6 @@ class BlockManager(
       }
     }
 
-    // TODO: This code will be removed when CacheTracker is gone.
-    if (blockId.startsWith("rdd")) {
-      notifyCacheTracker(blockId)
-    }
-
     // If replication had started, then wait for it to finish
     if (level.replication > 1) {
       if (replicationFuture == null) {
@@ -760,8 +781,7 @@ class BlockManager(
    */
   var cachedPeers: Seq[BlockManagerId] = null
   private def replicate(blockId: String, data: ByteBuffer, level: StorageLevel) {
-    val tLevel: StorageLevel =
-      new StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
+    val tLevel = StorageLevel(level.useDisk, level.useMemory, level.deserialized, 1)
     if (cachedPeers == null) {
       cachedPeers = master.getPeers(blockManagerId, level.replication - 1)
     }
@@ -777,16 +797,6 @@ class BlockManager(
       logDebug("Replicated BlockId " + blockId + " once used " +
         (System.nanoTime - start) / 1e6 + " s; The size of the data is " +
         data.limit() + " bytes.")
-    }
-  }
-
-  // TODO: This code will be removed when CacheTracker is gone.
-  private def notifyCacheTracker(key: String) {
-    if (cacheTracker != null) {
-      val rddInfo = key.split("_")
-      val rddId: Int = rddInfo(1).toInt
-      val partition: Int = rddInfo(2).toInt
-      cacheTracker.notifyFromBlockManager(spark.AddedToCache(rddId, partition, host))
     }
   }
 
@@ -940,6 +950,7 @@ class BlockManager(
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
+    metadataCleaner.cancel()
     logInfo("BlockManager stopped")
   }
 }
@@ -968,7 +979,7 @@ object BlockManager extends Logging {
    */
   def dispose(buffer: ByteBuffer) {
     if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
-      logDebug("Unmapping " + buffer)
+      logTrace("Unmapping " + buffer)
       if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
         buffer.asInstanceOf[DirectBuffer].cleaner().clean()
       }

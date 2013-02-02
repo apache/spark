@@ -119,10 +119,10 @@ private[spark] class Worker(
       logError("Worker registration failed: " + message)
       System.exit(1)
 
-    case LaunchExecutor(jobId, execId, jobDesc, cores_, memory_) =>
+    case LaunchExecutor(jobId, execId, jobDesc, cores_, memory_, execSparkHome_) =>
       logInfo("Asked to launch executor %s/%d for %s".format(jobId, execId, jobDesc.name))
       val manager = new ExecutorRunner(
-        jobId, execId, jobDesc, cores_, memory_, self, workerId, ip, sparkHome, workDir)
+        jobId, execId, jobDesc, cores_, memory_, self, workerId, ip, new File(execSparkHome_), workDir)
       executors(jobId + "/" + execId) = manager
       manager.start()
       coresUsed += cores_
@@ -134,7 +134,9 @@ private[spark] class Worker(
       val fullId = jobId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         val executor = executors(fullId)
-        logInfo("Executor " + fullId + " finished with state " + state)
+        logInfo("Executor " + fullId + " finished with state " + state +
+          message.map(" message " + _).getOrElse("") +
+          exitStatus.map(" exitStatus " + _).getOrElse(""))
         finishedExecutors(fullId) = executor
         executors -= fullId
         coresUsed -= executor.cores
@@ -143,9 +145,13 @@ private[spark] class Worker(
 
     case KillExecutor(jobId, execId) =>
       val fullId = jobId + "/" + execId
-      val executor = executors(fullId)
-      logInfo("Asked to kill executor " + fullId)
-      executor.kill()
+      executors.get(fullId) match {
+        case Some(executor) =>
+          logInfo("Asked to kill executor " + fullId)
+          executor.kill()
+        case None =>
+          logInfo("Asked to kill unknown executor " + fullId)
+      }
 
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       masterDisconnected()

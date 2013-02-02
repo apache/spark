@@ -15,41 +15,28 @@ import scala.collection.mutable.ArrayBuffer
 import SparkContext._
 import storage.StorageLevel
 
-class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
+class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"
 
-  @transient var sc: SparkContext = _
-
   after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
     System.clearProperty("spark.reducer.maxMbInFlight")
     System.clearProperty("spark.storage.memoryFraction")
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
   }
 
   test("local-cluster format") {
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[2, 1, 512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
-    sc = null
+    resetSparkContext()
   }
 
   test("simple groupByKey") {
@@ -188,4 +175,73 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     val values = sc.parallelize(1 to 2, 2).map(x => System.getenv("TEST_VAR")).collect()
     assert(values.toSeq === Seq("TEST_VALUE", "TEST_VALUE"))
   }
+
+  test("recover from node failures") {
+    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    DistributedSuite.amMaster = true
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(Seq(true, true), 2)
+    assert(data.count === 2) // force executors to start
+    val masterId = SparkEnv.get.blockManager.blockManagerId
+    assert(data.map(markNodeIfIdentity).collect.size === 2)
+    assert(data.map(failOnMarkedIdentity).collect.size === 2)
+  }
+
+  test("recover from repeated node failures during shuffle-map") {
+    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    DistributedSuite.amMaster = true
+    sc = new SparkContext(clusterUrl, "test")
+    for (i <- 1 to 3) {
+      val data = sc.parallelize(Seq(true, false), 2)
+      assert(data.count === 2)
+      assert(data.map(markNodeIfIdentity).collect.size === 2)
+      assert(data.map(failOnMarkedIdentity).map(x => x -> x).groupByKey.count === 2)
+    }
+  }
+
+  test("recover from repeated node failures during shuffle-reduce") {
+    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    DistributedSuite.amMaster = true
+    sc = new SparkContext(clusterUrl, "test")
+    for (i <- 1 to 3) {
+      val data = sc.parallelize(Seq(true, true), 2)
+      assert(data.count === 2)
+      assert(data.map(markNodeIfIdentity).collect.size === 2)
+      // This relies on mergeCombiners being used to perform the actual reduce for this
+      // test to actually be testing what it claims.
+      val grouped = data.map(x => x -> x).combineByKey(
+                      x => x,
+                      (x: Boolean, y: Boolean) => x,
+                      (x: Boolean, y: Boolean) => failOnMarkedIdentity(x)
+                    )
+      assert(grouped.collect.size === 1)
+    }
+  }
+}
+
+object DistributedSuite {
+  // Indicates whether this JVM is marked for failure.
+  var mark = false
+  
+  // Set by test to remember if we are in the driver program so we can assert
+  // that we are not.
+  var amMaster = false
+
+  // Act like an identity function, but if the argument is true, set mark to true.
+  def markNodeIfIdentity(item: Boolean): Boolean = {
+    if (item) {
+      assert(!amMaster)
+      mark = true
+    }
+    item
+  }
+
+  // Act like an identity function, but if mark was set to true previously, fail,
+  // crashing the entire JVM.
+  def failOnMarkedIdentity(item: Boolean): Boolean = {
+    if (mark) { 
+      System.exit(42)
+    } 
+    item
+  } 
 }

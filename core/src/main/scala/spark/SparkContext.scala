@@ -1,12 +1,15 @@
 package spark
 
 import java.io._
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.{URI, URLClassLoader}
+import java.lang.ref.WeakReference
 
 import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.JavaConversions._
 
 import akka.actor.Actor
 import akka.actor.Actor._
@@ -36,15 +39,13 @@ import spark.broadcast._
 import spark.deploy.LocalSparkCluster
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.rdd.HadoopRDD
-import spark.rdd.NewHadoopRDD
-import spark.rdd.UnionRDD
-import spark.scheduler.ShuffleMapTask
-import spark.scheduler.DAGScheduler
-import spark.scheduler.TaskScheduler
+import rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD}
+import scheduler.{ResultTask, ShuffleMapTask, DAGScheduler, TaskScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
+import storage.BlockManagerUI
+import util.{MetadataCleaner, TimeStampedHashMap}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -58,53 +59,48 @@ import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend
  * @param environment Environment variables to set on worker nodes.
  */
 class SparkContext(
-    master: String,
-    jobName: String,
-    val sparkHome: String,
-    jars: Seq[String],
-    environment: Map[String, String])
+    val master: String,
+    val jobName: String,
+    val sparkHome: String = null,
+    val jars: Seq[String] = Nil,
+    environment: Map[String, String] = Map())
   extends Logging {
-
-  /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
-   * @param sparkHome Location where Spark is installed on cluster nodes.
-   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
-   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
-   */
-  def this(master: String, jobName: String, sparkHome: String, jars: Seq[String]) =
-    this(master, jobName, sparkHome, jars, Map())
-
-  /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
-   */
-  def this(master: String, jobName: String) = this(master, jobName, null, Nil, Map())
 
   // Ensure logging is initialized before we spawn any threads
   initLogging()
 
-  // Set Spark master host and port system properties
-  if (System.getProperty("spark.master.host") == null) {
-    System.setProperty("spark.master.host", Utils.localIpAddress)
+  // Set Spark driver host and port system properties
+  if (System.getProperty("spark.driver.host") == null) {
+    System.setProperty("spark.driver.host", Utils.localIpAddress)
   }
-  if (System.getProperty("spark.master.port") == null) {
-    System.setProperty("spark.master.port", "0")
+  if (System.getProperty("spark.driver.port") == null) {
+    System.setProperty("spark.driver.port", "0")
   }
 
   private val isLocal = (master == "local" || master.startsWith("local["))
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createFromSystemProperties(
-    System.getProperty("spark.master.host"),
-    System.getProperty("spark.master.port").toInt,
+    "<driver>",
+    System.getProperty("spark.driver.host"),
+    System.getProperty("spark.driver.port").toInt,
     true,
     isLocal)
   SparkEnv.set(env)
 
+  // Start the BlockManager UI
+  private[spark] val ui = new BlockManagerUI(
+    env.actorSystem, env.blockManager.master.driverActor, this)
+  ui.start()
+
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
+
+  // Keeps track of all persisted RDDs
+  private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]()
+  private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
+
 
   // Add each JAR given through the constructor
   jars.foreach { addJar(_) }
@@ -131,6 +127,8 @@ class SparkContext(
     val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """(spark://.*)""".r
+    //Regular expression for connection to Mesos cluster
+    val MESOS_REGEX = """(mesos://.*)""".r
 
     master match {
       case "local" =>
@@ -171,6 +169,9 @@ class SparkContext(
         scheduler
 
       case _ =>
+        if (MESOS_REGEX.findFirstIn(master).isEmpty) {
+          logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
+        }
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
@@ -188,16 +189,45 @@ class SparkContext(
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
 
+  /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
+  val hadoopConfiguration = {
+    val conf = new Configuration()
+    // Explicitly check for S3 environment variables
+    if (System.getenv("AWS_ACCESS_KEY_ID") != null && System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
+      conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
+      conf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
+      conf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+      conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+    }
+    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
+    for (key <- System.getProperties.toMap[String, String].keys if key.startsWith("spark.hadoop.")) {
+      conf.set(key.substring("spark.hadoop.".length), System.getProperty(key))
+    }
+    val bufferSize = System.getProperty("spark.buffer.size", "65536")
+    conf.set("io.file.buffer.size", bufferSize)
+    conf
+  }
+
+  private[spark] var checkpointDir: Option[String] = None
+
   // Methods for creating RDDs
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
-    new ParallelCollection[T](this, seq, numSlices)
+    new ParallelCollection[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
   /** Distribute a local Scala collection to form an RDD. */
   def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     parallelize(seq, numSlices)
+  }
+
+  /** Distribute a local Scala collection to form an RDD, with one or more
+    * location preferences (hostnames of Spark nodes) for each object.
+    * Create a new partition for each collection item. */
+   def makeRDD[T: ClassManifest](seq: Seq[(T, Seq[String])]): RDD[T] = {
+    val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
+    new ParallelCollection[T](this, seq.map(_._1), seq.size, indexToPrefs)
   }
 
   /**
@@ -232,10 +262,8 @@ class SparkContext(
       valueClass: Class[V],
       minSplits: Int = defaultMinSplits
       ) : RDD[(K, V)] = {
-    val conf = new JobConf()
+    val conf = new JobConf(hadoopConfiguration)
     FileInputFormat.setInputPaths(conf, path)
-    val bufferSize = System.getProperty("spark.buffer.size", "65536")
-    conf.set("io.file.buffer.size", bufferSize)
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
   }
 
@@ -276,8 +304,7 @@ class SparkContext(
         path,
         fm.erasure.asInstanceOf[Class[F]],
         km.erasure.asInstanceOf[Class[K]],
-        vm.erasure.asInstanceOf[Class[V]],
-        new Configuration)
+        vm.erasure.asInstanceOf[Class[V]])
   }
 
   /**
@@ -289,7 +316,7 @@ class SparkContext(
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration): RDD[(K, V)] = {
+      conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
@@ -301,7 +328,7 @@ class SparkContext(
    * and extra configuration options to pass to the input format.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
-      conf: Configuration,
+      conf: Configuration = hadoopConfiguration,
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V]): RDD[(K, V)] = {
@@ -366,6 +393,13 @@ class SparkContext(
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
 
+
+  protected[spark] def checkpointFile[T: ClassManifest](
+      path: String
+    ): RDD[T] = {
+    new CheckpointRDD[T](this, path)
+  }
+
   /** Build the union of a list of RDDs. */
   def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
 
@@ -377,14 +411,14 @@ class SparkContext(
 
   /**
    * Create an [[spark.Accumulator]] variable of a given type, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
 
   /**
    * Create an [[spark.Accumulable]] shared variable, to which tasks can add values with `+=`.
-   * Only the master can access the accumuable's `value`.
+   * Only the driver can access the accumuable's `value`.
    * @tparam T accumulator type
    * @tparam R type that can be added to the accumulator
    */
@@ -409,9 +443,10 @@ class SparkContext(
   def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
 
   /**
-   * Add a file to be downloaded into the working directory of this Spark job on every node.
+   * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), or an HTTP, HTTPS or FTP URI.
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(path)` to find its download location.
    */
   def addFile(path: String) {
     val uri = new URI(path)
@@ -424,7 +459,7 @@ class SparkContext(
     // Fetch the file locally in case a job is executed locally.
     // Jobs that run through LocalScheduler will already fetch the required dependencies,
     // but jobs run in DAGScheduler.runLocally() will not so we must fetch the files here.
-    Utils.fetchFile(path, new File("."))
+    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory))
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
   }
@@ -472,17 +507,23 @@ class SparkContext(
 
   /** Shut down the SparkContext. */
   def stop() {
-    dagScheduler.stop()
-    dagScheduler = null
-    taskScheduler = null
-    // TODO: Cache.stop()?
-    env.stop()
-    // Clean up locally linked files
-    clearFiles()
-    clearJars()
-    SparkEnv.set(null)
-    ShuffleMapTask.clearCache()
-    logInfo("Successfully stopped SparkContext")
+    if (dagScheduler != null) {
+      metadataCleaner.cancel()
+      dagScheduler.stop()
+      dagScheduler = null
+      taskScheduler = null
+      // TODO: Cache.stop()?
+      env.stop()
+      // Clean up locally linked files
+      clearFiles()
+      clearJars()
+      SparkEnv.set(null)
+      ShuffleMapTask.clearCache()
+      ResultTask.clearCache()
+      logInfo("Successfully stopped SparkContext")
+    } else {
+      logInfo("SparkContext already stopped")
+    }
   }
 
   /**
@@ -503,10 +544,30 @@ class SparkContext(
   }
 
   /**
-   * Run a function on a given set of partitions in an RDD and return the results. This is the main
-   * entry point to the scheduler, by which all actions get launched. The allowLocal flag specifies
-   * whether the scheduler can run the computation on the master rather than shipping it out to the
-   * cluster, for short actions like first().
+   * Run a function on a given set of partitions in an RDD and pass the results to the given
+   * handler function. This is the main entry point for all actions in Spark. The allowLocal
+   * flag specifies whether the scheduler can run the computation on the driver rather than
+   * shipping it out to the cluster, for short actions like first().
+   */
+  def runJob[T, U: ClassManifest](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      allowLocal: Boolean,
+      resultHandler: (Int, U) => Unit) {
+    val callSite = Utils.getSparkCallSite
+    logInfo("Starting job: " + callSite)
+    val start = System.nanoTime
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler)
+    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    rdd.doCheckpoint()
+    result
+  }
+
+  /**
+   * Run a function on a given set of partitions in an RDD and return the results as an array. The
+   * allowLocal flag specifies whether the scheduler can run the computation on the driver rather
+   * than shipping it out to the cluster, for short actions like first().
    */
   def runJob[T, U: ClassManifest](
       rdd: RDD[T],
@@ -514,12 +575,9 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean
       ): Array[U] = {
-    val callSite = Utils.getSparkCallSite
-    logInfo("Starting job: " + callSite)
-    val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal)
-    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
-    result
+    val results = new Array[U](partitions.size)
+    runJob[T, U](rdd, func, partitions, allowLocal, (index, res) => results(index) = res)
+    results
   }
 
   /**
@@ -550,6 +608,29 @@ class SparkContext(
   }
 
   /**
+   * Run a job on all partitions in an RDD and pass the results to a handler function.
+   */
+  def runJob[T, U: ClassManifest](
+    rdd: RDD[T],
+    processPartition: (TaskContext, Iterator[T]) => U,
+    resultHandler: (Int, U) => Unit)
+  {
+    runJob[T, U](rdd, processPartition, 0 until rdd.splits.size, false, resultHandler)
+  }
+
+  /**
+   * Run a job on all partitions in an RDD and pass the results to a handler function.
+   */
+  def runJob[T, U: ClassManifest](
+      rdd: RDD[T],
+      processPartition: Iterator[T] => U,
+      resultHandler: (Int, U) => Unit)
+  {
+    val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
+    runJob[T, U](rdd, processFunc, 0 until rdd.splits.size, false, resultHandler)
+  }
+
+  /**
    * Run a job that can return approximate results.
    */
   def runApproximateJob[T, U, R](
@@ -575,6 +656,26 @@ class SparkContext(
     return f
   }
 
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists and useExisting is set to true, then the
+   * exisiting directory will be used. Otherwise an exception will be thrown to
+   * prevent accidental overriding of checkpoint files in the existing directory.
+   */
+  def setCheckpointDir(dir: String, useExisting: Boolean = false) {
+    val path = new Path(dir)
+    val fs = path.getFileSystem(new Configuration())
+    if (!useExisting) {
+      if (fs.exists(path)) {
+        throw new Exception("Checkpoint directory '" + path + "' already exists.")
+      } else {
+        fs.mkdirs(path)
+      }
+    }
+    checkpointDir = Some(dir)
+  }
+
   /** Default level of parallelism to use when not given by user (e.g. for reduce tasks) */
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
@@ -589,6 +690,11 @@ class SparkContext(
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+
+  /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
+  private[spark] def cleanup(cleanupTime: Long) {
+    persistentRdds.clearOldValues(cleanupTime)
+  }
 }
 
 /**
@@ -596,6 +702,7 @@ class SparkContext(
  * various Spark features.
  */
 object SparkContext {
+
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
@@ -604,6 +711,16 @@ object SparkContext {
   implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
+  }
+
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+    def addInPlace(t1: Long, t2: Long) = t1 + t2
+    def zero(initialValue: Long) = 0l
+  }
+
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+    def addInPlace(t1: Float, t2: Float) = t1 + t2
+    def zero(initialValue: Float) = 0f
   }
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings

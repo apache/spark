@@ -9,8 +9,14 @@ import spark.{Logging, Utils}
 
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * Testing class that creates a Spark standalone process in-cluster (that is, running the
+ * spark.deploy.master.Master and spark.deploy.worker.Workers in the same JVMs). Executors launched
+ * by the Workers still run in separate JVMs. This can be used to test distributed operation and
+ * fault recovery without spinning up a lot of processes.
+ */
 private[spark]
-class LocalSparkCluster(numSlaves: Int, coresPerSlave: Int, memoryPerSlave: Int) extends Logging {
+class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int) extends Logging {
   
   val localIpAddress = Utils.localIpAddress
   
@@ -19,33 +25,28 @@ class LocalSparkCluster(numSlaves: Int, coresPerSlave: Int, memoryPerSlave: Int)
   var masterPort : Int = _
   var masterUrl : String = _
   
-  val slaveActorSystems = ArrayBuffer[ActorSystem]()
-  val slaveActors = ArrayBuffer[ActorRef]()
+  val workerActorSystems = ArrayBuffer[ActorSystem]()
+  val workerActors = ArrayBuffer[ActorRef]()
   
   def start() : String = {
-    logInfo("Starting a local Spark cluster with " + numSlaves + " slaves.")
+    logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 
     /* Start the Master */
     val (actorSystem, masterPort) = AkkaUtils.createActorSystem("sparkMaster", localIpAddress, 0)
     masterActorSystem = actorSystem
     masterUrl = "spark://" + localIpAddress + ":" + masterPort
-    val actor = masterActorSystem.actorOf(
+    masterActor = masterActorSystem.actorOf(
       Props(new Master(localIpAddress, masterPort, 0)), name = "Master")
-    masterActor = actor
 
     /* Start the Slaves */
-    for (slaveNum <- 1 to numSlaves) {
-      /* We can pretend to test distributed stuff by giving the slaves distinct hostnames.
-         All of 127/8 should be a loopback, we use 127.100.*.* in hopes that it is
-         sufficiently distinctive. */
-      val slaveIpAddress = "127.100.0." + (slaveNum % 256)
+    for (workerNum <- 1 to numWorkers) {
       val (actorSystem, boundPort) = 
-        AkkaUtils.createActorSystem("sparkWorker" + slaveNum, slaveIpAddress, 0)
-      slaveActorSystems += actorSystem
+        AkkaUtils.createActorSystem("sparkWorker" + workerNum, localIpAddress, 0)
+      workerActorSystems += actorSystem
       val actor = actorSystem.actorOf(
-        Props(new Worker(slaveIpAddress, boundPort, 0, coresPerSlave, memoryPerSlave, masterUrl)),
-        name = "Worker")
-      slaveActors += actor
+        Props(new Worker(localIpAddress, boundPort, 0, coresPerWorker, memoryPerWorker, masterUrl)),
+              name = "Worker")
+      workerActors += actor
     }
 
     return masterUrl
@@ -53,9 +54,9 @@ class LocalSparkCluster(numSlaves: Int, coresPerSlave: Int, memoryPerSlave: Int)
 
   def stop() {
     logInfo("Shutting down local Spark cluster.")
-    // Stop the slaves before the master so they don't get upset that it disconnected
-    slaveActorSystems.foreach(_.shutdown())
-    slaveActorSystems.foreach(_.awaitTermination())
+    // Stop the workers before the master so they don't get upset that it disconnected
+    workerActorSystems.foreach(_.shutdown())
+    workerActorSystems.foreach(_.awaitTermination())
     masterActorSystem.shutdown()
     masterActorSystem.awaitTermination()
   }
