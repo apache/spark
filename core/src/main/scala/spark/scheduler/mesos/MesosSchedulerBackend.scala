@@ -79,7 +79,7 @@ private[spark] class MesosSchedulerBackend(
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(EXECUTOR_MEMORY).build())
+      .setScalar(Value.Scalar.newBuilder().setValue(executorMemory).build())
       .build()
     val command = CommandInfo.newBuilder()
       .setValue(execScript)
@@ -151,7 +151,7 @@ private[spark] class MesosSchedulerBackend(
       def enoughMemory(o: Offer) = {
         val mem = getResource(o.getResourcesList, "mem")
         val slaveId = o.getSlaveId.getValue
-        mem >= EXECUTOR_MEMORY || slaveIdsWithExecutors.contains(slaveId)
+        mem >= executorMemory || slaveIdsWithExecutors.contains(slaveId)
       }
 
       for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
