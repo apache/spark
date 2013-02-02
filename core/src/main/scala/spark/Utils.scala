@@ -12,6 +12,7 @@ import scala.io.Source
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import scala.Some
+import spark.serializer.SerializerInstance
 
 /**
  * Various utility methods used by Spark.
@@ -445,5 +446,12 @@ private object Utils extends Logging {
     val portBound = socket.getLocalPort
     socket.close()
     portBound
+  }
+
+  /**
+   * Clone an object using a Spark serializer.
+   */
+  def clone[T](value: T, serializer: SerializerInstance): T = {
+    serializer.deserialize[T](serializer.serialize(value))
   }
 }

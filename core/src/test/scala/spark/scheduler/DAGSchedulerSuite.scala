@@ -75,7 +75,12 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
    * JobWaiter for the last JobSubmitted event we pushed. To keep tests (most of which
    * will only submit one job) from needing to explicitly track it.
    */
-  var lastJobWaiter: JobWaiter = null
+  var lastJobWaiter: JobWaiter[Int] = null
+
+  /**
+   * Array into which we are accumulating the results from the last job asynchronously.
+   */
+  var lastJobResult: Array[Int] = null
 
   /**
    * Tell EasyMockSugar what mock objects we want to be configured by expecting {...}
@@ -289,25 +294,28 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
    * Start a job to compute the given RDD. Returns the JobWaiter that will
    * collect the result of the job via callbacks from DAGScheduler.
    */
-  def submitRdd(rdd: MyRDD, allowLocal: Boolean = false): JobWaiter = {
+  def submitRdd(rdd: MyRDD, allowLocal: Boolean = false): (JobWaiter[Int], Array[Int]) = {
+    val resultArray = new Array[Int](rdd.splits.size)
     val (toSubmit, waiter) = scheduler.prepareJob[(Int, Int), Int](
         rdd,
         jobComputeFunc,
         (0 to (rdd.splits.size - 1)),
         "test-site",
-        allowLocal
+        allowLocal,
+        (i: Int, value: Int) => resultArray(i) = value
     )
     lastJobWaiter = waiter
+    lastJobResult = resultArray
     runEvent(toSubmit)
-    return waiter
+    return (waiter, resultArray)
   }
 
   /**
    * Assert that a job we started has failed.
    */
-  def expectJobException(waiter: JobWaiter = lastJobWaiter) {
-    waiter.getResult match {
-      case JobSucceeded(_) => fail()
+  def expectJobException(waiter: JobWaiter[Int] = lastJobWaiter) {
+    waiter.awaitResult() match {
+      case JobSucceeded => fail()
       case JobFailed(_) => return
     }
   }
@@ -315,10 +323,11 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   /**
    * Assert that a job we started has succeeded and has the given result.
    */
-  def expectJobResult(expected: Array[Int], waiter: JobWaiter = lastJobWaiter) {
-    waiter.getResult match {
-      case JobSucceeded(answer) =>
-        assert(expected === answer.asInstanceOf[Seq[Int]].toArray )
+  def expectJobResult(expected: Array[Int], waiter: JobWaiter[Int] = lastJobWaiter,
+                      result: Array[Int] = lastJobResult) {
+    waiter.awaitResult match {
+      case JobSucceeded =>
+        assert(expected === result)
       case JobFailed(_) =>
         fail()
     }
@@ -329,7 +338,12 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
 
   test("zero split job") {
     val rdd = makeRdd(0, Nil)
-    assert(scheduler.runJob(rdd, jobComputeFunc, Seq(), "test-site", false) === Array[Int]())
+    var numResults = 0
+    def accumulateResult(partition: Int, value: Int) {
+      numResults += 1
+    }
+    scheduler.runJob(rdd, jobComputeFunc, Seq(), "test-site", false, accumulateResult)
+    assert(numResults === 0)
   }
 
   test("run trivial job") {

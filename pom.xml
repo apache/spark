@@ -505,11 +505,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <activation>
-        <property>
-          <name>!hadoopVersion</name>
-        </property>
-      </activation>
 
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
@@ -527,12 +522,6 @@
 
     <profile>
       <id>hadoop2</id>
-      <activation>
-        <property>
-          <name>hadoopVersion</name>
-          <value>2</value>
-        </property>
-      </activation>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
       </properties>

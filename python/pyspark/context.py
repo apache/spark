@@ -1,8 +1,6 @@
 import os
-import atexit
 import shutil
 import sys
-import tempfile
 from threading import Lock
 from tempfile import NamedTemporaryFile
 
@@ -24,11 +22,10 @@ class SparkContext(object):
     broadcast variables on that cluster.
     """
 
-    gateway = launch_gateway()
-    jvm = gateway.jvm
-    _readRDDFromPickleFile = jvm.PythonRDD.readRDDFromPickleFile
-    _writeIteratorToPickleFile = jvm.PythonRDD.writeIteratorToPickleFile
-    _takePartition = jvm.PythonRDD.takePartition
+    _gateway = None
+    _jvm = None
+    _writeIteratorToPickleFile = None
+    _takePartition = None
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
@@ -56,6 +53,13 @@ class SparkContext(object):
                 raise ValueError("Cannot run multiple SparkContexts at once")
             else:
                 SparkContext._active_spark_context = self
+                if not SparkContext._gateway:
+                    SparkContext._gateway = launch_gateway()
+                    SparkContext._jvm = SparkContext._gateway.jvm
+                    SparkContext._writeIteratorToPickleFile = \
+                        SparkContext._jvm.PythonRDD.writeIteratorToPickleFile
+                    SparkContext._takePartition = \
+                        SparkContext._jvm.PythonRDD.takePartition
         self.master = master
         self.jobName = jobName
         self.sparkHome = sparkHome or None # None becomes null in Py4J
@@ -63,8 +67,8 @@ class SparkContext(object):
         self.batchSize = batchSize  # -1 represents a unlimited batch size
 
         # Create the Java SparkContext through Py4J
-        empty_string_array = self.gateway.new_array(self.jvm.String, 0)
-        self._jsc = self.jvm.JavaSparkContext(master, jobName, sparkHome,
+        empty_string_array = self._gateway.new_array(self._jvm.String, 0)
+        self._jsc = self._jvm.JavaSparkContext(master, jobName, sparkHome,
                                               empty_string_array)
 
         # Create a single Accumulator in Java that we'll send all our updates through;
@@ -72,8 +76,8 @@ class SparkContext(object):
         self._accumulatorServer = accumulators._start_update_server()
         (host, port) = self._accumulatorServer.server_address
         self._javaAccumulator = self._jsc.accumulator(
-                self.jvm.java.util.ArrayList(),
-                self.jvm.PythonAccumulatorParam(host, port))
+                self._jvm.java.util.ArrayList(),
+                self._jvm.PythonAccumulatorParam(host, port))
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         # Broadcast's __reduce__ method stores Broadcast instances here.
@@ -87,6 +91,11 @@ class SparkContext(object):
             self.addPyFile(path)
         SparkFiles._sc = self
         sys.path.append(SparkFiles.getRootDirectory())
+
+        # Create a temporary directory inside spark.local.dir:
+        local_dir = self._jvm.spark.Utils.getLocalDir()
+        self._temp_dir = \
+            self._jvm.spark.Utils.createTempDir(local_dir).getAbsolutePath()
 
     @property
     def defaultParallelism(self):
@@ -120,14 +129,14 @@ class SparkContext(object):
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
-        tempFile = NamedTemporaryFile(delete=False)
-        atexit.register(lambda: os.unlink(tempFile.name))
+        tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
         if self.batchSize != 1:
             c = batched(c, self.batchSize)
         for x in c:
             write_with_length(dump_pickle(x), tempFile)
         tempFile.close()
-        jrdd = self._readRDDFromPickleFile(self._jsc, tempFile.name, numSlices)
+        readRDDFromPickleFile = self._jvm.PythonRDD.readRDDFromPickleFile
+        jrdd = readRDDFromPickleFile(self._jsc, tempFile.name, numSlices)
         return RDD(jrdd, self)
 
     def textFile(self, name, minSplits=None):
@@ -240,7 +249,9 @@ class SparkContext(object):
 
 
 def _test():
+    import atexit
     import doctest
+    import tempfile
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     globs['tempdir'] = tempfile.mkdtemp()

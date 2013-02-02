@@ -950,6 +950,7 @@ class BlockManager(
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
+    metadataCleaner.cancel()
     logInfo("BlockManager stopped")
   }
 }

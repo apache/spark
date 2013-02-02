@@ -43,7 +43,7 @@ public class JavaAPISuite implements Serializable {
     ssc = null;
 
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port");
+    System.clearProperty("spark.driver.port");
   }
 
   @Test

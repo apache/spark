@@ -103,21 +103,27 @@ private[spark] class PythonRDD[T: ClassManifest](
 
       private def read(): Array[Byte] = {
         try {
-          val length = stream.readInt()
-          if (length != -1) {
-            val obj = new Array[Byte](length)
-            stream.readFully(obj)
-            obj
-          } else {
-            // We've finished the data section of the output, but we can still read some
-            // accumulator updates; let's do that, breaking when we get EOFException
-            while (true) {
-              val len2 = stream.readInt()
-              val update = new Array[Byte](len2)
-              stream.readFully(update)
-              accumulator += Collections.singletonList(update)
-            }
-            new Array[Byte](0)
+          stream.readInt() match {
+            case length if length > 0 =>
+              val obj = new Array[Byte](length)
+              stream.readFully(obj)
+              obj
+            case -2 =>
+              // Signals that an exception has been thrown in python
+              val exLength = stream.readInt()
+              val obj = new Array[Byte](exLength)
+              stream.readFully(obj)
+              throw new PythonException(new String(obj))
+            case -1 =>
+              // We've finished the data section of the output, but we can still read some
+              // accumulator updates; let's do that, breaking when we get EOFException
+              while (true) {
+                val len2 = stream.readInt()
+                val update = new Array[Byte](len2)
+                stream.readFully(update)
+                accumulator += Collections.singletonList(update)
+              }
+              new Array[Byte](0)
           }
         } catch {
           case eof: EOFException => {
@@ -139,6 +145,9 @@ private[spark] class PythonRDD[T: ClassManifest](
 
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
+
+/** Thrown for exceptions in user Python code. */
+private class PythonException(msg: String) extends Exception(msg)
 
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
