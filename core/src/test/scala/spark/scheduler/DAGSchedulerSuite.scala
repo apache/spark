@@ -31,7 +31,7 @@ import spark.TaskEndReason
 import spark.{FetchFailed, Success}
 
 /**
- * Tests for DAGScheduler. These tests directly call the event processing functinos in DAGScheduler
+ * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
  * rather than spawning an event loop thread as happens in the real code. They use EasyMock
  * to mock out two classes that DAGScheduler interacts with: TaskScheduler (to which TaskSets are
  * submitted) and BlockManagerMaster (from which cache locations are retrieved and to which dead
@@ -56,29 +56,34 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   var schedulerThread: Thread = null
   var schedulerException: Throwable = null
 
-  /** Set of EasyMock argument matchers that match a TaskSet for a given RDD.
+  /**
+   * Set of EasyMock argument matchers that match a TaskSet for a given RDD.
    * We cache these so we do not create duplicate matchers for the same RDD.
    * This allows us to easily setup a sequence of expectations for task sets for
    * that RDD.
    */
   val taskSetMatchers = new HashMap[MyRDD, IArgumentMatcher]
 
-  /** Set of cache locations to return from our mock BlockManagerMaster.
+  /**
+   * Set of cache locations to return from our mock BlockManagerMaster.
    * Keys are (rdd ID, partition ID). Anything not present will return an empty
    * list of cache locations silently.
    */
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
 
-  /** JobWaiter for the last JobSubmitted event we pushed. To keep tests (most of which
+  /**
+   * JobWaiter for the last JobSubmitted event we pushed. To keep tests (most of which
    * will only submit one job) from needing to explicitly track it.
    */
   var lastJobWaiter: JobWaiter = null
 
-  /** Tell EasyMockSugar what mock objects we want to be configured by expecting {...}
+  /**
+   * Tell EasyMockSugar what mock objects we want to be configured by expecting {...}
    * and whenExecuting {...} */
   implicit val mocks = MockObjects(taskScheduler, blockManagerMaster)
 
-  /** Utility function to reset mocks and set expectations on them. EasyMock wants mock objects
+  /**
+   * Utility function to reset mocks and set expectations on them. EasyMock wants mock objects
    * to be reset after each time their expectations are set, and we tend to check mock object
    * calls over a single call to DAGScheduler.
    *
@@ -115,17 +120,21 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     whenExecuting {
       scheduler.stop()
     }
+    sc.stop()
     System.clearProperty("spark.master.port")
   }
 
   def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)
 
-  /** Type of RDD we use for testing. Note that we should never call the real RDD compute methods.
-   * This is a pair RDD type so it can always be used in ShuffleDependencies. */
+  /**
+   * Type of RDD we use for testing. Note that we should never call the real RDD compute methods.
+   * This is a pair RDD type so it can always be used in ShuffleDependencies.
+   */
   type MyRDD = RDD[(Int, Int)]
 
-  /** Create an RDD for passing to DAGScheduler. These RDDs will use the dependencies and
+  /**
+   * Create an RDD for passing to DAGScheduler. These RDDs will use the dependencies and
    * preferredLocations (if any) that are passed to them. They are deliberately not executable
    * so we can test that DAGScheduler does not try to execute RDDs locally.
    */
@@ -150,7 +159,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
   }
 
-  /** EasyMock matcher method. For use as an argument matcher for a TaskSet whose first task
+  /**
+   * EasyMock matcher method. For use as an argument matcher for a TaskSet whose first task
    * is from a particular RDD.
    */
   def taskSetForRdd(rdd: MyRDD): TaskSet = {
@@ -172,7 +182,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     return null
   }
 
-  /** Setup an EasyMock expectation to repsond to blockManagerMaster.getLocations() called from
+  /**
+   * Setup an EasyMock expectation to repsond to blockManagerMaster.getLocations() called from
    * cacheLocations.
    */
   def expectGetLocations(): Unit = {
@@ -197,7 +208,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }).anyTimes()
   }
 
-  /** Process the supplied event as if it were the top of the DAGScheduler event queue, expecting
+  /**
+   * Process the supplied event as if it were the top of the DAGScheduler event queue, expecting
    * the scheduler not to exit.
    *
    * After processing the event, submit waiting stages as is done on most iterations of the
@@ -208,7 +220,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     scheduler.submitWaitingStages()
   }
 
-  /** Expect a TaskSet for the specified RDD to be submitted to the TaskScheduler. Should be
+  /**
+   * Expect a TaskSet for the specified RDD to be submitted to the TaskScheduler. Should be
    * called from a resetExpecting { ... } block.
    *
    * Returns a easymock Capture that will contain the task set after the stage is submitted.
@@ -220,7 +233,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     return taskSetCapture
   }
 
-  /** Expect the supplied code snippet to submit a stage for the specified RDD.
+  /**
+   * Expect the supplied code snippet to submit a stage for the specified RDD.
    * Return the resulting TaskSet. First marks all the tasks are belonging to the
    * current MapOutputTracker generation.
    */
@@ -239,7 +253,9 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     return taskSet
   }
 
-  /** Send the given CompletionEvent messages for the tasks in the TaskSet. */
+  /**
+   * Send the given CompletionEvent messages for the tasks in the TaskSet.
+   */
   def respondToTaskSet(taskSet: TaskSet, results: Seq[(TaskEndReason, Any)]) {
     assert(taskSet.tasks.size >= results.size)
     for ((result, i) <- results.zipWithIndex) {
@@ -249,7 +265,9 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
   }
 
-  /** Assert that the supplied TaskSet has exactly the given preferredLocations. */
+  /**
+   * Assert that the supplied TaskSet has exactly the given preferredLocations.
+   */
   def expectTaskSetLocations(taskSet: TaskSet, locations: Seq[Seq[String]]) {
     assert(locations.size === taskSet.tasks.size)
     for ((expectLocs, taskLocs) <-
@@ -258,7 +276,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
   }
 
-  /** When we submit dummy Jobs, this is the compute function we supply. Except in a local test
+  /**
+   * When we submit dummy Jobs, this is the compute function we supply. Except in a local test
    * below, we do not expect this function to ever be executed; instead, we will return results
    * directly through CompletionEvents.
    */
@@ -266,8 +285,10 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
      it.next._1.asInstanceOf[Int]
 
 
-  /** Start a job to compute the given RDD. Returns the JobWaiter that will
-   * collect the result of the job via callbacks from DAGScheduler. */
+  /**
+   * Start a job to compute the given RDD. Returns the JobWaiter that will
+   * collect the result of the job via callbacks from DAGScheduler.
+   */
   def submitRdd(rdd: MyRDD, allowLocal: Boolean = false): JobWaiter = {
     val (toSubmit, waiter) = scheduler.prepareJob[(Int, Int), Int](
         rdd,
@@ -281,7 +302,9 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     return waiter
   }
 
-  /** Assert that a job we started has failed. */
+  /**
+   * Assert that a job we started has failed.
+   */
   def expectJobException(waiter: JobWaiter = lastJobWaiter) {
     waiter.getResult match {
       case JobSucceeded(_) => fail()
@@ -289,7 +312,9 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
   }
 
-  /** Assert that a job we started has succeeded and has the given result. */
+  /**
+   * Assert that a job we started has succeeded and has the given result.
+   */
   def expectJobResult(expected: Array[Int], waiter: JobWaiter = lastJobWaiter) {
     waiter.getResult match {
       case JobSucceeded(answer) =>
@@ -500,7 +525,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
       ))
     }
     val recomputeOne = interceptStage(shuffleOneRdd) {
-      scheduler.resubmitFailedStages
+      scheduler.resubmitFailedStages()
     }
     val recomputeTwo = interceptStage(shuffleTwoRdd) {
       respondToTaskSet(recomputeOne, List(
