@@ -43,6 +43,8 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   val numFailures = new Array[Int](numTasks)
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksFinished = 0
+  val creationTime = System.currentTimeMillis
+  var receivedOffers = 0
 
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
@@ -95,6 +97,8 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
   }
+
+  if (!TaskSetManager.firstTaskSet.isDefined) TaskSetManager.firstTaskSet = Some(this)
 
   // Add a task to all the pending-task lists that it should be on.
   private def addPendingTask(index: Int) {
@@ -188,6 +192,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
 
   // Respond to an offer of a single slave from the scheduler by finding a task
   def slaveOffer(execId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
+    receivedOffers += 1
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
       val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
@@ -426,4 +431,8 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     }
     return foundTasks
   }
+}
+
+object TaskSetManager {
+  var firstTaskSet: Option[TaskSetManager] = None
 }
