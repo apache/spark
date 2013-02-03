@@ -205,8 +205,9 @@ class DAGScheduler(
     missing.toList
   }
 
-  /** Returns (and does not) submit a JobSubmitted event suitable to run a given job, and
-   * a JobWaiter whose getResult() method will return the result of the job when it is complete.
+  /**
+   * Returns (and does not submit) a JobSubmitted event suitable to run a given job, and a
+   * JobWaiter whose getResult() method will return the result of the job when it is complete.
    *
    * The job is assumed to have at least one partition; zero partition jobs should be handled
    * without a JobSubmitted event.
@@ -308,7 +309,8 @@ class DAGScheduler(
     return false
   }
 
-  /** Resubmit any failed stages. Ordinarily called after a small amount of time has passed since
+  /**
+   * Resubmit any failed stages. Ordinarily called after a small amount of time has passed since
    * the last fetch failure.
    */
   private[scheduler] def resubmitFailedStages() {
@@ -321,7 +323,8 @@ class DAGScheduler(
     }
   }
   
-  /** Check for waiting or failed stages which are now eligible for resubmission.
+  /**
+   * Check for waiting or failed stages which are now eligible for resubmission.
    * Ordinarily run on every iteration of the event loop.
    */
   private[scheduler] def submitWaitingStages() {
@@ -366,9 +369,9 @@ class DAGScheduler(
       // the same time, so we want to make sure we've identified all the reduce tasks that depend
       // on the failed node.
       if (failed.size > 0 && time > lastFetchFailureTime + RESUBMIT_TIMEOUT) {
-        resubmitFailedStages
+        resubmitFailedStages()
       } else {
-        submitWaitingStages
+        submitWaitingStages()
       }
     }
   }
