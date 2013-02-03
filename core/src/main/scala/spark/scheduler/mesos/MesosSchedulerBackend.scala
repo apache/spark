@@ -29,16 +29,6 @@ private[spark] class MesosSchedulerBackend(
   with MScheduler
   with Logging {
 
-  // Memory used by each executor (in megabytes)
-  val EXECUTOR_MEMORY = {
-    if (System.getenv("SPARK_MEM") != null) {
-      Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
-      // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    } else {
-      512
-    }
-  }
-
   // Lock used to wait for scheduler to be registered
   var isRegistered = false
   val registeredLock = new Object()
@@ -89,7 +79,7 @@ private[spark] class MesosSchedulerBackend(
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(EXECUTOR_MEMORY).build())
+      .setScalar(Value.Scalar.newBuilder().setValue(executorMemory).build())
       .build()
     val command = CommandInfo.newBuilder()
       .setValue(execScript)
@@ -161,7 +151,7 @@ private[spark] class MesosSchedulerBackend(
       def enoughMemory(o: Offer) = {
         val mem = getResource(o.getResourcesList, "mem")
         val slaveId = o.getSlaveId.getValue
-        mem >= EXECUTOR_MEMORY || slaveIdsWithExecutors.contains(slaveId)
+        mem >= executorMemory || slaveIdsWithExecutors.contains(slaveId)
       }
 
       for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {

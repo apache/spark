@@ -35,16 +35,6 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
 
-  // Memory used by each executor (in megabytes)
-  val executorMemory = {
-    if (System.getenv("SPARK_MEM") != null) {
-      Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
-      // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    } else {
-      512
-    }
-  }
-
   // Lock used to wait for scheduler to be registered
   var isRegistered = false
   val registeredLock = new Object()
