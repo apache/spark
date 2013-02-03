@@ -265,7 +265,8 @@ class DAGScheduler(
     return listener.awaitResult()    // Will throw an exception if the job fails
   }
 
-  /** Process one event retrieved from the event queue.
+  /**
+   * Process one event retrieved from the event queue.
    * Returns true if we should stop the event loop.
    */
   private[scheduler] def processEvent(event: DAGSchedulerEvent): Boolean = {
