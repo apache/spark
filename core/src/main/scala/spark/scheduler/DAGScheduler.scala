@@ -23,7 +23,16 @@ import util.{MetadataCleaner, TimeStampedHashMap}
  * and to report fetch failures (the submitTasks method, and code to add CompletionEvents).
  */
 private[spark]
-class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with Logging {
+class DAGScheduler(
+    taskSched: TaskScheduler,
+    mapOutputTracker: MapOutputTracker,
+    blockManagerMaster: BlockManagerMaster,
+    env: SparkEnv)
+  extends TaskSchedulerListener with Logging {
+
+  def this(taskSched: TaskScheduler) {
+    this(taskSched, SparkEnv.get.mapOutputTracker, SparkEnv.get.blockManager.master, SparkEnv.get)
+  }
   taskSched.setListener(this)
 
   // Called by TaskScheduler to report task completions or failures.
@@ -66,10 +75,6 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
-  val env = SparkEnv.get
-  val mapOutputTracker = env.mapOutputTracker
-  val blockManagerMaster = env.blockManager.master
-
   // For tracking failed nodes, we use the MapOutputTracker's generation number, which is
   // sent with every task. When we detect a node failing, we note the current generation number
   // and failed executor, increment it for new tasks, and use this to ignore stray ShuffleMapTask
@@ -90,14 +95,16 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   val metadataCleaner = new MetadataCleaner("DAGScheduler", this.cleanup)
 
   // Start a thread to run the DAGScheduler event loop
-  new Thread("DAGScheduler") {
-    setDaemon(true)
-    override def run() {
-      DAGScheduler.this.run()
-    }
-  }.start()
+  def start() {
+    new Thread("DAGScheduler") {
+      setDaemon(true)
+      override def run() {
+        DAGScheduler.this.run()
+      }
+    }.start()
+  }
 
-  def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
+  private def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.splits.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
       cacheLocs(rdd.id) = blockManagerMaster.getLocations(blockIds).map {
@@ -107,7 +114,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     cacheLocs(rdd.id)
   }
 
-  def clearCacheLocs() {
+  private def clearCacheLocs() {
     cacheLocs.clear()
   }
 
@@ -116,7 +123,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * The priority value passed in will be used if the stage doesn't already exist with
    * a lower priority (we assume that priorities always increase across jobs for now).
    */
-  def getShuffleMapStage(shuffleDep: ShuffleDependency[_,_], priority: Int): Stage = {
+  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_,_], priority: Int): Stage = {
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
@@ -131,11 +138,11 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * as a result stage for the final RDD used directly in an action. The stage will also be given
    * the provided priority.
    */
-  def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_]], priority: Int): Stage = {
-    // Kind of ugly: need to register RDDs with the cache and map output tracker here
-    // since we can't do it in the RDD constructor because # of splits is unknown
-    logInfo("Registering RDD " + rdd.id + " (" + rdd.origin + ")")
+  private def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_]], priority: Int): Stage = {
     if (shuffleDep != None) {
+      // Kind of ugly: need to register RDDs with the cache and map output tracker here
+      // since we can't do it in the RDD constructor because # of splits is unknown
+      logInfo("Registering RDD " + rdd.id + " (" + rdd.origin + ")")
       mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.splits.size)
     }
     val id = nextStageId.getAndIncrement()
@@ -148,7 +155,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * Get or create the list of parent stages for a given RDD. The stages will be assigned the
    * provided priority if they haven't already been created with a lower priority.
    */
-  def getParentStages(rdd: RDD[_], priority: Int): List[Stage] = {
+  private def getParentStages(rdd: RDD[_], priority: Int): List[Stage] = {
     val parents = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
     def visit(r: RDD[_]) {
@@ -170,25 +177,22 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     parents.toList
   }
 
-  def getMissingParentStages(stage: Stage): List[Stage] = {
+  private def getMissingParentStages(stage: Stage): List[Stage] = {
     val missing = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
         visited += rdd
-        val locs = getCacheLocs(rdd)
-        for (p <- 0 until rdd.splits.size) {
-          if (locs(p) == Nil) {
-            for (dep <- rdd.dependencies) {
-              dep match {
-                case shufDep: ShuffleDependency[_,_] =>
-                  val mapStage = getShuffleMapStage(shufDep, stage.priority)
-                  if (!mapStage.isAvailable) {
-                    missing += mapStage
-                  }
-                case narrowDep: NarrowDependency[_] =>
-                  visit(narrowDep.rdd)
-              }
+        if (getCacheLocs(rdd).contains(Nil)) {
+          for (dep <- rdd.dependencies) {
+            dep match {
+              case shufDep: ShuffleDependency[_,_] =>
+                val mapStage = getShuffleMapStage(shufDep, stage.priority)
+                if (!mapStage.isAvailable) {
+                  missing += mapStage
+                }
+              case narrowDep: NarrowDependency[_] =>
+                visit(narrowDep.rdd)
             }
           }
         }
@@ -198,23 +202,45 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     missing.toList
   }
 
+  /**
+   * Returns (and does not submit) a JobSubmitted event suitable to run a given job, and a
+   * JobWaiter whose getResult() method will return the result of the job when it is complete.
+   *
+   * The job is assumed to have at least one partition; zero partition jobs should be handled
+   * without a JobSubmitted event.
+   */
+  private[scheduler] def prepareJob[T, U: ClassManifest](
+      finalRdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      callSite: String,
+      allowLocal: Boolean,
+      resultHandler: (Int, U) => Unit)
+    : (JobSubmitted, JobWaiter[U]) =
+  {
+    assert(partitions.size > 0)
+    val waiter = new JobWaiter(partitions.size, resultHandler)
+    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
+    val toSubmit = JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter)
+    return (toSubmit, waiter)
+  }
+
   def runJob[T, U: ClassManifest](
       finalRdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       callSite: String,
-      allowLocal: Boolean)
-    : Array[U] =
+      allowLocal: Boolean,
+      resultHandler: (Int, U) => Unit)
   {
     if (partitions.size == 0) {
-      return new Array[U](0)
+      return
     }
-    val waiter = new JobWaiter(partitions.size)
-    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    eventQueue.put(JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter))
-    waiter.getResult() match {
-      case JobSucceeded(results: Seq[_]) =>
-        return results.asInstanceOf[Seq[U]].toArray
+    val (toSubmit, waiter) = prepareJob(
+        finalRdd, func, partitions, callSite, allowLocal, resultHandler)
+    eventQueue.put(toSubmit)
+    waiter.awaitResult() match {
+      case JobSucceeded => {}
       case JobFailed(exception: Exception) =>
         logInfo("Failed to run " + callSite)
         throw exception
@@ -233,90 +259,117 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.splits.size).toArray
     eventQueue.put(JobSubmitted(rdd, func2, partitions, false, callSite, listener))
-    return listener.getResult()    // Will throw an exception if the job fails
+    return listener.awaitResult()    // Will throw an exception if the job fails
   }
+
+  /**
+   * Process one event retrieved from the event queue.
+   * Returns true if we should stop the event loop.
+   */
+  private[scheduler] def processEvent(event: DAGSchedulerEvent): Boolean = {
+    event match {
+      case JobSubmitted(finalRDD, func, partitions, allowLocal, callSite, listener) =>
+        val runId = nextRunId.getAndIncrement()
+        val finalStage = newStage(finalRDD, None, runId)
+        val job = new ActiveJob(runId, finalStage, func, partitions, callSite, listener)
+        clearCacheLocs()
+        logInfo("Got job " + job.runId + " (" + callSite + ") with " + partitions.length +
+                " output partitions (allowLocal=" + allowLocal + ")")
+        logInfo("Final stage: " + finalStage + " (" + finalStage.origin + ")")
+        logInfo("Parents of final stage: " + finalStage.parents)
+        logInfo("Missing parents: " + getMissingParentStages(finalStage))
+        if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
+          // Compute very short actions like first() or take() with no parent stages locally.
+          runLocally(job)
+        } else {
+          activeJobs += job
+          resultStageToJob(finalStage) = job
+          submitStage(finalStage)
+        }
+
+      case ExecutorLost(execId) =>
+        handleExecutorLost(execId)
+
+      case completion: CompletionEvent =>
+        handleTaskCompletion(completion)
+
+      case TaskSetFailed(taskSet, reason) =>
+        abortStage(idToStage(taskSet.stageId), reason)
+
+      case StopDAGScheduler =>
+        // Cancel any active jobs
+        for (job <- activeJobs) {
+          val error = new SparkException("Job cancelled because SparkContext was shut down")
+          job.listener.jobFailed(error)
+        }
+        return true
+    }
+    return false
+  }
+
+  /**
+   * Resubmit any failed stages. Ordinarily called after a small amount of time has passed since
+   * the last fetch failure.
+   */
+  private[scheduler] def resubmitFailedStages() {
+    logInfo("Resubmitting failed stages")
+    clearCacheLocs()
+    val failed2 = failed.toArray
+    failed.clear()
+    for (stage <- failed2.sortBy(_.priority)) {
+      submitStage(stage)
+    }
+  }
+  
+  /**
+   * Check for waiting or failed stages which are now eligible for resubmission.
+   * Ordinarily run on every iteration of the event loop.
+   */
+  private[scheduler] def submitWaitingStages() {
+    // TODO: We might want to run this less often, when we are sure that something has become
+    // runnable that wasn't before.
+    logTrace("Checking for newly runnable parent stages")
+    logTrace("running: " + running)
+    logTrace("waiting: " + waiting)
+    logTrace("failed: " + failed)
+    val waiting2 = waiting.toArray
+    waiting.clear()
+    for (stage <- waiting2.sortBy(_.priority)) {
+      submitStage(stage)
+    }
+  }
+
 
   /**
    * The main event loop of the DAG scheduler, which waits for new-job / task-finished / failure
    * events and responds by launching tasks. This runs in a dedicated thread and receives events
    * via the eventQueue.
    */
-  def run() {
+  private def run() {
     SparkEnv.set(env)
 
     while (true) {
       val event = eventQueue.poll(POLL_TIMEOUT, TimeUnit.MILLISECONDS)
-      val time = System.currentTimeMillis() // TODO: use a pluggable clock for testability
       if (event != null) {
         logDebug("Got event of type " + event.getClass.getName)
       }
 
-      event match {
-        case JobSubmitted(finalRDD, func, partitions, allowLocal, callSite, listener) =>
-          val runId = nextRunId.getAndIncrement()
-          val finalStage = newStage(finalRDD, None, runId)
-          val job = new ActiveJob(runId, finalStage, func, partitions, callSite, listener)
-          clearCacheLocs()
-          logInfo("Got job " + job.runId + " (" + callSite + ") with " + partitions.length +
-                  " output partitions")
-          logInfo("Final stage: " + finalStage + " (" + finalStage.origin + ")")
-          logInfo("Parents of final stage: " + finalStage.parents)
-          logInfo("Missing parents: " + getMissingParentStages(finalStage))
-          if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
-            // Compute very short actions like first() or take() with no parent stages locally.
-            runLocally(job)
-          } else {
-            activeJobs += job
-            resultStageToJob(finalStage) = job
-            submitStage(finalStage)
-          }
-
-        case ExecutorLost(execId) =>
-          handleExecutorLost(execId)
-
-        case completion: CompletionEvent =>
-          handleTaskCompletion(completion)
-
-        case TaskSetFailed(taskSet, reason) =>
-          abortStage(idToStage(taskSet.stageId), reason)
-
-        case StopDAGScheduler =>
-          // Cancel any active jobs
-          for (job <- activeJobs) {
-            val error = new SparkException("Job cancelled because SparkContext was shut down")
-            job.listener.jobFailed(error)
-          }
+      if (event != null) {
+        if (processEvent(event)) {
           return
-
-        case null =>
-          // queue.poll() timed out, ignore it
+        }
       }
 
+      val time = System.currentTimeMillis() // TODO: use a pluggable clock for testability
       // Periodically resubmit failed stages if some map output fetches have failed and we have
       // waited at least RESUBMIT_TIMEOUT. We wait for this short time because when a node fails,
       // tasks on many other nodes are bound to get a fetch failure, and they won't all get it at
       // the same time, so we want to make sure we've identified all the reduce tasks that depend
       // on the failed node.
       if (failed.size > 0 && time > lastFetchFailureTime + RESUBMIT_TIMEOUT) {
-        logInfo("Resubmitting failed stages")
-        clearCacheLocs()
-        val failed2 = failed.toArray
-        failed.clear()
-        for (stage <- failed2.sortBy(_.priority)) {
-          submitStage(stage)
-        }
+        resubmitFailedStages()
       } else {
-        // TODO: We might want to run this less often, when we are sure that something has become
-        // runnable that wasn't before.
-        logTrace("Checking for newly runnable parent stages")
-        logTrace("running: " + running)
-        logTrace("waiting: " + waiting)
-        logTrace("failed: " + failed)
-        val waiting2 = waiting.toArray
-        waiting.clear()
-        for (stage <- waiting2.sortBy(_.priority)) {
-          submitStage(stage)
-        }
+        submitWaitingStages()
       }
     }
   }
@@ -326,7 +379,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * We run the operation in a separate thread just in case it takes a bunch of time, so that we
    * don't block the DAGScheduler event loop or other concurrent jobs.
    */
-  def runLocally(job: ActiveJob) {
+  private def runLocally(job: ActiveJob) {
     logInfo("Computing the requested partition locally")
     new Thread("Local computation of job " + job.runId) {
       override def run() {
@@ -349,13 +402,14 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     }.start()
   }
 
-  def submitStage(stage: Stage) {
+  /** Submits stage, but first recursively submits any missing parents. */
+  private def submitStage(stage: Stage) {
     logDebug("submitStage(" + stage + ")")
     if (!waiting(stage) && !running(stage) && !failed(stage)) {
       val missing = getMissingParentStages(stage).sortBy(_.id)
       logDebug("missing: " + missing)
       if (missing == Nil) {
-        logInfo("Submitting " + stage + " (" + stage.origin + "), which has no missing parents")
+        logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
         submitMissingTasks(stage)
         running += stage
       } else {
@@ -367,7 +421,8 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     }
   }
 
-  def submitMissingTasks(stage: Stage) {
+  /** Called when stage's parents are available and we can now do its task. */
+  private def submitMissingTasks(stage: Stage) {
     logDebug("submitMissingTasks(" + stage + ")")
     // Get our pending tasks and remember them in our pendingTasks entry
     val myPending = pendingTasks.getOrElseUpdate(stage, new HashSet)
@@ -388,7 +443,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
       }
     }
     if (tasks.size > 0) {
-      logInfo("Submitting " + tasks.size + " missing tasks from " + stage)
+      logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
       logDebug("New pending tasks: " + myPending)
       taskSched.submitTasks(
@@ -407,7 +462,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
-  def handleTaskCompletion(event: CompletionEvent) {
+  private def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
     val stage = idToStage(task.stageId)
 
@@ -492,7 +547,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
                 waiting --= newlyRunnable
                 running ++= newlyRunnable
                 for (stage <- newlyRunnable.sortBy(_.id)) {
-                  logInfo("Submitting " + stage + " (" + stage.origin + "), which is now runnable")
+                  logInfo("Submitting " + stage + " (" + stage.rdd + "), which is now runnable")
                   submitMissingTasks(stage)
                 }
               }
@@ -541,12 +596,12 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * Optionally the generation during which the failure was caught can be passed to avoid allowing
    * stray fetch failures from possibly retriggering the detection of a node as lost.
    */
-  def handleExecutorLost(execId: String, maybeGeneration: Option[Long] = None) {
+  private def handleExecutorLost(execId: String, maybeGeneration: Option[Long] = None) {
     val currentGeneration = maybeGeneration.getOrElse(mapOutputTracker.getGeneration)
     if (!failedGeneration.contains(execId) || failedGeneration(execId) < currentGeneration) {
       failedGeneration(execId) = currentGeneration
       logInfo("Executor lost: %s (generation %d)".format(execId, currentGeneration))
-      env.blockManager.master.removeExecutor(execId)
+      blockManagerMaster.removeExecutor(execId)
       // TODO: This will be really slow if we keep accumulating shuffle map stages
       for ((shuffleId, stage) <- shuffleToMapStage) {
         stage.removeOutputsOnExecutor(execId)
@@ -567,7 +622,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
    * Aborts all jobs depending on a particular Stage. This is called in response to a task set
    * being cancelled by the TaskScheduler. Use taskSetFailed() to inject this event from outside.
    */
-  def abortStage(failedStage: Stage, reason: String) {
+  private def abortStage(failedStage: Stage, reason: String) {
     val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
@@ -583,7 +638,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
   /**
    * Return true if one of stage's ancestors is target.
    */
-  def stageDependsOn(stage: Stage, target: Stage): Boolean = {
+  private def stageDependsOn(stage: Stage, target: Stage): Boolean = {
     if (stage == target) {
       return true
     }
@@ -610,7 +665,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     visitedRdds.contains(target.rdd)
   }
 
-  def getPreferredLocs(rdd: RDD[_], partition: Int): List[String] = {
+  private def getPreferredLocs(rdd: RDD[_], partition: Int): List[String] = {
     // If the partition is cached, return the cache locations
     val cached = getCacheLocs(rdd)(partition)
     if (cached != Nil) {
@@ -636,7 +691,7 @@ class DAGScheduler(taskSched: TaskScheduler) extends TaskSchedulerListener with 
     return Nil
   }
 
-  def cleanup(cleanupTime: Long) {
+  private def cleanup(cleanupTime: Long) {
     var sizeBefore = idToStage.size
     idToStage.clearOldValues(cleanupTime)
     logInfo("idToStage " + sizeBefore + " --> " + idToStage.size)

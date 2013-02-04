@@ -18,35 +18,23 @@ import scala.collection.mutable.ArrayBuffer
 private[spark]
 class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int) extends Logging {
   
-  val localIpAddress = Utils.localIpAddress
+  private val localIpAddress = Utils.localIpAddress
+  private val masterActorSystems = ArrayBuffer[ActorSystem]()
+  private val workerActorSystems = ArrayBuffer[ActorSystem]()
   
-  var masterActor : ActorRef = _
-  var masterActorSystem : ActorSystem = _
-  var masterPort : Int = _
-  var masterUrl : String = _
-  
-  val workerActorSystems = ArrayBuffer[ActorSystem]()
-  val workerActors = ArrayBuffer[ActorRef]()
-  
-  def start() : String = {
+  def start(): String = {
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 
     /* Start the Master */
-    val (actorSystem, masterPort) = AkkaUtils.createActorSystem("sparkMaster", localIpAddress, 0)
-    masterActorSystem = actorSystem
-    masterUrl = "spark://" + localIpAddress + ":" + masterPort
-    masterActor = masterActorSystem.actorOf(
-      Props(new Master(localIpAddress, masterPort, 0)), name = "Master")
+    val (masterSystem, masterPort) = Master.startSystemAndActor(localIpAddress, 0, 0)
+    masterActorSystems += masterSystem
+    val masterUrl = "spark://" + localIpAddress + ":" + masterPort
 
-    /* Start the Slaves */
+    /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
-      val (actorSystem, boundPort) = 
-        AkkaUtils.createActorSystem("sparkWorker" + workerNum, localIpAddress, 0)
-      workerActorSystems += actorSystem
-      val actor = actorSystem.actorOf(
-        Props(new Worker(localIpAddress, boundPort, 0, coresPerWorker, memoryPerWorker, masterUrl)),
-              name = "Worker")
-      workerActors += actor
+      val (workerSystem, _) = Worker.startSystemAndActor(localIpAddress, 0, 0, coresPerWorker,
+        memoryPerWorker, masterUrl, null, Some(workerNum))
+      workerActorSystems += workerSystem
     }
 
     return masterUrl
@@ -57,7 +45,7 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
     // Stop the workers before the master so they don't get upset that it disconnected
     workerActorSystems.foreach(_.shutdown())
     workerActorSystems.foreach(_.awaitTermination())
-    masterActorSystem.shutdown()
-    masterActorSystem.awaitTermination()
+    masterActorSystems.foreach(_.shutdown())
+    masterActorSystems.foreach(_.awaitTermination())
   }
 }

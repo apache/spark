@@ -1,6 +1,7 @@
 """
 Worker that receives input from Piped RDD.
 """
+import os
 import sys
 import traceback
 from base64 import standard_b64decode
@@ -15,8 +16,8 @@ from pyspark.serializers import write_with_length, read_with_length, write_int, 
 
 
 # Redirect stdout to stderr so that users must return values from functions.
-old_stdout = sys.stdout
-sys.stdout = sys.stderr
+old_stdout = os.fdopen(os.dup(1), 'w')
+os.dup2(2, 1)
 
 
 def load_obj():

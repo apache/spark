@@ -26,7 +26,7 @@ class PySparkTestCase(unittest.TestCase):
         sys.path = self._old_sys_path
         # To avoid Akka rebinding to the same port, since it doesn't unbind
         # immediately on shutdown
-        self.sc.jvm.System.clearProperty("spark.driver.port")
+        self.sc._jvm.System.clearProperty("spark.driver.port")
 
 
 class TestCheckpoint(PySparkTestCase):
@@ -106,6 +106,15 @@ class TestAddFile(PySparkTestCase):
         self.sc.addFile(path)
         from userlibrary import UserClass
         self.assertEqual("Hello World!", UserClass().hello())
+
+
+class TestIO(PySparkTestCase):
+
+    def test_stdout_redirection(self):
+        import subprocess
+        def func(x):
+            subprocess.check_call('ls', shell=True)
+        self.sc.parallelize([1]).foreach(func)
 
 
 if __name__ == "__main__":
