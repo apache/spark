@@ -81,6 +81,9 @@ private[spark] class ShuffleMapTask(
   with Externalizable
   with Logging {
 
+
+  var totalBytesWritten : Option[Long] = None
+
   protected def this() = this(0, null, null, 0, null)
 
   var split = if (rdd == null) {
@@ -130,14 +133,18 @@ private[spark] class ShuffleMapTask(
 
       val compressedSizes = new Array[Byte](numOutputSplits)
 
+      var totalBytes = 0l
+
       val blockManager = SparkEnv.get.blockManager
       for (i <- 0 until numOutputSplits) {
         val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
         // Get a Scala iterator from Java map
         val iter: Iterator[(Any, Any)] = buckets(i).iterator
         val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
+        totalBytes += size
         compressedSizes(i) = MapOutputTracker.compressSize(size)
       }
+      totalBytesWritten = Some(totalBytes)
 
       return new MapStatus(blockManager.blockManagerId, compressedSizes)
     } finally {

@@ -511,8 +511,11 @@ class DAGScheduler(
             }
 
           case smt: ShuffleMapTask =>
-            val stage = idToStage(smt.stageId)
             val status = event.result.asInstanceOf[MapStatus]
+            smt.totalBytesWritten match {
+              case Some(b) => stageToInfos(stage).shuffleBytesWritten += b
+              case None => throw new RuntimeException("shuffle stask completed without tracking bytes written")
+            }
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
             if (failedGeneration.contains(execId) && smt.generation <= failedGeneration(execId)) {
