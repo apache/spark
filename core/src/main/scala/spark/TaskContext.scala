@@ -1,19 +1,21 @@
 package spark
 
 import scala.collection.mutable.ArrayBuffer
+import scheduler.Task
 
+class TaskContext(val stageId: Int, val splitId: Int, val attemptId: Long, val task: Task[_]) extends Serializable {
+  //by adding Task here, I'm destroying the separation between Task & TaskContext ... not sure why they need to
+  // be separate
 
-class TaskContext(val stageId: Int, val splitId: Int, val attemptId: Long) extends Serializable {
-
-  @transient val onCompleteCallbacks = new ArrayBuffer[() => Unit]
+  @transient val onCompleteCallbacks = new ArrayBuffer[TaskContext => Unit]
 
   // Add a callback function to be executed on task completion. An example use
   // is for HadoopRDD to register a callback to close the input stream.
-  def addOnCompleteCallback(f: () => Unit) {
+  def addOnCompleteCallback(f: TaskContext => Unit) {
     onCompleteCallbacks += f
   }
 
   def executeOnCompleteCallbacks() {
-    onCompleteCallbacks.foreach{_()}
+    onCompleteCallbacks.foreach{_.apply(this)}
   }
 }
