@@ -54,7 +54,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
     }
 
     def runTask(task: Task[_], idInJob: Int, attemptId: Int) {
-      logInfo("Running task " + idInJob)
+      logInfo("Running " + task)
       val info = new TaskInfo(attemptId, idInJob, System.currentTimeMillis(), "local", "local")
       // Set the Spark execution environment for the worker thread
       SparkEnv.set(env)
@@ -82,7 +82,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
         val resultToReturn = ser.deserialize[Any](ser.serialize(result))
         val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
           ser.serialize(Accumulators.values))
-        logInfo("Finished task " + idInJob)
+        logInfo("Finished " + task)
         info.markSuccessful()
 
         // If the threadpool has not already been shutdown, notify DAGScheduler

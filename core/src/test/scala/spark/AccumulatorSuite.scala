@@ -17,6 +17,12 @@ class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkConte
     val d = sc.parallelize(1 to 20)
     d.foreach{x => acc += x}
     acc.value should be (210)
+
+
+    val longAcc = sc.accumulator(0l)
+    val maxInt = Integer.MAX_VALUE.toLong
+    d.foreach{x => longAcc += maxInt + x}
+    longAcc.value should be (210l + maxInt * 20)
   }
 
   test ("value not assignable from tasks") {

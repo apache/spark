@@ -73,12 +73,12 @@ class SparkContext(
   // Ensure logging is initialized before we spawn any threads
   initLogging()
 
-  // Set Spark master host and port system properties
-  if (System.getProperty("spark.master.host") == null) {
-    System.setProperty("spark.master.host", Utils.localIpAddress)
+  // Set Spark driver host and port system properties
+  if (System.getProperty("spark.driver.host") == null) {
+    System.setProperty("spark.driver.host", Utils.localIpAddress)
   }
-  if (System.getProperty("spark.master.port") == null) {
-    System.setProperty("spark.master.port", "0")
+  if (System.getProperty("spark.driver.port") == null) {
+    System.setProperty("spark.driver.port", "0")
   }
 
   private val isLocal = (master == "local" || master.startsWith("local["))
@@ -86,15 +86,15 @@ class SparkContext(
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createFromSystemProperties(
     "<driver>",
-    System.getProperty("spark.master.host"),
-    System.getProperty("spark.master.port").toInt,
+    System.getProperty("spark.driver.host"),
+    System.getProperty("spark.driver.port").toInt,
     true,
     isLocal)
   SparkEnv.set(env)
 
   // Start the BlockManager UI
   private[spark] val ui = new BlockManagerUI(
-    env.actorSystem, env.blockManager.master.masterActor, this)
+    env.actorSystem, env.blockManager.master.driverActor, this)
   ui.start()
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
@@ -111,8 +111,9 @@ class SparkContext(
 
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
+  // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner
   for (key <- Seq("SPARK_MEM", "SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS",
-       "SPARK_TESTING")) {
+      "SPARK_TESTING")) {
     val value = System.getenv(key)
     if (value != null) {
       executorEnvs(key) = value
@@ -191,6 +192,7 @@ class SparkContext(
   taskScheduler.start()
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
+  dagScheduler.start()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
@@ -414,14 +416,14 @@ class SparkContext(
 
   /**
    * Create an [[spark.Accumulator]] variable of a given type, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
 
   /**
    * Create an [[spark.Accumulable]] shared variable, to which tasks can add values with `+=`.
-   * Only the master can access the accumuable's `value`.
+   * Only the driver can access the accumuable's `value`.
    * @tparam T accumulator type
    * @tparam R type that can be added to the accumulator
    */
@@ -471,7 +473,7 @@ class SparkContext(
    * Return a map from the slave to the max memory available for caching and the remaining
    * memory available for caching.
    */
-  def getSlavesMemoryStatus: Map[String, (Long, Long)] = {
+  def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
     env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
       (blockManagerId.ip + ":" + blockManagerId.port, mem)
     }
@@ -482,7 +484,7 @@ class SparkContext(
    * they take, etc.
    */
   def getRDDStorageInfo : Array[RDDInfo] = {
-    StorageUtils.rddInfoFromStorageStatus(getSlavesStorageStatus, this)
+    StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
   }
 
   def getStageInfo: Map[Stage,StageInfo] = {
@@ -492,7 +494,7 @@ class SparkContext(
   /**
    * Return information about blocks stored in all of the slaves
    */
-  def getSlavesStorageStatus : Array[StorageStatus] = {
+  def getExecutorStorageStatus : Array[StorageStatus] = {
     env.blockManager.master.getStorageStatus
   }
 
@@ -566,10 +568,30 @@ class SparkContext(
   }
 
   /**
-   * Run a function on a given set of partitions in an RDD and return the results. This is the main
-   * entry point to the scheduler, by which all actions get launched. The allowLocal flag specifies
-   * whether the scheduler can run the computation on the master rather than shipping it out to the
-   * cluster, for short actions like first().
+   * Run a function on a given set of partitions in an RDD and pass the results to the given
+   * handler function. This is the main entry point for all actions in Spark. The allowLocal
+   * flag specifies whether the scheduler can run the computation on the driver rather than
+   * shipping it out to the cluster, for short actions like first().
+   */
+  def runJob[T, U: ClassManifest](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      allowLocal: Boolean,
+      resultHandler: (Int, U) => Unit) {
+    val callSite = Utils.getSparkCallSite
+    logInfo("Starting job: " + callSite)
+    val start = System.nanoTime
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler)
+    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
+    rdd.doCheckpoint()
+    result
+  }
+
+  /**
+   * Run a function on a given set of partitions in an RDD and return the results as an array. The
+   * allowLocal flag specifies whether the scheduler can run the computation on the driver rather
+   * than shipping it out to the cluster, for short actions like first().
    */
   def runJob[T, U: ClassManifest](
       rdd: RDD[T],
@@ -577,13 +599,9 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean
       ): Array[U] = {
-    val callSite = Utils.getSparkCallSite
-    logInfo("Starting job: " + callSite)
-    val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal)
-    logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
-    rdd.doCheckpoint()
-    result
+    val results = new Array[U](partitions.size)
+    runJob[T, U](rdd, func, partitions, allowLocal, (index, res) => results(index) = res)
+    results
   }
 
   /**
@@ -611,6 +629,29 @@ class SparkContext(
    */
   def runJob[T, U: ClassManifest](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
     runJob(rdd, func, 0 until rdd.splits.size, false)
+  }
+
+  /**
+   * Run a job on all partitions in an RDD and pass the results to a handler function.
+   */
+  def runJob[T, U: ClassManifest](
+    rdd: RDD[T],
+    processPartition: (TaskContext, Iterator[T]) => U,
+    resultHandler: (Int, U) => Unit)
+  {
+    runJob[T, U](rdd, processPartition, 0 until rdd.splits.size, false, resultHandler)
+  }
+
+  /**
+   * Run a job on all partitions in an RDD and pass the results to a handler function.
+   */
+  def runJob[T, U: ClassManifest](
+      rdd: RDD[T],
+      processPartition: Iterator[T] => U,
+      resultHandler: (Int, U) => Unit)
+  {
+    val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
+    runJob[T, U](rdd, processFunc, 0 until rdd.splits.size, false, resultHandler)
   }
 
   /**
@@ -694,6 +735,16 @@ object SparkContext {
   implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
+  }
+
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+    def addInPlace(t1: Long, t2: Long) = t1 + t2
+    def zero(initialValue: Long) = 0l
+  }
+
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+    def addInPlace(t1: Float, t2: Float) = t1 + t2
+    def zero(initialValue: Float) = 0f
   }
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings

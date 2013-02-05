@@ -22,12 +22,11 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
 }
 
 case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
-  numPartitions: Int, memSize: Long, diskSize: Long) {
+  numCachedPartitions: Int, numPartitions: Int, memSize: Long, diskSize: Long) {
   override def toString = {
     import Utils.memoryBytesToString
-    import java.lang.{Integer => JInt}
-    String.format("RDD \"%s\" (%d) Storage: %s; Partitions: %d; MemorySize: %s; DiskSize: %s", name, id.asInstanceOf[JInt],
-      storageLevel.toString, numPartitions.asInstanceOf[JInt], memoryBytesToString(memSize), memoryBytesToString(diskSize))
+    "RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; DiskSize: %s".format(name, id,
+      storageLevel.toString, numCachedPartitions, numPartitions, memoryBytesToString(memSize), memoryBytesToString(diskSize))
   }
 }
 
@@ -44,8 +43,6 @@ object StorageUtils {
   /* Given a list of BlockStatus objets, returns information for each RDD */ 
   def rddInfoFromBlockStatusList(infos: Map[String, BlockStatus], 
     sc: SparkContext) : Array[RDDInfo] = {
-    // Find all RDD Blocks (ignore broadcast variables)
-    val rddBlocks = infos.filterKeys(_.startsWith("rdd"))
 
     // Group by rddId, ignore the partition name
     val groupedRddBlocks = infos.groupBy { case(k, v) =>
@@ -65,9 +62,8 @@ object StorageUtils {
       val rdd = sc.persistentRdds(rddId)
       val rddName = Option(rdd.name).getOrElse(rddKey)
       val rddStorageLevel = rdd.getStorageLevel
-      //TODO get total number of partitions in rdd
 
-      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, memSize, diskSize)
+      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, rdd.splits.size, memSize, diskSize)
     }.toArray
   }
 

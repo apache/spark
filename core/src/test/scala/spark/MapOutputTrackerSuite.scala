@@ -78,10 +78,9 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
 
   test("remote fetch") {
     try {
-      System.clearProperty("spark.master.host")  // In case some previous test had set it
-      val (actorSystem, boundPort) =
-        AkkaUtils.createActorSystem("test", "localhost", 0)
-      System.setProperty("spark.master.port", boundPort.toString)
+      System.clearProperty("spark.driver.host")  // In case some previous test had set it
+      val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", "localhost", 0)
+      System.setProperty("spark.driver.port", boundPort.toString)
       val masterTracker = new MapOutputTracker(actorSystem, true)
       val slaveTracker = new MapOutputTracker(actorSystem, false)
       masterTracker.registerShuffle(10, 1)
@@ -106,7 +105,7 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
       // failure should be cached
       intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
     } finally {
-      System.clearProperty("spark.master.port")
+      System.clearProperty("spark.driver.port")
     }
   }
 }

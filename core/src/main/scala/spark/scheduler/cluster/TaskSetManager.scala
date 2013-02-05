@@ -17,10 +17,7 @@ import java.nio.ByteBuffer
 /**
  * Schedules the tasks within a single TaskSet in the ClusterScheduler.
  */
-private[spark] class TaskSetManager(
-  sched: ClusterScheduler,
-  val taskSet: TaskSet)
-  extends Logging {
+private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSet) extends Logging {
 
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
@@ -100,7 +97,7 @@ private[spark] class TaskSetManager(
   }
 
   // Add a task to all the pending-task lists that it should be on.
-  def addPendingTask(index: Int) {
+  private def addPendingTask(index: Int) {
     val locations = tasks(index).preferredLocations.toSet & sched.hostsAlive
     if (locations.size == 0) {
       pendingTasksWithNoPrefs += index
@@ -115,7 +112,7 @@ private[spark] class TaskSetManager(
 
   // Return the pending tasks list for a given host, or an empty list if
   // there is no map entry for that host
-  def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
+  private def getPendingTasksForHost(host: String): ArrayBuffer[Int] = {
     pendingTasksForHost.getOrElse(host, ArrayBuffer())
   }
 
@@ -123,7 +120,7 @@ private[spark] class TaskSetManager(
   // Return None if the list is empty.
   // This method also cleans up any tasks in the list that have already
   // been launched, since we want that to happen lazily.
-  def findTaskFromList(list: ArrayBuffer[Int]): Option[Int] = {
+  private def findTaskFromList(list: ArrayBuffer[Int]): Option[Int] = {
     while (!list.isEmpty) {
       val index = list.last
       list.trimEnd(1)
@@ -137,7 +134,7 @@ private[spark] class TaskSetManager(
   // Return a speculative task for a given host if any are available. The task should not have an
   // attempt running on this host, in case the host is slow. In addition, if localOnly is set, the
   // task must have a preference for this host (or no preferred locations at all).
-  def findSpeculativeTask(host: String, localOnly: Boolean): Option[Int] = {
+  private def findSpeculativeTask(host: String, localOnly: Boolean): Option[Int] = {
     val hostsAlive = sched.hostsAlive
     speculatableTasks.retain(index => !finished(index)) // Remove finished tasks from set
     val localTask = speculatableTasks.find {
@@ -162,7 +159,7 @@ private[spark] class TaskSetManager(
 
   // Dequeue a pending task for a given node and return its index.
   // If localOnly is set to false, allow non-local tasks as well.
-  def findTask(host: String, localOnly: Boolean): Option[Int] = {
+  private def findTask(host: String, localOnly: Boolean): Option[Int] = {
     val localTask = findTaskFromList(getPendingTasksForHost(host))
     if (localTask != None) {
       return localTask
@@ -184,7 +181,7 @@ private[spark] class TaskSetManager(
   // Does a host count as a preferred location for a task? This is true if
   // either the task has preferred locations and this host is one, or it has
   // no preferred locations (in which we still count the launch as preferred).
-  def isPreferredLocation(task: Task[_], host: String): Boolean = {
+  private def isPreferredLocation(task: Task[_], host: String): Boolean = {
     val locs = task.preferredLocations
     return (locs.contains(host) || locs.isEmpty)
   }
@@ -335,7 +332,7 @@ private[spark] class TaskSetManager(
         if (numFailures(index) > MAX_TASK_FAILURES) {
           logError("Task %s:%d failed more than %d times; aborting job".format(
             taskSet.id, index, MAX_TASK_FAILURES))
-          abort("Task %d failed more than %d times".format(index, MAX_TASK_FAILURES))
+          abort("Task %s:%d failed more than %d times".format(taskSet.id, index, MAX_TASK_FAILURES))
         }
       }
     } else {

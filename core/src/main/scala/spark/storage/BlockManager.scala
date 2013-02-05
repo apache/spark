@@ -243,7 +243,7 @@ class BlockManager(
     val startTimeMs = System.currentTimeMillis
     var managers = master.getLocations(blockId)
     val locations = managers.map(_.ip)
-    logDebug("Get block locations in " + Utils.getUsedTimeMs(startTimeMs))
+    logDebug("Got block locations in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
 
@@ -253,7 +253,7 @@ class BlockManager(
   def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
     val startTimeMs = System.currentTimeMillis
     val locations = master.getLocations(blockIds).map(_.map(_.ip).toSeq).toArray
-    logDebug("Get multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
+    logDebug("Got multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
 
@@ -645,7 +645,7 @@ class BlockManager(
     var size = 0L
 
     myInfo.synchronized {
-      logDebug("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
+      logTrace("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
         + " to get into synchronized block")
 
       if (level.useMemory) {
@@ -677,8 +677,10 @@ class BlockManager(
     }
     logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))
 
+
     // Replicate block if required
     if (level.replication > 1) {
+      val remoteStartTime = System.currentTimeMillis
       // Serialize the block if not already done
       if (bytesAfterPut == null) {
         if (valuesAfterPut == null) {
@@ -688,11 +690,9 @@ class BlockManager(
         bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
       }
       replicate(blockId, bytesAfterPut, level)
+      logDebug("Put block " + blockId + " remotely took " + Utils.getUsedTimeMs(remoteStartTime))
     }
-
     BlockManager.dispose(bytesAfterPut)
-
-    logDebug("Put block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs))
 
     return size
   }
@@ -950,6 +950,7 @@ class BlockManager(
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
+    metadataCleaner.cancel()
     logInfo("BlockManager stopped")
   }
 }
@@ -978,7 +979,7 @@ object BlockManager extends Logging {
    */
   def dispose(buffer: ByteBuffer) {
     if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
-      logDebug("Unmapping " + buffer)
+      logTrace("Unmapping " + buffer)
       if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
         buffer.asInstanceOf[DirectBuffer].cleaner().clean()
       }

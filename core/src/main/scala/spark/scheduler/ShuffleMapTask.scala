@@ -32,7 +32,7 @@ private[spark] object ShuffleMapTask {
         return old
       } else {
         val out = new ByteArrayOutputStream
-        val ser = SparkEnv.get.closureSerializer.newInstance
+        val ser = SparkEnv.get.closureSerializer.newInstance()
         val objOut = ser.serializeStream(new GZIPOutputStream(out))
         objOut.writeObject(rdd)
         objOut.writeObject(dep)
@@ -48,7 +48,7 @@ private[spark] object ShuffleMapTask {
     synchronized {
       val loader = Thread.currentThread.getContextClassLoader
       val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
-      val ser = SparkEnv.get.closureSerializer.newInstance
+      val ser = SparkEnv.get.closureSerializer.newInstance()
       val objIn = ser.deserializeStream(in)
       val rdd = objIn.readObject().asInstanceOf[RDD[_]]
       val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_,_]]
@@ -127,7 +127,6 @@ private[spark] class ShuffleMapTask(
         val bucketId = dep.partitioner.getPartition(pair._1)
         buckets(bucketId) += pair
       }
-      val bucketIterators = buckets.map(_.iterator)
 
       val compressedSizes = new Array[Byte](numOutputSplits)
 
@@ -135,7 +134,7 @@ private[spark] class ShuffleMapTask(
       for (i <- 0 until numOutputSplits) {
         val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
         // Get a Scala iterator from Java map
-        val iter: Iterator[(Any, Any)] = bucketIterators(i)
+        val iter: Iterator[(Any, Any)] = buckets(i).iterator
         val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
         compressedSizes(i) = MapOutputTracker.compressSize(size)
       }

@@ -10,9 +10,9 @@ import spark.storage.{BlockManager, StorageLevel}
 private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
   private val loading = new HashSet[String]
 
-  /** Gets or computes an RDD split. Used by RDD.iterator() when a RDD is cached. */
+  /** Gets or computes an RDD split. Used by RDD.iterator() when an RDD is cached. */
   def getOrCompute[T](rdd: RDD[T], split: Split, context: TaskContext, storageLevel: StorageLevel)
-  : Iterator[T] = {
+      : Iterator[T] = {
     val key = "rdd_%d_%d".format(rdd.id, split.index)
     logInfo("Cache key is " + key)
     blockManager.get(key) match {
@@ -50,7 +50,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           // If we got here, we have to load the split
           val elements = new ArrayBuffer[Any]
           logInfo("Computing partition " + split)
-          elements ++= rdd.compute(split, context)
+          elements ++= rdd.computeOrReadCheckpoint(split, context)
           // Try to put this block in the blockManager
           blockManager.put(key, elements, storageLevel, true)
           return elements.iterator.asInstanceOf[Iterator[T]]

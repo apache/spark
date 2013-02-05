@@ -38,10 +38,7 @@ private[spark] class MapOutputTrackerActor(tracker: MapOutputTracker) extends Ac
   }
 }
 
-private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logging {
-  val ip: String = System.getProperty("spark.master.host", "localhost")
-  val port: Int = System.getProperty("spark.master.port", "7077").toInt
-  val actorName: String = "MapOutputTracker"
+private[spark] class MapOutputTracker(actorSystem: ActorSystem, isDriver: Boolean) extends Logging {
 
   val timeout = 10.seconds
 
@@ -56,11 +53,14 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
   var cacheGeneration = generation
   val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]
 
-  var trackerActor: ActorRef = if (isMaster) {
+  val actorName: String = "MapOutputTracker"
+  var trackerActor: ActorRef = if (isDriver) {
     val actor = actorSystem.actorOf(Props(new MapOutputTrackerActor(this)), name = actorName)
     logInfo("Registered MapOutputTrackerActor actor")
     actor
   } else {
+    val ip = System.getProperty("spark.driver.host", "localhost")
+    val port = System.getProperty("spark.driver.port", "7077").toInt
     val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
     actorSystem.actorFor(url)
   }
@@ -170,7 +170,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
     }
   }
 
-  def cleanup(cleanupTime: Long) {
+  private def cleanup(cleanupTime: Long) {
     mapStatuses.clearOldValues(cleanupTime)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
   }

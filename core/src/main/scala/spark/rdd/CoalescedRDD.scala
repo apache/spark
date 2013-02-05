@@ -27,11 +27,11 @@ private[spark] case class CoalescedRDDSplit(
  * or to avoid having a large number of small tasks when processing a directory with many files.
  */
 class CoalescedRDD[T: ClassManifest](
-    var prev: RDD[T],
+    @transient var prev: RDD[T],
     maxPartitions: Int)
-  extends RDD[T](prev.context, Nil) {  // Nil, so the dependencies_ var does not refer to parent RDDs
+  extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
 
-  @transient var splits_ : Array[Split] = {
+  override def getSplits: Array[Split] = {
     val prevSplits = prev.splits
     if (prevSplits.length < maxPartitions) {
       prevSplits.map(_.index).map{idx => new CoalescedRDDSplit(idx, prev, Array(idx)) }
@@ -44,26 +44,20 @@ class CoalescedRDD[T: ClassManifest](
     }
   }
 
-  override def getSplits = splits_
-
   override def compute(split: Split, context: TaskContext): Iterator[T] = {
     split.asInstanceOf[CoalescedRDDSplit].parents.iterator.flatMap { parentSplit =>
       firstParent[T].iterator(parentSplit, context)
     }
   }
 
-  var deps_ : List[Dependency[_]] = List(
+  override def getDependencies: Seq[Dependency[_]] = List(
     new NarrowDependency(prev) {
       def getParents(id: Int): Seq[Int] =
         splits(id).asInstanceOf[CoalescedRDDSplit].parentsIndices
     }
   )
 
-  override def getDependencies() = deps_
-
   override def clearDependencies() {
-    deps_ = Nil
-    splits_ = null
     prev = null
   }
 }

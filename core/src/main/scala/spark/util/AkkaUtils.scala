@@ -18,9 +18,13 @@ import java.util.concurrent.TimeoutException
  * Various utility classes for working with Akka.
  */
 private[spark] object AkkaUtils {
+
   /**
    * Creates an ActorSystem ready for remoting, with various Spark features. Returns both the
    * ActorSystem itself and its port (which is hard to get from Akka).
+   *
+   * Note: the `name` parameter is important, as even if a client sends a message to right
+   * host + port, if the system name is incorrect, Akka will drop the message.
    */
   def createActorSystem(name: String, host: String, port: Int): (ActorSystem, Int) = {
     val akkaThreads = System.getProperty("spark.akka.threads", "4").toInt
@@ -30,6 +34,7 @@ private[spark] object AkkaUtils {
     val akkaConf = ConfigFactory.parseString("""
       akka.daemonic = on
       akka.event-handlers = ["akka.event.slf4j.Slf4jEventHandler"]
+      akka.stdout-loglevel = "ERROR"
       akka.actor.provider = "akka.remote.RemoteActorRefProvider"
       akka.remote.transport = "akka.remote.netty.NettyRemoteTransport"
       akka.remote.log-remote-lifecycle-events = on
@@ -41,7 +46,7 @@ private[spark] object AkkaUtils {
       akka.actor.default-dispatcher.throughput = %d
       """.format(host, port, akkaTimeout, akkaFrameSize, akkaThreads, akkaBatchSize))
 
-    val actorSystem = ActorSystem("spark", akkaConf, getClass.getClassLoader)
+    val actorSystem = ActorSystem(name, akkaConf, getClass.getClassLoader)
 
     // Figure out the port number we bound to, in case port was passed as 0. This is a bit of a
     // hack because Akka doesn't let you figure out the port through the public API yet.
