@@ -4,6 +4,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
 import spark.storage.BlockManagerId
+import util.TimedIterator
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
   override def fetch[K, V](shuffleId: Int, reduceId: Int) = {
@@ -45,6 +46,6 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
         }
       }
     }
-    blockManager.getMultiple(blocksByAddress).flatMap(unpackBlock)
+    new TimedIterator(blockManager.getMultiple(blocksByAddress).flatMap(unpackBlock))
   }
 }
