@@ -852,6 +852,7 @@ class BlockFetcherIterator(
   import blockManager._
 
   private var remoteBytesRead = 0l
+  private var remoteFetchTime = 0l
 
   if (blocksByAddress == null) {
     throw new IllegalArgumentException("BlocksByAddress is null")
@@ -893,9 +894,12 @@ class BlockFetcherIterator(
     })
     bytesInFlight += req.size
     val sizeMap = req.blocks.toMap  // so we can look up the size of each blockID
+    val fetchStart = System.currentTimeMillis()
     val future = connectionManager.sendMessageReliably(cmId, blockMessageArray.toBufferMessage)
     future.onSuccess {
       case Some(message) => {
+        val fetchDone = System.currentTimeMillis()
+        remoteFetchTime += fetchDone - fetchStart
         val bufferMessage = message.asInstanceOf[BufferMessage]
         val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
         for (blockMessage <- blockMessageArray) {
