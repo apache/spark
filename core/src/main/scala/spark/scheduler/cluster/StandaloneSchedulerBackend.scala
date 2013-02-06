@@ -104,16 +104,18 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
     // Remove a disconnected slave from the cluster
     def removeExecutor(executorId: String, reason: String) {
-      logInfo("Executor " + executorId + " disconnected, so removing it")
-      val numCores = freeCores(executorId)
-      actorToExecutorId -= executorActor(executorId)
-      addressToExecutorId -= executorAddress(executorId)
-      executorActor -= executorId
-      executorHost -= executorId
-      freeCores -= executorId
-      executorHost -= executorId
-      totalCoreCount.addAndGet(-numCores)
-      scheduler.executorLost(executorId, SlaveLost(reason))
+      if (executorActor.contains(executorId)) {
+        logInfo("Executor " + executorId + " disconnected, so removing it")
+        val numCores = freeCores(executorId)
+        actorToExecutorId -= executorActor(executorId)
+        addressToExecutorId -= executorAddress(executorId)
+        executorActor -= executorId
+        executorHost -= executorId
+        freeCores -= executorId
+        executorHost -= executorId
+        totalCoreCount.addAndGet(-numCores)
+        scheduler.executorLost(executorId, SlaveLost(reason))
+      }
     }
   }
 
@@ -153,7 +155,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
   override def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
 
-  // Called by backends
+  // Called by subclasses when notified of a lost worker
   def removeExecutor(executorId: String, reason: String) {
     try {
       val timeout = 5.seconds
