@@ -95,7 +95,7 @@ private[spark] class Executor extends Logging {
         env.mapOutputTracker.updateGeneration(task.generation)
         val value = task.run(taskId.toInt)
         val accumUpdates = Accumulators.values
-        val result = new TaskResult(value, accumUpdates)
+        val result = new TaskResult(value, accumUpdates, TaskMetrics(task))
         val serializedResult = ser.serialize(result)
         logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
         context.statusUpdate(taskId, TaskState.FINISHED, serializedResult)

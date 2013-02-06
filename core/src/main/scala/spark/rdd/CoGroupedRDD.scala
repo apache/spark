@@ -112,7 +112,10 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
         val fetcher = SparkEnv.get.shuffleFetcher
         val fetchItr = fetcher.fetch[K, Seq[Any]](shuffleId, split.index)
         fetchItr.foreach(mergePair)
-        context.task.setShuffleReadMillis(fetchItr.getNetMillis)
+        context.task.shuffleReadMillis = Some(fetchItr.getNetMillis)
+        context.task.remoteFetchTime = Some(fetchItr.remoteFetchTime)
+        context.task.remoteFetchWaitTime = Some(fetchItr.remoteFetchWaitTime)
+        context.task.remoteReadBytes = Some(fetchItr.remoteBytesRead)
       }
     }
     JavaConversions.mapAsScalaMap(map).iterator

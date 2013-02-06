@@ -844,15 +844,37 @@ object BlockManager extends Logging {
 }
 
 
+private[spark] trait BlockFetchTracker {
+  def totalBlocks : Int
+  def numLocalBlocks: Int
+  def numRemoteBlocks: Int
+  def remoteFetchTime : Long
+  def remoteFetchWaitTime: Long
+  def remoteBytesRead : Long
+}
+
+private[spark] trait DelegateBlockFetchTracker extends BlockFetchTracker {
+  var delegate : BlockFetchTracker = _
+  def setDelegate(d: BlockFetchTracker) {delegate = d}
+  def totalBlocks = delegate.totalBlocks
+  def numLocalBlocks = delegate.numLocalBlocks
+  def numRemoteBlocks = delegate.numRemoteBlocks
+  def remoteFetchTime = delegate.remoteFetchTime
+  def remoteFetchWaitTime = delegate.remoteFetchWaitTime
+  def remoteBytesRead = delegate.remoteBytesRead
+}
+
+
 class BlockFetcherIterator(
     private val blockManager: BlockManager,
     val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])]
-) extends Iterator[(String, Option[Iterator[Any]])] with Logging {
+) extends Iterator[(String, Option[Iterator[Any]])] with Logging with BlockFetchTracker {
 
   import blockManager._
 
-  private var remoteBytesRead = 0l
-  private var remoteFetchTime = 0l
+  private var _remoteBytesRead = 0l
+  private var _remoteFetchTime = 0l
+  private var _remoteFetchWaitTime = 0l
 
   if (blocksByAddress == null) {
     throw new IllegalArgumentException("BlocksByAddress is null")
@@ -899,7 +921,7 @@ class BlockFetcherIterator(
     future.onSuccess {
       case Some(message) => {
         val fetchDone = System.currentTimeMillis()
-        remoteFetchTime += fetchDone - fetchStart
+        _remoteFetchTime += fetchDone - fetchStart
         val bufferMessage = message.asInstanceOf[BufferMessage]
         val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
         for (blockMessage <- blockMessageArray) {
@@ -910,7 +932,7 @@ class BlockFetcherIterator(
           val blockId = blockMessage.getId
           results.put(new FetchResult(
             blockId, sizeMap(blockId), () => dataDeserialize(blockId, blockMessage.getData)))
-          remoteBytesRead += req.size
+          _remoteBytesRead += req.size
           logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
       }
@@ -992,7 +1014,10 @@ class BlockFetcherIterator(
 
   def next(): (String, Option[Iterator[Any]]) = {
     resultsGotten += 1
+    val startFetchWait = System.currentTimeMillis()
     val result = results.take()
+    val stopFetchWait = System.currentTimeMillis()
+    _remoteFetchWaitTime += (stopFetchWait - startFetchWait)
     bytesInFlight -= result.size
     while (!fetchRequests.isEmpty &&
       (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
@@ -1003,8 +1028,12 @@ class BlockFetcherIterator(
 
 
   //methods to profile the block fetching
-
   def numLocalBlocks = localBlockIds.size
   def numRemoteBlocks = remoteBlockIds.size
+
+  def remoteFetchTime = _remoteFetchTime
+  def remoteFetchWaitTime = _remoteFetchWaitTime
+
+  def remoteBytesRead = _remoteBytesRead
 
 }
