@@ -76,8 +76,11 @@ private[spark] case object RequestMasterState
 // Master to MasterWebUI
 
 private[spark] 
-case class MasterState(uri: String, workers: Array[WorkerInfo], activeJobs: Array[JobInfo],
-  completedJobs: Array[JobInfo])
+case class MasterState(host: String, port: Int, workers: Array[WorkerInfo],
+  activeJobs: Array[JobInfo], completedJobs: Array[JobInfo]) {
+
+  def uri = "spark://" + host + ":" + port
+}
 
 //  WorkerWebUI to Worker
 private[spark] case object RequestWorkerState
@@ -85,6 +88,6 @@ private[spark] case object RequestWorkerState
 // Worker to WorkerWebUI
 
 private[spark]
-case class WorkerState(uri: String, workerId: String, executors: List[ExecutorRunner], 
+case class WorkerState(host: String, port: Int, workerId: String, executors: List[ExecutorRunner],
   finishedExecutors: List[ExecutorRunner], masterUrl: String, cores: Int, memory: Int, 
   coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String)
