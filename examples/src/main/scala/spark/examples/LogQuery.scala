@@ -5,7 +5,7 @@ import spark.SparkContext._
 /**
  * Executes a roll up-style query against Apache logs.
  */
-object OLAPQuery {
+object LogQuery {
   val exampleApacheLogs = List(
     """10.10.10.10 - "FRED" [18/Jan/2013:17:56:07 +1100] "GET http://images.com/2013/Generic.jpg
       | HTTP/1.1" 304 315 "http://referall.com/" "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1;
@@ -23,16 +23,16 @@ object OLAPQuery {
 
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: OLAPQuery <master> [logFile]")
+      System.err.println("Usage: LogQuery <master> [logFile]")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "OLAP Query")
+    val sc = new SparkContext(args(0), "Log Query")
 
     val dataSet =
       if (args.length == 2) sc.textFile(args(1))
       else sc.parallelize(exampleApacheLogs)
 
-    val apache_log_regex =
+    val apacheLogRegex =
       """^([\d.]+) (\S+) (\S+) \[([\w\d:/]+\s[+\-]\d{4})\] "(.+?)" (\d{3}) ([\d\-]+) "([^"]+)" "([^"]+)".*""".r
 
     /** Tracks the total query count and number of aggregate bytes for a particular group. */
@@ -42,8 +42,8 @@ object OLAPQuery {
     }
 
     def extractKey(line: String): (String, String, String) = {
-      apache_log_regex findFirstIn line match {
-        case Some(apache_log_regex(ip, _, user, dateTime, query, status, bytes, referer, ua)) =>
+      apacheLogRegex.findFirstIn(line) match {
+        case Some(apacheLogRegex(ip, _, user, dateTime, query, status, bytes, referer, ua)) =>
           if (user != "\"-\"") (ip, user, query)
           else (null, null, null)
         case _ => (null, null, null)
@@ -51,8 +51,8 @@ object OLAPQuery {
     }
 
     def extractStats(line: String): Stats = {
-      apache_log_regex findFirstIn line match {
-        case Some(apache_log_regex(ip, _, user, dateTime, query, status, bytes, referer, ua)) =>
+      apacheLogRegex.findFirstIn(line) match {
+        case Some(apacheLogRegex(ip, _, user, dateTime, query, status, bytes, referer, ua)) =>
           new Stats(1, bytes.toInt)
         case _ => new Stats(1, 0)
       }
