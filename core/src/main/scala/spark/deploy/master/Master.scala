@@ -17,7 +17,7 @@ import spark.util.AkkaUtils
 
 private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For job IDs
-  val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "4").toLong * 1000
+  val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
 
   var nextJobNumber = 0
   val workers = new HashSet[WorkerInfo]

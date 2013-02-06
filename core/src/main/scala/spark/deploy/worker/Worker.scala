@@ -31,7 +31,7 @@ private[spark] class Worker(
   val MASTER_REGEX = "spark://([^:]+):([0-9]+)".r
 
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
-  val HEARTBEAT_MILLIS = System.getProperty("spark.worker.timeout", "4").toLong * 1000 / 4
+  val HEARTBEAT_MILLIS = System.getProperty("spark.worker.timeout", "60").toLong * 1000 / 4
 
   var master: ActorRef = null
   var masterWebUiUrl : String = ""
