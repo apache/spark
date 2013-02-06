@@ -4,6 +4,7 @@ import java.io._
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.JavaConversions._
 import scala.util.Random
 
 import akka.actor._
@@ -172,12 +173,22 @@ private[spark] class BlockManagerMasterActor(val isLocal: Boolean) extends Actor
   initLogging()
   
   def removeHost(host: String) {
-    logInfo("Trying to remove the host: " + host + " from BlockManagerMaster.")
-    logInfo("Previous hosts: " + blockManagerInfo.keySet.toSeq)
-    val ip = host.split(":")(0)
-    val port = host.split(":")(1)
-    blockManagerInfo.remove(new BlockManagerId(ip, port.toInt))
-    logInfo("Current hosts: " + blockManagerInfo.keySet.toSeq)
+    logInfo("Removing the host " + host + " from BlockManagerMaster.")
+    logDebug("Previous hosts: " + blockManagerInfo.keySet.toSeq)
+    // Copy the keys to remove to avoid deleting items as we iterate over the hashmap
+    val toRemove = blockManagerInfo.keys.filter(_.ip == host).toArray
+    for (id <- toRemove) {
+      blockManagerInfo.remove(id)
+    }
+    val blocksRemoved = new ArrayBuffer[String]
+    for ((blockId, (replication, locations)) <- blockInfo) {
+      locations --= toRemove
+      if (locations.isEmpty) {
+        blocksRemoved += blockId
+      }
+    }
+    blockInfo --= blocksRemoved
+    logDebug("Current hosts: " + blockManagerInfo.keySet.toSeq)
     sender ! true
   }
 
@@ -397,7 +408,7 @@ private[spark] class BlockManagerMaster(actorSystem: ActorSystem, isMaster: Bool
   }
   
   def notifyADeadHost(host: String) {
-    communicate(RemoveHost(host + ":" + DEFAULT_MANAGER_PORT))
+    communicate(RemoveHost(host))
     logInfo("Removed " + host + " successfully in notifyADeadHost")
   }
 
