@@ -20,6 +20,7 @@ import spark.partial.BoundedDouble
 import spark.partial.CountEvaluator
 import spark.partial.GroupedCountEvaluator
 import spark.partial.PartialResult
+import spark.rdd.CoalescedRDD
 import spark.rdd.CartesianRDD
 import spark.rdd.FilteredRDD
 import spark.rdd.FlatMappedRDD
@@ -230,6 +231,12 @@ abstract class RDD[T: ClassManifest](
     map(x => (x, null)).reduceByKey((x, y) => x, numSplits).map(_._1)
 
   def distinct(): RDD[T] = distinct(splits.size)
+
+  /**
+   * Return a new RDD that is reduced into `numSplits` partitions.
+   */
+  def coalesce(numSplits: Int = sc.defaultParallelism): RDD[T] =
+    new CoalescedRDD(this, numSplits)
 
   /**
    * Return a sampled subset of this RDD.
