@@ -35,7 +35,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
 
   val numSplitsInRdd2 = rdd2.splits.size
 
-  override def getSplits: Array[Split] = {
+  override def getSplits = {
     // create the cross product split
     val array = new Array[Split](rdd1.splits.size * rdd2.splits.size)
     for (s1 <- rdd1.splits; s2 <- rdd2.splits) {
@@ -66,6 +66,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
   )
 
   override def clearDependencies() {
+    super.clearDependencies()
     rdd1 = null
     rdd2 = null
   }

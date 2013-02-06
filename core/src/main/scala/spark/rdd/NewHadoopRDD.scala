@@ -29,7 +29,7 @@ class NewHadoopRDD[K, V](
   with HadoopMapReduceUtil {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  val confBroadcast = sc.broadcast(new SerializableWritable(conf))
+  private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
   // private val serializableConf = new SerializableWritable(conf)
 
   private val jobtrackerId: String = {
@@ -39,7 +39,7 @@ class NewHadoopRDD[K, V](
 
   @transient private val jobId = new JobID(jobtrackerId, id)
 
-  @transient private val splits_ : Array[Split] = {
+  override def getSplits = {
     val inputFormat = inputFormatClass.newInstance
     val jobContext = newJobContext(conf, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
@@ -49,8 +49,6 @@ class NewHadoopRDD[K, V](
     }
     result
   }
-
-  override def getSplits = splits_
 
   override def compute(theSplit: Split, context: TaskContext) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[NewHadoopSplit]

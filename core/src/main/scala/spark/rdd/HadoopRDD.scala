@@ -45,10 +45,9 @@ class HadoopRDD[K, V](
   extends RDD[(K, V)](sc, Nil) {
 
   // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it
-  val confBroadcast = sc.broadcast(new SerializableWritable(conf))
+  private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
 
-  @transient
-  val splits_ : Array[Split] = {
+  override def getSplits = {
     val inputFormat = createInputFormat(conf)
     val inputSplits = inputFormat.getSplits(conf, minSplits)
     val array = new Array[Split](inputSplits.size)
@@ -62,8 +61,6 @@ class HadoopRDD[K, V](
     ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
   }
-
-  override def getSplits = splits_
 
   override def compute(theSplit: Split, context: TaskContext) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[HadoopSplit]

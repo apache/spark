@@ -656,7 +656,6 @@ abstract class RDD[T: ClassManifest](
    */
   private[spark] def markCheckpointed(checkpointRDD: RDD[_]) {
     clearDependencies()
-    dependencies_ = null
     splits_ = null
     deps = null    // Forget the constructor argument for dependencies too
   }
