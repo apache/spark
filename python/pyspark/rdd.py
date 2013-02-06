@@ -372,6 +372,10 @@ class RDD(object):
         items = []
         for partition in range(self._jrdd.splits().size()):
             iterator = self.ctx._takePartition(self._jrdd.rdd(), partition)
+            # Each item in the iterator is a string, Python object, batch of
+            # Python objects.  Regardless, it is sufficient to take `num`
+            # of these objects in order to collect `num` Python objects:
+            iterator = iterator.take(num)
             items.extend(self._collect_iterator_through_file(iterator))
             if len(items) >= num:
                 break
@@ -748,8 +752,10 @@ def _test():
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    doctest.testmod(globs=globs)
+    (failure_count, test_count) = doctest.testmod(globs=globs)
     globs['sc'].stop()
+    if failure_count:
+        exit(-1)
 
 
 if __name__ == "__main__":

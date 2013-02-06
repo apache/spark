@@ -27,8 +27,6 @@ private[spark] class BlockManagerMaster(
   val AKKA_RETRY_INTERVAL_MS: Int = System.getProperty("spark.akka.retry.wait", "3000").toInt
 
   val DRIVER_AKKA_ACTOR_NAME = "BlockMasterManager"
-  val SLAVE_AKKA_ACTOR_NAME = "BlockSlaveManager"
-  val DEFAULT_MANAGER_IP: String = Utils.localHostName()
 
   val timeout = 10.seconds
   var driverActor: ActorRef = {
@@ -115,6 +113,10 @@ private[spark] class BlockManagerMaster(
    */
   def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
     askDriverWithReply[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
+  }
+
+  def getStorageStatus: Array[StorageStatus] = {
+    askDriverWithReply[ArrayBuffer[StorageStatus]](GetStorageStatus).toArray
   }
 
   /** Stop the driver actor, called only on the Spark driver node */

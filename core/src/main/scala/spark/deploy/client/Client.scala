@@ -9,6 +9,7 @@ import spark.{SparkException, Logging}
 import akka.remote.RemoteClientLifeCycleEvent
 import akka.remote.RemoteClientShutdown
 import spark.deploy.RegisterJob
+import spark.deploy.master.Master
 import akka.remote.RemoteClientDisconnected
 import akka.actor.Terminated
 import akka.dispatch.Await
@@ -24,14 +25,8 @@ private[spark] class Client(
     listener: ClientListener)
   extends Logging {
 
-  val MASTER_REGEX = "spark://([^:]+):([0-9]+)".r
-
   var actor: ActorRef = null
   var jobId: String = null
-
-  if (MASTER_REGEX.unapplySeq(masterUrl) == None) {
-    throw new SparkException("Invalid master URL: " + masterUrl)
-  }
 
   class ClientActor extends Actor with Logging {
     var master: ActorRef = null
@@ -39,11 +34,9 @@ private[spark] class Client(
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
 
     override def preStart() {
-      val Seq(masterHost, masterPort) = MASTER_REGEX.unapplySeq(masterUrl).get
-      logInfo("Connecting to master spark://" + masterHost + ":" + masterPort)
-      val akkaUrl = "akka://spark@%s:%s/user/Master".format(masterHost, masterPort)
+      logInfo("Connecting to master " + masterUrl)
       try {
-        master = context.actorFor(akkaUrl)
+        master = context.actorFor(Master.toAkkaUrl(masterUrl))
         masterAddress = master.path.address
         master ! RegisterJob(jobDescription)
         context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])

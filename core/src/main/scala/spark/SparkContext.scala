@@ -46,6 +46,7 @@ import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, C
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import storage.BlockManagerUI
 import util.{MetadataCleaner, TimeStampedHashMap}
+import storage.{StorageStatus, StorageUtils, RDDInfo}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -107,8 +108,9 @@ class SparkContext(
 
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
+  // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner
   for (key <- Seq("SPARK_MEM", "SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS",
-       "SPARK_TESTING")) {
+      "SPARK_TESTING")) {
     val value = System.getenv(key)
     if (value != null) {
       executorEnvs(key) = value
@@ -187,6 +189,7 @@ class SparkContext(
   taskScheduler.start()
 
   private var dagScheduler = new DAGScheduler(taskScheduler)
+  dagScheduler.start()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
@@ -467,10 +470,25 @@ class SparkContext(
    * Return a map from the slave to the max memory available for caching and the remaining
    * memory available for caching.
    */
-  def getSlavesMemoryStatus: Map[String, (Long, Long)] = {
+  def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
     env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
       (blockManagerId.ip + ":" + blockManagerId.port, mem)
     }
+  }
+
+  /**
+   * Return information about what RDDs are cached, if they are in mem or on disk, how much space
+   * they take, etc.
+   */
+  def getRDDStorageInfo : Array[RDDInfo] = {
+    StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
+  }
+
+  /**
+   * Return information about blocks stored in all of the slaves
+   */
+  def getExecutorStorageStatus : Array[StorageStatus] = {
+    env.blockManager.master.getStorageStatus
   }
 
   /**
