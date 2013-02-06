@@ -254,6 +254,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     logInfo("Mesos slave lost: " + slaveId.getValue)
     synchronized {
       slaveIdsWithExecutors -= slaveId.getValue
+      removeSlave(slaveId.getValue)
     }
   }
 

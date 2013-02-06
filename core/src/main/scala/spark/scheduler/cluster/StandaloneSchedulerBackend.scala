@@ -104,16 +104,18 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
     // Remove a disconnected slave from the cluster
     def removeSlave(slaveId: String) {
-      logInfo("Slave " + slaveId + " disconnected, so removing it")
-      val numCores = freeCores(slaveId)
-      actorToSlaveId -= slaveActor(slaveId)
-      addressToSlaveId -= slaveAddress(slaveId)
-      slaveActor -= slaveId
-      slaveHost -= slaveId
-      freeCores -= slaveId
-      slaveHost -= slaveId
-      totalCoreCount.addAndGet(-numCores)
-      scheduler.slaveLost(slaveId)
+      if (slaveActor.contains(slaveId)) {
+        logInfo("Slave " + slaveId + " disconnected, so removing it")
+        val numCores = freeCores(slaveId)
+        actorToSlaveId -= slaveActor(slaveId)
+        addressToSlaveId -= slaveAddress(slaveId)
+        slaveActor -= slaveId
+        slaveHost -= slaveId
+        freeCores -= slaveId
+        slaveHost -= slaveId
+        totalCoreCount.addAndGet(-numCores)
+        scheduler.slaveLost(slaveId)
+      }
     }
   }
 
@@ -151,7 +153,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     masterActor ! ReviveOffers
   }
 
-  // Called by backends
+  // Called by subclasses when notified of a lost worker
   def removeSlave(slaveId: String) {
     try {
       val timeout = 5.seconds

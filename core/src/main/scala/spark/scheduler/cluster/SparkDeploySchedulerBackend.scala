@@ -78,7 +78,6 @@ private[spark] class SparkDeploySchedulerBackend(
       case Some(slaveId) => 
         executorIdToSlaveId.remove(id)
         removeSlave(slaveId)
-        scheduler.slaveLost(slaveId)
       case None =>
         logInfo("No slave ID known for executor %s".format(id))
     }

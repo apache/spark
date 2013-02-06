@@ -114,7 +114,7 @@ private[spark] class Client(
   def stop() {
     if (actor != null) {
       try {
-        val timeout = 1.seconds
+        val timeout = 5.seconds
         val future = actor.ask(StopClient)(timeout)
         Await.result(future, timeout)
       } catch {

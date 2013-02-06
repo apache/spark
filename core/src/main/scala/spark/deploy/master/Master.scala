@@ -119,8 +119,8 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     case Heartbeat(workerId) => {
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
-	  workerInfo.lastHeartbeat = System.currentTimeMillis()
-	case None =>
+          workerInfo.lastHeartbeat = System.currentTimeMillis()
+        case None =>
           logWarning("Got heartbeat from unregistered worker " + workerId)
       }
     }
