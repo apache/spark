@@ -198,6 +198,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.worker.timeout</td>
+  <td>60</td>
+  <td>
+    Number of seconds after which the standalone deploy master considers a worker lost if it
+    receives no heartbeats.
+  </td>
+</tr>
+<tr>
   <td>spark.akka.frameSize</td>
   <td>10</td>
   <td>
@@ -218,7 +226,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.akka.timeout</td>
   <td>20</td>
   <td>
-    Communication timeout between Spark nodes.
+    Communication timeout between Spark nodes, in seconds.
   </td>
 </tr>
 <tr>
