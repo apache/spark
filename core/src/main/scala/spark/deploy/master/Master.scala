@@ -145,7 +145,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     }
 
     case RequestMasterState => {
-      sender ! MasterState(ip + ":" + port, workers.toArray, jobs.toArray, completedJobs.toArray)
+      sender ! MasterState(ip, port, workers.toArray, jobs.toArray, completedJobs.toArray)
     }
   }
 
