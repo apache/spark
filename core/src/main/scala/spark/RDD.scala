@@ -330,7 +330,7 @@ abstract class RDD[T: ClassManifest](@transient sc: SparkContext) extends Serial
   def toArray(): Array[T] = collect()
 
   /**
-   * Reduces the elements of this RDD using the specified associative binary operator.
+   * Reduces the elements of this RDD using the specified commutative and associative binary operator.
    */
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
