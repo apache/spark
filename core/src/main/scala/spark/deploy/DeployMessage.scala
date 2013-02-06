@@ -29,6 +29,8 @@ case class ExecutorStateChanged(
     message: Option[String])
   extends DeployMessage
 
+private[spark] case class Heartbeat(workerId: String) extends DeployMessage
+
 // Master to Worker
 
 private[spark] case class RegisteredWorker(masterWebUiUrl: String) extends DeployMessage
@@ -43,7 +45,6 @@ private[spark] case class LaunchExecutor(
     memory: Int,
     sparkHome: String)
   extends DeployMessage
-
 
 // Client to Master
 

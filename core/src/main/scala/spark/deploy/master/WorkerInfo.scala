@@ -18,6 +18,8 @@ private[spark] class WorkerInfo(
   var coresUsed = 0
   var memoryUsed = 0
 
+  var lastHeartbeat = System.currentTimeMillis()
+
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 

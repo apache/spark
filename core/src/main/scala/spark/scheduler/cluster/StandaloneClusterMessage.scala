@@ -35,3 +35,4 @@ object StatusUpdate {
 // Internal messages in master
 private[spark] case object ReviveOffers extends StandaloneClusterMessage
 private[spark] case object StopMaster extends StandaloneClusterMessage
+private[spark] case class RemoveSlave(slaveId: String) extends StandaloneClusterMessage

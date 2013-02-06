@@ -2,6 +2,7 @@ package spark.deploy.worker
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import akka.actor.{ActorRef, Props, Actor}
+import akka.util.duration._
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
 import spark.deploy._
@@ -28,6 +29,9 @@ private[spark] class Worker(
 
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
   val MASTER_REGEX = "spark://([^:]+):([0-9]+)".r
+
+  // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
+  val HEARTBEAT_MILLIS = System.getProperty("spark.worker.timeout", "4").toLong * 1000 / 4
 
   var master: ActorRef = null
   var masterWebUiUrl : String = ""
@@ -114,6 +118,9 @@ private[spark] class Worker(
     case RegisteredWorker(url) =>
       masterWebUiUrl = url
       logInfo("Successfully registered with master")
+      context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
+        master ! Heartbeat(workerId)
+      }
 
     case RegisterWorkerFailed(message) =>
       logError("Worker registration failed: " + message)

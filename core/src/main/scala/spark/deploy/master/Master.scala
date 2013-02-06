@@ -3,6 +3,7 @@ package spark.deploy.master
 import akka.actor._
 import akka.actor.Terminated
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
+import akka.util.duration._
 
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -16,6 +17,7 @@ import spark.util.AkkaUtils
 
 private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For job IDs
+  val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "4").toLong * 1000
 
   var nextJobNumber = 0
   val workers = new HashSet[WorkerInfo]
@@ -46,6 +48,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     startWebUi()
+    context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
   }
 
   def startWebUi() {
@@ -110,6 +113,15 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
         }
         case None =>
           logWarning("Got status update for unknown executor " + jobId + "/" + execId)
+      }
+    }
+
+    case Heartbeat(workerId) => {
+      idToWorker.get(workerId) match {
+        case Some(workerInfo) =>
+	  workerInfo.lastHeartbeat = System.currentTimeMillis()
+	case None =>
+          logWarning("Got heartbeat from unregistered worker " + workerId)
       }
     }
 
@@ -218,8 +230,9 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     actorToWorker -= worker.actor
     addressToWorker -= worker.actor.path.address
     for (exec <- worker.executors.values) {
-      exec.job.actor ! ExecutorStateChanged(exec.job.id, exec.id, ExecutorState.LOST, None)
-      exec.job.executors -= exec.id
+      logInfo("Telling job of lost executor: " + exec.id)
+      exec.job.actor ! ExecutorUpdated(exec.id, ExecutorState.LOST, Some("worker lost"))
+      exec.job.removeExecutor(exec)
     }
   }
 
@@ -257,6 +270,18 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     val jobId = "job-%s-%04d".format(DATE_FORMAT.format(submitDate), nextJobNumber)
     nextJobNumber += 1
     jobId
+  }
+
+  /** Check for, and remove, any timed-out workers */
+  def timeOutDeadWorkers() {
+    // Copy the workers into an array so we don't modify the hashset while iterating through it
+    val expirationTime = System.currentTimeMillis() - WORKER_TIMEOUT
+    val toRemove = workers.filter(_.lastHeartbeat < expirationTime).toArray
+    for (worker <- toRemove) {
+      logWarning("Removing %s because we got no heartbeat in %d seconds".format(
+        worker.id, WORKER_TIMEOUT))
+      removeWorker(worker)
+    }
   }
 }
 

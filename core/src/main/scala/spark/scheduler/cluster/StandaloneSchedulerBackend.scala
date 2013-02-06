@@ -68,6 +68,10 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         sender ! true
         context.stop(self)
 
+      case RemoveSlave(slaveId) =>
+        removeSlave(slaveId)
+        sender ! true
+
       case Terminated(actor) =>
         actorToSlaveId.get(actor).foreach(removeSlave)
 
@@ -145,6 +149,18 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
   def reviveOffers() {
     masterActor ! ReviveOffers
+  }
+
+  // Called by backends
+  def removeSlave(slaveId: String) {
+    try {
+      val timeout = 5.seconds
+      val future = masterActor.ask(RemoveSlave(slaveId))(timeout)
+      Await.result(future, timeout)
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error notifying standalone scheduler's master actor", e)
+    }
   }
 
   def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
