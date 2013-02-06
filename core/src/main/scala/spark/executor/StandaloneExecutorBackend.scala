@@ -4,15 +4,14 @@ import java.nio.ByteBuffer
 import spark.Logging
 import spark.TaskState.TaskState
 import spark.util.AkkaUtils
-import akka.actor.{ActorRef, Actor, Props}
+import akka.actor.{ActorRef, Actor, Props, Terminated}
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import java.util.concurrent.{TimeUnit, ThreadPoolExecutor, SynchronousQueue}
-import akka.remote.RemoteClientLifeCycleEvent
 import spark.scheduler.cluster._
 import spark.scheduler.cluster.RegisteredExecutor
 import spark.scheduler.cluster.LaunchTask
 import spark.scheduler.cluster.RegisterExecutorFailed
 import spark.scheduler.cluster.RegisterExecutor
-
 
 private[spark] class StandaloneExecutorBackend(
     executor: Executor,
@@ -27,17 +26,11 @@ private[spark] class StandaloneExecutorBackend(
   var driver: ActorRef = null
 
   override def preStart() {
-    try {
-      logInfo("Connecting to driver: " + driverUrl)
-      driver = context.actorFor(driverUrl)
-      driver ! RegisterExecutor(executorId, hostname, cores)
-      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-      context.watch(driver) // Doesn't work with remote actors, but useful for testing
-    } catch {
-      case e: Exception =>
-        logError("Failed to connect to driver", e)
-        System.exit(1)
-    }
+    logInfo("Connecting to driver: " + driverUrl)
+    driver = context.actorFor(driverUrl)
+    driver ! RegisterExecutor(executorId, hostname, cores)
+    context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+    context.watch(driver) // Doesn't work with remote actors, but useful for testing
   }
 
   override def receive = {
@@ -52,6 +45,10 @@ private[spark] class StandaloneExecutorBackend(
     case LaunchTask(taskDesc) =>
       logInfo("Got assigned task " + taskDesc.taskId)
       executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
+
+    case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
+      logError("Driver terminated or disconnected! Shutting down.")
+      System.exit(1)
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {

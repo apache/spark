@@ -1,19 +1,16 @@
 package spark.deploy.worker
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
-import akka.actor.{ActorRef, Props, Actor}
+import akka.actor.{ActorRef, Props, Actor, Terminated}
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
 import spark.deploy._
-import akka.remote.RemoteClientLifeCycleEvent
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import java.text.SimpleDateFormat
 import java.util.Date
-import akka.remote.RemoteClientShutdown
-import akka.remote.RemoteClientDisconnected
 import spark.deploy.RegisterWorker
 import spark.deploy.LaunchExecutor
 import spark.deploy.RegisterWorkerFailed
-import akka.actor.Terminated
 import java.io.File
 
 private[spark] class Worker(
