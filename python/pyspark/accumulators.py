@@ -11,6 +11,12 @@
 >>> a.value
 7
 
+>>> sc.accumulator(1.0).value
+1.0
+
+>>> sc.accumulator(1j).value
+1j
+
 >>> rdd = sc.parallelize([1,2,3])
 >>> def f(x):
 ...     global a
@@ -19,7 +25,8 @@
 >>> a.value
 13
 
->>> class VectorAccumulatorParam(object):
+>>> from pyspark.accumulators import AccumulatorParam
+>>> class VectorAccumulatorParam(AccumulatorParam):
 ...     def zero(self, value):
 ...         return [0.0] * len(value)
 ...     def addInPlace(self, val1, val2):
@@ -84,8 +91,7 @@ class Accumulator(object):
 
     While C{SparkContext} supports accumulators for primitive data types like C{int} and
     C{float}, users can also define accumulators for custom types by providing a custom
-    C{AccumulatorParam} object with a C{zero} and C{addInPlace} method. Refer to the doctest
-    of this module for an example.
+    L{AccumulatorParam} object. Refer to the doctest of this module for an example.
     """
 
     def __init__(self, aid, value, accum_param):
@@ -124,8 +130,31 @@ class Accumulator(object):
     def __str__(self):
         return str(self._value)
 
+    def __repr__(self):
+        return "Accumulator<id=%i, value=%s>" % (self.aid, self._value)
 
-class AddingAccumulatorParam(object):
+
+class AccumulatorParam(object):
+    """
+    Helper object that defines how to accumulate values of a given type.
+    """
+
+    def zero(self, value):
+        """
+        Provide a "zero value" for the type, compatible in dimensions with the
+        provided C{value} (e.g., a zero vector)
+        """
+        raise NotImplementedError
+
+    def addInPlace(self, value1, value2):
+        """
+        Add two values of the accumulator's data type, returning a new value;
+        for efficiency, can also update C{value1} in place and return it.
+        """
+        raise NotImplementedError
+
+
+class AddingAccumulatorParam(AccumulatorParam):
     """
     An AccumulatorParam that uses the + operators to add values. Designed for simple types
     such as integers, floats, and lists. Requires the zero value for the underlying type
@@ -145,7 +174,7 @@ class AddingAccumulatorParam(object):
 
 # Singleton accumulator params for some standard types
 INT_ACCUMULATOR_PARAM = AddingAccumulatorParam(0)
-DOUBLE_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0)
+FLOAT_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0)
 COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)
 
 
@@ -167,12 +196,3 @@ def _start_update_server():
     thread.daemon = True
     thread.start()
     return server
-
-
-def _test():
-    import doctest
-    doctest.testmod()
-
-
-if __name__ == "__main__":
-    _test()

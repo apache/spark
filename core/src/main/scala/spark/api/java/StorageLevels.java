@@ -17,4 +17,15 @@ public class StorageLevels {
   public static final StorageLevel MEMORY_AND_DISK_2 = new StorageLevel(true, true, true, 2);
   public static final StorageLevel MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, 1);
   public static final StorageLevel MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, 2);
+
+  /**
+   * Create a new StorageLevel object.
+   * @param useDisk saved to disk, if true
+   * @param useMemory saved to memory, if true
+   * @param deserialized saved as deserialized objects, if true
+   * @param replication replication factor
+   */
+  public static StorageLevel create(boolean useDisk, boolean useMemory, boolean deserialized, int replication) {
+    return StorageLevel.apply(useDisk, useMemory, deserialized, replication);
+  }
 }

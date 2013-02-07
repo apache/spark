@@ -1,20 +1,23 @@
 """
 Worker that receives input from Piped RDD.
 """
+import os
 import sys
+import traceback
 from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
+from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, read_with_length, write_int, \
     read_long, read_int, dump_pickle, load_pickle, read_from_pickle_file
 
 
 # Redirect stdout to stderr so that users must return values from functions.
-old_stdout = sys.stdout
-sys.stdout = sys.stderr
+old_stdout = os.fdopen(os.dup(1), 'w')
+os.dup2(2, 1)
 
 
 def load_obj():
@@ -23,6 +26,10 @@ def load_obj():
 
 def main():
     split_index = read_int(sys.stdin)
+    spark_files_dir = load_pickle(read_with_length(sys.stdin))
+    SparkFiles._root_directory = spark_files_dir
+    SparkFiles._is_running_on_worker = True
+    sys.path.append(spark_files_dir)
     num_broadcast_variables = read_int(sys.stdin)
     for _ in range(num_broadcast_variables):
         bid = read_long(sys.stdin)
@@ -35,8 +42,13 @@ def main():
     else:
         dumps = dump_pickle
     iterator = read_from_pickle_file(sys.stdin)
-    for obj in func(split_index, iterator):
-        write_with_length(dumps(obj), old_stdout)
+    try:
+        for obj in func(split_index, iterator):
+           write_with_length(dumps(obj), old_stdout)
+    except Exception as e:
+        write_int(-2, old_stdout)
+        write_with_length(traceback.format_exc(), old_stdout)
+        sys.exit(-1)
     # Mark the beginning of the accumulators section of the output
     write_int(-1, old_stdout)
     for aid, accum in _accumulatorRegistry.items():

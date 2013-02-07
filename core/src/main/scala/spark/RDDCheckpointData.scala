@@ -20,7 +20,7 @@ private[spark] object CheckpointState extends Enumeration {
  * of the checkpointed RDD.
  */
 private[spark] class RDDCheckpointData[T: ClassManifest](rdd: RDD[T])
-extends Logging with Serializable {
+  extends Logging with Serializable {
 
   import CheckpointState._
 
@@ -31,7 +31,7 @@ extends Logging with Serializable {
   @transient var cpFile: Option[String] = None
 
   // The CheckpointRDD created from the checkpoint file, that is, the new parent the associated RDD.
-  @transient var cpRDD: Option[RDD[T]] = None
+  var cpRDD: Option[RDD[T]] = None
 
   // Mark the RDD for checkpointing
   def markForCheckpoint() {
@@ -41,12 +41,12 @@ extends Logging with Serializable {
   }
 
   // Is the RDD already checkpointed
-  def isCheckpointed(): Boolean = {
+  def isCheckpointed: Boolean = {
     RDDCheckpointData.synchronized { cpState == Checkpointed }
   }
 
   // Get the file to which this RDD was checkpointed to as an Option
-  def getCheckpointFile(): Option[String] = {
+  def getCheckpointFile: Option[String] = {
     RDDCheckpointData.synchronized { cpFile }
   }
 
@@ -71,7 +71,7 @@ extends Logging with Serializable {
     RDDCheckpointData.synchronized {
       cpFile = Some(path)
       cpRDD = Some(newRDD)
-      rdd.changeDependencies(newRDD)
+      rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and splits
       cpState = Checkpointed
       RDDCheckpointData.clearTaskCaches()
       logInfo("Done checkpointing RDD " + rdd.id + ", new parent is RDD " + newRDD.id)
@@ -79,7 +79,7 @@ extends Logging with Serializable {
   }
 
   // Get preferred location of a split after checkpointing
-  def getPreferredLocations(split: Split) = {
+  def getPreferredLocations(split: Split): Seq[String] = {
     RDDCheckpointData.synchronized {
       cpRDD.get.preferredLocations(split)
     }
@@ -91,9 +91,10 @@ extends Logging with Serializable {
     }
   }
 
-  // Get iterator. This is called at the worker nodes.
-  def iterator(split: Split, context: TaskContext): Iterator[T] = {
-    rdd.firstParent[T].iterator(split, context)
+  def checkpointRDD: Option[RDD[T]] = {
+    RDDCheckpointData.synchronized {
+      cpRDD
+    }
   }
 }
 

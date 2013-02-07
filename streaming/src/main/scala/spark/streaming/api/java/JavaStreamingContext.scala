@@ -34,6 +34,14 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     this(new StreamingContext(master, frameworkName, batchDuration))
 
   /**
+   * Creates a StreamingContext.
+   * @param sparkContext The underlying JavaSparkContext to use
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(sparkContext: JavaSparkContext, batchDuration: Duration) =
+    this(new StreamingContext(sparkContext.sc, batchDuration))
+
+  /**
    * Re-creates a StreamingContext from a checkpoint file.
    * @param path Path either to the directory that was specified as the checkpoint directory, or
    *             to the checkpoint file 'graph' or 'graph.bk'.
