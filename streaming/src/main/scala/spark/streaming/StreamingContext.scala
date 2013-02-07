@@ -136,8 +136,7 @@ class StreamingContext private (
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param hostname Zookeper hostname.
-   * @param port Zookeper port.
+   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
@@ -146,14 +145,13 @@ class StreamingContext private (
    * @param storageLevel RDD storage level. Defaults to memory-only.
    */
   def kafkaStream[T: ClassManifest](
-      hostname: String,
-      port: Int,
+      zkQuorum: String,
       groupId: String,
       topics: Map[String, Int],
       initialOffsets: Map[KafkaPartitionKey, Long] = Map[KafkaPartitionKey, Long](),
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
     ): DStream[T] = {
-    val inputStream = new KafkaInputDStream[T](this, hostname, port, groupId, topics, initialOffsets, storageLevel)
+    val inputStream = new KafkaInputDStream[T](this, zkQuorum, groupId, topics, initialOffsets, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }
