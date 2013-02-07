@@ -141,8 +141,7 @@ class StreamingContext private (
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param hostname Zookeper hostname.
-   * @param port Zookeper port.
+   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
@@ -151,14 +150,13 @@ class StreamingContext private (
    * @param storageLevel RDD storage level. Defaults to memory-only.
    */
   def kafkaStream[T: ClassManifest](
-      hostname: String,
-      port: Int,
+      zkQuorum: String,
       groupId: String,
       topics: Map[String, Int],
       initialOffsets: Map[KafkaPartitionKey, Long] = Map[KafkaPartitionKey, Long](),
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
     ): DStream[T] = {
-    val inputStream = new KafkaInputDStream[T](this, hostname, port, groupId, topics, initialOffsets, storageLevel)
+    val inputStream = new KafkaInputDStream[T](this, zkQuorum, groupId, topics, initialOffsets, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }
@@ -288,17 +286,31 @@ class StreamingContext private (
   }
 
   /**
-   * Creates a input stream from an queue of RDDs. In each batch,
+   * Creates an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
-   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty
    * @tparam T         Type of objects in the RDD
    */
   def queueStream[T: ClassManifest](
       queue: Queue[RDD[T]],
-      oneAtATime: Boolean = true,
-      defaultRDD: RDD[T] = null
+      oneAtATime: Boolean = true
+    ): DStream[T] = {
+    queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
+  }
+
+  /**
+   * Creates an input stream from a queue of RDDs. In each batch,
+   * it will process either one or all of the RDDs returned by the queue.
+   * @param queue      Queue of RDDs
+   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
+   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty. Set as null if no RDD should be returned when empty
+   * @tparam T         Type of objects in the RDD
+   */
+  def queueStream[T: ClassManifest](
+      queue: Queue[RDD[T]],
+      oneAtATime: Boolean,
+      defaultRDD: RDD[T]
     ): DStream[T] = {
     val inputStream = new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
     registerInputStream(inputStream)
