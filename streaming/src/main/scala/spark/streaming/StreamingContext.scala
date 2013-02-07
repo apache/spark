@@ -283,17 +283,31 @@ class StreamingContext private (
   }
 
   /**
-   * Creates a input stream from an queue of RDDs. In each batch,
+   * Creates an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
-   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty
    * @tparam T         Type of objects in the RDD
    */
   def queueStream[T: ClassManifest](
       queue: Queue[RDD[T]],
-      oneAtATime: Boolean = true,
-      defaultRDD: RDD[T] = null
+      oneAtATime: Boolean = true
+    ): DStream[T] = {
+    queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
+  }
+
+  /**
+   * Creates an input stream from a queue of RDDs. In each batch,
+   * it will process either one or all of the RDDs returned by the queue.
+   * @param queue      Queue of RDDs
+   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
+   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty. Set as null if no RDD should be returned when empty
+   * @tparam T         Type of objects in the RDD
+   */
+  def queueStream[T: ClassManifest](
+      queue: Queue[RDD[T]],
+      oneAtATime: Boolean,
+      defaultRDD: RDD[T]
     ): DStream[T] = {
     val inputStream = new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
     registerInputStream(inputStream)
