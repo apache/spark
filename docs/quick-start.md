@@ -135,7 +135,7 @@ scalaVersion := "{{site.SCALA_VERSION}}"
 libraryDependencies += "org.spark-project" %% "spark-core" % "{{site.SPARK_VERSION}}"
 
 resolvers ++= Seq(
-  "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
+  "Akka Repository" at "http://repo.akka.io/releases/",
   "Spray Repository" at "http://repo.spray.cc/")
 {% endhighlight %}
 
@@ -200,6 +200,16 @@ To build the job, we also write a Maven `pom.xml` file that lists Spark as a dep
   <name>Simple Project</name>
   <packaging>jar</packaging>
   <version>1.0</version>
+  <repositories> <!-- Repositories that Spark needs -->
+    <repository>
+      <id>Spray Repository</id>
+      <url>http://repo.spray.cc</url>
+    </repository>
+    <repository>
+      <id>Akka Repository</id>
+      <url>http://repo.akka.io/releases</url>
+    </repository>
+  </repositories>
   <dependencies>
     <dependency> <!-- Spark dependency -->
       <groupId>org.spark-project</groupId>
