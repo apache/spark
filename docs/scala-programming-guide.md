@@ -301,7 +301,8 @@ We recommend going through the following process to select one:
 * Use the replicated storage levels if you want fast fault recovery (e.g. if using Spark to serve requests from a web
   application). *All* the storage levels provide full fault tolerance by recomputing lost data, but the replicated ones
   let you continue running tasks on the RDD without waiting to recompute a lost partition.
-  
+ 
+If you want to define your own storage level (say, with replication factor of 3 instead of 2), then use the function factor method `apply()` of the [`StorageLevel`](api/core/index.html#spark.storage.StorageLevel$) singleton object.  
 
 # Shared Variables
 

@@ -22,17 +22,10 @@ class ShuffledRDD[K, V](
 
   override val partitioner = Some(part)
 
-  @transient
-  var splits_ = Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))
-
-  override def getSplits = splits_
+  override def getSplits = Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))
 
   override def compute(split: Split, context: TaskContext): Iterator[(K, V)] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
     SparkEnv.get.shuffleFetcher.fetch[K, V](shuffledId, split.index)
-  }
-
-  override def clearDependencies() {
-    splits_ = null
   }
 }

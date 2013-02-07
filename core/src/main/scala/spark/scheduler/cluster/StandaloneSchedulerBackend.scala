@@ -23,13 +23,13 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
 
-  class MasterActor(sparkProperties: Seq[(String, String)]) extends Actor {
-    val slaveActor = new HashMap[String, ActorRef]
-    val slaveAddress = new HashMap[String, Address]
-    val slaveHost = new HashMap[String, String]
+  class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
+    val executorActor = new HashMap[String, ActorRef]
+    val executorAddress = new HashMap[String, Address]
+    val executorHost = new HashMap[String, String]
     val freeCores = new HashMap[String, Int]
-    val actorToSlaveId = new HashMap[ActorRef, String]
-    val addressToSlaveId = new HashMap[Address, String]
+    val actorToExecutorId = new HashMap[ActorRef, String]
+    val addressToExecutorId = new HashMap[Address, String]
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -37,86 +37,86 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     }
 
     def receive = {
-      case RegisterSlave(slaveId, host, cores) =>
-        if (slaveActor.contains(slaveId)) {
-          sender ! RegisterSlaveFailed("Duplicate slave ID: " + slaveId)
+      case RegisterExecutor(executorId, host, cores) =>
+        if (executorActor.contains(executorId)) {
+          sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
         } else {
-          logInfo("Registered slave: " + sender + " with ID " + slaveId)
-          sender ! RegisteredSlave(sparkProperties)
+          logInfo("Registered executor: " + sender + " with ID " + executorId)
+          sender ! RegisteredExecutor(sparkProperties)
           context.watch(sender)
-          slaveActor(slaveId) = sender
-          slaveHost(slaveId) = host
-          freeCores(slaveId) = cores
-          slaveAddress(slaveId) = sender.path.address
-          actorToSlaveId(sender) = slaveId
-          addressToSlaveId(sender.path.address) = slaveId
+          executorActor(executorId) = sender
+          executorHost(executorId) = host
+          freeCores(executorId) = cores
+          executorAddress(executorId) = sender.path.address
+          actorToExecutorId(sender) = executorId
+          addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           makeOffers()
         }
 
-      case StatusUpdate(slaveId, taskId, state, data) =>
+      case StatusUpdate(executorId, taskId, state, data) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
-          freeCores(slaveId) += 1
-          makeOffers(slaveId)
+          freeCores(executorId) += 1
+          makeOffers(executorId)
         }
 
       case ReviveOffers =>
         makeOffers()
 
-      case StopMaster =>
+      case StopDriver =>
         sender ! true
         context.stop(self)
 
       case Terminated(actor) =>
-        actorToSlaveId.get(actor).foreach(removeSlave(_, "Akka actor terminated"))
+        actorToExecutorId.get(actor).foreach(removeExecutor(_, "Akka actor terminated"))
 
       case RemoteClientDisconnected(transport, address) =>
-        addressToSlaveId.get(address).foreach(removeSlave(_, "remote Akka client disconnected"))
+        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client disconnected"))
 
       case RemoteClientShutdown(transport, address) =>
-        addressToSlaveId.get(address).foreach(removeSlave(_, "remote Akka client shutdown"))
+        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client shutdown"))
     }
 
-    // Make fake resource offers on all slaves
+    // Make fake resource offers on all executors
     def makeOffers() {
       launchTasks(scheduler.resourceOffers(
-        slaveHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
+        executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
     }
 
-    // Make fake resource offers on just one slave
-    def makeOffers(slaveId: String) {
+    // Make fake resource offers on just one executor
+    def makeOffers(executorId: String) {
       launchTasks(scheduler.resourceOffers(
-        Seq(new WorkerOffer(slaveId, slaveHost(slaveId), freeCores(slaveId)))))
+        Seq(new WorkerOffer(executorId, executorHost(executorId), freeCores(executorId)))))
     }
 
     // Launch tasks returned by a set of resource offers
     def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        freeCores(task.slaveId) -= 1
-        slaveActor(task.slaveId) ! LaunchTask(task)
+        freeCores(task.executorId) -= 1
+        executorActor(task.executorId) ! LaunchTask(task)
       }
     }
 
     // Remove a disconnected slave from the cluster
-    def removeSlave(slaveId: String, reason: String) {
-      logInfo("Slave " + slaveId + " disconnected, so removing it")
-      val numCores = freeCores(slaveId)
-      actorToSlaveId -= slaveActor(slaveId)
-      addressToSlaveId -= slaveAddress(slaveId)
-      slaveActor -= slaveId
-      slaveHost -= slaveId
-      freeCores -= slaveId
-      slaveHost -= slaveId
+    def removeExecutor(executorId: String, reason: String) {
+      logInfo("Slave " + executorId + " disconnected, so removing it")
+      val numCores = freeCores(executorId)
+      actorToExecutorId -= executorActor(executorId)
+      addressToExecutorId -= executorAddress(executorId)
+      executorActor -= executorId
+      executorHost -= executorId
+      freeCores -= executorId
+      executorHost -= executorId
       totalCoreCount.addAndGet(-numCores)
-      scheduler.slaveLost(slaveId, SlaveLost(reason))
+      scheduler.executorLost(executorId, SlaveLost(reason))
     }
   }
 
-  var masterActor: ActorRef = null
+  var driverActor: ActorRef = null
   val taskIdsOnSlave = new HashMap[String, HashSet[String]]
 
-  def start() {
+  override def start() {
     val properties = new ArrayBuffer[(String, String)]
     val iterator = System.getProperties.entrySet.iterator
     while (iterator.hasNext) {
@@ -126,15 +126,15 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         properties += ((key, value))
       }
     }
-    masterActor = actorSystem.actorOf(
-      Props(new MasterActor(properties)), name = StandaloneSchedulerBackend.ACTOR_NAME)
+    driverActor = actorSystem.actorOf(
+      Props(new DriverActor(properties)), name = StandaloneSchedulerBackend.ACTOR_NAME)
   }
 
-  def stop() {
+  override def stop() {
     try {
-      if (masterActor != null) {
+      if (driverActor != null) {
         val timeout = 5.seconds
-        val future = masterActor.ask(StopMaster)(timeout)
+        val future = driverActor.ask(StopDriver)(timeout)
         Await.result(future, timeout)
       }
     } catch {
@@ -143,11 +143,11 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     }
   }
 
-  def reviveOffers() {
-    masterActor ! ReviveOffers
+  override def reviveOffers() {
+    driverActor ! ReviveOffers
   }
 
-  def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
+  override def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
 }
 
 private[spark] object StandaloneSchedulerBackend {

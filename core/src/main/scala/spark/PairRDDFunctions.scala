@@ -465,7 +465,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         val res = self.context.runJob(self, process _, Array(index), false)
         res(0)
       case None =>
-        self.filter(_._1 == key).map(_._2).collect
+        self.filter(_._1 == key).map(_._2).collect()
     }
   }
 
@@ -493,20 +493,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
-    saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, new Configuration)
-  }
-
-  /**
-   * Output the RDD to any Hadoop-supported file system, using a new Hadoop API `OutputFormat`
-   * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
-   */
-  def saveAsNewAPIHadoopFile(
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      conf: Configuration) {
+      conf: Configuration = self.context.hadoopConfiguration) {
     val job = new NewAPIHadoopJob(conf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
@@ -557,7 +545,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf) {
+      conf: JobConf = new JobConf(self.context.hadoopConfiguration)) {
     conf.setOutputKeyClass(keyClass)
     conf.setOutputValueClass(valueClass)
     // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
@@ -602,7 +590,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
       var count = 0
       while(iter.hasNext) {
-        val record = iter.next
+        val record = iter.next()
         count += 1
         writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
       }
@@ -661,9 +649,7 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
 }
 
 private[spark]
-class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U)
-  extends RDD[(K, U)](prev) {
-
+class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)](prev) {
   override def getSplits = firstParent[(K, V)].splits
   override val partitioner = firstParent[(K, V)].partitioner
   override def compute(split: Split, context: TaskContext) =

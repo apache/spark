@@ -12,7 +12,7 @@ import scala.collection.mutable.HashMap
 
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
 
 /**
@@ -75,7 +75,7 @@ abstract class DStream[T: ClassManifest] (
   // Checkpoint details
   protected[streaming] val mustCheckpoint = false
   protected[streaming] var checkpointDuration: Duration = null
-  protected[streaming] var checkpointData = new DStreamCheckpointData(HashMap[Time, Any]())
+  protected[streaming] val checkpointData = new DStreamCheckpointData(this)
 
   // Reference to whole DStream graph
   protected[streaming] var graph: DStreamGraph = null
@@ -85,10 +85,10 @@ abstract class DStream[T: ClassManifest] (
   // Duration for which the DStream requires its parent DStream to remember each RDD created
   protected[streaming] def parentRememberDuration = rememberDuration
 
-  /** Returns the StreamingContext associated with this DStream */
-  def context() = ssc
+  /** Return the StreamingContext associated with this DStream */
+  def context = ssc
 
-  /** Persists the RDDs of this DStream with the given storage level */
+  /** Persist the RDDs of this DStream with the given storage level */
   def persist(level: StorageLevel): DStream[T] = {
     if (this.isInitialized) {
       throw new UnsupportedOperationException(
@@ -159,7 +159,7 @@ abstract class DStream[T: ClassManifest] (
     )
 
     assert(
-     checkpointDuration == null || ssc.sc.checkpointDir.isDefined,
+     checkpointDuration == null || context.sparkContext.checkpointDir.isDefined,
       "The checkpoint directory has not been set. Please use StreamingContext.checkpoint()" +
       " or SparkContext.checkpoint() to set the checkpoint directory."
     )
@@ -198,10 +198,10 @@ abstract class DStream[T: ClassManifest] (
       metadataCleanerDelay < 0 || rememberDuration.milliseconds < metadataCleanerDelay * 1000,
       "It seems you are doing some DStream window operation or setting a checkpoint interval " +
         "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
-        "than " + rememberDuration.milliseconds + " milliseconds. But the Spark's metadata cleanup" +
-        "delay is set to " + (metadataCleanerDelay / 60.0) + " minutes, which is not sufficient. Please set " +
-        "the Java property 'spark.cleaner.delay' to more than " +
-        math.ceil(rememberDuration.milliseconds.toDouble / 60000.0).toInt + " minutes."
+        "than " + rememberDuration.milliseconds / 1000 + " seconds. But Spark's metadata cleanup" +
+        "delay is set to " + metadataCleanerDelay + " seconds, which is not sufficient. Please " +
+        "set the Java property 'spark.cleaner.delay' to more than " +
+        math.ceil(rememberDuration.milliseconds / 1000.0).toInt + " seconds."
     )
 
     dependencies.foreach(_.validate())
@@ -298,8 +298,8 @@ abstract class DStream[T: ClassManifest] (
     getOrCompute(time) match {
       case Some(rdd) => {
         val jobFunc = () => {
-          val emptyFunc = { (iterator: Iterator[T]) => {} } 
-          ssc.sc.runJob(rdd, emptyFunc)
+          val emptyFunc = { (iterator: Iterator[T]) => {} }
+          context.sparkContext.runJob(rdd, emptyFunc)
         }
         Some(new Job(time, jobFunc))
       }
@@ -310,10 +310,9 @@ abstract class DStream[T: ClassManifest] (
   /**
    * Dereference RDDs that are older than rememberDuration.
    */
-  protected[streaming] def forgetOldRDDs(time: Time) {
-    val keys = generatedRDDs.keys
+  protected[streaming] def forgetOldMetadata(time: Time) {
     var numForgotten = 0
-    keys.foreach(t => {
+    generatedRDDs.keys.foreach(t => {
       if (t <= (time - rememberDuration)) {
         generatedRDDs.remove(t)
         numForgotten += 1
@@ -321,7 +320,7 @@ abstract class DStream[T: ClassManifest] (
       }
     })
     logInfo("Forgot " + numForgotten + " RDDs from " + this)
-    dependencies.foreach(_.forgetOldRDDs(time))
+    dependencies.foreach(_.forgetOldMetadata(time))
   }
 
   /* Adds metadata to the Stream while it is running. 
@@ -342,40 +341,10 @@ abstract class DStream[T: ClassManifest] (
    */
   protected[streaming] def updateCheckpointData(currentTime: Time) {
     logInfo("Updating checkpoint data for time " + currentTime)
-
-    // Get the checkpointed RDDs from the generated RDDs
-    val newRdds = generatedRDDs.filter(_._2.getCheckpointFile.isDefined)
-                               .map(x => (x._1, x._2.getCheckpointFile.get))
-
-    // Make a copy of the existing checkpoint data (checkpointed RDDs)
-    val oldRdds = checkpointData.rdds.clone()
-
-    // If the new checkpoint data has checkpoints then replace existing with the new one
-    if (newRdds.size > 0) {
-      checkpointData.rdds.clear()
-      checkpointData.rdds ++= newRdds
-    }
-
-    // Make parent DStreams update their checkpoint data
+    checkpointData.update()
     dependencies.foreach(_.updateCheckpointData(currentTime))
-
-    // TODO: remove this, this is just for debugging
-    newRdds.foreach {
-      case (time, data) => { logInfo("Added checkpointed RDD for time " + time + " to stream checkpoint") }
-    }
-
-    if (newRdds.size > 0) {
-      (oldRdds -- newRdds.keySet).foreach {
-        case (time, data) => {
-          val path = new Path(data.toString)
-          val fs = path.getFileSystem(new Configuration())
-          fs.delete(path, true)
-          logInfo("Deleted checkpoint file '" + path + "' for time " + time)
-        }
-      }
-    }
-    logInfo("Updated checkpoint data for time " + currentTime + ", " + checkpointData.rdds.size + " checkpoints, " 
-      + "[" + checkpointData.rdds.mkString(",") + "]")
+    checkpointData.cleanup()
+    logDebug("Updated checkpoint data for time " + currentTime + ": " + checkpointData)
   }
 
   /**
@@ -386,14 +355,8 @@ abstract class DStream[T: ClassManifest] (
    */
   protected[streaming] def restoreCheckpointData() {
     // Create RDDs from the checkpoint data
-    logInfo("Restoring checkpoint data from " + checkpointData.rdds.size + " checkpointed RDDs")
-    checkpointData.rdds.foreach {
-      case(time, data) => {
-        logInfo("Restoring checkpointed RDD for time " + time + " from file '" + data.toString + "'")
-        val rdd = ssc.sc.checkpointFile[T](data.toString)
-        generatedRDDs += ((time, rdd))
-      }
-    }
+    logInfo("Restoring checkpoint data")
+    checkpointData.restore()
     dependencies.foreach(_.restoreCheckpointData())
     logInfo("Restored checkpoint data")
   }
@@ -433,7 +396,7 @@ abstract class DStream[T: ClassManifest] (
 
   /** Return a new DStream by applying a function to all elements of this DStream. */
   def map[U: ClassManifest](mapFunc: T => U): DStream[U] = {
-    new MappedDStream(this, ssc.sc.clean(mapFunc))
+    new MappedDStream(this, context.sparkContext.clean(mapFunc))
   }
 
   /**
@@ -441,7 +404,7 @@ abstract class DStream[T: ClassManifest] (
    * and then flattening the results
    */
   def flatMap[U: ClassManifest](flatMapFunc: T => Traversable[U]): DStream[U] = {
-    new FlatMappedDStream(this, ssc.sc.clean(flatMapFunc))
+    new FlatMappedDStream(this, context.sparkContext.clean(flatMapFunc))
   }
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
@@ -463,7 +426,7 @@ abstract class DStream[T: ClassManifest] (
       mapPartFunc: Iterator[T] => Iterator[U],
       preservePartitioning: Boolean = false
     ): DStream[U] = {
-    new MapPartitionedDStream(this, ssc.sc.clean(mapPartFunc), preservePartitioning)
+    new MapPartitionedDStream(this, context.sparkContext.clean(mapPartFunc), preservePartitioning)
   }
 
   /**
@@ -492,7 +455,7 @@ abstract class DStream[T: ClassManifest] (
    * this DStream will be registered as an output stream and therefore materialized.
    */
   def foreach(foreachFunc: (RDD[T], Time) => Unit) {
-    val newStream = new ForEachDStream(this, ssc.sc.clean(foreachFunc))
+    val newStream = new ForEachDStream(this, context.sparkContext.clean(foreachFunc))
     ssc.registerOutputStream(newStream)
     newStream
   }
@@ -510,7 +473,7 @@ abstract class DStream[T: ClassManifest] (
    * on each RDD of this DStream.
    */
   def transform[U: ClassManifest](transformFunc: (RDD[T], Time) => RDD[U]): DStream[U] = {
-    new TransformedDStream(this, ssc.sc.clean(transformFunc))
+    new TransformedDStream(this, context.sparkContext.clean(transformFunc))
   }
 
   /**
@@ -527,7 +490,7 @@ abstract class DStream[T: ClassManifest] (
       if (first11.size > 10) println("...")
       println()
     }
-    val newStream = new ForEachDStream(this, ssc.sc.clean(foreachFunc))
+    val newStream = new ForEachDStream(this, context.sparkContext.clean(foreachFunc))
     ssc.registerOutputStream(newStream)
   }
 
@@ -651,7 +614,3 @@ abstract class DStream[T: ClassManifest] (
     ssc.registerOutputStream(this)
   }
 }
-
-private[streaming]
-case class DStreamCheckpointData(rdds: HashMap[Time, Any])
-

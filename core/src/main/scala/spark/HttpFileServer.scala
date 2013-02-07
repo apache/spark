@@ -1,9 +1,7 @@
 package spark
 
-import java.io.{File, PrintWriter}
-import java.net.URL
-import scala.collection.mutable.HashMap
-import org.apache.hadoop.fs.FileUtil
+import java.io.{File}
+import com.google.common.io.Files
 
 private[spark] class HttpFileServer extends Logging {
   
@@ -40,7 +38,7 @@ private[spark] class HttpFileServer extends Logging {
   }
   
   def addFileToDir(file: File, dir: File) : String = {
-    Utils.copyFile(file, new File(dir, file.getName))
+    Files.copy(file, new File(dir, file.getName))
     return dir + "/" + file.getName
   }
   

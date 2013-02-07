@@ -17,7 +17,8 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val jars = ssc.sc.jars
   val graph = ssc.graph
   val checkpointDir = ssc.checkpointDir
-  val checkpointDuration: Duration = ssc.checkpointDuration
+  val checkpointDuration = ssc.checkpointDuration
+  val pendingTimes = ssc.scheduler.jobManager.getPendingTimes()
 
   def validate() {
     assert(master != null, "Checkpoint.master is null")

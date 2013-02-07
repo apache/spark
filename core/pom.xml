@@ -99,6 +99,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.easymock</groupId>
+      <artifactId>easymock</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.novocode</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
@@ -163,11 +168,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <activation>
-        <property>
-          <name>!hadoopVersion</name>
-        </property>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
@@ -220,12 +220,6 @@
     </profile>
     <profile>
       <id>hadoop2</id>
-      <activation>
-        <property>
-          <name>hadoopVersion</name>
-          <value>2</value>
-        </property>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>

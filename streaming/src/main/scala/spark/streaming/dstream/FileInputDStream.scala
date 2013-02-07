@@ -2,13 +2,14 @@ package spark.streaming.dstream
 
 import spark.RDD
 import spark.rdd.UnionRDD
-import spark.streaming.{StreamingContext, Time}
+import spark.streaming.{DStreamCheckpointData, StreamingContext, Time}
 
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.{HashSet, HashMap}
+import java.io.{ObjectInputStream, IOException}
 
 private[streaming]
 class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] : ClassManifest](
@@ -18,21 +19,14 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
     newFilesOnly: Boolean = true) 
   extends InputDStream[(K, V)](ssc_) {
 
+  protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
+
+  private val lastModTimeFiles = new HashSet[String]()
+  private var lastModTime = 0L
+
   @transient private var path_ : Path = null
   @transient private var fs_ : FileSystem = null
-
-  var lastModTime = 0L
-  val lastModTimeFiles = new HashSet[String]()
-
-  def path(): Path = {
-    if (path_ == null) path_ = new Path(directory)
-    path_
-  }
-
-  def fs(): FileSystem = {
-    if (fs_ == null) fs_ = path.getFileSystem(new Configuration())
-    fs_
-  }
+  @transient private var files = new HashMap[Time, Array[String]]
 
   override def start() {
     if (newFilesOnly) {
@@ -79,8 +73,8 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
       }
     }
 
-    val newFiles = fs.listStatus(path, newFilter)
-    logInfo("New files: " + newFiles.map(_.getPath).mkString(", "))
+    val newFiles = fs.listStatus(path, newFilter).map(_.getPath.toString)
+    logInfo("New files: " + newFiles.mkString(", "))
     if (newFiles.length > 0) {
       // Update the modification time and the files processed for that modification time
       if (lastModTime != newFilter.latestModTime) {
@@ -89,9 +83,70 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
       }
       lastModTimeFiles ++= newFilter.latestModTimeFiles
     }
-    val newRDD = new UnionRDD(ssc.sc, newFiles.map(
-      file => ssc.sc.newAPIHadoopFile[K, V, F](file.getPath.toString)))
-    Some(newRDD)
+    files += ((validTime, newFiles))
+    Some(filesToRDD(newFiles))
+  }
+
+  /** Forget the old time-to-files mappings along with old RDDs */
+  protected[streaming] override def forgetOldMetadata(time: Time) {
+    super.forgetOldMetadata(time)
+    val filesToBeRemoved = files.filter(_._1 <= (time - rememberDuration))
+    files --= filesToBeRemoved.keys
+    logInfo("Forgot " + filesToBeRemoved.size + " files from " + this)
+  }
+
+  /** Generate one RDD from an array of files */
+  protected[streaming] def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
+    new UnionRDD(
+      context.sparkContext,
+      files.map(file => context.sparkContext.newAPIHadoopFile[K, V, F](file))
+    )
+  }
+
+  private def path: Path = {
+    if (path_ == null) path_ = new Path(directory)
+    path_
+  }
+
+  private def fs: FileSystem = {
+    if (fs_ == null) fs_ = path.getFileSystem(new Configuration())
+    fs_
+  }
+
+  @throws(classOf[IOException])
+  private def readObject(ois: ObjectInputStream) {
+    logDebug(this.getClass().getSimpleName + ".readObject used")
+    ois.defaultReadObject()
+    generatedRDDs = new HashMap[Time, RDD[(K,V)]] ()
+    files = new HashMap[Time, Array[String]]
+  }
+
+  /**
+   * A custom version of the DStreamCheckpointData that stores names of
+   * Hadoop files as checkpoint data.
+   */
+  private[streaming]
+  class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
+
+     def hadoopFiles = data.asInstanceOf[HashMap[Time, Array[String]]]
+
+    override def update() {
+      hadoopFiles.clear()
+      hadoopFiles ++= files
+    }
+
+    override def cleanup() { }
+
+    override def restore() {
+      hadoopFiles.foreach {
+        case (time, files) => {
+          logInfo("Restoring Hadoop RDD for time " + time + " from files " +
+            files.mkString("[", ",", "]") )
+          files
+          generatedRDDs += ((time, filesToRDD(files)))
+        }
+      }
+    }
   }
 }
 
@@ -99,4 +154,5 @@ private[streaming]
 object FileInputDStream {
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 }
+
 

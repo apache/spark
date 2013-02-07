@@ -10,7 +10,7 @@ private[spark] class JobInfo(
     val id: String,
     val desc: JobDescription,
     val submitDate: Date,
-    val actor: ActorRef)
+    val driver: ActorRef)
 {
   var state = JobState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]

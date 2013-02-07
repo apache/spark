@@ -32,7 +32,7 @@ private[spark] object ShuffleMapTask {
         return old
       } else {
         val out = new ByteArrayOutputStream
-        val ser = SparkEnv.get.closureSerializer.newInstance
+        val ser = SparkEnv.get.closureSerializer.newInstance()
         val objOut = ser.serializeStream(new GZIPOutputStream(out))
         objOut.writeObject(rdd)
         objOut.writeObject(dep)
@@ -48,7 +48,7 @@ private[spark] object ShuffleMapTask {
     synchronized {
       val loader = Thread.currentThread.getContextClassLoader
       val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
-      val ser = SparkEnv.get.closureSerializer.newInstance
+      val ser = SparkEnv.get.closureSerializer.newInstance()
       val objIn = ser.deserializeStream(in)
       val rdd = objIn.readObject().asInstanceOf[RDD[_]]
       val dep = objIn.readObject().asInstanceOf[ShuffleDependency[_,_]]
@@ -81,7 +81,7 @@ private[spark] class ShuffleMapTask(
   with Externalizable
   with Logging {
 
-  def this() = this(0, null, null, 0, null)
+  protected def this() = this(0, null, null, 0, null)
 
   var split = if (rdd == null) {
     null
@@ -117,34 +117,33 @@ private[spark] class ShuffleMapTask(
 
   override def run(attemptId: Long): MapStatus = {
     val numOutputSplits = dep.partitioner.numPartitions
-    val partitioner = dep.partitioner
 
     val taskContext = new TaskContext(stageId, partition, attemptId)
+    try {
+      // Partition the map output.
+      val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
+      for (elem <- rdd.iterator(split, taskContext)) {
+        val pair = elem.asInstanceOf[(Any, Any)]
+        val bucketId = dep.partitioner.getPartition(pair._1)
+        buckets(bucketId) += pair
+      }
 
-    // Partition the map output.
-    val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
-    for (elem <- rdd.iterator(split, taskContext)) {
-      val pair = elem.asInstanceOf[(Any, Any)]
-      val bucketId = partitioner.getPartition(pair._1)
-      buckets(bucketId) += pair
+      val compressedSizes = new Array[Byte](numOutputSplits)
+
+      val blockManager = SparkEnv.get.blockManager
+      for (i <- 0 until numOutputSplits) {
+        val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
+        // Get a Scala iterator from Java map
+        val iter: Iterator[(Any, Any)] = buckets(i).iterator
+        val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
+        compressedSizes(i) = MapOutputTracker.compressSize(size)
+      }
+
+      return new MapStatus(blockManager.blockManagerId, compressedSizes)
+    } finally {
+      // Execute the callbacks on task completion.
+      taskContext.executeOnCompleteCallbacks()
     }
-    val bucketIterators = buckets.map(_.iterator)
-
-    val compressedSizes = new Array[Byte](numOutputSplits)
-
-    val blockManager = SparkEnv.get.blockManager
-    for (i <- 0 until numOutputSplits) {
-      val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
-      // Get a Scala iterator from Java map
-      val iter: Iterator[(Any, Any)] = bucketIterators(i)
-      val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
-      compressedSizes(i) = MapOutputTracker.compressSize(size)
-    }
-
-    // Execute the callbacks on task completion.
-    taskContext.executeOnCompleteCallbacks()
-
-    return new MapStatus(blockManager.blockManagerId, compressedSizes)
   }
 
   override def preferredLocations: Seq[String] = locs

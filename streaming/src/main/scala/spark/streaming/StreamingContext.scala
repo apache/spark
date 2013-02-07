@@ -61,7 +61,7 @@ class StreamingContext private (
 
   protected[streaming] val isCheckpointPresent = (cp_ != null)
 
-  val sc: SparkContext = {
+  protected[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
       new SparkContext(cp_.master, cp_.framework, cp_.sparkHome, cp_.jars)
     } else {
@@ -101,6 +101,11 @@ class StreamingContext private (
   protected[streaming] var scheduler: Scheduler = null
 
   /**
+   * Returns the associated Spark context
+   */
+  def sparkContext = sc
+
+  /**
    * Sets each DStreams in this context to remember RDDs it generated in the last given duration.
    * DStreams remember RDDs only for a limited duration of time and releases them for garbage
    * collection. This method allows the developer to specify how to long to remember the RDDs (
@@ -128,7 +133,7 @@ class StreamingContext private (
     }
   }
 
-  protected[streaming] def getInitialCheckpoint(): Checkpoint = {
+  protected[streaming] def initialCheckpoint: Checkpoint = {
     if (isCheckpointPresent) cp_ else null
   }
 
@@ -374,7 +379,7 @@ class StreamingContext private (
   }
 
   /**
-   * Sstops the execution of the streams.
+   * Stops the execution of the streams.
    */
   def stop() {
     try {
@@ -401,7 +406,7 @@ object StreamingContext {
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second interval.
     if (MetadataCleaner.getDelaySeconds < 0) {
-      MetadataCleaner.setDelaySeconds(60)
+      MetadataCleaner.setDelaySeconds(3600)
     }
     new SparkContext(master, frameworkName)
   }
