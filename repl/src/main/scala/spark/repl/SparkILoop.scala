@@ -200,7 +200,7 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
       ____              __  
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 0.6.2-SNAPSHOT
+   /___/ .__/\_,_/_/ /_/\_\   version 0.6.2
       /_/                  
 """)
     import Properties._
