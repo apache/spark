@@ -2,12 +2,14 @@ package spark.streaming
 
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
+import akka.zeromq.Subscribe
 
 import spark.streaming.dstream._
 
 import spark.{RDD, Logging, SparkEnv, SparkContext}
 import spark.streaming.receivers.ActorReceiver
 import spark.streaming.receivers.ReceiverSupervisorStrategy
+import spark.streaming.receivers.ZeroMQReceiver
 import spark.storage.StorageLevel
 import spark.util.MetadataCleaner
 import spark.streaming.receivers.ActorReceiver
@@ -174,6 +176,26 @@ class StreamingContext private (
     networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
   }
 
+  /**
+   * ZeroMQ stream receiver
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param zeroMQ topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
+   * 					   of byte thus it needs the converter(which might be deserializer of bytes)
+   * 					   to translate from sequence of sequence of bytes, where sequence refer to a frame
+   *					   and sub sequence refer to its payload.
+   * @param storageLevel RDD storage level. Defaults to memory-only.
+   */
+  def zeroMQStream[T: ClassManifest](publisherUrl:String,
+      subscribe: Subscribe,
+      bytesToObjects: Seq[Seq[Byte]] ⇒ Iterator[T],
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
+      supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy): DStream[T] = {
+    
+    actorStream(Props(new ZeroMQReceiver(publisherUrl,subscribe,bytesToObjects)), 
+        "ZeroMQReceiver", storageLevel, supervisorStrategy)
+  }
+      
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
    * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).

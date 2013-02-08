@@ -134,6 +134,7 @@ object SparkBuild extends Build {
       "com.typesafe.akka" % "akka-actor" % "2.0.3",
       "com.typesafe.akka" % "akka-remote" % "2.0.3",
       "com.typesafe.akka" % "akka-slf4j" % "2.0.3",
+      "com.typesafe.akka" % "akka-zeromq" % "2.0.3",
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
       "cc.spray" % "spray-can" % "1.0-M2.1",
