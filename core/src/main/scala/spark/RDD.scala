@@ -235,8 +235,7 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return a new RDD that is reduced into `numSplits` partitions.
    */
-  def coalesce(numSplits: Int = sc.defaultParallelism): RDD[T] =
-    new CoalescedRDD(this, numSplits)
+  def coalesce(numSplits: Int): RDD[T] = new CoalescedRDD(this, numSplits)
 
   /**
    * Return a sampled subset of this RDD.

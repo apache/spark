@@ -131,11 +131,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends PairFlatMapWorkaround
       other.classManifest)
 
   /**
-   * Return a new RDD that is reduced into the default number of partitions.
-   */
-  def coalesce(): RDD[T] = coalesce(rdd.context.defaultParallelism)
-
-  /**
    * Return a new RDD that is reduced into `numSplits` partitions.
    */
   def coalesce(numSplits: Int): RDD[T] = rdd.coalesce(numSplits)
