@@ -95,7 +95,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
-
+    Thread.sleep(1000)
     val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", 33333));
     val client = SpecificRequestor.getClient(
       classOf[AvroSourceProtocol], transceiver);

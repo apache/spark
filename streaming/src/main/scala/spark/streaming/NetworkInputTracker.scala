@@ -4,6 +4,7 @@ import spark.streaming.dstream.{NetworkInputDStream, NetworkReceiver}
 import spark.streaming.dstream.{StopReceiver, ReportBlock, ReportError}
 import spark.Logging
 import spark.SparkEnv
+import spark.SparkContext._
 
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Queue
@@ -138,8 +139,12 @@ class NetworkInputTracker(
         }
         iterator.next().start()
       }
+      // Run the dummy Spark job to ensure that all slaves have registered.
+      // This avoids all the receivers to be scheduled on the same node.
+      //ssc.sparkContext.makeRDD(1 to 100, 100).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
+
       // Distribute the receivers and start them
-      ssc.sc.runJob(tempRDD, startReceiver)
+      ssc.sparkContext.runJob(tempRDD, startReceiver)
     }
     
     /** Stops the receivers. */
