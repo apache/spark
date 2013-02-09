@@ -39,7 +39,7 @@ class NewHadoopRDD[K, V](
 
   @transient private val jobId = new JobID(jobtrackerId, id)
 
-  override def getSplits = {
+  override def getSplits: Array[Split] = {
     val inputFormat = inputFormatClass.newInstance
     val jobContext = newJobContext(conf, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
@@ -83,7 +83,7 @@ class NewHadoopRDD[K, V](
     }
   }
 
-  override def getPreferredLocations(split: Split) = {
+  override def getPreferredLocations(split: Split): Seq[String] = {
     val theSplit = split.asInstanceOf[NewHadoopSplit]
     theSplit.serializableHadoopSplit.value.getLocations.filter(_ != "localhost")
   }

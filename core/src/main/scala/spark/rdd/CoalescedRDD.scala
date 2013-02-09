@@ -31,7 +31,7 @@ class CoalescedRDD[T: ClassManifest](
     maxPartitions: Int)
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
 
-  override def getSplits = {
+  override def getSplits: Array[Split] = {
     val prevSplits = prev.splits
     if (prevSplits.length < maxPartitions) {
       prevSplits.map(_.index).map{idx => new CoalescedRDDSplit(idx, prev, Array(idx)) }
@@ -50,10 +50,12 @@ class CoalescedRDD[T: ClassManifest](
     }
   }
 
-  override def getDependencies = Seq(new NarrowDependency(prev) {
-    def getParents(id: Int): Seq[Int] =
-      splits(id).asInstanceOf[CoalescedRDDSplit].parentsIndices
-  })
+  override def getDependencies: Seq[Dependency[_]] = {
+    Seq(new NarrowDependency(prev) {
+      def getParents(id: Int): Seq[Int] =
+        splits(id).asInstanceOf[CoalescedRDDSplit].parentsIndices
+    })
+  }
 
   override def clearDependencies() {
     super.clearDependencies()

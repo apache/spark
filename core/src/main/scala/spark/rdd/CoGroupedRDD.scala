@@ -45,7 +45,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
 
   private val aggr = new CoGroupAggregator
 
-  override def getDependencies = {
+  override def getDependencies: Seq[Dependency[_]] = {
     rdds.map { rdd =>
       if (rdd.partitioner == Some(part)) {
         logInfo("Adding one-to-one dependency with " + rdd)
@@ -58,7 +58,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
     }
   }
 
-  override def getSplits = {
+  override def getSplits: Array[Split] = {
     val array = new Array[Split](part.numPartitions)
     for (i <- 0 until array.size) {
       // Each CoGroupSplit will have a dependency per contributing RDD

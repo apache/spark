@@ -7,7 +7,7 @@ private[spark] class FilteredRDD[T: ClassManifest](
     f: T => Boolean)
   extends RDD[T](prev) {
 
-  override def getSplits = firstParent[T].splits
+  override def getSplits: Array[Split] = firstParent[T].splits
 
   override val partitioner = prev.partitioner    // Since filter cannot change a partition's keys
 

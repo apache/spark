@@ -35,7 +35,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
 
   val numSplitsInRdd2 = rdd2.splits.size
 
-  override def getSplits = {
+  override def getSplits: Array[Split] = {
     // create the cross product split
     val array = new Array[Split](rdd1.splits.size * rdd2.splits.size)
     for (s1 <- rdd1.splits; s2 <- rdd2.splits) {
@@ -45,7 +45,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     array
   }
 
-  override def getPreferredLocations(split: Split) = {
+  override def getPreferredLocations(split: Split): Seq[String] = {
     val currSplit = split.asInstanceOf[CartesianSplit]
     rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
   }

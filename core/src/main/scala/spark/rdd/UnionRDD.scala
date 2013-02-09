@@ -28,7 +28,7 @@ class UnionRDD[T: ClassManifest](
     @transient var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
-  override def getSplits = {
+  override def getSplits: Array[Split] = {
     val array = new Array[Split](rdds.map(_.splits.size).sum)
     var pos = 0
     for (rdd <- rdds; split <- rdd.splits) {
@@ -38,7 +38,7 @@ class UnionRDD[T: ClassManifest](
     array
   }
 
-  override def getDependencies = {
+  override def getDependencies: Seq[Dependency[_]] = {
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for (rdd <- rdds) {

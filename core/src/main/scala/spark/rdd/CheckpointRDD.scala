@@ -20,7 +20,7 @@ class CheckpointRDD[T: ClassManifest](sc: SparkContext, val checkpointPath: Stri
 
   @transient val fs = new Path(checkpointPath).getFileSystem(sc.hadoopConfiguration)
 
-  override def getSplits = {
+  override def getSplits: Array[Split] = {
     val dirContents = fs.listStatus(new Path(checkpointPath))
     val splitFiles = dirContents.map(_.getPath.toString).filter(_.contains("part-")).sorted
     val numSplits = splitFiles.size

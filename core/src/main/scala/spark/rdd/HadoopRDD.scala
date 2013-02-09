@@ -47,7 +47,7 @@ class HadoopRDD[K, V](
   // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
 
-  override def getSplits = {
+  override def getSplits: Array[Split] = {
     val inputFormat = createInputFormat(conf)
     val inputSplits = inputFormat.getSplits(conf, minSplits)
     val array = new Array[Split](inputSplits.size)
@@ -106,7 +106,7 @@ class HadoopRDD[K, V](
     }
   }
 
-  override def getPreferredLocations(split: Split) = {
+  override def getPreferredLocations(split: Split): Seq[String] = {
     // TODO: Filtering out "localhost" in case of file:// URLs
     val hadoopSplit = split.asInstanceOf[HadoopSplit]
     hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")

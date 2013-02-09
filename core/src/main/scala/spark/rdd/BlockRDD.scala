@@ -18,7 +18,7 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     HashMap(blockIds.zip(locations):_*)
   }
 
-  override def getSplits = (0 until blockIds.size).map(i => {
+  override def getSplits: Array[Split] = (0 until blockIds.size).map(i => {
     new BlockRDDSplit(blockIds(i), i).asInstanceOf[Split]
   }).toArray
 
@@ -33,7 +33,7 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     }
   }
 
-  override def getPreferredLocations(split: Split) =
+  override def getPreferredLocations(split: Split): Seq[String] =
     locations_(split.asInstanceOf[BlockRDDSplit].blockId)
 
 }

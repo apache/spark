@@ -37,6 +37,6 @@ class PartitionPruningRDD[T: ClassManifest](
   override def compute(split: Split, context: TaskContext) = firstParent[T].iterator(
     split.asInstanceOf[PartitionPruningRDDSplit].parentSplit, context)
 
-  override protected def getSplits =
+  override protected def getSplits: Array[Split] =
     getDependencies.head.asInstanceOf[PruneDependency[T]].partitions
 }

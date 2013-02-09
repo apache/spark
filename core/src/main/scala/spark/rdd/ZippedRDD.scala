@@ -31,7 +31,7 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
     var rdd2: RDD[U])
   extends RDD[(T, U)](sc, List(new OneToOneDependency(rdd1), new OneToOneDependency(rdd2))) {
 
-  override def getSplits = {
+  override def getSplits: Array[Split] = {
     if (rdd1.splits.size != rdd2.splits.size) {
       throw new IllegalArgumentException("Can't zip RDDs with unequal numbers of partitions")
     }
