@@ -1,7 +1,7 @@
 package spark
 
 import java.io._
-import java.net.{NetworkInterface, InetAddress, URL, URI}
+import java.net._
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 import org.apache.hadoop.conf.Configuration
@@ -9,6 +9,10 @@ import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.io.Source
+import com.google.common.io.Files
+import com.google.common.util.concurrent.ThreadFactoryBuilder
+import scala.Some
+import spark.serializer.SerializerInstance
 
 /**
  * Various utility methods used by Spark.
@@ -110,48 +114,56 @@ private object Utils extends Logging {
     }
   }
 
-  /** Copy a file on the local file system */
-  def copyFile(source: File, dest: File) {
-    val in = new FileInputStream(source)
-    val out = new FileOutputStream(dest)
-    copyStream(in, out, true)
-  }
-
-  /** Download a file from a given URL to the local filesystem */
-  def downloadFile(url: URL, localPath: String) {
-    val in = url.openStream()
-    val out = new FileOutputStream(localPath)
-    Utils.copyStream(in, out, true)
-  }
-
   /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   *
+   * Throws SparkException if the target file already exists and has different contents than
+   * the requested file.
    */
   def fetchFile(url: String, targetDir: File) {
     val filename = url.split("/").last
+    val tempDir = getLocalDir
+    val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
-        logInfo("Fetching " + url + " to " + targetFile)
+        logInfo("Fetching " + url + " to " + tempFile)
         val in = new URL(url).openStream()
-        val out = new FileOutputStream(targetFile)
+        val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
-      case "file" | null =>
-        // Remove the file if it already exists
-        targetFile.delete()
-        // Symlink the file locally.
-        if (uri.isAbsolute) {
-          // url is absolute, i.e. it starts with "file:///". Extract the source
-          // file's absolute path from the url.
-          val sourceFile = new File(uri)
-          logInfo("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
-          FileUtil.symLink(sourceFile.getAbsolutePath, targetFile.getAbsolutePath)
+        if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
+          tempFile.delete()
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
         } else {
-          // url is not absolute, i.e. itself is the path to the source file.
-          logInfo("Symlinking " + url + " to " + targetFile.getAbsolutePath)
-          FileUtil.symLink(url, targetFile.getAbsolutePath)
+          Files.move(tempFile, targetFile)
+        }
+      case "file" | null =>
+        val sourceFile = if (uri.isAbsolute) {
+          new File(uri)
+        } else {
+          new File(url)
+        }
+        if (targetFile.exists && !Files.equal(sourceFile, targetFile)) {
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
+        } else {
+          // Remove the file if it already exists
+          targetFile.delete()
+          // Symlink the file locally.
+          if (uri.isAbsolute) {
+            // url is absolute, i.e. it starts with "file:///". Extract the source
+            // file's absolute path from the url.
+            val sourceFile = new File(uri)
+            logInfo("Symlinking " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
+            FileUtil.symLink(sourceFile.getAbsolutePath, targetFile.getAbsolutePath)
+          } else {
+            // url is not absolute, i.e. itself is the path to the source file.
+            logInfo("Symlinking " + url + " to " + targetFile.getAbsolutePath)
+            FileUtil.symLink(url, targetFile.getAbsolutePath)
+          }
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
@@ -159,8 +171,15 @@ private object Utils extends Logging {
         val conf = new Configuration()
         val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(uri))
-        val out = new FileOutputStream(targetFile)
+        val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
+        if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
+          tempFile.delete()
+          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
+            " " + url)
+        } else {
+          Files.move(tempFile, targetFile)
+        }
     }
     // Decompress the file if it's a .tar or .tar.gz
     if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
@@ -171,7 +190,16 @@ private object Utils extends Logging {
       Utils.execute(Seq("tar", "-xf", filename), targetDir)
     }
     // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(filename, "a+x")
+    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
+  }
+
+  /**
+   * Get a temporary directory using Spark's spark.local.dir property, if set. This will always
+   * return a single directory, even though the spark.local.dir property might be a list of
+   * multiple paths.
+   */
+  def getLocalDir: String = {
+    System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")).split(',')(0)
   }
 
   /**
@@ -212,7 +240,8 @@ private object Utils extends Logging {
         // Address resolves to something like 127.0.1.1, which happens on Debian; try to find
         // a better address using the local network interfaces
         for (ni <- NetworkInterface.getNetworkInterfaces) {
-          for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress && !addr.isLoopbackAddress) {
+          for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress &&
+               !addr.isLoopbackAddress && addr.isInstanceOf[Inet4Address]) {
             // We've found an address that looks reasonable!
             logWarning("Your hostname, " + InetAddress.getLocalHost.getHostName + " resolves to" +
               " a loopback address: " + address.getHostAddress + "; using " + addr.getHostAddress +
@@ -247,48 +276,28 @@ private object Utils extends Logging {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
   }
 
-  /**
-   * Returns a standard ThreadFactory except all threads are daemons.
-   */
-  private def newDaemonThreadFactory: ThreadFactory = {
-    new ThreadFactory {
-      def newThread(r: Runnable): Thread = {
-        var t = Executors.defaultThreadFactory.newThread (r)
-        t.setDaemon (true)
-        return t
-      }
-    }
-  }
+  private[spark] val daemonThreadFactory: ThreadFactory =
+    new ThreadFactoryBuilder().setDaemon(true).build()
 
   /**
    * Wrapper over newCachedThreadPool.
    */
-  def newDaemonCachedThreadPool(): ThreadPoolExecutor = {
-    var threadPool = Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory (newDaemonThreadFactory)
-
-    return threadPool
-  }
+  def newDaemonCachedThreadPool(): ThreadPoolExecutor =
+    Executors.newCachedThreadPool(daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
   /**
    * Return the string to tell how long has passed in seconds. The passing parameter should be in
    * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
-    return " " + (System.currentTimeMillis - startTimeMs) + " ms "
+    return " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**
    * Wrapper over newFixedThreadPool.
    */
-  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
-    var threadPool = Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory(newDaemonThreadFactory)
-
-    return threadPool
-  }
+  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor =
+    Executors.newFixedThreadPool(nThreads, daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
   /**
    * Delete a file or directory and its contents recursively.
@@ -423,5 +432,26 @@ private object Utils extends Logging {
       }
     }
     "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
+  }
+
+  /**
+   * Try to find a free port to bind to on the local host. This should ideally never be needed,
+   * except that, unfortunately, some of the networking libraries we currently rely on (e.g. Spray)
+   * don't let users bind to port 0 and then figure out which free port they actually bound to.
+   * We work around this by binding a ServerSocket and immediately unbinding it. This is *not*
+   * necessarily guaranteed to work, but it's the best we can do.
+   */
+  def findFreePort(): Int = {
+    val socket = new ServerSocket(0)
+    val portBound = socket.getLocalPort
+    socket.close()
+    portBound
+  }
+
+  /**
+   * Clone an object using a Spark serializer.
+   */
+  def clone[T](value: T, serializer: SerializerInstance): T = {
+    serializer.deserialize[T](serializer.serialize(value))
   }
 }

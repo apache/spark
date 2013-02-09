@@ -64,7 +64,7 @@ private[spark] class BlockMessage() {
 
       val booleanInt = buffer.getInt()
       val replication = buffer.getInt()
-      level = new StorageLevel(booleanInt, replication)
+      level = StorageLevel(booleanInt, replication)
       
       val dataLength = buffer.getInt()
       data = ByteBuffer.allocate(dataLength)

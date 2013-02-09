@@ -8,7 +8,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
-import spark.{OneToOneDependency, RDD, SparkEnv, Split, TaskContext}
+import spark.{RDD, SparkEnv, Split, TaskContext}
 
 
 /**
@@ -16,18 +16,18 @@ import spark.{OneToOneDependency, RDD, SparkEnv, Split, TaskContext}
  * (printing them one per line) and returns the output as a collection of strings.
  */
 class PipedRDD[T: ClassManifest](
-  parent: RDD[T], command: Seq[String], envVars: Map[String, String])
-  extends RDD[String](parent.context) {
+    prev: RDD[T],
+    command: Seq[String],
+    envVars: Map[String, String])
+  extends RDD[String](prev) {
 
-  def this(parent: RDD[T], command: Seq[String]) = this(parent, command, Map())
+  def this(prev: RDD[T], command: Seq[String]) = this(prev, command, Map())
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
-  def this(parent: RDD[T], command: String) = this(parent, PipedRDD.tokenize(command))
+  def this(prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
 
-  override def splits = parent.splits
-
-  override val dependencies = List(new OneToOneDependency(parent))
+  override def getSplits = firstParent[T].splits
 
   override def compute(split: Split, context: TaskContext): Iterator[String] = {
     val pb = new ProcessBuilder(command)
@@ -52,7 +52,7 @@ class PipedRDD[T: ClassManifest](
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
-        for (elem <- parent.iterator(split, context)) {
+        for (elem <- firstParent[T].iterator(split, context)) {
           out.println(elem)
         }
         out.close()

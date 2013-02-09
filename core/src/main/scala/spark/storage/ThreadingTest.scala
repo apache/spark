@@ -75,10 +75,11 @@ private[spark] object ThreadingTest {
     System.setProperty("spark.kryoserializer.buffer.mb", "1")
     val actorSystem = ActorSystem("test")
     val serializer = new KryoSerializer
-    val masterIp: String = System.getProperty("spark.master.host", "localhost")
-    val masterPort: Int = System.getProperty("spark.master.port", "7077").toInt
-    val blockManagerMaster = new BlockManagerMaster(actorSystem, true, true, masterIp, masterPort)
-    val blockManager = new BlockManager(actorSystem, blockManagerMaster, serializer, 1024 * 1024)
+    val driverIp: String = System.getProperty("spark.driver.host", "localhost")
+    val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
+    val blockManagerMaster = new BlockManagerMaster(actorSystem, true, true, driverIp, driverPort)
+    val blockManager = new BlockManager(
+      "<driver>", actorSystem, blockManagerMaster, serializer, 1024 * 1024)
     val producers = (1 to numProducers).map(i => new ProducerThread(blockManager, i))
     val consumers = producers.map(p => new ConsumerThread(blockManager, p.queue))
     producers.foreach(_.start)

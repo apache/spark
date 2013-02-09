@@ -8,40 +8,61 @@ import akka.util.duration._
 import cc.spray.Directives
 import cc.spray.directives._
 import cc.spray.typeconversion.TwirlSupport._
-import spark.deploy._
+import cc.spray.http.MediaTypes
+import cc.spray.typeconversion.SprayJsonSupport._
 
+import spark.deploy._
+import spark.deploy.JsonProtocol._
+
+/**
+ * Web UI server for the standalone master.
+ */
 private[spark]
 class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Directives {
   val RESOURCE_DIR = "spark/deploy/master/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
   
-  implicit val timeout = Timeout(1 seconds)
+  implicit val timeout = Timeout(10 seconds)
   
   val handler = {
     get {
-      path("") {
-        completeWith {
+      (path("") & parameters('format ?)) {
+        case Some(js) if js.equalsIgnoreCase("json") =>
           val future = master ? RequestMasterState
-          future.map { 
-            masterState => spark.deploy.master.html.index.render(masterState.asInstanceOf[MasterState])
+          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+            ctx.complete(future.mapTo[MasterState])
           }
-        }
-      } ~
-      path("job") {
-        parameter("jobId") { jobId =>
+        case _ =>
           completeWith {
             val future = master ? RequestMasterState
-            future.map { state => 
-              val masterState = state.asInstanceOf[MasterState]
-              
-              // A bit ugly an inefficient, but we won't have a number of jobs 
-              // so large that it will make a significant difference.
-              (masterState.activeJobs ++ masterState.completedJobs).find(_.id == jobId) match {
-                case Some(job) => spark.deploy.master.html.job_details.render(job)
-                case _ => null
-              }
+            future.map {
+              masterState => spark.deploy.master.html.index.render(masterState.asInstanceOf[MasterState])
             }
           }
+      } ~
+      path("job") {
+        parameters("jobId", 'format ?) {
+          case (jobId, Some(js)) if (js.equalsIgnoreCase("json")) =>
+            val future = master ? RequestMasterState
+            val jobInfo = for (masterState <- future.mapTo[MasterState]) yield {
+              masterState.activeJobs.find(_.id == jobId).getOrElse({
+                masterState.completedJobs.find(_.id == jobId).getOrElse(null)
+              })
+            }
+            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+              ctx.complete(jobInfo.mapTo[JobInfo])
+            }
+          case (jobId, _) =>
+            completeWith {
+              val future = master ? RequestMasterState
+              future.map { state =>
+                val masterState = state.asInstanceOf[MasterState]
+                val job = masterState.activeJobs.find(_.id == jobId).getOrElse({
+                  masterState.completedJobs.find(_.id == jobId).getOrElse(null)
+                })
+                spark.deploy.master.html.job_details.render(job)
+              }
+            }
         }
       } ~
       pathPrefix("static") {
@@ -50,5 +71,4 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
       getFromResourceDirectory(RESOURCE_DIR)
     }
   }
-
 }

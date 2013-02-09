@@ -10,7 +10,7 @@ import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import spark.{Accumulator, AccumulatorParam, RDD, SparkContext}
+import spark.{Accumulable, AccumulableParam, Accumulator, AccumulatorParam, RDD, SparkContext}
 import spark.SparkContext.IntAccumulatorParam
 import spark.SparkContext.DoubleAccumulatorParam
 import spark.broadcast.Broadcast
@@ -265,24 +265,44 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /**
    * Create an [[spark.Accumulator]] integer variable, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `add` method. Only the master can access the accumulator's `value`.
    */
-  def intAccumulator(initialValue: Int): Accumulator[Int] =
-    sc.accumulator(initialValue)(IntAccumulatorParam)
+  def intAccumulator(initialValue: Int): Accumulator[java.lang.Integer] =
+    sc.accumulator(initialValue)(IntAccumulatorParam).asInstanceOf[Accumulator[java.lang.Integer]]
 
   /**
    * Create an [[spark.Accumulator]] double variable, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `add` method. Only the master can access the accumulator's `value`.
    */
-  def doubleAccumulator(initialValue: Double): Accumulator[Double] =
-    sc.accumulator(initialValue)(DoubleAccumulatorParam)
+  def doubleAccumulator(initialValue: Double): Accumulator[java.lang.Double] =
+    sc.accumulator(initialValue)(DoubleAccumulatorParam).asInstanceOf[Accumulator[java.lang.Double]]
+
+  /**
+   * Create an [[spark.Accumulator]] integer variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   */
+  def accumulator(initialValue: Int): Accumulator[java.lang.Integer] = intAccumulator(initialValue)
+
+  /**
+   * Create an [[spark.Accumulator]] double variable, which tasks can "add" values
+   * to using the `add` method. Only the master can access the accumulator's `value`.
+   */
+  def accumulator(initialValue: Double): Accumulator[java.lang.Double] =
+    doubleAccumulator(initialValue)
 
   /**
    * Create an [[spark.Accumulator]] variable of a given type, which tasks can "add" values
-   * to using the `+=` method. Only the master can access the accumulator's `value`.
+   * to using the `add` method. Only the master can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T, accumulatorParam: AccumulatorParam[T]): Accumulator[T] =
     sc.accumulator(initialValue)(accumulatorParam)
+
+  /**
+   * Create an [[spark.Accumulable]] shared variable of the given type, to which tasks can
+   * "add" values with `add`. Only the master can access the accumuable's `value`.
+   */
+  def accumulable[T, R](initialValue: T, param: AccumulableParam[T, R]): Accumulable[T, R] =
+    sc.accumulable(initialValue)(param)
 
   /**
    * Broadcast a read-only variable to the cluster, returning a [[spark.Broadcast]] object for
@@ -301,6 +321,75 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * (in that order of preference). If neither of these is set, return None.
    */
   def getSparkHome(): Option[String] = sc.getSparkHome()
+
+  /**
+   * Add a file to be downloaded with this Spark job on every node.
+   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(path)` to find its download location.
+   */
+  def addFile(path: String) {
+    sc.addFile(path)
+  }
+
+  /**
+   * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
+   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI.
+   */
+  def addJar(path: String) {
+    sc.addJar(path)
+  }
+
+  /**
+   * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
+   * any new nodes.
+   */
+  def clearJars() {
+    sc.clearJars()
+  }
+
+  /**
+   * Clear the job's list of files added by `addFile` so that they do not get downloaded to
+   * any new nodes.
+   */
+  def clearFiles() {
+    sc.clearFiles()
+  }
+
+  /**
+   * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
+   */
+  def hadoopConfiguration(): Configuration = {
+    sc.hadoopConfiguration
+  }
+
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists and useExisting is set to true, then the
+   * exisiting directory will be used. Otherwise an exception will be thrown to
+   * prevent accidental overriding of checkpoint files in the existing directory.
+   */
+  def setCheckpointDir(dir: String, useExisting: Boolean) {
+    sc.setCheckpointDir(dir, useExisting)
+  }
+
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists, an exception will be thrown to prevent accidental
+   * overriding of checkpoint files.
+   */
+  def setCheckpointDir(dir: String) {
+    sc.setCheckpointDir(dir)
+  }
+
+  protected def checkpointFile[T](path: String): JavaRDD[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    new JavaRDD(sc.checkpointFile(path))
+  }
 }
 
 object JavaSparkContext {

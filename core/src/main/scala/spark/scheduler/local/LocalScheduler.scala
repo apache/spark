@@ -20,7 +20,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
   with Logging {
 
   var attemptId = new AtomicInteger(0)
-  var threadPool = Executors.newFixedThreadPool(threads, DaemonThreadFactory)
+  var threadPool = Utils.newDaemonFixedThreadPool(threads)
   val env = SparkEnv.get
   var listener: TaskSchedulerListener = null
 
@@ -53,7 +53,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
     }
 
     def runTask(task: Task[_], idInJob: Int, attemptId: Int) {
-      logInfo("Running task " + idInJob)
+      logInfo("Running " + task)
       // Set the Spark execution environment for the worker thread
       SparkEnv.set(env)
       try {
@@ -80,8 +80,11 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
         val resultToReturn = ser.deserialize[Any](ser.serialize(result))
         val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
           ser.serialize(Accumulators.values))
-        logInfo("Finished task " + idInJob)
-        listener.taskEnded(task, Success, resultToReturn, accumUpdates)
+        logInfo("Finished " + task)
+
+        // If the threadpool has not already been shutdown, notify DAGScheduler
+        if (!Thread.currentThread().isInterrupted)
+          listener.taskEnded(task, Success, resultToReturn, accumUpdates)
       } catch {
         case t: Throwable => {
           logError("Exception in task " + idInJob, t)
@@ -91,7 +94,8 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
               submitTask(task, idInJob)
             } else {
               // TODO: Do something nicer here to return all the way to the user
-              listener.taskEnded(task, new ExceptionFailure(t), null, null)
+              if (!Thread.currentThread().isInterrupted)
+                listener.taskEnded(task, new ExceptionFailure(t), null, null)
             }
           }
         }
@@ -108,22 +112,24 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
-    // Fetch missing dependencies
-    for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name + " with timestamp " + timestamp)
-      Utils.fetchFile(name, new File("."))
-      currentFiles(name) = timestamp
-    }
-    for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
-      logInfo("Fetching " + name + " with timestamp " + timestamp)
-      Utils.fetchFile(name, new File("."))
-      currentJars(name) = timestamp
-      // Add it to our class loader
-      val localName = name.split("/").last
-      val url = new File(".", localName).toURI.toURL
-      if (!classLoader.getURLs.contains(url)) {
-        logInfo("Adding " + url + " to class loader")
-        classLoader.addURL(url)
+    synchronized {
+      // Fetch missing dependencies
+      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
+        currentFiles(name) = timestamp
+      }
+      for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
+        currentJars(name) = timestamp
+        // Add it to our class loader
+        val localName = name.split("/").last
+        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
+        if (!classLoader.getURLs.contains(url)) {
+          logInfo("Adding " + url + " to class loader")
+          classLoader.addURL(url)
+        }
       }
     }
   }

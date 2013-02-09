@@ -19,6 +19,11 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.twitter4j</groupId>
+      <artifactId>twitter4j-stream</artifactId>
+      <version>3.0.3</version>
+    </dependency>
 
     <dependency>
       <groupId>org.scalatest</groupId>
@@ -53,6 +58,12 @@
           <classifier>hadoop1</classifier>
         </dependency>
         <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-streaming</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop1</classifier>
+        </dependency>
+        <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
           <scope>provided</scope>
@@ -76,6 +87,12 @@
         <dependency>
           <groupId>org.spark-project</groupId>
           <artifactId>spark-core</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop2</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-streaming</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
         </dependency>

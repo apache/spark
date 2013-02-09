@@ -41,6 +41,7 @@
     <module>core</module>
     <module>bagel</module>
     <module>examples</module>
+    <module>streaming</module>
     <module>repl</module>
     <module>repl-bin</module>
   </modules>
@@ -54,6 +55,7 @@
     <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.0.3</akka.version>
     <spray.version>1.0-M2.1</spray.version>
+    <spray.json.version>1.1.1</spray.json.version>
     <slf4j.version>1.6.1</slf4j.version>
     <cdh.version>4.1.2</cdh.version>
   </properties>
@@ -96,6 +98,17 @@
       <id>spray-repo</id>
       <name>Spray Repository</name>
       <url>http://repo.spray.cc/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>twitter4j-repo</id>
+      <name>Twitter4J Repository</name>
+      <url>http://twitter4j.org/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -223,6 +236,11 @@
         <version>${spray.version}</version>
       </dependency>
       <dependency>
+        <groupId>cc.spray</groupId>
+        <artifactId>spray-json_${scala.version}</artifactId>
+        <version>${spray.json.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.tomdz.twirl</groupId>
         <artifactId>twirl-api</artifactId>
         <version>1.0.2</version>
@@ -253,6 +271,12 @@
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.version}</artifactId>
         <version>1.8</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.easymock</groupId>
+        <artifactId>easymock</artifactId>
+        <version>3.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -481,6 +505,7 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
+
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
       </properties>
@@ -489,7 +514,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-core</artifactId>
-            <version>0.20.205.0</version>
+            <version>1.0.3</version>
           </dependency>
         </dependencies>
       </dependencyManagement>
@@ -511,6 +536,17 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
             <version>2.0.0-mr1-cdh${cdh.version}</version>
+          </dependency>
+          <!-- Specify Avro version because Kafka also has it as a dependency -->
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>1.7.1.cloudera.2</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-ipc</artifactId>
+            <version>1.7.1.cloudera.2</version>
           </dependency>
         </dependencies>
       </dependencyManagement>

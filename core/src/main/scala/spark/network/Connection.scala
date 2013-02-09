@@ -12,7 +12,14 @@ import java.net._
 
 
 private[spark]
-abstract class Connection(val channel: SocketChannel, val selector: Selector) extends Logging {
+abstract class Connection(val channel: SocketChannel, val selector: Selector,
+                          val remoteConnectionManagerId: ConnectionManagerId) extends Logging {
+  def this(channel_ : SocketChannel, selector_ : Selector) = {
+    this(channel_, selector_,
+         ConnectionManagerId.fromSocketAddress(
+            channel_.socket.getRemoteSocketAddress().asInstanceOf[InetSocketAddress]
+         ))
+  }
 
   channel.configureBlocking(false)
   channel.socket.setTcpNoDelay(true)
@@ -25,7 +32,6 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector) ex
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
 
   val remoteAddress = getRemoteAddress()
-  val remoteConnectionManagerId = ConnectionManagerId.fromSocketAddress(remoteAddress)
 
   def key() = channel.keyFor(selector)
 
@@ -103,8 +109,9 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector) ex
 }
 
 
-private[spark] class SendingConnection(val address: InetSocketAddress, selector_ : Selector) 
-extends Connection(SocketChannel.open, selector_) {
+private[spark] class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
+                                       remoteId_ : ConnectionManagerId)
+extends Connection(SocketChannel.open, selector_, remoteId_) {
 
   class Outbox(fair: Int = 0) {
     val messages = new Queue[Message]()
@@ -135,8 +142,11 @@ extends Connection(SocketChannel.open, selector_) {
           val chunk = message.getChunkForSending(defaultChunkSize)
           if (chunk.isDefined) {
             messages += message  // this is probably incorrect, it wont work as fifo
-            if (!message.started) logDebug("Starting to send [" + message + "]")
-            message.started = true
+            if (!message.started) {
+              logDebug("Starting to send [" + message + "]")
+              message.started = true
+              message.startTime = System.currentTimeMillis
+            }
             return chunk 
           } else {
             /*logInfo("Finished sending [" + message + "] to [" + remoteConnectionManagerId + "]")*/

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+# Figure out where the Scala framework is installed
+FWDIR="$(cd `dirname $0`; pwd)"
+
+# Export this as SPARK_HOME
+export SPARK_HOME="$FWDIR"
+
+# Exit if the user hasn't compiled Spark
+if [ ! -e "$SPARK_HOME/repl/target" ]; then
+  echo "Failed to find Spark classes in $SPARK_HOME/repl/target" >&2
+  echo "You need to compile Spark before running this program" >&2
+  exit 1
+fi
+
+# Load environment variables from conf/spark-env.sh, if it exists
+if [ -e $FWDIR/conf/spark-env.sh ] ; then
+  . $FWDIR/conf/spark-env.sh
+fi
+
+# Figure out which Python executable to use
+if [ -z "$PYSPARK_PYTHON" ] ; then
+  PYSPARK_PYTHON="python"
+fi
+export PYSPARK_PYTHON
+
+# Add the PySpark classes to the Python path:
+export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
+
+# Load the PySpark shell.py script when ./pyspark is used interactively:
+export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
+export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
+
+# Launch with `scala` by default:
+if [[ "$SPARK_LAUNCH_WITH_SCALA" != "0" ]] ; then
+    export SPARK_LAUNCH_WITH_SCALA=1
+fi
+
+if [[ "$IPYTHON" = "1" ]] ; then
+    export PYSPARK_PYTHON="ipython"
+    exec "$PYSPARK_PYTHON" -i -c "%run $PYTHONSTARTUP"
+else
+    exec "$PYSPARK_PYTHON" "$@"
+fi

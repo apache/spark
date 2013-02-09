@@ -65,9 +65,9 @@ private[spark] class ExecutorRunner(
     }
   }
 
-  /** Replace variables such as {{SLAVEID}} and {{CORES}} in a command argument passed to us */
+  /** Replace variables such as {{EXECUTOR_ID}} and {{CORES}} in a command argument passed to us */
   def substituteVariables(argument: String): String = argument match {
-    case "{{SLAVEID}}" => workerId
+    case "{{EXECUTOR_ID}}" => execId.toString
     case "{{HOSTNAME}}" => hostname
     case "{{CORES}}" => cores.toString
     case other => other
@@ -106,11 +106,6 @@ private[spark] class ExecutorRunner(
         throw new IOException("Failed to create directory " + executorDir)
       }
 
-      // Download the files it depends on into it (disabled for now)
-      //for (url <- jobDesc.fileUrls) {
-      //  fetchFile(url, executorDir)
-      //}
-
       // Launch the process
       val command = buildCommandSeq()
       val builder = new ProcessBuilder(command: _*).directory(executorDir)
@@ -118,8 +113,7 @@ private[spark] class ExecutorRunner(
       for ((key, value) <- jobDesc.command.environment) {
         env.put(key, value)
       }
-      env.put("SPARK_CORES", cores.toString)
-      env.put("SPARK_MEMORY", memory.toString)
+      env.put("SPARK_MEM", memory.toString + "m")
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
       env.put("SPARK_LAUNCH_WITH_SCALA", "0")

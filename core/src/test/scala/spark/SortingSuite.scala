@@ -5,18 +5,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.ShouldMatchers
 import SparkContext._
 
-class SortingSuite extends FunSuite with BeforeAndAfter with ShouldMatchers with Logging {
-  
-  var sc: SparkContext = _
-  
-  after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-  }
+class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers with Logging {
   
   test("sortByKey") {
     sc = new SparkContext("local", "test")

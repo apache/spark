@@ -52,6 +52,14 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
       mapSideCombine: Boolean = true): RDD[(K, C)] = {
+    if (getKeyClass().isArray) {
+      if (mapSideCombine) {
+        throw new SparkException("Cannot use map-side combining with array keys.")
+      }
+      if (partitioner.isInstanceOf[HashPartitioner]) {
+        throw new SparkException("Default partitioner cannot partition array keys.")
+      }
+    }
     val aggregator =
       new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (mapSideCombine) {
@@ -92,6 +100,11 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * before sending results to a reducer, similarly to a "combiner" in MapReduce.
    */
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = {
+
+    if (getKeyClass().isArray) {
+      throw new SparkException("reduceByKeyLocally() does not support array keys")
+    }
+
     def reducePartition(iter: Iterator[(K, V)]): Iterator[JHashMap[K, V]] = {
       val map = new JHashMap[K, V]
       for ((k, v) <- iter) {
@@ -165,6 +178,14 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * be set to true.
    */
   def partitionBy(partitioner: Partitioner, mapSideCombine: Boolean = false): RDD[(K, V)] = {
+    if (getKeyClass().isArray) {
+      if (mapSideCombine) {
+        throw new SparkException("Cannot use map-side combining with array keys.")
+      }
+      if (partitioner.isInstanceOf[HashPartitioner]) {
+        throw new SparkException("Default partitioner cannot partition array keys.")
+      }
+    }
     if (mapSideCombine) {
       def createCombiner(v: V) = ArrayBuffer(v)
       def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
@@ -178,9 +199,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   }
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce.
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
     this.cogroup(other, partitioner).flatMapValues {
@@ -336,6 +357,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * list of values for that key in `this` as well as `other`.
    */
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (Seq[V], Seq[W]))] = {
+    if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
+      throw new SparkException("Default partitioner cannot partition array keys.")
+    }
     val cg = new CoGroupedRDD[K](
         Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]),
         partitioner)
@@ -352,6 +376,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    */
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
+    if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
+      throw new SparkException("Default partitioner cannot partition array keys.")
+    }
     val cg = new CoGroupedRDD[K](
         Seq(self.asInstanceOf[RDD[(_, _)]],
             other1.asInstanceOf[RDD[(_, _)]],
@@ -438,7 +465,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         val res = self.context.runJob(self, process _, Array(index), false)
         res(0)
       case None =>
-        self.filter(_._1 == key).map(_._2).collect
+        self.filter(_._1 == key).map(_._2).collect()
     }
   }
 
@@ -466,20 +493,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       path: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[_ <: NewOutputFormat[_, _]]) {
-    saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, new Configuration)
-  }
-
-  /**
-   * Output the RDD to any Hadoop-supported file system, using a new Hadoop API `OutputFormat`
-   * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
-   */
-  def saveAsNewAPIHadoopFile(
-      path: String,
-      keyClass: Class[_],
-      valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      conf: Configuration) {
+      conf: Configuration = self.context.hadoopConfiguration) {
     val job = new NewAPIHadoopJob(conf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
@@ -530,7 +545,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf) {
+      conf: JobConf = new JobConf(self.context.hadoopConfiguration)) {
     conf.setOutputKeyClass(keyClass)
     conf.setOutputValueClass(valueClass)
     // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
@@ -575,7 +590,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
       var count = 0
       while(iter.hasNext) {
-        val record = iter.next
+        val record = iter.next()
         count += 1
         writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
       }
@@ -587,6 +602,16 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     self.context.runJob(self, writeToFile _)
     writer.cleanup()
   }
+
+  /**
+   * Return an RDD with the keys of each tuple.
+   */
+  def keys: RDD[K] = self.map(_._1)
+  
+  /**
+   * Return an RDD with the values of each tuple.
+   */
+  def values: RDD[V] = self.map(_._2)
 
   private[spark] def getKeyClass() = implicitly[ClassManifest[K]].erasure
 
@@ -624,24 +649,21 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
 }
 
 private[spark]
-class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override val partitioner = prev.partitioner
-  override def compute(split: Split, taskContext: TaskContext) =
-    prev.iterator(split, taskContext).map{case (k, v) => (k, f(v))}
+class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)](prev) {
+  override def getSplits = firstParent[(K, V)].splits
+  override val partitioner = firstParent[(K, V)].partitioner
+  override def compute(split: Split, context: TaskContext) =
+    firstParent[(K, V)].iterator(split, context).map{ case (k, v) => (k, f(v)) }
 }
 
 private[spark]
 class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U])
-  extends RDD[(K, U)](prev.context) {
+  extends RDD[(K, U)](prev) {
 
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override val partitioner = prev.partitioner
-
-  override def compute(split: Split, taskContext: TaskContext) = {
-    prev.iterator(split, taskContext).flatMap { case (k, v) => f(v).map(x => (k, x)) }
+  override def getSplits = firstParent[(K, V)].splits
+  override val partitioner = firstParent[(K, V)].partitioner
+  override def compute(split: Split, context: TaskContext) = {
+    firstParent[(K, V)].iterator(split, context).flatMap { case (k, v) => f(v).map(x => (k, x)) }
   }
 }
 

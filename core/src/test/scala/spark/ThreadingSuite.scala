@@ -22,19 +22,7 @@ object ThreadingSuiteState {
   }
 }
 
-class ThreadingSuite extends FunSuite with BeforeAndAfter {
-  
-  var sc: SparkContext = _
-  
-  after {
-    if(sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-  }
-  
+class ThreadingSuite extends FunSuite with LocalSparkContext {
   
   test("accessing SparkContext form a different thread") {
     sc = new SparkContext("local", "test")

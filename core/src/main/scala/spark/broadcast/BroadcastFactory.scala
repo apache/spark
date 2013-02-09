@@ -7,7 +7,7 @@ package spark.broadcast
  * entire Spark job.
  */
 private[spark] trait BroadcastFactory {
-  def initialize(isMaster: Boolean): Unit
-  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long): Broadcast[T]
+  def initialize(isDriver: Boolean): Unit
+  def newBroadcast[T](value: T, isLocal: Boolean, id: Long): Broadcast[T]
   def stop(): Unit
 }
