@@ -88,7 +88,7 @@ class BlockManager(
 
   val host = System.getProperty("spark.hostname", Utils.localHostName())
 
-  val slaveActor = master.actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
+  val slaveActor = actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
     name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
 
   // Pending reregistration action being executed asynchronously or null if none
@@ -946,7 +946,7 @@ class BlockManager(
       heartBeatTask.cancel()
     }
     connectionManager.stop()
-    master.actorSystem.stop(slaveActor)
+    actorSystem.stop(slaveActor)
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()

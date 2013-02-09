@@ -31,13 +31,15 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
 
   test("master start and stop") {
     val actorSystem = ActorSystem("test")
-    val tracker = new MapOutputTracker(actorSystem, true)
+    val tracker = new MapOutputTracker()
+    tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerActor(tracker)))
     tracker.stop()
   }
 
   test("master register and fetch") {
     val actorSystem = ActorSystem("test")
-    val tracker = new MapOutputTracker(actorSystem, true)
+    val tracker = new MapOutputTracker()
+    tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerActor(tracker)))
     tracker.registerShuffle(10, 2)
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val compressedSize10000 = MapOutputTracker.compressSize(10000L)
@@ -55,7 +57,8 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
 
   test("master register and unregister and fetch") {
     val actorSystem = ActorSystem("test")
-    val tracker = new MapOutputTracker(actorSystem, true)
+    val tracker = new MapOutputTracker()
+    tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerActor(tracker)))
     tracker.registerShuffle(10, 2)
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val compressedSize10000 = MapOutputTracker.compressSize(10000L)
@@ -77,35 +80,34 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("remote fetch") {
-    try {
-      System.clearProperty("spark.driver.host")  // In case some previous test had set it
-      val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", "localhost", 0)
-      System.setProperty("spark.driver.port", boundPort.toString)
-      val masterTracker = new MapOutputTracker(actorSystem, true)
-      val slaveTracker = new MapOutputTracker(actorSystem, false)
-      masterTracker.registerShuffle(10, 1)
-      masterTracker.incrementGeneration()
-      slaveTracker.updateGeneration(masterTracker.getGeneration)
-      intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", "localhost", 0)
+    val masterTracker = new MapOutputTracker()
+    masterTracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerActor(masterTracker)))
+    
+    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", "localhost", 0)
+    val slaveTracker = new MapOutputTracker()
+    slaveTracker.trackerActor = slaveSystem.actorFor("akka://spark@localhost:" + boundPort)
+    
+    masterTracker.registerShuffle(10, 1)
+    masterTracker.incrementGeneration()
+    slaveTracker.updateGeneration(masterTracker.getGeneration)
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
 
-      val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-      val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-      masterTracker.registerMapOutput(10, 0, new MapStatus(
-        BlockManagerId("a", "hostA", 1000), Array(compressedSize1000)))
-      masterTracker.incrementGeneration()
-      slaveTracker.updateGeneration(masterTracker.getGeneration)
-      assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-             Seq((BlockManagerId("a", "hostA", 1000), size1000)))
+    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
+    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
+    masterTracker.registerMapOutput(10, 0, new MapStatus(
+      BlockManagerId("a", "hostA", 1000), Array(compressedSize1000)))
+    masterTracker.incrementGeneration()
+    slaveTracker.updateGeneration(masterTracker.getGeneration)
+    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
+           Seq((BlockManagerId("a", "hostA", 1000), size1000)))
 
-      masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
-      masterTracker.incrementGeneration()
-      slaveTracker.updateGeneration(masterTracker.getGeneration)
-      intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+    masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
+    masterTracker.incrementGeneration()
+    slaveTracker.updateGeneration(masterTracker.getGeneration)
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
 
-      // failure should be cached
-      intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
-    } finally {
-      System.clearProperty("spark.driver.port")
-    }
+    // failure should be cached
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
   }
 }
