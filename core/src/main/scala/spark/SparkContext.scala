@@ -469,6 +469,10 @@ class SparkContext(
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
   }
 
+  def addSparkListener(listener: SparkListener) {
+    dagScheduler.sparkListeners += listener
+  }
+
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
    * memory available for caching.
