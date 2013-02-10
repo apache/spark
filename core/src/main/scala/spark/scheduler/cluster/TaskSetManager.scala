@@ -43,7 +43,6 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   val numFailures = new Array[Int](numTasks)
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksFinished = 0
-  val creationTime = System.currentTimeMillis
 
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
