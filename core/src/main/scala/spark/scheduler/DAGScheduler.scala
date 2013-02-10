@@ -7,9 +7,10 @@ import java.util.concurrent.Future
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
 import spark._
+import executor.TaskMetrics
 import spark.partial.ApproximateActionListener
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
@@ -42,8 +43,9 @@ class DAGScheduler(
       reason: TaskEndReason,
       result: Any,
       accumUpdates: Map[Long, Any],
-      taskInfo: TaskInfo) {
-    eventQueue.put(CompletionEvent(task, reason, result, accumUpdates, taskInfo))
+      taskInfo: TaskInfo,
+      taskMetrics: TaskMetrics) {
+    eventQueue.put(CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics))
   }
 
   // Called by TaskScheduler when an executor fails.
@@ -77,7 +79,7 @@ class DAGScheduler(
 
   private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
-  private val sparkListeners = Traversable[SparkListener]()
+  private[spark] var sparkListeners = ArrayBuffer[SparkListener]()
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
@@ -491,6 +493,7 @@ class DAGScheduler(
         }
         pendingTasks(stage) -= task
         stageToInfos(stage).taskInfos += event.taskInfo
+        stageToInfos(stage).taskMetrics += event.taskMetrics
         task match {
           case rt: ResultTask[_, _] =>
             resultStageToJob.get(stage) match {
@@ -512,10 +515,6 @@ class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val status = event.result.asInstanceOf[MapStatus]
-            smt.totalBytesWritten match {
-              case Some(b) => stageToInfos(stage).shuffleBytesWritten += b
-              case None => throw new RuntimeException("shuffle stask completed without tracking bytes written")
-            }
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
             if (failedGeneration.contains(execId) && smt.generation <= failedGeneration(execId)) {

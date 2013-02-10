@@ -81,9 +81,6 @@ private[spark] class ShuffleMapTask(
   with Externalizable
   with Logging {
 
-
-  var totalBytesWritten : Option[Long] = None
-
   protected def this() = this(0, null, null, 0, null)
 
   var split = if (rdd == null) {
@@ -144,7 +141,7 @@ private[spark] class ShuffleMapTask(
         totalBytes += size
         compressedSizes(i) = MapOutputTracker.compressSize(size)
       }
-      totalBytesWritten = Some(totalBytes)
+      shuffleBytesWritten = Some(totalBytes)
 
       return new MapStatus(blockManager.blockManagerId, compressedSizes)
     } finally {

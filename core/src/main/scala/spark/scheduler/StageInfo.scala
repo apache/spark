@@ -3,17 +3,29 @@ package spark.scheduler
 import cluster.TaskInfo
 import collection._
 import spark.util.Distribution
+import spark.executor.TaskMetrics
 
 case class StageInfo(
     val stage: Stage,
     val taskInfos: mutable.Buffer[TaskInfo] = mutable.Buffer[TaskInfo](),
-    val shuffleBytesWritten : mutable.Buffer[Long] = mutable.Buffer[Long](),
-    val shuffleBytesRead : mutable.Buffer[Long] = mutable.Buffer[Long]()
+    val taskMetrics: mutable.Buffer[TaskMetrics] = mutable.Buffer[TaskMetrics]()
 ) {
 
-  def name = stage.rdd.name + "(" + stage.origin + ")"
+  override def toString = stage.rdd.toString
 
   def getTaskRuntimeDistribution = {
-    new Distribution(taskInfos.map{_.duration.toDouble})
+    Distribution(taskInfos.map{_.duration.toDouble})
+  }
+
+  def getShuffleBytesWrittenDistribution = {
+    Distribution(taskMetrics.flatMap{_.shuffleBytesWritten.map{_.toDouble}})
+  }
+
+  def getRemoteFetchWaitTimeDistribution = {
+    Distribution(taskMetrics.flatMap{_.remoteFetchWaitTime.map{_.toDouble}})
+  }
+
+  def getRemoteBytesReadDistribution = {
+    Distribution(taskMetrics.flatMap{_.remoteBytesRead.map{_.toDouble}})
   }
 }

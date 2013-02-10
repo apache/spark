@@ -4,6 +4,7 @@ import cluster.TaskInfo
 import scala.collection.mutable.Map
 
 import spark._
+import executor.TaskMetrics
 
 /**
  * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue
@@ -27,7 +28,8 @@ private[spark] case class CompletionEvent(
     reason: TaskEndReason,
     result: Any,
     accumUpdates: Map[Long, Any],
-    taskInfo: TaskInfo)
+    taskInfo: TaskInfo,
+    taskMetrics: TaskMetrics)
   extends DAGSchedulerEvent
 
 private[spark] case class ExecutorLost(execId: String) extends DAGSchedulerEvent

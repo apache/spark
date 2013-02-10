@@ -116,6 +116,9 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
         context.task.remoteFetchTime = Some(fetchItr.remoteFetchTime)
         context.task.remoteFetchWaitTime = Some(fetchItr.remoteFetchWaitTime)
         context.task.remoteReadBytes = Some(fetchItr.remoteBytesRead)
+        context.task.totalBlocksFetched = Some(fetchItr.totalBlocks)
+        context.task.localBlocksFetched = Some(fetchItr.numLocalBlocks)
+        context.task.remoteBlocksFetched = Some(fetchItr.numRemoteBlocks)
       }
     }
     JavaConversions.mapAsScalaMap(map).iterator

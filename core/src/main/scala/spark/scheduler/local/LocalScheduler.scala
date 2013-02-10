@@ -87,7 +87,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
 
         // If the threadpool has not already been shutdown, notify DAGScheduler
         if (!Thread.currentThread().isInterrupted)
-          listener.taskEnded(task, Success, resultToReturn, accumUpdates, info)
+          listener.taskEnded(task, Success, resultToReturn, accumUpdates, info, null)
       } catch {
         case t: Throwable => {
           logError("Exception in task " + idInJob, t)
@@ -98,7 +98,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
             } else {
               // TODO: Do something nicer here to return all the way to the user
               if (!Thread.currentThread().isInterrupted)
-                listener.taskEnded(task, new ExceptionFailure(t), null, null, info)
+                listener.taskEnded(task, new ExceptionFailure(t), null, null, info, null)
             }
           }
         }

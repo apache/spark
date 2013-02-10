@@ -1,5 +1,7 @@
 package spark.scheduler.cluster
 
+import spark.executor.TaskMetrics
+
 /**
  * Information about a running task attempt inside a TaskSet.
  */
