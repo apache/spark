@@ -439,12 +439,16 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   /**
    * Choose a partitioner to use for a cogroup-like operation between a number of RDDs. If any of
    * the RDDs already has a partitioner, choose that one, otherwise use a default HashPartitioner.
+   *
+   * The number of partitions will be the same as the number of partitions in the largest upstream
+   * RDD, as this should be least likely to cause out-of-memory errors.
    */
   def defaultPartitioner(rdds: RDD[_]*): Partitioner = {
-    for (r <- rdds if r.partitioner != None) {
+    val bySize = rdds.sortBy(_.splits.size).reverse
+    for (r <- bySize if r.partitioner != None) {
       return r.partitioner.get
     }
-    return new HashPartitioner(self.context.defaultParallelism)
+    return new HashPartitioner(bySize.head.splits.size)
   }
 
   /**
