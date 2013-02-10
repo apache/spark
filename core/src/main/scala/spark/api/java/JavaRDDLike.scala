@@ -131,11 +131,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends PairFlatMapWorkaround
       other.classManifest)
 
   /**
-   * Return a new RDD that is reduced into `numSplits` partitions.
-   */
-  def coalesce(numSplits: Int): JavaRDD[T] = rdd.coalesce(numSplits)
-
-  /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */

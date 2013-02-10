@@ -53,6 +53,11 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
     fromRDD(srdd.filter(x => f(x).booleanValue()))
 
   /**
+   * Return a new RDD that is reduced into `numSplits` partitions.
+   */
+  def coalesce(numSplits: Int): JavaDoubleRDD = fromRDD(srdd.coalesce(numSplits))
+
+  /**
    * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaDoubleRDD =
