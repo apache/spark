@@ -11,6 +11,7 @@ import spark.TaskState.TaskState
 import spark.scheduler._
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
+import java.util.{TimerTask, Timer}
 
 /**
  * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
@@ -22,8 +23,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong
-  // How often to check for starved TaskSets
-  val STARVATION_CHECK_INTERVAL = System.getProperty("spark.starvation_check.interval", "5000").toLong
+  // Threshold above which we warn user initial TaskSet may be starved
+  val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "5000").toLong
 
   val activeTaskSets = new HashMap[String, TaskSetManager]
   var activeTaskSetsQueue = new ArrayBuffer[TaskSetManager]
@@ -31,6 +32,10 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
   val taskSetTaskIds = new HashMap[String, HashSet[Long]]
+
+  var hasReceivedTask = false
+  var hasLaunchedTask = false
+  val starvationTimer = new Timer(true)
 
   // Incrementing Mesos task IDs
   val nextTaskId = new AtomicLong(0)
@@ -86,21 +91,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
         }
       }.start()
     }
-
-    new Thread("ClusterScheduler starvation check") {
-      setDaemon(true)
-
-      override def run() {
-        while (true) {
-          try {
-            Thread.sleep(STARVATION_CHECK_INTERVAL)
-          } catch {
-            case e: InterruptedException => {}
-          }
-          detectStarvedTaskSets()
-        }
-      }
-    }.start()
   }
 
   override def submitTasks(taskSet: TaskSet) {
@@ -111,6 +101,18 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       activeTaskSets(taskSet.id) = manager
       activeTaskSetsQueue += manager
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
+
+      if (hasReceivedTask == false) {
+        starvationTimer.scheduleAtFixedRate(new TimerTask() {
+          override def run() {
+            if (!hasLaunchedTask) {
+              logWarning("Initial TaskSet has not accepted any offers. " +
+                "Check the scheduler UI to ensure slaves are registered.")
+            }
+          }
+        }, STARVATION_TIMEOUT, STARVATION_TIMEOUT)
+      }
+      hasReceivedTask = true;
     }
     backend.reviveOffers()
   }
@@ -167,6 +169,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           }
         } while (launchedTask)
       }
+      if (tasks.size > 0) hasLaunchedTask = true
       return tasks
     }
   }
@@ -263,20 +266,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
     if (shouldRevive) {
       backend.reviveOffers()
-    }
-  }
-
-  // Find and resource-starved TaskSets and alert the user
-  def detectStarvedTaskSets() {
-    val noOfferThresholdSeconds = 5
-    synchronized {
-      for (ts <- activeTaskSetsQueue) {
-        if (ts == TaskSetManager.firstTaskSet.get &&
-            (System.currentTimeMillis - ts.creationTime > noOfferThresholdSeconds * 1000) &&
-            ts.receivedOffers == 0) {
-          logWarning("No offers received. Check the scheduler UI to ensure slaves are registered.")
-        }
-      }
     }
   }
 
