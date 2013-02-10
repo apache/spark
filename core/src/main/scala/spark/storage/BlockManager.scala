@@ -585,7 +585,7 @@ class BlockManager(
         resultsGotten += 1
         val result = results.take()
         bytesInFlight -= result.size
-        if (!fetchRequests.isEmpty &&
+        while (!fetchRequests.isEmpty &&
             (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
           sendRequest(fetchRequests.dequeue())
         }
