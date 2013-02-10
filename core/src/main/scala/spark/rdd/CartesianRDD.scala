@@ -45,7 +45,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
     array
   }
 
-  override def getPreferredLocations(split: Split) = {
+  override def getPreferredLocations(split: Split): Seq[String] = {
     val currSplit = split.asInstanceOf[CartesianSplit]
     rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
   }
@@ -66,6 +66,7 @@ class CartesianRDD[T: ClassManifest, U:ClassManifest](
   )
 
   override def clearDependencies() {
+    super.clearDependencies()
     rdd1 = null
     rdd2 = null
   }

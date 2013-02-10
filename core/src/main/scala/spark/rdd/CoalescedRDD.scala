@@ -50,14 +50,15 @@ class CoalescedRDD[T: ClassManifest](
     }
   }
 
-  override def getDependencies: Seq[Dependency[_]] = List(
-    new NarrowDependency(prev) {
+  override def getDependencies: Seq[Dependency[_]] = {
+    Seq(new NarrowDependency(prev) {
       def getParents(id: Int): Seq[Int] =
         splits(id).asInstanceOf[CoalescedRDDSplit].parentsIndices
-    }
-  )
+    })
+  }
 
   override def clearDependencies() {
+    super.clearDependencies()
     prev = null
   }
 }

@@ -43,42 +43,38 @@ private[spark] class CoGroupAggregator
 class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) with Logging {
 
-  val aggr = new CoGroupAggregator
+  private val aggr = new CoGroupAggregator
 
-  @transient var deps_ = {
-    val deps = new ArrayBuffer[Dependency[_]]
-    for ((rdd, index) <- rdds.zipWithIndex) {
+  override def getDependencies: Seq[Dependency[_]] = {
+    rdds.map { rdd =>
       if (rdd.partitioner == Some(part)) {
         logInfo("Adding one-to-one dependency with " + rdd)
-        deps += new OneToOneDependency(rdd)
+        new OneToOneDependency(rdd)
       } else {
         logInfo("Adding shuffle dependency with " + rdd)
         val mapSideCombinedRDD = rdd.mapPartitions(aggr.combineValuesByKey(_), true)
-        deps += new ShuffleDependency[Any, ArrayBuffer[Any]](mapSideCombinedRDD, part)
+        new ShuffleDependency[Any, ArrayBuffer[Any]](mapSideCombinedRDD, part)
       }
     }
-    deps.toList
   }
 
-  override def getDependencies = deps_
-
-  @transient var splits_ : Array[Split] = {
+  override def getSplits: Array[Split] = {
     val array = new Array[Split](part.numPartitions)
     for (i <- 0 until array.size) {
-      array(i) = new CoGroupSplit(i, rdds.zipWithIndex.map { case (r, j) =>
+      // Each CoGroupSplit will have a dependency per contributing RDD
+      array(i) = new CoGroupSplit(i, rdds.zipWithIndex.map { case (rdd, j) =>
+        // Assume each RDD contributed a single dependency, and get it
         dependencies(j) match {
           case s: ShuffleDependency[_, _] =>
-            new ShuffleCoGroupSplitDep(s.shuffleId): CoGroupSplitDep
+            new ShuffleCoGroupSplitDep(s.shuffleId)
           case _ =>
-            new NarrowCoGroupSplitDep(r, i, r.splits(i)): CoGroupSplitDep
+            new NarrowCoGroupSplitDep(rdd, i, rdd.splits(i))
         }
       }.toList)
     }
     array
   }
 
-  override def getSplits = splits_
-  
   override val partitioner = Some(part)
 
   override def compute(s: Split, context: TaskContext): Iterator[(K, Seq[Seq[_]])] = {
@@ -97,7 +93,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
       }
     }
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
-      case NarrowCoGroupSplitDep(rdd, itsSplitIndex, itsSplit) => {
+      case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
         for ((k, v) <- rdd.iterator(itsSplit, context)) {
           getSeq(k.asInstanceOf[K])(depNum) += v
@@ -115,8 +111,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
   }
 
   override def clearDependencies() {
-    deps_ = null
-    splits_ = null
+    super.clearDependencies()
     rdds = null
   }
 }

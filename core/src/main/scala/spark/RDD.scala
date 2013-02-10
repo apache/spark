@@ -20,6 +20,7 @@ import spark.partial.BoundedDouble
 import spark.partial.CountEvaluator
 import spark.partial.GroupedCountEvaluator
 import spark.partial.PartialResult
+import spark.rdd.CoalescedRDD
 import spark.rdd.CartesianRDD
 import spark.rdd.FilteredRDD
 import spark.rdd.FlatMappedRDD
@@ -230,6 +231,11 @@ abstract class RDD[T: ClassManifest](
     map(x => (x, null)).reduceByKey((x, y) => x, numSplits).map(_._1)
 
   def distinct(): RDD[T] = distinct(splits.size)
+
+  /**
+   * Return a new RDD that is reduced into `numSplits` partitions.
+   */
+  def coalesce(numSplits: Int): RDD[T] = new CoalescedRDD(this, numSplits)
 
   /**
    * Return a sampled subset of this RDD.
@@ -649,7 +655,6 @@ abstract class RDD[T: ClassManifest](
    */
   private[spark] def markCheckpointed(checkpointRDD: RDD[_]) {
     clearDependencies()
-    dependencies_ = null
     splits_ = null
     deps = null    // Forget the constructor argument for dependencies too
   }
