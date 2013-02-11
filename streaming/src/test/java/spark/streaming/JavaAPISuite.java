@@ -528,7 +528,7 @@ public class JavaAPISuite implements Serializable {
         new PairFunction<Tuple2<String, Integer>, Integer, String>() {
           @Override
           public Tuple2<Integer, String> call(Tuple2<String, Integer> in) throws Exception {
-            return new Tuple2(in._2(),  in._1());
+            return in.swap();
           }
     });
 
@@ -563,7 +563,7 @@ public class JavaAPISuite implements Serializable {
             LinkedList<Tuple2<Integer, String>> out = new LinkedList<Tuple2<Integer, String>>();
             while (in.hasNext()) {
               Tuple2<String, Integer> next = in.next();
-              out.add(new Tuple2<Integer, String>(next._2(), next._1()));
+              out.add(next.swap());
             }
             return out;
           }
