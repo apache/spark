@@ -259,7 +259,9 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
         tid, info.duration, tasksFinished, numTasks))
       // Deserialize task result and pass it to the scheduler
       val result = ser.deserialize[TaskResult[_]](serializedData, getClass.getClassLoader)
-      sched.listener.taskEnded(tasks(index), Success, result.value, result.accumUpdates, info, result.metrics)
+      //lame way to get size into final metrics
+      val metricsWithSize = result.metrics.copy(resultSize = serializedData.limit())
+      sched.listener.taskEnded(tasks(index), Success, result.value, result.accumUpdates, info, metricsWithSize)
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
       if (tasksFinished == numTasks) {
