@@ -104,7 +104,7 @@ private[spark] object CheckpointRDD extends Logging {
     val deserializeStream = serializer.deserializeStream(fileInputStream)
 
     // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback(_ => deserializeStream.close())
+    context.addOnCompleteCallback(() => deserializeStream.close())
 
     deserializeStream.asIterator.asInstanceOf[Iterator[T]]
   }

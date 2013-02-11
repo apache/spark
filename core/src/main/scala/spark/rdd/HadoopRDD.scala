@@ -74,7 +74,7 @@ class HadoopRDD[K, V](
     reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 
     // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback(_ => reader.close())
+    context.addOnCompleteCallback(() => reader.close())
 
     val key: K = reader.createKey()
     val value: V = reader.createValue()

@@ -7,15 +7,15 @@ class TaskContext(val stageId: Int, val splitId: Int, val attemptId: Long, val t
   //by adding Task here, I'm destroying the separation between Task & TaskContext ... not sure why they need to
   // be separate
 
-  @transient val onCompleteCallbacks = new ArrayBuffer[TaskContext => Unit]
+  @transient val onCompleteCallbacks = new ArrayBuffer[() => Unit]
 
   // Add a callback function to be executed on task completion. An example use
   // is for HadoopRDD to register a callback to close the input stream.
-  def addOnCompleteCallback(f: TaskContext => Unit) {
+  def addOnCompleteCallback(f: () => Unit) {
     onCompleteCallbacks += f
   }
 
   def executeOnCompleteCallbacks() {
-    onCompleteCallbacks.foreach{_.apply(this)}
+    onCompleteCallbacks.foreach{_()}
   }
 }
