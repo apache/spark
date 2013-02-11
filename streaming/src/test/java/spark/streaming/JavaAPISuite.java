@@ -563,6 +563,48 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void testPairToPairFlatMapWithChangingTypes() { // Maps pair -> pair
+    List<List<Tuple2<String, Integer>>> inputData = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<String, Integer>("hi", 1),
+            new Tuple2<String, Integer>("ho", 2)),
+        Arrays.asList(
+            new Tuple2<String, Integer>("hi", 1),
+            new Tuple2<String, Integer>("ho", 2)));
+
+    List<List<Tuple2<Integer, String>>> expected = Arrays.asList(
+        Arrays.asList(
+            new Tuple2<Integer, String>(1, "h"),
+            new Tuple2<Integer, String>(1, "i"),
+            new Tuple2<Integer, String>(2, "h"),
+            new Tuple2<Integer, String>(2, "o")),
+        Arrays.asList(
+            new Tuple2<Integer, String>(1, "h"),
+            new Tuple2<Integer, String>(1, "i"),
+            new Tuple2<Integer, String>(2, "h"),
+            new Tuple2<Integer, String>(2, "o")));
+
+    JavaDStream<Tuple2<String, Integer>> stream =
+        JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
+    JavaPairDStream<Integer, String> flatMapped = pairStream.flatMap(
+      new PairFlatMapFunction<Tuple2<String, Integer>, Integer, String>() {
+      @Override
+      public Iterable<Tuple2<Integer, String>> call(Tuple2<String, Integer> in) throws Exception {
+        List<Tuple2<Integer, String>> out = new LinkedList<Tuple2<Integer, String>>();
+        for (Character s: in._1().toCharArray()) {
+          out.add(new Tuple2<Integer, String>(in._2(), s.toString()));
+        }
+        return out;
+      }
+    });
+    JavaTestUtils.attachTestOutputStream(flatMapped);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
   public void testPairGroupByKey() {
     List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
 
