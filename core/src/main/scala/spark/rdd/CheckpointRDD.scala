@@ -24,8 +24,8 @@ class CheckpointRDD[T: ClassManifest](sc: SparkContext, val checkpointPath: Stri
     val dirContents = fs.listStatus(new Path(checkpointPath))
     val splitFiles = dirContents.map(_.getPath.toString).filter(_.contains("part-")).sorted
     val numSplits = splitFiles.size
-    if (!splitFiles(0).endsWith(CheckpointRDD.splitIdToFile(0)) ||
-        !splitFiles(numSplits-1).endsWith(CheckpointRDD.splitIdToFile(numSplits-1))) {
+    if (numSplits > 0 && (!splitFiles(0).endsWith(CheckpointRDD.splitIdToFile(0)) ||
+        !splitFiles(numSplits-1).endsWith(CheckpointRDD.splitIdToFile(numSplits-1)))) {
       throw new SparkException("Invalid checkpoint directory: " + checkpointPath)
     }
     Array.tabulate(numSplits)(i => new CheckpointRDDSplit(i))
