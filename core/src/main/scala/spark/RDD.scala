@@ -636,16 +636,22 @@ abstract class RDD[T: ClassManifest](
   /** The [[spark.SparkContext]] that this RDD was created on. */
   def context = sc
 
+  // Avoid handling doCheckpoint multiple times to prevent excessive recursion
+  private var doCheckpointCalled = false
+
   /**
    * Performs the checkpointing of this RDD by saving this. It is called by the DAGScheduler
    * after a job using this RDD has completed (therefore the RDD has been materialized and
    * potentially stored in memory). doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
-    if (checkpointData.isDefined) {
-      checkpointData.get.doCheckpoint()
-    } else {
-      dependencies.foreach(_.rdd.doCheckpoint())
+    if (!doCheckpointCalled) {
+      doCheckpointCalled = true
+      if (checkpointData.isDefined) {
+        checkpointData.get.doCheckpoint()
+      } else {
+        dependencies.foreach(_.rdd.doCheckpoint())
+      }
     }
   }
 
