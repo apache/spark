@@ -511,16 +511,16 @@ public class JavaAPISuite implements Serializable {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
 
     List<List<Tuple2<Integer, String>>> expected = Arrays.asList(
-            Arrays.asList(
-                    new Tuple2<Integer, String>(1, "california"),
-                    new Tuple2<Integer, String>(3, "california"),
-                    new Tuple2<Integer, String>(4, "new york"),
-                    new Tuple2<Integer, String>(1, "new york")),
-            Arrays.asList(
-                    new Tuple2<Integer, String>(5, "california"),
-                    new Tuple2<Integer, String>(5, "california"),
-                    new Tuple2<Integer, String>(3, "new york"),
-                    new Tuple2<Integer, String>(1, "new york")));
+        Arrays.asList(
+                new Tuple2<Integer, String>(1, "california"),
+                new Tuple2<Integer, String>(3, "california"),
+                new Tuple2<Integer, String>(4, "new york"),
+                new Tuple2<Integer, String>(1, "new york")),
+        Arrays.asList(
+                new Tuple2<Integer, String>(5, "california"),
+                new Tuple2<Integer, String>(5, "california"),
+                new Tuple2<Integer, String>(3, "new york"),
+                new Tuple2<Integer, String>(1, "new york")));
 
     JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
