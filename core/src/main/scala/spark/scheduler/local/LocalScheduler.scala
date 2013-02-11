@@ -1,15 +1,13 @@
 package spark.scheduler.local
 
 import java.io.File
-import java.net.URLClassLoader
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.HashMap
 
 import spark._
-import executor.ExecutorURLClassLoader
+import spark.executor.ExecutorURLClassLoader
 import spark.scheduler._
-import cluster.TaskInfo
+import spark.scheduler.cluster.TaskInfo
 
 /**
  * A simple TaskScheduler implementation that runs tasks locally in a thread pool. Optionally

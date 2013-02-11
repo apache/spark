@@ -3,8 +3,8 @@ package spark
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import storage.{DelegateBlockFetchTracker, BlockManagerId}
-import util.TimedIterator
+import spark.storage.{DelegateBlockFetchTracker, BlockManagerId}
+import spark.util.TimedIterator
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
   override def fetch[K, V](shuffleId: Int, reduceId: Int) = {

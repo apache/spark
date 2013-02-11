@@ -1,7 +1,7 @@
 package spark.scheduler
 
-import cluster.TaskInfo
-import collection._
+import spark.scheduler.cluster.TaskInfo
+import scala.collection._
 import spark.util.Distribution
 import spark.executor.TaskMetrics
 

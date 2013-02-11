@@ -1,7 +1,7 @@
 package spark
 
-import storage.BlockFetchTracker
-import util.TimedIterator
+import spark.storage.BlockFetchTracker
+import spark.util.TimedIterator
 
 private[spark] abstract class ShuffleFetcher {
   /**

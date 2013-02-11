@@ -1,10 +1,10 @@
 package spark.scheduler
 
-import cluster.TaskInfo
+import spark.scheduler.cluster.TaskInfo
 import scala.collection.mutable.Map
 
 import spark._
-import executor.TaskMetrics
+import spark.executor.TaskMetrics
 
 /**
  * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue

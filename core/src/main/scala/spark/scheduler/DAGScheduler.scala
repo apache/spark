@@ -1,22 +1,19 @@
 package spark.scheduler
 
 import cluster.TaskInfo
-import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.Future
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
 import spark._
-import executor.TaskMetrics
+import spark.executor.TaskMetrics
 import spark.partial.ApproximateActionListener
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 import spark.storage.BlockManagerMaster
-import spark.storage.BlockManagerId
-import util.{MetadataCleaner, TimeStampedHashMap}
+import spark.util.{MetadataCleaner, TimeStampedHashMap}
 
 /**
  * A Scheduler subclass that implements stage-oriented scheduling. It computes a DAG of stages for
