@@ -810,12 +810,12 @@ public class JavaAPISuite implements Serializable {
           if (state.isPresent()) {
             out = out + state.get();
           }
-          for (Integer v : values) {
+          for (Integer v: values) {
             out = out + v;
           }
           return Optional.of(out);
         }
-    });
+        });
     JavaTestUtils.attachTestOutputStream(updated);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
