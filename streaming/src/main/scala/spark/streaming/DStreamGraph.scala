@@ -81,12 +81,14 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   private[streaming] def generateRDDs(time: Time): Seq[Job] = {
     this.synchronized {
+      logInfo("Generating RDDs for time " + time)
       outputStreams.flatMap(outputStream => outputStream.generateJob(time))
     }
   }
 
   private[streaming] def forgetOldRDDs(time: Time) {
     this.synchronized {
+      logInfo("Forgetting old RDDs for time " + time)
       outputStreams.foreach(_.forgetOldMetadata(time))
     }
   }

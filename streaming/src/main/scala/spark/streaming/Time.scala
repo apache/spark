@@ -40,3 +40,7 @@ case class Time(private val millis: Long) {
   override def toString: String = (millis.toString + " ms")
 
 }
+
+object Time {
+  val ordering = Ordering.by((time: Time) => time.millis)
+}

@@ -128,7 +128,7 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
   private[streaming]
   class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
 
-     def hadoopFiles = data.asInstanceOf[HashMap[Time, Array[String]]]
+    def hadoopFiles = data.asInstanceOf[HashMap[Time, Array[String]]]
 
     override def update() {
       hadoopFiles.clear()
@@ -139,11 +139,12 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
 
     override def restore() {
       hadoopFiles.foreach {
-        case (time, files) => {
-          logInfo("Restoring Hadoop RDD for time " + time + " from files " +
-            files.mkString("[", ",", "]") )
-          files
-          generatedRDDs += ((time, filesToRDD(files)))
+        case (t, f) => {
+          // Restore the metadata in both files and generatedRDDs
+          logInfo("Restoring files for time " + t + " - " +
+            f.mkString("[", ", ", "]") )
+          files += ((t, f))
+          generatedRDDs += ((t, filesToRDD(f)))
         }
       }
     }

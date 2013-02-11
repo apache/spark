@@ -40,7 +40,11 @@ class Scheduler(ssc: StreamingContext) extends Logging {
         clock.asInstanceOf[ManualClock].setTime(lastTime + jumpTime)
       }
       // Reschedule the batches that were received but not processed before failure
-      ssc.initialCheckpoint.pendingTimes.foreach(time => generateRDDs(time))
+      //ssc.initialCheckpoint.pendingTimes.foreach(time => generateRDDs(time))
+      val pendingTimes = ssc.initialCheckpoint.pendingTimes.sorted(Time.ordering)
+      println(pendingTimes.mkString(", "))
+      pendingTimes.foreach(time =>
+        graph.generateRDDs(time).foreach(jobManager.runJob))
       // Restart the timer
       timer.restart(graph.zeroTime.milliseconds)
       logInfo("Scheduler's timer restarted")
@@ -64,11 +68,11 @@ class Scheduler(ssc: StreamingContext) extends Logging {
     graph.generateRDDs(time).foreach(jobManager.runJob)
     graph.forgetOldRDDs(time)
     doCheckpoint(time)
-    logInfo("Generated RDDs for time " + time)
   }
 
   private def doCheckpoint(time: Time) {
     if (ssc.checkpointDuration != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
+      logInfo("Checkpointing graph for time " + time)
       val startTime = System.currentTimeMillis()
       ssc.graph.updateCheckpointData(time)
       checkpointWriter.write(new Checkpoint(ssc, time))
