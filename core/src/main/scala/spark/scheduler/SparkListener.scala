@@ -16,17 +16,24 @@ case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 class StatsReportListener extends SparkListener with Logging {
   def onStageCompleted(stageCompleted: StageCompleted) {
     import spark.scheduler.StatsReportListener._
-    logInfo("Finished stage: " + stageCompleted.stageInfo)
+    this.logInfo("Finished stage: " + stageCompleted.stageInfo)
     showMillisDistribution("task runtime:", stageCompleted.stageInfo.getTaskRuntimeDistribution)
     showBytesDistribution("shuffle bytes written:", stageCompleted.stageInfo.getShuffleBytesWrittenDistribution)
+
+    //fetch & some io info
     showMillisDistribution("fetch wait time:",stageCompleted.stageInfo.getRemoteFetchWaitTimeDistribution)
     showBytesDistribution("remote bytes read:", stageCompleted.stageInfo.getRemoteBytesReadDistribution)
     showBytesDistribution("task result size:", stageCompleted.stageInfo.getTaskResultSizeDistribution)
+
+    //runtime breakdown
+    showDistribution("executor (non-fetch) time pct: ", stageCompleted.stageInfo.getExectuorRuntimePercentage, "%2.0f \\%")
+    showDistribution("fetch wait time pct: ", stageCompleted.stageInfo.getFetchRuntimePercentage, "%2.0f \\%")
+    showDistribution("other time pct: ", stageCompleted.stageInfo.getOtherRuntimePercentage, "%2.0f \\%")
   }
 
 }
 
-object StatsReportListener {
+object StatsReportListener extends Logging {
 
   //for profiling, the extremes are more interesting
   val percentiles = Array[Int](0,5,10,25,50,75,90,95,100)
