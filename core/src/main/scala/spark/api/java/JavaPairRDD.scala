@@ -452,7 +452,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    */
   def sortByKey(ascending: Boolean): JavaPairRDD[K, V] = {
     val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
-    sortByKey(comp, true)
+    sortByKey(comp, ascending)
   }
 
   /**
