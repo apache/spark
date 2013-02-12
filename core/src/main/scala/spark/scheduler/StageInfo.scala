@@ -28,4 +28,8 @@ case class StageInfo(
   def getRemoteBytesReadDistribution = {
     Distribution(taskMetrics.flatMap{_.remoteBytesRead.map{_.toDouble}})
   }
+
+  def getTaskResultSizeDistribution = {
+    Distribution(taskMetrics.flatMap{_.resultSize.map{_.toDouble}})
+  }
 }

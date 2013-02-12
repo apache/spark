@@ -15,12 +15,18 @@ case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 
 class StatsReportListener extends SparkListener with Logging {
   def onStageCompleted(stageCompleted: StageCompleted) {
-    println("Finished stage: " + stageCompleted.stageInfo)
-    showDistribution("task runtime:", stageCompleted.stageInfo.getTaskRuntimeDistribution, "%4.0f")
-    showDistribution("shuffle bytes written:", stageCompleted.stageInfo.getShuffleBytesWrittenDistribution, d => Utils.memoryBytesToString(d.toLong))
-    showDistribution("fetch wait time:",stageCompleted.stageInfo.getRemoteFetchWaitTimeDistribution, "%4.0f")
-    showDistribution("remote bytes read:", stageCompleted.stageInfo.getRemoteBytesReadDistribution, d => Utils.memoryBytesToString(d.toLong))
+    import spark.scheduler.StatsReportListener._
+    logInfo("Finished stage: " + stageCompleted.stageInfo)
+    showMillisDistribution("task runtime:", stageCompleted.stageInfo.getTaskRuntimeDistribution)
+    showBytesDistribution("shuffle bytes written:", stageCompleted.stageInfo.getShuffleBytesWrittenDistribution)
+    showMillisDistribution("fetch wait time:",stageCompleted.stageInfo.getRemoteFetchWaitTimeDistribution)
+    showBytesDistribution("remote bytes read:", stageCompleted.stageInfo.getRemoteBytesReadDistribution)
+    showBytesDistribution("task result size:", stageCompleted.stageInfo.getTaskResultSizeDistribution)
   }
+
+}
+
+object StatsReportListener {
 
   //for profiling, the extremes are more interesting
   val percentiles = Array[Int](0,5,10,25,50,75,90,95,100)
@@ -32,6 +38,14 @@ class StatsReportListener extends SparkListener with Logging {
     showDistribution(heading, dOpt, f _)
   }
 
+  def showBytesDistribution(heading: String, dOpt: Option[Distribution]) {
+    showDistribution(heading, dOpt, d => Utils.memoryBytesToString(d.toLong))
+  }
+
+  def showMillisDistribution(heading: String, dOpt: Option[Distribution]) {
+    showDistribution(heading, dOpt, d => StatsReportListener.millisToString(d.toLong))
+  }
+
   def showDistribution(heading: String, dOpt: Option[Distribution], formatNumber: Double => String) {
     dOpt.foreach { d =>
       val stats = d.statCounter
@@ -40,5 +54,27 @@ class StatsReportListener extends SparkListener with Logging {
       logInfo(percentilesHeader)
       logInfo("\t" + quantiles.mkString("\t"))
     }
+  }
+
+
+  val seconds = 1000L
+  val minutes = seconds * 60
+  val hours = minutes * 60
+
+  /**
+   * reformat a time interval in milliseconds to a prettier format for output
+   */
+  def millisToString(ms: Long) = {
+    val (size, units) =
+      if (ms > hours) {
+        (ms.toDouble / hours, "hours")
+      } else if (ms > minutes) {
+        (ms.toDouble / minutes, "min")
+      } else if (ms > seconds) {
+        (ms.toDouble / seconds, "s")
+      } else {
+        (ms.toDouble, "ms")
+      }
+    "%.1f %s".format(size, units)
   }
 }
