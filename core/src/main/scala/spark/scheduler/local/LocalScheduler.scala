@@ -53,7 +53,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
 
     def runTask(task: Task[_], idInJob: Int, attemptId: Int) {
       logInfo("Running " + task)
-      val info = new TaskInfo(attemptId, idInJob, System.currentTimeMillis(), "local", "local")
+      val info = new TaskInfo(attemptId, idInJob, System.currentTimeMillis(), "local", "local", true)
       // Set the Spark execution environment for the worker thread
       SparkEnv.set(env)
       try {

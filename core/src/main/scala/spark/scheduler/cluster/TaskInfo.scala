@@ -11,7 +11,8 @@ class TaskInfo(
     val index: Int,
     val launchTime: Long,
     val executorId: String,
-    val host: String) {
+    val host: String,
+    val preferred: Boolean) {
   var finishTime: Long = 0
   var failed = false
 

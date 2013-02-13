@@ -208,7 +208,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
             taskSet.id, index, taskId, execId, host, prefStr))
           // Do various bookkeeping
           copiesRunning(index) += 1
-          val info = new TaskInfo(taskId, index, time, execId, host)
+          val info = new TaskInfo(taskId, index, time, execId, host, preferred)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           if (preferred) {
