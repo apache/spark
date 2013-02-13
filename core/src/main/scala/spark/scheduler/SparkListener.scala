@@ -1,7 +1,9 @@
 package spark.scheduler
 
+import spark.scheduler.cluster.TaskInfo
 import spark.util.Distribution
 import spark.{Utils, Logging}
+import spark.executor.TaskMetrics
 
 trait SparkListener {
   def onStageCompleted(stageCompleted: StageCompleted)
@@ -16,19 +18,23 @@ case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 class StatsReportListener extends SparkListener with Logging {
   def onStageCompleted(stageCompleted: StageCompleted) {
     import spark.scheduler.StatsReportListener._
+    implicit val sc = stageCompleted
     this.logInfo("Finished stage: " + stageCompleted.stageInfo)
-    showMillisDistribution("task runtime:", stageCompleted.stageInfo.getTaskRuntimeDistribution)
-    showBytesDistribution("shuffle bytes written:", stageCompleted.stageInfo.getShuffleBytesWrittenDistribution)
+    showMillisDistribution("task runtime:", (info, _) => Some(info.duration))
+    showBytesDistribution("shuffle bytes written:",(_,metric) => metric.shuffleBytesWritten)
 
     //fetch & some io info
-    showMillisDistribution("fetch wait time:",stageCompleted.stageInfo.getRemoteFetchWaitTimeDistribution)
-    showBytesDistribution("remote bytes read:", stageCompleted.stageInfo.getRemoteBytesReadDistribution)
-    showBytesDistribution("task result size:", stageCompleted.stageInfo.getTaskResultSizeDistribution)
+    showMillisDistribution("fetch wait time:",(_, metric) => metric.remoteFetchWaitTime)
+    showBytesDistribution("remote bytes read:", (_, metric) => metric.remoteBytesRead)
+    showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     //runtime breakdown
-    showDistribution("executor (non-fetch) time pct: ", stageCompleted.stageInfo.getExectuorRuntimePercentage, "%2.0f \\%")
-    showDistribution("fetch wait time pct: ", stageCompleted.stageInfo.getFetchRuntimePercentage, "%2.0f \\%")
-    showDistribution("other time pct: ", stageCompleted.stageInfo.getOtherRuntimePercentage, "%2.0f \\%")
+    val runtimePcts = stageCompleted.stageInfo.taskInfos.zip(stageCompleted.stageInfo.taskMetrics).map{
+      case (info, metrics) => RuntimePercentage(info.duration, metrics)
+    }
+    showDistribution("executor (non-fetch) time pct: ", Distribution(runtimePcts.map{_.executorPct * 100}), "%2.0f %%")
+    showDistribution("fetch wait time pct: ", Distribution(runtimePcts.flatMap{_.fetchPct.map{_ * 100}}), "%2.0f %%")
+    showDistribution("other time pct: ", Distribution(runtimePcts.map{_.other * 100}), "%2.0f %%")
   }
 
 }
@@ -40,9 +46,29 @@ object StatsReportListener extends Logging {
   val probabilities = percentiles.map{_ / 100.0}
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
+  def extractDoubleDistribution(stage:StageCompleted, getMetric: (TaskInfo,TaskMetrics) => Option[Double]): Option[Distribution] = {
+    Distribution(stage.stageInfo.taskInfos.zip(stage.stageInfo.taskMetrics).flatMap{
+      case ((info,metric)) => getMetric(info, metric)})
+  }
+
+  //is there some way to setup the types that I can get rid of this completely?
+  def extractLongDistribution(stage:StageCompleted, getMetric: (TaskInfo,TaskMetrics) => Option[Long]): Option[Distribution] = {
+    extractDoubleDistribution(stage, (info, metric) => getMetric(info,metric).map{_.toDouble})
+  }
+
   def showDistribution(heading: String, dOpt: Option[Distribution], format:String) {
     def f(d:Double) = format.format(d)
     showDistribution(heading, dOpt, f _)
+  }
+
+  def showDistribution(heading:String, format: String, getMetric: (TaskInfo,TaskMetrics) => Option[Double])
+    (implicit stage: StageCompleted) {
+    showDistribution(heading, extractDoubleDistribution(stage, getMetric), format)
+  }
+
+  def showBytesDistribution(heading:String, getMetric: (TaskInfo,TaskMetrics) => Option[Long])
+    (implicit stage: StageCompleted) {
+    showBytesDistribution(heading, extractLongDistribution(stage, getMetric))
   }
 
   def showBytesDistribution(heading: String, dOpt: Option[Distribution]) {
@@ -51,6 +77,11 @@ object StatsReportListener extends Logging {
 
   def showMillisDistribution(heading: String, dOpt: Option[Distribution]) {
     showDistribution(heading, dOpt, d => StatsReportListener.millisToString(d.toLong))
+  }
+
+  def showMillisDistribution(heading: String, getMetric: (TaskInfo, TaskMetrics) => Option[Long])
+    (implicit stage: StageCompleted) {
+    showMillisDistribution(heading, extractLongDistribution(stage, getMetric))
   }
 
   def showDistribution(heading: String, dOpt: Option[Distribution], formatNumber: Double => String) {
@@ -83,5 +114,18 @@ object StatsReportListener extends Logging {
         (ms.toDouble, "ms")
       }
     "%.1f %s".format(size, units)
+  }
+}
+
+
+
+case class RuntimePercentage(executorPct: Double, fetchPct: Option[Double], other: Double)
+object RuntimePercentage {
+  def apply(totalTime: Long, metrics: TaskMetrics): RuntimePercentage = {
+    val denom = totalTime.toDouble
+    val fetch = metrics.remoteFetchWaitTime.map{_ / denom}
+    val exec = (metrics.executorRunTime - metrics.remoteFetchWaitTime.getOrElse(0l)) / denom
+    val other = 1.0 - (exec + fetch.getOrElse(0d))
+    RuntimePercentage(exec, fetch, other)
   }
 }
