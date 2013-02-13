@@ -29,7 +29,7 @@ class StatsReportListener extends SparkListener with Logging {
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     //runtime breakdown
-    val runtimePcts = stageCompleted.stageInfo.taskInfos.zip(stageCompleted.stageInfo.taskMetrics).map{
+    val runtimePcts = stageCompleted.stageInfo.taskInfos.map{
       case (info, metrics) => RuntimePercentage(info.duration, metrics)
     }
     showDistribution("executor (non-fetch) time pct: ", Distribution(runtimePcts.map{_.executorPct * 100}), "%2.0f %%")
@@ -47,7 +47,7 @@ object StatsReportListener extends Logging {
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
   def extractDoubleDistribution(stage:StageCompleted, getMetric: (TaskInfo,TaskMetrics) => Option[Double]): Option[Distribution] = {
-    Distribution(stage.stageInfo.taskInfos.zip(stage.stageInfo.taskMetrics).flatMap{
+    Distribution(stage.stageInfo.taskInfos.flatMap{
       case ((info,metric)) => getMetric(info, metric)})
   }
 

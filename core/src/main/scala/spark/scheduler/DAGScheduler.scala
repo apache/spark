@@ -489,8 +489,7 @@ class DAGScheduler(
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
         }
         pendingTasks(stage) -= task
-        stageToInfos(stage).taskInfos += event.taskInfo
-        stageToInfos(stage).taskMetrics += event.taskMetrics
+        stageToInfos(stage).taskInfos += event.taskInfo -> event.taskMetrics
         task match {
           case rt: ResultTask[_, _] =>
             resultStageToJob.get(stage) match {
