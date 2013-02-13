@@ -38,13 +38,19 @@ class JobManager(ssc: StreamingContext, numThreads: Int = 1) extends Logging {
     logInfo("Added " + job + " to queue")
   }
 
+  def stop() {
+    jobExecutor.shutdown()
+  }
+
   private def clearJob(job: Job) {
     jobs.synchronized {
-      val jobsOfTime = jobs.get(job.time)
+      val time = job.time
+      val jobsOfTime = jobs.get(time)
       if (jobsOfTime.isDefined) {
         jobsOfTime.get -= job
         if (jobsOfTime.get.isEmpty) {
-          jobs -= job.time
+          ssc.scheduler.clearOldMetadata(time)
+          jobs -= time
         }
       } else {
         throw new Exception("Job finished for time " + job.time +

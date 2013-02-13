@@ -6,6 +6,8 @@ import util.ManualClock
 
 class BasicOperationsSuite extends TestSuiteBase {
 
+  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+
   override def framework() = "BasicOperationsSuite"
 
   after {

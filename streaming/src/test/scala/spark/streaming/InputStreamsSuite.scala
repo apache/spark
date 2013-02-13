@@ -133,26 +133,29 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
 
   test("file input stream") {
+    // Disable manual clock as FileInputDStream does not work with manual clock
+    System.clearProperty("spark.streaming.clock")
+
     // Set up the streaming context and input streams
     val testDir = Files.createTempDir()
     val ssc = new StreamingContext(master, framework, batchDuration)
-    val filestream = ssc.textFileStream(testDir.toString)
+    val fileStream = ssc.textFileStream(testDir.toString)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     def output = outputBuffer.flatMap(x => x)
-    val outputStream = new TestOutputStream(filestream, outputBuffer)
+    val outputStream = new TestOutputStream(fileStream, outputBuffer)
     ssc.registerOutputStream(outputStream)
     ssc.start()
 
     // Create files in the temporary directory so that Spark Streaming can read data from it
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
     val expectedOutput = input.map(_.toString)
     Thread.sleep(1000)
     for (i <- 0 until input.size) {
-      FileUtils.writeStringToFile(new File(testDir, i.toString), input(i).toString + "\n")
-      Thread.sleep(500)
-      clock.addToTime(batchDuration.milliseconds)
-      //Thread.sleep(100)
+      val file = new File(testDir, i.toString)
+      FileUtils.writeStringToFile(file, input(i).toString + "\n")
+      logInfo("Created file " + file)
+      Thread.sleep(batchDuration.milliseconds)
+      Thread.sleep(1000)
     }
     val startTime = System.currentTimeMillis()
     Thread.sleep(1000)
@@ -171,16 +174,16 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Verify whether all the elements received are as expected
     // (whether the elements were received one in each interval is not verified)
-    assert(output.size === expectedOutput.size)
-    for (i <- 0 until output.size) {
-      assert(output(i).size === 1)
-      assert(output(i).head.toString === expectedOutput(i))
-    }
+    assert(output.toList === expectedOutput.toList)
+
     FileUtils.deleteDirectory(testDir)
+
+    // Enable manual clock back again for other tests
+    System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
   }
 }
 
-
+/** This is server to test the network input stream */
 class TestServer(port: Int) extends Logging {
 
   val queue = new ArrayBlockingQueue[String](100)

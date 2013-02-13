@@ -5,6 +5,8 @@ import collection.mutable.ArrayBuffer
 
 class WindowOperationsSuite extends TestSuiteBase {
 
+  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+
   override def framework = "WindowOperationsSuite"
 
   override def maxWaitTimeMillis = 20000

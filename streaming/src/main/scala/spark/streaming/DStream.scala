@@ -292,7 +292,7 @@ abstract class DStream[T: ClassManifest] (
    * Generate a SparkStreaming job for the given time. This is an internal method that
    * should not be called directly. This default implementation creates a job
    * that materializes the corresponding RDD. Subclasses of DStream may override this
-   * (eg. ForEachDStream).
+   * to generate their own jobs.
    */
   protected[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
@@ -308,19 +308,18 @@ abstract class DStream[T: ClassManifest] (
   }
 
   /**
-   * Dereference RDDs that are older than rememberDuration.
+   * Clear metadata that are older than `rememberDuration` of this DStream.
+   * This is an internal method that should not be called directly. This default
+   * implementation clears the old generated RDDs. Subclasses of DStream may override
+   * this to clear their own metadata along with the generated RDDs.
    */
-  protected[streaming] def forgetOldMetadata(time: Time) {
+  protected[streaming] def clearOldMetadata(time: Time) {
     var numForgotten = 0
-    generatedRDDs.keys.foreach(t => {
-      if (t <= (time - rememberDuration)) {
-        generatedRDDs.remove(t)
-        numForgotten += 1
-        logInfo("Forgot RDD of time " + t + " from " + this)
-      }
-    })
-    logInfo("Forgot " + numForgotten + " RDDs from " + this)
-    dependencies.foreach(_.forgetOldMetadata(time))
+    val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
+    generatedRDDs --= oldRDDs.keys
+    logInfo("Cleared " + oldRDDs.size + " RDDs that were older than " +
+      (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
+    dependencies.foreach(_.clearOldMetadata(time))
   }
 
   /* Adds metadata to the Stream while it is running. 

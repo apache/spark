@@ -46,8 +46,15 @@ abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : Streaming
   def stop() {}
 
   override def compute(validTime: Time): Option[RDD[T]] = {
-    val blockIds = ssc.networkInputTracker.getBlockIds(id, validTime)    
-    Some(new BlockRDD[T](ssc.sc, blockIds))
+    // If this is called for any time before the start time of the context,
+    // then this returns an empty RDD. This may happen when recovering from a
+    // master failure forces
+    if (validTime >= graph.startTime) {
+      val blockIds = ssc.networkInputTracker.getBlockIds(id, validTime)
+      Some(new BlockRDD[T](ssc.sc, blockIds))
+    } else {
+      Some(new BlockRDD[T](ssc.sc, Array[String]()))
+    }
   }
 }
 
