@@ -291,7 +291,6 @@ class TestOutputStream[T: ClassManifest](
     (rdd: RDD[T], t: Time) => {
       val collected = rdd.collect()
       output += collected
-      println(t + ": " + collected.mkString("[", ",", "]"))
     }
   ) {
 

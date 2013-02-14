@@ -328,7 +328,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by reducing over a using incremental computation.
+   * Create a new DStream by applying incremental `reduceByKey` over a sliding window.
    * The reduced value of over a new window is calculated using the old window's reduce value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
@@ -342,25 +342,31 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
-   * @param numPartitions  Number of partitions of each RDD in the new DStream.
+   * @param numPartitions  number of partitions of each RDD in the new DStream.
+   * @param filterFunc     function to filter expired key-value pairs;
+   *                       only pairs that satisfy the function are retained
+   *                       set this to null if you do not want to filter
    */
   def reduceByKeyAndWindow(
       reduceFunc: Function2[V, V, V],
       invReduceFunc: Function2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration,
-      numPartitions: Int
+      numPartitions: Int,
+      filterFunc: JFunction[(K, V), java.lang.Boolean]
     ): JavaPairDStream[K, V] = {
     dstream.reduceByKeyAndWindow(
         reduceFunc,
         invReduceFunc,
         windowDuration,
         slideDuration,
-        numPartitions)
+        numPartitions,
+        (p: (K, V)) => filterFunc(p).booleanValue()
+    )
   }
 
   /**
-   * Create a new DStream by reducing over a using incremental computation.
+   * Create a new DStream by applying incremental `reduceByKey` over a sliding window.
    * The reduced value of over a new window is calculated using the old window's reduce value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
@@ -374,20 +380,26 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new DStream.
+   * @param filterFunc     function to filter expired key-value pairs;
+   *                       only pairs that satisfy the function are retained
+   *                       set this to null if you do not want to filter
    */
   def reduceByKeyAndWindow(
       reduceFunc: Function2[V, V, V],
       invReduceFunc: Function2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration,
-      partitioner: Partitioner
-    ): JavaPairDStream[K, V] = {
+      partitioner: Partitioner,
+      filterFunc: JFunction[(K, V), java.lang.Boolean]
+  ): JavaPairDStream[K, V] = {
     dstream.reduceByKeyAndWindow(
         reduceFunc,
         invReduceFunc,
         windowDuration,
         slideDuration,
-        partitioner)
+        partitioner,
+        (p: (K, V)) => filterFunc(p).booleanValue()
+    )
   }
 
   /**

@@ -531,7 +531,7 @@ abstract class DStream[T: ClassManifest] (
       windowDuration: Duration,
       slideDuration: Duration
     ): DStream[T] = {
-    this.window(windowDuration, slideDuration).reduce(reduceFunc)
+    this.reduce(reduceFunc).window(windowDuration, slideDuration).reduce(reduceFunc)
   }
 
   def reduceByWindow(
