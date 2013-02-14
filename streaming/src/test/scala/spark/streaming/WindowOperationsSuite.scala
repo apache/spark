@@ -236,14 +236,14 @@ class WindowOperationsSuite extends TestSuiteBase {
     testOperation(input, operation, expectedOutput, numBatches, true)
   }
 
-  test("countByKeyAndWindow") {
-    val input = Seq(Seq(("a", 1)), Seq(("b", 1), ("b", 2)), Seq(("a", 10), ("b", 20)))
+  test("countByValueAndWindow") {
+    val input = Seq(Seq("a"), Seq("b", "b"), Seq("a", "b"))
     val expectedOutput = Seq( Seq(("a", 1)), Seq(("a", 1), ("b", 2)), Seq(("a", 1), ("b", 3)))
     val windowDuration = Seconds(2)
     val slideDuration = Seconds(1)
     val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
-    val operation = (s: DStream[(String, Int)]) => {
-      s.countByKeyAndWindow(windowDuration, slideDuration).map(x => (x._1, x._2.toInt))
+    val operation = (s: DStream[String]) => {
+      s.countByValueAndWindow(windowDuration, slideDuration).map(x => (x._1, x._2.toInt))
     }
     testOperation(input, operation, expectedOutput, numBatches, true)
   }

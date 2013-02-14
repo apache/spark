@@ -95,14 +95,6 @@ extends Serializable {
   }
 
   /**
-   * Return a new DStream by counting the number of values of each key in each RDD. Hash
-   * partitioning is used to generate the RDDs with Spark's `numPartitions` partitions.
-   */
-  def countByKey(numPartitions: Int = self.ssc.sc.defaultParallelism): DStream[(K, Long)] = {
-    self.map(x => (x._1, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
-  }
-
-  /**
    * Return a new DStream by applying `groupByKey` over a sliding window. This is similar to
    * `DStream.groupByKey()` but applies it over a sliding window. The new DStream generates RDDs
    * with the same interval as this DStream. Hash partitioning is used to generate the RDDs with
@@ -211,7 +203,7 @@ extends Serializable {
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
-   * @param numPartitions  Number of partitions of each RDD in the new DStream.
+   * @param numPartitions  number of partitions of each RDD in the new DStream.
    */
   def reduceByKeyAndWindow(
       reduceFunc: (V, V) => V,
@@ -248,10 +240,10 @@ extends Serializable {
 
   /**
    * Return a new DStream by applying incremental `reduceByKey` over a sliding window.
-   * The reduced value of over a new window is calculated using the old window's reduce value :
+   * The reduced value of over a new window is calculated using the old window's reduced value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
-   * This is more efficient that reduceByKeyAndWindow without "inverse reduce" function.
+   * This is more efficient than reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
    * @param reduceFunc associative reduce function
@@ -281,10 +273,10 @@ extends Serializable {
 
   /**
    * Return a new DStream by applying incremental `reduceByKey` over a sliding window.
-   * The reduced value of over a new window is calculated using the old window's reduce value :
+   * The reduced value of over a new window is calculated using the old window's reduced value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
-   * This is more efficient that reduceByKeyAndWindow without "inverse reduce" function.
+   * This is more efficient than reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
    * @param reduceFunc     associative reduce function
    * @param invReduceFunc  inverse reduce function
@@ -312,31 +304,6 @@ extends Serializable {
     new ReducedWindowedDStream[K, V](
       self, cleanedReduceFunc, cleanedInvReduceFunc, cleanedFilterFunc,
       windowDuration, slideDuration, partitioner
-    )
-  }
-
-  /**
-   * Return a new DStream by counting the number of values for each key over a window.
-   * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
-   * @param windowDuration width of the window; must be a multiple of this DStream's
-   *                       batching interval
-   * @param slideDuration  sliding interval of the window (i.e., the interval after which
-   *                       the new DStream will generate RDDs); must be a multiple of this
-   *                       DStream's batching interval
-   * @param numPartitions  Number of partitions of each RDD in the new DStream.
-   */
-  def countByKeyAndWindow(
-      windowDuration: Duration,
-      slideDuration: Duration,
-      numPartitions: Int = self.ssc.sc.defaultParallelism
-    ): DStream[(K, Long)] = {
-
-    self.map(x => (x._1, 1L)).reduceByKeyAndWindow(
-      (x: Long, y: Long) => x + y,
-      (x: Long, y: Long) => x - y,
-      windowDuration,
-      slideDuration,
-      numPartitions
     )
   }
 

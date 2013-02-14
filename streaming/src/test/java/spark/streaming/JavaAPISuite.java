@@ -135,29 +135,6 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void testTumble() {
-    List<List<Integer>> inputData = Arrays.asList(
-        Arrays.asList(1,2,3),
-        Arrays.asList(4,5,6),
-        Arrays.asList(7,8,9),
-        Arrays.asList(10,11,12),
-        Arrays.asList(13,14,15),
-        Arrays.asList(16,17,18));
-
-    List<List<Integer>> expected = Arrays.asList(
-        Arrays.asList(1,2,3,4,5,6),
-        Arrays.asList(7,8,9,10,11,12),
-        Arrays.asList(13,14,15,16,17,18));
-
-    JavaDStream stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaDStream windowed = stream.tumble(new Duration(2000));
-    JavaTestUtils.attachTestOutputStream(windowed);
-    List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 6, 3);
-
-    assertOrderInvariantEquals(expected, result);
-  }
-
-  @Test
   public void testFilter() {
     List<List<String>> inputData = Arrays.asList(
         Arrays.asList("giants", "dodgers"),
@@ -584,24 +561,26 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void testCountByKey() {
-    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+  public void testCountByValue() {
+    List<List<String>> inputData = Arrays.asList(
+      Arrays.asList("hello", "world"),
+      Arrays.asList("hello", "moon"),
+      Arrays.asList("hello"));
 
     List<List<Tuple2<String, Long>>> expected = Arrays.asList(
-        Arrays.asList(
-            new Tuple2<String, Long>("california", 2L),
-            new Tuple2<String, Long>("new york", 2L)),
-        Arrays.asList(
-            new Tuple2<String, Long>("california", 2L),
-            new Tuple2<String, Long>("new york", 2L)));
+      Arrays.asList(
+              new Tuple2<String, Long>("hello", 1L),
+              new Tuple2<String, Long>("world", 1L)),
+      Arrays.asList(
+              new Tuple2<String, Long>("hello", 1L),
+              new Tuple2<String, Long>("moon", 1L)),
+      Arrays.asList(
+              new Tuple2<String, Long>("hello", 1L)));
 
-    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(
-        ssc, inputData, 1);
-    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
-
-    JavaPairDStream<String, Long> counted = pairStream.countByKey();
+    JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaPairDStream<String, Long> counted = stream.countByValue();
     JavaTestUtils.attachTestOutputStream(counted);
-    List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
     Assert.assertEquals(expected, result);
   }
@@ -712,26 +691,28 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void testCountByKeyAndWindow() {
-    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+  public void testCountByValueAndWindow() {
+    List<List<String>> inputData = Arrays.asList(
+        Arrays.asList("hello", "world"),
+        Arrays.asList("hello", "moon"),
+        Arrays.asList("hello"));
 
     List<List<Tuple2<String, Long>>> expected = Arrays.asList(
         Arrays.asList(
-            new Tuple2<String, Long>("california", 2L),
-            new Tuple2<String, Long>("new york", 2L)),
+            new Tuple2<String, Long>("hello", 1L),
+            new Tuple2<String, Long>("world", 1L)),
         Arrays.asList(
-            new Tuple2<String, Long>("california", 4L),
-            new Tuple2<String, Long>("new york", 4L)),
+            new Tuple2<String, Long>("hello", 2L),
+            new Tuple2<String, Long>("world", 1L),
+            new Tuple2<String, Long>("moon", 1L)),
         Arrays.asList(
-            new Tuple2<String, Long>("california", 2L),
-            new Tuple2<String, Long>("new york", 2L)));
+            new Tuple2<String, Long>("hello", 2L),
+            new Tuple2<String, Long>("moon", 1L)));
 
-    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(
+    JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(
         ssc, inputData, 1);
-    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
-
     JavaPairDStream<String, Long> counted =
-        pairStream.countByKeyAndWindow(new Duration(2000), new Duration(1000));
+      stream.countByValueAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 

@@ -24,7 +24,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     )
   }
 
-  test("flatmap") {
+  test("flatMap") {
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     testOperation(
       input,
@@ -85,6 +85,23 @@ class BasicOperationsSuite extends TestSuiteBase {
       Seq(1 to 4, 5 to 8, 9 to 12),
       (s: DStream[Int]) => s.reduce(_ + _),
       Seq(Seq(10), Seq(26), Seq(42))
+    )
+  }
+
+  test("count") {
+    testOperation(
+      Seq(1 to 1, 1 to 2, 1 to 3, 1 to 4),
+      (s: DStream[Int]) => s.count(),
+      Seq(Seq(1L), Seq(2L), Seq(3L), Seq(4L))
+    )
+  }
+
+  test("countByValue") {
+    testOperation(
+      Seq(1 to 1, Seq(1, 1, 1), 1 to 2, Seq(1, 1, 2, 2)),
+      (s: DStream[Int]) => s.countByValue(),
+      Seq(Seq((1, 1L)), Seq((1, 3L)), Seq((1, 1L), (2, 1L)), Seq((2, 2L), (1, 2L))),
+      true
     )
   }
 
@@ -206,7 +223,7 @@ class BasicOperationsSuite extends TestSuiteBase {
           case _ => Option(stateObj)
         }
       }
-      s.map(_ -> 1).updateStateByKey[StateObject](updateFunc).mapValues(_.counter)
+      s.map(x => (x, 1)).updateStateByKey[StateObject](updateFunc).mapValues(_.counter)
     }
 
     testOperation(inputData, updateStateOperation, outputData, true)

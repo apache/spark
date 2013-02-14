@@ -33,7 +33,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   def cache(): JavaPairDStream[K, V] = dstream.cache()
 
   /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
-  def persist(): JavaPairDStream[K, V] = dstream.cache()
+  def persist(): JavaPairDStream[K, V] = dstream.persist()
 
   /** Persist the RDDs of this DStream with the given storage level */
   def persist(storageLevel: StorageLevel): JavaPairDStream[K, V] = dstream.persist(storageLevel)
@@ -65,14 +65,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def window(windowDuration: Duration, slideDuration: Duration): JavaPairDStream[K, V] =
     dstream.window(windowDuration, slideDuration)
-
-  /**
-   * Return a new DStream which computed based on tumbling window on this DStream.
-   * This is equivalent to window(batchDuration, batchDuration).
-   * @param batchDuration tumbling window duration; must be a multiple of this DStream's interval
-   */
-  def tumble(batchDuration: Duration): JavaPairDStream[K, V] =
-    dstream.tumble(batchDuration)
 
   /**
    * Return a new DStream by unifying data of another DStream with this DStream.
@@ -146,23 +138,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val cm: ClassManifest[C] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[C]]
     dstream.combineByKey(createCombiner, mergeValue, mergeCombiners, partitioner)
-  }
-
-  /**
-   * Return a new DStream by counting the number of values of each key in each RDD. Hash
-   * partitioning is used to generate the RDDs with Spark's `numPartitions` partitions.
-   */
-  def countByKey(numPartitions: Int): JavaPairDStream[K, JLong] = {
-    JavaPairDStream.scalaToJavaLong(dstream.countByKey(numPartitions));
-  }
-
-
-  /**
-   * Return a new DStream by counting the number of values of each key in each RDD. Hash
-   * partitioning is used to generate the RDDs with the default number of partitions.
-   */
-  def countByKey(): JavaPairDStream[K, JLong] = {
-    JavaPairDStream.scalaToJavaLong(dstream.countByKey());
   }
 
   /**
@@ -400,35 +375,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
         partitioner,
         (p: (K, V)) => filterFunc(p).booleanValue()
     )
-  }
-
-  /**
-   * Create a new DStream by counting the number of values for each key over a window.
-   * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
-   * @param windowDuration width of the window; must be a multiple of this DStream's
-   *                       batching interval
-   * @param slideDuration  sliding interval of the window (i.e., the interval after which
-   *                       the new DStream will generate RDDs); must be a multiple of this
-   *                       DStream's batching interval
-   */
-  def countByKeyAndWindow(windowDuration: Duration, slideDuration: Duration)
-  : JavaPairDStream[K, JLong] = {
-    JavaPairDStream.scalaToJavaLong(dstream.countByKeyAndWindow(windowDuration, slideDuration))
-  }
-
-  /**
-   * Create a new DStream by counting the number of values for each key over a window.
-   * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
-   * @param windowDuration width of the window; must be a multiple of this DStream's
-   *                       batching interval
-   * @param slideDuration  sliding interval of the window (i.e., the interval after which
-   *                       the new DStream will generate RDDs); must be a multiple of this
-   *                       DStream's batching interval
-   * @param numPartitions  Number of partitions of each RDD in the new DStream.
-   */
-  def countByKeyAndWindow(windowDuration: Duration, slideDuration: Duration, numPartitions: Int)
-   : JavaPairDStream[K, Long] = {
-    dstream.countByKeyAndWindow(windowDuration, slideDuration, numPartitions)
   }
 
   private def convertUpdateStateFunction[S](in: JFunction2[JList[V], Optional[S], Optional[S]]):
