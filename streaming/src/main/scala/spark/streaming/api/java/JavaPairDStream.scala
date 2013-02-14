@@ -25,17 +25,17 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   // Methods common to all DStream's
   // =======================================================================
 
-  /** Returns a new DStream containing only the elements that satisfy a predicate. */
+  /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[(K, V), java.lang.Boolean]): JavaPairDStream[K, V] =
     dstream.filter((x => f(x).booleanValue()))
 
-  /** Persists RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
+  /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
   def cache(): JavaPairDStream[K, V] = dstream.cache()
 
-  /** Persists RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
+  /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
   def persist(): JavaPairDStream[K, V] = dstream.cache()
 
-  /** Persists the RDDs of this DStream with the given storage level */
+  /** Persist the RDDs of this DStream with the given storage level */
   def persist(storageLevel: StorageLevel): JavaPairDStream[K, V] = dstream.persist(storageLevel)
 
   /** Method that generates a RDD for the given Duration */
@@ -67,7 +67,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.window(windowDuration, slideDuration)
 
   /**
-   * Returns a new DStream which computed based on tumbling window on this DStream.
+   * Return a new DStream which computed based on tumbling window on this DStream.
    * This is equivalent to window(batchDuration, batchDuration).
    * @param batchDuration tumbling window duration; must be a multiple of this DStream's interval
    */
@@ -75,7 +75,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.tumble(batchDuration)
 
   /**
-   * Returns a new DStream by unifying data of another DStream with this DStream.
+   * Return a new DStream by unifying data of another DStream with this DStream.
    * @param that Another DStream having the same interval (i.e., slideDuration) as this DStream.
    */
   def union(that: JavaPairDStream[K, V]): JavaPairDStream[K, V] =
@@ -86,21 +86,21 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   // =======================================================================
 
   /**
-   * Create a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
+   * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    */
   def groupByKey(): JavaPairDStream[K, JList[V]] =
     dstream.groupByKey().mapValues(seqAsJavaList _)
 
   /**
-   * Create a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
+   * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
    */
   def groupByKey(numPartitions: Int): JavaPairDStream[K, JList[V]] =
     dstream.groupByKey(numPartitions).mapValues(seqAsJavaList _)
 
   /**
-   * Creates a new DStream by applying `groupByKey` on each RDD of `this` DStream.
+   * Return a new DStream by applying `groupByKey` on each RDD of `this` DStream.
    * Therefore, the values for each key in `this` DStream's RDDs are grouped into a
    * single sequence to generate the RDDs of the new DStream. [[spark.Partitioner]]
    * is used to control the partitioning of each RDD.
@@ -109,7 +109,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.groupByKey(partitioner).mapValues(seqAsJavaList _)
 
   /**
-   * Create a new DStream by applying `reduceByKey` to each RDD. The values for each key are
+   * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
    * merged using the associative reduce function. Hash partitioning is used to generate the RDDs
    * with Spark's default number of partitions.
    */
@@ -117,7 +117,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.reduceByKey(func)
 
   /**
-   * Create a new DStream by applying `reduceByKey` to each RDD. The values for each key are
+   * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
    * merged using the supplied reduce function. Hash partitioning is used to generate the RDDs
    * with `numPartitions` partitions.
    */
@@ -125,7 +125,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.reduceByKey(func, numPartitions)
 
   /**
-   * Create a new DStream by applying `reduceByKey` to each RDD. The values for each key are
+   * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
    * merged using the supplied reduce function. [[spark.Partitioner]] is used to control the
    * partitioning of each RDD.
    */
@@ -149,7 +149,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by counting the number of values of each key in each RDD. Hash
+   * Return a new DStream by counting the number of values of each key in each RDD. Hash
    * partitioning is used to generate the RDDs with Spark's `numPartitions` partitions.
    */
   def countByKey(numPartitions: Int): JavaPairDStream[K, JLong] = {
@@ -158,7 +158,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
 
   /**
-   * Create a new DStream by counting the number of values of each key in each RDD. Hash
+   * Return a new DStream by counting the number of values of each key in each RDD. Hash
    * partitioning is used to generate the RDDs with the default number of partitions.
    */
   def countByKey(): JavaPairDStream[K, JLong] = {
@@ -166,7 +166,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Creates a new DStream by applying `groupByKey` over a sliding window. This is similar to
+   * Return a new DStream by applying `groupByKey` over a sliding window. This is similar to
    * `DStream.groupByKey()` but applies it over a sliding window. The new DStream generates RDDs
    * with the same interval as this DStream. Hash partitioning is used to generate the RDDs with
    * Spark's default number of partitions.
@@ -178,7 +178,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by applying `groupByKey` over a sliding window. Similar to
+   * Return a new DStream by applying `groupByKey` over a sliding window. Similar to
    * `DStream.groupByKey()`, but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    * @param windowDuration width of the window; must be a multiple of this DStream's
@@ -193,7 +193,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by applying `groupByKey` over a sliding window on `this` DStream.
+   * Return a new DStream by applying `groupByKey` over a sliding window on `this` DStream.
    * Similar to `DStream.groupByKey()`, but applies it over a sliding window.
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    * @param windowDuration width of the window; must be a multiple of this DStream's
@@ -210,7 +210,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by applying `groupByKey` over a sliding window on `this` DStream.
+   * Return a new DStream by applying `groupByKey` over a sliding window on `this` DStream.
    * Similar to `DStream.groupByKey()`, but applies it over a sliding window.
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
@@ -243,7 +243,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` over a sliding window. This is similar to
+   * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    * @param reduceFunc associative reduce function
@@ -262,7 +262,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` over a sliding window. This is similar to
+   * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
    * @param reduceFunc associative reduce function
@@ -283,7 +283,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` over a sliding window. Similar to
+   * Return a new DStream by applying `reduceByKey` over a sliding window. Similar to
    * `DStream.reduceByKey()`, but applies it over a sliding window.
    * @param reduceFunc associative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
@@ -303,7 +303,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by reducing over a using incremental computation.
+   * Return a new DStream by reducing over a using incremental computation.
    * The reduced value of over a new window is calculated using the old window's reduce value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
@@ -328,7 +328,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by applying incremental `reduceByKey` over a sliding window.
+   * Return a new DStream by applying incremental `reduceByKey` over a sliding window.
    * The reduced value of over a new window is calculated using the old window's reduce value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
@@ -366,7 +366,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new DStream by applying incremental `reduceByKey` over a sliding window.
+   * Return a new DStream by applying incremental `reduceByKey` over a sliding window.
    * The reduced value of over a new window is calculated using the old window's reduce value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)

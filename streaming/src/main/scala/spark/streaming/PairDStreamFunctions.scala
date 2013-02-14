@@ -26,7 +26,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
+   * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    */
   def groupByKey(): DStream[(K, Seq[V])] = {
@@ -34,7 +34,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
+   * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
    */
   def groupByKey(numPartitions: Int): DStream[(K, Seq[V])] = {
@@ -42,7 +42,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `groupByKey` on each RDD. The supplied [[spark.Partitioner]]
+   * Return a new DStream by applying `groupByKey` on each RDD. The supplied [[spark.Partitioner]]
    * is used to control the partitioning of each RDD.
    */
   def groupByKey(partitioner: Partitioner): DStream[(K, Seq[V])] = {
@@ -54,7 +54,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` to each RDD. The values for each key are
+   * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
    * merged using the associative reduce function. Hash partitioning is used to generate the RDDs
    * with Spark's default number of partitions.
    */
@@ -63,7 +63,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` to each RDD. The values for each key are
+   * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
    * merged using the supplied reduce function. Hash partitioning is used to generate the RDDs
    * with `numPartitions` partitions.
    */
@@ -72,7 +72,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` to each RDD. The values for each key are
+   * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
    * merged using the supplied reduce function. [[spark.Partitioner]] is used to control the
    * partitioning of each RDD.
    */
@@ -82,7 +82,7 @@ extends Serializable {
   }
 
   /**
-   * Combine elements of each key in DStream's RDDs using custom function. This is similar to the
+   * Combine elements of each key in DStream's RDDs using custom functions. This is similar to the
    * combineByKey for RDDs. Please refer to combineByKey in [[spark.PairRDDFunctions]] for more
    * information.
    */
@@ -95,7 +95,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by counting the number of values of each key in each RDD. Hash
+   * Return a new DStream by counting the number of values of each key in each RDD. Hash
    * partitioning is used to generate the RDDs with Spark's `numPartitions` partitions.
    */
   def countByKey(numPartitions: Int = self.ssc.sc.defaultParallelism): DStream[(K, Long)] = {
@@ -103,7 +103,7 @@ extends Serializable {
   }
 
   /**
-   * Creates a new DStream by applying `groupByKey` over a sliding window. This is similar to
+   * Return a new DStream by applying `groupByKey` over a sliding window. This is similar to
    * `DStream.groupByKey()` but applies it over a sliding window. The new DStream generates RDDs
    * with the same interval as this DStream. Hash partitioning is used to generate the RDDs with
    * Spark's default number of partitions.
@@ -115,7 +115,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `groupByKey` over a sliding window. Similar to
+   * Return a new DStream by applying `groupByKey` over a sliding window. Similar to
    * `DStream.groupByKey()`, but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    * @param windowDuration width of the window; must be a multiple of this DStream's
@@ -129,7 +129,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `groupByKey` over a sliding window on `this` DStream.
+   * Return a new DStream by applying `groupByKey` over a sliding window on `this` DStream.
    * Similar to `DStream.groupByKey()`, but applies it over a sliding window.
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    * @param windowDuration width of the window; must be a multiple of this DStream's
@@ -167,7 +167,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` over a sliding window on `this` DStream.
+   * Return a new DStream by applying `reduceByKey` over a sliding window on `this` DStream.
    * Similar to `DStream.reduceByKey()`, but applies it over a sliding window. The new DStream
    * generates RDDs with the same interval as this DStream. Hash partitioning is used to generate
    * the RDDs with Spark's default number of partitions.
@@ -183,7 +183,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` over a sliding window. This is similar to
+   * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    * @param reduceFunc associative reduce function
@@ -202,7 +202,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` over a sliding window. This is similar to
+   * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
    * @param reduceFunc associative reduce function
@@ -223,7 +223,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying `reduceByKey` over a sliding window. Similar to
+   * Return a new DStream by applying `reduceByKey` over a sliding window. Similar to
    * `DStream.reduceByKey()`, but applies it over a sliding window.
    * @param reduceFunc associative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
@@ -247,7 +247,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying incremental `reduceByKey` over a sliding window.
+   * Return a new DStream by applying incremental `reduceByKey` over a sliding window.
    * The reduced value of over a new window is calculated using the old window's reduce value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
@@ -280,7 +280,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by applying incremental `reduceByKey` over a sliding window.
+   * Return a new DStream by applying incremental `reduceByKey` over a sliding window.
    * The reduced value of over a new window is calculated using the old window's reduce value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
@@ -316,7 +316,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new DStream by counting the number of values for each key over a window.
+   * Return a new DStream by counting the number of values for each key over a window.
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
@@ -341,7 +341,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new "state" DStream where the state for each key is updated by applying
+   * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
    * @param updateFunc State update function. If `this` function returns None, then
@@ -355,7 +355,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new "state" DStream where the state for each key is updated by applying
+   * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    * @param updateFunc State update function. If `this` function returns None, then
@@ -390,7 +390,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new "state" DStream where the state for each key is updated by applying
+   * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
    * [[spark.Paxrtitioner]] is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
