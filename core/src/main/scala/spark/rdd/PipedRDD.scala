@@ -27,7 +27,7 @@ class PipedRDD[T: ClassManifest](
   // using a standard StringTokenizer (i.e. by spaces)
   def this(prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
 
-  override def getSplits = firstParent[T].splits
+  override def getSplits: Array[Split] = firstParent[T].splits
 
   override def compute(split: Split, context: TaskContext): Iterator[String] = {
     val pb = new ProcessBuilder(command)

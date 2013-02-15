@@ -22,7 +22,9 @@ class ShuffledRDD[K, V](
 
   override val partitioner = Some(part)
 
-  override def getSplits = Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i))
+  override def getSplits: Array[Split] = {
+    Array.tabulate[Split](part.numPartitions)(i => new ShuffledRDDSplit(i)) 
+  }
 
   override def compute(split: Split, context: TaskContext): Iterator[(K, V)] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId

@@ -114,12 +114,12 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   }
 
   test("CoalescedRDD") {
-    testCheckpointing(new CoalescedRDD(_, 2))
+    testCheckpointing(_.coalesce(2))
 
     // Test whether size of CoalescedRDD reduce in size after parent RDD is checkpointed
     // Current implementation of CoalescedRDDSplit has transient reference to parent RDD,
     // so only the RDD will reduce in serialized size, not the splits.
-    testParentCheckpointing(new CoalescedRDD(_, 2), true, false)
+    testParentCheckpointing(_.coalesce(2), true, false)
 
     // Test that the CoalescedRDDSplit updates parent splits (CoalescedRDDSplit.parents) after
     // the parent RDD has been checkpointed and parent splits have been changed to HadoopSplits.

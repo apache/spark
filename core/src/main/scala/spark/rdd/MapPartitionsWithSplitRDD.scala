@@ -15,7 +15,7 @@ class MapPartitionsWithSplitRDD[U: ClassManifest, T: ClassManifest](
     preservesPartitioning: Boolean
   ) extends RDD[U](prev) {
 
-  override def getSplits = firstParent[T].splits
+  override def getSplits: Array[Split] = firstParent[T].splits
 
   override val partitioner = if (preservesPartitioning) prev.partitioner else None
 

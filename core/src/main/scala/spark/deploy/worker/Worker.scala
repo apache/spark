@@ -1,20 +1,18 @@
 package spark.deploy.worker
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
-import akka.actor.{ActorRef, Props, Actor, ActorSystem}
+import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
+import akka.util.duration._
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
 import spark.deploy._
-import akka.remote.RemoteClientLifeCycleEvent
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import java.text.SimpleDateFormat
 import java.util.Date
-import akka.remote.RemoteClientShutdown
-import akka.remote.RemoteClientDisconnected
 import spark.deploy.RegisterWorker
 import spark.deploy.LaunchExecutor
 import spark.deploy.RegisterWorkerFailed
 import spark.deploy.master.Master
-import akka.actor.Terminated
 import java.io.File
 
 private[spark] class Worker(
@@ -28,6 +26,9 @@ private[spark] class Worker(
   extends Actor with Logging {
 
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
+
+  // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
+  val HEARTBEAT_MILLIS = System.getProperty("spark.worker.timeout", "60").toLong * 1000 / 4
 
   var master: ActorRef = null
   var masterWebUiUrl : String = ""
@@ -100,6 +101,9 @@ private[spark] class Worker(
     case RegisteredWorker(url) =>
       masterWebUiUrl = url
       logInfo("Successfully registered with master")
+      context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
+        master ! Heartbeat(workerId)
+      }
 
     case RegisterWorkerFailed(message) =>
       logError("Worker registration failed: " + message)
@@ -143,7 +147,7 @@ private[spark] class Worker(
       masterDisconnected()
       
     case RequestWorkerState => {
-      sender ! WorkerState(ip + ":" + port, workerId, executors.values.toList, 
+      sender ! WorkerState(ip, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, masterUrl, cores, memory, 
         coresUsed, memoryUsed, masterWebUiUrl)
     }

@@ -11,10 +11,6 @@ private[spark]
 class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[String])
   extends RDD[T](sc, Nil) {
 
-  @transient var splits_ : Array[Split] = (0 until blockIds.size).map(i => {
-    new BlockRDDSplit(blockIds(i), i).asInstanceOf[Split]
-  }).toArray
-
   @transient lazy val locations_  = {
     val blockManager = SparkEnv.get.blockManager
     /*val locations = blockIds.map(id => blockManager.getLocations(id))*/
@@ -22,7 +18,10 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     HashMap(blockIds.zip(locations):_*)
   }
 
-  override def getSplits = splits_
+  override def getSplits: Array[Split] = (0 until blockIds.size).map(i => {
+    new BlockRDDSplit(blockIds(i), i).asInstanceOf[Split]
+  }).toArray
+
 
   override def compute(split: Split, context: TaskContext): Iterator[T] = {
     val blockManager = SparkEnv.get.blockManager
@@ -34,11 +33,8 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     }
   }
 
-  override def getPreferredLocations(split: Split) =
+  override def getPreferredLocations(split: Split): Seq[String] =
     locations_(split.asInstanceOf[BlockRDDSplit].blockId)
 
-  override def clearDependencies() {
-    splits_ = null
-  }
 }
 

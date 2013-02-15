@@ -67,6 +67,6 @@ private[spark] class SparkDeploySchedulerBackend(
       case None => SlaveLost(message)
     }
     logInfo("Executor %s removed: %s".format(executorId, message))
-    scheduler.executorLost(executorId, reason)
+    removeExecutor(executorId, reason.toString)
   }
 }
