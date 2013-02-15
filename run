@@ -22,6 +22,8 @@ fi
 # values for that; it doesn't need a lot
 if [ "$1" = "spark.deploy.master.Master" -o "$1" = "spark.deploy.worker.Worker" ]; then
   SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
+  # Backup current SPARK_JAVA_OPTS for use in ExecutorRunner.scala
+  SPARK_NONDAEMON_JAVA_OPTS=$SPARK_JAVA_OPTS
   SPARK_JAVA_OPTS=$SPARK_DAEMON_JAVA_OPTS   # Empty by default
 fi
 
@@ -70,6 +72,7 @@ if [ -e $FWDIR/conf/java-opts ] ; then
   JAVA_OPTS+=" `cat $FWDIR/conf/java-opts`"
 fi
 export JAVA_OPTS
+# Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
 
 CORE_DIR="$FWDIR/core"
 REPL_DIR="$FWDIR/repl"
