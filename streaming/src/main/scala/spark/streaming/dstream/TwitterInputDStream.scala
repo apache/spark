@@ -1,4 +1,4 @@
-package spark.streaming.examples.twitter
+package spark.streaming.dstream
 
 import spark._
 import spark.streaming._
@@ -6,7 +6,6 @@ import dstream.{NetworkReceiver, NetworkInputDStream}
 import storage.StorageLevel
 import twitter4j._
 import twitter4j.auth.BasicAuthorization
-import collection.JavaConversions._
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
@@ -50,7 +49,7 @@ class TwitterReceiver(
       def onTrackLimitationNotice(i: Int) {}
       def onScrubGeo(l: Long, l1: Long) {}
       def onStallWarning(stallWarning: StallWarning) {}
-      def onException(e: Exception) {}
+      def onException(e: Exception) { stopOnError(e) }
     })
 
     val query: FilterQuery = new FilterQuery
