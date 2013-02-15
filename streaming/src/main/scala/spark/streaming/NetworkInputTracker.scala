@@ -86,7 +86,7 @@ class NetworkInputTracker(
       }
       case DeregisterReceiver(streamId, msg) => {
         receiverInfo -= streamId
-        logInfo("De-registered receiver for network stream " + streamId
+        logError("De-registered receiver for network stream " + streamId
           + " with message " + msg)
         //TODO: Do something about the corresponding NetworkInputDStream
       }
