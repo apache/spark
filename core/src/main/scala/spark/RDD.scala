@@ -30,6 +30,7 @@ import spark.rdd.MapPartitionsRDD
 import spark.rdd.MapPartitionsWithSplitRDD
 import spark.rdd.PipedRDD
 import spark.rdd.SampledRDD
+import spark.rdd.SubtractedRDD
 import spark.rdd.UnionRDD
 import spark.rdd.ZippedRDD
 import spark.storage.StorageLevel
@@ -382,6 +383,26 @@ abstract class RDD[T: ClassManifest](
   def collect[U: ClassManifest](f: PartialFunction[T, U]): RDD[U] = {
     filter(f.isDefinedAt).map(f)
   }
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   * 
+   * Uses `this` partitioner/split size, because even if `other` is huge, the resulting
+   * RDD will be <= us.
+   */
+  def subtract(other: RDD[T]): RDD[T] =
+    subtract(other, partitioner.getOrElse(new HashPartitioner(splits.size)))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: RDD[T], numSplits: Int): RDD[T] =
+    subtract(other, new HashPartitioner(numSplits))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: RDD[T], p: Partitioner): RDD[T] = new SubtractedRDD[T](this, other, p)
 
   /**
    * Reduces the elements of this RDD using the specified commutative and associative binary operator.
