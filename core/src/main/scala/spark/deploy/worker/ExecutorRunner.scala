@@ -77,7 +77,7 @@ private[spark] class ExecutorRunner(
     val command = jobDesc.command
     val script = if (System.getProperty("os.name").startsWith("Windows")) "run.cmd" else "run";
     val runScript = new File(sparkHome, script).getCanonicalPath
-    Seq(runScript, command.mainClass) ++ command.arguments.map(substituteVariables)
+    Seq(runScript, command.mainClass) ++ (command.arguments ++ Seq(jobId)).map(substituteVariables)
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
