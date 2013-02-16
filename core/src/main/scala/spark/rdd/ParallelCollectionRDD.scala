@@ -1,8 +1,9 @@
-package spark
+package spark.rdd
 
 import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Map
+import spark.{RDD, TaskContext, SparkContext, Split}
 
 private[spark] class ParallelCollectionSplit[T: ClassManifest](
     val rddId: Long,
@@ -22,7 +23,7 @@ private[spark] class ParallelCollectionSplit[T: ClassManifest](
   override val index: Int = slice
 }
 
-private[spark] class ParallelCollection[T: ClassManifest](
+private[spark] class ParallelCollectionRDD[T: ClassManifest](
     @transient sc: SparkContext,
     @transient data: Seq[T],
     numSlices: Int,
@@ -33,12 +34,10 @@ private[spark] class ParallelCollection[T: ClassManifest](
   // instead.
   // UPDATE: A parallel collection can be checkpointed to HDFS, which achieves this goal.
 
-  @transient var splits_ : Array[Split] = {
-    val slices = ParallelCollection.slice(data, numSlices).toArray
+  override def getSplits: Array[Split] = {
+    val slices = ParallelCollectionRDD.slice(data, numSlices).toArray
     slices.indices.map(i => new ParallelCollectionSplit(id, i, slices(i))).toArray
   }
-
-  override def getSplits = splits_
 
   override def compute(s: Split, context: TaskContext) =
     s.asInstanceOf[ParallelCollectionSplit[T]].iterator
@@ -46,13 +45,9 @@ private[spark] class ParallelCollection[T: ClassManifest](
   override def getPreferredLocations(s: Split): Seq[String] = {
     locationPrefs.getOrElse(s.index, Nil)
   }
-
-  override def clearDependencies() {
-    splits_ = null
-  }
 }
 
-private object ParallelCollection {
+private object ParallelCollectionRDD {
   /**
    * Slice a collection into numSlices sub-collections. One extra thing we do here is to treat Range
    * collections specially, encoding the slices as other Ranges to minimize memory cost. This makes
