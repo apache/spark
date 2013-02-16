@@ -361,7 +361,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](
-        Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]),
+        Seq(self.asInstanceOf[RDD[(K, _)]], other.asInstanceOf[RDD[(K, _)]]),
         partitioner)
     val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
     prfs.mapValues {
@@ -380,9 +380,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](
-        Seq(self.asInstanceOf[RDD[(_, _)]],
-            other1.asInstanceOf[RDD[(_, _)]],
-            other2.asInstanceOf[RDD[(_, _)]]),
+        Seq(self.asInstanceOf[RDD[(K, _)]],
+            other1.asInstanceOf[RDD[(K, _)]],
+            other2.asInstanceOf[RDD[(K, _)]]),
         partitioner)
     val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
     prfs.mapValues {
