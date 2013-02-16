@@ -23,6 +23,7 @@ import spark.partial.BoundedDouble
 import spark.partial.PartialResult
 import spark.rdd._
 import spark.SparkContext._
+import spark.Partitioner._
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -434,21 +435,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
-  }
-
-  /**
-   * Choose a partitioner to use for a cogroup-like operation between a number of RDDs. If any of
-   * the RDDs already has a partitioner, choose that one, otherwise use a default HashPartitioner.
-   *
-   * The number of partitions will be the same as the number of partitions in the largest upstream
-   * RDD, as this should be least likely to cause out-of-memory errors.
-   */
-  def defaultPartitioner(rdds: RDD[_]*): Partitioner = {
-    val bySize = rdds.sortBy(_.splits.size).reverse
-    for (r <- bySize if r.partitioner != None) {
-      return r.partitioner.get
-    }
-    return new HashPartitioner(bySize.head.splits.size)
   }
 
   /**

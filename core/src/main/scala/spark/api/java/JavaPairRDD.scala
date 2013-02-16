@@ -237,7 +237,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * "combiner" in MapReduce. Output will be hash-partitioned with the default parallelism level.
    */
   def reduceByKey(func: JFunction2[V, V, V]): JavaPairRDD[K, V] = {
-    val partitioner = rdd.defaultPartitioner(rdd)
+    val partitioner = Partitioner.defaultPartitioner(rdd)
     fromRDD(reduceByKey(partitioner, func))
   }
 

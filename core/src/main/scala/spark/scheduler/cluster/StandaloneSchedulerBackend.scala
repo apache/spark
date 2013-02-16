@@ -147,7 +147,8 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     driverActor ! ReviveOffers
   }
 
-  override def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
+  override def defaultParallelism() = Option(System.getProperty("spark.default.parallelism"))
+      .map(_.toInt).getOrElse(math.max(totalCoreCount.get(), 2))
 }
 
 private[spark] object StandaloneSchedulerBackend {

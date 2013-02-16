@@ -9,6 +9,25 @@ abstract class Partitioner extends Serializable {
   def getPartition(key: Any): Int
 }
 
+object Partitioner {
+  /**
+   * Choose a partitioner to use for a cogroup-like operation between a number of RDDs. If any of
+   * the RDDs already has a partitioner, choose that one, otherwise use a default HashPartitioner.
+   *
+   * The number of partitions will be the same as the number of partitions in the largest upstream
+   * RDD, as this should be least likely to cause out-of-memory errors.
+   *
+   * We use two method parameters (rdd, others) to enforce callers passing at least 1 RDD.
+   */
+  def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
+    val bySize = (Seq(rdd) ++ others).sortBy(_.splits.size).reverse
+    for (r <- bySize if r.partitioner != None) {
+      return r.partitioner.get
+    }
+    return new HashPartitioner(bySize.head.splits.size)
+  }
+}
+
 /**
  * A [[spark.Partitioner]] that implements hash-based partitioning using Java's `Object.hashCode`.
  *
