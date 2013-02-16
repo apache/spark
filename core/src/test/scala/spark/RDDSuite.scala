@@ -122,7 +122,7 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val data = sc.parallelize(1 to 10, 10)
 
-    val coalesced1 = new CoalescedRDD(data, 2)
+    val coalesced1 = data.coalesce(2)
     assert(coalesced1.collect().toList === (1 to 10).toList)
     assert(coalesced1.glom().collect().map(_.toList).toList ===
       List(List(1, 2, 3, 4, 5), List(6, 7, 8, 9, 10)))
@@ -133,19 +133,19 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(1).toList ===
       List(5, 6, 7, 8, 9))
 
-    val coalesced2 = new CoalescedRDD(data, 3)
+    val coalesced2 = data.coalesce(3)
     assert(coalesced2.collect().toList === (1 to 10).toList)
     assert(coalesced2.glom().collect().map(_.toList).toList ===
       List(List(1, 2, 3), List(4, 5, 6), List(7, 8, 9, 10)))
 
-    val coalesced3 = new CoalescedRDD(data, 10)
+    val coalesced3 = data.coalesce(10)
     assert(coalesced3.collect().toList === (1 to 10).toList)
     assert(coalesced3.glom().collect().map(_.toList).toList ===
       (1 to 10).map(x => List(x)).toList)
 
     // If we try to coalesce into more partitions than the original RDD, it should just
     // keep the original number of partitions.
-    val coalesced4 = new CoalescedRDD(data, 20)
+    val coalesced4 = data.coalesce(20)
     assert(coalesced4.collect().toList === (1 to 10).toList)
     assert(coalesced4.glom().collect().map(_.toList).toList ===
       (1 to 10).map(x => List(x)).toList)

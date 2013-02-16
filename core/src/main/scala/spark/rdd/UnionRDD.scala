@@ -53,8 +53,4 @@ class UnionRDD[T: ClassManifest](
 
   override def getPreferredLocations(s: Split): Seq[String] =
     s.asInstanceOf[UnionSplit[T]].preferredLocations()
-
-  override def clearDependencies() {
-    rdds = null
-  }
 }

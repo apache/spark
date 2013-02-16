@@ -20,6 +20,7 @@ import spark.partial.BoundedDouble
 import spark.partial.CountEvaluator
 import spark.partial.GroupedCountEvaluator
 import spark.partial.PartialResult
+import spark.rdd.CoalescedRDD
 import spark.rdd.CartesianRDD
 import spark.rdd.FilteredRDD
 import spark.rdd.FlatMappedRDD
@@ -232,6 +233,11 @@ abstract class RDD[T: ClassManifest](
   def distinct(): RDD[T] = distinct(splits.size)
 
   /**
+   * Return a new RDD that is reduced into `numSplits` partitions.
+   */
+  def coalesce(numSplits: Int): RDD[T] = new CoalescedRDD(this, numSplits)
+
+  /**
    * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
@@ -378,7 +384,7 @@ abstract class RDD[T: ClassManifest](
   }
 
   /**
-   * Reduces the elements of this RDD using the specified associative binary operator.
+   * Reduces the elements of this RDD using the specified commutative and associative binary operator.
    */
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
@@ -630,16 +636,22 @@ abstract class RDD[T: ClassManifest](
   /** The [[spark.SparkContext]] that this RDD was created on. */
   def context = sc
 
+  // Avoid handling doCheckpoint multiple times to prevent excessive recursion
+  private var doCheckpointCalled = false
+
   /**
    * Performs the checkpointing of this RDD by saving this. It is called by the DAGScheduler
    * after a job using this RDD has completed (therefore the RDD has been materialized and
    * potentially stored in memory). doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
-    if (checkpointData.isDefined) {
-      checkpointData.get.doCheckpoint()
-    } else {
-      dependencies.foreach(_.rdd.doCheckpoint())
+    if (!doCheckpointCalled) {
+      doCheckpointCalled = true
+      if (checkpointData.isDefined) {
+        checkpointData.get.doCheckpoint()
+      } else {
+        dependencies.foreach(_.rdd.doCheckpoint())
+      }
     }
   }
 
@@ -649,7 +661,6 @@ abstract class RDD[T: ClassManifest](
    */
   private[spark] def markCheckpointed(checkpointRDD: RDD[_]) {
     clearDependencies()
-    dependencies_ = null
     splits_ = null
     deps = null    // Forget the constructor argument for dependencies too
   }

@@ -9,7 +9,7 @@ class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
     f: T => TraversableOnce[U])
   extends RDD[U](prev) {
 
-  override def getSplits = firstParent[T].splits
+  override def getSplits: Array[Split] = firstParent[T].splits
 
   override def compute(split: Split, context: TaskContext) =
     firstParent[T].iterator(split, context).flatMap(f)

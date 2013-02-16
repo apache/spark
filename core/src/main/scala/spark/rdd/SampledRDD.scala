@@ -19,17 +19,15 @@ class SampledRDD[T: ClassManifest](
     seed: Int)
   extends RDD[T](prev) {
 
-  @transient var splits_ : Array[Split] = {
+  override def getSplits: Array[Split] = {
     val rg = new Random(seed)
     firstParent[T].splits.map(x => new SampledRDDSplit(x, rg.nextInt))
   }
 
-  override def getSplits = splits_
-
-  override def getPreferredLocations(split: Split) =
+  override def getPreferredLocations(split: Split): Seq[String] =
     firstParent[T].preferredLocations(split.asInstanceOf[SampledRDDSplit].prev)
 
-  override def compute(splitIn: Split, context: TaskContext) = {
+  override def compute(splitIn: Split, context: TaskContext): Iterator[T] = {
     val split = splitIn.asInstanceOf[SampledRDDSplit]
     if (withReplacement) {
       // For large datasets, the expected number of occurrences of each element in a sample with
@@ -47,9 +45,5 @@ class SampledRDD[T: ClassManifest](
       val rand = new Random(split.seed)
       firstParent[T].iterator(split.prev, context).filter(x => (rand.nextDouble <= frac))
     }
-  }
-
-  override def clearDependencies() {
-    splits_ = null
   }
 }

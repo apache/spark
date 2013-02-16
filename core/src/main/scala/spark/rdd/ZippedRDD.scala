@@ -29,8 +29,7 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
     sc: SparkContext,
     var rdd1: RDD[T],
     var rdd2: RDD[U])
-  extends RDD[(T, U)](sc, List(new OneToOneDependency(rdd1), new OneToOneDependency(rdd2)))
-  with Serializable {
+  extends RDD[(T, U)](sc, List(new OneToOneDependency(rdd1), new OneToOneDependency(rdd2))) {
 
   override def getSplits: Array[Split] = {
     if (rdd1.splits.size != rdd2.splits.size) {
@@ -54,6 +53,7 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
   }
 
   override def clearDependencies() {
+    super.clearDependencies()
     rdd1 = null
     rdd2 = null
   }

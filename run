@@ -13,6 +13,18 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
+if [ -z "$1" ]; then
+  echo "Usage: run <spark-class> [<args>]" >&2
+  exit 1
+fi
+
+# If this is a standalone cluster daemon, reset SPARK_JAVA_OPTS and SPARK_MEM to reasonable
+# values for that; it doesn't need a lot
+if [ "$1" = "spark.deploy.master.Master" -o "$1" = "spark.deploy.worker.Worker" ]; then
+  SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
+  SPARK_JAVA_OPTS=$SPARK_DAEMON_JAVA_OPTS   # Empty by default
+fi
+
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
   if [ `command -v scala` ]; then
     RUNNER="scala"

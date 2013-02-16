@@ -39,6 +39,11 @@ JavaRDDLike[T, JavaRDD[T]] {
     wrapRDD(rdd.filter((x => f(x).booleanValue())))
 
   /**
+   * Return a new RDD that is reduced into `numSplits` partitions.
+   */
+  def coalesce(numSplits: Int): JavaRDD[T] = rdd.coalesce(numSplits)
+
+  /**
    * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaRDD[T] =
