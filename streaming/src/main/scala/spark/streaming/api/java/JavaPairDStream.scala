@@ -19,7 +19,9 @@ import com.google.common.base.Optional
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val kManifiest: ClassManifest[K],
     implicit val vManifest: ClassManifest[V])
-    extends JavaDStreamLike[(K, V), JavaPairDStream[K, V]] {
+    extends JavaDStreamLike[(K, V), JavaPairDStream[K, V], JavaPairRDD[K, V]] {
+
+  override def wrapRDD(rdd: RDD[(K, V)]): JavaPairRDD[K, V] = JavaPairRDD.fromRDD(rdd)
 
   // =======================================================================
   // Methods common to all DStream's

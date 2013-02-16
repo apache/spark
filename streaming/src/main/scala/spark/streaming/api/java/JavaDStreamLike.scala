@@ -6,16 +6,19 @@ import java.lang.{Long => JLong}
 import scala.collection.JavaConversions._
 
 import spark.streaming._
-import spark.api.java.JavaRDD
+import spark.api.java.{JavaRDDLike, JavaRDD}
 import spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
 import java.util
 import spark.RDD
 import JavaDStream._
 
-trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This]] extends Serializable {
+trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T, R]]
+    extends Serializable {
   implicit val classManifest: ClassManifest[T]
 
   def dstream: DStream[T]
+
+  def wrapRDD(in: RDD[T]): R
 
   implicit def scalaIntToJavaLong(in: DStream[Long]): JavaDStream[JLong] = {
     in.map(new JLong(_))
@@ -220,16 +223,16 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This]] extends Serializable 
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * this DStream will be registered as an output stream and therefore materialized.
    */
-  def foreach(foreachFunc: JFunction[JavaRDD[T], Void]) {
-    dstream.foreach(rdd => foreachFunc.call(new JavaRDD(rdd)))
+  def foreach(foreachFunc: JFunction[R, Void]) {
+    dstream.foreach(rdd => foreachFunc.call(wrapRDD(rdd)))
   }
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * this DStream will be registered as an output stream and therefore materialized.
    */
-  def foreach(foreachFunc: JFunction2[JavaRDD[T], Time, Void]) {
-    dstream.foreach((rdd, time) => foreachFunc.call(new JavaRDD(rdd), time))
+  def foreach(foreachFunc: JFunction2[R, Time, Void]) {
+    dstream.foreach((rdd, time) => foreachFunc.call(wrapRDD(rdd), time))
   }
 
   /**
