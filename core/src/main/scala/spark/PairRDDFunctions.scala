@@ -62,7 +62,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     }
     val aggregator =
       new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    if (mapSideCombine) {
+    if (Option(partitioner) == self.partitioner) {
+      self.mapPartitions(aggregator.combineValuesByKey(_), true)
+    } else if (mapSideCombine) {
       val mapSideCombined = self.mapPartitions(aggregator.combineValuesByKey(_), true)
       val partitioned = new ShuffledRDD[K, C](mapSideCombined, partitioner)
       partitioned.mapPartitions(aggregator.combineCombinersByKey(_), true)
