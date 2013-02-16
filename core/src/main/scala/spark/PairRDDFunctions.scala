@@ -23,6 +23,7 @@ import spark.partial.BoundedDouble
 import spark.partial.PartialResult
 import spark.rdd._
 import spark.SparkContext._
+import spark.Partitioner._
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -248,8 +249,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   }
 
   /**
-   * Simplified version of combineByKey that hash-partitions the resulting RDD using the default
-   * parallelism level.
+   * Simplified version of combineByKey that hash-partitions the resulting RDD using the
+   * existing partitioner/parallelism level.
    */
   def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
       : RDD[(K, C)] = {
@@ -259,7 +260,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   /**
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with the default parallelism level.
+   * "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
+   * parallelism level.
    */
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = {
     reduceByKey(defaultPartitioner(self), func)
@@ -267,7 +269,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
-   * resulting RDD with the default parallelism level.
+   * resulting RDD with the existing partitioner/parallelism level.
    */
   def groupByKey(): RDD[(K, Seq[V])] = {
     groupByKey(defaultPartitioner(self))
@@ -295,7 +297,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
    * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
-   * using the default level of parallelism.
+   * using the existing partitioner/parallelism level.
    */
   def leftOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
     leftOuterJoin(other, defaultPartitioner(self, other))
@@ -315,7 +317,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
    * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
-   * RDD using the default parallelism level.
+   * RDD using the existing partitioner/parallelism level.
    */
   def rightOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
     rightOuterJoin(other, defaultPartitioner(self, other))
@@ -436,17 +438,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
-  }
-
-  /**
-   * Choose a partitioner to use for a cogroup-like operation between a number of RDDs. If any of
-   * the RDDs already has a partitioner, choose that one, otherwise use a default HashPartitioner.
-   */
-  def defaultPartitioner(rdds: RDD[_]*): Partitioner = {
-    for (r <- rdds if r.partitioner != None) {
-      return r.partitioner.get
-    }
-    return new HashPartitioner(self.context.defaultParallelism)
   }
 
   /**
