@@ -87,8 +87,8 @@ def parse_args():
   parser.add_option("-g", "--ganglia", action="store_true", default=True,
       help="Setup ganglia monitoring for the cluster. NOTE: The ganglia " +
       "monitoring page will be publicly accessible")
-  parser.add_option("--mesos-scripts", action="store_true", default=False,
-      help="Use older mesos-ec2 scripts to setup the cluster. NOTE: Ganglia " +
+  parser.add_option("--new-scripts", action="store_true", default=False,
+      help="Use new spark-ec2 scripts to setup the cluster. NOTE: Ganglia " +
       "will not be setup with this option")
   parser.add_option("-u", "--user", default="root",
       help="The ssh user you want to connect as (default: root)")
@@ -380,17 +380,17 @@ def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_k
   if opts.ganglia:
     modules.append('ganglia')
 
-  if not opts.mesos_scripts:
+  if opts.new_scripts:
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
-    ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/shivaram/spark-ec2.git")
+    ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/mesos/spark-ec2.git")
 
   print "Deploying files to master..."
   deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes,
           zoo_nodes, modules)
 
   print "Running setup on master..."
-  if opts.mesos_scripts:
+  if not opts.new_scripts:
     if opts.cluster_type == "mesos":
       setup_mesos_cluster(master, opts)
     elif opts.cluster_type == "standalone":
