@@ -273,6 +273,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     slideDuration: Duration = Seconds(1)
     ) {
     test("reduceByKeyAndWindow - " + name) {
+      logInfo("reduceByKeyAndWindow - " + name)
       val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
       val operation = (s: DStream[(String, Int)]) => {
         s.reduceByKeyAndWindow((x: Int, y: Int) => x + y, windowDuration, slideDuration)
@@ -288,7 +289,8 @@ class WindowOperationsSuite extends TestSuiteBase {
     windowDuration: Duration = Seconds(2),
     slideDuration: Duration = Seconds(1)
   ) {
-    test("ReduceByKeyAndWindow with inverse function - " + name) {
+    test("reduceByKeyAndWindow with inverse function - " + name) {
+      logInfo("reduceByKeyAndWindow with inverse function - " + name)
       val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
       val operation = (s: DStream[(String, Int)]) => {
         s.reduceByKeyAndWindow(_ + _, _ - _, windowDuration, slideDuration)
@@ -306,6 +308,7 @@ class WindowOperationsSuite extends TestSuiteBase {
       slideDuration: Duration = Seconds(1)
     ) {
     test("reduceByKeyAndWindow with inverse and filter functions - " + name) {
+      logInfo("reduceByKeyAndWindow with inverse and filter functions - " + name)
       val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
       val filterFunc = (p: (String, Int)) => p._2 != 0
       val operation = (s: DStream[(String, Int)]) => {

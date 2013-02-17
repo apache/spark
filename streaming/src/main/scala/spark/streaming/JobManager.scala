@@ -43,19 +43,23 @@ class JobManager(ssc: StreamingContext, numThreads: Int = 1) extends Logging {
   }
 
   private def clearJob(job: Job) {
+    var timeCleared = false
+    val time = job.time
     jobs.synchronized {
-      val time = job.time
       val jobsOfTime = jobs.get(time)
       if (jobsOfTime.isDefined) {
         jobsOfTime.get -= job
         if (jobsOfTime.get.isEmpty) {
-          ssc.scheduler.clearOldMetadata(time)
           jobs -= time
+          timeCleared = true
         }
       } else {
         throw new Exception("Job finished for time " + job.time +
           " but time does not exist in jobs")
       }
+    }
+    if (timeCleared) {
+      ssc.scheduler.clearOldMetadata(time)
     }
   }
 

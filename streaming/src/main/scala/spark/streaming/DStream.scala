@@ -238,13 +238,15 @@ abstract class DStream[T: ClassManifest] (
     dependencies.foreach(_.remember(parentRememberDuration))
   }
 
-  /** This method checks whether the 'time' is valid wrt slideDuration for generating RDD */
+  /** Checks whether the 'time' is valid wrt slideDuration for generating RDD */
   protected def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
       throw new Exception (this + " has not been initialized")
     } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
+      logInfo("Time " + time + " is invalid as zeroTime is " + zeroTime + " and slideDuration is " + slideDuration + " and difference is " + (time - zeroTime))
       false
     } else {
+      logInfo("Time " + time + " is valid")
       true
     }
   }
@@ -627,16 +629,21 @@ abstract class DStream[T: ClassManifest] (
    * Return all the RDDs between 'fromTime' to 'toTime' (both included)
    */
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = {
-    val rdds = new ArrayBuffer[RDD[T]]()
-    var time = toTime.floor(slideDuration)
-    while (time >= zeroTime && time >= fromTime) {
-      getOrCompute(time) match {
-        case Some(rdd) => rdds += rdd
-        case None => //throw new Exception("Could not get RDD for time " + time)
-      }
-      time -= slideDuration
+    if (!(fromTime - zeroTime).isMultipleOf(slideDuration)) {
+      logWarning("fromTime (" + fromTime + ") is not a multiple of slideDuration (" + slideDuration + ")")
     }
-    rdds.toSeq
+    if (!(toTime - zeroTime).isMultipleOf(slideDuration)) {
+      logWarning("toTime (" + fromTime + ") is not a multiple of slideDuration (" + slideDuration + ")")
+    }
+    val alignedToTime = toTime.floor(slideDuration)
+    val alignedFromTime = fromTime.floor(slideDuration)
+
+    logInfo("Slicing from " + fromTime + " to " + toTime +
+      " (aligned to " + alignedFromTime + " and " + alignedToTime + ")")
+
+    alignedFromTime.to(alignedToTime, slideDuration).flatMap(time => {
+      if (time >= zeroTime) getOrCompute(time) else None
+    })
   }
 
   /**

@@ -2,8 +2,8 @@ package spark.streaming.dstream
 
 import spark._
 import spark.streaming._
-import dstream.{NetworkReceiver, NetworkInputDStream}
 import storage.StorageLevel
+
 import twitter4j._
 import twitter4j.auth.BasicAuthorization
 
@@ -19,7 +19,7 @@ class TwitterInputDStream(
     password: String,
     filters: Seq[String],
     storageLevel: StorageLevel
-    ) extends NetworkInputDStream[Status](ssc_)  {
+  ) extends NetworkInputDStream[Status](ssc_)  {
 
   override def createReceiver(): NetworkReceiver[Status] = {
     new TwitterReceiver(username, password, filters, storageLevel)

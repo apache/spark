@@ -119,18 +119,15 @@ class StreamingContext private (
 
   /**
    * Set the context to periodically checkpoint the DStream operations for master
-   * fault-tolerance. By default, the graph will be checkpointed every batch interval.
+   * fault-tolerance. The graph will be checkpointed every batch interval.
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
-   * @param interval checkpoint interval
    */
-  def checkpoint(directory: String, interval: Duration = null) {
+  def checkpoint(directory: String) {
     if (directory != null) {
       sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
       checkpointDir = directory
-      checkpointDuration = interval
     } else {
       checkpointDir = null
-      checkpointDuration = null
     }
   }
 

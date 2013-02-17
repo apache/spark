@@ -229,6 +229,26 @@ class BasicOperationsSuite extends TestSuiteBase {
     testOperation(inputData, updateStateOperation, outputData, true)
   }
 
+  test("slice") {
+    val ssc = new StreamingContext("local[2]", "BasicOperationSuite", Seconds(1))
+    val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
+    val stream = new TestInputStream[Int](ssc, input, 2)
+    ssc.registerInputStream(stream)
+    stream.foreach(_ => {})  // Dummy output stream
+    ssc.start()
+    Thread.sleep(2000)
+    def getInputFromSlice(fromMillis: Long, toMillis: Long) = {
+      stream.slice(new Time(fromMillis), new Time(toMillis)).flatMap(_.collect()).toSet
+    }
+
+    assert(getInputFromSlice(0, 1000) == Set(1))
+    assert(getInputFromSlice(0, 2000) == Set(1, 2))
+    assert(getInputFromSlice(1000, 2000) == Set(1, 2))
+    assert(getInputFromSlice(2000, 4000) == Set(2, 3, 4))
+    ssc.stop()
+    Thread.sleep(1000)
+  }
+
   test("forgetting of RDDs - map and window operations") {
     assert(batchDuration === Seconds(1), "Batch duration has changed from 1 second")
 

@@ -86,10 +86,12 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def getOutputStreams() = this.synchronized { outputStreams.toArray }
 
-  def generateRDDs(time: Time): Seq[Job] = {
+  def generateJobs(time: Time): Seq[Job] = {
     this.synchronized {
-      logInfo("Generating RDDs for time " + time)
-      outputStreams.flatMap(outputStream => outputStream.generateJob(time))
+      logInfo("Generating jobs for time " + time)
+      val jobs = outputStreams.flatMap(outputStream => outputStream.generateJob(time))
+      logInfo("Generated " + jobs.length + " jobs for time " + time)
+      jobs
     }
   }
 
@@ -97,18 +99,23 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     this.synchronized {
       logInfo("Clearing old metadata for time " + time)
       outputStreams.foreach(_.clearOldMetadata(time))
+      logInfo("Cleared old metadata for time " + time)
     }
   }
 
   def updateCheckpointData(time: Time) {
     this.synchronized {
+      logInfo("Updating checkpoint data for time " + time)
       outputStreams.foreach(_.updateCheckpointData(time))
+      logInfo("Updated checkpoint data for time " + time)
     }
   }
 
   def restoreCheckpointData() {
     this.synchronized {
+      logInfo("Restoring checkpoint data")
       outputStreams.foreach(_.restoreCheckpointData())
+      logInfo("Restored checkpoint data")
     }
   }
 

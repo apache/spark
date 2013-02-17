@@ -39,14 +39,11 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
 
   override def batchDuration = Milliseconds(500)
 
-  override def checkpointInterval = batchDuration
-
   override def actuallyWait = true
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
-    assert(checkpointInterval === batchDuration, "checkpointInterval for this test much be same as batchDuration")
 
     System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
 
@@ -188,7 +185,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     // Set up the streaming context and input streams
     val testDir = Files.createTempDir()
     var ssc = new StreamingContext(master, framework, Seconds(1))
-    ssc.checkpoint(checkpointDir, checkpointInterval)
+    ssc.checkpoint(checkpointDir)
     val fileStream = ssc.textFileStream(testDir.toString)
     // Making value 3 take large time to process, to ensure that the master
     // shuts down in the middle of processing the 3rd batch

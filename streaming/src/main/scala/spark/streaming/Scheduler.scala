@@ -20,8 +20,9 @@ class Scheduler(ssc: StreamingContext) extends Logging {
   val clockClass = System.getProperty("spark.streaming.clock", "spark.streaming.util.SystemClock")
   val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
   val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
-    longTime => generateRDDs(new Time(longTime)))
+    longTime => generateJobs(new Time(longTime)))
   val graph = ssc.graph
+  var latestTime: Time = null
 
   def start() = synchronized {
     if (ssc.isCheckpointPresent) {
@@ -35,6 +36,7 @@ class Scheduler(ssc: StreamingContext) extends Logging {
   def stop() = synchronized {
     timer.stop()
     jobManager.stop()
+    if (checkpointWriter != null) checkpointWriter.stop()
     ssc.graph.stop()
     logInfo("Scheduler stopped")    
   }
@@ -73,35 +75,38 @@ class Scheduler(ssc: StreamingContext) extends Logging {
     val timesToReschedule = (pendingTimes ++ downTimes).distinct.sorted(Time.ordering)
     logInfo("Batches to reschedule: " + timesToReschedule.mkString(", "))
     timesToReschedule.foreach(time =>
-      graph.generateRDDs(time).foreach(jobManager.runJob)
+      graph.generateJobs(time).foreach(jobManager.runJob)
     )
 
     // Restart the timer
     timer.start(restartTime.milliseconds)
-    logInfo("Scheduler's timer restarted")
+    logInfo("Scheduler's timer restarted at " + restartTime)
   }
 
-  /** Generates the RDDs, clears old metadata and does checkpoint for the given time */
-  def generateRDDs(time: Time) {
+  /** Generate jobs and perform checkpoint for the given `time`.  */
+  def generateJobs(time: Time) {
     SparkEnv.set(ssc.env)
     logInfo("\n-----------------------------------------------------\n")
-    graph.generateRDDs(time).foreach(jobManager.runJob)
+    graph.generateJobs(time).foreach(jobManager.runJob)
+    latestTime = time
     doCheckpoint(time)
   }
 
-
+  /**
+   * Clear old metadata assuming jobs of `time` have finished processing.
+   * And also perform checkpoint.
+   */
   def clearOldMetadata(time: Time) {
     ssc.graph.clearOldMetadata(time)
+    doCheckpoint(time)
   }
 
-  def doCheckpoint(time: Time) {
+  /** Perform checkpoint for the give `time`. */
+  def doCheckpoint(time: Time) = synchronized {
     if (ssc.checkpointDuration != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
       logInfo("Checkpointing graph for time " + time)
-      val startTime = System.currentTimeMillis()
       ssc.graph.updateCheckpointData(time)
       checkpointWriter.write(new Checkpoint(ssc, time))
-      val stopTime = System.currentTimeMillis()
-      logInfo("Checkpointing the graph took " + (stopTime - startTime) + " ms")
     }
   }
 }

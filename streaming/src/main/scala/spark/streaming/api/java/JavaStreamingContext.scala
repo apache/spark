@@ -314,12 +314,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Sets the context to periodically checkpoint the DStream operations for master
-   * fault-tolerance. By default, the graph will be checkpointed every batch interval.
+   * fault-tolerance. The graph will be checkpointed every batch interval.
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
-   * @param interval checkpoint interval
    */
-  def checkpoint(directory: String, interval: Duration = null) {
-    ssc.checkpoint(directory, interval)
+  def checkpoint(directory: String) {
+    ssc.checkpoint(directory)
   }
 
   /**

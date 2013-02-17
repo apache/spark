@@ -23,6 +23,7 @@ import spark.streaming.JavaCheckpointTestUtils;
 import spark.streaming.dstream.KafkaPartitionKey;
 
 import java.io.*;
+import java.text.Collator;
 import java.util.*;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
@@ -35,7 +36,7 @@ public class JavaAPISuite implements Serializable {
   public void setUp() {
       System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock");
       ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
-    ssc.checkpoint("checkpoint", new Duration(1000));
+    ssc.checkpoint("checkpoint");
   }
 
   @After
@@ -587,26 +588,47 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void testGroupByKeyAndWindow() {
-    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
 
-    List<List<Tuple2<String, List<String>>>> expected = Arrays.asList(
-        Arrays.asList(new Tuple2<String, List<String>>("california", Arrays.asList("dodgers", "giants")),
-          new Tuple2<String, List<String>>("new york", Arrays.asList("yankees", "mets"))),
-        Arrays.asList(new Tuple2<String, List<String>>("california",
-            Arrays.asList("sharks", "ducks", "dodgers", "giants")),
-            new Tuple2<String, List<String>>("new york", Arrays.asList("rangers", "islanders", "yankees", "mets"))),
-        Arrays.asList(new Tuple2<String, List<String>>("california", Arrays.asList("sharks", "ducks")),
-            new Tuple2<String, List<String>>("new york", Arrays.asList("rangers", "islanders"))));
+    List<List<Tuple2<String, List<Integer>>>> expected = Arrays.asList(
+      Arrays.asList(
+        new Tuple2<String, List<Integer>>("california", Arrays.asList(1, 3)),
+        new Tuple2<String, List<Integer>>("new york", Arrays.asList(1, 4))
+      ),
+      Arrays.asList(
+        new Tuple2<String, List<Integer>>("california", Arrays.asList(1, 3, 5, 5)),
+        new Tuple2<String, List<Integer>>("new york", Arrays.asList(1, 1, 3, 4))
+      ),
+      Arrays.asList(
+        new Tuple2<String, List<Integer>>("california", Arrays.asList(5, 5)),
+        new Tuple2<String, List<Integer>>("new york", Arrays.asList(1, 3))
+      )
+    );
 
-    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, List<String>> groupWindowed =
+    JavaPairDStream<String, List<Integer>> groupWindowed =
         pairStream.groupByKeyAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(groupWindowed);
-    List<List<Tuple2<String, List<String>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
+    List<List<Tuple2<String, List<Integer>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    assert(result.size() == expected.size());
+    for (int i = 0; i < result.size(); i++) {
+      assert(convert(result.get(i)).equals(convert(expected.get(i))));
+    }
+  }
+
+  private HashSet<Tuple2<String, HashSet<Integer>>> convert(List<Tuple2<String, List<Integer>>> listOfTuples) {
+    List<Tuple2<String, HashSet<Integer>>> newListOfTuples = new ArrayList<Tuple2<String, HashSet<Integer>>>();
+    for (Tuple2<String, List<Integer>> tuple: listOfTuples) {
+      newListOfTuples.add(convert(tuple));
+    }
+    return new HashSet<Tuple2<String, HashSet<Integer>>>(newListOfTuples);
+  }
+
+  private Tuple2<String, HashSet<Integer>> convert(Tuple2<String, List<Integer>> tuple) {
+    return new Tuple2<String, HashSet<Integer>>(tuple._1(), new HashSet<Integer>(tuple._2()));
   }
 
   @Test
@@ -894,7 +916,7 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(8,7));
 
     File tempDir = Files.createTempDir();
-    ssc.checkpoint(tempDir.getAbsolutePath(), new Duration(1000));
+    ssc.checkpoint(tempDir.getAbsolutePath());
 
     JavaDStream stream = JavaCheckpointTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaDStream letterCount = stream.map(new Function<String, Integer>() {

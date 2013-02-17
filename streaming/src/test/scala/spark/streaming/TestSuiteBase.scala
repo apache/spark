@@ -75,9 +75,6 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   // Directory where the checkpoint data will be saved
   def checkpointDir = "checkpoint"
 
-  // Duration after which the graph is checkpointed
-  def checkpointInterval = batchDuration
-
   // Number of partitions of the input parallel collections created for testing
   def numInputPartitions = 2
 
@@ -99,7 +96,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     // Create StreamingContext
     val ssc = new StreamingContext(master, framework, batchDuration)
     if (checkpointDir != null) {
-      ssc.checkpoint(checkpointDir, checkpointInterval)
+      ssc.checkpoint(checkpointDir)
     }
 
     // Setup the stream computation
@@ -124,7 +121,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     // Create StreamingContext
     val ssc = new StreamingContext(master, framework, batchDuration)
     if (checkpointDir != null) {
-      ssc.checkpoint(checkpointDir, checkpointInterval)
+      ssc.checkpoint(checkpointDir)
     }
 
     // Setup the stream computation
