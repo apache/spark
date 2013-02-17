@@ -215,8 +215,8 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   /**
    * Return all the RDDs between 'fromDuration' to 'toDuration' (both included)
    */
-  def slice(fromDuration: Duration, toDuration: Duration): JList[JavaRDD[T]] = {
-    new util.ArrayList(dstream.slice(fromDuration, toDuration).map(new JavaRDD(_)).toSeq)
+  def slice(fromTime: Time, toTime: Time): JList[R] = {
+    new util.ArrayList(dstream.slice(fromTime, toTime).map(wrapRDD(_)).toSeq)
   }
 
   /**
