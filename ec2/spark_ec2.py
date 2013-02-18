@@ -82,18 +82,21 @@ def parse_args():
   parser.add_option("--spot-price", metavar="PRICE", type="float",
       help="If specified, launch slaves as spot instances with the given " +
             "maximum price (in dollars)")
-  parser.add_option("-c", "--cluster-type", default="mesos",
-      help="'mesos' for a mesos cluster, 'standalone' for a standalone spark cluster (default: mesos)")
-  parser.add_option("-g", "--ganglia", action="store_true", default=True,
-      help="Setup ganglia monitoring for the cluster. NOTE: The ganglia " +
-      "monitoring page will be publicly accessible")
+  parser.add_option("--cluster-type", type="choice", metavar="TYPE",
+      choices=["mesos", "standalone"], default="mesos",
+      help="'mesos' for a Mesos cluster, 'standalone' for a standalone " +
+           "Spark cluster (default: mesos)")
+  parser.add_option("--ganglia", action="store_true", default=True,
+      help="Setup Ganglia monitoring on cluster (default: on). NOTE: " +
+           "the Ganglia page will be publicly accessible")
+  parser.add_option("--no-ganglia", action="store_false", dest="ganglia",
+      help="Disable Ganglia monitoring for the cluster")
   parser.add_option("--new-scripts", action="store_true", default=False,
-      help="Use new spark-ec2 scripts to setup the cluster. NOTE: Ganglia " +
-      "will not be setup with this option")
+      help="Use new spark-ec2 scripts, for Spark >= 0.7 AMIs")
   parser.add_option("-u", "--user", default="root",
-      help="The ssh user you want to connect as (default: root)")
+      help="The SSH user you want to connect as (default: root)")
   parser.add_option("--delete-groups", action="store_true", default=False,
-      help="When destroying a cluster, also destroy the security groups that were created")
+      help="When destroying a cluster, delete the security groups that were created")
             
   (opts, args) = parser.parse_args()
   if len(args) != 2:
