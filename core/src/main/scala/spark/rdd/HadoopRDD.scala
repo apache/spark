@@ -15,14 +15,14 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
-import spark.{Dependency, RDD, SerializableWritable, SparkContext, Split, TaskContext}
+import spark.{Dependency, RDD, SerializableWritable, SparkContext, Partition, TaskContext}
 
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
-private[spark] class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
-  extends Split {
+private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSplit)
+  extends Partition {
   
   val inputSplit = new SerializableWritable[InputSplit](s)
 
@@ -47,12 +47,12 @@ class HadoopRDD[K, V](
   // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
 
-  override def getSplits: Array[Split] = {
+  override def getPartitions: Array[Partition] = {
     val inputFormat = createInputFormat(conf)
     val inputSplits = inputFormat.getSplits(conf, minSplits)
-    val array = new Array[Split](inputSplits.size)
+    val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
-      array(i) = new HadoopSplit(id, i, inputSplits(i))
+      array(i) = new HadoopPartition(id, i, inputSplits(i))
     }
     array
   }
@@ -62,8 +62,8 @@ class HadoopRDD[K, V](
       .asInstanceOf[InputFormat[K, V]]
   }
 
-  override def compute(theSplit: Split, context: TaskContext) = new Iterator[(K, V)] {
-    val split = theSplit.asInstanceOf[HadoopSplit]
+  override def compute(theSplit: Partition, context: TaskContext) = new Iterator[(K, V)] {
+    val split = theSplit.asInstanceOf[HadoopPartition]
     var reader: RecordReader[K, V] = null
 
     val conf = confBroadcast.value.value
@@ -106,9 +106,9 @@ class HadoopRDD[K, V](
     }
   }
 
-  override def getPreferredLocations(split: Split): Seq[String] = {
+  override def getPreferredLocations(split: Partition): Seq[String] = {
     // TODO: Filtering out "localhost" in case of file:// URLs
-    val hadoopSplit = split.asInstanceOf[HadoopSplit]
+    val hadoopSplit = split.asInstanceOf[HadoopPartition]
     hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")
   }
 

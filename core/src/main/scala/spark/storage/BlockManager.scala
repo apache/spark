@@ -513,7 +513,7 @@ class BlockManager(
       }
     }
 
-    // Split local and remote blocks. Remote blocks are further split into FetchRequests of size
+    // Partition local and remote blocks. Remote blocks are further split into FetchRequests of size
     // at most maxBytesInFlight in order to limit the amount of data in flight.
     val remoteRequests = new ArrayBuffer[FetchRequest]
     for ((address, blockInfos) <- blocksByAddress) {

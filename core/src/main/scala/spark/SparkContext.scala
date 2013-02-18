@@ -614,14 +614,14 @@ class SparkContext(
    * Run a job on all partitions in an RDD and return the results in an array.
    */
   def runJob[T, U: ClassManifest](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.splits.size, false)
+    runJob(rdd, func, 0 until rdd.partitions.size, false)
   }
 
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
   def runJob[T, U: ClassManifest](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.splits.size, false)
+    runJob(rdd, func, 0 until rdd.partitions.size, false)
   }
 
   /**
@@ -632,7 +632,7 @@ class SparkContext(
     processPartition: (TaskContext, Iterator[T]) => U,
     resultHandler: (Int, U) => Unit)
   {
-    runJob[T, U](rdd, processPartition, 0 until rdd.splits.size, false, resultHandler)
+    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.size, false, resultHandler)
   }
 
   /**
@@ -644,7 +644,7 @@ class SparkContext(
       resultHandler: (Int, U) => Unit)
   {
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
-    runJob[T, U](rdd, processFunc, 0 until rdd.splits.size, false, resultHandler)
+    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.size, false, resultHandler)
   }
 
   /**
@@ -696,7 +696,7 @@ class SparkContext(
   /** Default level of parallelism to use when not given by user (e.g. for reduce tasks) */
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
-  /** Default min number of splits for Hadoop RDDs when not given by user */
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
 
   private var nextShuffleId = new AtomicInteger(0)

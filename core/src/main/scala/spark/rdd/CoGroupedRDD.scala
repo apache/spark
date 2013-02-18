@@ -5,7 +5,7 @@ import java.util.{HashMap => JHashMap}
 import scala.collection.JavaConversions
 import scala.collection.mutable.ArrayBuffer
 
-import spark.{Aggregator, Logging, Partitioner, RDD, SparkEnv, Split, TaskContext}
+import spark.{Aggregator, Logging, Partitioner, RDD, SparkEnv, Partition, TaskContext}
 import spark.{Dependency, OneToOneDependency, ShuffleDependency}
 
 
@@ -14,13 +14,13 @@ private[spark] sealed trait CoGroupSplitDep extends Serializable
 private[spark] case class NarrowCoGroupSplitDep(
     rdd: RDD[_],
     splitIndex: Int,
-    var split: Split
+    var split: Partition
   ) extends CoGroupSplitDep {
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
     // Update the reference to parent split at the time of task serialization
-    split = rdd.splits(splitIndex)
+    split = rdd.partitions(splitIndex)
     oos.defaultWriteObject()
   }
 }
@@ -28,7 +28,7 @@ private[spark] case class NarrowCoGroupSplitDep(
 private[spark] case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
 
 private[spark]
-class CoGroupSplit(idx: Int, val deps: Seq[CoGroupSplitDep]) extends Split with Serializable {
+class CoGroupPartition(idx: Int, val deps: Seq[CoGroupSplitDep]) extends Partition with Serializable {
   override val index: Int = idx
   override def hashCode(): Int = idx
 }
@@ -58,17 +58,17 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(K, _)]], part: Partitioner)
     }
   }
 
-  override def getSplits: Array[Split] = {
-    val array = new Array[Split](part.numPartitions)
+  override def getPartitions: Array[Partition] = {
+    val array = new Array[Partition](part.numPartitions)
     for (i <- 0 until array.size) {
-      // Each CoGroupSplit will have a dependency per contributing RDD
-      array(i) = new CoGroupSplit(i, rdds.zipWithIndex.map { case (rdd, j) =>
+      // Each CoGroupPartition will have a dependency per contributing RDD
+      array(i) = new CoGroupPartition(i, rdds.zipWithIndex.map { case (rdd, j) =>
         // Assume each RDD contributed a single dependency, and get it
         dependencies(j) match {
           case s: ShuffleDependency[_, _] =>
             new ShuffleCoGroupSplitDep(s.shuffleId)
           case _ =>
-            new NarrowCoGroupSplitDep(rdd, i, rdd.splits(i))
+            new NarrowCoGroupSplitDep(rdd, i, rdd.partitions(i))
         }
       }.toList)
     }
@@ -77,8 +77,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(K, _)]], part: Partitioner)
 
   override val partitioner = Some(part)
 
-  override def compute(s: Split, context: TaskContext): Iterator[(K, Seq[Seq[_]])] = {
-    val split = s.asInstanceOf[CoGroupSplit]
+  override def compute(s: Partition, context: TaskContext): Iterator[(K, Seq[Seq[_]])] = {
+    val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
     // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
     val map = new JHashMap[K, Seq[ArrayBuffer[Any]]]
