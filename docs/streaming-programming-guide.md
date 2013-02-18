@@ -34,16 +34,16 @@ The StreamingContext is used to creating InputDStreams from input sources:
 
 {% highlight scala %}
 // Assuming ssc is the StreamingContext
-ssc.networkStream(hostname, port)   // Creates a stream that uses a TCP socket to read data from hostname:port
-ssc.textFileStream(directory)       // Creates a stream by monitoring and processing new files in a HDFS directory
+ssc.textFileStream(directory)      // Creates a stream by monitoring and processing new files in a HDFS directory
+ssc.socketStream(hostname, port)   // Creates a stream that uses a TCP socket to read data from hostname:port
 {% endhighlight %}
 
-A complete list of input sources is available in the [StreamingContext API documentation](api/streaming/index.html#spark.streaming.StreamingContext). Data received from these sources can be processed using DStream operations, which are explained next.
+We also provide a input streams for Kafka, Flume, Akka actor, etc. For a complete list of input streams, take a look at the [StreamingContext API documentation](api/streaming/index.html#spark.streaming.StreamingContext).
 
 
 
 # DStream Operations
-Once an input DStream has been created, you can transform it using _DStream operators_. Most of these operators return new DStreams which you can further transform. Eventually, you'll need to call an _output operator_, which forces evaluation of the DStream by writing data out to an external source.
+Data received from the input streams can be processed using _DStream operations_. There are two kinds of operations - _transformations_ and _output operations_. Similar to RDD transformations, DStream transformations operate on one or more DStreams to create new DStreams with transformed data. After applying a sequence of transformations to the input streams, you'll need to call the output operations, which writies data out to an external source. 
 
 ## Transformations
 

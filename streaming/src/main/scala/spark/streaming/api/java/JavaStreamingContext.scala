@@ -130,7 +130,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    */
   def networkTextStream(hostname: String, port: Int, storageLevel: StorageLevel)
   : JavaDStream[String] = {
-    ssc.networkTextStream(hostname, port, storageLevel)
+    ssc.socketTextStream(hostname, port, storageLevel)
   }
 
   /**
@@ -140,8 +140,8 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    */
-  def networkTextStream(hostname: String, port: Int): JavaDStream[String] = {
-    ssc.networkTextStream(hostname, port)
+  def socketTextStream(hostname: String, port: Int): JavaDStream[String] = {
+    ssc.socketTextStream(hostname, port)
   }
 
   /**
@@ -154,7 +154,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param storageLevel  Storage level to use for storing the received objects
    * @tparam T            Type of the objects received (after converting bytes to objects)
    */
-  def networkStream[T](
+  def socketStream[T](
       hostname: String,
       port: Int,
       converter: JFunction[InputStream, java.lang.Iterable[T]],
@@ -163,7 +163,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     def fn = (x: InputStream) => converter.apply(x).toIterator
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    ssc.networkStream(hostname, port, fn, storageLevel)
+    ssc.socketStream(hostname, port, fn, storageLevel)
   }
 
   /**

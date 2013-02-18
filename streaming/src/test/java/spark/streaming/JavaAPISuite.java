@@ -23,7 +23,6 @@ import spark.streaming.JavaCheckpointTestUtils;
 import spark.streaming.dstream.KafkaPartitionKey;
 
 import java.io.*;
-import java.text.Collator;
 import java.util.*;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
@@ -984,7 +983,7 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void testNetworkTextStream() {
-    JavaDStream test = ssc.networkTextStream("localhost", 12345);
+    JavaDStream test = ssc.socketTextStream("localhost", 12345);
   }
 
   @Test
@@ -1004,7 +1003,7 @@ public class JavaAPISuite implements Serializable {
       }
     }
 
-    JavaDStream test = ssc.networkStream(
+    JavaDStream test = ssc.socketStream(
       "localhost",
       12345,
       new Converter(),

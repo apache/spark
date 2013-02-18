@@ -146,7 +146,7 @@ class StreamingContext private (
    * Create an input stream with any arbitrary user implemented network receiver.
    * @param receiver Custom implementation of NetworkReceiver
    */
-  def pluggableNetworkStream[T: ClassManifest](
+  def networkStream[T: ClassManifest](
     receiver: NetworkReceiver[T]): DStream[T] = {
     val inputStream = new PluggableInputDStream[T](this,
       receiver)
@@ -155,15 +155,16 @@ class StreamingContext private (
   }
 
   /**
-   * Create an input stream with any arbitrary user implemented akka actor receiver.
+   * Create an input stream with any arbitrary user implemented Akka actor receiver.
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
-   * @param storageLevel RDD storage level. Defaults to memory-only.
+   * @param storageLevel Storage level to use for storing the received objects
+   *                     (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
-  def pluggableActorStream[T: ClassManifest](
+  def actorStream[T: ClassManifest](
     props: Props, name: String, 
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2): DStream[T] = {
-    pluggableNetworkStream(new ActorReceiver(Settings(props, name, storageLevel)))
+    networkStream(new ActorReceiver(Settings(props, name, storageLevel)))
   }                 	                                                                  
 
   /**
@@ -174,7 +175,8 @@ class StreamingContext private (
    * in its own thread.
    * @param initialOffsets Optional initial offsets for each of the partitions to consume.
    * By default the value is pulled from zookeper.
-   * @param storageLevel RDD storage level. Defaults to memory-only.
+   * @param storageLevel  Storage level to use for storing the received objects
+   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
   def kafkaStream[T: ClassManifest](
       zkQuorum: String,
@@ -189,24 +191,24 @@ class StreamingContext private (
   }
 
   /**
-   * Create a input stream from network source hostname:port. Data is received using
-   * a TCP socket and the receive bytes is interpreted as UTF8 encoded \n delimited
+   * Create a input stream from TCP source hostname:port. Data is received using
+   * a TCP socket and the receive bytes is interpreted as UTF8 encoded `\n` delimited
    * lines.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
-  def networkTextStream(
+  def socketTextStream(
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[String] = {
-    networkStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
+    socketStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
   /**
-   * Create a input stream from network source hostname:port. Data is received using
+   * Create a input stream from TCP source hostname:port. Data is received using
    * a TCP socket and the receive bytes it interepreted as object using the given
    * converter.
    * @param hostname      Hostname to connect to for receiving data
@@ -215,7 +217,7 @@ class StreamingContext private (
    * @param storageLevel  Storage level to use for storing the received objects
    * @tparam T            Type of the objects received (after converting bytes to objects)
    */
-  def networkStream[T: ClassManifest](
+  def socketStream[T: ClassManifest](
       hostname: String,
       port: Int,
       converter: (InputStream) => Iterator[T],

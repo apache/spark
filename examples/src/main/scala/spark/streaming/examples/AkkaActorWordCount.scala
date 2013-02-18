@@ -36,8 +36,8 @@ class SampleActorReceiver[T: ClassManifest](urlOfPublisher: String)
 }
 
 /**
- * A sample word count program demonstrating the use of plugging in
- * AkkaActor as Receiver
+ * A sample word count program demonstrating the use of Akka actor stream.
+ *
  */
 object AkkaActorWordCount {
   def main(args: Array[String]) {
@@ -56,18 +56,18 @@ object AkkaActorWordCount {
       Seconds(batchDuration.toLong))
 
     /* 
-     * Following is the use of pluggableActorStream to plug in custom actor as receiver
+     * Following is the use of actorStream to plug in custom actor as receiver
      * 
      * An important point to note:
      * Since Actor may exist outside the spark framework, It is thus user's responsibility 
-     * to ensure the type safety, i.e type of data received and PluggableInputDstream 
+     * to ensure the type safety, i.e type of data received and actorStream
      * should be same.
      * 
-     * For example: Both pluggableActorStream and SampleActorReceiver are parameterized
+     * For example: Both actorStream and SampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
 
-    val lines = ssc.pluggableActorStream[String](
+    val lines = ssc.actorStream[String](
       Props(new SampleActorReceiver[String]("akka://spark@%s:%s/user/FeederActor".format(
         remoteAkkaHost, remoteAkkaPort.toInt))), "SampleReceiver")
 
