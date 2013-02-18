@@ -53,7 +53,7 @@ import storage.{StorageStatus, StorageUtils, RDDInfo}
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
  * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
- * @param jobName A name for your job, to display on the cluster web UI.
+ * @param appName A name for your application, to display on the cluster web UI.
  * @param sparkHome Location where Spark is installed on cluster nodes.
  * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
  *             system or HDFS, HTTP, HTTPS, or FTP URLs.
@@ -61,7 +61,7 @@ import storage.{StorageStatus, StorageUtils, RDDInfo}
  */
 class SparkContext(
     val master: String,
-    val jobName: String,
+    val appName: String,
     val sparkHome: String = null,
     val jars: Seq[String] = Nil,
     environment: Map[String, String] = Map())
@@ -143,7 +143,7 @@ class SparkContext(
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
-        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, jobName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
         scheduler.initialize(backend)
         scheduler
 
@@ -162,7 +162,7 @@ class SparkContext(
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val sparkUrl = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, jobName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
         scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
@@ -178,9 +178,9 @@ class SparkContext(
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
         val masterWithoutProtocol = master.replaceFirst("^mesos://", "")  // Strip initial mesos://
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, this, masterWithoutProtocol, jobName)
+          new CoarseMesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
         } else {
-          new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, jobName)
+          new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
         }
         scheduler.initialize(backend)
         scheduler
