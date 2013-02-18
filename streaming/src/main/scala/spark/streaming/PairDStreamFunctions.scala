@@ -18,8 +18,8 @@ import org.apache.hadoop.conf.Configuration
 
 class PairDStreamFunctions[K: ClassManifest, V: ClassManifest](self: DStream[(K,V)])
 extends Serializable {
- 
-  def ssc = self.ssc
+
+  private[streaming] def ssc = self.ssc
 
   private[streaming] def defaultPartitioner(numPartitions: Int = self.ssc.sc.defaultParallelism) = {
     new HashPartitioner(numPartitions)
@@ -242,7 +242,9 @@ extends Serializable {
    * Return a new DStream by applying incremental `reduceByKey` over a sliding window.
    * The reduced value of over a new window is calculated using the old window's reduced value :
    *  1. reduce the new values that entered the window (e.g., adding new counts)
+   *
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
+   *
    * This is more efficient than reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
@@ -399,7 +401,7 @@ extends Serializable {
   }
 
   /**
-   * Cogroup `this` DStream with `other` DStream. For each key k in corresponding RDDs of `this`
+   * Cogroup `this` DStream with `other` DStream using a partitioner. For each key k in corresponding RDDs of `this`
    * or `other` DStreams, the generated RDD will contains a tuple with the list of values for that
    * key in both RDDs. Partitioner is used to partition each generated RDD.
    */

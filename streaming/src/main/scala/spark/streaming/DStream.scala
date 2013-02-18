@@ -132,7 +132,7 @@ abstract class DStream[T: ClassManifest] (
 
     // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
     if (mustCheckpoint && checkpointDuration == null) {
-      checkpointDuration = slideDuration.max(Seconds(10))
+      checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt
       logInfo("Checkpoint interval automatically set to " + checkpointDuration)
     }
 

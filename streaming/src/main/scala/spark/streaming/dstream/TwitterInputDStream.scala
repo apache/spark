@@ -13,6 +13,7 @@ import twitter4j.auth.BasicAuthorization
 * An optional set of string filters can be used to restrict the set of tweets. The Twitter API is
 * such that this may return a sampled subset of all tweets during each interval.
 */
+private[streaming]
 class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
     username: String,
@@ -26,6 +27,7 @@ class TwitterInputDStream(
   }
 }
 
+private[streaming]
 class TwitterReceiver(
     username: String,
     password: String,
