@@ -72,6 +72,10 @@
       <artifactId>spray-server</artifactId>
     </dependency>
     <dependency>
+      <groupId>cc.spray</groupId>
+      <artifactId>spray-json_${scala.version}</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.tomdz.twirl</groupId>
       <artifactId>twirl-api</artifactId>
     </dependency>
@@ -92,6 +96,11 @@
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.easymock</groupId>
+      <artifactId>easymock</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

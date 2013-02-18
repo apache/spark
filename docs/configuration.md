@@ -198,25 +198,41 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.akka.frameSize</td>
+  <td>10</td>
+  <td>
+    Maximum message size to allow in "control plane" communication (for serialized tasks and task
+    results), in MB. Increase this if your tasks need to send back large results to the driver
+    (e.g. using <code>collect()</code> on a large dataset).
+  </td>
+</tr>
+<tr>
   <td>spark.akka.threads</td>
   <td>4</td>
   <td>
     Number of actor threads to use for communication. Can be useful to increase on large clusters
-    when the master has a lot of CPU cores.
+    when the driver has a lot of CPU cores.
   </td>
 </tr>
 <tr>
-  <td>spark.master.host</td>
+  <td>spark.akka.timeout</td>
+  <td>20</td>
+  <td>
+    Communication timeout between Spark nodes.
+  </td>
+</tr>
+<tr>
+  <td>spark.driver.host</td>
   <td>(local hostname)</td>
   <td>
-    Hostname or IP address for the master to listen on.
+    Hostname or IP address for the driver to listen on.
   </td>
 </tr>
 <tr>
-  <td>spark.master.port</td>
+  <td>spark.driver.port</td>
   <td>(random)</td>
   <td>
-    Port for the master to listen on.
+    Port for the driver to listen on.
   </td>
 </tr>
 <tr>

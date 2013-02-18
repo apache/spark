@@ -1,6 +1,6 @@
 package spark.streaming.dstream
 
-import spark.{DaemonThread, Logging}
+import spark.Logging
 import spark.storage.StorageLevel
 import spark.streaming.StreamingContext
 
@@ -48,7 +48,8 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
 
     val queue = new ArrayBlockingQueue[ByteBuffer](2)
 
-    blockPushingThread = new DaemonThread {
+    blockPushingThread = new Thread {
+      setDaemon(true)
       override def run() {
         var nextBlockNumber = 0
         while (true) {

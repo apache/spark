@@ -48,7 +48,7 @@ extends Broadcast[T](id) with Logging with Serializable {
 }
 
 private[spark] class HttpBroadcastFactory extends BroadcastFactory {
-  def initialize(isMaster: Boolean) { HttpBroadcast.initialize(isMaster) }
+  def initialize(isDriver: Boolean) { HttpBroadcast.initialize(isDriver) }
 
   def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
     new HttpBroadcast[T](value_, isLocal, id)
@@ -69,12 +69,12 @@ private object HttpBroadcast extends Logging {
   private val cleaner = new MetadataCleaner("HttpBroadcast", cleanup)
 
 
-  def initialize(isMaster: Boolean) {
+  def initialize(isDriver: Boolean) {
     synchronized {
       if (!initialized) {
         bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
         compress = System.getProperty("spark.broadcast.compress", "true").toBoolean
-        if (isMaster) {
+        if (isDriver) {
           createServer()
         }
         serverUri = System.getProperty("spark.httpBroadcast.uri")
@@ -95,7 +95,7 @@ private object HttpBroadcast extends Logging {
   }
 
   private def createServer() {
-    broadcastDir = Utils.createTempDir()
+    broadcastDir = Utils.createTempDir(Utils.getLocalDir)
     server = new HttpServer(broadcastDir)
     server.start()
     serverUri = server.uri

@@ -36,7 +36,7 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
   def cache(): JavaDStream[T] = dstream.cache()
 
   /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
-  def persist(): JavaDStream[T] = dstream.cache()
+  def persist(): JavaDStream[T] = dstream.persist()
 
   /** Persist the RDDs of this DStream with the given storage level */
   def persist(storageLevel: StorageLevel): JavaDStream[T] = dstream.persist(storageLevel)
@@ -50,32 +50,25 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
   }
 
   /**
-   * Return a new DStream which is computed based on windowed batches of this DStream.
-   * The new DStream generates RDDs with the same interval as this DStream.
+   * Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream. The new DStream generates RDDs with
+   * the same interval as this DStream.
    * @param windowDuration width of the window; must be a multiple of this DStream's interval.
-   * @return
    */
   def window(windowDuration: Duration): JavaDStream[T] =
     dstream.window(windowDuration)
 
   /**
-   * Return a new DStream which is computed based on windowed batches of this DStream.
-   * @param windowDuration duration (i.e., width) of the window;
-   *                   must be a multiple of this DStream's interval
+   * Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream.
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
-   *                   the new DStream will generate RDDs); must be a multiple of this
-   *                   DStream's interval
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
    */
   def window(windowDuration: Duration, slideDuration: Duration): JavaDStream[T] =
     dstream.window(windowDuration, slideDuration)
-
-  /**
-   * Return a new DStream which computed based on tumbling window on this DStream.
-   * This is equivalent to window(batchDuration, batchDuration).
-   * @param batchDuration tumbling window duration; must be a multiple of this DStream's interval
-   */
-  def tumble(batchDuration: Duration): JavaDStream[T] =
-    dstream.tumble(batchDuration)
 
   /**
    * Return a new DStream by unifying data of another DStream with this DStream.

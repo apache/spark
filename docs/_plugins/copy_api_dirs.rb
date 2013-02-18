@@ -28,3 +28,20 @@ if ENV['SKIP_SCALADOC'] != '1'
     cp_r(source + "/.", dest)
   end
 end
+
+if ENV['SKIP_EPYDOC'] != '1'
+  puts "Moving to python directory and building epydoc."
+  cd("../python")
+  puts `epydoc --config epydoc.conf`
+
+  puts "Moving back into docs dir."
+  cd("../docs")
+
+  puts "echo making directory pyspark"
+  mkdir_p "pyspark"
+
+  puts "cp -r ../python/docs/. api/pyspark"
+  cp_r("../python/docs/.", "api/pyspark")
+
+  cd("..")
+end

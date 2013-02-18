@@ -19,27 +19,23 @@ import spark.util.AkkaUtils
  * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
  */
 class SparkEnv (
+    val executorId: String,
     val actorSystem: ActorSystem,
     val serializer: Serializer,
     val closureSerializer: Serializer,
-    val cacheTracker: CacheTracker,
+    val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
-    val httpFileServer: HttpFileServer
+    val httpFileServer: HttpFileServer,
+    val sparkFilesDir: String
   ) {
-
-  /** No-parameter constructor for unit tests. */
-  def this() = {
-    this(null, new JavaSerializer, new JavaSerializer, null, null, null, null, null, null, null)
-  }
 
   def stop() {
     httpFileServer.stop()
     mapOutputTracker.stop()
-    cacheTracker.stop()
     shuffleFetcher.stop()
     broadcastManager.stop()
     blockManager.stop()
@@ -63,17 +59,18 @@ object SparkEnv extends Logging {
   }
 
   def createFromSystemProperties(
+      executorId: String,
       hostname: String,
       port: Int,
-      isMaster: Boolean,
-      isLocal: Boolean
-    ) : SparkEnv = {
+      isDriver: Boolean,
+      isLocal: Boolean): SparkEnv = {
+
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port)
 
-    // Bit of a hack: If this is the master and our port was 0 (meaning bind to any free port),
-    // figure out which port number Akka actually bound to and set spark.master.port to it.
-    if (isMaster && port == 0) {
-      System.setProperty("spark.master.port", boundPort.toString)
+    // Bit of a hack: If this is the driver and our port was 0 (meaning bind to any free port),
+    // figure out which port number Akka actually bound to and set spark.driver.port to it.
+    if (isDriver && port == 0) {
+      System.setProperty("spark.driver.port", boundPort.toString)
     }
 
     val classLoader = Thread.currentThread.getContextClassLoader
@@ -87,23 +84,22 @@ object SparkEnv extends Logging {
 
     val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
 
-    val masterIp: String = System.getProperty("spark.master.host", "localhost")
-    val masterPort: Int = System.getProperty("spark.master.port", "7077").toInt
+    val driverIp: String = System.getProperty("spark.driver.host", "localhost")
+    val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
     val blockManagerMaster = new BlockManagerMaster(
-      actorSystem, isMaster, isLocal, masterIp, masterPort)
-    val blockManager = new BlockManager(actorSystem, blockManagerMaster, serializer)
+      actorSystem, isDriver, isLocal, driverIp, driverPort)
+    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, serializer)
 
     val connectionManager = blockManager.connectionManager
 
-    val broadcastManager = new BroadcastManager(isMaster)
+    val broadcastManager = new BroadcastManager(isDriver)
 
     val closureSerializer = instantiateClass[Serializer](
       "spark.closure.serializer", "spark.JavaSerializer")
 
-    val cacheTracker = new CacheTracker(actorSystem, isMaster, blockManager)
-    blockManager.cacheTracker = cacheTracker
+    val cacheManager = new CacheManager(blockManager)
 
-    val mapOutputTracker = new MapOutputTracker(actorSystem, isMaster)
+    val mapOutputTracker = new MapOutputTracker(actorSystem, isDriver)
 
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
@@ -112,6 +108,15 @@ object SparkEnv extends Logging {
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
 
+    // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
+    // this is a temporary directory; in distributed mode, this is the executor's current working
+    // directory.
+    val sparkFilesDir: String = if (isDriver) {
+      Utils.createTempDir().getAbsolutePath
+    } else {
+      "."
+    }
+
     // Warn about deprecated spark.cache.class property
     if (System.getProperty("spark.cache.class") != null) {
       logWarning("The spark.cache.class property is no longer being used! Specify storage " +
@@ -119,15 +124,17 @@ object SparkEnv extends Logging {
     }
 
     new SparkEnv(
+      executorId,
       actorSystem,
       serializer,
       closureSerializer,
-      cacheTracker,
+      cacheManager,
       mapOutputTracker,
       shuffleFetcher,
       broadcastManager,
       blockManager,
       connectionManager,
-      httpFileServer)
+      httpFileServer,
+      sparkFilesDir)
   }
 }

@@ -63,9 +63,9 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() with spark.Logging {
 
   override def empty: Map[A, B] = new TimeStampedHashMap[A, B]()
 
-  override def size(): Int = internalMap.size()
+  override def size: Int = internalMap.size
 
-  override def foreach[U](f: ((A, B)) => U): Unit = {
+  override def foreach[U](f: ((A, B)) => U) {
     val iterator = internalMap.entrySet().iterator()
     while(iterator.hasNext) {
       val entry = iterator.next()

@@ -10,7 +10,7 @@ import collection.mutable.SynchronizedBuffer
 
 import java.io.{ObjectInputStream, IOException}
 
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfter, FunSuite}
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -28,6 +28,11 @@ class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[
     logInfo("Computing RDD for time " + validTime)
     val index = ((validTime - zeroTime) / slideDuration - 1).toInt
     val selectedInput = if (index < input.size) input(index) else Seq[T]()
+
+    // lets us test cases where RDDs are not created
+    if (selectedInput == null)
+      return None
+
     val rdd = ssc.sc.makeRDD(selectedInput, numPartitions)
     logInfo("Created RDD " + rdd.id + " with " + selectedInput)
     Some(rdd)
@@ -56,22 +61,27 @@ class TestOutputStream[T: ClassManifest](parent: DStream[T], val output: ArrayBu
  * This is the base trait for Spark Streaming testsuites. This provides basic functionality
  * to run user-defined set of input on user-defined stream operations, and verify the output.
  */
-trait TestSuiteBase extends FunSuite with Logging {
+trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
+  // Name of the framework for Spark context
   def framework = "TestSuiteBase"
 
+  // Master for Spark context
   def master = "local[2]"
 
+  // Batch duration
   def batchDuration = Seconds(1)
 
-  def checkpointDir = null.asInstanceOf[String]
+  // Directory where the checkpoint data will be saved
+  def checkpointDir = "checkpoint"
 
-  def checkpointInterval = batchDuration
-
+  // Number of partitions of the input parallel collections created for testing
   def numInputPartitions = 2
 
+  // Maximum time to wait before the test times out
   def maxWaitTimeMillis = 10000
 
+  // Whether to actually wait in real time before changing manual clock
   def actuallyWait = false
 
   /**
@@ -86,7 +96,7 @@ trait TestSuiteBase extends FunSuite with Logging {
     // Create StreamingContext
     val ssc = new StreamingContext(master, framework, batchDuration)
     if (checkpointDir != null) {
-      ssc.checkpoint(checkpointDir, checkpointInterval)
+      ssc.checkpoint(checkpointDir)
     }
 
     // Setup the stream computation
@@ -111,7 +121,7 @@ trait TestSuiteBase extends FunSuite with Logging {
     // Create StreamingContext
     val ssc = new StreamingContext(master, framework, batchDuration)
     if (checkpointDir != null) {
-      ssc.checkpoint(checkpointDir, checkpointInterval)
+      ssc.checkpoint(checkpointDir)
     }
 
     // Setup the stream computation
@@ -135,9 +145,6 @@ trait TestSuiteBase extends FunSuite with Logging {
       numBatches: Int,
       numExpectedOutput: Int
     ): Seq[Seq[V]] = {
-
-    System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
-
     assert(numBatches > 0, "Number of batches to run stream computation is zero")
     assert(numExpectedOutput > 0, "Number of expected outputs after " + numBatches + " is zero")
     logInfo("numBatches = " + numBatches + ", numExpectedOutput = " + numExpectedOutput)
@@ -181,7 +188,6 @@ trait TestSuiteBase extends FunSuite with Logging {
     } finally {
       ssc.stop()
     }
-
     output
   }
 

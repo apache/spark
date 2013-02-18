@@ -4,6 +4,7 @@ import java.io.File
 import java.net.InetAddress
 
 import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.bio.SocketConnector
 import org.eclipse.jetty.server.handler.DefaultHandler
 import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.server.handler.ResourceHandler
@@ -27,7 +28,13 @@ private[spark] class HttpServer(resourceBase: File) extends Logging {
     if (server != null) {
       throw new ServerStateException("Server is already started")
     } else {
-      server = new Server(0)
+      server = new Server()
+      val connector = new SocketConnector
+      connector.setMaxIdleTime(60*1000)
+      connector.setSoLingerTime(-1)
+      connector.setPort(0)
+      server.addConnector(connector)
+
       val threadPool = new QueuedThreadPool
       threadPool.setDaemon(true)
       server.setThreadPool(threadPool)

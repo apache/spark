@@ -104,9 +104,25 @@ private[spark] class WorkerArguments(args: Array[String]) {
   }
 
   def inferDefaultMemory(): Int = {
-    val bean = ManagementFactory.getOperatingSystemMXBean
-                                .asInstanceOf[com.sun.management.OperatingSystemMXBean]
-    val totalMb = (bean.getTotalPhysicalMemorySize / 1024 / 1024).toInt
+    val ibmVendor = System.getProperty("java.vendor").contains("IBM")
+    var totalMb = 0
+    try {
+      val bean = ManagementFactory.getOperatingSystemMXBean()
+      if (ibmVendor) {
+        val beanClass = Class.forName("com.ibm.lang.management.OperatingSystemMXBean")
+        val method = beanClass.getDeclaredMethod("getTotalPhysicalMemory")
+        totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
+      } else {
+        val beanClass = Class.forName("com.sun.management.OperatingSystemMXBean")
+        val method = beanClass.getDeclaredMethod("getTotalPhysicalMemorySize")
+        totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
+      }
+    } catch {
+      case e: Exception => {
+        totalMb = 2*1024
+        System.out.println("Failed to get total physical memory. Using " + totalMb + " MB")
+      }
+    }
     // Leave out 1 GB for the operating system, but don't return a negative memory size
     math.max(totalMb - 1024, 512)
   }

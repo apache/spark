@@ -1,25 +1,12 @@
 package spark
 
 import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
 
 import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
 
-class PartitioningSuite extends FunSuite with BeforeAndAfter {
-  
-  var sc: SparkContext = _
-  
-  after {
-    if(sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-  }
-  
+class PartitioningSuite extends FunSuite with LocalSparkContext {
   
   test("HashPartitioner equality") {
     val p2 = new HashPartitioner(2)
@@ -106,6 +93,11 @@ class PartitioningSuite extends FunSuite with BeforeAndAfter {
     assert(grouped2.leftOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.rightOuterJoin(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.cogroup(reduced2).partitioner === grouped2.partitioner)
+
+    assert(grouped2.map(_ => 1).partitioner === None)
+    assert(grouped2.mapValues(_ => 1).partitioner === grouped2.partitioner)
+    assert(grouped2.flatMapValues(_ => Seq(1)).partitioner === grouped2.partitioner)
+    assert(grouped2.filter(_._1 > 4).partitioner === grouped2.partitioner)
   }
 
   test("partitioning Java arrays should fail") {
