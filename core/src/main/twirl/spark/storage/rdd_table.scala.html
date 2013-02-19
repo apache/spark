@@ -1,0 +1,32 @@
+@(rdds: Array[spark.storage.RDDInfo])
+@import spark.Utils
+
+<table class="table table-bordered table-striped table-condensed sortable">
+  <thead>
+    <tr>
+      <th>RDD Name</th>
+      <th>Storage Level</th>
+      <th>Cached Partitions</th>
+      <th>Fraction Partitions Cached</th>
+      <th>Size in Memory</th>
+      <th>Size on Disk</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for(rdd <- rdds) {
+      <tr>
+        <td>
+          <a href="rdd?id=@(rdd.id)">
+            @rdd.name
+          </a>
+        </td>
+        <td>@(rdd.storageLevel.description)
+        </td>
+        <td>@rdd.numCachedPartitions</td>
+        <td>@(rdd.numCachedPartitions / rdd.numPartitions.toDouble)</td>
+        <td>@{Utils.memoryBytesToString(rdd.memSize)}</td>
+        <td>@{Utils.memoryBytesToString(rdd.diskSize)}</td>
+      </tr>
+    }
+  </tbody>
+</table>

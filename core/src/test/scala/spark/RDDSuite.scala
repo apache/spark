@@ -2,32 +2,20 @@ package spark
 
 import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
+import spark.SparkContext._
+import spark.rdd.{CoalescedRDD, PartitionPruningRDD}
 
-import spark.rdd.CoalescedRDD
-import SparkContext._
-
-class RDDSuite extends FunSuite with BeforeAndAfter {
-
-  var sc: SparkContext = _
-
-  after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-  }
+class RDDSuite extends FunSuite with LocalSparkContext {
 
   test("basic operations") {
     sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
     val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
-    assert(dups.distinct.count === 4)
-    assert(dups.distinct().collect === dups.distinct.collect)
-    assert(dups.distinct(2).collect === dups.distinct.collect)
+    assert(dups.distinct().count() === 4)
+    assert(dups.distinct.count === 4)  // Can distinct and count be called without parentheses?
+    assert(dups.distinct.collect === dups.distinct().collect)
+    assert(dups.distinct(2).collect === dups.distinct().collect)
     assert(nums.reduce(_ + _) === 10)
     assert(nums.fold(0)(_ + _) === 10)
     assert(nums.map(_.toString).collect().toList === List("1", "2", "3", "4"))
@@ -44,6 +32,10 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
       case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
     }
     assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))
+
+    intercept[UnsupportedOperationException] {
+      nums.filter(_ > 5).reduce(_ + _)
+    }
   }
 
   test("SparkContext.union") {
@@ -104,7 +96,7 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("caching with failures") {
-    sc = new SparkContext("local", "test") 
+    sc = new SparkContext("local", "test")
     val onlySplit = new Split { override def index: Int = 0 }
     var shouldFail = true
     val rdd = new RDD[Int](sc, Nil) {
@@ -136,8 +128,10 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
       List(List(1, 2, 3, 4, 5), List(6, 7, 8, 9, 10)))
 
     // Check that the narrow dependency is also specified correctly
-    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(0).toList === List(0, 1, 2, 3, 4))
-    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(1).toList === List(5, 6, 7, 8, 9))
+    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(0).toList ===
+      List(0, 1, 2, 3, 4))
+    assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(1).toList ===
+      List(5, 6, 7, 8, 9))
 
     val coalesced2 = new CoalescedRDD(data, 3)
     assert(coalesced2.collect().toList === (1 to 10).toList)
@@ -167,5 +161,16 @@ class RDDSuite extends FunSuite with BeforeAndAfter {
     intercept[IllegalArgumentException] {
       nums.zip(sc.parallelize(1 to 4, 1)).collect()
     }
+  }
+
+  test("partition pruning") {
+    sc = new SparkContext("local", "test")
+    val data = sc.parallelize(1 to 10, 10)
+    // Note that split number starts from 0, so > 8 means only 10th partition left.
+    val prunedRdd = new PartitionPruningRDD(data, splitNum => splitNum > 8)
+    assert(prunedRdd.splits.size === 1)
+    val prunedData = prunedRdd.collect()
+    assert(prunedData.size === 1)
+    assert(prunedData(0) === 10)
   }
 }

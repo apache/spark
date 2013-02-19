@@ -67,6 +67,8 @@ private[spark] class PythonRDD[T: ClassManifest](
         val dOut = new DataOutputStream(proc.getOutputStream)
         // Split index
         dOut.writeInt(split.index)
+        // sparkFilesDir
+        PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dOut)
         // Broadcast variables
         dOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
@@ -101,21 +103,27 @@ private[spark] class PythonRDD[T: ClassManifest](
 
       private def read(): Array[Byte] = {
         try {
-          val length = stream.readInt()
-          if (length != -1) {
-            val obj = new Array[Byte](length)
-            stream.readFully(obj)
-            obj
-          } else {
-            // We've finished the data section of the output, but we can still read some
-            // accumulator updates; let's do that, breaking when we get EOFException
-            while (true) {
-              val len2 = stream.readInt()
-              val update = new Array[Byte](len2)
-              stream.readFully(update)
-              accumulator += Collections.singletonList(update)
-            }
-            new Array[Byte](0)
+          stream.readInt() match {
+            case length if length > 0 =>
+              val obj = new Array[Byte](length)
+              stream.readFully(obj)
+              obj
+            case -2 =>
+              // Signals that an exception has been thrown in python
+              val exLength = stream.readInt()
+              val obj = new Array[Byte](exLength)
+              stream.readFully(obj)
+              throw new PythonException(new String(obj))
+            case -1 =>
+              // We've finished the data section of the output, but we can still read some
+              // accumulator updates; let's do that, breaking when we get EOFException
+              while (true) {
+                val len2 = stream.readInt()
+                val update = new Array[Byte](len2)
+                stream.readFully(update)
+                accumulator += Collections.singletonList(update)
+              }
+              new Array[Byte](0)
           }
         } catch {
           case eof: EOFException => {
@@ -135,10 +143,11 @@ private[spark] class PythonRDD[T: ClassManifest](
     }
   }
 
-  override def checkpoint() { }
-
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
+
+/** Thrown for exceptions in user Python code. */
+private class PythonException(msg: String) extends Exception(msg)
 
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
@@ -152,7 +161,6 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
       case Seq(a, b) => (a, b)
       case x          => throw new Exception("PairwiseRDD: unexpected value: " + x)
     }
-  override def checkpoint() { }
   val asJavaPairRDD : JavaPairRDD[Array[Byte], Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
 
@@ -230,6 +238,11 @@ private[spark] object PythonRDD {
   }
 
   def writeIteratorToPickleFile[T](items: java.util.Iterator[T], filename: String) {
+    import scala.collection.JavaConverters._
+    writeIteratorToPickleFile(items.asScala, filename)
+  }
+
+  def writeIteratorToPickleFile[T](items: Iterator[T], filename: String) {
     val file = new DataOutputStream(new FileOutputStream(filename))
     for (item <- items) {
       writeAsPickle(item, file)
@@ -237,8 +250,10 @@ private[spark] object PythonRDD {
     file.close()
   }
 
-  def takePartition[T](rdd: RDD[T], partition: Int): java.util.Iterator[T] =
-    rdd.context.runJob(rdd, ((x: Iterator[T]) => x), Seq(partition), true).head
+  def takePartition[T](rdd: RDD[T], partition: Int): Iterator[T] = {
+    implicit val cm : ClassManifest[T] = rdd.elementClassManifest
+    rdd.context.runJob(rdd, ((x: Iterator[T]) => x.toArray), Seq(partition), true).head.iterator
+  }
 }
 
 private object Pickle {
@@ -250,11 +265,6 @@ private object Pickle {
   val EMPTY_LIST: Byte = ']'
   val MARK: Byte = '('
   val APPENDS: Byte = 'e'
-}
-
-private class ExtractValue extends spark.api.java.function.Function[(Array[Byte],
-  Array[Byte]), Array[Byte]] {
-  override def call(pair: (Array[Byte], Array[Byte])) : Array[Byte] = pair._2
 }
 
 private class BytesToString extends spark.api.java.function.Function[Array[Byte], String] {

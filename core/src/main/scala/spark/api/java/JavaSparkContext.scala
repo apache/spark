@@ -323,9 +323,10 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def getSparkHome(): Option[String] = sc.getSparkHome()
 
   /**
-   * Add a file to be downloaded into the working directory of this Spark job on every node.
+   * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), or an HTTP, HTTPS or FTP URI.
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(path)` to find its download location.
    */
   def addFile(path: String) {
     sc.addFile(path)
@@ -357,20 +358,28 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   }
 
   /**
-   * Set the directory under which RDDs are going to be checkpointed. This method will
-   * create this directory and will throw an exception of the path already exists (to avoid
-   * overwriting existing files may be overwritten). The directory will be deleted on exit
-   * if indicated.
+   * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
+   */
+  def hadoopConfiguration(): Configuration = {
+    sc.hadoopConfiguration
+  }
+
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists and useExisting is set to true, then the
+   * exisiting directory will be used. Otherwise an exception will be thrown to
+   * prevent accidental overriding of checkpoint files in the existing directory.
    */
   def setCheckpointDir(dir: String, useExisting: Boolean) {
     sc.setCheckpointDir(dir, useExisting)
   }
 
   /**
-   * Set the directory under which RDDs are going to be checkpointed. This method will
-   * create this directory and will throw an exception of the path already exists (to avoid
-   * overwriting existing files may be overwritten). The directory will be deleted on exit
-   * if indicated.
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists, an exception will be thrown to prevent accidental
+   * overriding of checkpoint files.
    */
   def setCheckpointDir(dir: String) {
     sc.setCheckpointDir(dir)

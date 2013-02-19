@@ -1,7 +1,7 @@
 package spark
 
 import java.io._
-import java.net.{NetworkInterface, InetAddress, URL, URI}
+import java.net._
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
 import org.apache.hadoop.conf.Configuration
@@ -10,6 +10,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.io.Source
 import com.google.common.io.Files
+import com.google.common.util.concurrent.ThreadFactoryBuilder
+import scala.Some
+import spark.serializer.SerializerInstance
 
 /**
  * Various utility methods used by Spark.
@@ -111,20 +114,6 @@ private object Utils extends Logging {
     }
   }
 
-  /** Copy a file on the local file system */
-  def copyFile(source: File, dest: File) {
-    val in = new FileInputStream(source)
-    val out = new FileOutputStream(dest)
-    copyStream(in, out, true)
-  }
-
-  /** Download a file from a given URL to the local filesystem */
-  def downloadFile(url: URL, localPath: String) {
-    val in = url.openStream()
-    val out = new FileOutputStream(localPath)
-    Utils.copyStream(in, out, true)
-  }
-
   /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
@@ -201,7 +190,7 @@ private object Utils extends Logging {
       Utils.execute(Seq("tar", "-xf", filename), targetDir)
     }
     // Make the file executable - That's necessary for scripts
-    FileUtil.chmod(filename, "a+x")
+    FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
   }
 
   /**
@@ -251,7 +240,8 @@ private object Utils extends Logging {
         // Address resolves to something like 127.0.1.1, which happens on Debian; try to find
         // a better address using the local network interfaces
         for (ni <- NetworkInterface.getNetworkInterfaces) {
-          for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress && !addr.isLoopbackAddress) {
+          for (addr <- ni.getInetAddresses if !addr.isLinkLocalAddress &&
+               !addr.isLoopbackAddress && addr.isInstanceOf[Inet4Address]) {
             // We've found an address that looks reasonable!
             logWarning("Your hostname, " + InetAddress.getLocalHost.getHostName + " resolves to" +
               " a loopback address: " + address.getHostAddress + "; using " + addr.getHostAddress +
@@ -286,29 +276,14 @@ private object Utils extends Logging {
     customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
   }
 
-  /**
-   * Returns a standard ThreadFactory except all threads are daemons.
-   */
-  private def newDaemonThreadFactory: ThreadFactory = {
-    new ThreadFactory {
-      def newThread(r: Runnable): Thread = {
-        var t = Executors.defaultThreadFactory.newThread (r)
-        t.setDaemon (true)
-        return t
-      }
-    }
-  }
+  private[spark] val daemonThreadFactory: ThreadFactory =
+    new ThreadFactoryBuilder().setDaemon(true).build()
 
   /**
    * Wrapper over newCachedThreadPool.
    */
-  def newDaemonCachedThreadPool(): ThreadPoolExecutor = {
-    var threadPool = Executors.newCachedThreadPool.asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory (newDaemonThreadFactory)
-
-    return threadPool
-  }
+  def newDaemonCachedThreadPool(): ThreadPoolExecutor =
+    Executors.newCachedThreadPool(daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
   /**
    * Return the string to tell how long has passed in seconds. The passing parameter should be in
@@ -321,13 +296,8 @@ private object Utils extends Logging {
   /**
    * Wrapper over newFixedThreadPool.
    */
-  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor = {
-    var threadPool = Executors.newFixedThreadPool(nThreads).asInstanceOf[ThreadPoolExecutor]
-
-    threadPool.setThreadFactory(newDaemonThreadFactory)
-
-    return threadPool
-  }
+  def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor =
+    Executors.newFixedThreadPool(nThreads, daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
   /**
    * Delete a file or directory and its contents recursively.
@@ -462,5 +432,26 @@ private object Utils extends Logging {
       }
     }
     "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
+  }
+
+  /**
+   * Try to find a free port to bind to on the local host. This should ideally never be needed,
+   * except that, unfortunately, some of the networking libraries we currently rely on (e.g. Spray)
+   * don't let users bind to port 0 and then figure out which free port they actually bound to.
+   * We work around this by binding a ServerSocket and immediately unbinding it. This is *not*
+   * necessarily guaranteed to work, but it's the best we can do.
+   */
+  def findFreePort(): Int = {
+    val socket = new ServerSocket(0)
+    val portBound = socket.getLocalPort
+    socket.close()
+    portBound
+  }
+
+  /**
+   * Clone an object using a Spark serializer.
+   */
+  def clone[T](value: T, serializer: SerializerInstance): T = {
+    serializer.deserialize[T](serializer.serialize(value))
   }
 }

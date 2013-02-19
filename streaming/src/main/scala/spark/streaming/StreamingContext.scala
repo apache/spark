@@ -10,6 +10,8 @@ import spark.streaming.receivers.ActorReceiver
 import spark.streaming.receivers.ReceiverSupervisorStrategy
 import spark.storage.StorageLevel
 import spark.util.MetadataCleaner
+import spark.streaming.receivers.ActorReceiver
+
 
 import scala.collection.mutable.Queue
 
@@ -22,6 +24,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import java.util.UUID
+import twitter4j.Status
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -35,14 +38,14 @@ class StreamingContext private (
   ) extends Logging {
 
   /**
-   * Creates a StreamingContext using an existing SparkContext.
+   * Create a StreamingContext using an existing SparkContext.
    * @param sparkContext Existing SparkContext
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
   def this(sparkContext: SparkContext, batchDuration: Duration) = this(sparkContext, null, batchDuration)
 
   /**
-   * Creates a StreamingContext by providing the details necessary for creating a new SparkContext.
+   * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param frameworkName A name for your job, to display on the cluster web UI
    * @param batchDuration The time interval at which streaming data will be divided into batches
@@ -51,7 +54,7 @@ class StreamingContext private (
     this(StreamingContext.createNewSparkContext(master, frameworkName), null, batchDuration)
 
   /**
-   * Re-creates a StreamingContext from a checkpoint file.
+   * Re-create a StreamingContext from a checkpoint file.
    * @param path Path either to the directory that was specified as the checkpoint directory, or
    *             to the checkpoint file 'graph' or 'graph.bk'.
    */
@@ -66,7 +69,7 @@ class StreamingContext private (
 
   protected[streaming] val isCheckpointPresent = (cp_ != null)
 
-  val sc: SparkContext = {
+  protected[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
       new SparkContext(cp_.master, cp_.framework, cp_.sparkHome, cp_.jars)
     } else {
@@ -106,7 +109,12 @@ class StreamingContext private (
   protected[streaming] var scheduler: Scheduler = null
 
   /**
-   * Sets each DStreams in this context to remember RDDs it generated in the last given duration.
+   * Return the associated Spark context
+   */
+  def sparkContext = sc
+
+  /**
+   * Set each DStreams in this context to remember RDDs it generated in the last given duration.
    * DStreams remember RDDs only for a limited duration of time and releases them for garbage
    * collection. This method allows the developer to specify how to long to remember the RDDs (
    * if the developer wishes to query old data outside the DStream computation).
@@ -117,23 +125,20 @@ class StreamingContext private (
   }
 
   /**
-   * Sets the context to periodically checkpoint the DStream operations for master
-   * fault-tolerance. By default, the graph will be checkpointed every batch interval.
+   * Set the context to periodically checkpoint the DStream operations for master
+   * fault-tolerance. The graph will be checkpointed every batch interval.
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
-   * @param interval checkpoint interval
    */
-  def checkpoint(directory: String, interval: Duration = null) {
+  def checkpoint(directory: String) {
     if (directory != null) {
       sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
       checkpointDir = directory
-      checkpointDuration = interval
     } else {
       checkpointDir = null
-      checkpointDuration = null
     }
   }
 
-  protected[streaming] def getInitialCheckpoint(): Checkpoint = {
+  protected[streaming] def initialCheckpoint: Checkpoint = {
     if (isCheckpointPresent) cp_ else null
   }
 
@@ -143,7 +148,7 @@ class StreamingContext private (
    * Create an input stream with any arbitrary user implemented network receiver.
    * @param receiver Custom implementation of NetworkReceiver
    */
-  def pluggableNetworkStream[T: ClassManifest](
+  def networkStream[T: ClassManifest](
     receiver: NetworkReceiver[T]): DStream[T] = {
     val inputStream = new PluggableInputDStream[T](this,
       receiver)
@@ -166,52 +171,51 @@ class StreamingContext private (
     props: Props, name: String,
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
     supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy): DStream[T] = {
-    pluggableNetworkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
-  }                 	                                                                  
+    networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
+  }
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param hostname Zookeper hostname.
-   * @param port Zookeper port.
+   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
    * @param initialOffsets Optional initial offsets for each of the partitions to consume.
    * By default the value is pulled from zookeper.
-   * @param storageLevel RDD storage level. Defaults to memory-only.
+   * @param storageLevel  Storage level to use for storing the received objects
+   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
   def kafkaStream[T: ClassManifest](
-      hostname: String,
-      port: Int,
+      zkQuorum: String,
       groupId: String,
       topics: Map[String, Int],
       initialOffsets: Map[KafkaPartitionKey, Long] = Map[KafkaPartitionKey, Long](),
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
     ): DStream[T] = {
-    val inputStream = new KafkaInputDStream[T](this, hostname, port, groupId, topics, initialOffsets, storageLevel)
+    val inputStream = new KafkaInputDStream[T](this, zkQuorum, groupId, topics, initialOffsets, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }
 
   /**
-   * Create a input stream from network source hostname:port. Data is received using
-   * a TCP socket and the receive bytes is interpreted as UTF8 encoded \n delimited
+   * Create a input stream from TCP source hostname:port. Data is received using
+   * a TCP socket and the receive bytes is interpreted as UTF8 encoded `\n` delimited
    * lines.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
-  def networkTextStream(
+  def socketTextStream(
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[String] = {
-    networkStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
+    socketStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
   /**
-   * Create a input stream from network source hostname:port. Data is received using
+   * Create a input stream from TCP source hostname:port. Data is received using
    * a TCP socket and the receive bytes it interepreted as object using the given
    * converter.
    * @param hostname      Hostname to connect to for receiving data
@@ -220,7 +224,7 @@ class StreamingContext private (
    * @param storageLevel  Storage level to use for storing the received objects
    * @tparam T            Type of the objects received (after converting bytes to objects)
    */
-  def networkStream[T: ClassManifest](
+  def socketStream[T: ClassManifest](
       hostname: String,
       port: Int,
       converter: (InputStream) => Iterator[T],
@@ -232,7 +236,7 @@ class StreamingContext private (
   }
 
   /**
-   * Creates a input stream from a Flume source.
+   * Create a input stream from a Flume source.
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    * @param storageLevel  Storage level to use for storing the received objects
@@ -268,7 +272,7 @@ class StreamingContext private (
   }
 
   /**
-   * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
    * File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
@@ -287,7 +291,7 @@ class StreamingContext private (
   }
 
   /**
-   * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
    * @param directory HDFS directory to monitor for new file
    * @param filter Function to filter paths to process
@@ -306,9 +310,8 @@ class StreamingContext private (
     inputStream
   }
 
-
   /**
-   * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
    * as Text and input format as TextInputFormat). File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
@@ -318,17 +321,49 @@ class StreamingContext private (
   }
 
   /**
-   * Creates a input stream from an queue of RDDs. In each batch,
+   * Create a input stream that returns tweets received from Twitter.
+   * @param username Twitter username
+   * @param password Twitter password
+   * @param filters Set of filter strings to get only those tweets that match them
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def twitterStream(
+      username: String,
+      password: String,
+      filters: Seq[String],
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+    ): DStream[Status] = {
+    val inputStream = new TwitterInputDStream(this, username, password, filters, storageLevel)
+    registerInputStream(inputStream)
+    inputStream
+  }
+
+  /**
+   * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
-   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty
    * @tparam T         Type of objects in the RDD
    */
   def queueStream[T: ClassManifest](
       queue: Queue[RDD[T]],
-      oneAtATime: Boolean = true,
-      defaultRDD: RDD[T] = null
+      oneAtATime: Boolean = true
+    ): DStream[T] = {
+    queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
+  }
+
+  /**
+   * Create an input stream from a queue of RDDs. In each batch,
+   * it will process either one or all of the RDDs returned by the queue.
+   * @param queue      Queue of RDDs
+   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
+   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty. Set as null if no RDD should be returned when empty
+   * @tparam T         Type of objects in the RDD
+   */
+  def queueStream[T: ClassManifest](
+      queue: Queue[RDD[T]],
+      oneAtATime: Boolean,
+      defaultRDD: RDD[T]
     ): DStream[T] = {
     val inputStream = new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
     registerInputStream(inputStream)
@@ -343,7 +378,7 @@ class StreamingContext private (
   }
 
   /**
-   * Registers an input stream that will be started (InputDStream.start() called) to get the
+   * Register an input stream that will be started (InputDStream.start() called) to get the
    * input data.
    */
   def registerInputStream(inputStream: InputDStream[_]) {
@@ -351,7 +386,7 @@ class StreamingContext private (
   }
 
   /**
-   * Registers an output stream that will be computed every interval
+   * Register an output stream that will be computed every interval
    */
   def registerOutputStream(outputStream: DStream[_]) {
     graph.addOutputStream(outputStream)
@@ -369,7 +404,7 @@ class StreamingContext private (
   }
 
   /**
-   * Starts the execution of the streams.
+   * Start the execution of the streams.
    */
   def start() {
     if (checkpointDir != null && checkpointDuration == null && graph != null) {
@@ -397,7 +432,7 @@ class StreamingContext private (
   }
 
   /**
-   * Sstops the execution of the streams.
+   * Stop the execution of the streams.
    */
   def stop() {
     try {
@@ -424,7 +459,7 @@ object StreamingContext {
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second interval.
     if (MetadataCleaner.getDelaySeconds < 0) {
-      MetadataCleaner.setDelaySeconds(60)
+      MetadataCleaner.setDelaySeconds(3600)
     }
     new SparkContext(master, frameworkName)
   }

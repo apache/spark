@@ -4,6 +4,7 @@ An interactive shell.
 This file is designed to be launched as a PYTHONSTARTUP script.
 """
 import os
+import pyspark
 from pyspark.context import SparkContext
 
 
