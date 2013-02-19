@@ -24,6 +24,11 @@
       <artifactId>twitter4j-stream</artifactId>
       <version>3.0.3</version>
     </dependency>
+    <dependency>
+      <groupId>com.twitter</groupId>
+      <artifactId>algebird-core_2.9.2</artifactId>
+      <version>0.1.8</version>
+    </dependency>
 
     <dependency>
       <groupId>org.scalatest</groupId>
