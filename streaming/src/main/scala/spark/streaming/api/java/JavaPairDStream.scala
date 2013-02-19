@@ -15,11 +15,14 @@ import org.apache.hadoop.conf.Configuration
 import spark.api.java.JavaPairRDD
 import spark.storage.StorageLevel
 import com.google.common.base.Optional
+import spark.RDD
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val kManifiest: ClassManifest[K],
     implicit val vManifest: ClassManifest[V])
-    extends JavaDStreamLike[(K, V), JavaPairDStream[K, V]] {
+    extends JavaDStreamLike[(K, V), JavaPairDStream[K, V], JavaPairRDD[K, V]] {
+
+  override def wrapRDD(rdd: RDD[(K, V)]): JavaPairRDD[K, V] = JavaPairRDD.fromRDD(rdd)
 
   // =======================================================================
   // Methods common to all DStream's

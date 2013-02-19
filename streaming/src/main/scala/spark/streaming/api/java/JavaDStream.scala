@@ -4,6 +4,7 @@ import spark.streaming.{Duration, Time, DStream}
 import spark.api.java.function.{Function => JFunction}
 import spark.api.java.JavaRDD
 import spark.storage.StorageLevel
+import spark.RDD
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -26,7 +27,9 @@ import spark.storage.StorageLevel
  *  - A function that is used to generate an RDD after each time interval
  */
 class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassManifest[T])
-    extends JavaDStreamLike[T, JavaDStream[T]] {
+    extends JavaDStreamLike[T, JavaDStream[T], JavaRDD[T]] {
+
+  override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaDStream[T] =
