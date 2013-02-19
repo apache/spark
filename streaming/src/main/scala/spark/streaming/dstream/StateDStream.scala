@@ -48,8 +48,16 @@ class StateDStream[K: ClassManifest, V: ClassManifest, S: ClassManifest](
             //logDebug("Generating state RDD for time " + validTime)
             return Some(stateRDD)
           }
-          case None => {    // If parent RDD does not exist, then return old state RDD
-            return Some(prevStateRDD)
+          case None => {    // If parent RDD does not exist
+
+            // Re-apply the update function to the old state RDD
+            val updateFuncLocal = updateFunc
+            val finalFunc = (iterator: Iterator[(K, S)]) => {
+              val i = iterator.map(t => (t._1, Seq[V](), Option(t._2)))
+              updateFuncLocal(i)
+            }
+            val stateRDD = prevStateRDD.mapPartitions(finalFunc, preservePartitioning)
+            return Some(stateRDD)
           }
         }
       }

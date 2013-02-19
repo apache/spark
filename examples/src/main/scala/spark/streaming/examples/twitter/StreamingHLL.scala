@@ -4,6 +4,7 @@ import spark.streaming.{Seconds, StreamingContext}
 import spark.storage.StorageLevel
 import com.twitter.algebird.HyperLogLog._
 import com.twitter.algebird.HyperLogLogMonoid
+import spark.streaming.dstream.TwitterInputDStream
 
 /**
  * Example of using HyperLogLog monoid from Twitter's Algebird together with Spark Streaming's

@@ -3,9 +3,9 @@ package spark.streaming.util
 private[streaming]
 class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) => Unit) {
   
-  val minPollTime = 25L
+  private val minPollTime = 25L
   
-  val pollTime = {
+  private val pollTime = {
     if (period / 10.0 > minPollTime) {
       (period / 10.0).toLong
     } else {
@@ -13,11 +13,20 @@ class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) =>
     }  
   }
   
-  val thread = new Thread() {
+  private val thread = new Thread() {
     override def run() { loop }    
   }
   
-  var nextTime = 0L   
+  private var nextTime = 0L
+
+  def getStartTime(): Long = {
+    (math.floor(clock.currentTime.toDouble / period) + 1).toLong * period
+  }
+
+  def getRestartTime(originalStartTime: Long): Long = {
+    val gap = clock.currentTime - originalStartTime
+    (math.floor(gap.toDouble / period).toLong + 1) * period + originalStartTime
+  }
 
   def start(startTime: Long): Long = {
     nextTime = startTime
@@ -26,21 +35,14 @@ class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) =>
   }
 
   def start(): Long = {
-    val startTime = (math.floor(clock.currentTime.toDouble / period) + 1).toLong * period
-    start(startTime)
+    start(getStartTime())
   }
 
-  def restart(originalStartTime: Long): Long = {
-    val gap = clock.currentTime - originalStartTime
-    val newStartTime = (math.floor(gap.toDouble / period).toLong + 1) * period + originalStartTime
-    start(newStartTime)
-  }
-  
-  def stop() { 
+  def stop() {
     thread.interrupt() 
   }
   
-  def loop() {
+  private def loop() {
     try {
       while (true) {
         clock.waitTillTime(nextTime)

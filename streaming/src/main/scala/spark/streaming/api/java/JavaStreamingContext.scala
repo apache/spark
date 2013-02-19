@@ -53,27 +53,24 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param hostname Zookeper hostname.
-   * @param port Zookeper port.
+   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
    */
   def kafkaStream[T](
-    hostname: String,
-    port: Int,
+    zkQuorum: String,
     groupId: String,
     topics: JMap[String, JInt])
   : JavaDStream[T] = {
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    ssc.kafkaStream[T](hostname, port, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
+    ssc.kafkaStream[T](zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
   }
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param hostname Zookeper hostname.
-   * @param port Zookeper port.
+   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
@@ -81,8 +78,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * By default the value is pulled from zookeper.
    */
   def kafkaStream[T](
-    hostname: String,
-    port: Int,
+    zkQuorum: String,
     groupId: String,
     topics: JMap[String, JInt],
     initialOffsets: JMap[KafkaPartitionKey, JLong])
@@ -90,8 +86,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
     ssc.kafkaStream[T](
-      hostname,
-      port,
+      zkQuorum,
       groupId,
       Map(topics.mapValues(_.intValue()).toSeq: _*),
       Map(initialOffsets.mapValues(_.longValue()).toSeq: _*))
@@ -99,8 +94,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param hostname Zookeper hostname.
-   * @param port Zookeper port.
+   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
@@ -109,8 +103,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param storageLevel RDD storage level. Defaults to memory-only
    */
   def kafkaStream[T](
-    hostname: String,
-    port: Int,
+    zkQuorum: String,
     groupId: String,
     topics: JMap[String, JInt],
     initialOffsets: JMap[KafkaPartitionKey, JLong],
@@ -119,8 +112,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
     ssc.kafkaStream[T](
-      hostname,
-      port,
+      zkQuorum,
       groupId,
       Map(topics.mapValues(_.intValue()).toSeq: _*),
       Map(initialOffsets.mapValues(_.longValue()).toSeq: _*),
@@ -138,7 +130,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    */
   def networkTextStream(hostname: String, port: Int, storageLevel: StorageLevel)
   : JavaDStream[String] = {
-    ssc.networkTextStream(hostname, port, storageLevel)
+    ssc.socketTextStream(hostname, port, storageLevel)
   }
 
   /**
@@ -148,8 +140,8 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    */
-  def networkTextStream(hostname: String, port: Int): JavaDStream[String] = {
-    ssc.networkTextStream(hostname, port)
+  def socketTextStream(hostname: String, port: Int): JavaDStream[String] = {
+    ssc.socketTextStream(hostname, port)
   }
 
   /**
@@ -162,7 +154,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param storageLevel  Storage level to use for storing the received objects
    * @tparam T            Type of the objects received (after converting bytes to objects)
    */
-  def networkStream[T](
+  def socketStream[T](
       hostname: String,
       port: Int,
       converter: JFunction[InputStream, java.lang.Iterable[T]],
@@ -171,7 +163,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     def fn = (x: InputStream) => converter.apply(x).toIterator
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    ssc.networkStream(hostname, port, fn, storageLevel)
+    ssc.socketStream(hostname, port, fn, storageLevel)
   }
 
   /**
@@ -322,12 +314,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Sets the context to periodically checkpoint the DStream operations for master
-   * fault-tolerance. By default, the graph will be checkpointed every batch interval.
+   * fault-tolerance. The graph will be checkpointed every batch interval.
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
-   * @param interval checkpoint interval
    */
-  def checkpoint(directory: String, interval: Duration = null) {
-    ssc.checkpoint(directory, interval)
+  def checkpoint(directory: String) {
+    ssc.checkpoint(directory)
   }
 
   /**
