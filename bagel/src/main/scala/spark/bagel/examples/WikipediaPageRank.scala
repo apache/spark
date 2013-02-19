@@ -16,7 +16,7 @@ import scala.xml.{XML,NodeSeq}
 object WikipediaPageRank {
   def main(args: Array[String]) {
     if (args.length < 5) {
-      System.err.println("Usage: WikipediaPageRank <inputFile> <threshold> <numSplits> <host> <usePartitioner>")
+      System.err.println("Usage: WikipediaPageRank <inputFile> <threshold> <numPartitions> <host> <usePartitioner>")
       System.exit(-1)
     }
 
@@ -25,7 +25,7 @@ object WikipediaPageRank {
 
     val inputFile = args(0)
     val threshold = args(1).toDouble
-    val numSplits = args(2).toInt
+    val numPartitions = args(2).toInt
     val host = args(3)
     val usePartitioner = args(4).toBoolean
     val sc = new SparkContext(host, "WikipediaPageRank")
@@ -69,7 +69,7 @@ object WikipediaPageRank {
     val result =
         Bagel.run(
           sc, vertices, messages, combiner = new PRCombiner(),
-          numSplits = numSplits)(
+          numPartitions = numPartitions)(
           utils.computeWithCombiner(numVertices, epsilon))
 
     // Print the result

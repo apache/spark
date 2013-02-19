@@ -12,9 +12,10 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
     val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
-    assert(dups.distinct.count === 4)
-    assert(dups.distinct().collect === dups.distinct.collect)
-    assert(dups.distinct(2).collect === dups.distinct.collect)
+    assert(dups.distinct().count() === 4)
+    assert(dups.distinct.count === 4)  // Can distinct and count be called without parentheses?
+    assert(dups.distinct.collect === dups.distinct().collect)
+    assert(dups.distinct(2).collect === dups.distinct().collect)
     assert(nums.reduce(_ + _) === 10)
     assert(nums.fold(0)(_ + _) === 10)
     assert(nums.map(_.toString).collect().toList === List("1", "2", "3", "4"))
@@ -31,6 +32,15 @@ class RDDSuite extends FunSuite with LocalSparkContext {
       case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
     }
     assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))
+
+    val partitionSumsWithIndex = nums.mapPartitionsWithIndex {
+      case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
+    }
+    assert(partitionSumsWithIndex.collect().toList === List((0, 3), (1, 7)))
+
+    intercept[UnsupportedOperationException] {
+      nums.filter(_ > 5).reduce(_ + _)
+    }
   }
 
   test("SparkContext.union") {
@@ -92,12 +102,12 @@ class RDDSuite extends FunSuite with LocalSparkContext {
 
   test("caching with failures") {
     sc = new SparkContext("local", "test")
-    val onlySplit = new Split { override def index: Int = 0 }
+    val onlySplit = new Partition { override def index: Int = 0 }
     var shouldFail = true
     val rdd = new RDD[Int](sc, Nil) {
-      override def getSplits: Array[Split] = Array(onlySplit)
+      override def getPartitions: Array[Partition] = Array(onlySplit)
       override val getDependencies = List[Dependency[_]]()
-      override def compute(split: Split, context: TaskContext): Iterator[Int] = {
+      override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
         if (shouldFail) {
           throw new Exception("injected failure")
         } else {
@@ -117,7 +127,7 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val data = sc.parallelize(1 to 10, 10)
 
-    val coalesced1 = new CoalescedRDD(data, 2)
+    val coalesced1 = data.coalesce(2)
     assert(coalesced1.collect().toList === (1 to 10).toList)
     assert(coalesced1.glom().collect().map(_.toList).toList ===
       List(List(1, 2, 3, 4, 5), List(6, 7, 8, 9, 10)))
@@ -128,19 +138,19 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     assert(coalesced1.dependencies.head.asInstanceOf[NarrowDependency[_]].getParents(1).toList ===
       List(5, 6, 7, 8, 9))
 
-    val coalesced2 = new CoalescedRDD(data, 3)
+    val coalesced2 = data.coalesce(3)
     assert(coalesced2.collect().toList === (1 to 10).toList)
     assert(coalesced2.glom().collect().map(_.toList).toList ===
       List(List(1, 2, 3), List(4, 5, 6), List(7, 8, 9, 10)))
 
-    val coalesced3 = new CoalescedRDD(data, 10)
+    val coalesced3 = data.coalesce(10)
     assert(coalesced3.collect().toList === (1 to 10).toList)
     assert(coalesced3.glom().collect().map(_.toList).toList ===
       (1 to 10).map(x => List(x)).toList)
 
     // If we try to coalesce into more partitions than the original RDD, it should just
     // keep the original number of partitions.
-    val coalesced4 = new CoalescedRDD(data, 20)
+    val coalesced4 = data.coalesce(20)
     assert(coalesced4.collect().toList === (1 to 10).toList)
     assert(coalesced4.glom().collect().map(_.toList).toList ===
       (1 to 10).map(x => List(x)).toList)
@@ -163,8 +173,8 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     val data = sc.parallelize(1 to 10, 10)
     // Note that split number starts from 0, so > 8 means only 10th partition left.
     val prunedRdd = new PartitionPruningRDD(data, splitNum => splitNum > 8)
-    assert(prunedRdd.splits.size === 1)
-    val prunedData = prunedRdd.collect
+    assert(prunedRdd.partitions.size === 1)
+    val prunedData = prunedRdd.collect()
     assert(prunedData.size === 1)
     assert(prunedData(0) === 10)
   }

@@ -1,0 +1,40 @@
+@(app: spark.deploy.master.ApplicationInfo)
+
+@spark.common.html.layout(title = "Application Details") {
+      
+  <!-- Application Details -->
+  <div class="row">
+    <div class="span12">
+      <ul class="unstyled">
+        <li><strong>ID:</strong> @app.id</li>
+        <li><strong>Description:</strong> @app.desc.name</li>
+        <li><strong>User:</strong> @app.desc.user</li>
+        <li><strong>Cores:</strong> 
+          @app.desc.cores 
+          (@app.coresGranted Granted 
+          @if(app.desc.cores == Integer.MAX_VALUE) {
+
+          } else {
+            , @app.coresLeft
+          }
+          )
+        </li>
+        <li><strong>Memory per Slave:</strong> @app.desc.memoryPerSlave</li>
+        <li><strong>Submit Date:</strong> @app.submitDate</li>
+        <li><strong>State:</strong> @app.state</li>
+      </ul>
+    </div>
+  </div>
+  
+  <hr/>
+  
+  <!-- Executors -->
+  <div class="row">
+    <div class="span12">
+      <h3> Executor Summary </h3>
+      <br/>
+      @executors_table(app.executors.values.toList)
+    </div>
+  </div>
+      
+}

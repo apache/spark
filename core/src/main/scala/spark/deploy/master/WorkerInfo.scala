@@ -18,6 +18,8 @@ private[spark] class WorkerInfo(
   var coresUsed = 0
   var memoryUsed = 0
 
+  var lastHeartbeat = System.currentTimeMillis()
+
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 
@@ -35,8 +37,8 @@ private[spark] class WorkerInfo(
     }
   }
 
-  def hasExecutor(job: JobInfo): Boolean = {
-    executors.values.exists(_.job == job)
+  def hasExecutor(app: ApplicationInfo): Boolean = {
+    executors.values.exists(_.application == app)
   }
 
   def webUiAddress : String = {

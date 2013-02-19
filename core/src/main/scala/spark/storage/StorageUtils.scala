@@ -1,6 +1,6 @@
 package spark.storage
 
-import spark.SparkContext
+import spark.{Utils, SparkContext}
 import BlockManagerMasterActor.BlockStatus
 
 private[spark]
@@ -22,8 +22,13 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
 }
 
 case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
-  numPartitions: Int, memSize: Long, diskSize: Long)
-
+  numCachedPartitions: Int, numPartitions: Int, memSize: Long, diskSize: Long) {
+  override def toString = {
+    import Utils.memoryBytesToString
+    "RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; DiskSize: %s".format(name, id,
+      storageLevel.toString, numCachedPartitions, numPartitions, memoryBytesToString(memSize), memoryBytesToString(diskSize))
+  }
+}
 
 /* Helper methods for storage-related objects */
 private[spark]
@@ -38,8 +43,6 @@ object StorageUtils {
   /* Given a list of BlockStatus objets, returns information for each RDD */ 
   def rddInfoFromBlockStatusList(infos: Map[String, BlockStatus], 
     sc: SparkContext) : Array[RDDInfo] = {
-    // Find all RDD Blocks (ignore broadcast variables)
-    val rddBlocks = infos.filterKeys(_.startsWith("rdd"))
 
     // Group by rddId, ignore the partition name
     val groupedRddBlocks = infos.groupBy { case(k, v) =>
@@ -56,10 +59,11 @@ object StorageUtils {
       // Find the id of the RDD, e.g. rdd_1 => 1
       val rddId = rddKey.split("_").last.toInt
       // Get the friendly name for the rdd, if available.
-      val rddName = Option(sc.persistentRdds(rddId).name).getOrElse(rddKey)
-      val rddStorageLevel = sc.persistentRdds(rddId).getStorageLevel
-      
-      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, memSize, diskSize)
+      val rdd = sc.persistentRdds(rddId)
+      val rddName = Option(rdd.name).getOrElse(rddKey)
+      val rddStorageLevel = rdd.getStorageLevel
+
+      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, rdd.partitions.size, memSize, diskSize)
     }.toArray
   }
 

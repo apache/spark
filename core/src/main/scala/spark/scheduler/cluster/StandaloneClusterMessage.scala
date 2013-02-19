@@ -37,3 +37,6 @@ object StatusUpdate {
 // Internal messages in driver
 private[spark] case object ReviveOffers extends StandaloneClusterMessage
 private[spark] case object StopDriver extends StandaloneClusterMessage
+
+private[spark] case class RemoveExecutor(executorId: String, reason: String)
+  extends StandaloneClusterMessage

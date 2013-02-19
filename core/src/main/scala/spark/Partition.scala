@@ -3,7 +3,7 @@ package spark
 /**
  * A partition of an RDD.
  */
-trait Split extends Serializable {
+trait Partition extends Serializable {
   /**
    * Get the split's index within its parent RDD
    */

@@ -457,7 +457,7 @@ extends Serializable {
     ): DStream[(K, (Seq[V], Seq[W]))] = {
 
     val cgd = new CoGroupedDStream[K](
-      Seq(self.asInstanceOf[DStream[(_, _)]], other.asInstanceOf[DStream[(_, _)]]),
+      Seq(self.asInstanceOf[DStream[(K, _)]], other.asInstanceOf[DStream[(K, _)]]),
       partitioner
     )
     val pdfs = new PairDStreamFunctions[K, Seq[Seq[_]]](cgd)(

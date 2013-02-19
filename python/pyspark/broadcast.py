@@ -37,12 +37,3 @@ class Broadcast(object):
     def __reduce__(self):
         self._pickle_registry.add(self)
         return (_from_id, (self.bid, ))
-
-
-def _test():
-    import doctest
-    doctest.testmod()
-
-
-if __name__ == "__main__":
-    _test()

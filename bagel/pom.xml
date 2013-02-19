@@ -45,11 +45,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <activation>
-        <property>
-          <name>!hadoopVersion</name>
-        </property>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
@@ -77,12 +72,6 @@
     </profile>
     <profile>
       <id>hadoop2</id>
-      <activation>
-        <property>
-          <name>hadoopVersion</name>
-          <value>2</value>
-        </property>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>

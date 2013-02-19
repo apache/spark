@@ -2,14 +2,14 @@ package spark.scheduler.cluster
 
 import spark.{Utils, Logging, SparkContext}
 import spark.deploy.client.{Client, ClientListener}
-import spark.deploy.{Command, JobDescription}
+import spark.deploy.{Command, ApplicationDescription}
 import scala.collection.mutable.HashMap
 
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
-    jobName: String)
+    appName: String)
   extends StandaloneSchedulerBackend(scheduler, sc.env.actorSystem)
   with ClientListener
   with Logging {
@@ -20,16 +20,6 @@ private[spark] class SparkDeploySchedulerBackend(
 
   val maxCores = System.getProperty("spark.cores.max", Int.MaxValue.toString).toInt
 
-  // Memory used by each executor (in megabytes)
-  val executorMemory = {
-    if (System.getenv("SPARK_MEM") != null) {
-      Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
-      // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    } else {
-      512
-    }
-  }
-
   override def start() {
     super.start()
 
@@ -39,10 +29,11 @@ private[spark] class SparkDeploySchedulerBackend(
       StandaloneSchedulerBackend.ACTOR_NAME)
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
-    val sparkHome = sc.getSparkHome().getOrElse(throw new IllegalArgumentException("must supply spark home for spark standalone"))
-    val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command, sparkHome)
+    val sparkHome = sc.getSparkHome().getOrElse(
+      throw new IllegalArgumentException("must supply spark home for spark standalone"))
+    val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome)
 
-    client = new Client(sc.env.actorSystem, master, jobDesc, this)
+    client = new Client(sc.env.actorSystem, master, appDesc, this)
     client.start()
   }
 
@@ -55,8 +46,8 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def connected(jobId: String) {
-    logInfo("Connected to Spark cluster with job ID " + jobId)
+  override def connected(appId: String) {
+    logInfo("Connected to Spark cluster with app ID " + appId)
   }
 
   override def disconnected() {
@@ -77,6 +68,6 @@ private[spark] class SparkDeploySchedulerBackend(
       case None => SlaveLost(message)
     }
     logInfo("Executor %s removed: %s".format(executorId, message))
-    scheduler.executorLost(executorId, reason)
+    removeExecutor(executorId, reason.toString)
   }
 }

@@ -32,11 +32,11 @@ private[spark] class PythonRDD[T: ClassManifest](
     this(parent, PipedRDD.tokenize(command), envVars, preservePartitoning, pythonExec,
       broadcastVars, accumulator)
 
-  override def getSplits = parent.splits
+  override def getPartitions = parent.partitions
 
   override val partitioner = if (preservePartitoning) parent.partitioner else None
 
-  override def compute(split: Split, context: TaskContext): Iterator[Array[Byte]] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val SPARK_HOME = new ProcessBuilder().environment().get("SPARK_HOME")
 
     val pb = new ProcessBuilder(Seq(pythonExec, SPARK_HOME + "/python/pyspark/worker.py"))
@@ -65,7 +65,7 @@ private[spark] class PythonRDD[T: ClassManifest](
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
         val dOut = new DataOutputStream(proc.getOutputStream)
-        // Split index
+        // Partition index
         dOut.writeInt(split.index)
         // sparkFilesDir
         PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dOut)
@@ -103,21 +103,27 @@ private[spark] class PythonRDD[T: ClassManifest](
 
       private def read(): Array[Byte] = {
         try {
-          val length = stream.readInt()
-          if (length != -1) {
-            val obj = new Array[Byte](length)
-            stream.readFully(obj)
-            obj
-          } else {
-            // We've finished the data section of the output, but we can still read some
-            // accumulator updates; let's do that, breaking when we get EOFException
-            while (true) {
-              val len2 = stream.readInt()
-              val update = new Array[Byte](len2)
-              stream.readFully(update)
-              accumulator += Collections.singletonList(update)
-            }
-            new Array[Byte](0)
+          stream.readInt() match {
+            case length if length > 0 =>
+              val obj = new Array[Byte](length)
+              stream.readFully(obj)
+              obj
+            case -2 =>
+              // Signals that an exception has been thrown in python
+              val exLength = stream.readInt()
+              val obj = new Array[Byte](exLength)
+              stream.readFully(obj)
+              throw new PythonException(new String(obj))
+            case -1 =>
+              // We've finished the data section of the output, but we can still read some
+              // accumulator updates; let's do that, breaking when we get EOFException
+              while (true) {
+                val len2 = stream.readInt()
+                val update = new Array[Byte](len2)
+                stream.readFully(update)
+                accumulator += Collections.singletonList(update)
+              }
+              new Array[Byte](0)
           }
         } catch {
           case eof: EOFException => {
@@ -140,14 +146,17 @@ private[spark] class PythonRDD[T: ClassManifest](
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
 
+/** Thrown for exceptions in user Python code. */
+private class PythonException(msg: String) extends Exception(msg)
+
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
  * This is used by PySpark's shuffle operations.
  */
 private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
   RDD[(Array[Byte], Array[Byte])](prev) {
-  override def getSplits = prev.splits
-  override def compute(split: Split, context: TaskContext) =
+  override def getPartitions = prev.partitions
+  override def compute(split: Partition, context: TaskContext) =
     prev.iterator(split, context).grouped(2).map {
       case Seq(a, b) => (a, b)
       case x          => throw new Exception("PairwiseRDD: unexpected value: " + x)
@@ -229,6 +238,11 @@ private[spark] object PythonRDD {
   }
 
   def writeIteratorToPickleFile[T](items: java.util.Iterator[T], filename: String) {
+    import scala.collection.JavaConverters._
+    writeIteratorToPickleFile(items.asScala, filename)
+  }
+
+  def writeIteratorToPickleFile[T](items: Iterator[T], filename: String) {
     val file = new DataOutputStream(new FileOutputStream(filename))
     for (item <- items) {
       writeAsPickle(item, file)
@@ -236,8 +250,10 @@ private[spark] object PythonRDD {
     file.close()
   }
 
-  def takePartition[T](rdd: RDD[T], partition: Int): java.util.Iterator[T] =
-    rdd.context.runJob(rdd, ((x: Iterator[T]) => x), Seq(partition), true).head
+  def takePartition[T](rdd: RDD[T], partition: Int): Iterator[T] = {
+    implicit val cm : ClassManifest[T] = rdd.elementClassManifest
+    rdd.context.runJob(rdd, ((x: Iterator[T]) => x.toArray), Seq(partition), true).head.iterator
+  }
 }
 
 private object Pickle {
