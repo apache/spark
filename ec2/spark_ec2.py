@@ -179,7 +179,7 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.cluster_type == "mesos":
       master_group.authorize('tcp', 38090, 38090, '0.0.0.0/0')
     if opts.ganglia:
-      master_group.authorize('tcp', 80, 80, '0.0.0.0/0')
+      master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
   if slave_group.rules == []: # Group was just now created
     slave_group.authorize(src_group=master_group)
     slave_group.authorize(src_group=slave_group)
