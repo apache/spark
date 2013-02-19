@@ -57,6 +57,7 @@ trait JavaTestBase extends TestSuiteBase {
 }
 
 object JavaTestUtils extends JavaTestBase {
+  override def maxWaitTimeMillis = 20000
 
 }
 

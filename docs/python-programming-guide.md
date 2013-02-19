@@ -87,7 +87,7 @@ By default, the `pyspark` shell creates SparkContext that runs jobs locally.
 To connect to a non-local cluster, set the `MASTER` environment variable.
 For example, to use the `pyspark` shell with a [standalone Spark cluster](spark-standalone.html):
 
-{% highlight shell %}
+{% highlight bash %}
 $ MASTER=spark://IP:PORT ./pyspark
 {% endhighlight %}
 

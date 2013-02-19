@@ -41,7 +41,8 @@ class KafkaInputDStream[T: ClassManifest](
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[T](ssc_ ) with Logging {
 
-  def createReceiver(): NetworkReceiver[T] = {
+
+  def getReceiver(): NetworkReceiver[T] = {
     new KafkaReceiver(zkQuorum,  groupId, topics, initialOffsets, storageLevel)
         .asInstanceOf[NetworkReceiver[T]]
   }
@@ -73,7 +74,7 @@ class KafkaReceiver(zkQuorum: String, groupId: String,
 
     logInfo("Starting Kafka Consumer Stream with group: " + groupId)
     logInfo("Initial offsets: " + initialOffsets.toString)
-    
+
     // Zookeper connection properties
     val props = new Properties()
     props.put("zk.connect", zkQuorum)
@@ -104,7 +105,7 @@ class KafkaReceiver(zkQuorum: String, groupId: String,
     offsets.foreach { case(key, offset) =>
       val topicDirs = new ZKGroupTopicDirs(key.groupId, key.topic)
       val partitionName = key.brokerId + "-" + key.partId
-      updatePersistentPath(consumerConnector.zkClient, 
+      updatePersistentPath(consumerConnector.zkClient,
         topicDirs.consumerOffsetDir + "/" + partitionName, offset.toString)
     }
   }
@@ -115,10 +116,10 @@ class KafkaReceiver(zkQuorum: String, groupId: String,
       logInfo("Starting MessageHandler.")
       stream.takeWhile { msgAndMetadata =>
         blockGenerator += msgAndMetadata.message
-
         // Keep on handling messages
+
         true
-      }  
+      }
     }
   }
 }

@@ -33,8 +33,9 @@ public class JavaAPISuite implements Serializable {
 
   @Before
   public void setUp() {
-    ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
-    ssc.checkpoint("checkpoint", new Duration(1000));
+      System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock");
+      ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+    ssc.checkpoint("checkpoint");
   }
 
   @After
@@ -45,7 +46,7 @@ public class JavaAPISuite implements Serializable {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port");
   }
-  /*
+
   @Test
   public void testCount() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -129,29 +130,6 @@ public class JavaAPISuite implements Serializable {
     JavaDStream windowed = stream.window(new Duration(4000), new Duration(2000));
     JavaTestUtils.attachTestOutputStream(windowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 8, 4);
-
-    assertOrderInvariantEquals(expected, result);
-  }
-
-  @Test
-  public void testTumble() {
-    List<List<Integer>> inputData = Arrays.asList(
-        Arrays.asList(1,2,3),
-        Arrays.asList(4,5,6),
-        Arrays.asList(7,8,9),
-        Arrays.asList(10,11,12),
-        Arrays.asList(13,14,15),
-        Arrays.asList(16,17,18));
-
-    List<List<Integer>> expected = Arrays.asList(
-        Arrays.asList(1,2,3,4,5,6),
-        Arrays.asList(7,8,9,10,11,12),
-        Arrays.asList(13,14,15,16,17,18));
-
-    JavaDStream stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaDStream windowed = stream.tumble(new Duration(2000));
-    JavaTestUtils.attachTestOutputStream(windowed);
-    List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 6, 3);
 
     assertOrderInvariantEquals(expected, result);
   }
@@ -434,7 +412,7 @@ public class JavaAPISuite implements Serializable {
 
     assertOrderInvariantEquals(expected, result);
   }
-  */
+
   /*
    * Performs an order-invariant comparison of lists representing two RDD streams. This allows
    * us to account for ordering variation within individual RDD's which occurs during windowing.
@@ -450,7 +428,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(expected, actual);
   }
 
-  /*
+
   // PairDStream Functions
   @Test
   public void testPairFilter() {
@@ -583,50 +561,73 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void testCountByKey() {
-    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+  public void testCountByValue() {
+    List<List<String>> inputData = Arrays.asList(
+      Arrays.asList("hello", "world"),
+      Arrays.asList("hello", "moon"),
+      Arrays.asList("hello"));
 
     List<List<Tuple2<String, Long>>> expected = Arrays.asList(
-        Arrays.asList(
-            new Tuple2<String, Long>("california", 2L),
-            new Tuple2<String, Long>("new york", 2L)),
-        Arrays.asList(
-            new Tuple2<String, Long>("california", 2L),
-            new Tuple2<String, Long>("new york", 2L)));
+      Arrays.asList(
+              new Tuple2<String, Long>("hello", 1L),
+              new Tuple2<String, Long>("world", 1L)),
+      Arrays.asList(
+              new Tuple2<String, Long>("hello", 1L),
+              new Tuple2<String, Long>("moon", 1L)),
+      Arrays.asList(
+              new Tuple2<String, Long>("hello", 1L)));
 
-    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(
-        ssc, inputData, 1);
-    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
-
-    JavaPairDStream<String, Long> counted = pairStream.countByKey();
+    JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaPairDStream<String, Long> counted = stream.countByValue();
     JavaTestUtils.attachTestOutputStream(counted);
-    List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
     Assert.assertEquals(expected, result);
   }
 
   @Test
   public void testGroupByKeyAndWindow() {
-    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
 
-    List<List<Tuple2<String, List<String>>>> expected = Arrays.asList(
-        Arrays.asList(new Tuple2<String, List<String>>("california", Arrays.asList("dodgers", "giants")),
-          new Tuple2<String, List<String>>("new york", Arrays.asList("yankees", "mets"))),
-        Arrays.asList(new Tuple2<String, List<String>>("california",
-            Arrays.asList("sharks", "ducks", "dodgers", "giants")),
-            new Tuple2<String, List<String>>("new york", Arrays.asList("rangers", "islanders", "yankees", "mets"))),
-        Arrays.asList(new Tuple2<String, List<String>>("california", Arrays.asList("sharks", "ducks")),
-            new Tuple2<String, List<String>>("new york", Arrays.asList("rangers", "islanders"))));
+    List<List<Tuple2<String, List<Integer>>>> expected = Arrays.asList(
+      Arrays.asList(
+        new Tuple2<String, List<Integer>>("california", Arrays.asList(1, 3)),
+        new Tuple2<String, List<Integer>>("new york", Arrays.asList(1, 4))
+      ),
+      Arrays.asList(
+        new Tuple2<String, List<Integer>>("california", Arrays.asList(1, 3, 5, 5)),
+        new Tuple2<String, List<Integer>>("new york", Arrays.asList(1, 1, 3, 4))
+      ),
+      Arrays.asList(
+        new Tuple2<String, List<Integer>>("california", Arrays.asList(5, 5)),
+        new Tuple2<String, List<Integer>>("new york", Arrays.asList(1, 3))
+      )
+    );
 
-    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, List<String>> groupWindowed =
+    JavaPairDStream<String, List<Integer>> groupWindowed =
         pairStream.groupByKeyAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(groupWindowed);
-    List<List<Tuple2<String, List<String>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
+    List<List<Tuple2<String, List<Integer>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    assert(result.size() == expected.size());
+    for (int i = 0; i < result.size(); i++) {
+      assert(convert(result.get(i)).equals(convert(expected.get(i))));
+    }
+  }
+
+  private HashSet<Tuple2<String, HashSet<Integer>>> convert(List<Tuple2<String, List<Integer>>> listOfTuples) {
+    List<Tuple2<String, HashSet<Integer>>> newListOfTuples = new ArrayList<Tuple2<String, HashSet<Integer>>>();
+    for (Tuple2<String, List<Integer>> tuple: listOfTuples) {
+      newListOfTuples.add(convert(tuple));
+    }
+    return new HashSet<Tuple2<String, HashSet<Integer>>>(newListOfTuples);
+  }
+
+  private Tuple2<String, HashSet<Integer>> convert(Tuple2<String, List<Integer>> tuple) {
+    return new Tuple2<String, HashSet<Integer>>(tuple._1(), new HashSet<Integer>(tuple._2()));
   }
 
   @Test
@@ -711,26 +712,28 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void testCountByKeyAndWindow() {
-    List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
+  public void testCountByValueAndWindow() {
+    List<List<String>> inputData = Arrays.asList(
+        Arrays.asList("hello", "world"),
+        Arrays.asList("hello", "moon"),
+        Arrays.asList("hello"));
 
     List<List<Tuple2<String, Long>>> expected = Arrays.asList(
         Arrays.asList(
-            new Tuple2<String, Long>("california", 2L),
-            new Tuple2<String, Long>("new york", 2L)),
+            new Tuple2<String, Long>("hello", 1L),
+            new Tuple2<String, Long>("world", 1L)),
         Arrays.asList(
-            new Tuple2<String, Long>("california", 4L),
-            new Tuple2<String, Long>("new york", 4L)),
+            new Tuple2<String, Long>("hello", 2L),
+            new Tuple2<String, Long>("world", 1L),
+            new Tuple2<String, Long>("moon", 1L)),
         Arrays.asList(
-            new Tuple2<String, Long>("california", 2L),
-            new Tuple2<String, Long>("new york", 2L)));
+            new Tuple2<String, Long>("hello", 2L),
+            new Tuple2<String, Long>("moon", 1L)));
 
-    JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(
+    JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(
         ssc, inputData, 1);
-    JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
-
     JavaPairDStream<String, Long> counted =
-        pairStream.countByKeyAndWindow(new Duration(2000), new Duration(1000));
+      stream.countByValueAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
@@ -897,7 +900,7 @@ public class JavaAPISuite implements Serializable {
 
     Assert.assertEquals(expected, result);
   }
-  */
+
   @Test
   public void testCheckpointMasterRecovery() throws InterruptedException {
     List<List<String>> inputData = Arrays.asList(
@@ -912,7 +915,7 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(8,7));
 
     File tempDir = Files.createTempDir();
-    ssc.checkpoint(tempDir.getAbsolutePath(), new Duration(1000));
+    ssc.checkpoint(tempDir.getAbsolutePath());
 
     JavaDStream stream = JavaCheckpointTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaDStream letterCount = stream.map(new Function<String, Integer>() {
@@ -964,7 +967,7 @@ public class JavaAPISuite implements Serializable {
     assertOrderInvariantEquals(expected, result1);
   }
   */
-  /*
+
   // Input stream tests. These mostly just test that we can instantiate a given InputStream with
   // Java arguments and assign it to a JavaDStream without producing type errors. Testing of the
   // InputStream functionality is deferred to the existing Scala tests.
@@ -972,15 +975,15 @@ public class JavaAPISuite implements Serializable {
   public void testKafkaStream() {
     HashMap<String, Integer> topics = Maps.newHashMap();
     HashMap<KafkaPartitionKey, Long> offsets = Maps.newHashMap();
-    JavaDStream test1 = ssc.kafkaStream("localhost", 12345, "group", topics);
-    JavaDStream test2 = ssc.kafkaStream("localhost", 12345, "group", topics, offsets);
-    JavaDStream test3 = ssc.kafkaStream("localhost", 12345, "group", topics, offsets,
+    JavaDStream test1 = ssc.kafkaStream("localhost:12345", "group", topics);
+    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics, offsets);
+    JavaDStream test3 = ssc.kafkaStream("localhost:12345", "group", topics, offsets,
       StorageLevel.MEMORY_AND_DISK());
   }
 
   @Test
   public void testNetworkTextStream() {
-    JavaDStream test = ssc.networkTextStream("localhost", 12345);
+    JavaDStream test = ssc.socketTextStream("localhost", 12345);
   }
 
   @Test
@@ -1000,7 +1003,7 @@ public class JavaAPISuite implements Serializable {
       }
     }
 
-    JavaDStream test = ssc.networkStream(
+    JavaDStream test = ssc.socketStream(
       "localhost",
       12345,
       new Converter(),
@@ -1026,5 +1029,5 @@ public class JavaAPISuite implements Serializable {
   public void testFileStream() {
     JavaPairDStream<String, String> foo =
       ssc.<String, String, SequenceFileInputFormat>fileStream("/tmp/foo");
-  }*/
+  }
 }

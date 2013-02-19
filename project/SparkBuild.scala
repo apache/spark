@@ -154,10 +154,7 @@ object SparkBuild extends Build {
   )
 
   def examplesSettings = sharedSettings ++ Seq(
-    name := "spark-examples",
-    libraryDependencies ++= Seq(
-      "org.twitter4j" % "twitter4j-stream" % "3.0.3"
-    )
+    name := "spark-examples"
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
@@ -166,7 +163,8 @@ object SparkBuild extends Build {
     name := "spark-streaming",
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile",
-      "com.github.sgroschupf" % "zkclient" % "0.1"
+      "com.github.sgroschupf" % "zkclient" % "0.1",
+      "org.twitter4j" % "twitter4j-stream" % "3.0.3"
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 

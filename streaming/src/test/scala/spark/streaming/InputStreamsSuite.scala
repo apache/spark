@@ -1,5 +1,11 @@
 package spark.streaming
 
+import akka.actor.Actor
+import akka.actor.IO
+import akka.actor.IOManager
+import akka.actor.Props
+import akka.util.ByteString
+
 import dstream.SparkFlumeEvent
 import java.net.{InetSocketAddress, SocketException, Socket, ServerSocket}
 import java.io.{File, BufferedWriter, OutputStreamWriter}
@@ -7,6 +13,7 @@ import java.util.concurrent.{TimeUnit, ArrayBlockingQueue}
 import collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import util.ManualClock
 import spark.storage.StorageLevel
+import spark.streaming.receivers.Receiver
 import spark.Logging
 import scala.util.Random
 import org.apache.commons.io.FileUtils
@@ -25,6 +32,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     
   System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
 
+  val testPort = 9999
+
   override def checkpointDir = "checkpoint"
 
   after {
@@ -35,13 +44,12 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
   test("network input stream") {
     // Start the server
-    val testPort = 9999
     val testServer = new TestServer(testPort)
     testServer.start()
 
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(master, framework, batchDuration)
-    val networkStream = ssc.networkTextStream("localhost", testPort, StorageLevel.MEMORY_AND_DISK)
+    val networkStream = ssc.socketTextStream("localhost", testPort, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String  ]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
@@ -95,7 +103,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
-
+    Thread.sleep(1000)
     val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", 33333));
     val client = SpecificRequestor.getClient(
       classOf[AvroSourceProtocol], transceiver);
@@ -133,26 +141,29 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
 
   test("file input stream") {
+    // Disable manual clock as FileInputDStream does not work with manual clock
+    System.clearProperty("spark.streaming.clock")
+
     // Set up the streaming context and input streams
     val testDir = Files.createTempDir()
     val ssc = new StreamingContext(master, framework, batchDuration)
-    val filestream = ssc.textFileStream(testDir.toString)
+    val fileStream = ssc.textFileStream(testDir.toString)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     def output = outputBuffer.flatMap(x => x)
-    val outputStream = new TestOutputStream(filestream, outputBuffer)
+    val outputStream = new TestOutputStream(fileStream, outputBuffer)
     ssc.registerOutputStream(outputStream)
     ssc.start()
 
     // Create files in the temporary directory so that Spark Streaming can read data from it
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
     val expectedOutput = input.map(_.toString)
     Thread.sleep(1000)
     for (i <- 0 until input.size) {
-      FileUtils.writeStringToFile(new File(testDir, i.toString), input(i).toString + "\n")
-      Thread.sleep(500)
-      clock.addToTime(batchDuration.milliseconds)
-      //Thread.sleep(100)
+      val file = new File(testDir, i.toString)
+      FileUtils.writeStringToFile(file, input(i).toString + "\n")
+      logInfo("Created file " + file)
+      Thread.sleep(batchDuration.milliseconds)
+      Thread.sleep(1000)
     }
     val startTime = System.currentTimeMillis()
     Thread.sleep(1000)
@@ -171,16 +182,68 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Verify whether all the elements received are as expected
     // (whether the elements were received one in each interval is not verified)
+    assert(output.toList === expectedOutput.toList)
+
+    FileUtils.deleteDirectory(testDir)
+
+    // Enable manual clock back again for other tests
+    System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+  }
+
+
+  test("actor input stream") {
+    // Start the server
+    val port = testPort
+    val testServer = new TestServer(port)
+    testServer.start()
+
+    // Set up the streaming context and input streams
+    val ssc = new StreamingContext(master, framework, batchDuration)
+    val networkStream = ssc.actorStream[String](Props(new TestActor(port)), "TestActor",
+      StorageLevel.MEMORY_AND_DISK) //Had to pass the local value of port to prevent from closing over entire scope
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+    val outputStream = new TestOutputStream(networkStream, outputBuffer)
+    def output = outputBuffer.flatMap(x => x)
+    ssc.registerOutputStream(outputStream)
+    ssc.start()
+
+    // Feed data to the server to send to the network receiver
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val input = 1 to 9
+    val expectedOutput = input.map(x => x.toString)
+    Thread.sleep(1000)
+    for (i <- 0 until input.size) {
+      testServer.send(input(i).toString)
+      Thread.sleep(500)
+      clock.addToTime(batchDuration.milliseconds)
+    }
+    Thread.sleep(1000)
+    logInfo("Stopping server")
+    testServer.stop()
+    logInfo("Stopping context")
+    ssc.stop()
+
+    // Verify whether data received was as expected
+    logInfo("--------------------------------")
+    logInfo("output.size = " + outputBuffer.size)
+    logInfo("output")
+    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("expected output.size = " + expectedOutput.size)
+    logInfo("expected output")
+    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    logInfo("--------------------------------")
+
+    // Verify whether all the elements received are as expected
+    // (whether the elements were received one in each interval is not verified)
     assert(output.size === expectedOutput.size)
     for (i <- 0 until output.size) {
-      assert(output(i).size === 1)
-      assert(output(i).head.toString === expectedOutput(i))
+      assert(output(i) === expectedOutput(i))
     }
-    FileUtils.deleteDirectory(testDir)
   }
 }
 
 
+/** This is server to test the network input stream */
 class TestServer(port: Int) extends Logging {
 
   val queue = new ArrayBlockingQueue[String](100)
@@ -237,5 +300,17 @@ object TestServer {
       Thread.sleep(1000)
       s.send("hello")
     }
+  }
+}
+
+class TestActor(port: Int) extends Actor with Receiver {
+
+  def bytesToString(byteString: ByteString) = byteString.utf8String
+
+  override def preStart = IOManager(context.system).connect(new InetSocketAddress(port))
+
+  def receive = {
+    case IO.Read(socket, bytes) =>
+      pushBlock(bytesToString(bytes))
   }
 }

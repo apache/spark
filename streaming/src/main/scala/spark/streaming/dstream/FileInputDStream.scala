@@ -21,19 +21,21 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
 
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
 
+  // Latest file mod time seen till any point of time
   private val lastModTimeFiles = new HashSet[String]()
   private var lastModTime = 0L
 
   @transient private var path_ : Path = null
   @transient private var fs_ : FileSystem = null
-  @transient private var files = new HashMap[Time, Array[String]]
+  @transient private[streaming] var files = new HashMap[Time, Array[String]]
 
   override def start() {
     if (newFilesOnly) {
-      lastModTime = System.currentTimeMillis()
+      lastModTime = graph.zeroTime.milliseconds
     } else {
       lastModTime = 0
     }
+    logDebug("LastModTime initialized to " + lastModTime + ", new files only = " + newFilesOnly)
   }
   
   override def stop() { }
@@ -43,38 +45,50 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
    * a union RDD out of them. Note that this maintains the list of files that were processed
    * in the latest modification time in the previous call to this method. This is because the
    * modification time returned by the FileStatus API seems to return times only at the
-   * granularity of seconds. Hence, new files may have the same modification time as the
-   * latest modification time in the previous call to this method and the list of files
-   * maintained is used to filter the one that have been processed.
+   * granularity of seconds. And new files may have the same modification time as the
+   * latest modification time in the previous call to this method yet was not reported in
+   * the previous call.
    */
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
+    assert(validTime.milliseconds >= lastModTime, "Trying to get new files for really old time [" + validTime + " < " + lastModTime)
+
     // Create the filter for selecting new files
     val newFilter = new PathFilter() {
+      // Latest file mod time seen in this round of fetching files and its corresponding files
       var latestModTime = 0L
       val latestModTimeFiles = new HashSet[String]()
 
       def accept(path: Path): Boolean = {
-        if (!filter(path)) {
+        if (!filter(path)) {  // Reject file if it does not satisfy filter
+          logDebug("Rejected by filter " + path)
           return false
-        } else {
+        } else {              // Accept file only if
           val modTime = fs.getFileStatus(path).getModificationTime()
-          if (modTime < lastModTime){
-            return false
+          logDebug("Mod time for " + path + " is " + modTime)
+          if (modTime < lastModTime) {
+            logDebug("Mod time less than last mod time")
+            return false  // If the file was created before the last time it was called
           } else if (modTime == lastModTime && lastModTimeFiles.contains(path.toString)) {
-            return false
+            logDebug("Mod time equal to last mod time, but file considered already")
+            return false  // If the file was created exactly as lastModTime but not reported yet
+          } else if (modTime > validTime.milliseconds) {
+            logDebug("Mod time more than valid time")
+            return false  // If the file was created after the time this function call requires
           }
           if (modTime > latestModTime) {
             latestModTime = modTime
             latestModTimeFiles.clear()
+            logDebug("Latest mod time updated to " + latestModTime)
           }
           latestModTimeFiles += path.toString
+          logDebug("Accepted " + path)
           return true
         }        
       }
     }
-
+    logDebug("Finding new files at time " + validTime + " for last mod time = " + lastModTime)
     val newFiles = fs.listStatus(path, newFilter).map(_.getPath.toString)
-    logInfo("New files: " + newFiles.mkString(", "))
+    logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
     if (newFiles.length > 0) {
       // Update the modification time and the files processed for that modification time
       if (lastModTime != newFilter.latestModTime) {
@@ -82,17 +96,21 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
         lastModTimeFiles.clear()
       }
       lastModTimeFiles ++= newFilter.latestModTimeFiles
+      logDebug("Last mod time updated to " + lastModTime)
     }
     files += ((validTime, newFiles))
     Some(filesToRDD(newFiles))
   }
 
-  /** Forget the old time-to-files mappings along with old RDDs */
-  protected[streaming] override def forgetOldMetadata(time: Time) {
-    super.forgetOldMetadata(time)
-    val filesToBeRemoved = files.filter(_._1 <= (time - rememberDuration))
-    files --= filesToBeRemoved.keys
-    logInfo("Forgot " + filesToBeRemoved.size + " files from " + this)
+  /** Clear the old time-to-files mappings along with old RDDs */
+  protected[streaming] override def clearOldMetadata(time: Time) {
+    super.clearOldMetadata(time)
+    val oldFiles = files.filter(_._1 <= (time - rememberDuration))
+    files --= oldFiles.keys
+    logInfo("Cleared " + oldFiles.size + " old files that were older than " +
+      (time - rememberDuration) + ": " + oldFiles.keys.mkString(", "))
+    logDebug("Cleared files are:\n" +
+      oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
   }
 
   /** Generate one RDD from an array of files */
@@ -128,7 +146,7 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
   private[streaming]
   class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
 
-     def hadoopFiles = data.asInstanceOf[HashMap[Time, Array[String]]]
+    def hadoopFiles = data.asInstanceOf[HashMap[Time, Array[String]]]
 
     override def update() {
       hadoopFiles.clear()
@@ -139,13 +157,19 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
 
     override def restore() {
       hadoopFiles.foreach {
-        case (time, files) => {
-          logInfo("Restoring Hadoop RDD for time " + time + " from files " +
-            files.mkString("[", ",", "]") )
-          files
-          generatedRDDs += ((time, filesToRDD(files)))
+        case (t, f) => {
+          // Restore the metadata in both files and generatedRDDs
+          logInfo("Restoring files for time " + t + " - " +
+            f.mkString("[", ", ", "]") )
+          files += ((t, f))
+          generatedRDDs += ((t, filesToRDD(f)))
         }
       }
+    }
+
+    override def toString() = {
+      "[\n" + hadoopFiles.size + " file sets\n" +
+        hadoopFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n") + "\n]"
     }
   }
 }

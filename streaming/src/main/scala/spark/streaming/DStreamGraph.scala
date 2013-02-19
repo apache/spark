@@ -11,17 +11,20 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   private val inputStreams = new ArrayBuffer[InputDStream[_]]()
   private val outputStreams = new ArrayBuffer[DStream[_]]()
 
-  private[streaming] var zeroTime: Time = null
-  private[streaming] var batchDuration: Duration = null
-  private[streaming] var rememberDuration: Duration = null
-  private[streaming] var checkpointInProgress = false
+  var rememberDuration: Duration = null
+  var checkpointInProgress = false
 
-  private[streaming] def start(time: Time) {
+  var zeroTime: Time = null
+  var startTime: Time = null
+  var batchDuration: Duration = null
+
+  def start(time: Time) {
     this.synchronized {
       if (zeroTime != null) {
         throw new Exception("DStream graph computation already started")
       }
       zeroTime = time
+      startTime = time
       outputStreams.foreach(_.initialize(zeroTime))
       outputStreams.foreach(_.remember(rememberDuration))
       outputStreams.foreach(_.validate)
@@ -29,19 +32,23 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  private[streaming] def stop() {
+  def restart(time: Time) {
+    this.synchronized { startTime = time }
+  }
+
+  def stop() {
     this.synchronized {
       inputStreams.par.foreach(_.stop())
     }
   }
 
-  private[streaming] def setContext(ssc: StreamingContext) {
+  def setContext(ssc: StreamingContext) {
     this.synchronized {
       outputStreams.foreach(_.setContext(ssc))
     }
   }
 
-  private[streaming] def setBatchDuration(duration: Duration) {
+  def setBatchDuration(duration: Duration) {
     this.synchronized {
       if (batchDuration != null) {
         throw new Exception("Batch duration already set as " + batchDuration +
@@ -51,59 +58,68 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     batchDuration = duration
   }
 
-  private[streaming] def remember(duration: Duration) {
+  def remember(duration: Duration) {
     this.synchronized {
       if (rememberDuration != null) {
         throw new Exception("Batch duration already set as " + batchDuration +
           ". cannot set it again.")
       }
+      rememberDuration = duration
     }
-    rememberDuration = duration
   }
 
-  private[streaming] def addInputStream(inputStream: InputDStream[_]) {
+  def addInputStream(inputStream: InputDStream[_]) {
     this.synchronized {
       inputStream.setGraph(this)
       inputStreams += inputStream
     }
   }
 
-  private[streaming] def addOutputStream(outputStream: DStream[_]) {
+  def addOutputStream(outputStream: DStream[_]) {
     this.synchronized {
       outputStream.setGraph(this)
       outputStreams += outputStream
     }
   }
 
-  private[streaming] def getInputStreams() = this.synchronized { inputStreams.toArray }
+  def getInputStreams() = this.synchronized { inputStreams.toArray }
 
-  private[streaming] def getOutputStreams() = this.synchronized { outputStreams.toArray }
+  def getOutputStreams() = this.synchronized { outputStreams.toArray }
 
-  private[streaming] def generateRDDs(time: Time): Seq[Job] = {
+  def generateJobs(time: Time): Seq[Job] = {
     this.synchronized {
-      outputStreams.flatMap(outputStream => outputStream.generateJob(time))
+      logInfo("Generating jobs for time " + time)
+      val jobs = outputStreams.flatMap(outputStream => outputStream.generateJob(time))
+      logInfo("Generated " + jobs.length + " jobs for time " + time)
+      jobs
     }
   }
 
-  private[streaming] def forgetOldRDDs(time: Time) {
+  def clearOldMetadata(time: Time) {
     this.synchronized {
-      outputStreams.foreach(_.forgetOldMetadata(time))
+      logInfo("Clearing old metadata for time " + time)
+      outputStreams.foreach(_.clearOldMetadata(time))
+      logInfo("Cleared old metadata for time " + time)
     }
   }
 
-  private[streaming] def updateCheckpointData(time: Time) {
+  def updateCheckpointData(time: Time) {
     this.synchronized {
+      logInfo("Updating checkpoint data for time " + time)
       outputStreams.foreach(_.updateCheckpointData(time))
+      logInfo("Updated checkpoint data for time " + time)
     }
   }
 
-  private[streaming] def restoreCheckpointData() {
+  def restoreCheckpointData() {
     this.synchronized {
+      logInfo("Restoring checkpoint data")
       outputStreams.foreach(_.restoreCheckpointData())
+      logInfo("Restored checkpoint data")
     }
   }
 
-  private[streaming] def validate() {
+  def validate() {
     this.synchronized {
       assert(batchDuration != null, "Batch duration has not been set")
       //assert(batchDuration >= Milliseconds(100), "Batch duration of " + batchDuration + " is very low")

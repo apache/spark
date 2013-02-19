@@ -132,7 +132,7 @@ abstract class DStream[T: ClassManifest] (
 
     // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
     if (mustCheckpoint && checkpointDuration == null) {
-      checkpointDuration = slideDuration.max(Seconds(10))
+      checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt
       logInfo("Checkpoint interval automatically set to " + checkpointDuration)
     }
 
@@ -238,13 +238,15 @@ abstract class DStream[T: ClassManifest] (
     dependencies.foreach(_.remember(parentRememberDuration))
   }
 
-  /** This method checks whether the 'time' is valid wrt slideDuration for generating RDD */
+  /** Checks whether the 'time' is valid wrt slideDuration for generating RDD */
   protected def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
       throw new Exception (this + " has not been initialized")
     } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
+      logInfo("Time " + time + " is invalid as zeroTime is " + zeroTime + " and slideDuration is " + slideDuration + " and difference is " + (time - zeroTime))
       false
     } else {
+      logInfo("Time " + time + " is valid")
       true
     }
   }
@@ -292,7 +294,7 @@ abstract class DStream[T: ClassManifest] (
    * Generate a SparkStreaming job for the given time. This is an internal method that
    * should not be called directly. This default implementation creates a job
    * that materializes the corresponding RDD. Subclasses of DStream may override this
-   * (eg. ForEachDStream).
+   * to generate their own jobs.
    */
   protected[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
@@ -308,19 +310,18 @@ abstract class DStream[T: ClassManifest] (
   }
 
   /**
-   * Dereference RDDs that are older than rememberDuration.
+   * Clear metadata that are older than `rememberDuration` of this DStream.
+   * This is an internal method that should not be called directly. This default
+   * implementation clears the old generated RDDs. Subclasses of DStream may override
+   * this to clear their own metadata along with the generated RDDs.
    */
-  protected[streaming] def forgetOldMetadata(time: Time) {
+  protected[streaming] def clearOldMetadata(time: Time) {
     var numForgotten = 0
-    generatedRDDs.keys.foreach(t => {
-      if (t <= (time - rememberDuration)) {
-        generatedRDDs.remove(t)
-        numForgotten += 1
-        logInfo("Forgot RDD of time " + t + " from " + this)
-      }
-    })
-    logInfo("Forgot " + numForgotten + " RDDs from " + this)
-    dependencies.foreach(_.forgetOldMetadata(time))
+    val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
+    generatedRDDs --= oldRDDs.keys
+    logInfo("Cleared " + oldRDDs.size + " RDDs that were older than " +
+      (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
+    dependencies.foreach(_.clearOldMetadata(time))
   }
 
   /* Adds metadata to the Stream while it is running. 
@@ -443,6 +444,15 @@ abstract class DStream[T: ClassManifest] (
   def count(): DStream[Long] = this.map(_ => 1L).reduce(_ + _)
 
   /**
+   * Return a new DStream in which each RDD contains the counts of each distinct value in
+   * each RDD of this DStream. Hash partitioning is used to generate
+   * the RDDs with `numPartitions` partitions (Spark's default number of partitions if
+   * `numPartitions` not specified).
+   */
+  def countByValue(numPartitions: Int = ssc.sc.defaultParallelism): DStream[(T, Long)] =
+    this.map(x => (x, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
+
+  /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * this DStream will be registered as an output stream and therefore materialized.
    */
@@ -495,14 +505,16 @@ abstract class DStream[T: ClassManifest] (
   }
 
   /**
-   * Return a new DStream which is computed based on windowed batches of this DStream.
-   * The new DStream generates RDDs with the same interval as this DStream.
+   * Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream. The new DStream generates RDDs with
+   * the same interval as this DStream.
    * @param windowDuration width of the window; must be a multiple of this DStream's interval.
    */
   def window(windowDuration: Duration): DStream[T] = window(windowDuration, this.slideDuration)
 
   /**
-   * Return a new DStream which is computed based on windowed batches of this DStream.
+   * Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream.
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -514,27 +526,39 @@ abstract class DStream[T: ClassManifest] (
   }
 
   /**
-   * Return a new DStream which computed based on tumbling window on this DStream.
-   * This is equivalent to window(batchTime, batchTime).
-   * @param batchDuration tumbling window duration; must be a multiple of this DStream's
-   *                  batching interval
-   */
-  def tumble(batchDuration: Duration): DStream[T] = window(batchDuration, batchDuration)
-
-  /**
    * Return a new DStream in which each RDD has a single element generated by reducing all
-   * elements in a window over this DStream. windowDuration and slideDuration are as defined
-   * in the window() operation. This is equivalent to
-   * window(windowDuration, slideDuration).reduce(reduceFunc)
+   * elements in a sliding window over this DStream.
+   * @param reduceFunc associative reduce function
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
    */
   def reduceByWindow(
       reduceFunc: (T, T) => T,
       windowDuration: Duration,
       slideDuration: Duration
     ): DStream[T] = {
-    this.window(windowDuration, slideDuration).reduce(reduceFunc)
+    this.reduce(reduceFunc).window(windowDuration, slideDuration).reduce(reduceFunc)
   }
 
+  /**
+   * Return a new DStream in which each RDD has a single element generated by reducing all
+   * elements in a sliding window over this DStream. However, the reduction is done incrementally
+   * using the old window's reduced value :
+   *  1. reduce the new values that entered the window (e.g., adding new counts)
+   *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
+   *  This is more efficient than reduceByWindow without "inverse reduce" function.
+   *  However, it is applicable to only "invertible reduce functions".
+   * @param reduceFunc associative reduce function
+   * @param invReduceFunc inverse reduce function
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
+   */
   def reduceByWindow(
       reduceFunc: (T, T) => T,
       invReduceFunc: (T, T) => T,
@@ -548,11 +572,44 @@ abstract class DStream[T: ClassManifest] (
 
   /**
    * Return a new DStream in which each RDD has a single element generated by counting the number
-   * of elements in a window over this DStream. windowDuration and slideDuration are as defined in the
-   * window() operation. This is equivalent to window(windowDuration, slideDuration).count()
+   * of elements in a sliding window over this DStream. Hash partitioning is used to generate the RDDs with
+   * Spark's default number of partitions.
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
    */
   def countByWindow(windowDuration: Duration, slideDuration: Duration): DStream[Long] = {
     this.map(_ => 1L).reduceByWindow(_ + _, _ - _, windowDuration, slideDuration)
+  }
+
+  /**
+   * Return a new DStream in which each RDD contains the count of distinct elements in
+   * RDDs in a sliding window over this DStream. Hash partitioning is used to generate
+   * the RDDs with `numPartitions` partitions (Spark's default number of partitions if
+   * `numPartitions` not specified).
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
+   * @param numPartitions  number of partitions of each RDD in the new DStream.
+   */
+  def countByValueAndWindow(
+      windowDuration: Duration,
+      slideDuration: Duration,
+      numPartitions: Int = ssc.sc.defaultParallelism
+    ): DStream[(T, Long)] = {
+
+    this.map(x => (x, 1L)).reduceByKeyAndWindow(
+      (x: Long, y: Long) => x + y,
+      (x: Long, y: Long) => x - y,
+      windowDuration,
+      slideDuration,
+      numPartitions,
+      (x: (T, Long)) => x._2 != 0L
+    )
   }
 
   /**
@@ -572,16 +629,21 @@ abstract class DStream[T: ClassManifest] (
    * Return all the RDDs between 'fromTime' to 'toTime' (both included)
    */
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = {
-    val rdds = new ArrayBuffer[RDD[T]]()
-    var time = toTime.floor(slideDuration)
-    while (time >= zeroTime && time >= fromTime) {
-      getOrCompute(time) match {
-        case Some(rdd) => rdds += rdd
-        case None => //throw new Exception("Could not get RDD for time " + time)
-      }
-      time -= slideDuration
+    if (!(fromTime - zeroTime).isMultipleOf(slideDuration)) {
+      logWarning("fromTime (" + fromTime + ") is not a multiple of slideDuration (" + slideDuration + ")")
     }
-    rdds.toSeq
+    if (!(toTime - zeroTime).isMultipleOf(slideDuration)) {
+      logWarning("toTime (" + fromTime + ") is not a multiple of slideDuration (" + slideDuration + ")")
+    }
+    val alignedToTime = toTime.floor(slideDuration)
+    val alignedFromTime = fromTime.floor(slideDuration)
+
+    logInfo("Slicing from " + fromTime + " to " + toTime +
+      " (aligned to " + alignedFromTime + " and " + alignedToTime + ")")
+
+    alignedFromTime.to(alignedToTime, slideDuration).flatMap(time => {
+      if (time >= zeroTime) getOrCompute(time) else None
+    })
   }
 
   /**
