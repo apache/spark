@@ -415,6 +415,11 @@ def setup_standalone_cluster(master, slave_nodes, opts):
 def setup_spark_cluster(master, opts):
   ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
   ssh(master, opts, "spark-ec2/setup.sh")
+  if opts.cluster_type == "mesos":
+    print "Mesos cluster started at http://%s:8080" % master
+  elif opts.cluster_type == "standalone":
+    print "Spark standalone cluster started at http://%s:8080" % master
+
   if opts.ganglia:
     print "Ganglia started at http://%s:5080/ganglia" % master
 
