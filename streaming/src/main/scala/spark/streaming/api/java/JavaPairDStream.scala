@@ -15,6 +15,7 @@ import org.apache.hadoop.conf.Configuration
 import spark.api.java.JavaPairRDD
 import spark.storage.StorageLevel
 import com.google.common.base.Optional
+import spark.RDD
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val kManifiest: ClassManifest[K],

@@ -13,6 +13,7 @@ import scala.Tuple2;
 import spark.HashPartitioner;
 import spark.api.java.JavaRDD;
 import spark.api.java.JavaRDDLike;
+import spark.api.java.JavaPairRDD;
 import spark.api.java.JavaSparkContext;
 import spark.api.java.function.*;
 import spark.storage.StorageLevel;
