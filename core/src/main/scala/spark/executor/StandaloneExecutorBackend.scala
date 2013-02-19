@@ -68,8 +68,9 @@ private[spark] object StandaloneExecutorBackend {
   }
 
   def main(args: Array[String]) {
-    if (args.length != 4) {
-      System.err.println("Usage: StandaloneExecutorBackend <driverUrl> <executorId> <hostname> <cores>")
+    if (args.length < 4) {
+      //the reason we allow the last frameworkId argument is to make it easy to kill rogue executors
+      System.err.println("Usage: StandaloneExecutorBackend <driverUrl> <executorId> <hostname> <cores> [<appid>]")
       System.exit(1)
     }
     run(args(0), args(1), args(2), args(3).toInt)

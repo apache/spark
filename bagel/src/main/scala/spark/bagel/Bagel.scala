@@ -14,11 +14,11 @@ object Bagel extends Logging {
     combiner: Combiner[M, C],
     aggregator: Option[Aggregator[V, A]],
     partitioner: Partitioner,
-    numSplits: Int
+    numPartitions: Int
   )(
     compute: (V, Option[C], Option[A], Int) => (V, Array[M])
   ): RDD[(K, V)] = {
-    val splits = if (numSplits != 0) numSplits else sc.defaultParallelism
+    val splits = if (numPartitions != 0) numPartitions else sc.defaultParallelism
 
     var superstep = 0
     var verts = vertices
@@ -56,12 +56,12 @@ object Bagel extends Logging {
     messages: RDD[(K, M)],
     combiner: Combiner[M, C],
     partitioner: Partitioner,
-    numSplits: Int
+    numPartitions: Int
   )(
     compute: (V, Option[C], Int) => (V, Array[M])
   ): RDD[(K, V)] = {
     run[K, V, M, C, Nothing](
-      sc, vertices, messages, combiner, None, partitioner, numSplits)(
+      sc, vertices, messages, combiner, None, partitioner, numPartitions)(
       addAggregatorArg[K, V, M, C](compute))
   }
 
@@ -70,13 +70,13 @@ object Bagel extends Logging {
     vertices: RDD[(K, V)],
     messages: RDD[(K, M)],
     combiner: Combiner[M, C],
-    numSplits: Int
+    numPartitions: Int
   )(
     compute: (V, Option[C], Int) => (V, Array[M])
   ): RDD[(K, V)] = {
-    val part = new HashPartitioner(numSplits)
+    val part = new HashPartitioner(numPartitions)
     run[K, V, M, C, Nothing](
-      sc, vertices, messages, combiner, None, part, numSplits)(
+      sc, vertices, messages, combiner, None, part, numPartitions)(
       addAggregatorArg[K, V, M, C](compute))
   }
 
@@ -84,13 +84,13 @@ object Bagel extends Logging {
     sc: SparkContext,
     vertices: RDD[(K, V)],
     messages: RDD[(K, M)],
-    numSplits: Int
+    numPartitions: Int
   )(
     compute: (V, Option[Array[M]], Int) => (V, Array[M])
   ): RDD[(K, V)] = {
-    val part = new HashPartitioner(numSplits)
+    val part = new HashPartitioner(numPartitions)
     run[K, V, M, Array[M], Nothing](
-      sc, vertices, messages, new DefaultCombiner(), None, part, numSplits)(
+      sc, vertices, messages, new DefaultCombiner(), None, part, numPartitions)(
       addAggregatorArg[K, V, M, Array[M]](compute))
   }
 

@@ -6,7 +6,7 @@ import spark.streaming.{Time, DStream, Duration}
 
 private[streaming]
 class CoGroupedDStream[K : ClassManifest](
-    parents: Seq[DStream[(_, _)]],
+    parents: Seq[DStream[(K, _)]],
     partitioner: Partitioner
   ) extends DStream[(K, Seq[Seq[_]])](parents.head.ssc) {
 

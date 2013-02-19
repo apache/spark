@@ -8,25 +8,25 @@ import akka.pattern.AskTimeoutException
 import spark.{SparkException, Logging}
 import akka.remote.RemoteClientLifeCycleEvent
 import akka.remote.RemoteClientShutdown
-import spark.deploy.RegisterJob
+import spark.deploy.RegisterApplication
 import spark.deploy.master.Master
 import akka.remote.RemoteClientDisconnected
 import akka.actor.Terminated
 import akka.dispatch.Await
 
 /**
- * The main class used to talk to a Spark deploy cluster. Takes a master URL, a job description,
- * and a listener for job events, and calls back the listener when various events occur.
+ * The main class used to talk to a Spark deploy cluster. Takes a master URL, an app description,
+ * and a listener for cluster events, and calls back the listener when various events occur.
  */
 private[spark] class Client(
     actorSystem: ActorSystem,
     masterUrl: String,
-    jobDescription: JobDescription,
+    appDescription: ApplicationDescription,
     listener: ClientListener)
   extends Logging {
 
   var actor: ActorRef = null
-  var jobId: String = null
+  var appId: String = null
 
   class ClientActor extends Actor with Logging {
     var master: ActorRef = null
@@ -38,7 +38,7 @@ private[spark] class Client(
       try {
         master = context.actorFor(Master.toAkkaUrl(masterUrl))
         masterAddress = master.path.address
-        master ! RegisterJob(jobDescription)
+        master ! RegisterApplication(appDescription)
         context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
         context.watch(master)  // Doesn't work with remote actors, but useful for testing
       } catch {
@@ -50,17 +50,17 @@ private[spark] class Client(
     }
 
     override def receive = {
-      case RegisteredJob(jobId_) =>
-        jobId = jobId_
-        listener.connected(jobId)
+      case RegisteredApplication(appId_) =>
+        appId = appId_
+        listener.connected(appId)
 
       case ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int) =>
-        val fullId = jobId + "/" + id
+        val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, host, cores))
         listener.executorAdded(fullId, workerId, host, cores, memory)
 
       case ExecutorUpdated(id, state, message, exitStatus) =>
-        val fullId = jobId + "/" + id
+        val fullId = appId + "/" + id
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {

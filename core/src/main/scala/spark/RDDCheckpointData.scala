@@ -16,7 +16,7 @@ private[spark] object CheckpointState extends Enumeration {
 /**
  * This class contains all the information related to RDD checkpointing. Each instance of this class
  * is associated with a RDD. It manages process of checkpointing of the associated RDD, as well as,
- * manages the post-checkpoint state by providing the updated splits, iterator and preferred locations
+ * manages the post-checkpoint state by providing the updated partitions, iterator and preferred locations
  * of the checkpointed RDD.
  */
 private[spark] class RDDCheckpointData[T: ClassManifest](rdd: RDD[T])
@@ -67,11 +67,11 @@ private[spark] class RDDCheckpointData[T: ClassManifest](rdd: RDD[T])
     rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path) _)
     val newRDD = new CheckpointRDD[T](rdd.context, path)
 
-    // Change the dependencies and splits of the RDD
+    // Change the dependencies and partitions of the RDD
     RDDCheckpointData.synchronized {
       cpFile = Some(path)
       cpRDD = Some(newRDD)
-      rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and splits
+      rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and partitions
       cpState = Checkpointed
       RDDCheckpointData.clearTaskCaches()
       logInfo("Done checkpointing RDD " + rdd.id + ", new parent is RDD " + newRDD.id)
@@ -79,15 +79,15 @@ private[spark] class RDDCheckpointData[T: ClassManifest](rdd: RDD[T])
   }
 
   // Get preferred location of a split after checkpointing
-  def getPreferredLocations(split: Split): Seq[String] = {
+  def getPreferredLocations(split: Partition): Seq[String] = {
     RDDCheckpointData.synchronized {
       cpRDD.get.preferredLocations(split)
     }
   }
 
-  def getSplits: Array[Split] = {
+  def getPartitions: Array[Partition] = {
     RDDCheckpointData.synchronized {
-      cpRDD.get.splits
+      cpRDD.get.partitions
     }
   }
 

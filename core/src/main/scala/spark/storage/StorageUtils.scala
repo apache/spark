@@ -63,7 +63,7 @@ object StorageUtils {
       val rddName = Option(rdd.name).getOrElse(rddKey)
       val rddStorageLevel = rdd.getStorageLevel
 
-      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, rdd.splits.size, memSize, diskSize)
+      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, rdd.partitions.size, memSize, diskSize)
     }.toArray
   }
 
