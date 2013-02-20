@@ -7,3 +7,4 @@ SPARK_VERSION: 0.6.2
 SPARK_VERSION_SHORT: 0.6.2
 SCALA_VERSION: 2.9.2
 MESOS_VERSION: 0.9.0-incubating
+SPARK_ISSUE_TRACKER_URL: https://spark-project.atlassian.net
