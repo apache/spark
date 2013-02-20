@@ -147,7 +147,7 @@ object ActorWordCount {
      */
 
     val lines = ssc.actorStream[String](
-      Props(new SampleActorReceiver[String]("akka://spark@%s:%s/user/FeederActor".format(
+      Props(new SampleActorReceiver[String]("akka://test@%s:%s/user/FeederActor".format(
         host, port.toInt))), "SampleReceiver")
 
     //compute wordcount
