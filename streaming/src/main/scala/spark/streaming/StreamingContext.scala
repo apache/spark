@@ -177,7 +177,7 @@ class StreamingContext private (
   }
 
   /**
-   * ZeroMQ stream receiver
+   * Create an input stream that receives messages pushed by a zeromq publisher.
    * @param publisherUrl Url of remote zeromq publisher
    * @param zeroMQ topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
