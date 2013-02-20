@@ -1,6 +1,6 @@
 package spark.deploy
 
-private[spark] class JobDescription(
+private[spark] class ApplicationDescription(
     val name: String,
     val cores: Int,
     val memoryPerSlave: Int,
@@ -10,5 +10,5 @@ private[spark] class JobDescription(
 
   val user = System.getProperty("user.name", "<unknown>")
 
-  override def toString: String = "JobDescription(" + name + ")"
+  override def toString: String = "ApplicationDescription(" + name + ")"
 }

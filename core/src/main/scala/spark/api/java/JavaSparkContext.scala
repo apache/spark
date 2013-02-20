@@ -23,41 +23,41 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
+   * @param appName A name for your application, to display on the cluster web UI
    */
-  def this(master: String, jobName: String) = this(new SparkContext(master, jobName))
+  def this(master: String, appName: String) = this(new SparkContext(master, appName))
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
+   * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the slave nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
-  def this(master: String, jobName: String, sparkHome: String, jarFile: String) =
-    this(new SparkContext(master, jobName, sparkHome, Seq(jarFile)))
+  def this(master: String, appName: String, sparkHome: String, jarFile: String) =
+    this(new SparkContext(master, appName, sparkHome, Seq(jarFile)))
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
+   * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the slave nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
-  def this(master: String, jobName: String, sparkHome: String, jars: Array[String]) =
-    this(new SparkContext(master, jobName, sparkHome, jars.toSeq))
+  def this(master: String, appName: String, sparkHome: String, jars: Array[String]) =
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq))
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
+   * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the slave nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes
    */
-  def this(master: String, jobName: String, sparkHome: String, jars: Array[String],
+  def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, jobName, sparkHome, jars.toSeq, environment))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment))
 
   private[spark] val env = sc.env
 

@@ -88,7 +88,7 @@ object WikipediaPageRankStandalone {
     n: Long,
     partitioner: Partitioner,
     usePartitioner: Boolean,
-    numSplits: Int
+    numPartitions: Int
   ): RDD[(String, Double)] = {
     var ranks = links.mapValues { edges => defaultRank }
     for (i <- 1 to numIterations) {

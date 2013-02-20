@@ -30,13 +30,18 @@ JavaRDDLike[T, JavaRDD[T]] {
   /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
-  def distinct(numSplits: Int): JavaRDD[T] = wrapRDD(rdd.distinct(numSplits))
+  def distinct(numPartitions: Int): JavaRDD[T] = wrapRDD(rdd.distinct(numPartitions))
   
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaRDD[T] =
     wrapRDD(rdd.filter((x => f(x).booleanValue())))
+
+  /**
+   * Return a new RDD that is reduced into `numPartitions` partitions.
+   */
+  def coalesce(numPartitions: Int): JavaRDD[T] = rdd.coalesce(numPartitions)
 
   /**
    * Return a sampled subset of this RDD.

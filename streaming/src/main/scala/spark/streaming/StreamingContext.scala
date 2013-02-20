@@ -47,11 +47,11 @@ class StreamingContext private (
   /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param frameworkName A name for your job, to display on the cluster web UI
+   * @param appName A name for your job, to display on the cluster web UI
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
-  def this(master: String, frameworkName: String, batchDuration: Duration) =
-    this(StreamingContext.createNewSparkContext(master, frameworkName), null, batchDuration)
+  def this(master: String, appName: String, batchDuration: Duration) =
+    this(StreamingContext.createNewSparkContext(master, appName), null, batchDuration)
 
   /**
    * Re-create a StreamingContext from a checkpoint file.
@@ -454,14 +454,14 @@ object StreamingContext {
     new PairDStreamFunctions[K, V](stream)
   }
 
-  protected[streaming] def createNewSparkContext(master: String, frameworkName: String): SparkContext = {
+  protected[streaming] def createNewSparkContext(master: String, appName: String): SparkContext = {
 
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second interval.
     if (MetadataCleaner.getDelaySeconds < 0) {
       MetadataCleaner.setDelaySeconds(3600)
     }
-    new SparkContext(master, frameworkName)
+    new SparkContext(master, appName)
   }
 
   protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
