@@ -274,8 +274,8 @@ class RDD(object):
 
     def reduce(self, f):
         """
-        Reduces the elements of this RDD using the specified associative binary
-        operator.
+        Reduces the elements of this RDD using the specified commutative and 
+        associative binary operator.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).reduce(add)

@@ -27,11 +27,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   /**
    * Creates a StreamingContext.
    * @param master Name of the Spark Master
-   * @param frameworkName Name to be used when registering with the scheduler
+   * @param appName Name to be used when registering with the scheduler
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
-  def this(master: String, frameworkName: String, batchDuration: Duration) =
-    this(new StreamingContext(master, frameworkName, batchDuration))
+  def this(master: String, appName: String, batchDuration: Duration) =
+    this(new StreamingContext(master, appName, batchDuration))
 
   /**
    * Creates a StreamingContext.

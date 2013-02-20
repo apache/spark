@@ -1,8 +1,8 @@
 @(worker: spark.deploy.WorkerState)
 @import spark.Utils
 
-@spark.common.html.layout(title = "Spark Worker on " + worker.uri) {
-      
+@spark.common.html.layout(title = "Spark Worker on " + worker.host) {
+
   <!-- Worker Details -->
   <div class="row">
     <div class="span12">
@@ -10,12 +10,12 @@
         <li><strong>ID:</strong> @worker.workerId</li>
         <li><strong>
           Master URL:</strong> @worker.masterUrl 
-          (WebUI at <a href="@worker.masterWebUiUrl">@worker.masterWebUiUrl</a>)
         </li>
         <li><strong>Cores:</strong> @worker.cores (@worker.coresUsed Used)</li>
         <li><strong>Memory:</strong> @{Utils.memoryMegabytesToString(worker.memory)}
           (@{Utils.memoryMegabytesToString(worker.memoryUsed)} Used)</li>
       </ul>
+      <p><a href="@worker.masterWebUiUrl">Back to Master</a></p>
     </div>
   </div>
 

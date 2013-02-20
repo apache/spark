@@ -8,7 +8,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
-import spark.{RDD, SparkEnv, Split, TaskContext}
+import spark.{RDD, SparkEnv, Partition, TaskContext}
 
 
 /**
@@ -27,9 +27,9 @@ class PipedRDD[T: ClassManifest](
   // using a standard StringTokenizer (i.e. by spaces)
   def this(prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
 
-  override def getSplits = firstParent[T].splits
+  override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  override def compute(split: Split, context: TaskContext): Iterator[String] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[String] = {
     val pb = new ProcessBuilder(command)
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()

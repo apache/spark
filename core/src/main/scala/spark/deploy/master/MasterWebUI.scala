@@ -40,27 +40,27 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
             }
           }
       } ~
-      path("job") {
-        parameters("jobId", 'format ?) {
-          case (jobId, Some(js)) if (js.equalsIgnoreCase("json")) =>
+      path("app") {
+        parameters("appId", 'format ?) {
+          case (appId, Some(js)) if (js.equalsIgnoreCase("json")) =>
             val future = master ? RequestMasterState
-            val jobInfo = for (masterState <- future.mapTo[MasterState]) yield {
-              masterState.activeJobs.find(_.id == jobId).getOrElse({
-                masterState.completedJobs.find(_.id == jobId).getOrElse(null)
+            val appInfo = for (masterState <- future.mapTo[MasterState]) yield {
+              masterState.activeApps.find(_.id == appId).getOrElse({
+                masterState.completedApps.find(_.id == appId).getOrElse(null)
               })
             }
             respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-              ctx.complete(jobInfo.mapTo[JobInfo])
+              ctx.complete(appInfo.mapTo[ApplicationInfo])
             }
-          case (jobId, _) =>
+          case (appId, _) =>
             completeWith {
               val future = master ? RequestMasterState
               future.map { state =>
                 val masterState = state.asInstanceOf[MasterState]
-                val job = masterState.activeJobs.find(_.id == jobId).getOrElse({
-                  masterState.completedJobs.find(_.id == jobId).getOrElse(null)
+                val app = masterState.activeApps.find(_.id == appId).getOrElse({
+                  masterState.completedApps.find(_.id == appId).getOrElse(null)
                 })
-                spark.deploy.master.html.job_details.render(job)
+                spark.deploy.master.html.app_details.render(app)
               }
             }
         }
