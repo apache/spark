@@ -164,12 +164,12 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
 
   test("CheckpointRDD with zero partitions") {
     val rdd = new BlockRDD[Int](sc, Array[String]())
-    assert(rdd.splits.size === 0)
+    assert(rdd.partitions.size === 0)
     assert(rdd.isCheckpointed === false)
     rdd.checkpoint()
     assert(rdd.count() === 0)
     assert(rdd.isCheckpointed === true)
-    assert(rdd.splits.size === 0)
+    assert(rdd.partitions.size === 0)
   }
 
   /**

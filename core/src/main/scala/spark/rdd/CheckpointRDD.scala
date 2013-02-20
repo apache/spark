@@ -22,10 +22,10 @@ class CheckpointRDD[T: ClassManifest](sc: SparkContext, val checkpointPath: Stri
 
   override def getPartitions: Array[Partition] = {
     val dirContents = fs.listStatus(new Path(checkpointPath))
-    val splitFiles = dirContents.map(_.getPath.toString).filter(_.contains("part-")).sorted
-    val numPartitions = splitFiles.size
-    if (numPartitions > 0 && !splitFiles(0).endsWith(CheckpointRDD.splitIdToFile(0)) ||
-        !splitFiles(numPartitions-1).endsWith(CheckpointRDD.splitIdToFile(numPartitions-1))) {
+    val partitionFiles = dirContents.map(_.getPath.toString).filter(_.contains("part-")).sorted
+    val numPartitions =  partitionFiles.size
+    if (numPartitions > 0 && (! partitionFiles(0).endsWith(CheckpointRDD.splitIdToFile(0)) ||
+        ! partitionFiles(numPartitions-1).endsWith(CheckpointRDD.splitIdToFile(numPartitions-1)))) {
       throw new SparkException("Invalid checkpoint directory: " + checkpointPath)
     }
     Array.tabulate(numPartitions)(i => new CheckpointRDDPartition(i))
