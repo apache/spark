@@ -254,7 +254,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   /**
    * Registers an output stream that will be computed every interval
    */
-  def registerOutputStream(outputStream: JavaDStreamLike[_, _]) {
+  def registerOutputStream(outputStream: JavaDStreamLike[_, _, _]) {
     ssc.registerOutputStream(outputStream.dstream)
   }
 
