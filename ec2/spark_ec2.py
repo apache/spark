@@ -179,7 +179,7 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.cluster_type == "mesos":
       master_group.authorize('tcp', 38090, 38090, '0.0.0.0/0')
     if opts.ganglia:
-      master_group.authorize('tcp', 80, 80, '0.0.0.0/0')
+      master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
   if slave_group.rules == []: # Group was just now created
     slave_group.authorize(src_group=master_group)
     slave_group.authorize(src_group=slave_group)
@@ -415,6 +415,13 @@ def setup_standalone_cluster(master, slave_nodes, opts):
 def setup_spark_cluster(master, opts):
   ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
   ssh(master, opts, "spark-ec2/setup.sh")
+  if opts.cluster_type == "mesos":
+    print "Mesos cluster started at http://%s:8080" % master
+  elif opts.cluster_type == "standalone":
+    print "Spark standalone cluster started at http://%s:8080" % master
+
+  if opts.ganglia:
+    print "Ganglia started at http://%s:5080/ganglia" % master
 
 
 # Wait for a whole cluster (masters, slaves and ZooKeeper) to start up
