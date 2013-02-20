@@ -40,3 +40,15 @@ class PartitionPruningRDD[T: ClassManifest](
   override protected def getPartitions: Array[Partition] =
     getDependencies.head.asInstanceOf[PruneDependency[T]].partitions
 }
+
+
+object PartitionPruningRDD {
+
+  /**
+   * Create a PartitionPruningRDD. This function can be used to create the PartitionPruningRDD
+   * when its type T is not known at compile time.
+   */
+  def create[T](rdd: RDD[T], partitionFilterFunc: Int => Boolean) = {
+    new PartitionPruningRDD[T](rdd, partitionFilterFunc)(rdd.elementClassManifest)
+  }
+}
