@@ -6,6 +6,9 @@ import spark.{Utils, Logging}
 import spark.executor.TaskMetrics
 
 trait SparkListener {
+  /**
+   * called when a stage is completed, with information on the completed stage
+   */
   def onStageCompleted(stageCompleted: StageCompleted)
 }
 
@@ -14,7 +17,9 @@ sealed trait SparkListenerEvents
 case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 
 
-
+/**
+ * Simple SparkListener that logs a few summary statistics when each stage completes
+ */
 class StatsReportListener extends SparkListener with Logging {
   def onStageCompleted(stageCompleted: StageCompleted) {
     import spark.scheduler.StatsReportListener._
