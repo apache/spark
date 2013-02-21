@@ -1,18 +1,18 @@
 package spark.deploy.master
 
-import spark.deploy.JobDescription
+import spark.deploy.ApplicationDescription
 import java.util.Date
 import akka.actor.ActorRef
 import scala.collection.mutable
 
-private[spark] class JobInfo(
+private[spark] class ApplicationInfo(
     val startTime: Long,
     val id: String,
-    val desc: JobDescription,
+    val desc: ApplicationDescription,
     val submitDate: Date,
     val driver: ActorRef)
 {
-  var state = JobState.WAITING
+  var state = ApplicationState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]
   var coresGranted = 0
   var endTime = -1L
@@ -48,7 +48,7 @@ private[spark] class JobInfo(
     _retryCount
   }
 
-  def markFinished(endState: JobState.Value) {
+  def markFinished(endState: ApplicationState.Value) {
     state = endState
     endTime = System.currentTimeMillis()
   }

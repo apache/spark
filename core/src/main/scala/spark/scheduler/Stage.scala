@@ -28,7 +28,7 @@ private[spark] class Stage(
   extends Logging {
   
   val isShuffleMap = shuffleDep != None
-  val numPartitions = rdd.splits.size
+  val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
 

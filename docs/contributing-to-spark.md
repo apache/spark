@@ -15,7 +15,7 @@ The Spark team welcomes contributions in the form of GitHub pull requests. Here 
   But first, make sure that you have [configured a spark-env.sh](configuration.html) with at least
   `SCALA_HOME`, as some of the tests try to spawn subprocesses using this.
 - Add new unit tests for your code. We use [ScalaTest](http://www.scalatest.org/) for testing. Just add a new Suite in `core/src/test`, or methods to an existing Suite.
-- If you'd like to report a bug but don't have time to fix it, you can still post it to our [issue tracker](https://spark-project.atlassian.net), or email the [mailing list](http://www.spark-project.org/mailing-lists.html).
+- If you'd like to report a bug but don't have time to fix it, you can still post it to our [issue tracker]({{site.SPARK_ISSUE_TRACKER_URL}}), or email the [mailing list](http://www.spark-project.org/mailing-lists.html).
 
 # Licensing of Contributions
 

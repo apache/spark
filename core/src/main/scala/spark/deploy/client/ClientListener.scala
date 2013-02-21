@@ -8,7 +8,7 @@ package spark.deploy.client
  * Users of this API should *not* block inside the callback methods.
  */
 private[spark] trait ClientListener {
-  def connected(jobId: String): Unit
+  def connected(appId: String): Unit
 
   def disconnected(): Unit
 

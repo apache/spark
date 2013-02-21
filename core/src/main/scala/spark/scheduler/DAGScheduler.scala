@@ -111,7 +111,7 @@ class DAGScheduler(
 
   private def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
     if (!cacheLocs.contains(rdd.id)) {
-      val blockIds = rdd.splits.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
+      val blockIds = rdd.partitions.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
       cacheLocs(rdd.id) = blockManagerMaster.getLocations(blockIds).map {
         locations => locations.map(_.ip).toList
       }.toArray
@@ -146,9 +146,9 @@ class DAGScheduler(
   private def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_]], priority: Int): Stage = {
     if (shuffleDep != None) {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
-      // since we can't do it in the RDD constructor because # of splits is unknown
+      // since we can't do it in the RDD constructor because # of partitions is unknown
       logInfo("Registering RDD " + rdd.id + " (" + rdd.origin + ")")
-      mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.splits.size)
+      mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.partitions.size)
     }
     val id = nextStageId.getAndIncrement()
     val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd, priority), priority)
@@ -168,7 +168,7 @@ class DAGScheduler(
       if (!visited(r)) {
         visited += r
         // Kind of ugly: need to register RDDs with the cache here since
-        // we can't do it in its constructor because # of splits is unknown
+        // we can't do it in its constructor because # of partitions is unknown
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_,_] =>
@@ -263,7 +263,7 @@ class DAGScheduler(
   {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val partitions = (0 until rdd.splits.size).toArray
+    val partitions = (0 until rdd.partitions.size).toArray
     eventQueue.put(JobSubmitted(rdd, func2, partitions, false, callSite, listener))
     return listener.awaitResult()    // Will throw an exception if the job fails
   }
@@ -392,7 +392,7 @@ class DAGScheduler(
         try {
           SparkEnv.set(env)
           val rdd = job.finalStage.rdd
-          val split = rdd.splits(job.partitions(0))
+          val split = rdd.partitions(job.partitions(0))
           val taskContext = new TaskContext(job.finalStage.id, job.partitions(0), 0)
           try {
             val result = job.func(taskContext, rdd.iterator(split, taskContext))
@@ -681,7 +681,7 @@ class DAGScheduler(
       return cached
     }
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
-    val rddPrefs = rdd.preferredLocations(rdd.splits(partition)).toList
+    val rddPrefs = rdd.preferredLocations(rdd.partitions(partition)).toList
     if (rddPrefs != Nil) {
       return rddPrefs
     }

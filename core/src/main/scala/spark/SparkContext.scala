@@ -34,7 +34,7 @@ import org.apache.mesos.MesosNativeLibrary
 import spark.deploy.LocalSparkCluster
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD}
+import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
 import spark.scheduler._
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
@@ -48,7 +48,7 @@ import spark.storage.{StorageStatus, StorageUtils, RDDInfo}
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
  * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
- * @param jobName A name for your job, to display on the cluster web UI.
+ * @param appName A name for your application, to display on the cluster web UI.
  * @param sparkHome Location where Spark is installed on cluster nodes.
  * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
  *             system or HDFS, HTTP, HTTPS, or FTP URLs.
@@ -56,7 +56,7 @@ import spark.storage.{StorageStatus, StorageUtils, RDDInfo}
  */
 class SparkContext(
     val master: String,
-    val jobName: String,
+    val appName: String,
     val sparkHome: String = null,
     val jars: Seq[String] = Nil,
     environment: Map[String, String] = Map())
@@ -138,7 +138,7 @@ class SparkContext(
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
-        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, jobName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
         scheduler.initialize(backend)
         scheduler
 
@@ -157,7 +157,7 @@ class SparkContext(
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val sparkUrl = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, jobName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
         scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
@@ -173,9 +173,9 @@ class SparkContext(
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
         val masterWithoutProtocol = master.replaceFirst("^mesos://", "")  // Strip initial mesos://
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, this, masterWithoutProtocol, jobName)
+          new CoarseMesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
         } else {
-          new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, jobName)
+          new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
         }
         scheduler.initialize(backend)
         scheduler
@@ -211,7 +211,7 @@ class SparkContext(
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
-    new ParallelCollection[T](this, seq, numSlices, Map[Int, Seq[String]]())
+    new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
   /** Distribute a local Scala collection to form an RDD. */
@@ -224,7 +224,7 @@ class SparkContext(
     * Create a new partition for each collection item. */
    def makeRDD[T: ClassManifest](seq: Seq[(T, Seq[String])]): RDD[T] = {
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
-    new ParallelCollection[T](this, seq.map(_._1), seq.size, indexToPrefs)
+    new ParallelCollectionRDD[T](this, seq.map(_._1), seq.size, indexToPrefs)
   }
 
   /**
@@ -617,14 +617,14 @@ class SparkContext(
    * Run a job on all partitions in an RDD and return the results in an array.
    */
   def runJob[T, U: ClassManifest](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.splits.size, false)
+    runJob(rdd, func, 0 until rdd.partitions.size, false)
   }
 
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
   def runJob[T, U: ClassManifest](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
-    runJob(rdd, func, 0 until rdd.splits.size, false)
+    runJob(rdd, func, 0 until rdd.partitions.size, false)
   }
 
   /**
@@ -635,7 +635,7 @@ class SparkContext(
     processPartition: (TaskContext, Iterator[T]) => U,
     resultHandler: (Int, U) => Unit)
   {
-    runJob[T, U](rdd, processPartition, 0 until rdd.splits.size, false, resultHandler)
+    runJob[T, U](rdd, processPartition, 0 until rdd.partitions.size, false, resultHandler)
   }
 
   /**
@@ -647,7 +647,7 @@ class SparkContext(
       resultHandler: (Int, U) => Unit)
   {
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
-    runJob[T, U](rdd, processFunc, 0 until rdd.splits.size, false, resultHandler)
+    runJob[T, U](rdd, processFunc, 0 until rdd.partitions.size, false, resultHandler)
   }
 
   /**
@@ -699,7 +699,7 @@ class SparkContext(
   /** Default level of parallelism to use when not given by user (e.g. for reduce tasks) */
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
-  /** Default min number of splits for Hadoop RDDs when not given by user */
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
 
   private var nextShuffleId = new AtomicInteger(0)

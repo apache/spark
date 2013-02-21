@@ -2,13 +2,13 @@ package spark.deploy.client
 
 import spark.util.AkkaUtils
 import spark.{Logging, Utils}
-import spark.deploy.{Command, JobDescription}
+import spark.deploy.{Command, ApplicationDescription}
 
 private[spark] object TestClient {
 
   class TestListener extends ClientListener with Logging {
     def connected(id: String) {
-      logInfo("Connected to master, got job ID " + id)
+      logInfo("Connected to master, got app ID " + id)
     }
 
     def disconnected() {
@@ -24,7 +24,7 @@ private[spark] object TestClient {
   def main(args: Array[String]) {
     val url = args(0)
     val (actorSystem, port) = AkkaUtils.createActorSystem("spark", Utils.localIpAddress, 0)
-    val desc = new JobDescription(
+    val desc = new ApplicationDescription(
       "TestClient", 1, 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()), "dummy-spark-home")
     val listener = new TestListener
     val client = new Client(actorSystem, url, desc, listener)

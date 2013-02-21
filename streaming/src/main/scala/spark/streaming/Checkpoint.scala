@@ -12,7 +12,7 @@ private[streaming]
 class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   extends Logging with Serializable {
   val master = ssc.sc.master
-  val framework = ssc.sc.jobName
+  val framework = ssc.sc.appName
   val sparkHome = ssc.sc.sparkHome
   val jars = ssc.sc.jars
   val graph = ssc.graph

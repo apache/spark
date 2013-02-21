@@ -5,10 +5,10 @@ import java.util.Random
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
-import spark.{RDD, Split, TaskContext}
+import spark.{RDD, Partition, TaskContext}
 
 private[spark]
-class SampledRDDSplit(val prev: Split, val seed: Int) extends Split with Serializable {
+class SampledRDDPartition(val prev: Partition, val seed: Int) extends Partition with Serializable {
   override val index: Int = prev.index
 }
 
@@ -19,16 +19,16 @@ class SampledRDD[T: ClassManifest](
     seed: Int)
   extends RDD[T](prev) {
 
-  override def getSplits: Array[Split] = {
+  override def getPartitions: Array[Partition] = {
     val rg = new Random(seed)
-    firstParent[T].splits.map(x => new SampledRDDSplit(x, rg.nextInt))
+    firstParent[T].partitions.map(x => new SampledRDDPartition(x, rg.nextInt))
   }
 
-  override def getPreferredLocations(split: Split): Seq[String] =
-    firstParent[T].preferredLocations(split.asInstanceOf[SampledRDDSplit].prev)
+  override def getPreferredLocations(split: Partition): Seq[String] =
+    firstParent[T].preferredLocations(split.asInstanceOf[SampledRDDPartition].prev)
 
-  override def compute(splitIn: Split, context: TaskContext): Iterator[T] = {
-    val split = splitIn.asInstanceOf[SampledRDDSplit]
+  override def compute(splitIn: Partition, context: TaskContext): Iterator[T] = {
+    val split = splitIn.asInstanceOf[SampledRDDPartition]
     if (withReplacement) {
       // For large datasets, the expected number of occurrences of each element in a sample with
       // replacement is Poisson(frac). We use that to get a count for each element.
