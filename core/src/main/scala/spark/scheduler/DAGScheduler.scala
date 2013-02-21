@@ -76,7 +76,7 @@ class DAGScheduler(
 
   private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
-  private[spark] var sparkListeners = ArrayBuffer[SparkListener]()
+  private[spark] val sparkListeners = ArrayBuffer[SparkListener]()
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
