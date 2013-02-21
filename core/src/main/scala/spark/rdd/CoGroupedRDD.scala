@@ -106,13 +106,13 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(_, _)]], part: Partitioner)
         for ((k, vs) <- fetchItr) {
           getSeq(k)(depNum) ++= vs
         }
-        context.task.shuffleReadMillis = Some(fetchItr.getNetMillis)
-        context.task.remoteFetchTime = Some(fetchItr.remoteFetchTime)
-        context.task.remoteFetchWaitTime = Some(fetchItr.remoteFetchWaitTime)
-        context.task.remoteReadBytes = Some(fetchItr.remoteBytesRead)
-        context.task.totalBlocksFetched = Some(fetchItr.totalBlocks)
-        context.task.localBlocksFetched = Some(fetchItr.numLocalBlocks)
-        context.task.remoteBlocksFetched = Some(fetchItr.numRemoteBlocks)
+        context.taskMetrics.shuffleReadMillis = Some(fetchItr.getNetMillis)
+        context.taskMetrics.remoteFetchTime = Some(fetchItr.remoteFetchTime)
+        context.taskMetrics.remoteFetchWaitTime = Some(fetchItr.remoteFetchWaitTime)
+        context.taskMetrics.remoteBytesRead = Some(fetchItr.remoteBytesRead)
+        context.taskMetrics.totalBlocksFetched = Some(fetchItr.totalBlocks)
+        context.taskMetrics.localBlocksFetched = Some(fetchItr.numLocalBlocks)
+        context.taskMetrics.remoteBlocksFetched = Some(fetchItr.numRemoteBlocks)
       }
     }
     JavaConversions.mapAsScalaMap(map).iterator

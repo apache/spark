@@ -118,7 +118,8 @@ private[spark] class ShuffleMapTask(
   override def run(attemptId: Long): MapStatus = {
     val numOutputSplits = dep.partitioner.numPartitions
 
-    val taskContext = new TaskContext(stageId, partition, attemptId, this)
+    val taskContext = new TaskContext(stageId, partition, attemptId)
+    metrics = Some(taskContext.taskMetrics)
     try {
       // Partition the map output.
       val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
@@ -141,7 +142,7 @@ private[spark] class ShuffleMapTask(
         totalBytes += size
         compressedSizes(i) = MapOutputTracker.compressSize(size)
       }
-      shuffleBytesWritten = Some(totalBytes)
+      metrics.get.shuffleBytesWritten = Some(totalBytes)
 
       return new MapStatus(blockManager.blockManagerId, compressedSizes)
     } finally {

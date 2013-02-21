@@ -1,12 +1,12 @@
 package spark.scheduler
 
-import scala.collection.mutable.HashMap
-import spark.serializer.{SerializerInstance, Serializer}
+import spark.serializer.SerializerInstance
 import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 import spark.util.ByteBufferInputStream
 import scala.collection.mutable.HashMap
+import spark.executor.TaskMetrics
 
 /**
  * A task to execute on a worker node.
@@ -17,15 +17,7 @@ private[spark] abstract class Task[T](val stageId: Int) extends Serializable {
 
   var generation: Long = -1   // Map output tracker generation. Will be set by TaskScheduler.
 
-  var shuffleReadMillis : Option[Long] = None
-  var remoteReadBytes : Option[Long] = None
-  var remoteFetchWaitTime : Option[Long] = None
-  var remoteFetchTime : Option[Long] = None
-  var totalBlocksFetched : Option[Int] = None
-  var remoteBlocksFetched: Option[Int] = None
-  var localBlocksFetched: Option[Int] = None
-
-  var shuffleBytesWritten : Option[Long] = None
+  var metrics: Option[TaskMetrics] = None
 
 }
 

@@ -1,19 +1,16 @@
 package spark.executor
 
-import spark.scheduler.Task
-
 case class TaskMetrics(
-  val totalBlocksFetched : Option[Int],
-  val remoteBlocksFetched: Option[Int],
-  val localBlocksFetched: Option[Int],
-  val remoteFetchWaitTime: Option[Long],
-  val remoteBytesRead: Option[Long],
-  val shuffleBytesWritten: Option[Long]
+  var shuffleReadMillis: Option[Long],
+  var totalBlocksFetched : Option[Int],
+  var remoteBlocksFetched: Option[Int],
+  var localBlocksFetched: Option[Int],
+  var remoteFetchWaitTime: Option[Long],
+  var remoteFetchTime: Option[Long],
+  var remoteBytesRead: Option[Long],
+  var shuffleBytesWritten: Option[Long]
 )
 
 object TaskMetrics {
-  private[spark] def apply(task: Task[_]) : TaskMetrics = {
-    TaskMetrics(task.totalBlocksFetched, task.remoteBlocksFetched, task.localBlocksFetched,
-      task.remoteFetchWaitTime, task.remoteReadBytes, task.shuffleBytesWritten)
-  }
+  private[spark] def empty() : TaskMetrics = TaskMetrics(None,None,None,None,None,None,None,None)
 }

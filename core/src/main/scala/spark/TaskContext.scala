@@ -1,9 +1,14 @@
 package spark
 
+import executor.TaskMetrics
 import scala.collection.mutable.ArrayBuffer
-import spark.scheduler.Task
 
-class TaskContext(val stageId: Int, val splitId: Int, val attemptId: Long, val task: Task[_]) extends Serializable {
+class TaskContext(
+  val stageId: Int,
+  val splitId: Int,
+  val attemptId: Long,
+  val taskMetrics: TaskMetrics = TaskMetrics.empty()
+) extends Serializable {
   //by adding Task here, I'm destroying the separation between Task & TaskContext ... not sure why they need to
   // be separate
 
