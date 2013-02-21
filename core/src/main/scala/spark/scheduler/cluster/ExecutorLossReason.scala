@@ -12,10 +12,10 @@ class ExecutorLossReason(val message: String) {
 
 private[spark]
 case class ExecutorExited(val exitCode: Int)
-    extends ExecutorLossReason(ExecutorExitCode.explainExitCode(exitCode)) {
+  extends ExecutorLossReason(ExecutorExitCode.explainExitCode(exitCode)) {
 }
 
 private[spark]
 case class SlaveLost(_message: String = "Slave lost")
-    extends ExecutorLossReason(_message) {
+  extends ExecutorLossReason(_message) {
 }
