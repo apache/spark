@@ -178,7 +178,11 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark local dirs") {
       override def run() {
         logDebug("Shutdown hook called")
-        localDirs.foreach(localDir => Utils.deleteRecursively(localDir))
+        try {
+          localDirs.foreach(localDir => Utils.deleteRecursively(localDir))
+        } catch {
+          case t: Throwable => logError("Exception while deleting local spark dirs", t)
+        }
       }
     })
   }
