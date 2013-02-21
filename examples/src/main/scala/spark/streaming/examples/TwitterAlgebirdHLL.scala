@@ -7,8 +7,17 @@ import com.twitter.algebird.HyperLogLogMonoid
 import spark.streaming.dstream.TwitterInputDStream
 
 /**
- * Example using HyperLogLog monoid from Twitter's Algebird together with Spark Streaming's
- * TwitterInputDStream to compute approximate distinct counts of userids.
+ * Illustrates the use of the HyperLogLog algorithm, from Twitter's Algebird library, to compute
+ * a windowed and global estimate of the unique user IDs occurring in a Twitter stream.
+ * <p>
+ * <p>
+ *   This <a href="http://highlyscalable.wordpress.com/2012/05/01/probabilistic-structures-web-analytics-data-mining/">
+ *   blog post</a> and this
+ *   <a href="http://highscalability.com/blog/2012/4/5/big-data-counting-how-to-count-a-billion-distinct-objects-us.html">blog post</a>
+ *   have good overviews of HyperLogLog (HLL). HLL is a memory-efficient datastructure for estimating
+ *   the cardinality of a data stream, i.e. the number of unique elements.
+ * <p><p>
+ *   Algebird's implementation is a monoid, so we can succinctly merge two HLL instances in the reduce operation.
  */
 object TwitterAlgebirdHLL {
   def main(args: Array[String]) {
@@ -18,7 +27,7 @@ object TwitterAlgebirdHLL {
       System.exit(1)
     }
 
-    /** Bit size parameter for HyperLogLog */
+    /** Bit size parameter for HyperLogLog, trades off accuracy vs size */
     val BIT_SIZE = 12
     val Array(master, username, password) = args.slice(0, 3)
     val filters = args.slice(3, args.length)
@@ -28,11 +37,11 @@ object TwitterAlgebirdHLL {
 
     val users = stream.map(status => status.getUser.getId)
 
-    var globalHll = new HyperLogLogMonoid(BIT_SIZE).zero
+    val hll = new HyperLogLogMonoid(BIT_SIZE)
+    var globalHll = hll.zero
     var userSet: Set[Long] = Set()
 
     val approxUsers = users.mapPartitions(ids => {
-      val hll = new HyperLogLogMonoid(BIT_SIZE)
       ids.map(id => hll(id))
     }).reduce(_ + _)
 
