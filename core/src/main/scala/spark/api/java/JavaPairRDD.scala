@@ -59,7 +59,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
-  def filter(f: Function[(K, V), java.lang.Boolean]): JavaPairRDD[K, V] =
+  def filter(f: JFunction[(K, V), java.lang.Boolean]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.filter(x => f(x).booleanValue()))
 
   /**
@@ -102,7 +102,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
-  def combineByKey[C](createCombiner: Function[V, C],
+  def combineByKey[C](createCombiner: JFunction[V, C],
     mergeValue: JFunction2[C, V, C],
     mergeCombiners: JFunction2[C, C, C],
     partitioner: Partitioner): JavaPairRDD[K, C] = {
@@ -309,7 +309,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
    */
-  def mapValues[U](f: Function[V, U]): JavaPairRDD[K, U] = {
+  def mapValues[U](f: JFunction[V, U]): JavaPairRDD[K, U] = {
     implicit val cm: ClassManifest[U] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[U]]
     fromRDD(rdd.mapValues(f))
