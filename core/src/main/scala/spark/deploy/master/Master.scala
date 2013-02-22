@@ -33,6 +33,8 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
 
+  var firstApp: Option[ApplicationInfo] = None
+
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else ip
@@ -167,7 +169,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       // Try to spread out each app among all the nodes, until it has all its cores
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(canUse(app, _)).sortBy(_.coresFree).reverse
+                                   .filter(canUse(app, _)).sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
@@ -190,7 +192,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       }
     } else {
       // Pack each app into as few nodes as possible until we've assigned all its cores
-      for (worker <- workers if worker.coresFree > 0) {
+      for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
         for (app <- waitingApps if app.coresLeft > 0) {
           if (canUse(app, worker)) {
             val coresToUse = math.min(worker.coresFree, app.coresLeft)
@@ -202,6 +204,10 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
           }
         }
       }
+    }
+    if (workers.toArray.filter(_.state == WorkerState.ALIVE).size > 0 &&
+        firstApp != None && firstApp.get.executors.size == 0) {
+      logWarning("Could not find any machines with enough memory. Ensure that SPARK_WORKER_MEM > SPARK_MEM.")
     }
   }
 
@@ -245,6 +251,9 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     idToApp(app.id) = app
     actorToApp(driver) = app
     addressToApp(driver.path.address) = app
+    if (firstApp == None) {
+      firstApp = Some(app)
+    }
     return app
   }
 
