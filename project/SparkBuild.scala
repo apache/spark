@@ -164,7 +164,8 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile",
       "com.github.sgroschupf" % "zkclient" % "0.1",
-      "org.twitter4j" % "twitter4j-stream" % "3.0.3"
+      "org.twitter4j" % "twitter4j-stream" % "3.0.3",
+      "com.typesafe.akka" % "akka-zeromq" % "2.0.3"
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
