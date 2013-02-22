@@ -205,10 +205,6 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
         }
       }
     }
-    if (workers.toArray.filter(_.state == WorkerState.ALIVE).size > 0 &&
-        firstApp != None && firstApp.get.executors.size == 0) {
-      logWarning("Could not find any machines with enough memory. Ensure that SPARK_WORKER_MEM > SPARK_MEM.")
-    }
   }
 
   def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo, sparkHome: String) {
@@ -253,6 +249,10 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     addressToApp(driver.path.address) = app
     if (firstApp == None) {
       firstApp = Some(app)
+    }
+    val workersAlive = workers.filter(_.state == WorkerState.ALIVE).toArray
+    if (workersAlive.size > 0 && !workersAlive.exists(_.memoryFree >= desc.memoryPerSlave)) {
+      logWarning("Could not find any workers with enough memory for " + firstApp.get.id)
     }
     return app
   }

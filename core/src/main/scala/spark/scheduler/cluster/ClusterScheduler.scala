@@ -24,7 +24,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong
   // Threshold above which we warn user initial TaskSet may be starved
-  val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "5000").toLong
+  val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "15000").toLong
 
   val activeTaskSets = new HashMap[String, TaskSetManager]
   var activeTaskSetsQueue = new ArrayBuffer[TaskSetManager]
@@ -106,8 +106,10 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {
             if (!hasLaunchedTask) {
-              logWarning("Initial TaskSet has not accepted any offers. " +
-                "Check the scheduler UI to ensure slaves are registered.")
+              logWarning("Initial job has not accepted any resources; " +
+                "check your cluster UI to ensure that workers are registered")
+            } else {
+              this.cancel()
             }
           }
         }, STARVATION_TIMEOUT, STARVATION_TIMEOUT)
@@ -169,7 +171,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           }
         } while (launchedTask)
       }
-      if (tasks.size > 0) hasLaunchedTask = true
+      if (tasks.size > 0) {
+        hasLaunchedTask = true
+      }
       return tasks
     }
   }
