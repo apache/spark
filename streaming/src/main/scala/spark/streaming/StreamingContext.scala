@@ -2,12 +2,14 @@ package spark.streaming
 
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
+import akka.zeromq.Subscribe
 
 import spark.streaming.dstream._
 
 import spark.{RDD, Logging, SparkEnv, SparkContext}
 import spark.streaming.receivers.ActorReceiver
 import spark.streaming.receivers.ReceiverSupervisorStrategy
+import spark.streaming.receivers.ZeroMQReceiver
 import spark.storage.StorageLevel
 import spark.util.MetadataCleaner
 import spark.streaming.receivers.ActorReceiver
@@ -161,7 +163,7 @@ class StreamingContext private (
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
    * @param storageLevel RDD storage level. Defaults to memory-only.
-   * 
+   *
    * @note An important point to note:
    *       Since Actor may exist outside the spark framework, It is thus user's responsibility
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
@@ -172,6 +174,26 @@ class StreamingContext private (
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
     supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy): DStream[T] = {
     networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
+  }
+
+  /**
+   * Create an input stream that receives messages pushed by a zeromq publisher.
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param zeroMQ topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
+   *                       of byte thus it needs the converter(which might be deserializer of bytes)
+   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
+   *                       and sub sequence refer to its payload.
+   * @param storageLevel RDD storage level. Defaults to memory-only.
+   */
+  def zeroMQStream[T: ClassManifest](publisherUrl:String,
+      subscribe: Subscribe,
+      bytesToObjects: Seq[Seq[Byte]] ⇒ Iterator[T],
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
+      supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy): DStream[T] = {
+
+    actorStream(Props(new ZeroMQReceiver(publisherUrl,subscribe,bytesToObjects)),
+        "ZeroMQReceiver", storageLevel, supervisorStrategy)
   }
 
   /**
@@ -478,4 +500,3 @@ object StreamingContext {
     new Path(sscCheckpointDir, UUID.randomUUID.toString).toString
   }
 }
-
