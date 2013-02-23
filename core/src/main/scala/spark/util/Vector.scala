@@ -10,12 +10,14 @@ class Vector(val elements: Array[Double]) extends Serializable {
       throw new IllegalArgumentException("Vectors of different length")
     return Vector(length, i => this(i) + other(i))
   }
+  def add(other: Vector) = +(other)
 
   def - (other: Vector): Vector = {
     if (length != other.length)
       throw new IllegalArgumentException("Vectors of different length")
     return Vector(length, i => this(i) - other(i))
   }
+  def subtract(other: Vector) = -(other)
 
   def dot(other: Vector): Double = {
     if (length != other.length)
@@ -60,10 +62,13 @@ class Vector(val elements: Array[Double]) extends Serializable {
     }
     this
   }
+  def addInPlace(other: Vector) = +=(other)
 
   def * (scale: Double): Vector = Vector(length, i => this(i) * scale)
+  def multiply (d: Double) = *(d)
 
   def / (d: Double): Vector = this * (1 / d)
+  def divide (d: Double) = /(d)
 
   def unary_- = this * -1
 
