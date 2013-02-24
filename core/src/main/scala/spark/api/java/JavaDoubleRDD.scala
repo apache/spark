@@ -6,8 +6,8 @@ import spark.api.java.function.{Function => JFunction}
 import spark.util.StatCounter
 import spark.partial.{BoundedDouble, PartialResult}
 import spark.storage.StorageLevel
-
 import java.lang.Double
+import spark.Partitioner
 
 class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, JavaDoubleRDD] {
 
@@ -56,6 +56,27 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
    * Return a new RDD that is reduced into `numPartitions` partitions.
    */
   def coalesce(numPartitions: Int): JavaDoubleRDD = fromRDD(srdd.coalesce(numPartitions))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   * 
+   * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
+   * RDD will be <= us.
+   */
+  def subtract(other: JavaDoubleRDD): JavaDoubleRDD =
+    fromRDD(srdd.subtract(other))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaDoubleRDD, numPartitions: Int): JavaDoubleRDD =
+    fromRDD(srdd.subtract(other, numPartitions))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaDoubleRDD, p: Partitioner): JavaDoubleRDD =
+    fromRDD(srdd.subtract(other, p))
 
   /**
    * Return a sampled subset of this RDD.

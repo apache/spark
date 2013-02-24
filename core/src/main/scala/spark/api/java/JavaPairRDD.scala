@@ -182,6 +182,27 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     fromRDD(groupByResultToJava(rdd.groupByKey(numPartitions)))
 
   /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   * 
+   * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
+   * RDD will be <= us.
+   */
+  def subtract(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
+    fromRDD(rdd.subtract(other))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaPairRDD[K, V], numPartitions: Int): JavaPairRDD[K, V] =
+    fromRDD(rdd.subtract(other, numPartitions))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaPairRDD[K, V], p: Partitioner): JavaPairRDD[K, V] =
+    fromRDD(rdd.subtract(other, p))
+
+  /**
    * Return a copy of the RDD partitioned using the specified partitioner. If `mapSideCombine`
    * is true, Spark will group values of the same key together on the map side before the
    * repartitioning, to only send each key over the network once. If a large number of
