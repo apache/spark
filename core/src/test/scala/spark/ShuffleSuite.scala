@@ -241,7 +241,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val b = sc.parallelize(Array(2, 3, 4), 4)
     val c = a.subtract(b)
     assert(c.collect().toSet === Set(1))
-    assert(c.splits.size === a.splits.size)
+    assert(c.partitions.size === a.partitions.size)
   }
 
   test("subtract with narrow dependency") {

@@ -6,7 +6,7 @@ import spark.RDD
 import spark.Partitioner
 import spark.Dependency
 import spark.TaskContext
-import spark.Split
+import spark.Partition
 import spark.SparkEnv
 import spark.ShuffleDependency
 import spark.OneToOneDependency
@@ -24,7 +24,7 @@ import spark.OneToOneDependency
  * touch each once to decide if the value needs to be removed.
  *
  * This is particularly helpful when `rdd1` is much smaller than `rdd2`, as
- * you can use `rdd1`'s partitioner/split size and not worry about running
+ * you can use `rdd1`'s partitioner/partition size and not worry about running
  * out of memory because of the size of `rdd2`.
  */
 private[spark] class SubtractedRDD[T: ClassManifest](
@@ -63,16 +63,16 @@ private[spark] class SubtractedRDD[T: ClassManifest](
     }
   }
 
-  override def getSplits: Array[Split] = {
-    val array = new Array[Split](part.numPartitions)
+  override def getPartitions: Array[Partition] = {
+    val array = new Array[Partition](part.numPartitions)
     for (i <- 0 until array.size) {
-      // Each CoGroupSplit will dependend on rdd1 and rdd2
-      array(i) = new CoGroupSplit(i, Seq(rdd1, rdd2).zipWithIndex.map { case (rdd, j) =>
+      // Each CoGroupPartition will depend on rdd1 and rdd2
+      array(i) = new CoGroupPartition(i, Seq(rdd1, rdd2).zipWithIndex.map { case (rdd, j) =>
         dependencies(j) match {
           case s: ShuffleDependency[_, _] =>
             new ShuffleCoGroupSplitDep(s.shuffleId)
           case _ =>
-            new NarrowCoGroupSplitDep(rdd, i, rdd.splits(i))
+            new NarrowCoGroupSplitDep(rdd, i, rdd.partitions(i))
         }
       }.toList)
     }
@@ -81,21 +81,21 @@ private[spark] class SubtractedRDD[T: ClassManifest](
 
   override val partitioner = Some(part)
 
-  override def compute(s: Split, context: TaskContext): Iterator[T] = {
-    val split = s.asInstanceOf[CoGroupSplit]
+  override def compute(p: Partition, context: TaskContext): Iterator[T] = {
+    val partition = p.asInstanceOf[CoGroupPartition]
     val set = new JHashSet[T]
     def integrate(dep: CoGroupSplitDep, op: T => Unit) = dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
         for (k <- rdd.iterator(itsSplit, context))
           op(k.asInstanceOf[T])
       case ShuffleCoGroupSplitDep(shuffleId) =>
-        for ((k, _) <- SparkEnv.get.shuffleFetcher.fetch(shuffleId, split.index))
+        for ((k, _) <- SparkEnv.get.shuffleFetcher.fetch(shuffleId, partition.index))
           op(k.asInstanceOf[T])
     }
     // the first dep is rdd1; add all keys to the set
-    integrate(split.deps(0), set.add)
+    integrate(partition.deps(0), set.add)
     // the second dep is rdd2; remove all of its keys from the set
-    integrate(split.deps(1), set.remove)
+    integrate(partition.deps(1), set.remove)
     set.iterator
   }
 

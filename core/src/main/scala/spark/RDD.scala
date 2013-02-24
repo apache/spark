@@ -397,17 +397,17 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
    * 
-   * Uses `this` partitioner/split size, because even if `other` is huge, the resulting
+   * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
   def subtract(other: RDD[T]): RDD[T] =
-    subtract(other, partitioner.getOrElse(new HashPartitioner(splits.size)))
+    subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.size)))
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
    */
-  def subtract(other: RDD[T], numSplits: Int): RDD[T] =
-    subtract(other, new HashPartitioner(numSplits))
+  def subtract(other: RDD[T], numPartitions: Int): RDD[T] =
+    subtract(other, new HashPartitioner(numPartitions))
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
