@@ -22,7 +22,7 @@
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>algebird-core_2.9.2</artifactId>
-      <version>0.1.9</version>
+      <version>0.1.8</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
