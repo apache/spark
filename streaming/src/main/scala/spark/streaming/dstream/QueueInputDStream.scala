@@ -7,6 +7,7 @@ import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 import spark.streaming.{Time, StreamingContext}
 
+private[streaming]
 class QueueInputDStream[T: ClassManifest](
     @transient ssc: StreamingContext,
     val queue: Queue[RDD[T]],
