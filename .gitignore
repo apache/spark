@@ -34,3 +34,5 @@ log/
 spark-tests.log
 streaming-tests.log
 dependency-reduced-pom.xml
+.ensime
+.ensime_lucene

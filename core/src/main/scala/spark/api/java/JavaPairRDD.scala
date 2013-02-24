@@ -59,7 +59,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
-  def filter(f: Function[(K, V), java.lang.Boolean]): JavaPairRDD[K, V] =
+  def filter(f: JFunction[(K, V), java.lang.Boolean]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.filter(x => f(x).booleanValue()))
 
   /**
@@ -102,7 +102,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
-  def combineByKey[C](createCombiner: Function[V, C],
+  def combineByKey[C](createCombiner: JFunction[V, C],
     mergeValue: JFunction2[C, V, C],
     mergeCombiners: JFunction2[C, C, C],
     partitioner: Partitioner): JavaPairRDD[K, C] = {
@@ -180,6 +180,27 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    */
   def groupByKey(numPartitions: Int): JavaPairRDD[K, JList[V]] =
     fromRDD(groupByResultToJava(rdd.groupByKey(numPartitions)))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   * 
+   * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
+   * RDD will be <= us.
+   */
+  def subtract(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
+    fromRDD(rdd.subtract(other))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaPairRDD[K, V], numPartitions: Int): JavaPairRDD[K, V] =
+    fromRDD(rdd.subtract(other, numPartitions))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaPairRDD[K, V], p: Partitioner): JavaPairRDD[K, V] =
+    fromRDD(rdd.subtract(other, p))
 
   /**
    * Return a copy of the RDD partitioned using the specified partitioner. If `mapSideCombine`
@@ -309,7 +330,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
    */
-  def mapValues[U](f: Function[V, U]): JavaPairRDD[K, U] = {
+  def mapValues[U](f: JFunction[V, U]): JavaPairRDD[K, U] = {
     implicit val cm: ClassManifest[U] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[U]]
     fromRDD(rdd.mapValues(f))
