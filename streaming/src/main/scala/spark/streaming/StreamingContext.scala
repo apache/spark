@@ -170,7 +170,8 @@ class StreamingContext private (
    *       should be same.
    */
   def actorStream[T: ClassManifest](
-    props: Props, name: String,
+    props: Props,
+    name: String,
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
     supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy): DStream[T] = {
     networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
@@ -179,19 +180,20 @@ class StreamingContext private (
   /**
    * Create an input stream that receives messages pushed by a zeromq publisher.
    * @param publisherUrl Url of remote zeromq publisher
-   * @param zeroMQ topic to subscribe to
+   * @param subscribe topic to subscribe to
    * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
    *                       of byte thus it needs the converter(which might be deserializer of bytes)
    *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
    *                       and sub sequence refer to its payload.
    * @param storageLevel RDD storage level. Defaults to memory-only.
    */
-  def zeroMQStream[T: ClassManifest](publisherUrl:String,
+  def zeroMQStream[T: ClassManifest](
+      publisherUrl:String,
       subscribe: Subscribe,
       bytesToObjects: Seq[Seq[Byte]] ⇒ Iterator[T],
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
-      supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy): DStream[T] = {
-
+      supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
+    ): DStream[T] = {
     actorStream(Props(new ZeroMQReceiver(publisherUrl,subscribe,bytesToObjects)),
         "ZeroMQReceiver", storageLevel, supervisorStrategy)
   }
@@ -283,7 +285,7 @@ class StreamingContext private (
    * @param storageLevel  Storage level to use for storing the received objects
    * @tparam T            Type of the objects in the received blocks
    */
-  def rawNetworkStream[T: ClassManifest](
+  def rawSocketStream[T: ClassManifest](
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
@@ -352,7 +354,7 @@ class StreamingContext private (
   def twitterStream(
       username: String,
       password: String,
-      filters: Seq[String],
+      filters: Seq[String] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[Status] = {
     val inputStream = new TwitterInputDStream(this, username, password, filters, storageLevel)

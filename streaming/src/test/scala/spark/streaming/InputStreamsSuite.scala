@@ -42,7 +42,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
 
-  test("network input stream") {
+  test("socket input stream") {
     // Start the server
     val testServer = new TestServer(testPort)
     testServer.start()
