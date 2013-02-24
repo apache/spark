@@ -23,7 +23,7 @@ import spark.streaming.api.java.JavaStreamingContext;
  */
 public class JavaNetworkWordCount {
   public static void main(String[] args) {
-    if (args.length < 2) {
+    if (args.length < 3) {
       System.err.println("Usage: NetworkWordCount <master> <hostname> <port>\n" +
           "In local mode, <master> should be 'local[n]' with n > 1");
       System.exit(1);

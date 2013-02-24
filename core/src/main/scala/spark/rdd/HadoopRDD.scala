@@ -15,7 +15,7 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
-import spark.{Dependency, RDD, SerializableWritable, SparkContext, Partition, TaskContext}
+import spark.{Dependency, Logging, Partition, RDD, SerializableWritable, SparkContext, TaskContext}
 
 
 /**
@@ -42,7 +42,7 @@ class HadoopRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     minSplits: Int)
-  extends RDD[(K, V)](sc, Nil) {
+  extends RDD[(K, V)](sc, Nil) with Logging {
 
   // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
@@ -71,7 +71,7 @@ class HadoopRDD[K, V](
     reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 
     // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback(() => reader.close())
+    context.addOnCompleteCallback{ () => close() }
 
     val key: K = reader.createKey()
     val value: V = reader.createValue()
@@ -88,9 +88,6 @@ class HadoopRDD[K, V](
         }
         gotNext = true
       }
-      if (finished) {
-        reader.close()
-      }
       !finished
     }
 
@@ -103,6 +100,14 @@ class HadoopRDD[K, V](
       }
       gotNext = false
       (key, value)
+    }
+
+    private def close() {
+      try {
+        reader.close()
+      } catch {
+        case e: Exception => logWarning("Exception in RecordReader.close()", e)
+      }
     }
   }
 

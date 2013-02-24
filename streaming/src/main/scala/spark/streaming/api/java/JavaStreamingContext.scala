@@ -1,16 +1,26 @@
 package spark.streaming.api.java
 
-import scala.collection.JavaConversions._
-import java.lang.{Long => JLong, Integer => JInt}
-
 import spark.streaming._
-import dstream._
+import receivers.{ActorReceiver, ReceiverSupervisorStrategy}
+import spark.streaming.dstream._
 import spark.storage.StorageLevel
+
 import spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
+import spark.api.java.{JavaSparkContext, JavaRDD}
+
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
+
+import twitter4j.Status
+
+import akka.actor.Props
+import akka.actor.SupervisorStrategy
+import akka.zeromq.Subscribe
+
+import scala.collection.JavaConversions._
+
+import java.lang.{Long => JLong, Integer => JInt}
 import java.io.InputStream
 import java.util.{Map => JMap}
-import spark.api.java.{JavaSparkContext, JavaRDD}
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -128,7 +138,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
-  def networkTextStream(hostname: String, port: Int, storageLevel: StorageLevel)
+  def socketTextStream(hostname: String, port: Int, storageLevel: StorageLevel)
   : JavaDStream[String] = {
     ssc.socketTextStream(hostname, port, storageLevel)
   }
@@ -186,13 +196,13 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param storageLevel  Storage level to use for storing the received objects
    * @tparam T            Type of the objects in the received blocks
    */
-  def rawNetworkStream[T](
+  def rawSocketStream[T](
       hostname: String,
       port: Int,
       storageLevel: StorageLevel): JavaDStream[T] = {
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    JavaDStream.fromDStream(ssc.rawNetworkStream(hostname, port, storageLevel))
+    JavaDStream.fromDStream(ssc.rawSocketStream(hostname, port, storageLevel))
   }
 
   /**
@@ -204,10 +214,10 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param port          Port to connect to for receiving data
    * @tparam T            Type of the objects in the received blocks
    */
-  def rawNetworkStream[T](hostname: String, port: Int): JavaDStream[T] = {
+  def rawSocketStream[T](hostname: String, port: Int): JavaDStream[T] = {
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    JavaDStream.fromDStream(ssc.rawNetworkStream(hostname, port))
+    JavaDStream.fromDStream(ssc.rawSocketStream(hostname, port))
   }
 
   /**
@@ -246,9 +256,176 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    */
-  def flumeStream(hostname: String, port: Int):
-  JavaDStream[SparkFlumeEvent] = {
+  def flumeStream(hostname: String, port: Int): JavaDStream[SparkFlumeEvent] = {
     ssc.flumeStream(hostname, port)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param username Twitter username
+   * @param password Twitter password
+   * @param filters Set of filter strings to get only those tweets that match them
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def twitterStream(
+      username: String,
+      password: String,
+      filters: Array[String],
+      storageLevel: StorageLevel
+    ): JavaDStream[Status] = {
+    ssc.twitterStream(username, password, filters, storageLevel)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param username Twitter username
+   * @param password Twitter password
+   * @param filters Set of filter strings to get only those tweets that match them
+   */
+  def twitterStream(
+      username: String,
+      password: String,
+      filters: Array[String]
+    ): JavaDStream[Status] = {
+    ssc.twitterStream(username, password, filters)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param username Twitter username
+   * @param password Twitter password
+   */
+  def twitterStream(
+      username: String,
+      password: String
+    ): JavaDStream[Status] = {
+    ssc.twitterStream(username, password)
+  }
+
+  /**
+   * Create an input stream with any arbitrary user implemented actor receiver.
+   * @param props Props object defining creation of the actor
+   * @param name Name of the actor
+   * @param storageLevel Storage level to use for storing the received objects
+   *
+   * @note An important point to note:
+   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
+   *       to ensure the type safety, i.e parametrized type of data received and actorStream
+   *       should be same.
+   */
+  def actorStream[T](
+      props: Props,
+      name: String,
+      storageLevel: StorageLevel,
+      supervisorStrategy: SupervisorStrategy
+    ): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    ssc.actorStream[T](props, name, storageLevel, supervisorStrategy)
+  }
+
+  /**
+   * Create an input stream with any arbitrary user implemented actor receiver.
+   * @param props Props object defining creation of the actor
+   * @param name Name of the actor
+   * @param storageLevel Storage level to use for storing the received objects
+   *
+   * @note An important point to note:
+   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
+   *       to ensure the type safety, i.e parametrized type of data received and actorStream
+   *       should be same.
+   */
+  def actorStream[T](
+      props: Props,
+      name: String,
+      storageLevel: StorageLevel
+  ): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    ssc.actorStream[T](props, name, storageLevel)
+  }
+
+  /**
+   * Create an input stream with any arbitrary user implemented actor receiver.
+   * @param props Props object defining creation of the actor
+   * @param name Name of the actor
+   *
+   * @note An important point to note:
+   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
+   *       to ensure the type safety, i.e parametrized type of data received and actorStream
+   *       should be same.
+   */
+  def actorStream[T](
+      props: Props,
+      name: String
+    ): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    ssc.actorStream[T](props, name)
+  }
+
+  /**
+   * Create an input stream that receives messages pushed by a zeromq publisher.
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param subscribe topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
+   *                       of byte thus it needs the converter(which might be deserializer of bytes)
+   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
+   *                       and sub sequence refer to its payload.
+   * @param storageLevel  Storage level to use for storing the received objects
+   */
+  def zeroMQStream[T](
+      publisherUrl:String,
+      subscribe: Subscribe,
+      bytesToObjects: Seq[Seq[Byte]] ⇒ Iterator[T],
+      storageLevel: StorageLevel,
+      supervisorStrategy: SupervisorStrategy
+    ): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    ssc.zeroMQStream[T](publisherUrl, subscribe, bytesToObjects, storageLevel, supervisorStrategy)
+  }
+
+  /**
+   * Create an input stream that receives messages pushed by a zeromq publisher.
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param subscribe topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
+   *                       of byte thus it needs the converter(which might be deserializer of bytes)
+   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
+   *                       and sub sequence refer to its payload.
+   * @param storageLevel RDD storage level. Defaults to memory-only.
+   */
+  def zeroMQStream[T](
+      publisherUrl:String,
+      subscribe: Subscribe,
+      bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
+      storageLevel: StorageLevel
+    ): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    def fn(x: Seq[Seq[Byte]]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
+    ssc.zeroMQStream[T](publisherUrl, subscribe, fn, storageLevel)
+  }
+
+  /**
+   * Create an input stream that receives messages pushed by a zeromq publisher.
+   * @param publisherUrl Url of remote zeromq publisher
+   * @param subscribe topic to subscribe to
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
+   *                       of byte thus it needs the converter(which might be deserializer of bytes)
+   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
+   *                       and sub sequence refer to its payload.
+   */
+  def zeroMQStream[T](
+      publisherUrl:String,
+      subscribe: Subscribe,
+      bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]]
+    ): JavaDStream[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    def fn(x: Seq[Seq[Byte]]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
+    ssc.zeroMQStream[T](publisherUrl, subscribe, fn)
   }
 
   /**

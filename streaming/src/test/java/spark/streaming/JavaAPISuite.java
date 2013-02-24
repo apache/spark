@@ -24,9 +24,15 @@ import spark.streaming.api.java.JavaStreamingContext;
 import spark.streaming.JavaTestUtils;
 import spark.streaming.JavaCheckpointTestUtils;
 import spark.streaming.dstream.KafkaPartitionKey;
+import spark.streaming.InputStreamsSuite;
 
 import java.io.*;
 import java.util.*;
+
+import akka.actor.Props;
+import akka.zeromq.Subscribe;
+
+
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -1205,12 +1211,12 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void testNetworkTextStream() {
+  public void testSocketTextStream() {
     JavaDStream test = ssc.socketTextStream("localhost", 12345);
   }
 
   @Test
-  public void testNetworkString() {
+  public void testSocketString() {
     class Converter extends Function<InputStream, Iterable<String>> {
       public Iterable<String> call(InputStream in) {
         BufferedReader reader = new BufferedReader(new InputStreamReader(in));
@@ -1239,18 +1245,39 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void testRawNetworkStream() {
-    JavaDStream test = ssc.rawNetworkStream("localhost", 12345);
+  public void testRawSocketStream() {
+    JavaDStream test = ssc.rawSocketStream("localhost", 12345);
   }
 
   @Test
   public void testFlumeStream() {
-    JavaDStream test = ssc.flumeStream("localhost", 12345);
+    JavaDStream test = ssc.flumeStream("localhost", 12345, StorageLevel.MEMORY_ONLY());
   }
 
   @Test
   public void testFileStream() {
     JavaPairDStream<String, String> foo =
       ssc.<String, String, SequenceFileInputFormat>fileStream("/tmp/foo");
+  }
+
+  @Test
+  public void testTwitterStream() {
+    String[] filters = new String[] { "good", "bad", "ugly" };
+    JavaDStream test = ssc.twitterStream("username", "password", filters, StorageLevel.MEMORY_ONLY());
+  }
+
+  @Test
+  public void testActorStream() {
+    JavaDStream test = ssc.actorStream((Props)null, "TestActor", StorageLevel.MEMORY_ONLY());
+  }
+
+  @Test
+  public void testZeroMQStream() {
+    JavaDStream test = ssc.zeroMQStream("url", (Subscribe) null, new Function<byte[][], Iterable<String>>() {
+      @Override
+      public Iterable<String> call(byte[][] b) throws Exception {
+        return null;
+      }
+    });
   }
 }
