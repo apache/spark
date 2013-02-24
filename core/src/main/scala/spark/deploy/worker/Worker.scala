@@ -109,19 +109,19 @@ private[spark] class Worker(
       logError("Worker registration failed: " + message)
       System.exit(1)
 
-    case LaunchExecutor(jobId, execId, jobDesc, cores_, memory_, execSparkHome_) =>
-      logInfo("Asked to launch executor %s/%d for %s".format(jobId, execId, jobDesc.name))
+    case LaunchExecutor(appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
+      logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
       val manager = new ExecutorRunner(
-        jobId, execId, jobDesc, cores_, memory_, self, workerId, ip, new File(execSparkHome_), workDir)
-      executors(jobId + "/" + execId) = manager
+        appId, execId, appDesc, cores_, memory_, self, workerId, ip, new File(execSparkHome_), workDir)
+      executors(appId + "/" + execId) = manager
       manager.start()
       coresUsed += cores_
       memoryUsed += memory_
-      master ! ExecutorStateChanged(jobId, execId, ExecutorState.RUNNING, None, None)
+      master ! ExecutorStateChanged(appId, execId, ExecutorState.RUNNING, None, None)
 
-    case ExecutorStateChanged(jobId, execId, state, message, exitStatus) =>
-      master ! ExecutorStateChanged(jobId, execId, state, message, exitStatus)
-      val fullId = jobId + "/" + execId
+    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
+      master ! ExecutorStateChanged(appId, execId, state, message, exitStatus)
+      val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         val executor = executors(fullId)
         logInfo("Executor " + fullId + " finished with state " + state +
@@ -133,8 +133,8 @@ private[spark] class Worker(
         memoryUsed -= executor.memory
       }
 
-    case KillExecutor(jobId, execId) =>
-      val fullId = jobId + "/" + execId
+    case KillExecutor(appId, execId) =>
+      val fullId = appId + "/" + execId
       executors.get(fullId) match {
         case Some(executor) =>
           logInfo("Asked to kill executor " + fullId)

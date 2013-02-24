@@ -1,9 +1,9 @@
-@(jobs: Array[spark.deploy.master.JobInfo])
+@(apps: Array[spark.deploy.master.ApplicationInfo])
 
 <table class="table table-bordered table-striped table-condensed sortable">
   <thead>
     <tr>
-      <th>JobID</th>
+      <th>ID</th>
       <th>Description</th>
       <th>Cores</th>
       <th>Memory per Node</th>
@@ -14,8 +14,8 @@
     </tr>
   </thead>
   <tbody>
-    @for(j <- jobs) {
-      @job_row(j)
+    @for(j <- apps) {
+      @app_row(j)
     }
   </tbody>
 </table>

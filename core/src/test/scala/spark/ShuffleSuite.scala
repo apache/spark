@@ -1,6 +1,7 @@
 package spark
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashSet
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
@@ -97,6 +98,28 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
     val sums = pairs.reduceByKey(_+_, 10).collect()
     assert(sums.toSet === Set((1, 7), (2, 1)))
+  }
+  
+  test("reduceByKey with partitioner") {
+    sc = new SparkContext("local", "test")
+    val p = new Partitioner() {
+      def numPartitions = 2
+      def getPartition(key: Any) = key.asInstanceOf[Int]
+    }
+    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 1), (0, 1))).partitionBy(p)
+    val sums = pairs.reduceByKey(_+_)
+    assert(sums.collect().toSet === Set((1, 4), (0, 1)))
+    assert(sums.partitioner === Some(p))
+    // count the dependencies to make sure there is only 1 ShuffledRDD
+    val deps = new HashSet[RDD[_]]()
+    def visit(r: RDD[_]) {
+      for (dep <- r.dependencies) {
+        deps += dep.rdd
+        visit(dep.rdd)
+      }
+    }
+    visit(sums)
+    assert(deps.size === 2) // ShuffledRDD, ParallelCollection
   }
 
   test("join") {
@@ -199,7 +222,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val emptyDir = Files.createTempDir()
     val file = sc.textFile(emptyDir.getAbsolutePath)
-    assert(file.splits.size == 0)
+    assert(file.partitions.size == 0)
     assert(file.collect().toList === Nil)
     // Test that a shuffle on the file works, because this used to be a bug
     assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)

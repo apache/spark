@@ -14,7 +14,7 @@
                                     @{state.workers.map(_.coresUsed).sum} Used</li>
         <li><strong>Memory:</strong> @{Utils.memoryMegabytesToString(state.workers.map(_.memory).sum)} Total, 
                                      @{Utils.memoryMegabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
-        <li><strong>Jobs:</strong> @state.activeJobs.size Running, @state.completedJobs.size Completed </li>
+        <li><strong>Applications:</strong> @state.activeApps.size Running, @state.completedApps.size Completed </li>
       </ul>
     </div>
   </div>
@@ -22,7 +22,7 @@
   <!-- Worker Summary -->
   <div class="row">
     <div class="span12">
-      <h3> Cluster Summary </h3>
+      <h3> Workers </h3>
       <br/>
       @worker_table(state.workers.sortBy(_.id))
     </div>
@@ -30,23 +30,23 @@
 
   <hr/>
 
-  <!-- Job Summary (Running) -->
+  <!-- App Summary (Running) -->
   <div class="row">
     <div class="span12">
-      <h3> Running Jobs </h3>
+      <h3> Running Applications </h3>
       <br/>
-      @job_table(state.activeJobs.sortBy(_.startTime).reverse)
+      @app_table(state.activeApps.sortBy(_.startTime).reverse)
     </div>
   </div>
 
   <hr/>
 
-  <!-- Job Summary (Completed) -->
+  <!-- App Summary (Completed) -->
   <div class="row">
     <div class="span12">
-      <h3> Completed Jobs </h3>
+      <h3> Completed Applications </h3>
       <br/>
-      @job_table(state.completedJobs.sortBy(_.endTime).reverse)
+      @app_table(state.completedApps.sortBy(_.endTime).reverse)
     </div>
   </div>
 

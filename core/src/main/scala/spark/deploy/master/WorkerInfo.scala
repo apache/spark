@@ -37,8 +37,8 @@ private[spark] class WorkerInfo(
     }
   }
 
-  def hasExecutor(job: JobInfo): Boolean = {
-    executors.values.exists(_.job == job)
+  def hasExecutor(app: ApplicationInfo): Boolean = {
+    executors.values.exists(_.application == app)
   }
 
   def webUiAddress : String = {
