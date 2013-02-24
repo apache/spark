@@ -183,7 +183,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.broadcast.factory</td>
-  <td>spark.broadcast. HttpBroadcastFactory</td>
+  <td>spark.broadcast.HttpBroadcastFactory</td>
   <td>
     Which broadcast implementation to use.
   </td>
@@ -244,10 +244,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.cleaner.delay</td>
+  <td>spark.cleaner.ttl</td>
   <td>(disable)</td>
   <td>
-    Duration (minutes) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
     Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
     useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
     applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
