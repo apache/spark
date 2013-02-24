@@ -131,8 +131,7 @@ object ActorWordCount {
     val Seq(master, host, port) = args.toSeq
 
     // Create the context and set the batch size
-    val ssc = new StreamingContext(master, "ActorWordCount",
-                                   Seconds(10))
+    val ssc = new StreamingContext(master, "ActorWordCount", Seconds(2))
 
     /*
      * Following is the use of actorStream to plug in custom actor as receiver
