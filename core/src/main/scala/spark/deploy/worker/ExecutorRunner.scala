@@ -75,10 +75,10 @@ private[spark] class ExecutorRunner(
 
   def buildCommandSeq(): Seq[String] = {
     val command = appDesc.command
-    val runner = if (getEnvOrEmpty("JAVA_HOME") == "") {
+    val runner = if (System.getenv("JAVA_HOME") == null) {
       "java"
     } else {
-      getEnvOrEmpty("JAVA_HOME") + "/bin/java"
+      System.getenv("JAVA_HOME") + "/bin/java"
     }
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
@@ -91,29 +91,19 @@ private[spark] class ExecutorRunner(
    * way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(): Seq[String] = {
-    val _javaLibPath = if (getEnvOrEmpty("SPARK_LIBRARY_PATH") == "") {
+    val _javaLibPath = if (System.getenv("SPARK_LIBRARY_PATH") == null) {
       ""
     } else {
-      "-Djava.library.path=" + getEnvOrEmpty("SPARK_LIBRARY_PATH")
+      "-Djava.library.path=" + System.getenv("SPARK_LIBRARY_PATH")
     }
     
     Seq("-cp", 
-        getEnvOrEmpty("CLASSPATH"), 
-        // SPARK_JAVA_OPTS is overwritten with SPARK_DAEMON_JAVA_OPTS for running the worker
-        getEnvOrEmpty("SPARK_NONDAEMON_JAVA_OPTS"), 
+        System.getenv("CLASSPATH"), 
+        System.getenv("SPARK_JAVA_OPTS"), 
         _javaLibPath,
         "-Xms" + memory.toString + "M",
         "-Xmx" + memory.toString + "M")
-    .filter(_ != "")
-  }
-  
-  def getEnvOrEmpty(key: String): String = {
-    val result = System.getenv(key)
-    if (result == null) {
-      ""
-    } else {
-      result
-    }
+    .filter(_ != null)
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

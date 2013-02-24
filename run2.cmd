@@ -22,9 +22,9 @@ if "%1"=="spark.deploy.master.Master" set RUNNING_DAEMON=1
 if "%1"=="spark.deploy.worker.Worker" set RUNNING_DAEMON=1
 if "x%SPARK_DAEMON_MEMORY%" == "x" set SPARK_DAEMON_MEMORY=512m
 if "%RUNNING_DAEMON%"=="1" set SPARK_MEM=%SPARK_DAEMON_MEMORY%
-rem Backup current SPARK_JAVA_OPTS for use in ExecutorRunner.scala
-if "%RUNNING_DAEMON%"=="1" set SPARK_NONDAEMON_JAVA_OPTS=%SPARK_JAVA_OPTS%
-if "%RUNNING_DAEMON%"=="1" set SPARK_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS%
+rem Do not overwrite SPARK_JAVA_OPTS environment variable in this script
+if "%RUNNING_DAEMON%"=="0" set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS%
+if "%RUNNING_DAEMON%"=="1" set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS%
 
 rem Check that SCALA_HOME has been specified
 if not "x%SCALA_HOME%"=="x" goto scala_exists
@@ -41,7 +41,7 @@ rem variable so that our process sees it and can report it to Mesos
 if "x%SPARK_MEM%"=="x" set SPARK_MEM=512m
 
 rem Set JAVA_OPTS to be able to load native libraries and to set heap size
-set JAVA_OPTS=%SPARK_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%SPARK_MEM% -Xmx%SPARK_MEM%
+set JAVA_OPTS=%OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%SPARK_MEM% -Xmx%SPARK_MEM%
 rem Load extra JAVA_OPTS from conf/java-opts, if it exists
 if exist "%FWDIR%conf\java-opts.cmd" call "%FWDIR%conf\java-opts.cmd"
 rem Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
