@@ -20,11 +20,11 @@ object Partitioner {
    * We use two method parameters (rdd, others) to enforce callers passing at least 1 RDD.
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
-    val bySize = (Seq(rdd) ++ others).sortBy(_.splits.size).reverse
+    val bySize = (Seq(rdd) ++ others).sortBy(_.partitions.size).reverse
     for (r <- bySize if r.partitioner != None) {
       return r.partitioner.get
     }
-    return new HashPartitioner(bySize.head.splits.size)
+    return new HashPartitioner(bySize.head.partitions.size)
   }
 }
 

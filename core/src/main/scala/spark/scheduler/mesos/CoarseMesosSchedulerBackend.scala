@@ -28,7 +28,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
-    frameworkName: String)
+    appName: String)
   extends StandaloneSchedulerBackend(scheduler, sc.env.actorSystem)
   with MScheduler
   with Logging {
@@ -76,7 +76,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = CoarseMesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(frameworkName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try { {
             val ret = driver.run()
@@ -239,7 +239,11 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def slaveLost(d: SchedulerDriver, slaveId: SlaveID) {
     logInfo("Mesos slave lost: " + slaveId.getValue)
     synchronized {
-      slaveIdsWithExecutors -= slaveId.getValue
+      if (slaveIdsWithExecutors.contains(slaveId.getValue)) {
+        // Note that the slave ID corresponds to the executor ID on that slave
+        slaveIdsWithExecutors -= slaveId.getValue
+        removeExecutor(slaveId.getValue, "Mesos slave lost")
+      }
     }
   }
 

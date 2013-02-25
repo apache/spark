@@ -7,12 +7,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 
-import spark.{Dependency, RDD, SerializableWritable, SparkContext, Split, TaskContext}
+import spark.{Dependency, Logging, Partition, RDD, SerializableWritable, SparkContext, TaskContext}
 
 
 private[spark]
-class NewHadoopSplit(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
-  extends Split {
+class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
+  extends Partition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
 
@@ -26,7 +26,8 @@ class NewHadoopRDD[K, V](
     valueClass: Class[V],
     @transient conf: Configuration)
   extends RDD[(K, V)](sc, Nil)
-  with HadoopMapReduceUtil {
+  with HadoopMapReduceUtil
+  with Logging {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
@@ -39,19 +40,19 @@ class NewHadoopRDD[K, V](
 
   @transient private val jobId = new JobID(jobtrackerId, id)
 
-  override def getSplits: Array[Split] = {
+  override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
     val jobContext = newJobContext(conf, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
-    val result = new Array[Split](rawSplits.size)
+    val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
-      result(i) = new NewHadoopSplit(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+      result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
     }
     result
   }
 
-  override def compute(theSplit: Split, context: TaskContext) = new Iterator[(K, V)] {
-    val split = theSplit.asInstanceOf[NewHadoopSplit]
+  override def compute(theSplit: Partition, context: TaskContext) = new Iterator[(K, V)] {
+    val split = theSplit.asInstanceOf[NewHadoopPartition]
     val conf = confBroadcast.value.value
     val attemptId = new TaskAttemptID(jobtrackerId, id, true, split.index, 0)
     val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
@@ -61,7 +62,7 @@ class NewHadoopRDD[K, V](
     reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
     // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback(() => reader.close())
+    context.addOnCompleteCallback(() => close())
 
     var havePair = false
     var finished = false
@@ -81,10 +82,18 @@ class NewHadoopRDD[K, V](
       havePair = false
       return (reader.getCurrentKey, reader.getCurrentValue)
     }
+
+    private def close() {
+      try {
+        reader.close()
+      } catch {
+        case e: Exception => logWarning("Exception in RecordReader.close()", e)
+      }
+    }
   }
 
-  override def getPreferredLocations(split: Split): Seq[String] = {
-    val theSplit = split.asInstanceOf[NewHadoopSplit]
+  override def getPreferredLocations(split: Partition): Seq[String] = {
+    val theSplit = split.asInstanceOf[NewHadoopPartition]
     theSplit.serializableHadoopSplit.value.getLocations.filter(_ != "localhost")
   }
 }

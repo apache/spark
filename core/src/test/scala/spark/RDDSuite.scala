@@ -33,6 +33,11 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     }
     assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))
 
+    val partitionSumsWithIndex = nums.mapPartitionsWithIndex {
+      case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
+    }
+    assert(partitionSumsWithIndex.collect().toList === List((0, 3), (1, 7)))
+
     intercept[UnsupportedOperationException] {
       nums.filter(_ > 5).reduce(_ + _)
     }
@@ -97,12 +102,12 @@ class RDDSuite extends FunSuite with LocalSparkContext {
 
   test("caching with failures") {
     sc = new SparkContext("local", "test")
-    val onlySplit = new Split { override def index: Int = 0 }
+    val onlySplit = new Partition { override def index: Int = 0 }
     var shouldFail = true
     val rdd = new RDD[Int](sc, Nil) {
-      override def getSplits: Array[Split] = Array(onlySplit)
+      override def getPartitions: Array[Partition] = Array(onlySplit)
       override val getDependencies = List[Dependency[_]]()
-      override def compute(split: Split, context: TaskContext): Iterator[Int] = {
+      override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
         if (shouldFail) {
           throw new Exception("injected failure")
         } else {
@@ -168,7 +173,7 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     val data = sc.parallelize(1 to 10, 10)
     // Note that split number starts from 0, so > 8 means only 10th partition left.
     val prunedRdd = new PartitionPruningRDD(data, splitNum => splitNum > 8)
-    assert(prunedRdd.splits.size === 1)
+    assert(prunedRdd.partitions.size === 1)
     val prunedData = prunedRdd.collect()
     assert(prunedData.size === 1)
     assert(prunedData(0) === 10)

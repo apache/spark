@@ -198,7 +198,7 @@ extends Connection(SocketChannel.open, selector_, remoteId_) {
     outbox.synchronized {
       outbox.addMessage(message)
       if (channel.isConnected) {
-        changeConnectionKeyInterest(SelectionKey.OP_WRITE)
+        changeConnectionKeyInterest(SelectionKey.OP_WRITE | SelectionKey.OP_READ)
       }
     }
   }
@@ -219,7 +219,7 @@ extends Connection(SocketChannel.open, selector_, remoteId_) {
   def finishConnect() {
     try {
       channel.finishConnect
-      changeConnectionKeyInterest(SelectionKey.OP_WRITE)
+      changeConnectionKeyInterest(SelectionKey.OP_WRITE | SelectionKey.OP_READ)
       logInfo("Connected to [" + address + "], " + outbox.messages.size + " messages pending")
     } catch {
       case e: Exception => {
@@ -239,8 +239,7 @@ extends Connection(SocketChannel.open, selector_, remoteId_) {
                 currentBuffers ++= chunk.buffers 
               }
               case None => {
-                changeConnectionKeyInterest(0)
-                /*key.interestOps(0)*/
+                changeConnectionKeyInterest(SelectionKey.OP_READ)
                 return
               }
             }
@@ -265,6 +264,23 @@ extends Connection(SocketChannel.open, selector_, remoteId_) {
         callOnExceptionCallback(e)
         close()
       }
+    }
+  }
+
+  override def read() {
+    // We don't expect the other side to send anything; so, we just read to detect an error or EOF.
+    try {
+      val length = channel.read(ByteBuffer.allocate(1))
+      if (length == -1) { // EOF
+        close()
+      } else if (length > 0) {
+        logWarning("Unexpected data read from SendingConnection to " + remoteConnectionManagerId)
+      }
+    } catch {
+      case e: Exception =>
+        logError("Exception while reading SendingConnection to " + remoteConnectionManagerId, e)
+        callOnExceptionCallback(e)
+        close()
     }
   }
 }

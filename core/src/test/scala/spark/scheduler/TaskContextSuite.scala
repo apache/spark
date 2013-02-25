@@ -5,7 +5,7 @@ import org.scalatest.BeforeAndAfter
 import spark.TaskContext
 import spark.RDD
 import spark.SparkContext
-import spark.Split
+import spark.Partition
 import spark.LocalSparkContext
 
 class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
@@ -14,8 +14,8 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     var completed = false
     sc = new SparkContext("local", "test")
     val rdd = new RDD[String](sc, List()) {
-      override def getSplits = Array[Split](StubSplit(0))
-      override def compute(split: Split, context: TaskContext) = {
+      override def getPartitions = Array[Partition](StubPartition(0))
+      override def compute(split: Partition, context: TaskContext) = {
         context.addOnCompleteCallback(() => completed = true)
         sys.error("failed")
       }
@@ -28,5 +28,5 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     assert(completed === true)
   }
 
-  case class StubSplit(val index: Int) extends Split
+  case class StubPartition(val index: Int) extends Partition
 }

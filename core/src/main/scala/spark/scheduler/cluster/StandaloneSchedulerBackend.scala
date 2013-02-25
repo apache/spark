@@ -68,6 +68,10 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         sender ! true
         context.stop(self)
 
+      case RemoveExecutor(executorId, reason) =>
+        removeExecutor(executorId, reason)
+        sender ! true
+
       case Terminated(actor) =>
         actorToExecutorId.get(actor).foreach(removeExecutor(_, "Akka actor terminated"))
 
@@ -100,16 +104,18 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
     // Remove a disconnected slave from the cluster
     def removeExecutor(executorId: String, reason: String) {
-      logInfo("Slave " + executorId + " disconnected, so removing it")
-      val numCores = freeCores(executorId)
-      actorToExecutorId -= executorActor(executorId)
-      addressToExecutorId -= executorAddress(executorId)
-      executorActor -= executorId
-      executorHost -= executorId
-      freeCores -= executorId
-      executorHost -= executorId
-      totalCoreCount.addAndGet(-numCores)
-      scheduler.executorLost(executorId, SlaveLost(reason))
+      if (executorActor.contains(executorId)) {
+        logInfo("Executor " + executorId + " disconnected, so removing it")
+        val numCores = freeCores(executorId)
+        actorToExecutorId -= executorActor(executorId)
+        addressToExecutorId -= executorAddress(executorId)
+        executorActor -= executorId
+        executorHost -= executorId
+        freeCores -= executorId
+        executorHost -= executorId
+        totalCoreCount.addAndGet(-numCores)
+        scheduler.executorLost(executorId, SlaveLost(reason))
+      }
     }
   }
 
@@ -139,7 +145,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
       }
     } catch {
       case e: Exception =>
-        throw new SparkException("Error stopping standalone scheduler's master actor", e)
+        throw new SparkException("Error stopping standalone scheduler's driver actor", e)
     }
   }
 
@@ -149,6 +155,18 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
   override def defaultParallelism() = Option(System.getProperty("spark.default.parallelism"))
       .map(_.toInt).getOrElse(math.max(totalCoreCount.get(), 2))
+
+  // Called by subclasses when notified of a lost worker
+  def removeExecutor(executorId: String, reason: String) {
+    try {
+      val timeout = 5.seconds
+      val future = driverActor.ask(RemoveExecutor(executorId, reason))(timeout)
+      Await.result(future, timeout)
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error notifying standalone scheduler's driver actor", e)
+    }
+  }
 }
 
 private[spark] object StandaloneSchedulerBackend {

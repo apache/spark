@@ -1,6 +1,7 @@
 package spark
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashSet
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
@@ -97,6 +98,28 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
     val sums = pairs.reduceByKey(_+_, 10).collect()
     assert(sums.toSet === Set((1, 7), (2, 1)))
+  }
+  
+  test("reduceByKey with partitioner") {
+    sc = new SparkContext("local", "test")
+    val p = new Partitioner() {
+      def numPartitions = 2
+      def getPartition(key: Any) = key.asInstanceOf[Int]
+    }
+    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 1), (0, 1))).partitionBy(p)
+    val sums = pairs.reduceByKey(_+_)
+    assert(sums.collect().toSet === Set((1, 4), (0, 1)))
+    assert(sums.partitioner === Some(p))
+    // count the dependencies to make sure there is only 1 ShuffledRDD
+    val deps = new HashSet[RDD[_]]()
+    def visit(r: RDD[_]) {
+      for (dep <- r.dependencies) {
+        deps += dep.rdd
+        visit(dep.rdd)
+      }
+    }
+    visit(sums)
+    assert(deps.size === 2) // ShuffledRDD, ParallelCollection
   }
 
   test("join") {
@@ -199,7 +222,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val emptyDir = Files.createTempDir()
     val file = sc.textFile(emptyDir.getAbsolutePath)
-    assert(file.splits.size == 0)
+    assert(file.partitions.size == 0)
     assert(file.collect().toList === Nil)
     // Test that a shuffle on the file works, because this used to be a bug
     assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
@@ -214,13 +237,13 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
 
   test("default partitioner uses split size") {
     sc = new SparkContext("local", "test")
-    // specify 2000 splits
+    // specify 2000 partitions
     val a = sc.makeRDD(Array(1, 2, 3, 4), 2000)
     // do a map, which loses the partitioner
     val b = a.map(a => (a, (a * 2).toString))
-    // then a group by, and see we didn't revert to 2 splits
+    // then a group by, and see we didn't revert to 2 partitions
     val c = b.groupByKey()
-    assert(c.splits.size === 2000)
+    assert(c.partitions.size === 2000)
   }
 
   test("default partitioner uses largest partitioner") {
@@ -228,7 +251,33 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val a = sc.makeRDD(Array((1, "a"), (2, "b")), 2)
     val b = sc.makeRDD(Array((1, "a"), (2, "b")), 2000)
     val c = a.join(b)
-    assert(c.splits.size === 2000)
+    assert(c.partitions.size === 2000)
+  }
+
+  test("subtract") {
+    sc = new SparkContext("local", "test")
+    val a = sc.parallelize(Array(1, 2, 3), 2)
+    val b = sc.parallelize(Array(2, 3, 4), 4)
+    val c = a.subtract(b)
+    assert(c.collect().toSet === Set(1))
+    assert(c.partitions.size === a.partitions.size)
+  }
+
+  test("subtract with narrow dependency") {
+    sc = new SparkContext("local", "test")
+    // use a deterministic partitioner
+    val p = new Partitioner() {
+      def numPartitions = 5
+      def getPartition(key: Any) = key.asInstanceOf[Int]
+    }
+    // partitionBy so we have a narrow dependency
+    val a = sc.parallelize(Array((1, "a"), (2, "b"), (3, "c"))).partitionBy(p)
+    println(sc.runJob(a, (i: Iterator[(Int, String)]) => i.toList).toList)
+    // more partitions/no partitioner so a shuffle dependency 
+    val b = sc.parallelize(Array((2, "b"), (3, "cc"), (4, "d")), 4)
+    val c = a.subtract(b)
+    assert(c.collect().toSet === Set((1, "a"), (3, "c")))
+    assert(c.partitioner.get === p)
   }
 }
 

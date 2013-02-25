@@ -63,7 +63,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     }
     val aggregator =
       new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    if (mapSideCombine) {
+    if (self.partitioner == Some(partitioner)) {
+      self.mapPartitions(aggregator.combineValuesByKey(_), true)
+    } else if (mapSideCombine) {
       val mapSideCombined = self.mapPartitions(aggregator.combineValuesByKey(_), true)
       val partitioned = new ShuffledRDD[K, C](mapSideCombined, partitioner)
       partitioned.mapPartitions(aggregator.combineCombinersByKey(_), true)
@@ -82,8 +84,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   def combineByKey[C](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
-      numSplits: Int): RDD[(K, C)] = {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numSplits))
+      numPartitions: Int): RDD[(K, C)] = {
+    combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numPartitions))
   }
 
   /**
@@ -144,10 +146,10 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   /**
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with numSplits splits.
+   * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
    */
-  def reduceByKey(func: (V, V) => V, numSplits: Int): RDD[(K, V)] = {
-    reduceByKey(new HashPartitioner(numSplits), func)
+  def reduceByKey(func: (V, V) => V, numPartitions: Int): RDD[(K, V)] = {
+    reduceByKey(new HashPartitioner(numPartitions), func)
   }
 
   /**
@@ -165,10 +167,10 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
-   * resulting RDD with into `numSplits` partitions.
+   * resulting RDD with into `numPartitions` partitions.
    */
-  def groupByKey(numSplits: Int): RDD[(K, Seq[V])] = {
-    groupByKey(new HashPartitioner(numSplits))
+  def groupByKey(numPartitions: Int): RDD[(K, Seq[V])] = {
+    groupByKey(new HashPartitioner(numPartitions))
   }
 
   /**
@@ -287,8 +289,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
-  def join[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, W))] = {
-    join(other, new HashPartitioner(numSplits))
+  def join[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, W))] = {
+    join(other, new HashPartitioner(numPartitions))
   }
 
   /**
@@ -305,10 +307,10 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
    * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
-   * into `numSplits` partitions.
+   * into `numPartitions` partitions.
    */
-  def leftOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (V, Option[W]))] = {
-    leftOuterJoin(other, new HashPartitioner(numSplits))
+  def leftOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, Option[W]))] = {
+    leftOuterJoin(other, new HashPartitioner(numPartitions))
   }
 
   /**
@@ -327,8 +329,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
    * RDD into the given number of partitions.
    */
-  def rightOuterJoin[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (Option[V], W))] = {
-    rightOuterJoin(other, new HashPartitioner(numSplits))
+  def rightOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Option[V], W))] = {
+    rightOuterJoin(other, new HashPartitioner(numPartitions))
   }
 
   /**
@@ -363,7 +365,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](
-        Seq(self.asInstanceOf[RDD[(_, _)]], other.asInstanceOf[RDD[(_, _)]]),
+        Seq(self.asInstanceOf[RDD[(K, _)]], other.asInstanceOf[RDD[(K, _)]]),
         partitioner)
     val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
     prfs.mapValues {
@@ -382,9 +384,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](
-        Seq(self.asInstanceOf[RDD[(_, _)]],
-            other1.asInstanceOf[RDD[(_, _)]],
-            other2.asInstanceOf[RDD[(_, _)]]),
+        Seq(self.asInstanceOf[RDD[(K, _)]],
+            other1.asInstanceOf[RDD[(K, _)]],
+            other2.asInstanceOf[RDD[(K, _)]]),
         partitioner)
     val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
     prfs.mapValues {
@@ -414,17 +416,17 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: RDD[(K, W)], numSplits: Int): RDD[(K, (Seq[V], Seq[W]))] = {
-    cogroup(other, new HashPartitioner(numSplits))
+  def cogroup[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Seq[V], Seq[W]))] = {
+    cogroup(other, new HashPartitioner(numPartitions))
   }
 
   /**
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
-  def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], numSplits: Int)
+  def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], numPartitions: Int)
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
-    cogroup(other1, other2, new HashPartitioner(numSplits))
+    cogroup(other1, other2, new HashPartitioner(numPartitions))
   }
 
   /** Alias for cogroup. */
@@ -625,9 +627,9 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
    * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
    * order of the keys).
    */
-  def sortByKey(ascending: Boolean = true, numSplits: Int = self.splits.size): RDD[(K,V)] = {
+  def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.size): RDD[(K,V)] = {
     val shuffled =
-      new ShuffledRDD[K, V](self, new RangePartitioner(numSplits, self, ascending))
+      new ShuffledRDD[K, V](self, new RangePartitioner(numPartitions, self, ascending))
     shuffled.mapPartitions(iter => {
       val buf = iter.toArray
       if (ascending) {
@@ -641,9 +643,9 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
 
 private[spark]
 class MappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => U) extends RDD[(K, U)](prev) {
-  override def getSplits = firstParent[(K, V)].splits
+  override def getPartitions = firstParent[(K, V)].partitions
   override val partitioner = firstParent[(K, V)].partitioner
-  override def compute(split: Split, context: TaskContext) =
+  override def compute(split: Partition, context: TaskContext) =
     firstParent[(K, V)].iterator(split, context).map{ case (k, v) => (k, f(v)) }
 }
 
@@ -651,9 +653,9 @@ private[spark]
 class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U])
   extends RDD[(K, U)](prev) {
 
-  override def getSplits = firstParent[(K, V)].splits
+  override def getPartitions = firstParent[(K, V)].partitions
   override val partitioner = firstParent[(K, V)].partitioner
-  override def compute(split: Split, context: TaskContext) = {
+  override def compute(split: Partition, context: TaskContext) = {
     firstParent[(K, V)].iterator(split, context).flatMap { case (k, v) => f(v).map(x => (k, x)) }
   }
 }

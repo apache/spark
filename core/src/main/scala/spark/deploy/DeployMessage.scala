@@ -1,7 +1,7 @@
 package spark.deploy
 
 import spark.deploy.ExecutorState.ExecutorState
-import spark.deploy.master.{WorkerInfo, JobInfo}
+import spark.deploy.master.{WorkerInfo, ApplicationInfo}
 import spark.deploy.worker.ExecutorRunner
 import scala.collection.immutable.List
 
@@ -23,37 +23,39 @@ case class RegisterWorker(
 
 private[spark] 
 case class ExecutorStateChanged(
-    jobId: String,
+    appId: String,
     execId: Int,
     state: ExecutorState,
     message: Option[String],
     exitStatus: Option[Int])
   extends DeployMessage
 
+private[spark] case class Heartbeat(workerId: String) extends DeployMessage
+
 // Master to Worker
 
 private[spark] case class RegisteredWorker(masterWebUiUrl: String) extends DeployMessage
 private[spark] case class RegisterWorkerFailed(message: String) extends DeployMessage
-private[spark] case class KillExecutor(jobId: String, execId: Int) extends DeployMessage
+private[spark] case class KillExecutor(appId: String, execId: Int) extends DeployMessage
 
 private[spark] case class LaunchExecutor(
-    jobId: String,
+    appId: String,
     execId: Int,
-    jobDesc: JobDescription,
+    appDesc: ApplicationDescription,
     cores: Int,
     memory: Int,
     sparkHome: String)
   extends DeployMessage
 
-
 // Client to Master
 
-private[spark] case class RegisterJob(jobDescription: JobDescription) extends DeployMessage
+private[spark] case class RegisterApplication(appDescription: ApplicationDescription)
+  extends DeployMessage
 
 // Master to Client
 
 private[spark] 
-case class RegisteredJob(jobId: String) extends DeployMessage
+case class RegisteredApplication(appId: String) extends DeployMessage
 
 private[spark] 
 case class ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int)
@@ -63,7 +65,7 @@ case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String
                            exitStatus: Option[Int])
 
 private[spark]
-case class JobKilled(message: String)
+case class appKilled(message: String)
 
 // Internal message in Client
 
@@ -76,8 +78,11 @@ private[spark] case object RequestMasterState
 // Master to MasterWebUI
 
 private[spark] 
-case class MasterState(uri: String, workers: Array[WorkerInfo], activeJobs: Array[JobInfo],
-  completedJobs: Array[JobInfo])
+case class MasterState(host: String, port: Int, workers: Array[WorkerInfo],
+  activeApps: Array[ApplicationInfo], completedApps: Array[ApplicationInfo]) {
+
+  def uri = "spark://" + host + ":" + port
+}
 
 //  WorkerWebUI to Worker
 private[spark] case object RequestWorkerState
@@ -85,6 +90,6 @@ private[spark] case object RequestWorkerState
 // Worker to WorkerWebUI
 
 private[spark]
-case class WorkerState(uri: String, workerId: String, executors: List[ExecutorRunner], 
+case class WorkerState(host: String, port: Int, workerId: String, executors: List[ExecutorRunner],
   finishedExecutors: List[ExecutorRunner], masterUrl: String, cores: Int, memory: Int, 
   coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String)
