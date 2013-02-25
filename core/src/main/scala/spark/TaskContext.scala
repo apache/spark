@@ -9,8 +9,6 @@ class TaskContext(
   val attemptId: Long,
   val taskMetrics: TaskMetrics = TaskMetrics.empty()
 ) extends Serializable {
-  //by adding Task here, I'm destroying the separation between Task & TaskContext ... not sure why they need to
-  // be separate
 
   @transient val onCompleteCallbacks = new ArrayBuffer[() => Unit]
 
