@@ -41,7 +41,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
   def this(master: String, appName: String, batchDuration: Duration) =
-    this(new StreamingContext(master, appName, batchDuration))
+    this(new StreamingContext(master, appName, batchDuration, null, Nil, Map()))
 
   /**
    * Creates a StreamingContext.
@@ -58,7 +58,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
       batchDuration: Duration,
       sparkHome: String,
       jars: Array[String]) =
-    this(new StreamingContext(master, appName, batchDuration, sparkHome, jars))
+    this(new StreamingContext(master, appName, batchDuration, sparkHome, jars, Map()))
 
   /**
    * Creates a StreamingContext.
