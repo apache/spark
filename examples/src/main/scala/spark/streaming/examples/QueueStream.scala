@@ -30,7 +30,7 @@ object QueueStream {
     
     // Create and push some RDDs into
     for (i <- 1 to 30) {
-      rddQueue += ssc.sc.makeRDD(1 to 1000, 10)
+      rddQueue += sc.sparkContext.makeRDD(1 to 1000, 10)
       Thread.sleep(1000)
     }
     ssc.stop()
