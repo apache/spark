@@ -235,7 +235,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     assert(rdd.values.collect().toList === List("a", "b"))
   }
 
-  test("default partitioner uses split size") {
+  test("default partitioner uses partition size") {
     sc = new SparkContext("local", "test")
     // specify 2000 partitions
     val a = sc.makeRDD(Array(1, 2, 3, 4), 2000)
