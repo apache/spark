@@ -10,9 +10,6 @@ abstract class Partitioner extends Serializable {
 }
 
 object Partitioner {
-
-  private val useDefaultParallelism = System.getProperty("spark.default.parallelism") != null
-
   /**
    * Choose a partitioner to use for a cogroup-like operation between a number of RDDs.
    *
@@ -33,7 +30,7 @@ object Partitioner {
     for (r <- bySize if r.partitioner != None) {
       return r.partitioner.get
     }
-    if (useDefaultParallelism) {
+    if (System.getProperty("spark.default.parallelism") != null) {
       return new HashPartitioner(rdd.context.defaultParallelism)
     } else {
       return new HashPartitioner(bySize.head.partitions.size)
