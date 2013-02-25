@@ -38,7 +38,7 @@ class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging
 
 
 object MetadataCleaner {
-  def getDelaySeconds = System.getProperty("spark.cleaner.delay", "-1").toInt
-  def setDelaySeconds(delay: Int) { System.setProperty("spark.cleaner.delay", delay.toString) }
+  def getDelaySeconds = System.getProperty("spark.cleaner.ttl", "-1").toInt
+  def setDelaySeconds(delay: Int) { System.setProperty("spark.cleaner.ttl", delay.toString) }
 }
 

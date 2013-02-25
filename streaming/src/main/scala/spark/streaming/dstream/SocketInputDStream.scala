@@ -15,7 +15,7 @@ class SocketInputDStream[T: ClassManifest](
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[T](ssc_) {
 
-  def createReceiver(): NetworkReceiver[T] = {
+  def getReceiver(): NetworkReceiver[T] = {
     new SocketReceiver(host, port, bytesToObjects, storageLevel)
   }
 }

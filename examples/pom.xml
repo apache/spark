@@ -20,11 +20,10 @@
       <artifactId>jetty-server</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.twitter4j</groupId>
-      <artifactId>twitter4j-stream</artifactId>
-      <version>3.0.3</version>
+      <groupId>com.twitter</groupId>
+      <artifactId>algebird-core_2.9.2</artifactId>
+      <version>0.1.8</version>
     </dependency>
-
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.version}</artifactId>

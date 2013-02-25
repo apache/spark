@@ -114,7 +114,7 @@ object SparkBuild extends Build {
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
     resolvers ++= Seq(
-      "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
+      "Akka Repository" at "http://repo.akka.io/releases/",
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
       "Spray Repository" at "http://repo.spray.cc/",
       "Cloudera Repository" at "https://repository.cloudera.com/artifactory/cloudera-repos/",
@@ -155,9 +155,7 @@ object SparkBuild extends Build {
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
-    libraryDependencies ++= Seq(
-      "org.twitter4j" % "twitter4j-stream" % "3.0.3"
-    )
+    libraryDependencies ++= Seq("com.twitter" % "algebird-core_2.9.2" % "0.1.8")
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
@@ -166,7 +164,9 @@ object SparkBuild extends Build {
     name := "spark-streaming",
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile",
-      "com.github.sgroschupf" % "zkclient" % "0.1"
+      "com.github.sgroschupf" % "zkclient" % "0.1",
+      "org.twitter4j" % "twitter4j-stream" % "3.0.3",
+      "com.typesafe.akka" % "akka-zeromq" % "2.0.3"
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
