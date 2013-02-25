@@ -58,9 +58,9 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
 * [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts, and details on the Scala API
-* [Streaming Programming Guide](streaming-programming-guide.html): an API preview of Spark Streaming
 * [Java Programming Guide](java-programming-guide.html): using Spark from Java
 * [Python Programming Guide](python-programming-guide.html): using Spark from Python
+* [Spark Streaming Guide](streaming-programming-guide.html): using the alpha release of Spark Streaming
 
 **API Docs:**
 
