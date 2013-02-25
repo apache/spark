@@ -64,7 +64,7 @@ class SparkContext(
     val appName: String,
     val sparkHome: String = null,
     val jars: Seq[String] = Nil,
-    environment: Map[String, String] = Map())
+    val environment: Map[String, String] = Map())
   extends Logging {
 
   // Ensure logging is initialized before we spawn any threads
