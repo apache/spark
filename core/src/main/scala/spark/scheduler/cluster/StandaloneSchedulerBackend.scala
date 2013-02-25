@@ -153,7 +153,8 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     driverActor ! ReviveOffers
   }
 
-  override def defaultParallelism(): Int = math.max(totalCoreCount.get(), 2)
+  override def defaultParallelism() = Option(System.getProperty("spark.default.parallelism"))
+      .map(_.toInt).getOrElse(math.max(totalCoreCount.get(), 2))
 
   // Called by subclasses when notified of a lost worker
   def removeExecutor(executorId: String, reason: String) {

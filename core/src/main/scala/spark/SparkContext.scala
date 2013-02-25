@@ -693,7 +693,7 @@ class SparkContext(
     checkpointDir = Some(dir)
   }
 
-  /** Default level of parallelism to use when not given by user (e.g. for reduce tasks) */
+  /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
