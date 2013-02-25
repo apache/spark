@@ -28,21 +28,21 @@ fi
 
 # Add java opts for master, worker, executor. The opts maybe null
 case "$1" in
-	'spark.deploy.master.Master')
-		SPARK_JAVA_OPTS+=" $SPARK_MASTER_OPTS"
-		;;
-	'spark.deploy.worker.Worker')
-		SPARK_JAVA_OPTS+=" $SPARK_WORKER_OPTS"
-		;;
-	'spark.executor.StandaloneExecutorBackend')
-		SPARK_JAVA_OPTS+=" $SPARK_EXECUTOR_OPTS"
-		;;
-	'spark.executor.MesosExecutorBackend')
-		SPARK_JAVA_OPTS+=" $SPARK_EXECUTOR_OPTS"
-		;;
-	'spark.repl.Main')
-		SPARK_JAVA_OPTS+=" $SPARK_REPL_OPTS"
-		;;
+  'spark.deploy.master.Master')
+    SPARK_JAVA_OPTS+=" $SPARK_MASTER_OPTS"
+    ;;
+  'spark.deploy.worker.Worker')
+    SPARK_JAVA_OPTS+=" $SPARK_WORKER_OPTS"
+    ;;
+  'spark.executor.StandaloneExecutorBackend')
+    SPARK_JAVA_OPTS+=" $SPARK_EXECUTOR_OPTS"
+    ;;
+  'spark.executor.MesosExecutorBackend')
+    SPARK_JAVA_OPTS+=" $SPARK_EXECUTOR_OPTS"
+    ;;
+  'spark.repl.Main')
+    SPARK_JAVA_OPTS+=" $SPARK_REPL_OPTS"
+    ;;
 esac
 
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
