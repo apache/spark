@@ -1,9 +1,9 @@
 ---
 layout: global
-title: Tutorial - Spark streaming, Plugging in a custom receiver.
+title: Tutorial - Spark Streaming, Plugging in a custom receiver.
 ---
 
-A "Spark streaming" receiver can be a simple network stream, streams of messages from a message queue, files etc. A receiver can also assume roles more than just receiving data like filtering, preprocessing, to name a few of the possibilities. The api to plug-in any user defined custom receiver is thus provided to encourage development of receivers which may be well suited to ones specific need.
+A "Spark Streaming" receiver can be a simple network stream, streams of messages from a message queue, files etc. A receiver can also assume roles more than just receiving data like filtering, preprocessing, to name a few of the possibilities. The api to plug-in any user defined custom receiver is thus provided to encourage development of receivers which may be well suited to ones specific need.
 
 This guide shows the programming model and features by walking through a simple sample receiver and corresponding Spark Streaming application.
 
