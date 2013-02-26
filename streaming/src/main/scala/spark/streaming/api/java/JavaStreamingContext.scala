@@ -49,6 +49,23 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param appName Name to be used when registering with the scheduler
    * @param batchDuration The time interval at which streaming data will be divided into batches
    * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jarFile JAR file containing job code, to ship to cluster. This can be a path on the local
+   *                file system or an HDFS, HTTP, HTTPS, or FTP URL.
+   */
+  def this(
+      master: String,
+      appName: String,
+      batchDuration: Duration,
+      sparkHome: String,
+      jarFile: String) =
+    this(new StreamingContext(master, appName, batchDuration, sparkHome, Seq(jarFile), Map()))
+
+  /**
+   * Creates a StreamingContext.
+   * @param master Name of the Spark Master
+   * @param appName Name to be used when registering with the scheduler
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */

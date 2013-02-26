@@ -21,7 +21,8 @@ object TwitterPopularTags {
     val Array(master, username, password) = args.slice(0, 3)
     val filters = args.slice(3, args.length)
 
-    val ssc = new StreamingContext(master, "TwitterPopularTags", Seconds(2))
+    val ssc = new StreamingContext(master, "TwitterPopularTags", Seconds(2),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
     val stream = ssc.twitterStream(username, password, filters)
 
     val hashTags = stream.flatMap(status => status.getText.split(" ").filter(_.startsWith("#")))

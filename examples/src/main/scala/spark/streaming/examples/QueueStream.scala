@@ -15,7 +15,8 @@ object QueueStream {
     }
     
     // Create the context
-    val ssc = new StreamingContext(args(0), "QueueStream", Seconds(1))
+    val ssc = new StreamingContext(args(0), "QueueStream", Seconds(1),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     // Create the queue through which RDDs can be pushed to 
     // a QueueInputDStream

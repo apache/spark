@@ -134,6 +134,16 @@ for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
 done
 export CLASSPATH # Needed for spark-shell
 
+# Figure out the JAR file that our examples were packaged into.
+if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*".jar" ]; then
+  # Use the JAR from the SBT build
+  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*".jar"`
+fi
+if [ -e "$EXAMPLES_DIR/target/spark-examples-"*hadoop*".jar" ]; then
+  # Use the JAR from the Maven build
+  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples-"*hadoop*".jar"`
+fi
+
 # Figure out whether to run our class with java or with the scala launcher.
 # In most cases, we'd prefer to execute our process with java because scala
 # creates a shell script as the parent of its Java process, which makes it

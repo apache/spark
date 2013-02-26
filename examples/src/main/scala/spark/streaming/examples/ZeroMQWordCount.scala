@@ -58,7 +58,8 @@ object ZeroMQWordCount {
     val Seq(master, url, topic) = args.toSeq
 
     // Create the context and set the batch size
-    val ssc = new StreamingContext(master, "ZeroMQWordCount", Seconds(2))
+    val ssc = new StreamingContext(master, "ZeroMQWordCount", Seconds(2),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     def bytesToStringIterator(x: Seq[Seq[Byte]]) = (x.map(x => new String(x.toArray))).iterator
 

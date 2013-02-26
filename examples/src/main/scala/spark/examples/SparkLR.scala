@@ -5,6 +5,9 @@ import scala.math.exp
 import spark.util.Vector
 import spark._
 
+/**
+ * Logistic regression based classification.
+ */
 object SparkLR {
   val N = 10000  // Number of data points
   val D = 10   // Numer of dimensions
@@ -28,7 +31,8 @@ object SparkLR {
       System.err.println("Usage: SparkLR <master> [<slices>]")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "SparkLR")
+    val sc = new SparkContext(args(0), "SparkLR",
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
     val numSlices = if (args.length > 1) args(1).toInt else 2
     val points = sc.parallelize(generateData, numSlices).cache()
 
