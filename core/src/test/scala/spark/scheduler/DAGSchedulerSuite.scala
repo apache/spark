@@ -90,7 +90,12 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter {
     cacheLocations.clear()
     results.clear()
     mapOutputTracker = new MapOutputTracker()
-    scheduler = new DAGScheduler(taskScheduler, mapOutputTracker, blockManagerMaster, null)
+    scheduler = new DAGScheduler(taskScheduler, mapOutputTracker, blockManagerMaster, null) {
+      override def runLocally(job: ActiveJob) {
+        // don't bother with the thread while unit testing
+        runLocallyWithinThread(job)
+      }
+    }
   }
 
   after {
@@ -203,8 +208,6 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter {
       override def toString = "DAGSchedulerSuite Local RDD"
     }
     runEvent(JobSubmitted(rdd, jobComputeFunc, Array(0), true, null, listener))
-    // this shouldn't be needed, but i haven't stubbed out runLocally yet
-    Thread.sleep(500)
     assert(results === Map(0 -> 42))
   }
   
