@@ -94,7 +94,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   test("flume input stream") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(master, framework, batchDuration)
-    val flumeStream = ssc.flumeStream("localhost", 33333, StorageLevel.MEMORY_AND_DISK)
+    val flumeStream = ssc.flumeStream("localhost", testPort, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
@@ -104,7 +104,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
     Thread.sleep(1000)
-    val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", 33333));
+    val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", testPort));
     val client = SpecificRequestor.getClient(
       classOf[AvroSourceProtocol], transceiver);
 
