@@ -6,6 +6,8 @@ import util.ManualClock
 
 class BasicOperationsSuite extends TestSuiteBase {
 
+  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+
   override def framework() = "BasicOperationsSuite"
 
   after {
@@ -22,7 +24,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     )
   }
 
-  test("flatmap") {
+  test("flatMap") {
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     testOperation(
       input,
@@ -83,6 +85,23 @@ class BasicOperationsSuite extends TestSuiteBase {
       Seq(1 to 4, 5 to 8, 9 to 12),
       (s: DStream[Int]) => s.reduce(_ + _),
       Seq(Seq(10), Seq(26), Seq(42))
+    )
+  }
+
+  test("count") {
+    testOperation(
+      Seq(1 to 1, 1 to 2, 1 to 3, 1 to 4),
+      (s: DStream[Int]) => s.count(),
+      Seq(Seq(1L), Seq(2L), Seq(3L), Seq(4L))
+    )
+  }
+
+  test("countByValue") {
+    testOperation(
+      Seq(1 to 1, Seq(1, 1, 1), 1 to 2, Seq(1, 1, 2, 2)),
+      (s: DStream[Int]) => s.countByValue(),
+      Seq(Seq((1, 1L)), Seq((1, 3L)), Seq((1, 1L), (2, 1L)), Seq((2, 2L), (1, 2L))),
+      true
     )
   }
 
@@ -163,6 +182,71 @@ class BasicOperationsSuite extends TestSuiteBase {
     }
 
     testOperation(inputData, updateStateOperation, outputData, true)
+  }
+
+  test("updateStateByKey - object lifecycle") {
+    val inputData =
+      Seq(
+        Seq("a","b"),
+        null,
+        Seq("a","c","a"),
+        Seq("c"),
+        null,
+        null
+      )
+
+    val outputData =
+      Seq(
+        Seq(("a", 1), ("b", 1)),
+        Seq(("a", 1), ("b", 1)),
+        Seq(("a", 3), ("c", 1)),
+        Seq(("a", 3), ("c", 2)),
+        Seq(("c", 2)),
+        Seq()
+      )
+
+    val updateStateOperation = (s: DStream[String]) => {
+      class StateObject(var counter: Int = 0, var expireCounter: Int = 0) extends Serializable
+
+      // updateFunc clears a state when a StateObject is seen without new values twice in a row
+      val updateFunc = (values: Seq[Int], state: Option[StateObject]) => {
+        val stateObj = state.getOrElse(new StateObject)
+        values.foldLeft(0)(_ + _) match {
+          case 0 => stateObj.expireCounter += 1 // no new values
+          case n => { // has new values, increment and reset expireCounter
+            stateObj.counter += n
+            stateObj.expireCounter = 0
+          }
+        }
+        stateObj.expireCounter match {
+          case 2 => None // seen twice with no new values, give it the boot
+          case _ => Option(stateObj)
+        }
+      }
+      s.map(x => (x, 1)).updateStateByKey[StateObject](updateFunc).mapValues(_.counter)
+    }
+
+    testOperation(inputData, updateStateOperation, outputData, true)
+  }
+
+  test("slice") {
+    val ssc = new StreamingContext("local[2]", "BasicOperationSuite", Seconds(1))
+    val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
+    val stream = new TestInputStream[Int](ssc, input, 2)
+    ssc.registerInputStream(stream)
+    stream.foreach(_ => {})  // Dummy output stream
+    ssc.start()
+    Thread.sleep(2000)
+    def getInputFromSlice(fromMillis: Long, toMillis: Long) = {
+      stream.slice(new Time(fromMillis), new Time(toMillis)).flatMap(_.collect()).toSet
+    }
+
+    assert(getInputFromSlice(0, 1000) == Set(1))
+    assert(getInputFromSlice(0, 2000) == Set(1, 2))
+    assert(getInputFromSlice(1000, 2000) == Set(1, 2))
+    assert(getInputFromSlice(2000, 4000) == Set(2, 3, 4))
+    ssc.stop()
+    Thread.sleep(1000)
   }
 
   test("forgetting of RDDs - map and window operations") {

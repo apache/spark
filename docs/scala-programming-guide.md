@@ -203,7 +203,7 @@ A complete list of transformations is available in the [RDD API doc](api/core/in
 <tr><th>Action</th><th>Meaning</th></tr>
 <tr>
   <td> <b>reduce</b>(<i>func</i>) </td>
-  <td> Aggregate the elements of the dataset using a function <i>func</i> (which takes two arguments and returns one). The function should be associative so that it can be computed correctly in parallel. </td>
+  <td> Aggregate the elements of the dataset using a function <i>func</i> (which takes two arguments and returns one). The function should be commutative and associative so that it can be computed correctly in parallel. </td>
 </tr>
 <tr>
   <td> <b>collect</b>() </td>

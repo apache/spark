@@ -30,13 +30,18 @@ JavaRDDLike[T, JavaRDD[T]] {
   /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
-  def distinct(numSplits: Int): JavaRDD[T] = wrapRDD(rdd.distinct(numSplits))
+  def distinct(numPartitions: Int): JavaRDD[T] = wrapRDD(rdd.distinct(numPartitions))
   
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaRDD[T] =
     wrapRDD(rdd.filter((x => f(x).booleanValue())))
+
+  /**
+   * Return a new RDD that is reduced into `numPartitions` partitions.
+   */
+  def coalesce(numPartitions: Int): JavaRDD[T] = rdd.coalesce(numPartitions)
 
   /**
    * Return a sampled subset of this RDD.
@@ -49,6 +54,26 @@ JavaRDDLike[T, JavaRDD[T]] {
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.union(other.rdd))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   * 
+   * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
+   * RDD will be <= us.
+   */
+  def subtract(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.subtract(other))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaRDD[T], numPartitions: Int): JavaRDD[T] =
+    wrapRDD(rdd.subtract(other, numPartitions))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
+    wrapRDD(rdd.subtract(other, p))
 
 }
 

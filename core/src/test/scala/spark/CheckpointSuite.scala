@@ -34,7 +34,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     testCheckpointing(_.sample(false, 0.5, 0))
     testCheckpointing(_.glom())
     testCheckpointing(_.mapPartitions(_.map(_.toString)))
-    testCheckpointing(r => new MapPartitionsWithSplitRDD(r,
+    testCheckpointing(r => new MapPartitionsWithIndexRDD(r,
       (i: Int, iter: Iterator[Int]) => iter.map(_.toString), false ))
     testCheckpointing(_.map(x => (x % 2, 1)).reduceByKey(_ + _).mapValues(_.toString))
     testCheckpointing(_.map(x => (x % 2, 1)).reduceByKey(_ + _).flatMapValues(x => 1 to x))
@@ -43,14 +43,14 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
 
   test("ParallelCollection") {
     val parCollection = sc.makeRDD(1 to 4, 2)
-    val numSplits = parCollection.splits.size
+    val numPartitions = parCollection.partitions.size
     parCollection.checkpoint()
     assert(parCollection.dependencies === Nil)
     val result = parCollection.collect()
     assert(sc.checkpointFile[Int](parCollection.getCheckpointFile.get).collect() === result)
     assert(parCollection.dependencies != Nil)
-    assert(parCollection.splits.length === numSplits)
-    assert(parCollection.splits.toList === parCollection.checkpointData.get.getSplits.toList)
+    assert(parCollection.partitions.length === numPartitions)
+    assert(parCollection.partitions.toList === parCollection.checkpointData.get.getPartitions.toList)
     assert(parCollection.collect() === result)
   }
 
@@ -59,13 +59,13 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     val blockManager = SparkEnv.get.blockManager
     blockManager.putSingle(blockId, "test", StorageLevel.MEMORY_ONLY)
     val blockRDD = new BlockRDD[String](sc, Array(blockId))
-    val numSplits = blockRDD.splits.size
+    val numPartitions = blockRDD.partitions.size
     blockRDD.checkpoint()
     val result = blockRDD.collect()
     assert(sc.checkpointFile[String](blockRDD.getCheckpointFile.get).collect() === result)
     assert(blockRDD.dependencies != Nil)
-    assert(blockRDD.splits.length === numSplits)
-    assert(blockRDD.splits.toList === blockRDD.checkpointData.get.getSplits.toList)
+    assert(blockRDD.partitions.length === numPartitions)
+    assert(blockRDD.partitions.toList === blockRDD.checkpointData.get.getPartitions.toList)
     assert(blockRDD.collect() === result)
   }
 
@@ -79,9 +79,9 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   test("UnionRDD") {
     def otherRDD = sc.makeRDD(1 to 10, 1)
 
-    // Test whether the size of UnionRDDSplits reduce in size after parent RDD is checkpointed.
+    // Test whether the size of UnionRDDPartitions reduce in size after parent RDD is checkpointed.
     // Current implementation of UnionRDD has transient reference to parent RDDs,
-    // so only the splits will reduce in serialized size, not the RDD.
+    // so only the partitions will reduce in serialized size, not the RDD.
     testCheckpointing(_.union(otherRDD), false, true)
     testParentCheckpointing(_.union(otherRDD), false, true)
   }
@@ -91,21 +91,21 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     testCheckpointing(new CartesianRDD(sc, _, otherRDD))
 
     // Test whether size of CoalescedRDD reduce in size after parent RDD is checkpointed
-    // Current implementation of CoalescedRDDSplit has transient reference to parent RDD,
-    // so only the RDD will reduce in serialized size, not the splits.
+    // Current implementation of CoalescedRDDPartition has transient reference to parent RDD,
+    // so only the RDD will reduce in serialized size, not the partitions.
     testParentCheckpointing(new CartesianRDD(sc, _, otherRDD), true, false)
 
-    // Test that the CartesianRDD updates parent splits (CartesianRDD.s1/s2) after
-    // the parent RDD has been checkpointed and parent splits have been changed to HadoopSplits.
+    // Test that the CartesianRDD updates parent partitions (CartesianRDD.s1/s2) after
+    // the parent RDD has been checkpointed and parent partitions have been changed to HadoopPartitions.
     // Note that this test is very specific to the current implementation of CartesianRDD.
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
     ones.checkpoint() // checkpoint that MappedRDD
     val cartesian = new CartesianRDD(sc, ones, ones)
     val splitBeforeCheckpoint =
-      serializeDeserialize(cartesian.splits.head.asInstanceOf[CartesianSplit])
+      serializeDeserialize(cartesian.partitions.head.asInstanceOf[CartesianPartition])
     cartesian.count() // do the checkpointing
     val splitAfterCheckpoint =
-      serializeDeserialize(cartesian.splits.head.asInstanceOf[CartesianSplit])
+      serializeDeserialize(cartesian.partitions.head.asInstanceOf[CartesianPartition])
     assert(
       (splitAfterCheckpoint.s1 != splitBeforeCheckpoint.s1) &&
         (splitAfterCheckpoint.s2 != splitBeforeCheckpoint.s2),
@@ -114,27 +114,27 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   }
 
   test("CoalescedRDD") {
-    testCheckpointing(new CoalescedRDD(_, 2))
+    testCheckpointing(_.coalesce(2))
 
     // Test whether size of CoalescedRDD reduce in size after parent RDD is checkpointed
-    // Current implementation of CoalescedRDDSplit has transient reference to parent RDD,
-    // so only the RDD will reduce in serialized size, not the splits.
-    testParentCheckpointing(new CoalescedRDD(_, 2), true, false)
+    // Current implementation of CoalescedRDDPartition has transient reference to parent RDD,
+    // so only the RDD will reduce in serialized size, not the partitions.
+    testParentCheckpointing(_.coalesce(2), true, false)
 
-    // Test that the CoalescedRDDSplit updates parent splits (CoalescedRDDSplit.parents) after
-    // the parent RDD has been checkpointed and parent splits have been changed to HadoopSplits.
-    // Note that this test is very specific to the current implementation of CoalescedRDDSplits
+    // Test that the CoalescedRDDPartition updates parent partitions (CoalescedRDDPartition.parents) after
+    // the parent RDD has been checkpointed and parent partitions have been changed to HadoopPartitions.
+    // Note that this test is very specific to the current implementation of CoalescedRDDPartitions
     val ones = sc.makeRDD(1 to 100, 10).map(x => x)
     ones.checkpoint() // checkpoint that MappedRDD
     val coalesced = new CoalescedRDD(ones, 2)
     val splitBeforeCheckpoint =
-      serializeDeserialize(coalesced.splits.head.asInstanceOf[CoalescedRDDSplit])
+      serializeDeserialize(coalesced.partitions.head.asInstanceOf[CoalescedRDDPartition])
     coalesced.count() // do the checkpointing
     val splitAfterCheckpoint =
-      serializeDeserialize(coalesced.splits.head.asInstanceOf[CoalescedRDDSplit])
+      serializeDeserialize(coalesced.partitions.head.asInstanceOf[CoalescedRDDPartition])
     assert(
       splitAfterCheckpoint.parents.head != splitBeforeCheckpoint.parents.head,
-      "CoalescedRDDSplit.parents not updated after parent RDD checkpointed"
+      "CoalescedRDDPartition.parents not updated after parent RDD checkpointed"
     )
   }
 
@@ -156,30 +156,40 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
       rdd => new ZippedRDD(sc, rdd, rdd.map(x => x)), true, false)
 
     // Test whether size of ZippedRDD reduce in size after parent RDD is checkpointed
-    // Current implementation of ZippedRDDSplit has transient references to parent RDDs,
-    // so only the RDD will reduce in serialized size, not the splits.
+    // Current implementation of ZippedRDDPartitions has transient references to parent RDDs,
+    // so only the RDD will reduce in serialized size, not the partitions.
     testParentCheckpointing(
       rdd => new ZippedRDD(sc, rdd, rdd.map(x => x)), true, false)
+  }
+
+  test("CheckpointRDD with zero partitions") {
+    val rdd = new BlockRDD[Int](sc, Array[String]())
+    assert(rdd.partitions.size === 0)
+    assert(rdd.isCheckpointed === false)
+    rdd.checkpoint()
+    assert(rdd.count() === 0)
+    assert(rdd.isCheckpointed === true)
+    assert(rdd.partitions.size === 0)
   }
 
   /**
    * Test checkpointing of the final RDD generated by the given operation. By default,
    * this method tests whether the size of serialized RDD has reduced after checkpointing or not.
-   * It can also test whether the size of serialized RDD splits has reduced after checkpointing or
-   * not, but this is not done by default as usually the splits do not refer to any RDD and
+   * It can also test whether the size of serialized RDD partitions has reduced after checkpointing or
+   * not, but this is not done by default as usually the partitions do not refer to any RDD and
    * therefore never store the lineage.
    */
   def testCheckpointing[U: ClassManifest](
       op: (RDD[Int]) => RDD[U],
       testRDDSize: Boolean = true,
-      testRDDSplitSize: Boolean = false
+      testRDDPartitionSize: Boolean = false
     ) {
     // Generate the final RDD using given RDD operation
     val baseRDD = generateLongLineageRDD()
     val operatedRDD = op(baseRDD)
     val parentRDD = operatedRDD.dependencies.headOption.orNull
     val rddType = operatedRDD.getClass.getSimpleName
-    val numSplits = operatedRDD.splits.length
+    val numPartitions = operatedRDD.partitions.length
 
     // Find serialized sizes before and after the checkpoint
     val (rddSizeBeforeCheckpoint, splitSizeBeforeCheckpoint) = getSerializedSizes(operatedRDD)
@@ -193,11 +203,11 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     // Test whether dependencies have been changed from its earlier parent RDD
     assert(operatedRDD.dependencies.head.rdd != parentRDD)
 
-    // Test whether the splits have been changed to the new Hadoop splits
-    assert(operatedRDD.splits.toList === operatedRDD.checkpointData.get.getSplits.toList)
+    // Test whether the partitions have been changed to the new Hadoop partitions
+    assert(operatedRDD.partitions.toList === operatedRDD.checkpointData.get.getPartitions.toList)
 
-    // Test whether the number of splits is same as before
-    assert(operatedRDD.splits.length === numSplits)
+    // Test whether the number of partitions is same as before
+    assert(operatedRDD.partitions.length === numPartitions)
 
     // Test whether the data in the checkpointed RDD is same as original
     assert(operatedRDD.collect() === result)
@@ -215,18 +225,18 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
       )
     }
 
-    // Test whether serialized size of the splits has reduced. If the splits
-    // do not have any non-transient reference to another RDD or another RDD's splits, it
+    // Test whether serialized size of the partitions has reduced. If the partitions
+    // do not have any non-transient reference to another RDD or another RDD's partitions, it
     // does not refer to a lineage and therefore may not reduce in size after checkpointing.
-    // However, if the original splits before checkpointing do refer to a parent RDD, the splits
+    // However, if the original partitions before checkpointing do refer to a parent RDD, the partitions
     // must be forgotten after checkpointing (to remove all reference to parent RDDs) and
-    // replaced with the HadoopSplits of the checkpointed RDD.
-    if (testRDDSplitSize) {
-      logInfo("Size of " + rddType + " splits "
+    // replaced with the HadooPartitions of the checkpointed RDD.
+    if (testRDDPartitionSize) {
+      logInfo("Size of " + rddType + " partitions "
         + "[" + splitSizeBeforeCheckpoint + " --> " + splitSizeAfterCheckpoint + "]")
       assert(
         splitSizeAfterCheckpoint < splitSizeBeforeCheckpoint,
-        "Size of " + rddType + " splits did not reduce after checkpointing " +
+        "Size of " + rddType + " partitions did not reduce after checkpointing " +
           "[" + splitSizeBeforeCheckpoint + " --> " + splitSizeAfterCheckpoint + "]"
       )
     }
@@ -235,13 +245,13 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   /**
    * Test whether checkpointing of the parent of the generated RDD also
    * truncates the lineage or not. Some RDDs like CoGroupedRDD hold on to its parent
-   * RDDs splits. So even if the parent RDD is checkpointed and its splits changed,
-   * this RDD will remember the splits and therefore potentially the whole lineage.
+   * RDDs partitions. So even if the parent RDD is checkpointed and its partitions changed,
+   * this RDD will remember the partitions and therefore potentially the whole lineage.
    */
   def testParentCheckpointing[U: ClassManifest](
       op: (RDD[Int]) => RDD[U],
       testRDDSize: Boolean,
-      testRDDSplitSize: Boolean
+      testRDDPartitionSize: Boolean
     ) {
     // Generate the final RDD using given RDD operation
     val baseRDD = generateLongLineageRDD()
@@ -250,9 +260,9 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
     val rddType = operatedRDD.getClass.getSimpleName
     val parentRDDType = parentRDD.getClass.getSimpleName
 
-    // Get the splits and dependencies of the parent in case they're lazily computed
+    // Get the partitions and dependencies of the parent in case they're lazily computed
     parentRDD.dependencies
-    parentRDD.splits
+    parentRDD.partitions
 
     // Find serialized sizes before and after the checkpoint
     val (rddSizeBeforeCheckpoint, splitSizeBeforeCheckpoint) = getSerializedSizes(operatedRDD)
@@ -275,16 +285,16 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
       )
     }
 
-    // Test whether serialized size of the splits has reduced because of its parent being
-    // checkpointed. If the splits do not have any non-transient reference to another RDD
-    // or another RDD's splits, it does not refer to a lineage and therefore may not reduce
-    // in size after checkpointing. However, if the splits do refer to the *splits* of a parent
-    // RDD, then these splits must update reference to the parent RDD splits as the parent RDD's
-    // splits must have changed after checkpointing.
-    if (testRDDSplitSize) {
+    // Test whether serialized size of the partitions has reduced because of its parent being
+    // checkpointed. If the partitions do not have any non-transient reference to another RDD
+    // or another RDD's partitions, it does not refer to a lineage and therefore may not reduce
+    // in size after checkpointing. However, if the partitions do refer to the *partitions* of a parent
+    // RDD, then these partitions must update reference to the parent RDD partitions as the parent RDD's
+    // partitions must have changed after checkpointing.
+    if (testRDDPartitionSize) {
       assert(
         splitSizeAfterCheckpoint < splitSizeBeforeCheckpoint,
-        "Size of " + rddType + " splits did not reduce after checkpointing parent " + parentRDDType +
+        "Size of " + rddType + " partitions did not reduce after checkpointing parent " + parentRDDType +
           "[" + splitSizeBeforeCheckpoint + " --> " + splitSizeAfterCheckpoint + "]"
       )
     }
@@ -321,12 +331,12 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   }
 
   /**
-   * Get serialized sizes of the RDD and its splits, in order to test whether the size shrinks
+   * Get serialized sizes of the RDD and its partitions, in order to test whether the size shrinks
    * upon checkpointing. Ignores the checkpointData field, which may grow when we checkpoint.
    */
   def getSerializedSizes(rdd: RDD[_]): (Int, Int) = {
     (Utils.serialize(rdd).length - Utils.serialize(rdd.checkpointData).length,
-     Utils.serialize(rdd.splits).length)
+     Utils.serialize(rdd.partitions).length)
   }
 
   /**
@@ -347,7 +357,7 @@ object CheckpointSuite {
   def cogroup[K, V](first: RDD[(K, V)], second: RDD[(K, V)], part: Partitioner) = {
     //println("First = " + first + ", second = " + second)
     new CoGroupedRDD[K](
-      Seq(first.asInstanceOf[RDD[(_, _)]], second.asInstanceOf[RDD[(_, _)]]),
+      Seq(first.asInstanceOf[RDD[(K, _)]], second.asInstanceOf[RDD[(K, _)]]),
       part
     ).asInstanceOf[RDD[(K, Seq[Seq[V]])]]
   }

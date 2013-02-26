@@ -115,6 +115,14 @@ You can optionally configure the cluster further by setting environment variable
     <td><code>SPARK_WORKER_WEBUI_PORT</code></td>
     <td>Port for the worker web UI (default: 8081)</td>
   </tr>
+  <tr>
+    <td><code>SPARK_DAEMON_MEMORY</code></td>
+    <td>Memory to allocate to the Spark master and worker daemons themselves (default: 512m)</td>
+  </tr>
+  <tr>
+    <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>
+    <td>JVM options for the Spark master and worker daemons themselves (default: none)</td>
+  </tr>
 </table>
 
 

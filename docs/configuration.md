@@ -183,7 +183,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.broadcast.factory</td>
-  <td>spark.broadcast. HttpBroadcastFactory</td>
+  <td>spark.broadcast.HttpBroadcastFactory</td>
   <td>
     Which broadcast implementation to use.
   </td>
@@ -195,6 +195,14 @@ Apart from these, the following properties are also available, and may be useful
     Number of milliseconds to wait to launch a data-local task before giving up and launching it
     in a non-data-local location. You should increase this if your tasks are long and you are seeing
     poor data locality, but the default generally works well.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.timeout</td>
+  <td>60</td>
+  <td>
+    Number of seconds after which the standalone deploy master considers a worker lost if it
+    receives no heartbeats.
   </td>
 </tr>
 <tr>
@@ -218,7 +226,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.akka.timeout</td>
   <td>20</td>
   <td>
-    Communication timeout between Spark nodes.
+    Communication timeout between Spark nodes, in seconds.
   </td>
 </tr>
 <tr>
@@ -236,10 +244,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.cleaner.delay</td>
+  <td>spark.cleaner.ttl</td>
   <td>(disable)</td>
   <td>
-    Duration (minutes) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
     Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
     useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
     applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.

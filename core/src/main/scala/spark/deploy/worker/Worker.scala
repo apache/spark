@@ -2,6 +2,7 @@ package spark.deploy.worker
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
+import akka.util.duration._
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
 import spark.deploy._
@@ -25,6 +26,9 @@ private[spark] class Worker(
   extends Actor with Logging {
 
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
+
+  // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
+  val HEARTBEAT_MILLIS = System.getProperty("spark.worker.timeout", "60").toLong * 1000 / 4
 
   var master: ActorRef = null
   var masterWebUiUrl : String = ""
@@ -97,24 +101,27 @@ private[spark] class Worker(
     case RegisteredWorker(url) =>
       masterWebUiUrl = url
       logInfo("Successfully registered with master")
+      context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
+        master ! Heartbeat(workerId)
+      }
 
     case RegisterWorkerFailed(message) =>
       logError("Worker registration failed: " + message)
       System.exit(1)
 
-    case LaunchExecutor(jobId, execId, jobDesc, cores_, memory_, execSparkHome_) =>
-      logInfo("Asked to launch executor %s/%d for %s".format(jobId, execId, jobDesc.name))
+    case LaunchExecutor(appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
+      logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
       val manager = new ExecutorRunner(
-        jobId, execId, jobDesc, cores_, memory_, self, workerId, ip, new File(execSparkHome_), workDir)
-      executors(jobId + "/" + execId) = manager
+        appId, execId, appDesc, cores_, memory_, self, workerId, ip, new File(execSparkHome_), workDir)
+      executors(appId + "/" + execId) = manager
       manager.start()
       coresUsed += cores_
       memoryUsed += memory_
-      master ! ExecutorStateChanged(jobId, execId, ExecutorState.RUNNING, None, None)
+      master ! ExecutorStateChanged(appId, execId, ExecutorState.RUNNING, None, None)
 
-    case ExecutorStateChanged(jobId, execId, state, message, exitStatus) =>
-      master ! ExecutorStateChanged(jobId, execId, state, message, exitStatus)
-      val fullId = jobId + "/" + execId
+    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
+      master ! ExecutorStateChanged(appId, execId, state, message, exitStatus)
+      val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         val executor = executors(fullId)
         logInfo("Executor " + fullId + " finished with state " + state +
@@ -126,8 +133,8 @@ private[spark] class Worker(
         memoryUsed -= executor.memory
       }
 
-    case KillExecutor(jobId, execId) =>
-      val fullId = jobId + "/" + execId
+    case KillExecutor(appId, execId) =>
+      val fullId = appId + "/" + execId
       executors.get(fullId) match {
         case Some(executor) =>
           logInfo("Asked to kill executor " + fullId)
@@ -140,7 +147,7 @@ private[spark] class Worker(
       masterDisconnected()
       
     case RequestWorkerState => {
-      sender ! WorkerState(ip + ":" + port, workerId, executors.values.toList, 
+      sender ! WorkerState(ip, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, masterUrl, cores, memory, 
         coresUsed, memoryUsed, masterWebUiUrl)
     }

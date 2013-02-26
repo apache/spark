@@ -41,9 +41,9 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef) extends Direct
           }
       } ~
       path("log") {
-        parameters("jobId", "executorId", "logType") { (jobId, executorId, logType) =>
+        parameters("appId", "executorId", "logType") { (appId, executorId, logType) =>
           respondWithMediaType(cc.spray.http.MediaTypes.`text/plain`) {
-            getFromFileName("work/" + jobId + "/" + executorId + "/" + logType)
+            getFromFileName("work/" + appId + "/" + executorId + "/" + logType)
           }
         }
       } ~

@@ -14,7 +14,7 @@ import spark.MapOutputTracker
 import spark.RDD
 import spark.SparkContext
 import spark.SparkException
-import spark.Split
+import spark.Partition
 import spark.TaskContext
 import spark.TaskEndReason
 
@@ -111,18 +111,18 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter {
    * so we can test that DAGScheduler does not try to execute RDDs locally.
    */
   private def makeRdd(
-        numSplits: Int,
+        numPartitions: Int,
         dependencies: List[Dependency[_]],
         locations: Seq[Seq[String]] = Nil
       ): MyRDD = {
-    val maxSplit = numSplits - 1
+    val maxPartition = numPartitions - 1
     return new MyRDD(sc, dependencies) {
-      override def compute(split: Split, context: TaskContext): Iterator[(Int, Int)] =
+      override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
         throw new RuntimeException("should not be reached")
-      override def getSplits() = (0 to maxSplit).map(i => new Split {
+      override def getPartitions = (0 to maxPartition).map(i => new Partition {
         override def index = i
       }).toArray
-      override def getPreferredLocations(split: Split): Seq[String] =
+      override def getPreferredLocations(split: Partition): Seq[String] =
         if (locations.isDefinedAt(split.index))
           locations(split.index)
         else
@@ -196,9 +196,10 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter {
 
   test("local job") {
     val rdd = new MyRDD(sc, Nil) {
-      override def compute(split: Split, context: TaskContext) = Array(42 -> 0).iterator
-      override def getSplits() = Array(new Split { override def index = 0 })
-      override def getPreferredLocations(split: Split) = Nil
+      override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
+        Array(42 -> 0).iterator
+      override def getPartitions = Array( new Partition { override def index = 0 } )
+      override def getPreferredLocations(split: Partition) = Nil
       override def toString = "DAGSchedulerSuite Local RDD"
     }
     runEvent(JobSubmitted(rdd, jobComputeFunc, Array(0), true, null, listener))
