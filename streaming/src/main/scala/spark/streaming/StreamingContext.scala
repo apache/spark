@@ -505,7 +505,7 @@ object StreamingContext {
     if (MetadataCleaner.getDelaySeconds < 0) {
       MetadataCleaner.setDelaySeconds(3600)
     }
-    new SparkContext(master, appName)
+    new SparkContext(master, appName, sparkHome, jars, environment)
   }
 
   protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
