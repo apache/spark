@@ -222,7 +222,6 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(Seq(true, true), 2)
     assert(data.count === 2) // force executors to start
-    val masterId = SparkEnv.get.blockManager.blockManagerId
     assert(data.map(markNodeIfIdentity).collect.size === 2)
     assert(data.map(failOnMarkedIdentity).collect.size === 2)
   }
