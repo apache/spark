@@ -3,15 +3,9 @@ layout: global
 title: Spark Overview
 ---
 
-{% comment %}
-TODO(andyk): Rewrite to make the Java API a first class part of the story.
-{% endcomment %}
-
 Spark is a MapReduce-like cluster computing framework designed for low-latency iterative jobs and interactive use from an interpreter.
 It provides clean, language-integrated APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html), with a rich array of parallel operators.
-Spark can run on top of the [Apache Mesos](http://incubator.apache.org/mesos/) cluster manager,
-[Hadoop YARN](http://hadoop.apache.org/docs/r2.0.1-alpha/hadoop-yarn/hadoop-yarn-site/YARN.html),
-Amazon EC2, or without an independent resource manager ("standalone mode").
+Spark can run on top of the Apache Mesos cluster manager, Hadoop YARN, Amazon EC2, or without an independent resource manager ("standalone mode").
 
 # Downloading
 
