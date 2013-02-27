@@ -26,7 +26,7 @@ private[spark] class BlockManagerMaster(
   val AKKA_RETRY_ATTEMPTS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
   val AKKA_RETRY_INTERVAL_MS: Int = System.getProperty("spark.akka.retry.wait", "3000").toInt
 
-  val DRIVER_AKKA_ACTOR_NAME = "BlockMasterManager"
+  val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
   val timeout = 10.seconds
   var driverActor: ActorRef = {

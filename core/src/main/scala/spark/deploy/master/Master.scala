@@ -263,7 +263,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       apps -= app
       idToApp -= app.id
       actorToApp -= app.driver
-      addressToWorker -= app.driver.path.address
+      addressToApp -= app.driver.path.address
       completedApps += app   // Remember it in our history
       waitingApps -= app
       for (exec <- app.executors.values) {
