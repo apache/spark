@@ -11,6 +11,7 @@ import spark.TaskState.TaskState
 import spark.scheduler._
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
+import java.util.{TimerTask, Timer}
 
 /**
  * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
@@ -22,6 +23,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong
+  // Threshold above which we warn user initial TaskSet may be starved
+  val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "15000").toLong
 
   val activeTaskSets = new HashMap[String, TaskSetManager]
   var activeTaskSetsQueue = new ArrayBuffer[TaskSetManager]
@@ -29,6 +32,10 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
   val taskSetTaskIds = new HashMap[String, HashSet[Long]]
+
+  var hasReceivedTask = false
+  var hasLaunchedTask = false
+  val starvationTimer = new Timer(true)
 
   // Incrementing Mesos task IDs
   val nextTaskId = new AtomicLong(0)
@@ -94,6 +101,20 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       activeTaskSets(taskSet.id) = manager
       activeTaskSetsQueue += manager
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
+
+      if (hasReceivedTask == false) {
+        starvationTimer.scheduleAtFixedRate(new TimerTask() {
+          override def run() {
+            if (!hasLaunchedTask) {
+              logWarning("Initial job has not accepted any resources; " +
+                "check your cluster UI to ensure that workers are registered")
+            } else {
+              this.cancel()
+            }
+          }
+        }, STARVATION_TIMEOUT, STARVATION_TIMEOUT)
+      }
+      hasReceivedTask = true;
     }
     backend.reviveOffers()
   }
@@ -119,6 +140,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       // Mark each slave as alive and remember its hostname
       for (o <- offers) {
         executorIdToHost(o.executorId) = o.hostname
+        if (!executorsByHost.contains(o.hostname)) {
+          executorsByHost(o.hostname) = new HashSet()
+        }
       }
       // Build a list of tasks to assign to each slave
       val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
@@ -138,9 +162,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
                 taskSetTaskIds(manager.taskSet.id) += tid
                 taskIdToExecutorId(tid) = execId
                 activeExecutorIds += execId
-                if (!executorsByHost.contains(host)) {
-                  executorsByHost(host) = new HashSet()
-                }
                 executorsByHost(host) += execId
                 availableCpus(i) -= 1
                 launchedTask = true
@@ -149,6 +170,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
             }
           }
         } while (launchedTask)
+      }
+      if (tasks.size > 0) {
+        hasLaunchedTask = true
       }
       return tasks
     }
@@ -235,7 +259,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   }
 
   override def defaultParallelism() = backend.defaultParallelism()
-  
+
   // Check for speculatable tasks in all our active jobs.
   def checkSpeculatableTasks() {
     var shouldRevive = false

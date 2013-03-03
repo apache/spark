@@ -26,7 +26,9 @@ object LogQuery {
       System.err.println("Usage: LogQuery <master> [logFile]")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "Log Query")
+
+    val sc = new SparkContext(args(0), "Log Query",
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     val dataSet =
       if (args.length == 2) sc.textFile(args(1))

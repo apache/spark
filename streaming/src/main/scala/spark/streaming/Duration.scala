@@ -16,7 +16,7 @@ case class Duration (private val millis: Long) {
 
   def * (times: Int): Duration = new Duration(millis * times)
 
-  def / (that: Duration): Long = millis / that.millis
+  def / (that: Duration): Double = millis.toDouble / that.millis.toDouble
 
   def isMultipleOf(that: Duration): Boolean =
     (this.millis % that.millis == 0)

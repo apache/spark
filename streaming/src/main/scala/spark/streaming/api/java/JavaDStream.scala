@@ -4,6 +4,7 @@ import spark.streaming.{Duration, Time, DStream}
 import spark.api.java.function.{Function => JFunction}
 import spark.api.java.JavaRDD
 import spark.storage.StorageLevel
+import spark.RDD
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -16,9 +17,7 @@ import spark.storage.StorageLevel
  *
  * This class contains the basic operations available on all DStreams, such as `map`, `filter` and
  * `window`. In addition, [[spark.streaming.api.java.JavaPairDStream]] contains operations available
- * only on DStreams of key-value pairs, such as `groupByKeyAndWindow` and `join`. These operations
- * are automatically available on any DStream of the right type (e.g., DStream[(Int, Int)] through
- * implicit conversions when `spark.streaming.StreamingContext._` is imported.
+ * only on DStreams of key-value pairs, such as `groupByKeyAndWindow` and `join`.
  *
  * DStreams internally is characterized by a few basic properties:
  *  - A list of other DStreams that the DStream depends on
@@ -26,7 +25,9 @@ import spark.storage.StorageLevel
  *  - A function that is used to generate an RDD after each time interval
  */
 class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassManifest[T])
-    extends JavaDStreamLike[T, JavaDStream[T]] {
+    extends JavaDStreamLike[T, JavaDStream[T], JavaRDD[T]] {
+
+  override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaDStream[T] =
@@ -36,7 +37,7 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
   def cache(): JavaDStream[T] = dstream.cache()
 
   /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
-  def persist(): JavaDStream[T] = dstream.cache()
+  def persist(): JavaDStream[T] = dstream.persist()
 
   /** Persist the RDDs of this DStream with the given storage level */
   def persist(storageLevel: StorageLevel): JavaDStream[T] = dstream.persist(storageLevel)
@@ -50,32 +51,25 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
   }
 
   /**
-   * Return a new DStream which is computed based on windowed batches of this DStream.
-   * The new DStream generates RDDs with the same interval as this DStream.
+   * Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream. The new DStream generates RDDs with
+   * the same interval as this DStream.
    * @param windowDuration width of the window; must be a multiple of this DStream's interval.
-   * @return
    */
   def window(windowDuration: Duration): JavaDStream[T] =
     dstream.window(windowDuration)
 
   /**
-   * Return a new DStream which is computed based on windowed batches of this DStream.
-   * @param windowDuration duration (i.e., width) of the window;
-   *                   must be a multiple of this DStream's interval
+   * Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream.
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
-   *                   the new DStream will generate RDDs); must be a multiple of this
-   *                   DStream's interval
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
    */
   def window(windowDuration: Duration, slideDuration: Duration): JavaDStream[T] =
     dstream.window(windowDuration, slideDuration)
-
-  /**
-   * Return a new DStream which computed based on tumbling window on this DStream.
-   * This is equivalent to window(batchDuration, batchDuration).
-   * @param batchDuration tumbling window duration; must be a multiple of this DStream's interval
-   */
-  def tumble(batchDuration: Duration): JavaDStream[T] =
-    dstream.tumble(batchDuration)
 
   /**
    * Return a new DStream by unifying data of another DStream with this DStream.

@@ -7,7 +7,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 
-import spark.{Dependency, RDD, SerializableWritable, SparkContext, Partition, TaskContext}
+import spark.{Dependency, Logging, Partition, RDD, SerializableWritable, SparkContext, TaskContext}
 
 
 private[spark]
@@ -26,7 +26,8 @@ class NewHadoopRDD[K, V](
     valueClass: Class[V],
     @transient conf: Configuration)
   extends RDD[(K, V)](sc, Nil)
-  with HadoopMapReduceUtil {
+  with HadoopMapReduceUtil
+  with Logging {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
@@ -61,7 +62,7 @@ class NewHadoopRDD[K, V](
     reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
     // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback(() => reader.close())
+    context.addOnCompleteCallback(() => close())
 
     var havePair = false
     var finished = false
@@ -80,6 +81,14 @@ class NewHadoopRDD[K, V](
       }
       havePair = false
       return (reader.getCurrentKey, reader.getCurrentValue)
+    }
+
+    private def close() {
+      try {
+        reader.close()
+      } catch {
+        case e: Exception => logWarning("Exception in RecordReader.close()", e)
+      }
     }
   }
 

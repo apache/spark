@@ -59,7 +59,7 @@ class SparkContext(
     val appName: String,
     val sparkHome: String = null,
     val jars: Seq[String] = Nil,
-    environment: Map[String, String] = Map())
+    val environment: Map[String, String] = Map())
   extends Logging {
 
   // Ensure logging is initialized before we spawn any threads
@@ -434,7 +434,7 @@ class SparkContext(
   }
 
   /**
-   * Broadcast a read-only variable to the cluster, returning a [[spark.Broadcast]] object for
+   * Broadcast a read-only variable to the cluster, returning a [[spark.broadcast.Broadcast]] object for
    * reading it in distributed functions. The variable will be sent to each cluster only once.
    */
   def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
@@ -696,7 +696,7 @@ class SparkContext(
     checkpointDir = Some(dir)
   }
 
-  /** Default level of parallelism to use when not given by user (e.g. for reduce tasks) */
+  /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */

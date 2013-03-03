@@ -51,7 +51,7 @@ private[spark] class PythonRDD[T: ClassManifest](
     val env = SparkEnv.get
 
     // Start a thread to print the process's stderr to ours
-    new Thread("stderr reader for " + command) {
+    new Thread("stderr reader for " + pythonExec) {
       override def run() {
         for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
           System.err.println(line)
@@ -60,7 +60,7 @@ private[spark] class PythonRDD[T: ClassManifest](
     }.start()
 
     // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for " + command) {
+    new Thread("stdin writer for " + pythonExec) {
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)

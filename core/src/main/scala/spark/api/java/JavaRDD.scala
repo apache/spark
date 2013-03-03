@@ -55,6 +55,26 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def union(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.union(other.rdd))
 
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   * 
+   * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
+   * RDD will be <= us.
+   */
+  def subtract(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.subtract(other))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaRDD[T], numPartitions: Int): JavaRDD[T] =
+    wrapRDD(rdd.subtract(other, numPartitions))
+
+  /**
+   * Return an RDD with the elements from `this` that are not in `other`.
+   */
+  def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
+    wrapRDD(rdd.subtract(other, p))
+
 }
 
 object JavaRDD {

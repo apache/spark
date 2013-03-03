@@ -22,7 +22,8 @@ object HdfsWordCount {
     }
 
     // Create the context
-    val ssc = new StreamingContext(args(0), "HdfsWordCount", Seconds(2))
+    val ssc = new StreamingContext(args(0), "HdfsWordCount", Seconds(2),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     // Create the FileInputDStream on the directory and use the
     // stream to count words in new files created

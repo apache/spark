@@ -35,7 +35,7 @@ from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
 from boto import ec2
 
 # A static URL from which to figure out the latest Mesos EC2 AMI
-LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.6"
+LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.7"
 
 
 # Configure and parse our command-line arguments
@@ -83,16 +83,16 @@ def parse_args():
       help="If specified, launch slaves as spot instances with the given " +
             "maximum price (in dollars)")
   parser.add_option("--cluster-type", type="choice", metavar="TYPE",
-      choices=["mesos", "standalone"], default="mesos",
+      choices=["mesos", "standalone"], default="standalone",
       help="'mesos' for a Mesos cluster, 'standalone' for a standalone " +
-           "Spark cluster (default: mesos)")
+           "Spark cluster (default: standalone)")
   parser.add_option("--ganglia", action="store_true", default=True,
       help="Setup Ganglia monitoring on cluster (default: on). NOTE: " +
            "the Ganglia page will be publicly accessible")
   parser.add_option("--no-ganglia", action="store_false", dest="ganglia",
       help="Disable Ganglia monitoring for the cluster")
-  parser.add_option("--new-scripts", action="store_true", default=False,
-      help="Use new spark-ec2 scripts, for Spark >= 0.7 AMIs")
+  parser.add_option("--old-scripts", action="store_true", default=False,
+      help="Use old mesos-ec2 scripts, for Spark <= 0.6 AMIs")
   parser.add_option("-u", "--user", default="root",
       help="The SSH user you want to connect as (default: root)")
   parser.add_option("--delete-groups", action="store_true", default=False,
@@ -383,7 +383,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_k
   if opts.ganglia:
     modules.append('ganglia')
 
-  if opts.new_scripts:
+  if not opts.old_scripts:
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
     ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/mesos/spark-ec2.git")
@@ -393,7 +393,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_k
           zoo_nodes, modules)
 
   print "Running setup on master..."
-  if not opts.new_scripts:
+  if opts.old_scripts:
     if opts.cluster_type == "mesos":
       setup_mesos_cluster(master, opts)
     elif opts.cluster_type == "standalone":
