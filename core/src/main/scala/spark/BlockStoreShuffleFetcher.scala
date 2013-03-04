@@ -5,7 +5,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
 import spark.storage.{DelegateBlockFetchTracker, BlockManagerId}
-import util.{CleanupIterator, TimedIterator}
+import util.{CompletionIterator, TimedIterator}
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
   override def fetch[K, V](shuffleId: Int, reduceId: Int, metrics: TaskMetrics) = {
@@ -51,7 +51,7 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
     val blockFetcherItr = blockManager.getMultiple(blocksByAddress)
     val itr = new TimedIterator(blockFetcherItr.flatMap(unpackBlock)) with DelegateBlockFetchTracker
     itr.setDelegate(blockFetcherItr)
-    CleanupIterator[(K,V), Iterator[(K,V)]](itr, {
+    CompletionIterator[(K,V), Iterator[(K,V)]](itr, {
       val shuffleMetrics = new ShuffleReadMetrics
       shuffleMetrics.shuffleReadMillis = itr.getNetMillis
       shuffleMetrics.remoteFetchTime = itr.remoteFetchTime
