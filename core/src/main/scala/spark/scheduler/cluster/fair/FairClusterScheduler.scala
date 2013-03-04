@@ -31,7 +31,7 @@ private[spark] class FairClusterScheduler(override val sc: SparkContext)
   with Logging {
  
   
-  val schedulerAllocFile = System.getProperty("mapred.fairscheduler.allocation.file","unspecified")
+  val schedulerAllocFile = System.getProperty("spark.fairscheduler.allocation.file","unspecified")
   
   val poolNameToPool= new HashMap[String, Pool]
   var pools = new ArrayBuffer[Pool]
