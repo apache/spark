@@ -1,9 +1,11 @@
 package spark.scheduler
 
 import java.net.URI
+import java.util.Properties
 
 import spark._
 import spark.storage.BlockManagerId
+
 
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
@@ -24,7 +26,8 @@ private[spark] class Stage(
     val rdd: RDD[_],
     val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
-    val priority: Int)
+    val priority: Int,
+    val properties: Properties = null)
   extends Logging {
   
   val isShuffleMap = shuffleDep != None

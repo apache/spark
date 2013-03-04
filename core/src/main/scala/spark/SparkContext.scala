@@ -3,11 +3,13 @@ package spark
 import java.io._
 import java.util.concurrent.atomic.AtomicInteger
 import java.net.URI
+import java.util.Properties
 
 import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
+import scala.util.DynamicVariable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
@@ -72,6 +74,11 @@ class SparkContext(
   if (System.getProperty("spark.driver.port") == null) {
     System.setProperty("spark.driver.port", "0")
   }
+  
+  //Set the default task scheduler
+  if (System.getProperty("spark.cluster.taskscheduler") == null) {
+    System.setProperty("spark.cluster.taskscheduler", "spark.scheduler.cluster.ClusterScheduler")
+  }
 
   private val isLocal = (master == "local" || master.startsWith("local["))
 
@@ -112,7 +119,7 @@ class SparkContext(
     }
   }
   executorEnvs ++= environment
-
+  
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
@@ -137,7 +144,7 @@ class SparkContext(
         new LocalScheduler(threads.toInt, maxFailures.toInt, this)
 
       case SPARK_REGEX(sparkUrl) =>
-        val scheduler = new ClusterScheduler(this)
+        val scheduler = Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
         scheduler.initialize(backend)
         scheduler
@@ -153,7 +160,7 @@ class SparkContext(
               memoryPerSlaveInt, sparkMemEnvInt))
         }
 
-        val scheduler = new ClusterScheduler(this)
+        val scheduler = Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val sparkUrl = localCluster.start()
@@ -169,7 +176,7 @@ class SparkContext(
           logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
         }
         MesosNativeLibrary.load()
-        val scheduler = new ClusterScheduler(this)
+        val scheduler = Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
         val masterWithoutProtocol = master.replaceFirst("^mesos://", "")  // Strip initial mesos://
         val backend = if (coarseGrained) {
@@ -206,6 +213,20 @@ class SparkContext(
   }
 
   private[spark] var checkpointDir: Option[String] = None
+  
+  // Thread Local variable that can be used by users to pass information down the stack
+  private val localProperties = new DynamicVariable[Properties](null)
+  
+  def initLocalProperties() {
+      localProperties.value = new Properties()
+  }
+  
+  def addLocalProperties(key: String, value: String) {
+    if(localProperties.value == null) {
+      localProperties.value = new Properties()
+    }
+    localProperties.value.setProperty(key,value)
+  }
 
   // Methods for creating RDDs
 
@@ -578,7 +599,7 @@ class SparkContext(
     val callSite = Utils.getSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler)
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler,localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result
@@ -649,7 +670,7 @@ class SparkContext(
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
     runJob[T, U](rdd, processFunc, 0 until rdd.partitions.size, false, resultHandler)
   }
-
+  
   /**
    * Run a job that can return approximate results.
    */
@@ -657,12 +678,11 @@ class SparkContext(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
-      timeout: Long
-      ): PartialResult[R] = {
+      timeout: Long): PartialResult[R] = {
     val callSite = Utils.getSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout)
+    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout, localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
