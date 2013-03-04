@@ -13,6 +13,7 @@ import com.ning.compress.lzf.LZFInputStream
 import com.ning.compress.lzf.LZFOutputStream
 
 import spark._
+import executor.ShuffleWriteMetrics
 import spark.storage._
 import util.{TimeStampedHashMap, MetadataCleaner}
 
@@ -142,7 +143,9 @@ private[spark] class ShuffleMapTask(
         totalBytes += size
         compressedSizes(i) = MapOutputTracker.compressSize(size)
       }
-      metrics.get.shuffleBytesWritten = Some(totalBytes)
+      val shuffleMetrics = new ShuffleWriteMetrics
+      shuffleMetrics.shuffleBytesWritten = totalBytes
+      metrics.get.shuffleWriteMetrics = Some(shuffleMetrics)
 
       return new MapStatus(blockManager.blockManagerId, compressedSizes)
     } finally {

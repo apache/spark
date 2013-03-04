@@ -1,6 +1,6 @@
 package spark
 
-import executor.TaskMetrics
+import executor.{ShuffleReadMetrics, TaskMetrics}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
@@ -52,13 +52,15 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
     val itr = new TimedIterator(blockFetcherItr.flatMap(unpackBlock)) with DelegateBlockFetchTracker
     itr.setDelegate(blockFetcherItr)
     CleanupIterator[(K,V), Iterator[(K,V)]](itr, {
-      metrics.shuffleReadMillis = Some(itr.getNetMillis)
-      metrics.remoteFetchTime = Some(itr.remoteFetchTime)
-      metrics.remoteFetchWaitTime = Some(itr.remoteFetchWaitTime)
-      metrics.remoteBytesRead = Some(itr.remoteBytesRead)
-      metrics.totalBlocksFetched = Some(itr.totalBlocks)
-      metrics.localBlocksFetched = Some(itr.numLocalBlocks)
-      metrics.remoteBlocksFetched = Some(itr.numRemoteBlocks)
+      val shuffleMetrics = new ShuffleReadMetrics
+      shuffleMetrics.shuffleReadMillis = itr.getNetMillis
+      shuffleMetrics.remoteFetchTime = itr.remoteFetchTime
+      shuffleMetrics.remoteFetchWaitTime = itr.remoteFetchWaitTime
+      shuffleMetrics.remoteBytesRead = itr.remoteBytesRead
+      shuffleMetrics.totalBlocksFetched = itr.totalBlocks
+      shuffleMetrics.localBlocksFetched = itr.numLocalBlocks
+      shuffleMetrics.remoteBlocksFetched = itr.numRemoteBlocks
+      metrics.shuffleReadMetrics = Some(shuffleMetrics)
     })
   }
 }

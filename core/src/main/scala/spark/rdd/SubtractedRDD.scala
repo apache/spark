@@ -89,7 +89,7 @@ private[spark] class SubtractedRDD[T: ClassManifest](
         for (k <- rdd.iterator(itsSplit, context))
           op(k.asInstanceOf[T])
       case ShuffleCoGroupSplitDep(shuffleId) =>
-        for ((k, _) <- SparkEnv.get.shuffleFetcher.fetch(shuffleId, partition.index))
+        for ((k, _) <- SparkEnv.get.shuffleFetcher.fetch(shuffleId, partition.index, context.taskMetrics))
           op(k.asInstanceOf[T])
     }
     // the first dep is rdd1; add all keys to the set

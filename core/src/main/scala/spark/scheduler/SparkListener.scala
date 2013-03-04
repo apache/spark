@@ -26,11 +26,13 @@ class StatsReportListener extends SparkListener with Logging {
     implicit val sc = stageCompleted
     this.logInfo("Finished stage: " + stageCompleted.stageInfo)
     showMillisDistribution("task runtime:", (info, _) => Some(info.duration))
-    showBytesDistribution("shuffle bytes written:",(_,metric) => metric.shuffleBytesWritten)
 
-    //fetch & some io info
-    showMillisDistribution("fetch wait time:",(_, metric) => metric.remoteFetchWaitTime)
-    showBytesDistribution("remote bytes read:", (_, metric) => metric.remoteBytesRead)
+    //shuffle write
+    showBytesDistribution("shuffle bytes written:",(_,metric) => metric.shuffleWriteMetrics.map{_.shuffleBytesWritten})
+
+    //fetch & io
+    showMillisDistribution("fetch wait time:",(_, metric) => metric.shuffleReadMetrics.map{_.remoteFetchWaitTime})
+    showBytesDistribution("remote bytes read:", (_, metric) => metric.shuffleReadMetrics.map{_.remoteBytesRead})
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     //runtime breakdown
@@ -61,6 +63,18 @@ object StatsReportListener extends Logging {
     extractDoubleDistribution(stage, (info, metric) => getMetric(info,metric).map{_.toDouble})
   }
 
+  def showDistribution(heading: String, d: Distribution, formatNumber: Double => String) {
+    val stats = d.statCounter
+    logInfo(heading + stats)
+    val quantiles = d.getQuantiles(probabilities).map{formatNumber}
+    logInfo(percentilesHeader)
+    logInfo("\t" + quantiles.mkString("\t"))
+  }
+
+  def showDistribution(heading: String, dOpt: Option[Distribution], formatNumber: Double => String) {
+    dOpt.foreach { d => showDistribution(heading, d, formatNumber)}
+  }
+
   def showDistribution(heading: String, dOpt: Option[Distribution], format:String) {
     def f(d:Double) = format.format(d)
     showDistribution(heading, dOpt, f _)
@@ -77,11 +91,15 @@ object StatsReportListener extends Logging {
   }
 
   def showBytesDistribution(heading: String, dOpt: Option[Distribution]) {
-    showDistribution(heading, dOpt, d => Utils.memoryBytesToString(d.toLong))
+    dOpt.foreach{dist => showBytesDistribution(heading, dist)}
+  }
+
+  def showBytesDistribution(heading: String, dist: Distribution) {
+    showDistribution(heading, dist, (d => Utils.memoryBytesToString(d.toLong)): Double => String)
   }
 
   def showMillisDistribution(heading: String, dOpt: Option[Distribution]) {
-    showDistribution(heading, dOpt, d => StatsReportListener.millisToString(d.toLong))
+    showDistribution(heading, dOpt, (d => StatsReportListener.millisToString(d.toLong)): Double => String)
   }
 
   def showMillisDistribution(heading: String, getMetric: (TaskInfo, TaskMetrics) => Option[Long])
@@ -89,15 +107,6 @@ object StatsReportListener extends Logging {
     showMillisDistribution(heading, extractLongDistribution(stage, getMetric))
   }
 
-  def showDistribution(heading: String, dOpt: Option[Distribution], formatNumber: Double => String) {
-    dOpt.foreach { d =>
-      val stats = d.statCounter
-      logInfo(heading + stats)
-      val quantiles = d.getQuantiles(probabilities).map{formatNumber}
-      logInfo(percentilesHeader)
-      logInfo("\t" + quantiles.mkString("\t"))
-    }
-  }
 
 
   val seconds = 1000L
@@ -128,8 +137,9 @@ case class RuntimePercentage(executorPct: Double, fetchPct: Option[Double], othe
 object RuntimePercentage {
   def apply(totalTime: Long, metrics: TaskMetrics): RuntimePercentage = {
     val denom = totalTime.toDouble
-    val fetch = metrics.remoteFetchWaitTime.map{_ / denom}
-    val exec = (metrics.executorRunTime - metrics.remoteFetchWaitTime.getOrElse(0l)) / denom
+    val fetchTime = metrics.shuffleReadMetrics.map{_.remoteFetchWaitTime}
+    val fetch = fetchTime.map{_ / denom}
+    val exec = (metrics.executorRunTime - fetchTime.getOrElse(0l)) / denom
     val other = 1.0 - (exec + fetch.getOrElse(0d))
     RuntimePercentage(exec, fetch, other)
   }
