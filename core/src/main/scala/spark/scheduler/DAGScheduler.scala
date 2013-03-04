@@ -1,20 +1,19 @@
 package spark.scheduler
 
-import java.net.URI
+import cluster.TaskInfo
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.Future
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
 import spark._
+import spark.executor.TaskMetrics
 import spark.partial.ApproximateActionListener
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 import spark.storage.BlockManagerMaster
-import spark.storage.BlockManagerId
-import util.{MetadataCleaner, TimeStampedHashMap}
+import spark.util.{MetadataCleaner, TimeStampedHashMap}
 
 /**
  * A Scheduler subclass that implements stage-oriented scheduling. It computes a DAG of stages for
@@ -40,8 +39,10 @@ class DAGScheduler(
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Map[Long, Any]) {
-    eventQueue.put(CompletionEvent(task, reason, result, accumUpdates))
+      accumUpdates: Map[Long, Any],
+      taskInfo: TaskInfo,
+      taskMetrics: TaskMetrics) {
+    eventQueue.put(CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics))
   }
 
   // Called by TaskScheduler when an executor fails.
@@ -72,6 +73,10 @@ class DAGScheduler(
   val idToStage = new TimeStampedHashMap[Int, Stage]
 
   val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
+
+  private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
+
+  private[spark] val sparkListeners = ArrayBuffer[SparkListener]()
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
@@ -148,6 +153,7 @@ class DAGScheduler(
     val id = nextStageId.getAndIncrement()
     val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd, priority), priority)
     idToStage(id) = stage
+    stageToInfos(stage) = StageInfo(stage)
     stage
   }
 
@@ -472,6 +478,8 @@ class DAGScheduler(
         case _ => "Unkown"
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.origin, serviceTime))
+      val stageComp = StageCompleted(stageToInfos(stage))
+      sparkListeners.foreach{_.onStageCompleted(stageComp)}
       running -= stage
     }
     event.reason match {
@@ -481,6 +489,7 @@ class DAGScheduler(
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
         }
         pendingTasks(stage) -= task
+        stageToInfos(stage).taskInfos += event.taskInfo -> event.taskMetrics
         task match {
           case rt: ResultTask[_, _] =>
             resultStageToJob.get(stage) match {
@@ -501,7 +510,6 @@ class DAGScheduler(
             }
 
           case smt: ShuffleMapTask =>
-            val stage = idToStage(smt.stageId)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)

@@ -1,14 +1,13 @@
 package spark.scheduler.local
 
 import java.io.File
-import java.net.URLClassLoader
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.HashMap
 
 import spark._
-import executor.ExecutorURLClassLoader
+import spark.executor.ExecutorURLClassLoader
 import spark.scheduler._
+import spark.scheduler.cluster.TaskInfo
 
 /**
  * A simple TaskScheduler implementation that runs tasks locally in a thread pool. Optionally
@@ -54,6 +53,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
 
     def runTask(task: Task[_], idInJob: Int, attemptId: Int) {
       logInfo("Running " + task)
+      val info = new TaskInfo(attemptId, idInJob, System.currentTimeMillis(), "local", "local", true)
       // Set the Spark execution environment for the worker thread
       SparkEnv.set(env)
       try {
@@ -81,10 +81,11 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
         val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
           ser.serialize(Accumulators.values))
         logInfo("Finished " + task)
+        info.markSuccessful()
 
         // If the threadpool has not already been shutdown, notify DAGScheduler
         if (!Thread.currentThread().isInterrupted)
-          listener.taskEnded(task, Success, resultToReturn, accumUpdates)
+          listener.taskEnded(task, Success, resultToReturn, accumUpdates, info, null)
       } catch {
         case t: Throwable => {
           logError("Exception in task " + idInJob, t)
@@ -95,7 +96,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
             } else {
               // TODO: Do something nicer here to return all the way to the user
               if (!Thread.currentThread().isInterrupted)
-                listener.taskEnded(task, new ExceptionFailure(t), null, null)
+                listener.taskEnded(task, new ExceptionFailure(t), null, null, info, null)
             }
           }
         }

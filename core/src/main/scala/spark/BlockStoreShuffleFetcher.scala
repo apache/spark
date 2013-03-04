@@ -1,20 +1,22 @@
 package spark
 
+import executor.{ShuffleReadMetrics, TaskMetrics}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import spark.storage.BlockManagerId
+import spark.storage.{DelegateBlockFetchTracker, BlockManagerId}
+import util.{CompletionIterator, TimedIterator}
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
-  override def fetch[K, V](shuffleId: Int, reduceId: Int) = {
+  override def fetch[K, V](shuffleId: Int, reduceId: Int, metrics: TaskMetrics) = {
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
     val blockManager = SparkEnv.get.blockManager
-    
+
     val startTime = System.currentTimeMillis
     val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
     logDebug("Fetching map output location for shuffle %d, reduce %d took %d ms".format(
       shuffleId, reduceId, System.currentTimeMillis - startTime))
-    
+
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
     for (((address, size), index) <- statuses.zipWithIndex) {
       splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
@@ -45,6 +47,20 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
         }
       }
     }
-    blockManager.getMultiple(blocksByAddress).flatMap(unpackBlock)
+
+    val blockFetcherItr = blockManager.getMultiple(blocksByAddress)
+    val itr = new TimedIterator(blockFetcherItr.flatMap(unpackBlock)) with DelegateBlockFetchTracker
+    itr.setDelegate(blockFetcherItr)
+    CompletionIterator[(K,V), Iterator[(K,V)]](itr, {
+      val shuffleMetrics = new ShuffleReadMetrics
+      shuffleMetrics.shuffleReadMillis = itr.getNetMillis
+      shuffleMetrics.remoteFetchTime = itr.remoteFetchTime
+      shuffleMetrics.remoteFetchWaitTime = itr.remoteFetchWaitTime
+      shuffleMetrics.remoteBytesRead = itr.remoteBytesRead
+      shuffleMetrics.totalBlocksFetched = itr.totalBlocks
+      shuffleMetrics.localBlocksFetched = itr.numLocalBlocks
+      shuffleMetrics.remoteBlocksFetched = itr.numRemoteBlocks
+      metrics.shuffleReadMetrics = Some(shuffleMetrics)
+    })
   }
 }
