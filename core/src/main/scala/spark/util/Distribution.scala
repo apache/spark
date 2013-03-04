@@ -3,11 +3,11 @@ package spark.util
 import java.io.PrintStream
 
 /**
- * util for getting some stats from a small sample of numeric values, with some handy summary functions
+ * Util for getting some stats from a small sample of numeric values, with some handy summary functions.
  *
  * Entirely in memory, not intended as a good way to compute stats over large data sets.
  *
- * assumes you are giving it a non-empty set of data
+ * Assumes you are giving it a non-empty set of data
  */
 class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) {
   require(startIdx < endIdx)

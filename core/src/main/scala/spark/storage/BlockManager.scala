@@ -843,28 +843,6 @@ object BlockManager extends Logging {
   }
 }
 
-
-private[spark] trait BlockFetchTracker {
-  def totalBlocks : Int
-  def numLocalBlocks: Int
-  def numRemoteBlocks: Int
-  def remoteFetchTime : Long
-  def remoteFetchWaitTime: Long
-  def remoteBytesRead : Long
-}
-
-private[spark] trait DelegateBlockFetchTracker extends BlockFetchTracker {
-  var delegate : BlockFetchTracker = _
-  def setDelegate(d: BlockFetchTracker) {delegate = d}
-  def totalBlocks = delegate.totalBlocks
-  def numLocalBlocks = delegate.numLocalBlocks
-  def numRemoteBlocks = delegate.numRemoteBlocks
-  def remoteFetchTime = delegate.remoteFetchTime
-  def remoteFetchWaitTime = delegate.remoteFetchWaitTime
-  def remoteBytesRead = delegate.remoteBytesRead
-}
-
-
 class BlockFetcherIterator(
     private val blockManager: BlockManager,
     val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])]
