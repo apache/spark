@@ -372,10 +372,10 @@ abstract class RDD[T: ClassManifest](
    * and a seed value of type B.
    */
   def mapWith[A: ClassManifest, B: ClassManifest, U: ClassManifest](
-    f:(A, T) => U,
     factoryBuilder: (Int, B) => (T => A),
     factorySeed: B,
-    preservesPartitioning: Boolean = false): RDD[U] = {
+    preservesPartitioning: Boolean = false)
+    (f:(A, T) => U): RDD[U] = {
       def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
         val factory = factoryBuilder(index, factorySeed)
         iter.map(t => f(factory(t), t))
@@ -391,10 +391,10 @@ abstract class RDD[T: ClassManifest](
    * and a seed value of type B.
    */
   def flatMapWith[A: ClassManifest, B: ClassManifest, U: ClassManifest](
-    f:(A, T) => Seq[U],
     factoryBuilder: (Int, B) => (T => A),
     factorySeed: B,
-    preservesPartitioning: Boolean = false): RDD[U] = {
+    preservesPartitioning: Boolean = false)
+    (f:(A, T) => Seq[U]): RDD[U] = {
       def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
         val factory = factoryBuilder(index, factorySeed)
         iter.flatMap(t => f(factory(t), t))
@@ -410,10 +410,10 @@ abstract class RDD[T: ClassManifest](
    * and a seed value of type B.
    */
   def filterWith[A: ClassManifest, B: ClassManifest](
-    p:(A, T) => Boolean,
     factoryBuilder: (Int, B) => (T => A),
     factorySeed: B,
-    preservesPartitioning: Boolean = false): RDD[T] = {
+    preservesPartitioning: Boolean = false)
+    (p:(A, T) => Boolean): RDD[T] = {
       def iterF(index: Int, iter: Iterator[T]): Iterator[T] = {
         val factory = factoryBuilder(index, factorySeed)
         iter.filter(t => p(factory(t), t))

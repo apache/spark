@@ -183,11 +183,11 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
     val randoms = ones.mapWith(
-      (random: Double, t: Int) => random * t,
       (index: Int, seed: Int) => {
 	      val prng = new java.util.Random(index + seed)
 	      (_ => prng.nextDouble)},
-      42).
+      42)
+      {(random: Double, t: Int) => random * t}.
       collect()
     val prn42_3 = {
       val prng42 = new java.util.Random(42)
@@ -205,11 +205,11 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
     val randoms = ones.flatMapWith(
-      (random: Double, t: Int) => Seq(random * t, random * t * 10),
       (index: Int, seed: Int) => {
         val prng = new java.util.Random(index + seed)
         (_ => prng.nextDouble)},
-      42).
+      42)
+      {(random: Double, t: Int) => Seq(random * t, random * t * 10)}.
       collect()
     val prn42_3 = {
       val prng42 = new java.util.Random(42)
@@ -228,11 +228,11 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val ints = sc.makeRDD(Array(1, 2, 3, 4, 5, 6), 2)
     val sample = ints.filterWith(
-      (random: Int, t: Int) => random == 0,
       (index: Int, seed: Int) => {
 	      val prng = new Random(index + seed)
 	      (_ => prng.nextInt(3))},
-      42).
+      42)
+      {(random: Int, t: Int) => random == 0}.
       collect()
     val checkSample = {
       val prng42 = new Random(42)
