@@ -107,7 +107,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
             } else {
               logError("Application %s with ID %s failed %d times, removing it".format(
                 appInfo.desc.name, appInfo.id, appInfo.retryCount))
-              removeApplication(appInfo)
+              removeApplication(appInfo, ApplicationState.FAILED)
             }
           }
         }
@@ -129,19 +129,19 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       // The disconnected actor could've been either a worker or an app; remove whichever of
       // those we have an entry for in the corresponding actor hashmap
       actorToWorker.get(actor).foreach(removeWorker)
-      actorToApp.get(actor).foreach(removeApplication)
+      actorToApp.get(actor).foreach(finishApplication)
     }
 
     case RemoteClientDisconnected(transport, address) => {
       // The disconnected client could've been either a worker or an app; remove whichever it was
       addressToWorker.get(address).foreach(removeWorker)
-      addressToApp.get(address).foreach(removeApplication)
+      addressToApp.get(address).foreach(finishApplication)
     }
 
     case RemoteClientShutdown(transport, address) => {
       // The disconnected client could've been either a worker or an app; remove whichever it was
       addressToWorker.get(address).foreach(removeWorker)
-      addressToApp.get(address).foreach(removeApplication)
+      addressToApp.get(address).foreach(finishApplication)
     }
 
     case RequestMasterState => {
@@ -257,7 +257,11 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     return app
   }
 
-  def removeApplication(app: ApplicationInfo) {
+  def finishApplication(app: ApplicationInfo) {
+    removeApplication(app, ApplicationState.FINISHED)
+  }
+
+  def removeApplication(app: ApplicationInfo, state: ApplicationState.Value) {
     if (apps.contains(app)) {
       logInfo("Removing app " + app.id)
       apps -= app
@@ -270,7 +274,8 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
         exec.worker.removeExecutor(exec)
         exec.worker.actor ! KillExecutor(exec.application.id, exec.id)
       }
-      app.markFinished(ApplicationState.FINISHED)  // TODO: Mark it as FAILED if it failed
+      app.markFinished(state)
+      app.driver ! ApplicationRemoved(state.toString)
       schedule()
     }
   }
