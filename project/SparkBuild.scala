@@ -92,10 +92,10 @@ object SparkBuild extends Build {
 */
 
     libraryDependencies ++= Seq(
-      "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
-      "org.scalatest" %% "scalatest" % "1.8" % "test",
-      "org.scalacheck" %% "scalacheck" % "1.9" % "test",
-      "com.novocode" % "junit-interface" % "0.8" % "test",
+      "org.eclipse.jetty" % "jetty-server" % "7.6.8.v20121106",
+      "org.scalatest" %% "scalatest" % "1.9.1" % "test",
+      "org.scalacheck" %% "scalacheck" % "1.10.0" % "test",
+      "com.novocode" % "junit-interface" % "0.9" % "test",
       "org.easymock" % "easymock" % "3.1" % "test"
     ),
     parallelExecution := false,
