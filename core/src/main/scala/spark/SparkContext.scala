@@ -39,7 +39,7 @@ import spark.partial.PartialResult
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
 import spark.scheduler._
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
+import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler, TaskSetQueuesManager}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.BlockManagerUI
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
@@ -77,7 +77,7 @@ class SparkContext(
   
   //Set the default task scheduler
   if (System.getProperty("spark.cluster.taskscheduler") == null) {
-    System.setProperty("spark.cluster.taskscheduler", "spark.scheduler.cluster.ClusterScheduler")
+    System.setProperty("spark.cluster.taskscheduler", "spark.scheduler.cluster.FIFOTaskSetQueuesManager")
   }
 
   private val isLocal = (master == "local" || master.startsWith("local["))
@@ -144,9 +144,10 @@ class SparkContext(
         new LocalScheduler(threads.toInt, maxFailures.toInt, this)
 
       case SPARK_REGEX(sparkUrl) =>
-        val scheduler = Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
+        val scheduler = new ClusterScheduler(this)//Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
-        scheduler.initialize(backend)
+        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).newInstance().asInstanceOf[TaskSetQueuesManager]
+        scheduler.initialize(backend, taskSetQueuesManager)
         scheduler
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
@@ -160,12 +161,13 @@ class SparkContext(
               memoryPerSlaveInt, sparkMemEnvInt))
         }
 
-        val scheduler = Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
+        val scheduler = new ClusterScheduler(this)//Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val sparkUrl = localCluster.start()
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
-        scheduler.initialize(backend)
+        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).newInstance().asInstanceOf[TaskSetQueuesManager]
+        scheduler.initialize(backend, taskSetQueuesManager)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
         }
@@ -176,7 +178,7 @@ class SparkContext(
           logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
         }
         MesosNativeLibrary.load()
-        val scheduler = Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
+        val scheduler = new ClusterScheduler(this)//Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
         val masterWithoutProtocol = master.replaceFirst("^mesos://", "")  // Strip initial mesos://
         val backend = if (coarseGrained) {
@@ -184,7 +186,8 @@ class SparkContext(
         } else {
           new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
         }
-        scheduler.initialize(backend)
+        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).newInstance().asInstanceOf[TaskSetQueuesManager]
+        scheduler.initialize(backend, taskSetQueuesManager)
         scheduler
     }
   }

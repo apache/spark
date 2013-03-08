@@ -253,6 +253,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     }
     val index = info.index
     info.markSuccessful()
+    sched.taskFinished(this)
     if (!finished(index)) {
       tasksFinished += 1
       logInfo("Finished TID %s in %d ms (progress: %d/%d)".format(
@@ -281,6 +282,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     }
     val index = info.index
     info.markFailed()
+    sched.taskFinished(this)
     if (!finished(index)) {
       logInfo("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
       copiesRunning(index) -= 1
