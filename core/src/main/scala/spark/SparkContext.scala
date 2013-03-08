@@ -144,7 +144,7 @@ class SparkContext(
         new LocalScheduler(threads.toInt, maxFailures.toInt, this)
 
       case SPARK_REGEX(sparkUrl) =>
-        val scheduler = new ClusterScheduler(this)//Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
+        val scheduler = new ClusterScheduler(this)
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
         val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).newInstance().asInstanceOf[TaskSetQueuesManager]
         scheduler.initialize(backend, taskSetQueuesManager)
@@ -161,7 +161,7 @@ class SparkContext(
               memoryPerSlaveInt, sparkMemEnvInt))
         }
 
-        val scheduler = new ClusterScheduler(this)//Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
+        val scheduler = new ClusterScheduler(this)
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val sparkUrl = localCluster.start()
@@ -178,7 +178,7 @@ class SparkContext(
           logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
         }
         MesosNativeLibrary.load()
-        val scheduler = new ClusterScheduler(this)//Class.forName(System.getProperty("spark.cluster.taskscheduler")).getConstructors()(0).newInstance(Array[AnyRef](this):_*).asInstanceOf[ClusterScheduler]
+        val scheduler = new ClusterScheduler(this)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
         val masterWithoutProtocol = master.replaceFirst("^mesos://", "")  // Strip initial mesos://
         val backend = if (coarseGrained) {
