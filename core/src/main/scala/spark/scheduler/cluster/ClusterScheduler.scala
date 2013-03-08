@@ -27,7 +27,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "15000").toLong
 
   val activeTaskSets = new HashMap[String, TaskSetManager]
- // var activeTaskSetsQueue = new ArrayBuffer[TaskSetManager]
 
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
@@ -171,33 +170,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           executorsByHost(host) += execId
         }
       }
-      
-      /*val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
-      val availableCpus = offers.map(o => o.cores).toArray
-      var launchedTask = false
-      for (manager <- activeTaskSetsQueue.sortBy(m => (m.taskSet.priority, m.taskSet.stageId))) {
-        do {
-          launchedTask = false
-          for (i <- 0 until offers.size) {
-            val execId = offers(i).executorId
-            val host = offers(i).hostname
-            manager.slaveOffer(execId, host, availableCpus(i)) match {
-              case Some(task) =>
-                tasks(i) += task
-                val tid = task.taskId
-                taskIdToTaskSetId(tid) = manager.taskSet.id
-                taskSetTaskIds(manager.taskSet.id) += tid
-                taskIdToExecutorId(tid) = execId
-                activeExecutorIds += execId
-                executorsByHost(host) += execId
-                availableCpus(i) -= 1
-                launchedTask = true
 
-              case None => {}
-            }
-          }
-        } while (launchedTask)
-      }*/
       if (tasks.size > 0) {
         hasLaunchedTask = true
       }
