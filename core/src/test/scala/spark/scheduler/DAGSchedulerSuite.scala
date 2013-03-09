@@ -15,6 +15,8 @@ import org.easymock.{IAnswer, IArgumentMatcher}
 
 import akka.actor.ActorSystem
 
+import spark.LocalSparkContext
+
 import spark.storage.BlockManager
 import spark.storage.BlockManagerId
 import spark.storage.BlockManagerMaster
@@ -42,13 +44,13 @@ import spark.{FetchFailed, Success}
  * DAGScheduler#submitWaitingStages (via test utility functions like runEvent or respondToTaskSet)
  * and capturing the resulting TaskSets from the mock TaskScheduler.
  */
-class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar with TimeLimitedTests {
+class DAGSchedulerSuite extends FunSuite
+    with BeforeAndAfter with EasyMockSugar with TimeLimitedTests with LocalSparkContext {
 
   // impose a time limit on this test in case we don't let the job finish, in which case
   // JobWaiter#getResult will hang.
   override val timeLimit = Span(5, Seconds)
 
-  val sc: SparkContext = new SparkContext("local", "DAGSchedulerSuite")
   var scheduler: DAGScheduler = null
   val taskScheduler = mock[TaskScheduler]
   val blockManagerMaster = mock[BlockManagerMaster]
@@ -105,6 +107,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
   }
 
   before {
+    sc = new SparkContext("local", "DAGSchedulerSuite")
     taskSetMatchers.clear()
     cacheLocations.clear()
     val actorSystem = ActorSystem("test")
@@ -125,8 +128,6 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     whenExecuting {
       scheduler.stop()
     }
-    sc.stop()
-    System.clearProperty("spark.master.port")
   }
 
   def makeBlockManagerId(host: String): BlockManagerId =
