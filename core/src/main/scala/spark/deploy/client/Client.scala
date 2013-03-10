@@ -54,6 +54,11 @@ private[spark] class Client(
         appId = appId_
         listener.connected(appId)
 
+      case ApplicationRemoved(message) =>
+        logError("Master removed our application: %s; stopping client".format(message))
+        markDisconnected()
+        context.stop(self)
+
       case ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int) =>
         val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, host, cores))
