@@ -7,6 +7,6 @@ private[spark] trait DelegateBlockFetchTracker extends BlockFetchTracker {
   def numLocalBlocks = delegate.numLocalBlocks
   def numRemoteBlocks = delegate.numRemoteBlocks
   def remoteFetchTime = delegate.remoteFetchTime
-  def remoteFetchWaitTime = delegate.remoteFetchWaitTime
+  def fetchWaitTime = delegate.fetchWaitTime
   def remoteBytesRead = delegate.remoteBytesRead
 }
