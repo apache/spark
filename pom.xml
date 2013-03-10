@@ -198,7 +198,7 @@
       <dependency>
         <groupId>de.javakaffee</groupId>
         <artifactId>kryo-serializers</artifactId>
-        <version>0.20</version>
+        <version>0.22</version>
       </dependency>
       <dependency>
         <groupId>com.typesafe.akka</groupId>
