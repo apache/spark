@@ -47,6 +47,7 @@ private[spark] class PythonRDD[T: ClassManifest](
       currentEnvVars.put(variable, value)
     }
 
+    val startTime = System.currentTimeMillis
     val proc = pb.start()
     val env = SparkEnv.get
 
@@ -108,6 +109,17 @@ private[spark] class PythonRDD[T: ClassManifest](
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
+            case -3 =>
+              // Timing data from child
+              val bootTime = stream.readLong()
+              val initTime = stream.readLong()
+              val finishTime = stream.readLong()
+              val boot = bootTime - startTime
+              val init = initTime - bootTime
+              val finish = finishTime - initTime
+              val total = finishTime - startTime
+              logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot, init, finish))
+              read
             case -2 =>
               // Signals that an exception has been thrown in python
               val exLength = stream.readInt()

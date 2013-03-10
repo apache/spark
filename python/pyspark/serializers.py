@@ -46,6 +46,10 @@ def read_long(stream):
     return struct.unpack("!q", length)[0]
 
 
+def write_long(value, stream):
+    stream.write(struct.pack("!q", value))
+
+
 def read_int(stream):
     length = stream.read(4)
     if length == "":
