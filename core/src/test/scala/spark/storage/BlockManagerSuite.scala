@@ -32,7 +32,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
   before {
     actorSystem = ActorSystem("test")
-    master = new BlockManagerMaster(actorSystem, true, true, "localhost", 7077)
+    master = new BlockManagerMaster(
+      actorSystem.actorOf(Props(new spark.storage.BlockManagerMasterActor(true))))
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     oldArch = System.setProperty("os.arch", "amd64")

@@ -1,7 +1,6 @@
 package spark
 
-import akka.actor.ActorSystem
-import akka.actor.ActorSystemImpl
+import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
 import serializer.Serializer
@@ -83,11 +82,23 @@ object SparkEnv extends Logging {
     }
 
     val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
+    
+    def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
+      if (isDriver) {
+        logInfo("Registering " + name)
+        actorSystem.actorOf(Props(newActor), name = name)
+      } else {
+        val driverIp: String = System.getProperty("spark.driver.host", "localhost")
+        val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
+        val url = "akka://spark@%s:%s/user/%s".format(driverIp, driverPort, name)
+        logInfo("Connecting to " + name + ": " + url)
+        actorSystem.actorFor(url)
+      }
+    }
 
-    val driverIp: String = System.getProperty("spark.driver.host", "localhost")
-    val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
-    val blockManagerMaster = new BlockManagerMaster(
-      actorSystem, isDriver, isLocal, driverIp, driverPort)
+    val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
+      "BlockManagerMaster",
+      new spark.storage.BlockManagerMasterActor(isLocal)))
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, serializer)
 
     val connectionManager = blockManager.connectionManager
@@ -99,7 +110,12 @@ object SparkEnv extends Logging {
 
     val cacheManager = new CacheManager(blockManager)
 
-    val mapOutputTracker = new MapOutputTracker(actorSystem, isDriver)
+    // Have to assign trackerActor after initialization as MapOutputTrackerActor
+    // requires the MapOutputTracker itself
+    val mapOutputTracker = new MapOutputTracker()
+    mapOutputTracker.trackerActor = registerOrLookup(
+      "MapOutputTracker",
+      new MapOutputTrackerActor(mapOutputTracker))
 
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
@@ -137,4 +153,5 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir)
   }
+  
 }

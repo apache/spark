@@ -385,27 +385,32 @@ class DAGScheduler(
    * We run the operation in a separate thread just in case it takes a bunch of time, so that we
    * don't block the DAGScheduler event loop or other concurrent jobs.
    */
-  private def runLocally(job: ActiveJob) {
+  protected def runLocally(job: ActiveJob) {
     logInfo("Computing the requested partition locally")
     new Thread("Local computation of job " + job.runId) {
       override def run() {
-        try {
-          SparkEnv.set(env)
-          val rdd = job.finalStage.rdd
-          val split = rdd.partitions(job.partitions(0))
-          val taskContext = new TaskContext(job.finalStage.id, job.partitions(0), 0)
-          try {
-            val result = job.func(taskContext, rdd.iterator(split, taskContext))
-            job.listener.taskSucceeded(0, result)
-          } finally {
-            taskContext.executeOnCompleteCallbacks()
-          }
-        } catch {
-          case e: Exception =>
-            job.listener.jobFailed(e)
-        }
+        runLocallyWithinThread(job)
       }
     }.start()
+  }
+
+  // Broken out for easier testing in DAGSchedulerSuite.
+  protected def runLocallyWithinThread(job: ActiveJob) {
+    try {
+      SparkEnv.set(env)
+      val rdd = job.finalStage.rdd
+      val split = rdd.partitions(job.partitions(0))
+      val taskContext = new TaskContext(job.finalStage.id, job.partitions(0), 0)
+      try {
+        val result = job.func(taskContext, rdd.iterator(split, taskContext))
+        job.listener.taskSucceeded(0, result)
+      } finally {
+        taskContext.executeOnCompleteCallbacks()
+      }
+    } catch {
+      case e: Exception =>
+        job.listener.jobFailed(e)
+    }
   }
 
   /** Submits stage, but first recursively submits any missing parents. */

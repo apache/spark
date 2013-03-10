@@ -38,9 +38,10 @@ private[spark] class MapOutputTrackerActor(tracker: MapOutputTracker) extends Ac
   }
 }
 
-private[spark] class MapOutputTracker(actorSystem: ActorSystem, isDriver: Boolean) extends Logging {
+private[spark] class MapOutputTracker extends Logging {
 
-  val timeout = 10.seconds
+  // Set to the MapOutputTrackerActor living on the driver
+  var trackerActor: ActorRef = _
 
   var mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]
 
@@ -53,24 +54,13 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isDriver: Boolea
   var cacheGeneration = generation
   val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]
 
-  val actorName: String = "MapOutputTracker"
-  var trackerActor: ActorRef = if (isDriver) {
-    val actor = actorSystem.actorOf(Props(new MapOutputTrackerActor(this)), name = actorName)
-    logInfo("Registered MapOutputTrackerActor actor")
-    actor
-  } else {
-    val ip = System.getProperty("spark.driver.host", "localhost")
-    val port = System.getProperty("spark.driver.port", "7077").toInt
-    val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
-    actorSystem.actorFor(url)
-  }
-
   val metadataCleaner = new MetadataCleaner("MapOutputTracker", this.cleanup)
 
   // Send a message to the trackerActor and get its result within a default timeout, or
   // throw a SparkException if this fails.
   def askTracker(message: Any): Any = {
     try {
+      val timeout = 10.seconds
       val future = trackerActor.ask(message)(timeout)
       return Await.result(future, timeout)
     } catch {
