@@ -24,7 +24,7 @@ if __name__ == "__main__":
             "Usage: PythonTC <master> [<slices>]"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonTC")
-    slices = sys.argv[2] if len(sys.argv) > 2 else 2
+    slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2
     tc = sc.parallelize(generateGraph(), slices).cache()
 
     # Linear transitive closure: each round grows paths by one edge,
