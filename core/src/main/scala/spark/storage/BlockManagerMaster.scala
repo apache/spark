@@ -15,13 +15,7 @@ import akka.util.duration._
 
 import spark.{Logging, SparkException, Utils}
 
-private[spark] class BlockManagerMaster(
-    val actorSystem: ActorSystem,
-    isDriver: Boolean,
-    isLocal: Boolean,
-    driverIp: String,
-    driverPort: Int)
-  extends Logging {
+private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {
 
   val AKKA_RETRY_ATTEMPTS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
   val AKKA_RETRY_INTERVAL_MS: Int = System.getProperty("spark.akka.retry.wait", "3000").toInt
@@ -29,18 +23,6 @@ private[spark] class BlockManagerMaster(
   val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
   val timeout = 10.seconds
-  var driverActor: ActorRef = {
-    if (isDriver) {
-      val driverActor = actorSystem.actorOf(Props(new BlockManagerMasterActor(isLocal)),
-        name = DRIVER_AKKA_ACTOR_NAME)
-      logInfo("Registered BlockManagerMaster Actor")
-      driverActor
-    } else {
-      val url = "akka://spark@%s:%s/user/%s".format(driverIp, driverPort, DRIVER_AKKA_ACTOR_NAME)
-      logInfo("Connecting to BlockManagerMaster: " + url)
-      actorSystem.actorFor(url)
-    }
-  }
 
   /** Remove a dead executor from the driver actor. This is only called on the driver side. */
   def removeExecutor(execId: String) {
@@ -59,7 +41,7 @@ private[spark] class BlockManagerMaster(
 
   /** Register the BlockManager's id with the driver. */
   def registerBlockManager(
-    blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+      blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     logInfo("Trying to register BlockManager")
     tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
     logInfo("Registered BlockManager")
