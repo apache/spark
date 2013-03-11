@@ -20,7 +20,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     //just to make sure some of the tasks take a noticeable amount of time
     val w = {i:Int =>
       if (i == 0)
-        Thread.sleep(25)
+        Thread.sleep(100)
       i
     }
 
