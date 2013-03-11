@@ -34,7 +34,7 @@ object Bagel extends Logging {
    * @tparam M message type
    * @tparam C combiner
    * @tparam A aggregator
-   * @return a set of (K, V) pairs representing the graph after completion of the program
+   * @return an RDD of (K, V) pairs representing the graph after completion of the program
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest,
           C: Manifest, A: Manifest](
@@ -110,8 +110,10 @@ object Bagel extends Logging {
       addAggregatorArg[K, V, M, C](compute))
   }
 
-  /** Runs a Bagel program with no [[spark.bagel.Aggregator]], default [[spark.HashPartitioner]]
-    * and default storage level*/
+  /**
+   * Runs a Bagel program with no [[spark.bagel.Aggregator]], default [[spark.HashPartitioner]]
+   * and default storage level
+   */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
     sc: SparkContext,
     vertices: RDD[(K, V)],
@@ -139,8 +141,10 @@ object Bagel extends Logging {
       addAggregatorArg[K, V, M, C](compute))
   }
 
-  /** Runs a Bagel program with no [[spark.bagel.Aggregator]], default [[spark.HashPartitioner]],
-    * [[spark.bagel.DefaultCombiner]] and the default storage level */
+  /**
+   * Runs a Bagel program with no [[spark.bagel.Aggregator]], default [[spark.HashPartitioner]],
+   * [[spark.bagel.DefaultCombiner]] and the default storage level
+   */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](
     sc: SparkContext,
     vertices: RDD[(K, V)],
@@ -150,8 +154,10 @@ object Bagel extends Logging {
     compute: (V, Option[Array[M]], Int) => (V, Array[M])
   ): RDD[(K, V)] = run(sc, vertices, messages, numPartitions, DEFAULT_STORAGE_LEVEL)(compute)
 
-  /** Runs a Bagel program with no [[spark.bagel.Aggregator]], the default [[spark.HashPartitioner]]
-    * and [[spark.bagel.DefaultCombiner]]*/
+  /**
+   * Runs a Bagel program with no [[spark.bagel.Aggregator]], the default [[spark.HashPartitioner]]
+   * and [[spark.bagel.DefaultCombiner]]
+   */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](
     sc: SparkContext,
     vertices: RDD[(K, V)],
