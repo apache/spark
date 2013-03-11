@@ -204,9 +204,9 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
     val randoms = ones.flatMapWith(
       (index: Int) => new Random(index + 42))
-      {(prng: Random, t: Int) => {
+      {(prng: Random, t: Int) =>
         val random = prng.nextDouble()
-        Seq(random * t, random * t * 10)}}.
+        Seq(random * t, random * t * 10)}.
       collect()
     val prn42_3 = {
       val prng42 = new Random(42)
