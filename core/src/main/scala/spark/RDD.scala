@@ -365,60 +365,59 @@ abstract class RDD[T: ClassManifest](
     new MapPartitionsWithIndexRDD(this, sc.clean(f), preservesPartitioning)
 
   /**
-   * Maps f over this RDD where f takes an additional parameter of type A.  This
-   * additional parameter is produced by a factory method T => A which is called
-   * on each invocation of f.  This factory method is produced by the factoryBuilder,
-   * an instance of which is constructed in each partition from the partition index
-   * and a seed value of type B.
+   * Maps f over this RDD where, f takes an additional parameter of type A.  This
+   * additional parameter is produced by constructorOfA, which is called in each
+   * partition with the index of that partition.
    */
-  def mapWith[A: ClassManifest, B: ClassManifest, U: ClassManifest](
-    factoryBuilder: (Int, B) => (T => A),
-    factorySeed: B,
-    preservesPartitioning: Boolean = false)
+  def mapWith[A: ClassManifest, U: ClassManifest](constructorOfA: Int => A, preservesPartitioning: Boolean = false)
     (f:(A, T) => U): RDD[U] = {
       def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
-        val factory = factoryBuilder(index, factorySeed)
-        iter.map(t => f(factory(t), t))
+        val a = constructorOfA(index)
+        iter.map(t => f(a, t))
+      }
+    new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), preservesPartitioning)
+  }
+
+    /**
+   * FlatMaps f over this RDD, where f takes an additional parameter of type A.  This
+   * additional parameter is produced by constructorOfA, which is called in each
+   * partition with the index of that partition.
+   */
+  def flatMapWith[A: ClassManifest, U: ClassManifest](constructorOfA: Int => A, preservesPartitioning: Boolean = false)
+    (f:(A, T) => Seq[U]): RDD[U] = {
+      def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
+        val a = constructorOfA(index)
+        iter.flatMap(t => f(a, t))
       }
     new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), preservesPartitioning)
   }
 
   /**
-   * FlatMaps f over this RDD where f takes an additional parameter of type A.  This
-   * additional parameter is produced by a factory method T => A which is called
-   * on each invocation of f.  This factory method is produced by the factoryBuilder,
-   * an instance of which is constructed in each partition from the partition index
-   * and a seed value of type B.
+   * Applies f to each element of this RDD, where f takes an additional parameter of type A.
+   * This additional parameter is produced by constructorOfA, which is called in each
+   * partition with the index of that partition.
    */
-  def flatMapWith[A: ClassManifest, B: ClassManifest, U: ClassManifest](
-    factoryBuilder: (Int, B) => (T => A),
-    factorySeed: B,
-    preservesPartitioning: Boolean = false)
-    (f:(A, T) => Seq[U]): RDD[U] = {
-      def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
-        val factory = factoryBuilder(index, factorySeed)
-        iter.flatMap(t => f(factory(t), t))
+  def foreachWith[A: ClassManifest](constructorOfA: Int => A)
+    (f:(A, T) => Unit) {
+      def iterF(index: Int, iter: Iterator[T]): Iterator[T] = {
+        val a = constructorOfA(index)
+        iter.map(t => {f(a, t); t})
       }
-    new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), preservesPartitioning)
+    (new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), true)).foreach(_ => {})
   }
 
   /**
    * Filters this RDD with p, where p takes an additional parameter of type A.  This
-   * additional parameter is produced by a factory method T => A which is called
-   * on each invocation of p.  This factory method is produced by the factoryBuilder,
-   * an instance of which is constructed in each partition from the partition index
-   * and a seed value of type B.
+   * additional parameter is produced by constructorOfA, which is called in each
+   * partition with the index of that partition.
    */
-  def filterWith[A: ClassManifest, B: ClassManifest](
-    factoryBuilder: (Int, B) => (T => A),
-    factorySeed: B,
-    preservesPartitioning: Boolean = false)
+  def filterWith[A: ClassManifest](constructorOfA: Int => A)
     (p:(A, T) => Boolean): RDD[T] = {
       def iterF(index: Int, iter: Iterator[T]): Iterator[T] = {
-        val factory = factoryBuilder(index, factorySeed)
-        iter.filter(t => p(factory(t), t))
+        val a = constructorOfA(index)
+        iter.filter(t => p(a, t))
       }
-    new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), preservesPartitioning)
+    new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), true)
   }
 
   /**
@@ -437,6 +436,14 @@ abstract class RDD[T: ClassManifest](
   def foreach(f: T => Unit) {
     val cleanF = sc.clean(f)
     sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
+  }
+
+  /**
+   * Applies a function f to each partition of this RDD.
+   */
+  def foreachPartition(f: Iterator[T] => Unit) {
+    val cleanF = sc.clean(f)
+    sc.runJob(this, (iter: Iterator[T]) => f(iter))
   }
 
   /**
