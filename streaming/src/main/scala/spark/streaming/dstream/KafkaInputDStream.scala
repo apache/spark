@@ -12,6 +12,8 @@ import kafka.message.{Message, MessageSet, MessageAndMetadata}
 import kafka.serializer.StringDecoder
 import kafka.utils.{Utils, ZKGroupTopicDirs}
 import kafka.utils.ZkUtils._
+import kafka.utils.ZKStringSerializer
+import org.I0Itec.zkclient._
 
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
@@ -23,8 +25,7 @@ case class KafkaPartitionKey(brokerId: Int, topic: String, groupId: String, part
 /**
  * Input stream that pulls messages from a Kafka Broker.
  * 
- * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
- * @param groupId The group id for this consumer.
+ * @param kafkaParams Map of kafka configuration paramaters. See: http://kafka.apache.org/configuration.html
  * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
  * in its own thread.
  * @param initialOffsets Optional initial offsets for each of the partitions to consume.
@@ -34,8 +35,7 @@ case class KafkaPartitionKey(brokerId: Int, topic: String, groupId: String, part
 private[streaming]
 class KafkaInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
-    zkQuorum: String,
-    groupId: String,
+    kafkaParams: Map[String, String],
     topics: Map[String, Int],
     initialOffsets: Map[KafkaPartitionKey, Long],
     storageLevel: StorageLevel
@@ -43,18 +43,15 @@ class KafkaInputDStream[T: ClassManifest](
 
 
   def getReceiver(): NetworkReceiver[T] = {
-    new KafkaReceiver(zkQuorum,  groupId, topics, initialOffsets, storageLevel)
+    new KafkaReceiver(kafkaParams, topics, initialOffsets, storageLevel)
         .asInstanceOf[NetworkReceiver[T]]
   }
 }
 
 private[streaming]
-class KafkaReceiver(zkQuorum: String, groupId: String,
+class KafkaReceiver(kafkaParams: Map[String, String],
   topics: Map[String, Int], initialOffsets: Map[KafkaPartitionKey, Long], 
   storageLevel: StorageLevel) extends NetworkReceiver[Any] {
-
-  // Timeout for establishing a connection to Zookeper in ms.
-  val ZK_TIMEOUT = 10000
 
   // Handles pushing data into the BlockManager
   lazy protected val blockGenerator = new BlockGenerator(storageLevel)
@@ -72,20 +69,24 @@ class KafkaReceiver(zkQuorum: String, groupId: String,
     // In case we are using multiple Threads to handle Kafka Messages
     val executorPool = Executors.newFixedThreadPool(topics.values.reduce(_ + _))
 
-    logInfo("Starting Kafka Consumer Stream with group: " + groupId)
+    logInfo("Starting Kafka Consumer Stream with group: " + kafkaParams("groupid"))
     logInfo("Initial offsets: " + initialOffsets.toString)
 
-    // Zookeper connection properties
+    // Kafka connection properties
     val props = new Properties()
-    props.put("zk.connect", zkQuorum)
-    props.put("zk.connectiontimeout.ms", ZK_TIMEOUT.toString)
-    props.put("groupid", groupId)
+    kafkaParams.foreach(param => props.put(param._1, param._2))
 
     // Create the connection to the cluster
-    logInfo("Connecting to Zookeper: " + zkQuorum)
+    logInfo("Connecting to Zookeper: " + kafkaParams("zk.connect"))
     val consumerConfig = new ConsumerConfig(props)
     consumerConnector = Consumer.create(consumerConfig).asInstanceOf[ZookeeperConsumerConnector]
-    logInfo("Connected to " + zkQuorum)
+    logInfo("Connected to " + kafkaParams("zk.connect"))
+
+    // When autooffset.reset is 'smallest', it is our responsibility to try and whack the
+    // consumer group zk node.
+    if (kafkaParams.get("autooffset.reset").exists(_ == "smallest")) {
+      tryZookeeperConsumerGroupCleanup(kafkaParams("zk.connect"), kafkaParams("groupid"))
+    }
 
     // If specified, set the topic offset
     setOffsets(initialOffsets)
@@ -97,7 +98,6 @@ class KafkaReceiver(zkQuorum: String, groupId: String,
     topicMessageStreams.values.foreach { streams =>
       streams.foreach { stream => executorPool.submit(new MessageHandler(stream)) }
     }
-
   }
 
   // Overwrites the offets in Zookeper.
@@ -120,6 +120,20 @@ class KafkaReceiver(zkQuorum: String, groupId: String,
 
         true
       }
+    }
+  }
+
+  // Handles cleanup of consumer group znode. Lifted with love from Kafka's
+  // ConsumerConsole.scala tryCleanupZookeeper()
+  private def tryZookeeperConsumerGroupCleanup(zkUrl: String, groupId: String) {
+    try {
+      val dir = "/consumers/" + groupId
+      logInfo("Cleaning up temporary zookeeper data under " + dir + ".")
+      val zk = new ZkClient(zkUrl, 30*1000, 30*1000, ZKStringSerializer)
+      zk.deleteRecursive(dir)
+      zk.close()
+    } catch {
+      case _ => // swallow
     }
   }
 }
