@@ -2,6 +2,7 @@ package spark.streaming.dstream
 
 import spark.streaming.StreamingContext
 import spark.storage.StorageLevel
+import spark.util.NextIterator
 
 import java.io._
 import java.net.Socket
@@ -59,45 +60,18 @@ object SocketReceiver  {
    */
   def bytesToLines(inputStream: InputStream): Iterator[String] = {
     val dataInputStream = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))
-
-    val iterator = new Iterator[String] {
-      var gotNext = false
-      var finished = false
-      var nextValue: String = null
-
-      private def getNext() {
-        try {
-          nextValue = dataInputStream.readLine()
-          if (nextValue == null) {
-            finished = true
-          }
+    new NextIterator[String] {
+      protected override def getNext() {
+        val nextValue = dataInputStream.readLine()
+        if (nextValue == null) {
+          finished = true
         }
-        gotNext = true
-      }
-
-      override def hasNext: Boolean = {
-        if (!finished) {
-          if (!gotNext) {
-            getNext()
-            if (finished) {
-              dataInputStream.close()
-            }
-          }
-        }
-        !finished
-      }
-
-      override def next(): String = {
-        if (finished) {
-          throw new NoSuchElementException("End of stream")
-        }
-        if (!gotNext) {
-          getNext()
-        }
-        gotNext = false
         nextValue
       }
+
+      protected override def close() {
+        dataInputStream.close()
+      }
     }
-    iterator
   }
 }
