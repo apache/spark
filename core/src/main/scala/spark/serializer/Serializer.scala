@@ -81,5 +81,9 @@ trait DeserializationStream {
           finished = true
       }
     }
+
+    override protected def close() {
+      DeserializationStream.this.close()
+    }
   }
 }

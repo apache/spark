@@ -22,8 +22,8 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
   protected def getNext(): U
 
   /**
-   * Method for subclasses to optionally implement when all elements
-   * have been successfully iterated, and the iteration is done.
+   * Method for subclasses to implement when all elements have been successfully
+   * iterated, and the iteration is done.
    *
    * <b>Note:</b> `NextIterator` cannot guarantee that `close` will be
    * called because it has no control over what happens when an exception
@@ -32,8 +32,7 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
    * Ideally you should have another try/catch, as in HadoopRDD, that
    * ensures any resources are closed should iteration fail.
    */
-  protected def close() {
-  }
+  protected def close()
 
   override def hasNext: Boolean = {
     if (!finished) {
