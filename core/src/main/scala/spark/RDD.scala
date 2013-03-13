@@ -408,8 +408,24 @@ abstract class RDD[T: ClassManifest](
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
-  def subtract(other: RDD[T]): RDD[T] =
-    subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.size)))
+  def subtract(other: RDD[T]): RDD[T] = {
+    // If we do have a partitioner, our T is really (K, V), and we'll need to
+    // unwrap the (T, null) that subtract does to get back to the K
+    val rdd = subtract(other, partitioner match {
+      case None => new HashPartitioner(partitions.size)
+      case Some(p) => new Partitioner() {
+        override def numPartitions = p.numPartitions
+        override def getPartition(k: Any) = p.getPartition(k.asInstanceOf[(Any, _)]._1)
+      }
+    })
+    // Hacky, but if we did have a partitioner, we can keep using it
+    new RDD[T](rdd) {
+      override def getPartitions = rdd.partitions
+      override def getDependencies = rdd.dependencies
+      override def compute(split: Partition, context: TaskContext) = rdd.compute(split, context)
+      override val partitioner = RDD.this.partitioner
+    }
+  }
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
@@ -420,7 +436,9 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
    */
-  def subtract(other: RDD[T], p: Partitioner): RDD[T] = new SubtractedRDD[T](this, other, p)
+  def subtract(other: RDD[T], p: Partitioner): RDD[T] = {
+     new SubtractedRDD[T, Any](this.map((_, null)), other.map((_, null)), p).keys
+  }
 
   /**
    * Reduces the elements of this RDD using the specified commutative and associative binary operator.
