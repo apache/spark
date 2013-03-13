@@ -5,6 +5,7 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
   
   private var gotNext = false
   private var nextValue: U = _
+  private var closed = false
   protected var finished = false
 
   /**
@@ -34,12 +35,25 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
    */
   protected def close()
 
+  /**
+   * Calls the subclass-defined close method, but only once.
+   *
+   * Usually calling `close` multiple times should be fine, but historically
+   * there have been issues with some InputFormats throwing exceptions.
+   */
+  def closeIfNeeded() {
+    if (!closed) {
+      close()
+      closed = true
+    }
+  }
+
   override def hasNext: Boolean = {
     if (!finished) {
       if (!gotNext) {
         nextValue = getNext()
         if (finished) {
-          close()
+          closeIfNeeded()
         }
         gotNext = true
       }
