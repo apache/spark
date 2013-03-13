@@ -265,7 +265,7 @@ print "Lines with a: %i, lines with b: %i" % (numAs, numBs)
 This job simply counts the number of lines containing 'a' and the number containing 'b' in a system log file.
 Like in the Scala and Java examples, we use a SparkContext to create RDDs.
 We can pass Python functions to Spark, which are automatically serialized along with any variables that they reference.
-For jobs that use custom classes or third-party libraries, we can add those code dependencies to SparkContext to ensure that they will be available on remote machines; this is described in more detail in the [Python programming guide](python-programming-guide).
+For jobs that use custom classes or third-party libraries, we can add those code dependencies to SparkContext to ensure that they will be available on remote machines; this is described in more detail in the [Python programming guide](python-programming-guide.html).
 `SimpleJob` is simple enough that we do not need to specify any code dependencies.
 
 We can run this job using the `pyspark` script:
