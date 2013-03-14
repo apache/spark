@@ -283,7 +283,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
   test("subtractByKey") {
     sc = new SparkContext("local", "test")
     val a = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 2)
-    val b = sc.parallelize(Array((2, "bb"), (3, "cc"), (4, "dd")), 4)
+    val b = sc.parallelize(Array((2, 20), (3, 30), (4, 40)), 4)
     val c = a.subtractByKey(b)
     assert(c.collect().toSet === Set((1, "a"), (1, "a")))
     assert(c.partitions.size === a.partitions.size)
