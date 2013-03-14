@@ -161,6 +161,12 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     rdd.countByKeyApprox(timeout, confidence).map(mapAsJavaMap)
 
   /**
+   * Merge the values for each key using an associative function and a neutral "zero value".
+   */
+  def foldByKey(zeroValue: V, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
+    fromRDD(rdd.foldByKey(zeroValue)(func))
+
+  /**
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.

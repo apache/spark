@@ -196,7 +196,29 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(33, sum);
   }
 
-  @Test
+    @Test
+    public void foldByKey() {
+        List<Tuple2<Integer, Integer>> pairs = Arrays.asList(
+                new Tuple2<Integer, Integer>(2, 1),
+                new Tuple2<Integer, Integer>(2, 1),
+                new Tuple2<Integer, Integer>(1, 1),
+                new Tuple2<Integer, Integer>(3, 2),
+                new Tuple2<Integer, Integer>(3, 1)
+        );
+        JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs);
+        JavaPairRDD<Integer, Integer> sums = rdd.foldByKey(0,
+          new Function2<Integer, Integer, Integer>() {
+                    @Override
+                    public Integer call(Integer a, Integer b) {
+                        return a + b;
+                    }
+                });
+        Assert.assertEquals(1, sums.lookup(1).get(0).intValue());
+        Assert.assertEquals(2, sums.lookup(2).get(0).intValue());
+        Assert.assertEquals(3, sums.lookup(3).get(0).intValue());
+    }
+
+    @Test
   public void reduceByKey() {
     List<Tuple2<Integer, Integer>> pairs = Arrays.asList(
       new Tuple2<Integer, Integer>(2, 1),
