@@ -87,7 +87,7 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest](
     // the first dep is rdd1; add all values to the map
     integrate(partition.deps(0), t => getSeq(t._1) += t._2)
     // the second dep is rdd2; remove all of its keys
-    integrate(partition.deps(1), t => map.remove(t._1) )
+    integrate(partition.deps(1), t => map.remove(t._1))
     map.iterator.map { t =>  t._2.iterator.map { (t._1, _) } }.flatten
   }
 

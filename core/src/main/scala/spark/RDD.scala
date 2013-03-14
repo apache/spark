@@ -408,24 +408,8 @@ abstract class RDD[T: ClassManifest](
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
-  def subtract(other: RDD[T]): RDD[T] = {
-    // If we do have a partitioner, our T is really (K, V), and we'll need to
-    // unwrap the (T, null) that subtract does to get back to the K
-    val rdd = subtract(other, partitioner match {
-      case None => new HashPartitioner(partitions.size)
-      case Some(p) => new Partitioner() {
-        override def numPartitions = p.numPartitions
-        override def getPartition(k: Any) = p.getPartition(k.asInstanceOf[(Any, _)]._1)
-      }
-    })
-    // Hacky, but if we did have a partitioner, we can keep using it
-    new RDD[T](rdd) {
-      override def getPartitions = rdd.partitions
-      override def getDependencies = rdd.dependencies
-      override def compute(split: Partition, context: TaskContext) = rdd.compute(split, context)
-      override val partitioner = RDD.this.partitioner
-    }
-  }
+  def subtract(other: RDD[T]): RDD[T] =
+    subtract(other, partitioner.getOrElse(new HashPartitioner(partitions.size)))
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
@@ -437,7 +421,21 @@ abstract class RDD[T: ClassManifest](
    * Return an RDD with the elements from `this` that are not in `other`.
    */
   def subtract(other: RDD[T], p: Partitioner): RDD[T] = {
-     new SubtractedRDD[T, Any](this.map((_, null)), other.map((_, null)), p).keys
+    if (partitioner == Some(p)) {
+      // Our partitioner knows how to handle T (which, since we have a partitioner, is
+      // really (K, V)) so make a new Partitioner that will de-tuple our fake tuples
+      val p2 = new Partitioner() {
+        override def numPartitions = p.numPartitions
+        override def getPartition(k: Any) = p.getPartition(k.asInstanceOf[(Any, _)]._1)
+      }
+      // Unfortunately, since we're making a new p2, we'll get ShuffleDependencies
+      // anyway, and when calling .keys, will not have a partitioner set, even though
+      // the SubtractedRDD will, thanks to p2's de-tupled partitioning, already be
+      // partitioned by the right/real keys (e.g. p).
+      this.map(x => (x, null)).subtractByKey(other.map((_, null)), p2).keys
+    } else {
+      this.map(x => (x, null)).subtractByKey(other.map((_, null)), p).keys
+    }
   }
 
   /**
