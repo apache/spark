@@ -35,13 +35,13 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassM
 
   override def getDependencies: Seq[Dependency[_]] = {
     Seq(rdd1, rdd2).map { rdd =>
-	  if (rdd.partitioner == Some(part)) {
-	    logInfo("Adding one-to-one dependency with " + rdd)
-	    new OneToOneDependency(rdd)
-	  } else {
-	    logInfo("Adding shuffle dependency with " + rdd)
-	    new ShuffleDependency(rdd.asInstanceOf[RDD[(K, Any)]], part)
-	  }
+      if (rdd.partitioner == Some(part)) {
+        logInfo("Adding one-to-one dependency with " + rdd)
+        new OneToOneDependency(rdd)
+      } else {
+        logInfo("Adding shuffle dependency with " + rdd)
+        new ShuffleDependency(rdd.asInstanceOf[RDD[(K, Any)]], part)
+      }
     }
   }
 
