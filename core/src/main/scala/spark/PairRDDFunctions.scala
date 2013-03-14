@@ -89,6 +89,13 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   }
 
   /**
+   * Merge the values for each key using an associative function and a neutral "zero value".
+   */
+  def foldByKey[V1 >: V](zeroValue: V1)(op: (V1, V1) => V1): RDD[(K, V1)] = {
+    groupByKey.mapValues(seq => seq.fold(zeroValue)(op))
+  }
+
+  /**
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
