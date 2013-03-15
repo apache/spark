@@ -163,6 +163,18 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   /**
    * Merge the values for each key using an associative function and a neutral "zero value".
    */
+  def foldByKey(zeroValue: V, partitioner: Partitioner, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
+    fromRDD(rdd.foldByKey(zeroValue, partitioner)(func))
+
+  /**
+   * Merge the values for each key using an associative function and a neutral "zero value".
+   */
+  def foldByKey(zeroValue: V, numPartitions: Int, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
+    fromRDD(rdd.foldByKey(zeroValue, numPartitions)(func))
+
+  /**
+   * Merge the values for each key using an associative function and a neutral "zero value".
+   */
   def foldByKey(zeroValue: V, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
     fromRDD(rdd.foldByKey(zeroValue)(func))
 

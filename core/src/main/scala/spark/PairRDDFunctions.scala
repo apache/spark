@@ -91,8 +91,23 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   /**
    * Merge the values for each key using an associative function and a neutral "zero value".
    */
-  def foldByKey(zeroValue: V)(op: (V, V) => V): RDD[(K, V)] = {
-    groupByKey.mapValues(seq => seq.fold[V](zeroValue)(op))
+  def foldByKey(zeroValue: V, partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = {
+    groupByKey(partitioner).mapValues(seq => seq.fold[V](zeroValue)(func))
+  }
+
+
+  /**
+   * Merge the values for each key using an associative function and a neutral "zero value".
+   */
+  def foldByKey(zeroValue: V, numPartitions: Int)(func: (V, V) => V): RDD[(K, V)] = {
+    foldByKey(zeroValue, new HashPartitioner(numPartitions))(func)
+  }
+
+  /**
+   * Merge the values for each key using an associative function and a neutral "zero value".
+   */
+  def foldByKey(zeroValue: V)(func: (V, V) => V): RDD[(K, V)] = {
+    foldByKey(zeroValue, defaultPartitioner(self))(func)
   }
 
   /**
