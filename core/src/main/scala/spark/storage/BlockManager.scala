@@ -903,7 +903,7 @@ class BlockFetcherIterator(
 
   private var _remoteBytesRead = 0l
   private var _remoteFetchTime = 0l
-  private var _remoteFetchWaitTime = 0l
+  private var _fetchWaitTime = 0l
 
   if (blocksByAddress == null) {
     throw new IllegalArgumentException("BlocksByAddress is null")
@@ -1046,7 +1046,7 @@ class BlockFetcherIterator(
     val startFetchWait = System.currentTimeMillis()
     val result = results.take()
     val stopFetchWait = System.currentTimeMillis()
-    _remoteFetchWaitTime += (stopFetchWait - startFetchWait)
+    _fetchWaitTime += (stopFetchWait - startFetchWait)
     bytesInFlight -= result.size
     while (!fetchRequests.isEmpty &&
       (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
@@ -1061,7 +1061,7 @@ class BlockFetcherIterator(
   def numRemoteBlocks = remoteBlockIds.size
 
   def remoteFetchTime = _remoteFetchTime
-  def remoteFetchWaitTime = _remoteFetchWaitTime
+  def fetchWaitTime = _fetchWaitTime
 
   def remoteBytesRead = _remoteBytesRead
 

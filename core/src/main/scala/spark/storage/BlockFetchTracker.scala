@@ -5,6 +5,6 @@ private[spark] trait BlockFetchTracker {
     def numLocalBlocks: Int
     def numRemoteBlocks: Int
     def remoteFetchTime : Long
-    def remoteFetchWaitTime: Long
+    def fetchWaitTime: Long
     def remoteBytesRead : Long
 }
