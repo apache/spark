@@ -19,17 +19,12 @@ import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 
 
-// Key for a specific Kafka Partition: (broker, topic, group, part)
-case class KafkaPartitionKey(brokerId: Int, topic: String, groupId: String, partId: Int)
-
 /**
  * Input stream that pulls messages from a Kafka Broker.
  * 
  * @param kafkaParams Map of kafka configuration paramaters. See: http://kafka.apache.org/configuration.html
  * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
  * in its own thread.
- * @param initialOffsets Optional initial offsets for each of the partitions to consume.
- * By default the value is pulled from zookeper.
  * @param storageLevel RDD storage level.
  */
 private[streaming]
@@ -37,26 +32,25 @@ class KafkaInputDStream[T: ClassManifest](
     @transient ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
-    initialOffsets: Map[KafkaPartitionKey, Long],
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[T](ssc_ ) with Logging {
 
 
   def getReceiver(): NetworkReceiver[T] = {
-    new KafkaReceiver(kafkaParams, topics, initialOffsets, storageLevel)
+    new KafkaReceiver(kafkaParams, topics, storageLevel)
         .asInstanceOf[NetworkReceiver[T]]
   }
 }
 
 private[streaming]
 class KafkaReceiver(kafkaParams: Map[String, String],
-  topics: Map[String, Int], initialOffsets: Map[KafkaPartitionKey, Long], 
+  topics: Map[String, Int],
   storageLevel: StorageLevel) extends NetworkReceiver[Any] {
 
   // Handles pushing data into the BlockManager
   lazy protected val blockGenerator = new BlockGenerator(storageLevel)
   // Connection to Kafka
-  var consumerConnector : ZookeeperConsumerConnector = null
+  var consumerConnector : ConsumerConnector = null
 
   def onStop() {
     blockGenerator.stop()
@@ -70,7 +64,6 @@ class KafkaReceiver(kafkaParams: Map[String, String],
     val executorPool = Executors.newFixedThreadPool(topics.values.reduce(_ + _))
 
     logInfo("Starting Kafka Consumer Stream with group: " + kafkaParams("groupid"))
-    logInfo("Initial offsets: " + initialOffsets.toString)
 
     // Kafka connection properties
     val props = new Properties()
@@ -79,7 +72,7 @@ class KafkaReceiver(kafkaParams: Map[String, String],
     // Create the connection to the cluster
     logInfo("Connecting to Zookeper: " + kafkaParams("zk.connect"))
     val consumerConfig = new ConsumerConfig(props)
-    consumerConnector = Consumer.create(consumerConfig).asInstanceOf[ZookeeperConsumerConnector]
+    consumerConnector = Consumer.create(consumerConfig)
     logInfo("Connected to " + kafkaParams("zk.connect"))
 
     // When autooffset.reset is 'smallest', it is our responsibility to try and whack the
@@ -88,25 +81,12 @@ class KafkaReceiver(kafkaParams: Map[String, String],
       tryZookeeperConsumerGroupCleanup(kafkaParams("zk.connect"), kafkaParams("groupid"))
     }
 
-    // If specified, set the topic offset
-    setOffsets(initialOffsets)
-
     // Create Threads for each Topic/Message Stream we are listening
     val topicMessageStreams = consumerConnector.createMessageStreams(topics, new StringDecoder())
 
     // Start the messages handler for each partition
     topicMessageStreams.values.foreach { streams =>
       streams.foreach { stream => executorPool.submit(new MessageHandler(stream)) }
-    }
-  }
-
-  // Overwrites the offets in Zookeper.
-  private def setOffsets(offsets: Map[KafkaPartitionKey, Long]) {
-    offsets.foreach { case(key, offset) =>
-      val topicDirs = new ZKGroupTopicDirs(key.groupId, key.topic)
-      val partitionName = key.brokerId + "-" + key.partId
-      updatePersistentPath(consumerConnector.zkClient,
-        topicDirs.consumerOffsetDir + "/" + partitionName, offset.toString)
     }
   }
 

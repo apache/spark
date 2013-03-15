@@ -84,39 +84,12 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
-   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
-   * By default the value is pulled from zookeper.
-   */
-  def kafkaStream[T](
-    zkQuorum: String,
-    groupId: String,
-    topics: JMap[String, JInt],
-    initialOffsets: JMap[KafkaPartitionKey, JLong])
-  : JavaDStream[T] = {
-    implicit val cmt: ClassManifest[T] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    ssc.kafkaStream[T](
-      zkQuorum,
-      groupId,
-      Map(topics.mapValues(_.intValue()).toSeq: _*),
-      Map(initialOffsets.mapValues(_.longValue()).toSeq: _*))
-  }
-
-  /**
-   * Create an input stream that pulls messages form a Kafka Broker.
-   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
-   * @param groupId The group id for this consumer.
-   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   * in its own thread.
-   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
-   * By default the value is pulled from zookeper.
    * @param storageLevel RDD storage level. Defaults to memory-only
    */
   def kafkaStream[T](
     zkQuorum: String,
     groupId: String,
     topics: JMap[String, JInt],
-    initialOffsets: JMap[KafkaPartitionKey, JLong],
     storageLevel: StorageLevel)
   : JavaDStream[T] = {
     implicit val cmt: ClassManifest[T] =
@@ -125,7 +98,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
       zkQuorum,
       groupId,
       Map(topics.mapValues(_.intValue()).toSeq: _*),
-      Map(initialOffsets.mapValues(_.longValue()).toSeq: _*),
       storageLevel)
   }
 

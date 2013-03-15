@@ -204,8 +204,6 @@ class StreamingContext private (
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
-   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
-   * By default the value is pulled from zookeper.
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
@@ -213,11 +211,10 @@ class StreamingContext private (
       zkQuorum: String,
       groupId: String,
       topics: Map[String, Int],
-      initialOffsets: Map[KafkaPartitionKey, Long] = Map[KafkaPartitionKey, Long](),
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
     ): DStream[T] = {
     val kafkaParams = Map[String, String]("zk.connect" -> zkQuorum, "groupid" -> groupId, "zk.connectiontimeout.ms" -> "10000");
-    kafkaStream[T](kafkaParams, topics, initialOffsets, storageLevel)
+    kafkaStream[T](kafkaParams, topics, storageLevel)
   }
 
   /**
@@ -225,16 +222,14 @@ class StreamingContext private (
    * @param kafkaParams Map of kafka configuration paramaters. See: http://kafka.apache.org/configuration.html
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
-   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
    * @param storageLevel  Storage level to use for storing the received objects
    */
   def kafkaStream[T: ClassManifest](
       kafkaParams: Map[String, String],
       topics: Map[String, Int],
-      initialOffsets: Map[KafkaPartitionKey, Long],
       storageLevel: StorageLevel
     ): DStream[T] = {
-    val inputStream = new KafkaInputDStream[T](this, kafkaParams, topics, initialOffsets, storageLevel)
+    val inputStream = new KafkaInputDStream[T](this, kafkaParams, topics, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }
