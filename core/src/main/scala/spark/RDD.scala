@@ -366,7 +366,7 @@ abstract class RDD[T: ClassManifest](
 
   /**
    * Maps f over this RDD, where f takes an additional parameter of type A.  This
-   * additional parameter is produced by constructorOfA, which is called in each
+   * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
   def mapWith[A: ClassManifest, U: ClassManifest](constructA: Int => A, preservesPartitioning: Boolean = false)
@@ -380,7 +380,7 @@ abstract class RDD[T: ClassManifest](
 
   /**
    * FlatMaps f over this RDD, where f takes an additional parameter of type A.  This
-   * additional parameter is produced by constructorOfA, which is called in each
+   * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
   def flatMapWith[A: ClassManifest, U: ClassManifest](constructA: Int => A, preservesPartitioning: Boolean = false)
@@ -394,7 +394,7 @@ abstract class RDD[T: ClassManifest](
 
   /**
    * Applies f to each element of this RDD, where f takes an additional parameter of type A.
-   * This additional parameter is produced by constructorOfA, which is called in each
+   * This additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
   def foreachWith[A: ClassManifest](constructA: Int => A)
@@ -408,7 +408,7 @@ abstract class RDD[T: ClassManifest](
 
   /**
    * Filters this RDD with p, where p takes an additional parameter of type A.  This
-   * additional parameter is produced by constructorOfA, which is called in each
+   * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
   def filterWith[A: ClassManifest](constructA: Int => A)
