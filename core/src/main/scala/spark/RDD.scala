@@ -365,7 +365,7 @@ abstract class RDD[T: ClassManifest](
     new MapPartitionsWithIndexRDD(this, sc.clean(f), preservesPartitioning)
 
   /**
-   * Maps f over this RDD where, f takes an additional parameter of type A.  This
+   * Maps f over this RDD, where f takes an additional parameter of type A.  This
    * additional parameter is produced by constructorOfA, which is called in each
    * partition with the index of that partition.
    */
