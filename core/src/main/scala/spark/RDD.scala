@@ -369,25 +369,25 @@ abstract class RDD[T: ClassManifest](
    * additional parameter is produced by constructorOfA, which is called in each
    * partition with the index of that partition.
    */
-  def mapWith[A: ClassManifest, U: ClassManifest](constructorOfA: Int => A, preservesPartitioning: Boolean = false)
-    (f:(A, T) => U): RDD[U] = {
+  def mapWith[A: ClassManifest, U: ClassManifest](constructA: Int => A, preservesPartitioning: Boolean = false)
+    (f:(T, A) => U): RDD[U] = {
       def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
-        val a = constructorOfA(index)
-        iter.map(t => f(a, t))
+        val a = constructA(index)
+        iter.map(t => f(t, a))
       }
     new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), preservesPartitioning)
   }
 
-    /**
+  /**
    * FlatMaps f over this RDD, where f takes an additional parameter of type A.  This
    * additional parameter is produced by constructorOfA, which is called in each
    * partition with the index of that partition.
    */
-  def flatMapWith[A: ClassManifest, U: ClassManifest](constructorOfA: Int => A, preservesPartitioning: Boolean = false)
-    (f:(A, T) => Seq[U]): RDD[U] = {
+  def flatMapWith[A: ClassManifest, U: ClassManifest](constructA: Int => A, preservesPartitioning: Boolean = false)
+    (f:(T, A) => Seq[U]): RDD[U] = {
       def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
-        val a = constructorOfA(index)
-        iter.flatMap(t => f(a, t))
+        val a = constructA(index)
+        iter.flatMap(t => f(t, a))
       }
     new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), preservesPartitioning)
   }
@@ -397,11 +397,11 @@ abstract class RDD[T: ClassManifest](
    * This additional parameter is produced by constructorOfA, which is called in each
    * partition with the index of that partition.
    */
-  def foreachWith[A: ClassManifest](constructorOfA: Int => A)
-    (f:(A, T) => Unit) {
+  def foreachWith[A: ClassManifest](constructA: Int => A)
+    (f:(T, A) => Unit) {
       def iterF(index: Int, iter: Iterator[T]): Iterator[T] = {
-        val a = constructorOfA(index)
-        iter.map(t => {f(a, t); t})
+        val a = constructA(index)
+        iter.map(t => {f(t, a); t})
       }
     (new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), true)).foreach(_ => {})
   }
@@ -411,11 +411,11 @@ abstract class RDD[T: ClassManifest](
    * additional parameter is produced by constructorOfA, which is called in each
    * partition with the index of that partition.
    */
-  def filterWith[A: ClassManifest](constructorOfA: Int => A)
-    (p:(A, T) => Boolean): RDD[T] = {
+  def filterWith[A: ClassManifest](constructA: Int => A)
+    (p:(T, A) => Boolean): RDD[T] = {
       def iterF(index: Int, iter: Iterator[T]): Iterator[T] = {
-        val a = constructorOfA(index)
-        iter.filter(t => p(a, t))
+        val a = constructA(index)
+        iter.filter(t => p(t, a))
       }
     new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), true)
   }
