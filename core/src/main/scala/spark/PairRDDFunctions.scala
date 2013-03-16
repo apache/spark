@@ -97,7 +97,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     combineByKey[V]({v: V => func(zeroValue, v)}, func, func, partitioner)
   }
 
-
   /**
    * Merge the values for each key using an associative function and a neutral "zero value" which may
    * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
