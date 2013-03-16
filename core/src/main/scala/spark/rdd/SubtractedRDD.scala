@@ -1,7 +1,8 @@
 package spark.rdd
 
-import java.util.{HashSet => JHashSet}
+import java.util.{HashMap => JHashMap}
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 import spark.RDD
 import spark.Partitioner
 import spark.Dependency
@@ -27,10 +28,10 @@ import spark.OneToOneDependency
  * you can use `rdd1`'s partitioner/partition size and not worry about running
  * out of memory because of the size of `rdd2`.
  */
-private[spark] class SubtractedRDD[T: ClassManifest](
-    @transient var rdd1: RDD[T],
-    @transient var rdd2: RDD[T],
-    part: Partitioner) extends RDD[T](rdd1.context, Nil) {
+private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassManifest](
+    @transient var rdd1: RDD[(K, V)],
+    @transient var rdd2: RDD[(K, W)],
+    part: Partitioner) extends RDD[(K, V)](rdd1.context, Nil) {
 
   override def getDependencies: Seq[Dependency[_]] = {
     Seq(rdd1, rdd2).map { rdd =>
@@ -39,26 +40,7 @@ private[spark] class SubtractedRDD[T: ClassManifest](
         new OneToOneDependency(rdd)
       } else {
         logInfo("Adding shuffle dependency with " + rdd)
-        val mapSideCombinedRDD = rdd.mapPartitions(i => {
-          val set = new JHashSet[T]()
-          while (i.hasNext) {
-            set.add(i.next)
-          }
-          set.iterator
-        }, true)
-        // ShuffleDependency requires a tuple (k, v), which it will partition by k.
-        // We need this to partition to map to the same place as the k for
-        // OneToOneDependency, which means:
-        // - for already-tupled RDD[(A, B)], into getPartition(a)
-        // - for non-tupled RDD[C], into getPartition(c)
-        val part2 = new Partitioner() {
-          def numPartitions = part.numPartitions
-          def getPartition(key: Any) = key match {
-            case (k, v) => part.getPartition(k)
-            case k => part.getPartition(k)
-          }
-        }
-        new ShuffleDependency(mapSideCombinedRDD.map((_, null)), part2)
+        new ShuffleDependency(rdd.asInstanceOf[RDD[(K, Any)]], part)
       }
     }
   }
@@ -81,22 +63,32 @@ private[spark] class SubtractedRDD[T: ClassManifest](
 
   override val partitioner = Some(part)
 
-  override def compute(p: Partition, context: TaskContext): Iterator[T] = {
+  override def compute(p: Partition, context: TaskContext): Iterator[(K, V)] = {
     val partition = p.asInstanceOf[CoGroupPartition]
-    val set = new JHashSet[T]
-    def integrate(dep: CoGroupSplitDep, op: T => Unit) = dep match {
-      case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
-        for (k <- rdd.iterator(itsSplit, context))
-          op(k.asInstanceOf[T])
-      case ShuffleCoGroupSplitDep(shuffleId) =>
-        for ((k, _) <- SparkEnv.get.shuffleFetcher.fetch(shuffleId, partition.index, context.taskMetrics))
-          op(k.asInstanceOf[T])
+    val map = new JHashMap[K, ArrayBuffer[V]]
+    def getSeq(k: K): ArrayBuffer[V] = {
+      val seq = map.get(k)
+      if (seq != null) {
+        seq
+      } else {
+        val seq = new ArrayBuffer[V]()
+        map.put(k, seq)
+        seq
+      }
     }
-    // the first dep is rdd1; add all keys to the set
-    integrate(partition.deps(0), set.add)
-    // the second dep is rdd2; remove all of its keys from the set
-    integrate(partition.deps(1), set.remove)
-    set.iterator
+    def integrate(dep: CoGroupSplitDep, op: ((K, V)) => Unit) = dep match {
+      case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
+        for (t <- rdd.iterator(itsSplit, context))
+          op(t.asInstanceOf[(K, V)])
+      case ShuffleCoGroupSplitDep(shuffleId) =>
+        for (t <- SparkEnv.get.shuffleFetcher.fetch(shuffleId, partition.index, context.taskMetrics))
+          op(t.asInstanceOf[(K, V)])
+    }
+    // the first dep is rdd1; add all values to the map
+    integrate(partition.deps(0), t => getSeq(t._1) += t._2)
+    // the second dep is rdd2; remove all of its keys
+    integrate(partition.deps(1), t => map.remove(t._1))
+    map.iterator.map { t =>  t._2.iterator.map { (t._1, _) } }.flatten
   }
 
   override def clearDependencies() {
