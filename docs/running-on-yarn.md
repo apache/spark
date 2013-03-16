@@ -4,7 +4,7 @@ title: Launching Spark on YARN
 ---
 
 Experimental support for running over a [YARN (Hadoop
-NextGen)](http://hadoop.apache.org/docs/r2.0.1-alpha/hadoop-yarn/hadoop-yarn-site/YARN.html)
+NextGen)](http://hadoop.apache.org/docs/r2.0.2-alpha/hadoop-yarn/hadoop-yarn-site/YARN.html)
 cluster was added to Spark in version 0.6.0.  Because YARN depends on version
 2.0 of the Hadoop libraries, this currently requires checking out a separate
 branch of Spark, called `yarn`, which you can do as follows:
