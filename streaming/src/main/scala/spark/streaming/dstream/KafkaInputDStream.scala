@@ -100,8 +100,10 @@ class KafkaReceiver(kafkaParams: Map[String, String],
     }
   }
 
-  // Handles cleanup of consumer group znode. Lifted with love from Kafka's
-  // ConsumerConsole.scala tryCleanupZookeeper()
+  // Delete consumer group from zookeeper. This effectivly resets the group so we can consume from the beginning again.
+  // The kafka high level consumer doesn't expose setting offsets currently, this is a trick copied from Kafkas'
+  // ConsoleConsumer. See code related to 'autooffset.reset' when it is set to 'smallest':
+  // https://github.com/apache/kafka/blob/0.7.2/core/src/main/scala/kafka/consumer/ConsoleConsumer.scala
   private def tryZookeeperConsumerGroupCleanup(zkUrl: String, groupId: String) {
     try {
       val dir = "/consumers/" + groupId

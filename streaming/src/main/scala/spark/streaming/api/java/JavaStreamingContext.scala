@@ -80,6 +80,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
+   * @param kafkaParams Map of kafka configuration paramaters. See: http://kafka.apache.org/configuration.html
    * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
@@ -87,16 +88,14 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param storageLevel RDD storage level. Defaults to memory-only
    */
   def kafkaStream[T](
-    zkQuorum: String,
-    groupId: String,
+	kafkaParams: JMap[String, String],
     topics: JMap[String, JInt],
     storageLevel: StorageLevel)
   : JavaDStream[T] = {
     implicit val cmt: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
     ssc.kafkaStream[T](
-      zkQuorum,
-      groupId,
+      kafkaParams.toMap,
       Map(topics.mapValues(_.intValue()).toSeq: _*),
       storageLevel)
   }
