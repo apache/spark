@@ -1,7 +1,6 @@
 package spark.scheduler
 
 import java.net.URI
-import java.util.Properties
 
 import spark._
 import spark.storage.BlockManagerId
@@ -26,8 +25,7 @@ private[spark] class Stage(
     val rdd: RDD[_],
     val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
-    val priority: Int,
-    val properties: Properties = null)
+    val priority: Int)
   extends Logging {
   
   val isShuffleMap = shuffleDep != None

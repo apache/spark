@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
 /**
  * Schedules the tasks within a single TaskSet in the ClusterScheduler.
  */
-private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSet) extends Logging {
+private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSet) extends Schedulable with Logging {
 
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
@@ -28,6 +28,9 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // Maximum times a task is allowed to fail before failing the job
   val MAX_TASK_FAILURES = 4
 
+  val TASKSET_MINIMIUM_SHARES = 1
+
+  val TASKSET_WEIGHT = 1
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = System.getProperty("spark.speculation.quantile", "0.75").toDouble
   val SPECULATION_MULTIPLIER = System.getProperty("spark.speculation.multiplier", "1.5").toDouble
@@ -43,6 +46,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   val numFailures = new Array[Int](numTasks)
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksFinished = 0
+  var numRunningTasks =0;
 
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
@@ -94,6 +98,36 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // of task index so that tasks with low indices get launched first.
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
+  }
+
+  override def getMinShare(): Int = 
+  {
+      return TASKSET_MINIMIUM_SHARES
+  }
+
+  override def getRunningTasks(): Int =
+  {
+      return numRunningTasks 
+  }
+
+  def setRunningTasks(taskNum :Int)
+  {
+      numRunningTasks = taskNum 
+  }
+
+  override def getPriority(): Int =
+  {
+      return priority
+  }
+
+  override def getWeight(): Int = 
+  {
+      return TASKSET_WEIGHT
+  }
+
+  override def getStageId(): Int = 
+  {
+     return taskSet.stageId
   }
 
   // Add a task to all the pending-task lists that it should be on.
@@ -222,7 +256,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
-          return Some(new TaskDescription(taskId, execId, taskName, serializedTask))
+          return Some(new TaskDescription(taskId,taskSet.id,execId, taskName, serializedTask))
         }
         case _ =>
       }

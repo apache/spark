@@ -12,8 +12,6 @@ private[spark] trait TaskSetQueuesManager {
   def removeTaskSetManager(manager: TaskSetManager): Unit
   def taskFinished(manager: TaskSetManager): Unit
   def removeExecutor(executorId: String, host: String): Unit
-  //The receiveOffers function, accepts tasks and offers. It populates the tasks to the actual task from TaskSet
-  //It returns a list of TaskSet ID that corresponds to each assigned tasks
-  def receiveOffer(tasks: Seq[ArrayBuffer[TaskDescription]], offers: Seq[WorkerOffer]): Seq[Seq[String]] 
+  def receiveOffer(execId: String, host:String, avaiableCpus:Double):Option[TaskDescription]
   def checkSpeculatableTasks(): Boolean
 }

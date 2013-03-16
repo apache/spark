@@ -10,6 +10,7 @@ import spark.Logging
 private[spark] class FIFOTaskSetQueuesManager extends TaskSetQueuesManager with Logging {
   
   var activeTaskSetsQueue = new ArrayBuffer[TaskSetManager]
+  val tasksetSchedulingAlgorithm = new FIFOSchedulingAlgorithm()
   
   override def addTaskSetManager(manager: TaskSetManager) {
     activeTaskSetsQueue += manager
@@ -27,31 +28,19 @@ private[spark] class FIFOTaskSetQueuesManager extends TaskSetQueuesManager with 
     activeTaskSetsQueue.foreach(_.executorLost(executorId, host))
   }
   
-  override def receiveOffer(tasks: Seq[ArrayBuffer[TaskDescription]], offers: Seq[WorkerOffer]): Seq[Seq[String]] = {
-    val taskSetIds = offers.map(o => new ArrayBuffer[String](o.cores))
-    val availableCpus = offers.map(o => o.cores).toArray
-    var launchedTask = false
-    for (manager <- activeTaskSetsQueue.sortBy(m => (m.taskSet.priority, m.taskSet.stageId))) {
-      do {
-        launchedTask = false
-        for (i <- 0 until offers.size) {
-          val execId = offers(i).executorId
-          val host = offers(i).hostname
-          manager.slaveOffer(execId, host, availableCpus(i)) match {
-            case Some(task) =>
-              tasks(i) += task              
-              taskSetIds(i) += manager.taskSet.id
-              availableCpus(i) -= 1
-              launchedTask = true
-
-            case None => {}
-          }
-        }
-      } while (launchedTask)
+  override def receiveOffer(execId:String, host:String,avaiableCpus:Double):Option[TaskDescription] =
+  {
+    for(manager <- activeTaskSetsQueue.sortWith(tasksetSchedulingAlgorithm.comparator))
+    {
+      val task = manager.slaveOffer(execId,host,avaiableCpus)
+      if (task != None)
+      {
+        return task
+      }
     }
-    return taskSetIds
+    return None
   }
-  
+
   override def checkSpeculatableTasks(): Boolean = {
     var shouldRevive = false
     for (ts <- activeTaskSetsQueue) {

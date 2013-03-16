@@ -89,6 +89,8 @@ class DAGScheduler(
   //       stray messages to detect.
   val failedGeneration = new HashMap[String, Long]
 
+  val idToActiveJob = new HashMap[Int, ActiveJob]
+
   val waiting = new HashSet[Stage] // Stages we need to run whose parents aren't done
   val running = new HashSet[Stage] // Stages we are running right now
   val failed = new HashSet[Stage]  // Stages that must be resubmitted due to fetch failures
@@ -129,11 +131,11 @@ class DAGScheduler(
    * The priority value passed in will be used if the stage doesn't already exist with
    * a lower priority (we assume that priorities always increase across jobs for now).
    */
-  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_,_], priority: Int, properties: Properties): Stage = {
+  private def getShuffleMapStage(shuffleDep: ShuffleDependency[_,_], priority: Int): Stage = {
     shuffleToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
-        val stage = newStage(shuffleDep.rdd, Some(shuffleDep), priority, properties)
+        val stage = newStage(shuffleDep.rdd, Some(shuffleDep), priority)
         shuffleToMapStage(shuffleDep.shuffleId) = stage
         stage
     }
@@ -144,7 +146,7 @@ class DAGScheduler(
    * as a result stage for the final RDD used directly in an action. The stage will also be given
    * the provided priority.
    */
-  private def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_]], priority: Int, properties: Properties): Stage = {
+  private def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_]], priority: Int): Stage = {
     if (shuffleDep != None) {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
@@ -152,7 +154,7 @@ class DAGScheduler(
       mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.partitions.size)
     }
     val id = nextStageId.getAndIncrement()
-    val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd, priority, properties), priority, properties)
+    val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd, priority), priority)
     idToStage(id) = stage
     stageToInfos(stage) = StageInfo(stage)
     stage
@@ -162,7 +164,7 @@ class DAGScheduler(
    * Get or create the list of parent stages for a given RDD. The stages will be assigned the
    * provided priority if they haven't already been created with a lower priority.
    */
-  private def getParentStages(rdd: RDD[_], priority: Int, properties: Properties): List[Stage] = {
+  private def getParentStages(rdd: RDD[_], priority: Int): List[Stage] = {
     val parents = new HashSet[Stage]
     val visited = new HashSet[RDD[_]]
     def visit(r: RDD[_]) {
@@ -173,7 +175,7 @@ class DAGScheduler(
         for (dep <- r.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_,_] =>
-              parents += getShuffleMapStage(shufDep, priority, properties)
+              parents += getShuffleMapStage(shufDep, priority)
             case _ =>
               visit(dep.rdd)
           }
@@ -194,7 +196,7 @@ class DAGScheduler(
           for (dep <- rdd.dependencies) {
             dep match {
               case shufDep: ShuffleDependency[_,_] =>
-                val mapStage = getShuffleMapStage(shufDep, stage.priority, stage.properties)
+                val mapStage = getShuffleMapStage(shufDep, stage.priority)
                 if (!mapStage.isAvailable) {
                   missing += mapStage
                 }
@@ -239,7 +241,8 @@ class DAGScheduler(
       partitions: Seq[Int],
       callSite: String,
       allowLocal: Boolean,
-      resultHandler: (Int, U) => Unit, properties: Properties = null)
+      resultHandler: (Int, U) => Unit, 
+      properties: Properties = null)
   {
     if (partitions.size == 0) {
       return
@@ -260,7 +263,8 @@ class DAGScheduler(
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
       callSite: String,
-      timeout: Long, properties: Properties = null)
+      timeout: Long, 
+      properties: Properties = null)
     : PartialResult[R] =
   {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
@@ -278,8 +282,8 @@ class DAGScheduler(
     event match {
       case JobSubmitted(finalRDD, func, partitions, allowLocal, callSite, listener, properties) =>
         val runId = nextRunId.getAndIncrement()
-        val finalStage = newStage(finalRDD, None, runId, properties)
-        val job = new ActiveJob(runId, finalStage, func, partitions, callSite, listener)
+        val finalStage = newStage(finalRDD, None, runId)
+        val job = new ActiveJob(runId, finalStage, func, partitions, callSite, listener, properties)
         clearCacheLocs()
         logInfo("Got job " + job.runId + " (" + callSite + ") with " + partitions.length +
                 " output partitions (allowLocal=" + allowLocal + ")")
@@ -290,6 +294,7 @@ class DAGScheduler(
           // Compute very short actions like first() or take() with no parent stages locally.
           runLocally(job)
         } else {
+          idToActiveJob(runId) = job
           activeJobs += job
           resultStageToJob(finalStage) = job
           submitStage(finalStage)
@@ -459,8 +464,9 @@ class DAGScheduler(
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
       logDebug("New pending tasks: " + myPending)
+      val properties = idToActiveJob(stage.priority).properties
       taskSched.submitTasks(
-        new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.priority, stage.properties))
+        new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.priority, properties))
       if (!stage.submissionTime.isDefined) {
         stage.submissionTime = Some(System.currentTimeMillis())
       }
@@ -665,7 +671,7 @@ class DAGScheduler(
         for (dep <- rdd.dependencies) {
           dep match {
             case shufDep: ShuffleDependency[_,_] =>
-              val mapStage = getShuffleMapStage(shufDep, stage.priority, stage.properties)
+              val mapStage = getShuffleMapStage(shufDep, stage.priority)
               if (!mapStage.isAvailable) {
                 visitedStages += mapStage
                 visit(mapStage.rdd)

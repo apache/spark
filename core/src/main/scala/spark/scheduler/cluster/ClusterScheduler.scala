@@ -143,7 +143,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
    * that tasks are balanced across the cluster.
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = {
-    synchronized {
+     synchronized {
+      
       SparkEnv.set(sc.env)
       // Mark each slave as alive and remember its hostname
       for (o <- offers) {
@@ -152,25 +153,33 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           executorsByHost(o.hostname) = new HashSet()
         }
       }
-            
       // Build a list of tasks to assign to each slave
       val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
-      val taskSetIds = taskSetQueuesManager.receiveOffer(tasks, offers)
-      //We populate the necessary bookkeeping structures
-      for (i <- 0 until offers.size) {
-        val execId = offers(i).executorId
-        val host = offers(i).hostname
-        for(j <- 0 until tasks(i).size) {
-          val tid = tasks(i)(j).taskId
-          val taskSetid = taskSetIds(i)(j)
-          taskIdToTaskSetId(tid) = taskSetid
-          taskSetTaskIds(taskSetid) += tid
-          taskIdToExecutorId(tid) = execId
-          activeExecutorIds += execId
-          executorsByHost(host) += execId
-        }
-      }
+      val availableCpus = offers.map(o => o.cores).toArray
+      for (i <- 0 until offers.size)
+      {
+            var launchedTask = true
+            val execId = offers(i).executorId
+            val host = offers(i).hostname
+            while (availableCpus(i) > 0 && launchedTask)
+            {
+              launchedTask = false
+              taskSetQueuesManager.receiveOffer(execId,host,availableCpus(i)) match {
+              case Some(task) =>
+                tasks(i) += task
+                val tid = task.taskId
+                taskIdToTaskSetId(tid) = task.taskSetId
+                taskSetTaskIds(task.taskSetId) += tid
+                taskIdToExecutorId(tid) = execId
+                activeExecutorIds += execId
+                executorsByHost(host) += execId
+                availableCpus(i) -= 1
+                launchedTask = true
 
+              case None => {}
+            }
+          }
+      }
       if (tasks.size > 0) {
         hasLaunchedTask = true
       }
@@ -219,10 +228,11 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       taskSetToUpdate.get.statusUpdate(tid, state, serializedData)
     }
     if (failedExecutor != None) {
-      listener.executorLost(failedExecutor.get)
+      listener.executorLost(failedExecutor.get) 
       backend.reviveOffers()
     }
     if (taskFailed) {
+
       // Also revive offers if a task had failed for some reason other than host lost
       backend.reviveOffers()
     }
@@ -289,7 +299,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
     // Call listener.executorLost without holding the lock on this to prevent deadlock
     if (failedExecutor != None) {
-      listener.executorLost(failedExecutor.get)
+      listener.executorLost(failedExecutor.get) 
       backend.reviveOffers()
     }
   }
