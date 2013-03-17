@@ -17,6 +17,8 @@ which is packaged with it. To build Spark and its example programs, run:
 
     sbt/sbt package
 
+Spark also supports building using Maven. If you would like to build using Maven, see the [instructions for building Spark with Maven](http://spark-project.org/docs/latest/building-with-maven.html) in the spark documentation..
+
 To run Spark, you will need to have Scala's bin directory in your `PATH`, or
 you will need to set the `SCALA_HOME` environment variable to point to where
 you've installed Scala. Scala must be accessible through one of these
