@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCALA_VERSION=2.9.2
+SCALA_VERSION=2.10
 
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
