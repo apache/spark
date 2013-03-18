@@ -16,13 +16,14 @@ object SkewedGroupByTest {
     var valSize = if (args.length > 3) args(3).toInt else 1000
     var numReducers = if (args.length > 4) args(4).toInt else numMappers
 
-    val sc = new SparkContext(args(0), "GroupBy Test")
+    val sc = new SparkContext(args(0), "GroupBy Test",
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
     
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random
 
       // map output sizes lineraly increase from the 1st to the last
-      numKVPairs = (1. * (p + 1) / numMappers * numKVPairs).toInt
+      numKVPairs = (1.0 * (p + 1) / numMappers * numKVPairs).toInt
 
       var arr1 = new Array[(Int, Array[Byte])](numKVPairs)
       for (i <- 0 until numKVPairs) {
@@ -31,11 +32,11 @@ object SkewedGroupByTest {
         arr1(i) = (ranGen.nextInt(Int.MaxValue), byteArr)
       }
       arr1
-    }.cache
+    }.cache()
     // Enforce that everything has been calculated and in cache
-    pairs1.count
+    pairs1.count()
     
-    println(pairs1.groupByKey(numReducers).count)
+    println(pairs1.groupByKey(numReducers).count())
 
     System.exit(0)
   }

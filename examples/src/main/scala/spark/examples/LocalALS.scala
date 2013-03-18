@@ -1,11 +1,13 @@
 package spark.examples
 
-import java.util.Random
 import scala.math.sqrt
 import cern.jet.math._
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
 
+/**
+ * Alternating least squares matrix factorization.
+ */
 object LocalALS {
   // Parameters set through command line arguments
   var M = 0 // Number of movies

@@ -3,6 +3,9 @@ package spark.examples
 import java.util.Random
 import spark.util.Vector
 
+/**
+ * Logistic regression based classification.
+ */
 object LocalLR {
   val N = 10000  // Number of data points
   val D = 10   // Number of dimensions

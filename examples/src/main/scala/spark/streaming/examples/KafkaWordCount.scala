@@ -10,22 +10,34 @@ import spark.streaming.StreamingContext._
 import spark.storage.StorageLevel
 import spark.streaming.util.RawTextHelper._
 
+/**
+ * Consumes messages from one or more topics in Kafka and does wordcount.
+ * Usage: KafkaWordCount <master> <zkQuorum> <group> <topics> <numThreads>
+ *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
+ *   <zkQuorum> is a list of one or more zookeeper servers that make quorum
+ *   <group> is the name of kafka consumer group
+ *   <topics> is a list of one or more kafka topics to consume from
+ *   <numThreads> is the number of threads the kafka consumer should use
+ *
+ * Example:
+ *    `./run spark.streaming.examples.KafkaWordCount local[2] zoo01,zoo02,zoo03 my-consumer-group topic1,topic2 1`
+ */
 object KafkaWordCount {
   def main(args: Array[String]) {
     
-    if (args.length < 6) {
-      System.err.println("Usage: KafkaWordCount <master> <hostname> <port> <group> <topics> <numThreads>")
+    if (args.length < 5) {
+      System.err.println("Usage: KafkaWordCount <master> <zkQuorum> <group> <topics> <numThreads>")
       System.exit(1)
     }
 
-    val Array(master, hostname, port, group, topics, numThreads) = args
+    val Array(master, zkQuorum, group, topics, numThreads) = args
 
-    val sc = new SparkContext(master, "KafkaWordCount")
-    val ssc =  new StreamingContext(sc, Seconds(2))
+    val ssc =  new StreamingContext(master, "KafkaWordCount", Seconds(2),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
     ssc.checkpoint("checkpoint")
 
     val topicpMap = topics.split(",").map((_,numThreads.toInt)).toMap
-    val lines = ssc.kafkaStream[String](hostname, port.toInt, group, topicpMap)
+    val lines = ssc.kafkaStream[String](zkQuorum, group, topicpMap)
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1l)).reduceByKeyAndWindow(add _, subtract _, Minutes(10), Seconds(2), 2)
     wordCounts.print()
@@ -38,16 +50,16 @@ object KafkaWordCount {
 object KafkaWordCountProducer {
 
   def main(args: Array[String]) {
-    if (args.length < 3) {
-      System.err.println("Usage: KafkaWordCountProducer <hostname> <port> <topic> <messagesPerSec> <wordsPerMessage>")
+    if (args.length < 2) {
+      System.err.println("Usage: KafkaWordCountProducer <zkQuorum> <topic> <messagesPerSec> <wordsPerMessage>")
       System.exit(1)
     }
 
-    val Array(hostname, port, topic, messagesPerSec, wordsPerMessage) = args
+    val Array(zkQuorum, topic, messagesPerSec, wordsPerMessage) = args
 
     // Zookeper connection properties
     val props = new Properties()
-    props.put("zk.connect", hostname + ":" + port)
+    props.put("zk.connect", zkQuorum)
     props.put("serializer.class", "kafka.serializer.StringEncoder")
     
     val config = new ProducerConfig(props)

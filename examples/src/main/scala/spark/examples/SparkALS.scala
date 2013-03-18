@@ -1,14 +1,14 @@
 package spark.examples
 
-import java.io.Serializable
-import java.util.Random
 import scala.math.sqrt
 import cern.jet.math._
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
 import spark._
-import scala.Option
 
+/**
+ * Alternating least squares matrix factorization.
+ */
 object SparkALS {
   // Parameters set through command line arguments
   var M = 0 // Number of movies
@@ -70,30 +70,32 @@ object SparkALS {
   }
 
   def main(args: Array[String]) {
+    if (args.length == 0) {
+      System.err.println("Usage: SparkALS <master> [<M> <U> <F> <iters> <slices>]")
+      System.exit(1)
+    }
+
     var host = ""
     var slices = 0
 
-    (0 to 5).map(i => {
-      i match {
-        case a if a < args.length => Some(args(a))
-        case _ => None
-      }
-    }).toArray match {
-      case Array(host_, m, u, f, iters, slices_) => {
-        host = host_ getOrElse "local"
-        M = (m getOrElse "100").toInt
-        U = (u getOrElse "500").toInt
-        F = (f getOrElse "10").toInt
-        ITERATIONS = (iters getOrElse "5").toInt
-        slices = (slices_ getOrElse "2").toInt
-      }
-      case _ => {
-        System.err.println("Usage: SparkALS [<master> <M> <U> <F> <iters> <slices>]")
+    val options = (0 to 5).map(i => if (i < args.length) Some(args(i)) else None)
+
+    options.toArray match {
+      case Array(host_, m, u, f, iters, slices_) =>
+        host = host_.get
+        M = m.getOrElse("100").toInt
+        U = u.getOrElse("500").toInt
+        F = f.getOrElse("10").toInt
+        ITERATIONS = iters.getOrElse("5").toInt
+        slices = slices_.getOrElse("2").toInt
+      case _ =>
+        System.err.println("Usage: SparkALS <master> [<M> <U> <F> <iters> <slices>]")
         System.exit(1)
-      }
     }
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
-    val spark = new SparkContext(host, "SparkALS")
+
+    val sc = new SparkContext(host, "SparkALS",
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
     
     val R = generateR()
 
@@ -102,19 +104,19 @@ object SparkALS {
     var us = Array.fill(U)(factory1D.random(F))
 
     // Iteratively update movies then users
-    val Rc  = spark.broadcast(R)
-    var msc = spark.broadcast(ms)
-    var usc = spark.broadcast(us)
+    val Rc  = sc.broadcast(R)
+    var msb = sc.broadcast(ms)
+    var usb = sc.broadcast(us)
     for (iter <- 1 to ITERATIONS) {
       println("Iteration " + iter + ":")
-      ms = spark.parallelize(0 until M, slices)
-                .map(i => update(i, msc.value(i), usc.value, Rc.value))
+      ms = sc.parallelize(0 until M, slices)
+                .map(i => update(i, msb.value(i), usb.value, Rc.value))
                 .toArray
-      msc = spark.broadcast(ms) // Re-broadcast ms because it was updated
-      us = spark.parallelize(0 until U, slices)
-                .map(i => update(i, usc.value(i), msc.value, algebra.transpose(Rc.value)))
+      msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
+      us = sc.parallelize(0 until U, slices)
+                .map(i => update(i, usb.value(i), msb.value, algebra.transpose(Rc.value)))
                 .toArray
-      usc = spark.broadcast(us) // Re-broadcast us because it was updated
+      usb = sc.broadcast(us) // Re-broadcast us because it was updated
       println("RMSE = " + rmse(R, ms, us))
       println()
     }

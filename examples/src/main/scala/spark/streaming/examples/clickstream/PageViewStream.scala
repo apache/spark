@@ -24,20 +24,20 @@ object PageViewStream {
     val port = args(2).toInt
 
     // Create the context
-    val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1))
+    val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     // Create a NetworkInputDStream on target host:port and convert each line to a PageView
-    val pageViews = ssc.networkTextStream(host, port)
-                        .flatMap(_.split("\n"))
-                        .map(PageView.fromString(_))
+    val pageViews = ssc.socketTextStream(host, port)
+                       .flatMap(_.split("\n"))
+                       .map(PageView.fromString(_))
 
     // Return a count of views per URL seen in each batch
-    val pageCounts = pageViews.map(view => ((view.url, 1))).countByKey()
+    val pageCounts = pageViews.map(view => view.url).countByValue()
 
     // Return a sliding window of page views per URL in the last ten seconds
-    val slidingPageCounts = pageViews.map(view => ((view.url, 1)))
-                                .window(Seconds(10), Seconds(2))
-                                .countByKey()
+    val slidingPageCounts = pageViews.map(view => view.url)
+                                     .countByValueAndWindow(Seconds(10), Seconds(2))
 
 
     // Return the rate of error pages (a non 200 status) in each zip code over the last 30 seconds
@@ -61,7 +61,7 @@ object PageViewStream {
                                    .map("Unique active users: " + _)
 
     // An external dataset we want to join to this stream
-    val userList = ssc.sc.parallelize(
+    val userList = ssc.sparkContext.parallelize(
        Map(1 -> "Patrick Wendell", 2->"Reynold Xin", 3->"Matei Zaharia").toSeq)
 
     metric match {

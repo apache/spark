@@ -84,10 +84,10 @@ class PartitioningSuite extends FunSuite with LocalSparkContext {
     assert(grouped4.groupByKey(3).partitioner !=  grouped4.partitioner)
     assert(grouped4.groupByKey(4).partitioner === grouped4.partitioner)
 
-    assert(grouped2.join(grouped4).partitioner === grouped2.partitioner)
-    assert(grouped2.leftOuterJoin(grouped4).partitioner === grouped2.partitioner)
-    assert(grouped2.rightOuterJoin(grouped4).partitioner === grouped2.partitioner)
-    assert(grouped2.cogroup(grouped4).partitioner === grouped2.partitioner)
+    assert(grouped2.join(grouped4).partitioner === grouped4.partitioner)
+    assert(grouped2.leftOuterJoin(grouped4).partitioner === grouped4.partitioner)
+    assert(grouped2.rightOuterJoin(grouped4).partitioner === grouped4.partitioner)
+    assert(grouped2.cogroup(grouped4).partitioner === grouped4.partitioner)
 
     assert(grouped2.join(reduced2).partitioner === grouped2.partitioner)
     assert(grouped2.leftOuterJoin(reduced2).partitioner === grouped2.partitioner)
