@@ -11,6 +11,9 @@ import spark.util.Vector;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * K-means clustering using Java API.
+ */
 public class JavaKMeans {
 
     /** Parses numbers split by whitespace to a vector */
@@ -50,7 +53,7 @@ public class JavaKMeans {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 4) {
-            System.err.println("Usage: SparkKMeans <master> <file> <k> <convergeDist>");
+            System.err.println("Usage: JavaKMeans <master> <file> <k> <convergeDist>");
             System.exit(1);
         }
         JavaSparkContext sc = new JavaSparkContext(args[0], "JavaKMeans",
