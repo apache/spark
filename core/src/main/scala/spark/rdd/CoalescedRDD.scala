@@ -37,8 +37,8 @@ class CoalescedRDD[T: ClassManifest](
       prevSplits.map(_.index).map{idx => new CoalescedRDDPartition(idx, prev, Array(idx)) }
     } else {
       (0 until maxPartitions).map { i =>
-        val rangeStart = (i * prevSplits.length) / maxPartitions
-        val rangeEnd = ((i + 1) * prevSplits.length) / maxPartitions
+        val rangeStart = ((i.toLong * prevSplits.length) / maxPartitions).toInt
+        val rangeEnd = (((i.toLong + 1) * prevSplits.length) / maxPartitions).toInt
         new CoalescedRDDPartition(i, prev, (rangeStart until rangeEnd).toArray)
       }.toArray
     }
