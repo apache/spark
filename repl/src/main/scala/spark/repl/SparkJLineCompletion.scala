@@ -14,10 +14,11 @@ import scala.tools.jline._
 import scala.tools.jline.console.completer._
 import Completion._
 import scala.collection.mutable.ListBuffer
+import spark.Logging
 
 // REPL completor - queries supplied interpreter for valid
 // completions based on current contents of buffer.
-class SparkJLineCompletion(val intp: SparkIMain) extends Completion with CompletionOutput {
+class SparkJLineCompletion(val intp: SparkIMain) extends Completion with CompletionOutput with Logging {
   val global: intp.global.type = intp.global
   import global._
   import definitions.{ PredefModule, AnyClass, AnyRefClass, ScalaPackage, JavaLangPackage }
@@ -318,7 +319,7 @@ class SparkJLineCompletion(val intp: SparkIMain) extends Completion with Complet
     // This is jline's entry point for completion.
     override def complete(buf: String, cursor: Int): Candidates = {
       verbosity = if (isConsecutiveTabs(buf, cursor)) verbosity + 1 else 0
-      Console.println("\ncomplete(%s, %d) last = (%s, %d), verbosity: %s".format(buf, cursor, lastBuf, lastCursor, verbosity))
+      logDebug("\ncomplete(%s, %d) last = (%s, %d), verbosity: %s".format(buf, cursor, lastBuf, lastCursor, verbosity))
 
       // we don't try lower priority completions unless higher ones return no results.
       def tryCompletion(p: Parsed, completionFunction: Parsed => List[String]): Option[Candidates] = {
@@ -331,7 +332,7 @@ class SparkJLineCompletion(val intp: SparkIMain) extends Completion with Complet
             val advance = commonPrefix(winners)
             lastCursor = p.position + advance.length
             lastBuf = (buf take p.position) + advance
-            Console.println("tryCompletion(%s, _) lastBuf = %s, lastCursor = %s, p.position = %s".format(
+            logDebug("tryCompletion(%s, _) lastBuf = %s, lastCursor = %s, p.position = %s".format(
               p, lastBuf, lastCursor, p.position))
             p.position
           }
@@ -365,7 +366,7 @@ class SparkJLineCompletion(val intp: SparkIMain) extends Completion with Complet
        */
       try tryAll
       catch { case ex: Throwable =>
-        Console.println("Error: complete(%s, %s) provoked".format(buf, cursor) + ex)
+        logWarning("Error: complete(%s, %s) provoked".format(buf, cursor) + ex)
         Candidates(cursor,
           if (isReplDebug) List("<error:" + ex + ">")
           else Nil

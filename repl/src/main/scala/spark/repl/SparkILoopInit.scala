@@ -31,7 +31,9 @@ trait SparkILoopInit {
     val welcomeMsg = "Using Scala %s (%s, Java %s)".format(
       versionString, javaVmName, javaVersion)
     echo(welcomeMsg)
-  }
+    echo("Type in expressions to have them evaluated.")
+    echo("Type :help for more information.")
+   }
 
   protected def asyncMessage(msg: String) {
     if (isReplInfo || isReplPower)
@@ -119,8 +121,6 @@ trait SparkILoopInit {
         """)
       command("import spark.SparkContext._");
     }
-    // echo("Type in expressions to have them evaluated.")
-    // echo("Type :help for more information.")
   }
 
   // code to be executed only after the interpreter is initialized
@@ -131,7 +131,7 @@ trait SparkILoopInit {
   }
   protected def runThunks(): Unit = synchronized {
     if (pendingThunks.nonEmpty)
-      println("Clearing " + pendingThunks.size + " thunks.")
+      logDebug("Clearing " + pendingThunks.size + " thunks.")
 
     while (pendingThunks.nonEmpty) {
       val thunk = pendingThunks.head
