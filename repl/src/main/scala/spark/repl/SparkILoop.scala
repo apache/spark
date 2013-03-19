@@ -151,9 +151,20 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     finally in = saved
   }
 
+  /*PRASHANT:Detecting if a lazy val has been materialized or not is possible but not worth it
+   * as in most cases of spark shell usages they will be. Incase they are not user will find
+   * shutdown slower than the shell start up itself
+   * */
+  def sparkCleanUp(){
+    echo("Stopping spark context.")
+    intp.beQuietDuring {
+      command("sc.stop()")
+    }
+  }
   /** Close the interpreter and set the var to null. */
   def closeInterpreter() {
     if (intp ne null) {
+      sparkCleanUp()
       intp.close()
       intp = null
     }
@@ -873,6 +884,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       val autorun = replProps.replAutorunCode.option flatMap (f => io.File(f).safeSlurp())
       if (autorun.isDefined) intp.quietRun(autorun.get)
     })
+    addThunk(initializeSpark())
 
     loadFiles(settings)
     // it is broken on startup; go ahead and exit
@@ -886,7 +898,6 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     // message to an actor.
     if (isAsync) {
       intp initialize initializedCallback()
-      addThunk(initializeSpark())
       createAsyncListener() // listens for signal to run postInitialization
     }
     else {

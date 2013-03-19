@@ -121,6 +121,7 @@ trait SparkILoopInit {
         """)
       command("import spark.SparkContext._");
     }
+   echo("... Spark context available as sc.")
   }
 
   // code to be executed only after the interpreter is initialized
