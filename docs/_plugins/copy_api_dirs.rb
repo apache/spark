@@ -1,7 +1,8 @@
 require 'fileutils'
 include FileUtils
 
-if ENV['SKIP_SCALADOC'] != '1'
+if ENV['SKIP_API'] != '1'
+  # Build Scaladoc for Java/Scala
   projects = ["core", "examples", "repl", "bagel", "streaming"]
 
   puts "Moving to project root and building scaladoc."
@@ -27,9 +28,8 @@ if ENV['SKIP_SCALADOC'] != '1'
     puts "cp -r " + source + "/. " + dest
     cp_r(source + "/.", dest)
   end
-end
 
-if ENV['SKIP_EPYDOC'] != '1'
+  # Build Epydoc for Python
   puts "Moving to python directory and building epydoc."
   cd("../python")
   puts `epydoc --config epydoc.conf`

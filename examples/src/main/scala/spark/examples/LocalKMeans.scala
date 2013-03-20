@@ -6,6 +6,9 @@ import spark.SparkContext._
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
+/**
+ * K-means clustering.
+ */
 object LocalKMeans {
 	val N = 1000
 	val R = 1000   	// Scaling factor

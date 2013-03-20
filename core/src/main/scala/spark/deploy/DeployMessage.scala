@@ -65,7 +65,7 @@ case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String
                            exitStatus: Option[Int])
 
 private[spark]
-case class appKilled(message: String)
+case class ApplicationRemoved(message: String)
 
 // Internal message in Client
 

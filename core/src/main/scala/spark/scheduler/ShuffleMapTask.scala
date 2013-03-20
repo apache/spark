@@ -13,6 +13,7 @@ import com.ning.compress.lzf.LZFInputStream
 import com.ning.compress.lzf.LZFOutputStream
 
 import spark._
+import executor.ShuffleWriteMetrics
 import spark.storage._
 import util.{TimeStampedHashMap, MetadataCleaner}
 
@@ -119,6 +120,7 @@ private[spark] class ShuffleMapTask(
     val numOutputSplits = dep.partitioner.numPartitions
 
     val taskContext = new TaskContext(stageId, partition, attemptId)
+    metrics = Some(taskContext.taskMetrics)
     try {
       // Partition the map output.
       val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
@@ -130,14 +132,20 @@ private[spark] class ShuffleMapTask(
 
       val compressedSizes = new Array[Byte](numOutputSplits)
 
+      var totalBytes = 0l
+
       val blockManager = SparkEnv.get.blockManager
       for (i <- 0 until numOutputSplits) {
         val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
         // Get a Scala iterator from Java map
         val iter: Iterator[(Any, Any)] = buckets(i).iterator
         val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
+        totalBytes += size
         compressedSizes(i) = MapOutputTracker.compressSize(size)
       }
+      val shuffleMetrics = new ShuffleWriteMetrics
+      shuffleMetrics.shuffleBytesWritten = totalBytes
+      metrics.get.shuffleWriteMetrics = Some(shuffleMetrics)
 
       return new MapStatus(blockManager.blockManagerId, compressedSizes)
     } finally {

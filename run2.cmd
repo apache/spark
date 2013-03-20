@@ -62,6 +62,16 @@ set CLASSPATH=%CLASSPATH%;%FWDIR%repl\lib\*
 set CLASSPATH=%CLASSPATH%;%FWDIR%python\lib\*
 set CLASSPATH=%CLASSPATH%;%BAGEL_DIR%\target\scala-%SCALA_VERSION%\classes
 
+rem Figure out the JAR file that our examples were packaged into.
+rem First search in the build path from SBT:
+for %%d in ("examples/target/scala-%SCALA_VERSION%/spark-examples*.jar") do (
+  set SPARK_EXAMPLES_JAR=examples/target/scala-%SCALA_VERSION%/%%d
+)
+rem Then search in the build path from Maven:
+for %%d in ("examples/target/spark-examples*hadoop*.jar") do (
+  set SPARK_EXAMPLES_JAR=examples/target/%%d
+)
+
 rem Figure out whether to run our class with java or with the scala launcher.
 rem In most cases, we'd prefer to execute our process with java because scala
 rem creates a shell script as the parent of its Java process, which makes it

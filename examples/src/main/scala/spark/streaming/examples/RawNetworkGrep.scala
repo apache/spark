@@ -31,10 +31,11 @@ object RawNetworkGrep {
     val Array(master, IntParam(numStreams), host, IntParam(port), IntParam(batchMillis)) = args
 
     // Create the context
-    val ssc = new StreamingContext(master, "RawNetworkGrep", Milliseconds(batchMillis))
+    val ssc = new StreamingContext(master, "RawNetworkGrep", Milliseconds(batchMillis),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     // Warm up the JVMs on master and slave for JIT compilation to kick in
-    RawTextHelper.warmUp(ssc.sc)
+    RawTextHelper.warmUp(ssc.sparkContext)
 
     val rawStreams = (1 to numStreams).map(_ =>
       ssc.rawSocketStream[String](host, port, StorageLevel.MEMORY_ONLY_SER_2)).toArray

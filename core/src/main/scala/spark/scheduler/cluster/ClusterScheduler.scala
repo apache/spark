@@ -140,6 +140,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       // Mark each slave as alive and remember its hostname
       for (o <- offers) {
         executorIdToHost(o.executorId) = o.hostname
+        if (!executorsByHost.contains(o.hostname)) {
+          executorsByHost(o.hostname) = new HashSet()
+        }
       }
       // Build a list of tasks to assign to each slave
       val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
@@ -159,9 +162,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
                 taskSetTaskIds(manager.taskSet.id) += tid
                 taskIdToExecutorId(tid) = execId
                 activeExecutorIds += execId
-                if (!executorsByHost.contains(host)) {
-                  executorsByHost(host) = new HashSet()
-                }
                 executorsByHost(host) += execId
                 availableCpus(i) -= 1
                 launchedTask = true

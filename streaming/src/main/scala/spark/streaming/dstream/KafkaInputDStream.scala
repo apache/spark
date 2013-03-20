@@ -13,6 +13,7 @@ import kafka.serializer.StringDecoder
 import kafka.utils.{Utils, ZKGroupTopicDirs}
 import kafka.utils.ZkUtils._
 
+import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 

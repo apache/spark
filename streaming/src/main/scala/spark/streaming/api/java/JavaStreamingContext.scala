@@ -41,10 +41,63 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
   def this(master: String, appName: String, batchDuration: Duration) =
-    this(new StreamingContext(master, appName, batchDuration))
+    this(new StreamingContext(master, appName, batchDuration, null, Nil, Map()))
 
   /**
    * Creates a StreamingContext.
+   * @param master Name of the Spark Master
+   * @param appName Name to be used when registering with the scheduler
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jarFile JAR file containing job code, to ship to cluster. This can be a path on the local
+   *                file system or an HDFS, HTTP, HTTPS, or FTP URL.
+   */
+  def this(
+      master: String,
+      appName: String,
+      batchDuration: Duration,
+      sparkHome: String,
+      jarFile: String) =
+    this(new StreamingContext(master, appName, batchDuration, sparkHome, Seq(jarFile), Map()))
+
+  /**
+   * Creates a StreamingContext.
+   * @param master Name of the Spark Master
+   * @param appName Name to be used when registering with the scheduler
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   */
+  def this(
+      master: String,
+      appName: String,
+      batchDuration: Duration,
+      sparkHome: String,
+      jars: Array[String]) =
+    this(new StreamingContext(master, appName, batchDuration, sparkHome, jars, Map()))
+
+  /**
+   * Creates a StreamingContext.
+   * @param master Name of the Spark Master
+   * @param appName Name to be used when registering with the scheduler
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   * @param environment Environment variables to set on worker nodes
+   */
+  def this(
+    master: String,
+    appName: String,
+    batchDuration: Duration,
+    sparkHome: String,
+    jars: Array[String],
+    environment: JMap[String, String]) =
+    this(new StreamingContext(master, appName, batchDuration, sparkHome, jars, environment))
+
+  /**
+   * Creates a StreamingContext using an existing SparkContext.
    * @param sparkContext The underlying JavaSparkContext to use
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */

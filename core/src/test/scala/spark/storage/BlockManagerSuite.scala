@@ -12,6 +12,7 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers._
 import org.scalatest.time.SpanSugar._
 
+import spark.JavaSerializer
 import spark.KryoSerializer
 import spark.SizeEstimator
 import spark.util.ByteBufferInputStream
@@ -31,7 +32,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
   before {
     actorSystem = ActorSystem("test")
-    master = new BlockManagerMaster(actorSystem, true, true, "localhost", 7077)
+    master = new BlockManagerMaster(
+      actorSystem.actorOf(Props(new spark.storage.BlockManagerMasterActor(true))))
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     oldArch = System.setProperty("os.arch", "amd64")
@@ -262,7 +264,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       t1.join()
       t2.join()
       t3.join()
- 
+
       store.dropFromMemory("a1", null)
       store.dropFromMemory("a2", null)
       store.waitForAsyncReregister()
@@ -580,6 +582,23 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       System.clearProperty("spark.shuffle.compress")
       System.clearProperty("spark.broadcast.compress")
       System.clearProperty("spark.rdd.compress")
+    }
+  }
+
+  test("block store put failure") {
+    // Use Java serializer so we can create an unserializable error.
+    store = new BlockManager("<driver>", actorSystem, master, new JavaSerializer, 1200)
+
+    // The put should fail since a1 is not serializable.
+    class UnserializableClass
+    val a1 = new UnserializableClass
+    intercept[java.io.NotSerializableException] {
+      store.putSingle("a1", a1, StorageLevel.DISK_ONLY)
+    }
+
+    // Make sure get a1 doesn't hang and returns None.
+    failAfter(1 second) {
+      assert(store.getSingle("a1") == None, "a1 should not be in store")
     }
   }
 }
