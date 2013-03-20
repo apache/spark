@@ -3,7 +3,7 @@ package spark
 import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
 import spark.SparkContext._
-import spark.rdd.{CoalescedRDD, PartitionPruningRDD}
+import spark.rdd.{CoalescedRDD, CoGroupedRDD, PartitionPruningRDD}
 
 class RDDSuite extends FunSuite with LocalSparkContext {
 
@@ -121,6 +121,36 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     assert(thrown.getMessage.contains("injected failure"))
     shouldFail = false
     assert(rdd.collect().toList === List(1, 2, 3, 4))
+  }
+
+  test("cogrouped RDDs") {
+    sc = new SparkContext("local", "test")
+    val rdd1 = sc.makeRDD(Array((1, "one"), (1, "another one"), (2, "two"), (3, "three")), 2)
+    val rdd2 = sc.makeRDD(Array((1, "one1"), (1, "another one1"), (2, "two1")), 2)
+
+    // Use cogroup function
+    val cogrouped = rdd1.cogroup(rdd2).collectAsMap()
+    assert(cogrouped(1) === (Seq("one", "another one"), Seq("one1", "another one1")))
+    assert(cogrouped(2) === (Seq("two"), Seq("two1")))
+    assert(cogrouped(3) === (Seq("three"), Seq()))
+
+    // Construct CoGroupedRDD directly, with map side combine enabled
+    val cogrouped1 = new CoGroupedRDD[Int](
+      Seq(rdd1.asInstanceOf[RDD[(Int, Any)]], rdd2.asInstanceOf[RDD[(Int, Any)]]),
+      new HashPartitioner(3),
+      true).collectAsMap()
+    assert(cogrouped1(1).toSeq === Seq(Seq("one", "another one"), Seq("one1", "another one1")))
+    assert(cogrouped1(2).toSeq === Seq(Seq("two"), Seq("two1")))
+    assert(cogrouped1(3).toSeq === Seq(Seq("three"), Seq()))
+
+    // Construct CoGroupedRDD directly, with map side combine disabled
+    val cogrouped2 = new CoGroupedRDD[Int](
+      Seq(rdd1.asInstanceOf[RDD[(Int, Any)]], rdd2.asInstanceOf[RDD[(Int, Any)]]),
+      new HashPartitioner(3),
+      false).collectAsMap()
+    assert(cogrouped2(1).toSeq === Seq(Seq("one", "another one"), Seq("one1", "another one1")))
+    assert(cogrouped2(2).toSeq === Seq(Seq("two"), Seq("two1")))
+    assert(cogrouped2(3).toSeq === Seq(Seq("three"), Seq()))
   }
 
   test("coalesced RDDs") {
