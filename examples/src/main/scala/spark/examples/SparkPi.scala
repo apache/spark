@@ -4,6 +4,7 @@ import scala.math.random
 import spark._
 import SparkContext._
 
+/** Computes an approximation to pi */
 object SparkPi {
   def main(args: Array[String]) {
     if (args.length == 0) {
