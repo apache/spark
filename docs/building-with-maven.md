@@ -29,11 +29,11 @@ It uses the scala-maven-plugin which supports incremental and continuous compila
 
 Tests are run by default via the scalatest-maven-plugin. With this you can do things like:
 
-skip test execution (but not compilation):
+Skip test execution (but not compilation):
 
     $ mvn -DskipTests -Phadoop2 clean install
 
-To runn a specific test suite:
+To run a specific test suite:
 
     $ mvn -Phadoop2 -Dsuites=spark.repl.ReplSuite test
 
