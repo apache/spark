@@ -22,6 +22,8 @@ Spark uses [Simple Build Tool](https://github.com/harrah/xsbt/wiki), which is bu
 
     sbt/sbt package
 
+Spark also supports building using Maven. If you would like to build using Maven, see the [instructions for building Spark with Maven](building-with-maven.html).
+
 # Testing the Build
 
 Spark comes with a number of sample programs in the `examples` directory.
@@ -72,6 +74,7 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 **Other documents:**
 
+* [Building Spark With Maven](building-with-maven.html): Build Spark using the Maven build tool
 * [Configuration](configuration.html): customize Spark via its configuration system
 * [Tuning Guide](tuning.html): best practices to optimize performance and memory use
 * [Bagel](bagel-programming-guide.html): an implementation of Google's Pregel on Spark
