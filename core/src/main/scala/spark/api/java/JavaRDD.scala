@@ -44,6 +44,12 @@ JavaRDDLike[T, JavaRDD[T]] {
   def coalesce(numPartitions: Int): JavaRDD[T] = rdd.coalesce(numPartitions)
 
   /**
+   * Return a new RDD that is reduced into `numPartitions` partitions.
+   */
+  def coalesce(numPartitions: Int, shuffle: java.lang.Boolean): JavaRDD[T] =
+    rdd.coalesce(numPartitions, shuffle)
+
+  /**
    * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaRDD[T] =
