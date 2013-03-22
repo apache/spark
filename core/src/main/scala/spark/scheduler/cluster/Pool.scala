@@ -5,8 +5,7 @@ import scala.collection.mutable.ArrayBuffer
 import spark.Logging
 import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 /**
- * An interface for 
- * 
+ * An Schedulable entity that represent collection of TaskSetManager
  */
 private[spark] class Pool(val poolName: String, schedulingMode: SchedulingMode,val minShare:Int, val weight:Int) extends Schedulable with Logging {
   

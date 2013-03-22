@@ -28,7 +28,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // Maximum times a task is allowed to fail before failing the job
   val MAX_TASK_FAILURES = 4
 
-  val TASKSET_MINIMIUM_SHARES = 1
+  val TASKSET_MINIMUM_SHARES = 1
 
   val TASKSET_WEIGHT = 1
   // Quantile of tasks at which to start speculation
@@ -102,7 +102,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
 
   override def getMinShare(): Int = 
   {
-      return TASKSET_MINIMIUM_SHARES
+      return TASKSET_MINIMUM_SHARES
   }
 
   override def getRunningTasks(): Int =
