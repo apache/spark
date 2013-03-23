@@ -60,7 +60,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
    */
-  def coalesce(numPartitions: Int, shuffle: java.lang.Boolean): JavaDoubleRDD =
+  def coalesce(numPartitions: Int, shuffle: Boolean): JavaDoubleRDD =
     fromRDD(srdd.coalesce(numPartitions, shuffle))
 
   /**
