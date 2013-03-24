@@ -23,7 +23,6 @@ import spark.streaming.api.java.JavaPairDStream;
 import spark.streaming.api.java.JavaStreamingContext;
 import spark.streaming.JavaTestUtils;
 import spark.streaming.JavaCheckpointTestUtils;
-import spark.streaming.dstream.KafkaPartitionKey;
 import spark.streaming.InputStreamsSuite;
 
 import java.io.*;
@@ -1203,10 +1202,9 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testKafkaStream() {
     HashMap<String, Integer> topics = Maps.newHashMap();
-    HashMap<KafkaPartitionKey, Long> offsets = Maps.newHashMap();
     JavaDStream test1 = ssc.kafkaStream("localhost:12345", "group", topics);
-    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics, offsets);
-    JavaDStream test3 = ssc.kafkaStream("localhost:12345", "group", topics, offsets,
+    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics);
+    JavaDStream test3 = ssc.kafkaStream("localhost:12345", "group", topics,
       StorageLevel.MEMORY_AND_DISK());
   }
 

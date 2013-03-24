@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 import java.util.UUID
 import twitter4j.Status
 
+
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
  * information (such as, cluster URL and job name) to internally create a SparkContext, it provides
@@ -207,14 +208,14 @@ class StreamingContext private (
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
-  def kafkaStream[T: ClassManifest](
+  def kafkaStream(
       zkQuorum: String,
       groupId: String,
       topics: Map[String, Int],
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
-    ): DStream[T] = {
+    ): DStream[String] = {
     val kafkaParams = Map[String, String]("zk.connect" -> zkQuorum, "groupid" -> groupId, "zk.connectiontimeout.ms" -> "10000");
-    kafkaStream[T](kafkaParams, topics, storageLevel)
+    kafkaStream[String, kafka.serializer.StringDecoder](kafkaParams, topics, storageLevel)
   }
 
   /**
@@ -224,12 +225,12 @@ class StreamingContext private (
    * in its own thread.
    * @param storageLevel  Storage level to use for storing the received objects
    */
-  def kafkaStream[T: ClassManifest](
+  def kafkaStream[T: ClassManifest, D <: kafka.serializer.Decoder[_]: Manifest](
       kafkaParams: Map[String, String],
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): DStream[T] = {
-    val inputStream = new KafkaInputDStream[T](this, kafkaParams, topics, storageLevel)
+    val inputStream = new KafkaInputDStream[T, D](this, kafkaParams, topics, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }
