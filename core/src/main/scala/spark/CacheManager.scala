@@ -27,7 +27,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           if (loading.contains(key)) {
             logInfo("Loading contains " + key + ", waiting...")
             while (loading.contains(key)) {
-              try {loading.wait()} catch {case _ =>}
+              try {loading.wait()} catch {case _ : Throwable =>}
             }
             logInfo("Loading no longer contains " + key + ", so returning cached result")
             // See whether someone else has successfully loaded it. The main way this would fail
