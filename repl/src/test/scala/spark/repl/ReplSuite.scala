@@ -27,24 +27,23 @@ class ReplSuite extends FunSuite {
     spark.repl.Main.interp = interp
     val separator = System.getProperty("path.separator")
     interp.process(Array("-classpath", paths.mkString(separator)))
-    spark.repl.Main.interp = null
-    if (interp.sparkContext != null)
-      interp.sparkContext.stop()
+    if (interp != null)
+      interp.closeInterpreter();
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.master.port")
     return out.toString
   }
-  
+
   def assertContains(message: String, output: String) {
     assert(output contains message,
            "Interpreter output did not contain '" + message + "':\n" + output)
   }
-  
+
   def assertDoesNotContain(message: String, output: String) {
     assert(!(output contains message),
            "Interpreter output contained '" + message + "':\n" + output)
   }
-  
+
   test ("simple foreach with accumulator") {
     val output = runInterpreter("local", """
       val accum = sc.accumulator(0)
@@ -55,7 +54,7 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("res1: Int = 55", output)
   }
-  
+
   test ("external vars") {
     val output = runInterpreter("local", """
       var v = 7
@@ -104,7 +103,7 @@ class ReplSuite extends FunSuite {
     assertContains("res0: Int = 70", output)
     assertContains("res1: Int = 100", output)
   }
-  
+
   test ("broadcast vars") {
     // Test that the value that a broadcast var had when it was created is used,
     // even if that variable is then modified in the driver program
