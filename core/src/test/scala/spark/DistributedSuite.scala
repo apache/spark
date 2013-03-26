@@ -252,6 +252,18 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       assert(data2.count === 2)
     }
   }
+  
+  test("remove RDDs cleanly") {
+    DistributedSuite.amMaster = true
+    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    val data = sc.parallelize(Seq(true, false, false, false), 4)
+    data.persist(StorageLevel.MEMORY_ONLY_2)
+    data.count
+    sc.removeRDD(data.id)
+    assert(sc.persistentRdds.isEmpty == true)
+    assert(sc.getRDDStorageInfo.isEmpty == true)
+    
+  }
 }
 
 object DistributedSuite {

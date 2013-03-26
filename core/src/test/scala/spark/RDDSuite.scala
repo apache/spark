@@ -100,6 +100,13 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     assert(rdd.collect().toList === List(1, 2, 3, 4))
   }
 
+  test("remove RDD") {
+	sc = new SparkContext("local", "test")
+	val rdd = sc.makeRDD(Array(1,2,3,4), 2).cache()
+	sc.removeRDD(rdd.id)
+	assert(sc.persistentRdds.empty == true)
+  }
+
   test("caching with failures") {
     sc = new SparkContext("local", "test")
     val onlySplit = new Partition { override def index: Int = 0 }

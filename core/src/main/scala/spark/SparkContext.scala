@@ -1,47 +1,50 @@
 package spark
 
 import java.io._
-import java.util.concurrent.atomic.AtomicInteger
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.generic.Growable
-import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions._
+import scala.collection.mutable.{ConcurrentMap, HashMap}
 
-import org.apache.hadoop.fs.Path
+import akka.actor.Actor._
+
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapred.InputFormat
-import org.apache.hadoop.mapred.SequenceFileInputFormat
-import org.apache.hadoop.io.Writable
-import org.apache.hadoop.io.IntWritable
-import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.io.FloatWritable
-import org.apache.hadoop.io.DoubleWritable
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.ArrayWritable
 import org.apache.hadoop.io.BooleanWritable
 import org.apache.hadoop.io.BytesWritable
-import org.apache.hadoop.io.ArrayWritable
+import org.apache.hadoop.io.DoubleWritable
+import org.apache.hadoop.io.FloatWritable
+import org.apache.hadoop.io.IntWritable
+import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.FileInputFormat
+import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.SequenceFileInputFormat
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+
 import org.apache.mesos.MesosNativeLibrary
 
-import spark.deploy.{SparkHadoopUtil, LocalSparkCluster}
-import spark.partial.ApproximateEvaluator
-import spark.partial.PartialResult
+import spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import spark.partial.{ApproximateEvaluator, PartialResult}
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
-import spark.scheduler._
+import spark.scheduler.{DAGScheduler, ResultTask, ShuffleMapTask, SparkListener, SplitInfo, Stage, StageInfo, TaskScheduler}
+import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, ClusterScheduler}
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import spark.storage.BlockManagerUI
+import spark.storage.{BlockManagerUI, StorageStatus, StorageUtils, RDDInfo}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
-import spark.storage.{StorageStatus, StorageUtils, RDDInfo}
+
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -97,7 +100,7 @@ class SparkContext(
   private[spark] val addedJars = HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
-  private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]()
+  private[spark] val persistentRdds: ConcurrentMap[Int, RDD[_]] = new ConcurrentHashMap[Int, RDD[_]]()
   private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
 
 
@@ -520,6 +523,21 @@ class SparkContext(
     env.blockManager.master.getStorageStatus
   }
 
+  def removeRDD(id: Int): Unit = {
+    val storageStatusList = getExecutorStorageStatus
+    val groupedRddBlocks = storageStatusList.flatMap(_.blocks).toMap
+    logInfo("RDD to remove: " + id)
+    groupedRddBlocks.foreach(x => {
+      val k = x._1.substring(0,x._1.lastIndexOf('_'))
+      val rdd_id = "rdd_" + id
+      logInfo("RDD to check: " + rdd_id)
+      if(k.equals(rdd_id)) {
+        env.blockManager.master.removeBlock(x._1)
+      }
+    })
+    persistentRdds.remove(id)
+  }
+
   /**
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
@@ -743,7 +761,7 @@ class SparkContext(
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
   private[spark] def cleanup(cleanupTime: Long) {
-    persistentRdds.clearOldValues(cleanupTime)
+    // do nothing. this needs to be removed.
   }
 }
 
