@@ -111,14 +111,16 @@ We'll create a very simple Spark job in Scala. So simple, in fact, that it's nam
 import spark.SparkContext
 import SparkContext._
 
-object SimpleJob extends Application {
-  val logFile = "/var/log/syslog" // Should be some file on your system
-  val sc = new SparkContext("local", "Simple Job", "$YOUR_SPARK_HOME",
-    List("target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar"))
-  val logData = sc.textFile(logFile, 2).cache()
-  val numAs = logData.filter(line => line.contains("a")).count()
-  val numBs = logData.filter(line => line.contains("b")).count()
-  println("Lines with a: %s, Lines with b: %s".format(numAs, numBs))
+object SimpleJob {
+  def main(args: Array[String]) {
+    val logFile = "/var/log/syslog" // Should be some file on your system
+    val sc = new SparkContext("local", "Simple Job", "$YOUR_SPARK_HOME",
+      List("target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar"))
+    val logData = sc.textFile(logFile, 2).cache()
+    val numAs = logData.filter(line => line.contains("a")).count()
+    val numBs = logData.filter(line => line.contains("b")).count()
+    println("Lines with a: %s, Lines with b: %s".format(numAs, numBs))
+  }
 }
 {% endhighlight %}
 
