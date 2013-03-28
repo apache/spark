@@ -49,7 +49,7 @@ Finally, to register your classes with Kryo, create a public class that extends
 {% highlight scala %}
 import com.esotericsoftware.kryo.Kryo
 
-class MyRegistrator extends KryoRegistrator {
+class MyRegistrator extends spark.KryoRegistrator {
   override def registerClasses(kryo: Kryo) {
     kryo.register(classOf[MyClass1])
     kryo.register(classOf[MyClass2])
