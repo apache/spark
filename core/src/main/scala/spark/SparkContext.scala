@@ -74,7 +74,7 @@ class SparkContext(
   if (System.getProperty("spark.driver.port") == null) {
     System.setProperty("spark.driver.port", "0")
   }
-  
+
   //Set the default task scheduler
   if (System.getProperty("spark.cluster.taskscheduler") == null) {
     System.setProperty("spark.cluster.taskscheduler", "spark.scheduler.cluster.FIFOTaskSetQueuesManager")
@@ -119,7 +119,7 @@ class SparkContext(
     }
   }
   executorEnvs ++= environment
-  
+
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
@@ -216,14 +216,14 @@ class SparkContext(
   }
 
   private[spark] var checkpointDir: Option[String] = None
-  
+
   // Thread Local variable that can be used by users to pass information down the stack
   private val localProperties = new DynamicVariable[Properties](null)
-  
+
   def initLocalProperties() {
       localProperties.value = new Properties()
   }
-  
+
   def addLocalProperties(key: String, value: String) {
     if(localProperties.value == null) {
       localProperties.value = new Properties()
@@ -673,7 +673,7 @@ class SparkContext(
     val processFunc = (context: TaskContext, iter: Iterator[T]) => processPartition(iter)
     runJob[T, U](rdd, processFunc, 0 until rdd.partitions.size, false, resultHandler)
   }
-  
+
   /**
    * Run a job that can return approximate results.
    */

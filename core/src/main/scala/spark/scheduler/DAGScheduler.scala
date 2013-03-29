@@ -333,7 +333,7 @@ class DAGScheduler(
       submitStage(stage)
     }
   }
-  
+
   /**
    * Check for waiting or failed stages which are now eligible for resubmission.
    * Ordinarily run on every iteration of the event loop.
@@ -720,7 +720,7 @@ class DAGScheduler(
     sizeBefore = shuffleToMapStage.size
     shuffleToMapStage.clearOldValues(cleanupTime)
     logInfo("shuffleToMapStage " + sizeBefore + " --> " + shuffleToMapStage.size)
-    
+
     sizeBefore = pendingTasks.size
     pendingTasks.clearOldValues(cleanupTime)
     logInfo("pendingTasks " + sizeBefore + " --> " + pendingTasks.size)
