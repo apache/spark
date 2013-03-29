@@ -5,7 +5,6 @@ import scala.collection.mutable.ArrayBuffer
 /**
  * An interface for managing TaskSet queue/s that allows plugging different policy for
  * offering tasks to resources
- * 
  */
 private[spark] trait TaskSetQueuesManager {
   def addTaskSetManager(manager: TaskSetManager): Unit

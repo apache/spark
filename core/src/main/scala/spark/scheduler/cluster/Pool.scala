@@ -7,13 +7,21 @@ import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 /**
  * An Schedulable entity that represent collection of TaskSetManager
  */
-private[spark] class Pool(val poolName: String, schedulingMode: SchedulingMode,val minShare:Int, val weight:Int) extends Schedulable with Logging {
-  
+private[spark] class Pool(val poolName: String,val schedulingMode: SchedulingMode, initMinShare:Int, initWeight:Int) extends Schedulable with Logging
+{
+
   var activeTaskSetsQueue = new ArrayBuffer[TaskSetManager]
-  var numRunningTasks: Int = 0
-  var taskSetSchedulingAlgorithm: SchedulingAlgorithm = 
+
+  var weight = initWeight
+  var minShare = initMinShare
+  var runningTasks = 0
+
+  val priority = 0
+  val stageId = 0
+
+  var taskSetSchedulingAlgorithm: SchedulingAlgorithm =
   {
-    schedulingMode match 
+    schedulingMode match
     {
       case SchedulingMode.FAIR =>
         val schedule = new FairSchedulingAlgorithm()
@@ -22,26 +30,6 @@ private[spark] class Pool(val poolName: String, schedulingMode: SchedulingMode,v
         val schedule = new FIFOSchedulingAlgorithm()
         schedule
     }
-  }
-  
-  override def getMinShare():Int =
-  {
-    return minShare
-  }
-
-  override def getRunningTasks():Int = 
-  {
-    return numRunningTasks
-  }
-
-  def setRunningTasks(taskNum : Int)
-  {
-    numRunningTasks = taskNum
-  }
-
-  override def getWeight(): Int = 
-  {
-    return weight
   }
 
   def addTaskSetManager(manager:TaskSetManager)
@@ -74,15 +62,14 @@ private[spark] class Pool(val poolName: String, schedulingMode: SchedulingMode,v
     val sortedActiveTasksSetQueue = activeTaskSetsQueue.sortWith(taskSetSchedulingAlgorithm.comparator)
     for(manager <- sortedActiveTasksSetQueue)
     {
-      
-    logDebug("taskSetId:%s,taskNum:%d,minShares:%d,weight:%d,runningTasks:%d".format(manager.taskSet.id,manager.numTasks,manager.getMinShare(),manager.getWeight(),manager.getRunningTasks()))  
+    logDebug("poolname:%s,taskSetId:%s,taskNum:%d,minShares:%d,weight:%d,runningTasks:%d".format(poolName,manager.taskSet.id,manager.numTasks,manager.minShare,manager.weight,manager.runningTasks))
     }
     for(manager <- sortedActiveTasksSetQueue)
     {
         val task = manager.slaveOffer(execId,host,availableCpus)
         if (task != None)
         {
-          manager.setRunningTasks(manager.getRunningTasks() + 1)
+          manager.runningTasks += 1
           return task
         }
     }

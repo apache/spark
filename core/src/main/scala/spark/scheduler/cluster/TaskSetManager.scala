@@ -29,7 +29,6 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   val MAX_TASK_FAILURES = 4
 
   val TASKSET_MINIMUM_SHARES = 1
-
   val TASKSET_WEIGHT = 1
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = System.getProperty("spark.speculation.quantile", "0.75").toDouble
@@ -38,7 +37,12 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // Serializer for closures and tasks.
   val ser = SparkEnv.get.closureSerializer.newInstance()
 
+  var weight = TASKSET_WEIGHT
+  var minShare = TASKSET_MINIMUM_SHARES
+  var runningTasks = 0
   val priority = taskSet.priority
+  val stageId = taskSet.stageId
+
   val tasks = taskSet.tasks
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
@@ -46,7 +50,6 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   val numFailures = new Array[Int](numTasks)
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksFinished = 0
-  var numRunningTasks =0;
 
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
@@ -98,36 +101,6 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // of task index so that tasks with low indices get launched first.
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
-  }
-
-  override def getMinShare(): Int = 
-  {
-      return TASKSET_MINIMUM_SHARES
-  }
-
-  override def getRunningTasks(): Int =
-  {
-      return numRunningTasks 
-  }
-
-  def setRunningTasks(taskNum :Int)
-  {
-      numRunningTasks = taskNum 
-  }
-
-  override def getPriority(): Int =
-  {
-      return priority
-  }
-
-  override def getWeight(): Int = 
-  {
-      return TASKSET_WEIGHT
-  }
-
-  override def getStageId(): Int = 
-  {
-     return taskSet.stageId
   }
 
   // Add a task to all the pending-task lists that it should be on.

@@ -60,7 +60,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   var backend: SchedulerBackend = null
 
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
-  
+
   var taskSetQueuesManager: TaskSetQueuesManager = null
 
   override def setListener(listener: TaskSchedulerListener) {
@@ -131,11 +131,11 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
   }
 
-  def taskFinished(manager: TaskSetManager) {    
+  def taskFinished(manager: TaskSetManager) {
     this.synchronized {
-      taskSetQueuesManager.taskFinished(manager) 
+      taskSetQueuesManager.taskFinished(manager)
     }
-  }  
+  }
 
   /**
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
@@ -144,7 +144,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = {
      synchronized {
-      
       SparkEnv.set(sc.env)
       // Mark each slave as alive and remember its hostname
       for (o <- offers) {
@@ -228,7 +227,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       taskSetToUpdate.get.statusUpdate(tid, state, serializedData)
     }
     if (failedExecutor != None) {
-      listener.executorLost(failedExecutor.get) 
+      listener.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
     if (taskFailed) {
@@ -299,7 +298,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
     // Call listener.executorLost without holding the lock on this to prevent deadlock
     if (failedExecutor != None) {
-      listener.executorLost(failedExecutor.get) 
+      listener.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
   }

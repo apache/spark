@@ -241,7 +241,7 @@ class DAGScheduler(
       partitions: Seq[Int],
       callSite: String,
       allowLocal: Boolean,
-      resultHandler: (Int, U) => Unit, 
+      resultHandler: (Int, U) => Unit,
       properties: Properties = null)
   {
     if (partitions.size == 0) {
@@ -263,7 +263,7 @@ class DAGScheduler(
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
       callSite: String,
-      timeout: Long, 
+      timeout: Long,
       properties: Properties = null)
     : PartialResult[R] =
   {

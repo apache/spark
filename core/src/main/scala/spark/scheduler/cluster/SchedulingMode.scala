@@ -1,4 +1,4 @@
-package spark.scheduler.cluster 
+package spark.scheduler.cluster
 
 object SchedulingMode extends Enumeration("FAIR","FIFO")
 {
