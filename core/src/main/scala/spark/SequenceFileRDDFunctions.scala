@@ -46,7 +46,7 @@ class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : Cla
         // from T to Writable. Since we have two apply methods we filter out the one which
         // is of the form "java.lang.Object apply(java.lang.Object)"
         implicitly[T => Writable].getClass.getDeclaredMethods().filter(
-            m => m.getReturnType().toString != "java.lang.Object" &&
+            m => m.getReturnType().toString != "class java.lang.Object" &&
                  m.getName() == "apply")(0).getReturnType
 
       }
