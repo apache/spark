@@ -6,9 +6,11 @@ import util.ManualClock
 
 class BasicOperationsSuite extends TestSuiteBase {
 
-  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
-
   override def framework() = "BasicOperationsSuite"
+
+  before {
+    System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+  }
 
   after {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown

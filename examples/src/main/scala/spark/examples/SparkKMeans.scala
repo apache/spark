@@ -64,6 +64,7 @@ object SparkKMeans {
       for (newP <- newPoints) {
         kPoints(newP._1) = newP._2
       }
+      println("Finished iteration (delta = " + tempDist + ")")
     }
 
     println("Final centers:")

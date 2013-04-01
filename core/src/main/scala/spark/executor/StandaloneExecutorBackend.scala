@@ -14,7 +14,6 @@ import spark.scheduler.cluster.RegisterExecutorFailed
 import spark.scheduler.cluster.RegisterExecutor
 
 private[spark] class StandaloneExecutorBackend(
-    executor: Executor,
     driverUrl: String,
     executorId: String,
     hostname: String,
@@ -23,6 +22,7 @@ private[spark] class StandaloneExecutorBackend(
   with ExecutorBackend
   with Logging {
 
+  var executor: Executor = null
   var driver: ActorRef = null
 
   override def preStart() {
@@ -36,7 +36,7 @@ private[spark] class StandaloneExecutorBackend(
   override def receive = {
     case RegisteredExecutor(sparkProperties) =>
       logInfo("Successfully registered with driver")
-      executor.initialize(executorId, hostname, sparkProperties)
+      executor = new Executor(executorId, hostname, sparkProperties)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -44,7 +44,12 @@ private[spark] class StandaloneExecutorBackend(
 
     case LaunchTask(taskDesc) =>
       logInfo("Got assigned task " + taskDesc.taskId)
-      executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
+      if (executor == null) {
+        logError("Received launchTask but executor was null")
+        System.exit(1)
+      } else {
+        executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
+      }
 
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       logError("Driver terminated or disconnected! Shutting down.")
@@ -62,7 +67,7 @@ private[spark] object StandaloneExecutorBackend {
     // before getting started with all our system properties, etc
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0)
     val actor = actorSystem.actorOf(
-      Props(new StandaloneExecutorBackend(new Executor, driverUrl, executorId, hostname, cores)),
+      Props(new StandaloneExecutorBackend(driverUrl, executorId, hostname, cores)),
       name = "Executor")
     actorSystem.awaitTermination()
   }
