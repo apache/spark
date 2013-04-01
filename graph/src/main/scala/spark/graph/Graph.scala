@@ -63,6 +63,8 @@ class Graph[VD: Manifest, ED: Manifest](
   private val vTable: RDD[(Vid, (VD, Array[Pid]))] = Graph.createVTable(
     _vertices, eTable, numVertexPartitions)
 
+  def vertices: RDD[Vertex[VD]] = vTable.map { case(vid, (data, pids)) => new Vertex(vid, data) }
+
   def edges: RDD[Edge[ED]] = eTable.mapPartitions { iter => iter.next._2.iterator }
 
   def edgesWithVertices: RDD[EdgeWithVertices[VD, ED]] = new EdgeWithVerticesRDD(vTable, eTable)
