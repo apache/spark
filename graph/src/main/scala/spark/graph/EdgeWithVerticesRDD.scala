@@ -20,7 +20,7 @@ private[graph]
 class EdgeWithVerticesRDD[VD: Manifest, ED: Manifest](
     @transient vTable: RDD[(Vid, (VD, Array[Pid]))],
     eTable: RDD[(Pid, EdgePartition[ED])])
-  extends RDD[EdgeWithVertices[VD, ED]](eTable.context, Nil) {
+  extends RDD[VertexHashMap, Iterator[EdgeWithVertices[VD, ED]]](eTable.context, Nil) {
 
   @transient
   private val shuffleDependency = {
@@ -47,12 +47,14 @@ class EdgeWithVerticesRDD[VD: Manifest, ED: Manifest](
   override def getPreferredLocations(s: Partition) =
     eTable.preferredLocations(s.asInstanceOf[EdgeWithVerticesPartition].eTablePartition)
 
-  override def compute(s: Partition, context: TaskContext): Iterator[EdgeWithVertices[VD, ED]] = {
+  override def compute(s: Partition, context: TaskContext)
+    : Iterator[VertexHashMap, Iterator[EdgeWithVertices[VD, ED]]] = {
+
     val split = s.asInstanceOf[EdgeWithVerticesPartition]
 
     // Fetch the vertices and put them in a hashmap.
     // TODO: use primitive hashmaps for primitive VD types.
-    val vmap = new it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap[VD]//(1000000)
+    val vmap = new VertexHashMap[VD]//(1000000)
     val fetcher = SparkEnv.get.shuffleFetcher
     fetcher.fetch[Pid, (Vid, VD)](shuffleId, split.index, context.taskMetrics).foreach {
       case (pid, (vid, vdata)) => vmap.put(vid, vdata)
@@ -62,7 +64,7 @@ class EdgeWithVerticesRDD[VD: Manifest, ED: Manifest](
       .asInstanceOf[(Pid, EdgePartition[ED])]
 
     // Return an iterator that looks up the hash map to find matching vertices for each edge.
-    new Iterator[EdgeWithVertices[VD, ED]] {
+    val iter = new Iterator[EdgeWithVertices[VD, ED]] {
       private var pos = 0
       private val e = new EdgeWithVertices[VD, ED]
       e.src = new Vertex[VD]
@@ -79,5 +81,6 @@ class EdgeWithVerticesRDD[VD: Manifest, ED: Manifest](
         e
       }
     }
+    (vmap, iter)
   }
 }

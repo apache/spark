@@ -3,38 +3,27 @@ package spark.graph
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
-import com.esotericsoftware.kryo._
-
 import it.unimi.dsi.fastutil.ints.IntArrayList
 
-import spark.{ClosureCleaner, HashPartitioner, KryoRegistrator, SparkContext, RDD}
+import spark.{ClosureCleaner, HashPartitioner, SparkContext, RDD}
 import spark.SparkContext._
+import spark.graph.Graph.EdgePartition
 import spark.storage.StorageLevel
 
 
-
-class Vertex[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD] {
-  var id: Vid = _
-  var data: VD = _
-
-  def this(id: Int, data: VD) { this(); this.id = id; this.data = data; }
-}
+case class Vertex[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD] (
+  var id: Vid = 0,
+  var data: VD = nullValue[VD])
 
 
-class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] {
-  var src: Vid = _
-  var dst: Vid = _
-  var data: ED = _
-
-  def this(src: Vid, dst: Vid, data: ED) {
-    this(); this.src = src; this.dst = dst; this.data = data;
-  }
-}
+case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] (
+  var src: Vid = 0,
+  var dst: Vid = 0,
+  var data: ED = nullValue[ED])
 
 
 class EdgeWithVertices[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD,
                        @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] {
-
   var src: Vertex[VD] = _
   var dst: Vertex[VD] = _
   var data: ED = _
@@ -49,25 +38,38 @@ class EdgeWithVertices[@specialized(Char, Int, Boolean, Byte, Long, Float, Doubl
  * A Graph RDD that supports computation on graphs.
  */
 class Graph[VD: Manifest, ED: Manifest](
-  private val _vertices: RDD[Vertex[VD]],
-  private val _edges: RDD[Edge[ED]]) {
-
-  import Graph.EdgePartition
+  val rawVertices: RDD[Vertex[VD]],
+  val rawEdges: RDD[Edge[ED]]) {
 
   var numEdgePartitions = 5
   var numVertexPartitions = 5
 
-  private val eTable: RDD[(Pid, EdgePartition[ED])] = Graph.createETable(
-    _edges, numEdgePartitions)
+  val vertexPartitioner = new HashPartitioner(numVertexPartitions)
 
-  private val vTable: RDD[(Vid, (VD, Array[Pid]))] = Graph.createVTable(
-    _vertices, eTable, numVertexPartitions)
+  val edgePartitioner = new HashPartitioner(numEdgePartitions)
 
-  def vertices: RDD[Vertex[VD]] = vTable.map { case(vid, (data, pids)) => new Vertex(vid, data) }
+  lazy val eTable: RDD[(Pid, EdgePartition[ED])] = Graph.createETable(
+    rawEdges, numEdgePartitions)
 
-  def edges: RDD[Edge[ED]] = eTable.mapPartitions { iter => iter.next._2.iterator }
+  lazy val vTable: RDD[(Vid, (VD, Array[Pid]))] = Graph.createVTable(
+    rawVertices, eTable, numVertexPartitions)
 
-  def edgesWithVertices: RDD[EdgeWithVertices[VD, ED]] = new EdgeWithVerticesRDD(vTable, eTable)
+  def vertices(): RDD[Vertex[VD]] = vTable.map { case(vid, (data, pids)) => new Vertex(vid, data) }
+
+  def edges(): RDD[Edge[ED]] = eTable.mapPartitions { iter => iter.next._2.iterator }
+
+  def edgesWithVertices(): RDD[EdgeWithVertices[VD, ED]] = {
+    (new EdgeWithVerticesRDD(vTable, eTable)).mapPartitions { case(vmap, iter) => iter }
+  }
+
+  def mapPartitions[U: ClassManifest](
+    f: (VertexHashMap, Iterator[EdgeWithVertices[VD, ED]]) => Iterator[U],
+    preservesPartitioning: Boolean = false): RDD[U] = {
+    (new EdgeWithVerticesRDD(vTable, eTable)).mapPartitions({ part =>
+       val (vmap, iter) = part.next()
+       iter.mapPartitions(f)
+    }, preservesPartitioning)
+  }
 
 }
 
@@ -75,8 +77,7 @@ class Graph[VD: Manifest, ED: Manifest](
 object Graph {
 
   /**
-   * A partition of edges. This is created so we can store edge data in columnar format so it is
-   * more efficient to store the data in memory.
+   * A partition of edges in 3 large columnar arrays.
    */
   private[graph]
   class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: Manifest] {
