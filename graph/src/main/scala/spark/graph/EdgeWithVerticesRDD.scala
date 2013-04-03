@@ -17,10 +17,10 @@ class EdgeWithVerticesPartition(idx: Int, val eTablePartition: Partition) extend
  * A RDD that brings together edge data with its associated vertex data.
  */
 private[graph]
-class EdgeWithVerticesRDD[VD: Manifest, ED: Manifest](
+class EdgeWithVerticesRDD[VD: ClassManifest, ED: ClassManifest](
     @transient vTable: RDD[(Vid, (VD, Array[Pid]))],
     eTable: RDD[(Pid, EdgePartition[ED])])
-  extends RDD[VertexHashMap, Iterator[EdgeWithVertices[VD, ED]]](eTable.context, Nil) {
+  extends RDD[(VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]])](eTable.context, Nil) {
 
   @transient
   private val shuffleDependency = {
@@ -48,7 +48,7 @@ class EdgeWithVerticesRDD[VD: Manifest, ED: Manifest](
     eTable.preferredLocations(s.asInstanceOf[EdgeWithVerticesPartition].eTablePartition)
 
   override def compute(s: Partition, context: TaskContext)
-    : Iterator[VertexHashMap, Iterator[EdgeWithVertices[VD, ED]]] = {
+    : Iterator[(VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]])] = {
 
     val split = s.asInstanceOf[EdgeWithVerticesPartition]
 
@@ -81,6 +81,6 @@ class EdgeWithVerticesRDD[VD: Manifest, ED: Manifest](
         e
       }
     }
-    (vmap, iter)
+    Iterator((vmap, iter))
   }
 }

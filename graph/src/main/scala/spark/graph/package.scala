@@ -4,8 +4,8 @@ package object graph {
 
   type Vid = Int
   type Pid = Int
-  type Status = Boolean
-  type VertexHashMap = it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+
+  type VertexHashMap[T] = it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap[T]
 
   /**
    * Return the default null-like value for a data type T.
