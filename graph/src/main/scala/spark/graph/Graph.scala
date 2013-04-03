@@ -111,22 +111,23 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     new Graph(vertices, edges.map(f))
   }
 
-  def updateVertices[U: ClassManifest](
+  def updateVertices[U: ClassManifest, VD2: ClassManifest](
       updates: RDD[(Vid, U)],
-      updateFunc: (Vertex[VD], Seq[U]) => VD)
-    : Graph[VD, ED] = {
+      updateFunc: (Vertex[VD], Seq[U]) => VD2)
+    : Graph[VD2, ED] = {
 
     ClosureCleaner.clean(updateFunc)
 
     val joined: RDD[(Vid, ((VD, Array[Pid]), Option[Seq[U]]))] =
       vTable.leftOuterJoin(updates.groupByKey(vertexPartitioner))
 
-    val newVTable = (joined.mapPartitions({ iter =>
+    val newVTable = joined.mapPartitions({ iter =>
       iter.map { case (vid, ((vdata, pids), updates)) =>
-        val newVdata = if (updates.isDefined) updateFunc(Vertex(vid, vdata), updates.get) else vdata
+        val u = if (updates.isDefined) updates.get else Seq.empty
+        val newVdata = updateFunc(Vertex(vid, vdata), u)
         (vid, (newVdata, pids))
       }
-    }, preservesPartitioning = true)).cache()
+    }, preservesPartitioning = true).cache()
 
     new Graph(null, null, newVTable, eTable)
   }
