@@ -48,6 +48,9 @@ object GraphLab {
 
       i += 1
     }
+    // return the transformed graph with the accumulator removed
+    g.mapVertices(v => Vertex(v.id, v.data.vdata))
+
   }
 
 }

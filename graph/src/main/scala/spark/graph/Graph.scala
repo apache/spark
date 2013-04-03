@@ -58,12 +58,21 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     this
   }
 
+  /// Todo:  Should theses be set on construction and passed onto derived graphs?
   var numEdgePartitions = 5
   var numVertexPartitions = 5
 
+  /// Todo:  Should these be passed onto derived graphs?
   protected val vertexPartitioner = new HashPartitioner(numVertexPartitions)
-
   protected val edgePartitioner = new HashPartitioner(numEdgePartitions)
+
+
+
+  lazy val numEdges = edges.count()
+  lazy val numVertices = vertices.count()
+  lazy val inDegrees = edges.map{ case Edge(src, target, _) => (target, 1) }.reduceByKey(_+_)
+  lazy val outDegrees = edges.map{ case Edge(src, target, _) => (src, 1) }.reduceByKey(_+_)
+
 
   protected lazy val eTable: RDD[(Pid, EdgePartition[ED])] = {
     if (_rawETable == null) {
@@ -301,8 +310,8 @@ object Graph {
 
     // Parse the vertex data table
     val vertices = edges.flatMap {
-      case (source, target, _) => List((source, 1), (target, 1))
-    }.reduceByKey(_ + _).map(pair => Vertex(piar._1, pair._2))
+      case Edge(source, target, _) => List((source, 1), (target, 1))
+    }.reduceByKey(_ + _).map(pair => Vertex(pair._1, pair._2))
 
     val graph = new Graph[Int, ED](vertices, edges)
 
