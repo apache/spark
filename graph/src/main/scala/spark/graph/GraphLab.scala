@@ -5,7 +5,7 @@ import scala.collection.JavaConversions._
 import spark.RDD
 
 
-class GraphLab {
+object GraphLab {
 
   def iterateGAS[A: ClassManifest, VD: ClassManifest, ED: ClassManifest](
     graph: Graph[VD, ED],

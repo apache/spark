@@ -6,6 +6,7 @@ import scala.collection.mutable.ArrayBuffer
 import it.unimi.dsi.fastutil.ints.IntArrayList
 
 import spark.{ClosureCleaner, HashPartitioner, RDD}
+import spark.SparkContext
 import spark.SparkContext._
 import spark.graph.Graph.EdgePartition
 import spark.storage.StorageLevel
@@ -13,7 +14,10 @@ import spark.storage.StorageLevel
 
 case class Vertex[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD] (
   var id: Vid = 0,
-  var data: VD = nullValue[VD])
+  var data: VD = nullValue[VD]) {
+
+  def this(tuple: Tuple2[Vid, VD]) = this(tuple._1, tuple._2)
+}
 
 
 case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] (
@@ -142,10 +146,46 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
 object Graph {
 
   /**
+   * Load an edge list from file initializing the Graph RDD
+   */
+  def textFile[ED: ClassManifest](sc: SparkContext,
+    fname: String, edgeParser: Array[String] => ED) = {
+
+    // Parse the edge data table
+    val edges = sc.textFile(fname).map { line =>
+      val lineArray = line.split("\\s+")
+      if(lineArray.length < 2) {
+        println("Invalid line: " + line)
+        assert(false)
+      }
+      val source = lineArray(0)
+      val target = lineArray(1)
+      val tail = lineArray.drop(2)
+      val edata = edgeParser(tail)
+      Edge(source.trim.toInt, target.trim.toInt, edata)
+    }.cache()
+
+    // Parse the vertex data table
+    val vertices = edges.flatMap { edge => List((edge.src, 1), (edge.dst, 1)) }
+      .reduceByKey(_ + _)
+      .map(new Vertex(_))
+
+    val graph = new Graph[Int, ED](vertices, edges)
+    graph.cache()
+
+    println("Loaded graph:" +
+      "\n\t#edges:    " + graph.edges.count +
+      "\n\t#vertices: " + graph.vertices.count)
+
+    graph
+  }
+
+
+  /**
    * A partition of edges in 3 large columnar arrays.
    */
   private[graph]
-  class EdgePartition [@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED:ClassManifest]
+  class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED:ClassManifest]
   {
     val srcIds: IntArrayList = new IntArrayList
     val dstIds: IntArrayList = new IntArrayList
@@ -170,7 +210,7 @@ object Graph {
       private var edge = new Edge[ED]
       private var pos = 0
 
-      override def hasNext: Boolean = pos < size
+      override def hasNext: Boolean = pos < EdgePartition.this.size
 
       override def next(): Edge[ED] = {
         edge.src = srcIds.get(pos)

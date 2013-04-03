@@ -4,7 +4,7 @@ package object graph {
 
   type Vid = Int
   type Pid = Int
-  type Status = Boolean
+
   type VertexHashMap[T] = it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap[T]
 
   /**
