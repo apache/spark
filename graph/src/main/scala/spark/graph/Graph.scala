@@ -172,5 +172,41 @@ object Graph {
     }, preservesPartitioning = true)
     .cache()
   }
+
+  /**
+   * Load a graph from a text file.
+   */
+  def textFile[ED: Manifest](sc: SparkContext,
+    fname: String, edgeParser: Array[String] => ED) = {
+
+    // Parse the edge data table
+    val edges = sc.textFile(fname).map(
+      line => {
+        val lineArray = line.split("\\s+")
+        if(lineArray.length < 2) {
+          println("Invalid line: " + line)
+          assert(false)
+        }
+        val source = lineArray(0)
+        val target = lineArray(1)
+        val tail = lineArray.drop(2)
+        val edata = edgeParser(tail)
+        Edge(source.trim.toInt, target.trim.toInt, edata)
+      }).cache
+
+    // Parse the vertex data table
+    val vertices = edges.flatMap {
+      case (source, target, _) => List((source, 1), (target, 1))
+    }.reduceByKey(_ + _).map(pair => Vertex(piar._1, pair._2))
+
+    val graph = new Graph[Int, ED](vertices, edges)
+
+    println("Loaded graph:" +
+      "\n\t#edges:    " + graph.numEdges +
+      "\n\t#vertices: " + graph.numVertices)
+    graph
+  }
+
+
 }
 

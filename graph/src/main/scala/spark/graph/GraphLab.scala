@@ -1,7 +1,7 @@
 package spark.graph
 
 
-class GraphLab {
+object GraphLab {
 
   def iterateGAS[A: Manifest, VD: Manifest, ED: Manifest](
     graph: Graph[VD, ED],
