@@ -26,25 +26,19 @@ object Analytics {
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
    */
-  def pagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], maxIter: Int) = {
+  def pagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
     // Compute the out degree of each vertex
-    val outDegree = graph.edges.map {
-      case Edge(src, target, data) => (src, 1)
-      }.reduceByKey(_ + _)
-    val pagerankGraph = graph.updateVertices[Int, (Int, Float)](outDegree,
+    val pagerankGraph = graph.updateVertices[Int, (Int, Float)](graph.outDegrees,
       (vertex, degIter) => (degIter.sum, 1.0F)
     )
-    GraphLab.iterateGAS[Float, (Int, Float), ED](pagerankGraph,
+    GraphLab.iterateGAS[(Int, Float), ED, Float](pagerankGraph)(
       (me_id, edge) => edge.src.data._2 / edge.dst.data._1, // gather
       (a: Float, b: Float) => a + b, // merge
       0F,
       (vertex, a: Float) => (vertex.data._1, (0.15F + 0.85F * a)), // apply
-      maxIter).vertices.map { case Vertex(id, (degree, rank)) => (id, rank) }
-    //    println("Computed graph: #edges: " + graph_ret.numEdges + "  #vertices" + graph_ret.numVertices)
-    //    graph_ret.vertices.take(10).foreach(println)
+      numIter).vertices.map{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
   }
 
-/*
 
   /**
    * Compute the connected component membership of each vertex
@@ -53,41 +47,26 @@ object Analytics {
    * that vertex.
    */
   def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
-
-    val vertices = graph.vertices.mapPartitions(iter => iter.map { case (vid, _) => (vid, vid) })
-    val edges = graph.edges // .mapValues(v => None)
-    val ccGraph = new Graph(vertices, edges)
-
-
-    ccGraph.iterateStatic(
+    val ccGraph = graph.mapVertices { case Vertex(vid, _) => Vertex(vid, vid) }
+    GraphLab.iterateGAS[Int, ED, Int](ccGraph)(
       (me_id, edge) => edge.otherVertex(me_id).data, // gather
       (a: Int, b: Int) => math.min(a, b), // merge
       Integer.MAX_VALUE,
       (v, a: Int) => math.min(v.data, a), // apply
       numIter,
       gatherEdges = EdgeDirection.Both).vertices
-    //
-    //    graph_ret.vertices.`.foreach(println)
-    //    graph_ret.edges.take(10).foreach(println)
   }
 
 
   /**
    * Compute the shortest path to a set of markers
    */
-  def shortestPath[VD: Manifest, ED: Manifest](graph: Graph[VD, Float],
-    sources: List[Int], numIter: Int) = {
+  def shortestPath[VD: Manifest](graph: Graph[VD, Float], sources: List[Int], numIter: Int) = {
     val sourceSet = sources.toSet
-    val vertices = graph.vertices.mapPartitions(
-      iter => iter.map {
-        case (vid, _) => (vid, (if(sourceSet.contains(vid)) 0.0F else Float.MaxValue) )
-        });
-
-    val edges = graph.edges // .mapValues(v => None)
-    val spGraph = new Graph(vertices, edges)
-
-    val niterations = Int.MaxValue
-    spGraph.iterateStatic(
+    val spGraph = graph.mapVertices {
+      case Vertex(vid, _) => Vertex(vid, (if(sourceSet.contains(vid)) 0.0F else Float.MaxValue))
+    }
+    GraphLab.iterateGAS[Float, Float, Float](spGraph)(
       (me_id, edge) => edge.otherVertex(me_id).data + edge.data, // gather
       (a: Float, b: Float) => math.min(a, b), // merge
       Float.MaxValue,
@@ -96,7 +75,7 @@ object Analytics {
       gatherEdges = EdgeDirection.In).vertices
   }
 
-*/
+
 
 
   // /**
@@ -266,7 +245,7 @@ object Analytics {
 
 
 
-/*
+
     taskType match {
       case "pagerank" => {
 
@@ -289,7 +268,7 @@ object Analytics {
 
         if(!isDynamic && numIter == Int.MaxValue) {
           println("Set number of iterations!")
-          exit(1)
+          sys.exit(1)
         }
         println("======================================")
         println("|             PageRank               |")
@@ -306,13 +285,13 @@ object Analytics {
         graph.numEdgePartitions = numEPart
         val startTime = System.currentTimeMillis
 
-        Analytics.pageRank(graph, numIter)
-        // val pr = if(isDynamic) Analytics.dynamicPageRank(graph, tol, numIter)
-        //   else  Analytics.pageRank(graph, numIter)
-        println("Total rank: " + pr.map(_._2).reduce(_+_))
+        val pr = Analytics.pagerank(graph, numIter)
+        // val pr = if(isDynamic) Analytics.dynamicPagerank(graph, tol, numIter)
+        //   else  Analytics.pagerank(graph, numIter)
+        println("Total rank: " + pr.map{ case Vertex(id,r) => r }.reduce(_+_) )
         if(!outFname.isEmpty) {
           println("Saving pageranks of pages to " + outFname)
-          pr.map(p => p._1 + "\t" + p._2).saveAsTextFile(outFname)
+          pr.map{case Vertex(id, r) => id + "\t" + r}.saveAsTextFile(outFname)
         }
         println("Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
         sc.stop()
@@ -331,7 +310,7 @@ object Analytics {
 
         if(!isDynamic && numIter == Int.MaxValue) {
           println("Set number of iterations!")
-          exit(1)
+          sys.exit(1)
         }
         println("======================================")
         println("|      Connected Components          |")
@@ -343,55 +322,56 @@ object Analytics {
 
         val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
         val graph = Graph.textFile(sc, fname, a => 1.0F)
-        Analytics.connectedComponents(graph, numIter)
+        val cc = Analytics.connectedComponents(graph, numIter)
         // val cc = if(isDynamic) Analytics.dynamicConnectedComponents(graph, numIter)
         //   else  Analytics.connectedComponents(graph, numIter)
-        println("Components: " + cc.map(_._2).distinct())
+        println("Components: " + cc.map(_.data).distinct())
 
         sc.stop()
       }
 
-     // case "shortestpath" => {
+     case "shortestpath" => {
 
-     //    var numIter = Int.MaxValue
-     //    var isDynamic = true
-     //    var sources: List[Int] = List.empty
+        var numIter = Int.MaxValue
+        var isDynamic = true
+        var sources: List[Int] = List.empty
 
-     //    options.foreach{
-     //      case ("numIter", v) => numIter = v.toInt
-     //      case ("dynamic", v) => isDynamic = v.toBoolean
-     //      case ("source", v) => sources ++= List(v.toInt)
-     //      case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
-     //    }
+        options.foreach{
+          case ("numIter", v) => numIter = v.toInt
+          case ("dynamic", v) => isDynamic = v.toBoolean
+          case ("source", v) => sources ++= List(v.toInt)
+          case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
+        }
 
 
-     //    if(!isDynamic && numIter == Int.MaxValue) {
-     //      println("Set number of iterations!")
-     //      exit(1)
-     //    }
+        if(!isDynamic && numIter == Int.MaxValue) {
+          println("Set number of iterations!")
+          sys.exit(1)
+        }
 
-     //    if(sources.isEmpty) {
-     //      println("No sources provided!")
-     //      exit(1)
-     //    }
+        if(sources.isEmpty) {
+          println("No sources provided!")
+          sys.exit(1)
+        }
 
-     //    println("======================================")
-     //    println("|          Shortest Path             |")
-     //    println("--------------------------------------")
-     //    println(" Using parameters:")
-     //    println(" \tDynamic:  " + isDynamic)
-     //    println(" \tNumIter:  " + numIter)
-     //    println(" \tSources:  [" + sources.mkString(", ") + "]")
-     //    println("======================================")
+        println("======================================")
+        println("|          Shortest Path             |")
+        println("--------------------------------------")
+        println(" Using parameters:")
+        println(" \tDynamic:  " + isDynamic)
+        println(" \tNumIter:  " + numIter)
+        println(" \tSources:  [" + sources.mkString(", ") + "]")
+        println("======================================")
 
-     //    val sc = new SparkContext(host, "ShortestPath(" + fname + ")")
-     //    val graph = Graph.textFile(sc, fname, a => (if(a.isEmpty) 1.0F else a(0).toFloat ) )
-     //    val cc = if(isDynamic) Analytics.dynamicShortestPath(graph, sources, numIter)
-     //      else  Analytics.shortestPath(graph, sources, numIter)
-     //    println("Longest Path: " + cc.map(_._2).reduce(math.max(_,_)))
+        val sc = new SparkContext(host, "ShortestPath(" + fname + ")")
+        val graph = Graph.textFile(sc, fname, a => (if(a.isEmpty) 1.0F else a(0).toFloat ) )
+        val sp = Analytics.shortestPath(graph, sources, numIter)
+        // val cc = if(isDynamic) Analytics.dynamicShortestPath(graph, sources, numIter)
+        //   else  Analytics.shortestPath(graph, sources, numIter)
+        println("Longest Path: " + sp.map(_.data).reduce(math.max(_,_)))
 
-     //    sc.stop()
-     //  }
+        sc.stop()
+      }
 
 
      //  case "als" => {
@@ -449,7 +429,7 @@ object Analytics {
         println("Invalid task type.")
       }
     }
-    */
+
   }
 
 

@@ -6,14 +6,14 @@ import spark.RDD
 
 object GraphLab {
 
-  def iterateGAS[A: ClassManifest, VD: ClassManifest, ED: ClassManifest](
-    graph: Graph[VD, ED],
+  def iterateGAS[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](graph: Graph[VD, ED])(
     gather: (Vid, EdgeWithVertices[VD, ED]) => A,
     merge: (A, A) => A,
     default: A,
     apply: (Vertex[VD], A) => VD,
     numIter: Int,
-    gatherEdges: EdgeDirection.EdgeDirection = EdgeDirection.In) = {
+    gatherEdges: EdgeDirection.EdgeDirection = EdgeDirection.In) :
+    Graph[VD, ED] = {
 
     var g = graph.mapVertices(v => Vertex(v.id, VDataWithAcc(v.data, default))).cache()
 
