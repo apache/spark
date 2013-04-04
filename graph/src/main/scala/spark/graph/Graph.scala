@@ -175,20 +175,54 @@ object Graph {
       Edge(source.trim.toInt, target.trim.toInt, edata)
     }.cache()
 
-    // Parse the vertex data table
-    val vertices = edges.flatMap { edge => List((edge.src, 1), (edge.dst, 1)) }
-      .reduceByKey(_ + _)
-      .map(new Vertex(_))
-
-    val graph = new Graph[Int, ED](vertices, edges)
-    graph.cache()
-
+    val graph = fromEdges(edges)
     println("Loaded graph:" +
-      "\n\t#edges:    " + graph.edges.count +
-      "\n\t#vertices: " + graph.vertices.count)
+      "\n\t#edges:    " + graph.numEdges +
+      "\n\t#vertices: " + graph.numVertices)
 
     graph
   }
+
+
+  def fromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): Graph[Int, ED] = {
+    val vertices = edges.flatMap { edge => List((edge.src, 1), (edge.dst, 1)) }
+      .reduceByKey(_ + _)
+      .map{ case (vid, degree) => Vertex(vid, degree) }
+    new Graph[Int, ED](vertices, edges).cache
+  }
+
+  /**
+   * Make k-cycles
+   */
+  def kCycles(sc: SparkContext, numCycles: Int = 3, size: Int = 3) = {
+    // Construct the edges
+    val edges = sc.parallelize(for (i <- 0 until numCycles; j <- 0 until size) yield {
+      val offset = i * numCycles
+      val source = offset + j
+      val target = offset + ((j + 1) % size)
+      Edge(source, target, i * numCycles + j)
+    })
+    // Change vertex data to be the lowest vertex id of the vertex in that cycle
+    val graph = fromEdges(edges).mapVertices{
+      case Vertex(id, degree) => Vertex(id, (id/numCycles) * numCycles)
+    }
+    graph
+  }
+
+  /**
+   * Make a regular grid graph
+   **/
+  def grid(sc: SparkContext, numRows: Int = 5, numCols: Int = 5) = {
+    def coord(vid: Int) = (vid % numRows, vid / numRows)
+    val vertices = sc.parallelize( 0 until (numRows * numCols) ).map(
+      vid => Vertex(vid, coord(vid)))
+    def index(r: Int, c:Int) = (r + c * numRows)
+    val edges = vertices.flatMap{ case Vertex(vid, (r,c)) =>
+      (if(r+1 < numRows) List(Edge(vid, index(r+1,c), 1.0F)) else List.empty) ++
+        (if(c+1 < numCols) List(Edge(vid, index(r,c+1), 1.0F)) else List.empty)
+    }
+    new Graph(vertices, edges)
+ }
 
 
   /**
