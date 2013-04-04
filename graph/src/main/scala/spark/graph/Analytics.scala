@@ -32,7 +32,7 @@ object Analytics {
       (vertex, degIter) => (degIter.sum, 1.0F)
     )
     GraphLab.iterateGAS[(Int, Float), ED, Float](pagerankGraph)(
-      (me_id, edge) => edge.src.data._2 / edge.dst.data._1, // gather
+      (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
       (a: Float, b: Float) => a + b, // merge
       0F,
       (vertex, a: Float) => (vertex.data._1, (0.15F + 0.85F * a)), // apply
