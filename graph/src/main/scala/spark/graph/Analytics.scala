@@ -54,7 +54,7 @@ object Analytics {
       Integer.MAX_VALUE,
       (v, a: Int) => math.min(v.data, a), // apply
       numIter,
-      gatherEdges = EdgeDirection.Both).vertices
+      gatherDirection = EdgeDirection.Both).vertices
   }
 
 
@@ -72,7 +72,7 @@ object Analytics {
       Float.MaxValue,
       (v, a: Float) => math.min(v.data, a), // apply
       numIter,
-      gatherEdges = EdgeDirection.In).vertices
+      gatherDirection = EdgeDirection.In).vertices
   }
 
 

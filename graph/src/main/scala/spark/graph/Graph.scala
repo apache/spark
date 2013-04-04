@@ -5,7 +5,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.ints.IntArrayList
 
-import spark.{ClosureCleaner, HashPartitioner, RDD}
+import spark.{ClosureCleaner, HashPartitioner, Partitioner, RDD}
 import spark.SparkContext
 import spark.SparkContext._
 import spark.graph.Graph.EdgePartition
@@ -17,6 +17,8 @@ case class Vertex[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD
   var data: VD = nullValue[VD]) {
 
   def this(tuple: Tuple2[Vid, VD]) = this(tuple._1, tuple._2)
+
+  def tuple = (id, data)
 }
 
 
@@ -36,6 +38,13 @@ class EdgeWithVertices[@specialized(Char, Int, Boolean, Byte, Long, Float, Doubl
 
   def vertex(vid: Vid): Vertex[VD] = if (src.id == vid) src else dst
 }
+
+
+private[graph]
+case class MutableTuple2[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) U,
+                         @specialized(Char, Int, Boolean, Byte, Long, Float, Double) V](
+  var _1: U, var _2: V)
+
 
 
 /**
@@ -58,7 +67,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     this
   }
 
-  /// Todo:  Should theses be set on construction and passed onto derived graphs?
+  /// Todo:  Should theses be set on construction and passed onto derived graphs? Yes.
   var numEdgePartitions = 5
   var numVertexPartitions = 5
 
@@ -66,13 +75,17 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
   protected val vertexPartitioner = new HashPartitioner(numVertexPartitions)
   protected val edgePartitioner = new HashPartitioner(numEdgePartitions)
 
-
-
   lazy val numEdges = edges.count()
-  lazy val numVertices = vertices.count()
-  lazy val inDegrees = edges.map{ case Edge(src, target, _) => (target, 1) }.reduceByKey(_+_)
-  lazy val outDegrees = edges.map{ case Edge(src, target, _) => (src, 1) }.reduceByKey(_+_)
 
+  lazy val numVertices = vertices.count()
+
+  lazy val inDegrees = edges
+    .map { case Edge(src, target, _) => (target, 1) }
+    .reduceByKey(vertexPartitioner, _ + _)
+
+  lazy val outDegrees = edges
+    .map { case Edge(src, target, _) => (src, 1) }
+    .reduceByKey(vertexPartitioner, _ + _)
 
   protected lazy val eTable: RDD[(Pid, EdgePartition[ED])] = {
     if (_rawETable == null) {
@@ -88,6 +101,17 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     } else {
       _rawVTable
     }
+  }
+
+  protected lazy val vTableReplicated: RDD[(Vid, VD)] = {
+    // Join vid2pid and vTable, generate a shuffle dependency on the joined result, and get
+    // the shuffle id so we can use it on the slave.
+    vTable
+      .flatMap { case (vid, (vdata, pids)) => pids.iterator.map { pid => (pid, (vid, vdata)) } }
+      .partitionBy(edgePartitioner)
+      .mapPartitions(
+        { part => part.map { case(pid, (vid, vdata)) => (vid, vdata) } },
+        preservesPartitioning = true)
   }
 
   def vertices: RDD[Vertex[VD]] = {
@@ -107,7 +131,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
   def edgesWithVertices: RDD[EdgeWithVertices[VD, ED]] = {
-    (new EdgeWithVerticesRDD[VD, ED](vTable, eTable)).mapPartitions { part => part.next._2 }
+    (new EdgeWithVerticesRDD(vTableReplicated, eTable)).mapPartitions { part => part.next._2 }
   }
 
   def mapVertices[VD2: ClassManifest](f: (Vertex[VD]) => Vertex[VD2]) = {
@@ -120,20 +144,55 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     new Graph(vertices, edges.map(f))
   }
 
+  def mapReduceNeighborhood[VD2: ClassManifest](
+    mapFunc: (Vid, EdgeWithVertices[VD, ED]) => VD2,
+    reduceFunc: (VD2, VD2) => VD2,
+    default: VD2,
+    gatherDirection: EdgeDirection.EdgeDirection): RDD[(Vid, VD2)] = {
+
+    ClosureCleaner.clean(mapFunc)
+    ClosureCleaner.clean(reduceFunc)
+    //ClosureCleaner.clean(default)
+
+    val newVTable = vTableReplicated.mapPartitions({ part =>
+        part.map { v => (v._1, MutableTuple2(v._2, default)) }
+      }, preservesPartitioning = true)
+
+    (new EdgeWithVerticesRDD[MutableTuple2[VD, VD2], ED](newVTable, eTable))
+      .mapPartitions { part =>
+        val (vmap, edges) = part.next()
+        val edgeSansAcc = new EdgeWithVertices[VD, ED]()
+        edges.map { edge: EdgeWithVertices[MutableTuple2[VD, VD2], ED] =>
+          edgeSansAcc.data = edge.data
+          edgeSansAcc.src.data = edge.src.data._1
+          edgeSansAcc.dst.data = edge.dst.data._1
+          edgeSansAcc.src.id = edge.src.id
+          edgeSansAcc.dst.id = edge.dst.id
+          if (gatherDirection == EdgeDirection.In || gatherDirection == EdgeDirection.Both) {
+            edge.dst.data._2 = reduceFunc(edge.dst.data._2, mapFunc(edgeSansAcc.dst.id, edgeSansAcc))
+          }
+          if (gatherDirection == EdgeDirection.Out || gatherDirection == EdgeDirection.Both) {
+            edge.src.data._2 = reduceFunc(edge.src.data._2, mapFunc(edgeSansAcc.src.id, edgeSansAcc))
+          }
+        }
+
+        vmap.int2ObjectEntrySet().fastIterator().map{ entry =>
+          (entry.getIntKey(), entry.getValue()._2)
+        }
+      }
+      .combineByKey((v: VD2) => v, reduceFunc, null, vertexPartitioner, false)
+  }
+
   def updateVertices[U: ClassManifest, VD2: ClassManifest](
       updates: RDD[(Vid, U)],
-      updateFunc: (Vertex[VD], Seq[U]) => VD2)
+      updateFunc: (Vertex[VD], Option[U]) => VD2)
     : Graph[VD2, ED] = {
 
     ClosureCleaner.clean(updateFunc)
 
-    val joined: RDD[(Vid, ((VD, Array[Pid]), Option[Seq[U]]))] =
-      vTable.leftOuterJoin(updates.groupByKey(vertexPartitioner))
-
-    val newVTable = joined.mapPartitions({ iter =>
-      iter.map { case (vid, ((vdata, pids), updates)) =>
-        val u = if (updates.isDefined) updates.get else Seq.empty
-        val newVdata = updateFunc(Vertex(vid, vdata), u)
+    val newVTable = vTable.leftOuterJoin(updates).mapPartitions({ iter =>
+      iter.map { case (vid, ((vdata, pids), update)) =>
+        val newVdata = updateFunc(Vertex(vid, vdata), update)
         (vid, (newVdata, pids))
       }
     }, preservesPartitioning = true).cache()
@@ -141,14 +200,14 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     new Graph(null, null, newVTable, eTable)
   }
 
-  def mapPartitions[U: ClassManifest](
-    f: (VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]]) => Iterator[U],
-    preservesPartitioning: Boolean = false): RDD[U] = {
-    (new EdgeWithVerticesRDD(vTable, eTable)).mapPartitions({ part =>
-       val (vmap, iter) = part.next()
-       f(vmap, iter)
-    }, preservesPartitioning)
-  }
+  // def mapPartitions[U: ClassManifest](
+  //   f: (VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]]) => Iterator[U],
+  //   preservesPartitioning: Boolean = false): RDD[U] = {
+  //   (new EdgeWithVerticesRDD(vTable, eTable)).mapPartitions({ part =>
+  //      val (vmap, iter) = part.next()
+  //      f(vmap, iter)
+  //   }, preservesPartitioning)
+  // }
 
 }
 

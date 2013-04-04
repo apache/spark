@@ -7,7 +7,8 @@ import spark.graph.Graph.EdgePartition
 
 
 private[graph]
-class EdgeWithVerticesPartition(idx: Int, val eTablePartition: Partition) extends Partition {
+class EdgeWithVerticesPartition(idx: Int, val vPart: Partition, val ePart: Partition)
+  extends Partition {
   override val index: Int = idx
   override def hashCode(): Int = idx
 }
@@ -18,34 +19,24 @@ class EdgeWithVerticesPartition(idx: Int, val eTablePartition: Partition) extend
  */
 private[graph]
 class EdgeWithVerticesRDD[VD: ClassManifest, ED: ClassManifest](
-    @transient vTable: RDD[(Vid, (VD, Array[Pid]))],
+    vTableReplicated: RDD[(Vid, VD)],
     eTable: RDD[(Pid, EdgePartition[ED])])
   extends RDD[(VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]])](eTable.context, Nil) {
 
-  @transient
-  private val shuffleDependency = {
-    // Join vid2pid and vTable, generate a shuffle dependency on the joined result, and get
-    // the shuffle id so we can use it on the slave.
-    val vTableReplicated = vTable.flatMap { case (vid, (vdata, pids)) =>
-      pids.iterator.map { pid => (pid, (vid, vdata)) }
-    }
-    new ShuffleDependency(vTableReplicated, eTable.partitioner.get)
-  }
-
-  private val shuffleId = shuffleDependency.shuffleId
+  assert(vTableReplicated.partitioner == eTable.partitioner)
 
   override def getDependencies: List[Dependency[_]] = {
-    List(new OneToOneDependency(eTable), shuffleDependency)
+    List(new OneToOneDependency(eTable), new OneToOneDependency(vTableReplicated))
   }
 
   override def getPartitions = Array.tabulate[Partition](eTable.partitions.size) {
-    i => new EdgeWithVerticesPartition(i, eTable.partitions(i)): Partition
+    i => new EdgeWithVerticesPartition(i, eTable.partitions(i), vTableReplicated.partitions(i))
   }
 
   override val partitioner = eTable.partitioner
 
   override def getPreferredLocations(s: Partition) =
-    eTable.preferredLocations(s.asInstanceOf[EdgeWithVerticesPartition].eTablePartition)
+    eTable.preferredLocations(s.asInstanceOf[EdgeWithVerticesPartition].ePart)
 
   override def compute(s: Partition, context: TaskContext)
     : Iterator[(VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]])] = {
@@ -55,12 +46,9 @@ class EdgeWithVerticesRDD[VD: ClassManifest, ED: ClassManifest](
     // Fetch the vertices and put them in a hashmap.
     // TODO: use primitive hashmaps for primitive VD types.
     val vmap = new VertexHashMap[VD]//(1000000)
-    val fetcher = SparkEnv.get.shuffleFetcher
-    fetcher.fetch[Pid, (Vid, VD)](shuffleId, split.index, context.taskMetrics).foreach {
-      case (pid, (vid, vdata)) => vmap.put(vid, vdata)
-    }
+    vTableReplicated.iterator(split.vPart, context).foreach { v => vmap.put(v._1, v._2) }
 
-    val (pid, edgePartition) = eTable.iterator(split.eTablePartition, context).next()
+    val (pid, edgePartition) = eTable.iterator(split.ePart, context).next()
       .asInstanceOf[(Pid, EdgePartition[ED])]
 
     // Return an iterator that looks up the hash map to find matching vertices for each edge.

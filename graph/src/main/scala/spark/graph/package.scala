@@ -11,5 +11,4 @@ package object graph {
    * Return the default null-like value for a data type T.
    */
   def nullValue[T] = null.asInstanceOf[T]
-
 }
