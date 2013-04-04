@@ -61,9 +61,13 @@ class EdgeWithVerticesRDD[VD: ClassManifest, ED: ClassManifest](
       override def hasNext: Boolean = pos < edgePartition.size
       override def next() = {
         e.src.id = edgePartition.srcIds.getInt(pos)
+        // assert(vmap.containsKey(e.src.id))
         e.src.data = vmap.get(e.src.id)
+
         e.dst.id = edgePartition.dstIds.getInt(pos)
+        // assert(vmap.containsKey(e.dst.id))
         e.dst.data = vmap.get(e.dst.id)
+
         e.data = edgePartition.data(pos)
         pos += 1
         e

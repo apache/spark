@@ -79,13 +79,17 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
 
   lazy val numVertices = vertices.count()
 
-  lazy val inDegrees = edges
+  lazy val inDegrees = mapReduceNeighborhood[Vid]((vid, edge) => 1, _+_, 0, EdgeDirection.In)
+
+  lazy val outDegrees = mapReduceNeighborhood[Vid]((vid,edge) => 1, _+_, 0, EdgeDirection.Out)
+
+  lazy val degrees = mapReduceNeighborhood[Vid]((vid,edge) => 1, _+_, 0, EdgeDirection.Both)
+
+
+  edges
     .map { case Edge(src, target, _) => (target, 1) }
     .reduceByKey(vertexPartitioner, _ + _)
 
-  lazy val outDegrees = edges
-    .map { case Edge(src, target, _) => (src, 1) }
-    .reduceByKey(vertexPartitioner, _ + _)
 
   protected lazy val eTable: RDD[(Pid, EdgePartition[ED])] = {
     if (_rawETable == null) {
@@ -144,6 +148,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     new Graph(vertices, edges.map(f))
   }
 
+
   def mapReduceNeighborhood[VD2: ClassManifest](
     mapFunc: (Vid, EdgeWithVertices[VD, ED]) => VD2,
     reduceFunc: (VD2, VD2) => VD2,
@@ -162,7 +167,9 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
       .mapPartitions { part =>
         val (vmap, edges) = part.next()
         val edgeSansAcc = new EdgeWithVertices[VD, ED]()
-        edges.map { edge: EdgeWithVertices[MutableTuple2[VD, VD2], ED] =>
+        edgeSansAcc.src = new Vertex[VD]
+        edgeSansAcc.dst = new Vertex[VD]
+        edges.foreach { edge: EdgeWithVertices[MutableTuple2[VD, VD2], ED] =>
           edgeSansAcc.data = edge.data
           edgeSansAcc.src.data = edge.src.data._1
           edgeSansAcc.dst.data = edge.dst.data._1
@@ -175,13 +182,12 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
             edge.src.data._2 = reduceFunc(edge.src.data._2, mapFunc(edgeSansAcc.src.id, edgeSansAcc))
           }
         }
-
         vmap.int2ObjectEntrySet().fastIterator().map{ entry =>
           (entry.getIntKey(), entry.getValue()._2)
         }
-      }
-      .combineByKey((v: VD2) => v, reduceFunc, null, vertexPartitioner, false)
+      }.combineByKey((v: VD2) => v, reduceFunc, null, vertexPartitioner, false)
   }
+
 
   def updateVertices[U: ClassManifest, VD2: ClassManifest](
       updates: RDD[(Vid, U)],
