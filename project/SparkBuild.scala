@@ -36,7 +36,7 @@ object SparkBuild extends Build {
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
     version := "0.7.1-SNAPSHOT",
-    scalaVersion := "2.9.2",
+    scalaVersion := "2.9.3",
     scalacOptions := Seq("-unchecked", "-optimize", "-deprecation"),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
@@ -93,8 +93,8 @@ object SparkBuild extends Build {
 
     libraryDependencies ++= Seq(
       "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
-      "org.scalatest" %% "scalatest" % "1.8" % "test",
-      "org.scalacheck" %% "scalacheck" % "1.9" % "test",
+      "org.scalatest" %% "scalatest" % "1.9.1" % "test",
+      "org.scalacheck" %% "scalacheck" % "1.10.0" % "test",
       "com.novocode" % "junit-interface" % "0.8" % "test",
       "org.easymock" % "easymock" % "3.1" % "test"
     ),
@@ -140,7 +140,7 @@ object SparkBuild extends Build {
       "colt" % "colt" % "1.2.0",
       "cc.spray" % "spray-can" % "1.0-M2.1",
       "cc.spray" % "spray-server" % "1.0-M2.1",
-      "cc.spray" %%  "spray-json" % "1.1.1",
+      "cc.spray" % "spray-json_2.9.2" % "1.1.1",
       "org.apache.mesos" % "mesos" % "0.9.0-incubating"
     ) ++ (if (HADOOP_MAJOR_VERSION == "2") Some("org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION) else None).toSeq,
     unmanagedSourceDirectories in Compile <+= baseDirectory{ _ / ("src/hadoop" + HADOOP_MAJOR_VERSION + "/scala") }
