@@ -30,7 +30,7 @@ object Analytics {
   def pagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
     // Compute the out degree of each vertex
     val pagerankGraph = graph.updateVertices[Int, (Int, Float)](graph.outDegrees,
-      (vertex, degIter) => (degIter.sum, 1.0F)
+      (vertex, deg) => (deg.getOrElse(0), 1.0F)
     )
     GraphLab.iterateGA[(Int, Float), ED, Float](pagerankGraph)(
       (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
@@ -46,12 +46,13 @@ object Analytics {
   def pregelPagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
     // Compute the out degree of each vertex
     val pagerankGraph = graph.updateVertices[Int, (Int, Float)](graph.outDegrees,
-      (vertex, degIter) => (degIter.sum, 1.0F)
+      (vertex, deg) => (deg.getOrElse(0), 1.0F)
     )
     Pregel.iterate[(Int, Float), ED, Float](pagerankGraph)(
       (vertex, a: Float) => (vertex.data._1, (0.15F + 0.85F * a)), // apply
       (me_id, edge) => Some(edge.src.data._2 / edge.src.data._1), // gather
       (a: Float, b: Float) => a + b, // merge
+      1.0F,
       numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
   }
 
