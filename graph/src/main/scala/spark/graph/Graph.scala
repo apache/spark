@@ -189,6 +189,61 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
 
+
+  def mapReduceNeighborhoodFilter[VD2: ClassManifest](
+    mapFunc: (Vid, EdgeWithVertices[VD, ED]) => Option[VD2],
+    reduceFunc: (VD2, VD2) => VD2,
+    gatherDirection: EdgeDirection.EdgeDirection): RDD[(Vid, VD2)] = {
+
+    ClosureCleaner.clean(mapFunc)
+    ClosureCleaner.clean(reduceFunc)
+
+    val newVTable = vTableReplicated.mapPartitions({ part =>
+        part.map { v => (v._1, MutableTuple2(v._2, Option.empty[VD2])) }
+      }, preservesPartitioning = true)
+
+    (new EdgeWithVerticesRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable))
+      .mapPartitions { part =>
+        val (vmap, edges) = part.next()
+        val edgeSansAcc = new EdgeWithVertices[VD, ED]()
+        edgeSansAcc.src = new Vertex[VD]
+        edgeSansAcc.dst = new Vertex[VD]
+        edges.foreach { edge: EdgeWithVertices[MutableTuple2[VD, Option[VD2]], ED] =>
+          edgeSansAcc.data = edge.data
+          edgeSansAcc.src.data = edge.src.data._1
+          edgeSansAcc.dst.data = edge.dst.data._1
+          edgeSansAcc.src.id = edge.src.id
+          edgeSansAcc.dst.id = edge.dst.id
+          if (gatherDirection == EdgeDirection.In || gatherDirection == EdgeDirection.Both) {
+            edge.dst.data._2 =
+              if(edge.dst.data._2.isEmpty) mapFunc(edgeSansAcc.dst.id, edgeSansAcc)
+              else {
+                val tmp = mapFunc(edgeSansAcc.dst.id, edgeSansAcc)
+                if(!tmp.isEmpty) Some(reduceFunc(edge.dst.data._2.get, tmp.get))
+                else edge.dst.data._2
+              }
+          }
+          if (gatherDirection == EdgeDirection.Out || gatherDirection == EdgeDirection.Both) {
+            edge.dst.data._2 =
+              if(edge.dst.data._2.isEmpty) mapFunc(edgeSansAcc.src.id, edgeSansAcc)
+              else {
+                val tmp = mapFunc(edgeSansAcc.src.id, edgeSansAcc)
+                if(!tmp.isEmpty) Some(reduceFunc(edge.src.data._2.get, tmp.get))
+                else edge.src.data._2
+              }
+          }
+        }
+        vmap.int2ObjectEntrySet().fastIterator().filter{!_.getValue()._2.isEmpty}.map{ entry =>
+          (entry.getIntKey(), entry.getValue()._2)
+        }
+      }
+      .map{ case (vid, aOpt) => (vid, aOpt.get) }
+      .combineByKey((v: VD2) => v, reduceFunc, null, vertexPartitioner, false)
+
+  }
+
+
+
   def updateVertices[U: ClassManifest, VD2: ClassManifest](
       updates: RDD[(Vid, U)],
       updateFunc: (Vertex[VD], Option[U]) => VD2)
