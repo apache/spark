@@ -34,8 +34,7 @@ object GraphLab {
 
 
 
-  def iterateGA[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](
-    rawGraph: Graph[VD, ED])(
+  def iterateGA[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](rawGraph: Graph[VD, ED])(
     gather: (Vid, EdgeWithVertices[VD, ED]) => A,
     merge: (A, A) => A,
     apply: (Vertex[VD], Option[A]) => VD,
@@ -50,7 +49,7 @@ object GraphLab {
     while (i < numIter) {
 
       val accUpdates: RDD[(Vid, A)] =
-        graph.mapReduceNeighborhoodFilter(someGather, merge, gatherDirection)
+        graph.flatMapReduceNeighborhood(someGather, merge, gatherDirection)
       graph = graph.updateVertices(accUpdates, apply).cache()
 
       i += 1
@@ -60,8 +59,7 @@ object GraphLab {
 
 
 
-  def iterateGAS[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](
-    rawGraph: Graph[VD, ED])(
+  def iterateGAS[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](rawGraph: Graph[VD, ED])(
     rawGather: (Vid, EdgeWithVertices[VD, ED]) => A,
     merge: (A, A) => A,
     rawApply: (Vertex[VD], Option[A]) => VD,
@@ -100,6 +98,7 @@ object GraphLab {
       }
     }
 
+    // Scatter is basically a gather in the opposite direction so we reverse the edge direction
     val scatterDirection = rawScatterDirection match {
       case EdgeDirection.In => EdgeDirection.Out
       case EdgeDirection.Out => EdgeDirection.In
@@ -116,12 +115,12 @@ object GraphLab {
     while (i < numIter && numActive > 0) {
 
       val accUpdates: RDD[(Vid, A)] =
-        graph.mapReduceNeighborhoodFilter(gather, merge, gatherDirection)
+        graph.flatMapReduceNeighborhood(gather, merge, gatherDirection)
 
       graph = graph.updateVertices(accUpdates, apply).cache()
 
       val activeVertices: RDD[(Vid, Boolean)] =
-        graph.mapReduceNeighborhoodFilter(scatter, _ || _, scatterDirection)
+        graph.flatMapReduceNeighborhood(scatter, _ || _, scatterDirection)
 
       graph = graph.updateVertices(activeVertices, applyActive).cache()
 

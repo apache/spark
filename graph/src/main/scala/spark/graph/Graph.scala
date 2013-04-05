@@ -37,6 +37,9 @@ class EdgeWithVertices[@specialized(Char, Int, Boolean, Byte, Long, Float, Doubl
   def otherVertex(vid: Vid): Vertex[VD] = if (src.id == vid) dst else src
 
   def vertex(vid: Vid): Vertex[VD] = if (src.id == vid) src else dst
+
+  def relativeDirection(vid: Vid): EdgeDirection.EdgeDirection =
+    if(vid == src.id) EdgeDirection.Out else EdgeDirection.In
 }
 
 
@@ -134,6 +137,11 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     }
   }
 
+  def reverse: Graph[VD,ED] = {
+    new Graph(vertices, edges.map{ case Edge(s,t,e) => Edge(t,s,e) })
+  }
+
+
   def edgesWithVertices: RDD[EdgeWithVertices[VD, ED]] = {
     (new EdgeWithVerticesRDD(vTableReplicated, eTable)).mapPartitions { part => part.next._2 }
   }
@@ -142,6 +150,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     ClosureCleaner.clean(f)
     new Graph(vertices.map(f), edges)
   }
+
 
   def mapEdges[ED2: ClassManifest](f: (Edge[ED]) => Edge[ED2]) = {
     ClosureCleaner.clean(f)
@@ -190,7 +199,19 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
 
 
 
-  def mapReduceNeighborhoodFilter[VD2: ClassManifest](
+  def collectNeighborIds(edgeDirection: EdgeDirection.EdgeDirection) : RDD[(Vid, Array[Vid])] = {
+    mapReduceNeighborhood[Array[Vid]](
+      (vid, edge) => Array(edge.otherVertex(vid).id),
+      (a,b) => a ++ b,
+      Array.empty[Vid],
+      edgeDirection)
+  }
+
+  /**
+   * Same as mapReduceNeighborhood but map function can return none and there is no default value.
+   * As a consequence the resulting table may be much smaller than the set of vertices.
+   */
+  def flatMapReduceNeighborhood[VD2: ClassManifest](
     mapFunc: (Vid, EdgeWithVertices[VD, ED]) => Option[VD2],
     reduceFunc: (VD2, VD2) => VD2,
     gatherDirection: EdgeDirection.EdgeDirection): RDD[(Vid, VD2)] = {

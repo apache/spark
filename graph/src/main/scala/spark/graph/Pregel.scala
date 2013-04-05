@@ -22,7 +22,7 @@ object Pregel {
     while (i < numIter) {
 
       val msgs: RDD[(Vid, A)] =
-        graph.mapReduceNeighborhoodFilter(reverseGather, mergeMsg, EdgeDirection.In)
+        graph.flatMapReduceNeighborhood(reverseGather, mergeMsg, EdgeDirection.In)
 
       def runProg(v: Vertex[VD], msg: Option[A]): VD =
         if(msg.isEmpty) v.data else vprog(v, msg.get)
@@ -31,6 +31,25 @@ object Pregel {
 
       i += 1
     }
+    graph
+
+  }
+
+
+  def iterateOriginal[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](
+    rawGraph: Graph[VD, ED])(
+    vprog: ( Vertex[VD], A, Seq[Vid]) => Seq[(Vid, A)],
+    mergeMsg: (A, A) => A,
+    numIter: Int) : Graph[VD, ED] = {
+
+    var graph = rawGraph.cache
+    var i = 0
+
+    val outNbrIds : RDD[(Vid, Array[Vid])] = graph.collectNeighborIds(EdgeDirection.Out)
+
+    /// Todo implement
+    /// vprog takes the vertex, the message (A), and list of out neighbor ids
+
     graph
 
   }
