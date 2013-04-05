@@ -1,9 +1,17 @@
 package spark.graph
 
 
-object EdgeDirection extends Enumeration {
+sealed abstract class EdgeDirection {
+  def reverse: EdgeDirection = this match {
+    case EdgeDirection.In   => EdgeDirection.In
+    case EdgeDirection.Out  => EdgeDirection.Out
+    case EdgeDirection.Both => EdgeDirection.Both
+  }
+}
 
-  type EdgeDirection = Value
 
-  val None, In, Out, Both = Value
+object EdgeDirection {
+  case object In extends EdgeDirection
+  case object Out extends EdgeDirection
+  case object Both extends EdgeDirection
 }
