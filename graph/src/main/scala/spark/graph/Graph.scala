@@ -313,17 +313,19 @@ object Graph {
   def textFile[ED: ClassManifest](sc: SparkContext, fname: String, edgeParser: Array[String] => ED) = {
 
     // Parse the edge data table
-    val edges = sc.textFile(fname).map { line =>
-      val lineArray = line.split("\\s+")
-      if(lineArray.length < 2) {
-        println("Invalid line: " + line)
-        assert(false)
-      }
-      val source = lineArray(0)
-      val target = lineArray(1)
-      val tail = lineArray.drop(2)
-      val edata = edgeParser(tail)
-      Edge(source.trim.toInt, target.trim.toInt, edata)
+    val edges = sc.textFile(fname).flatMap { line =>
+      if(!line.isEmpty && line(0) != '#') {
+        val lineArray = line.split("\\s+")
+        if(lineArray.length < 2) {
+          println("Invalid line: " + line)
+          assert(false)
+        }
+        val source = lineArray(0)
+        val target = lineArray(1)
+        val tail = lineArray.drop(2)
+        val edata = edgeParser(tail)
+        Array(Edge(source.trim.toInt, target.trim.toInt, edata))
+      } else { Array.empty[Edge[ED]] }
     }.cache()
 
     val graph = fromEdges(edges)
