@@ -43,7 +43,7 @@ object Analytics {
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
    */
-  def dynamicPageRank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED],
+  def dynamicPagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED],
     tol: Float, maxIter: Int = 10) = {
     // Compute the out degree of each vertex
     val pagerankGraph = graph.updateVertices[Int, (Int, Float, Float)](graph.outDegrees,
@@ -52,7 +52,7 @@ object Analytics {
 
     // Run PageRank
     GraphLab.iterateGAS(pagerankGraph)(
-      (me_id, edge) => edge.src.data._2 / edge.dst.data._1, // gather
+      (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
       (a: Float, b: Float) => a + b,
       (vertex, a: Option[Float]) =>
         (vertex.data._1, (0.15F + 0.85F * a.getOrElse(0F)), vertex.data._2), // apply
