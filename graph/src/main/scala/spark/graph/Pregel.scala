@@ -15,10 +15,14 @@ object Pregel {
 
     var graph = rawGraph.cache
     var i = 0
+
+    def reverseGather(vid: Vid, edge: EdgeWithVertices[VD,ED]) =
+      sendMsg(edge.otherVertex(vid).id, edge)
+
     while (i < numIter) {
 
       val msgs: RDD[(Vid, A)] =
-        graph.mapReduceNeighborhoodFilter(sendMsg, mergeMsg, EdgeDirection.In)
+        graph.mapReduceNeighborhoodFilter(reverseGather, mergeMsg, EdgeDirection.In)
 
       def runProg(v: Vertex[VD], msg: Option[A]): VD =
         if(msg.isEmpty) v.data else vprog(v, msg.get)
