@@ -38,8 +38,9 @@ class EdgeWithVertices[@specialized(Char, Int, Boolean, Byte, Long, Float, Doubl
 
   def vertex(vid: Vid): Vertex[VD] = if (src.id == vid) src else dst
 
-  def relativeDirection(vid: Vid): EdgeDirection.EdgeDirection =
-    if(vid == src.id) EdgeDirection.Out else EdgeDirection.In
+  def relativeDirection(vid: Vid): EdgeDirection = {
+    if (vid == src.id) EdgeDirection.Out else EdgeDirection.In
+  }
 }
 
 
@@ -122,7 +123,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     newGraph(vertices, edges.map{ case Edge(s, t, e) => Edge(t, s, e) })
   }
 
-  def collectNeighborIds(edgeDirection: EdgeDirection.EdgeDirection) : RDD[(Vid, Array[Vid])] = {
+  def collectNeighborIds(edgeDirection: EdgeDirection) : RDD[(Vid, Array[Vid])] = {
     mapReduceNeighborhood[Array[Vid]](
       (vid, edge) => Array(edge.otherVertex(vid).id),
       (a, b) => a ++ b,
@@ -146,7 +147,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
     mapFunc: (Vid, EdgeWithVertices[VD, ED]) => VD2,
     reduceFunc: (VD2, VD2) => VD2,
     default: VD2,
-    gatherDirection: EdgeDirection.EdgeDirection): RDD[(Vid, VD2)] = {
+    gatherDirection: EdgeDirection): RDD[(Vid, VD2)] = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
@@ -188,7 +189,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
   def flatMapReduceNeighborhood[VD2: ClassManifest](
     mapFunc: (Vid, EdgeWithVertices[VD, ED]) => Option[VD2],
     reduceFunc: (VD2, VD2) => VD2,
-    gatherDirection: EdgeDirection.EdgeDirection): RDD[(Vid, VD2)] = {
+    gatherDirection: EdgeDirection): RDD[(Vid, VD2)] = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
@@ -372,7 +373,7 @@ object Graph {
         (if(c+1 < numCols) List(Edge(vid, index(r,c+1), 1.0F)) else List.empty)
     }
     new Graph(vertices, edges)
- }
+  }
 
 
   /**
