@@ -37,5 +37,10 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       (v, u: Option[String]) => if (u.isDefined) v.data + u.get else v.data)
     assert(g.numVertexPartitions === 5)
     assert(g.numEdgePartitions === 8)
+
+    g = g.reverse
+    assert(g.numVertexPartitions === 5)
+    assert(g.numEdgePartitions === 8)
+
   }
 }
