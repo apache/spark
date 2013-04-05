@@ -7,7 +7,6 @@ import spark.SparkContext._
 
 object Analytics {
 
-
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
    */
@@ -22,7 +21,6 @@ object Analytics {
       (vertex, a: Option[Float]) => (vertex.data._1, (0.15F + 0.85F * a.getOrElse(0F))), // apply
       numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
   }
-
 
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
@@ -39,7 +37,6 @@ object Analytics {
       1.0F,
       numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
   }
-
 
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
@@ -61,8 +58,6 @@ object Analytics {
       maxIter).mapVertices { case Vertex(vid, data) => Vertex(vid, data._2) }
   }
 
-
-
   /**
    * Compute the connected component membership of each vertex
    * and return an RDD with the vertex value containing the
@@ -78,7 +73,6 @@ object Analytics {
       numIter,
       gatherDirection = EdgeDirection.Both)
   }
-
 
   /**
    * Compute the shortest path to a set of markers
@@ -210,8 +204,6 @@ object Analytics {
   //     vertex => vertex.id < maxUser).vertices
   // }
 
-
-
   def main(args: Array[String]) = {
     val host = args(0)
     val taskType = args(1)
@@ -223,9 +215,9 @@ object Analytics {
       }
     }
 
-    // System.setProperty("spark.serializer", "spark.KryoSerializer")
-    // //System.setProperty("spark.shuffle.compress", "false")
-    // System.setProperty("spark.kryo.registrator", "spark.graphlab.AnalyticsKryoRegistrator")
+    System.setProperty("spark.serializer", "spark.KryoSerializer")
+    //System.setProperty("spark.shuffle.compress", "false")
+    System.setProperty("spark.kryo.registrator", "spark.graph.GraphKryoRegistrator")
 
     taskType match {
       case "pagerank" => {
@@ -268,7 +260,7 @@ object Analytics {
         // val pr = if(isDynamic) Analytics.dynamicPagerank(graph, tol, numIter)
         //   else  Analytics.pagerank(graph, numIter)
         println("Total rank: " + pr.vertices.map{ case Vertex(id,r) => r }.reduce(_+_) )
-        if(!outFname.isEmpty) {
+        if (!outFname.isEmpty) {
           println("Saving pageranks of pages to " + outFname)
           pr.vertices.map{case Vertex(id, r) => id + "\t" + r}.saveAsTextFile(outFname)
         }
@@ -408,8 +400,5 @@ object Analytics {
         println("Invalid task type.")
       }
     }
-
   }
-
-
 }

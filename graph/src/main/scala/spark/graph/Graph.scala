@@ -311,11 +311,17 @@ object Graph {
   /**
    * Load an edge list from file initializing the Graph RDD
    */
-  def textFile[ED: ClassManifest](sc: SparkContext, fname: String, edgeParser: Array[String] => ED) = {
+  def textFile[ED: ClassManifest](
+      sc: SparkContext,
+      path: String,
+      edgeParser: Array[String] => ED,
+      minEdgePartitions: Int = 1,
+      minVertexPartitions: Int = 1)
+    : Graph[Int, ED] = {
 
     // Parse the edge data table
-    val edges = sc.textFile(fname).flatMap { line =>
-      if(!line.isEmpty && line(0) != '#') {
+    val edges = sc.textFile(path).flatMap { line =>
+      if (!line.isEmpty && line(0) != '#') {
         val lineArray = line.split("\\s+")
         if(lineArray.length < 2) {
           println("Invalid line: " + line)
@@ -326,13 +332,15 @@ object Graph {
         val tail = lineArray.drop(2)
         val edata = edgeParser(tail)
         Array(Edge(source.trim.toInt, target.trim.toInt, edata))
-      } else { Array.empty[Edge[ED]] }
+      } else {
+        Array.empty[Edge[ED]]
+      }
     }.cache()
 
     val graph = fromEdges(edges)
-    println("Loaded graph:" +
-      "\n\t#edges:    " + graph.numEdges +
-      "\n\t#vertices: " + graph.numVertices)
+    // println("Loaded graph:" +
+    //   "\n\t#edges:    " + graph.numEdges +
+    //   "\n\t#vertices: " + graph.numVertices)
 
     graph
   }
