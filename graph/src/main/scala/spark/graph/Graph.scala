@@ -43,12 +43,6 @@ class EdgeWithVertices[@specialized(Char, Int, Boolean, Byte, Long, Float, Doubl
 }
 
 
-private[graph]
-case class MutableTuple2[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) U,
-                         @specialized(Char, Int, Boolean, Byte, Long, Float, Double) V](
-  var _1: U, var _2: V)
-
-
 /**
  * A Graph RDD that supports computation on graphs.
  */
@@ -61,26 +55,23 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
   _rawETable: RDD[(Pid, EdgePartition[ED])]) {
 
   def this(vertices: RDD[Vertex[VD]], edges: RDD[Edge[ED]]) = {
-    this(
-      Graph.DEFAULT_NUM_VERTEX_PARTITIONS, Graph.DEFAULT_NUM_EDGE_PARTITIONS,
-      vertices, edges,
-      null, null)
+    this(vertices.partitions.size, edges.partitions.size, vertices, edges, null, null)
   }
 
   def withPartitioner(numVertexPartitions: Int, numEdgePartitions: Int): Graph[VD, ED] = {
     if (_cached) {
-      val newgraph = new Graph(numVertexPartitions, numEdgePartitions, null, null, _rawVTable, _rawETable)
-      newgraph.cache()
+      (new Graph(numVertexPartitions, numEdgePartitions, null, null, _rawVTable, _rawETable))
+        .cache()
     } else {
       new Graph(numVertexPartitions, numEdgePartitions, _rawVertices, _rawEdges, null, null)
     }
   }
 
-  def withVertexPartitioner(numVertexPartitions: Int = Graph.DEFAULT_NUM_VERTEX_PARTITIONS) = {
+  def withVertexPartitioner(numVertexPartitions: Int) = {
     withPartitioner(numVertexPartitions, numEdgePartitions)
   }
 
-  def withEdgePartitioner(numEdgePartitions: Int = Graph.DEFAULT_NUM_EDGE_PARTITIONS) = {
+  def withEdgePartitioner(numEdgePartitions: Int) = {
     withPartitioner(numVertexPartitions, numEdgePartitions)
   }
 
@@ -139,11 +130,11 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
       edgeDirection)
   }
 
-  def mapVertices[VD2: ClassManifest](f: (Vertex[VD]) => Vertex[VD2]): Graph[VD2, ED] = {
+  def mapVertices[VD2: ClassManifest](f: Vertex[VD] => Vertex[VD2]): Graph[VD2, ED] = {
     newGraph(vertices.map(f), edges)
   }
 
-  def mapEdges[ED2: ClassManifest](f: (Edge[ED]) => Edge[ED2]): Graph[VD, ED2] = {
+  def mapEdges[ED2: ClassManifest](f: Edge[ED] => Edge[ED2]): Graph[VD, ED2] = {
     newGraph(vertices, edges.map(f))
   }
 
@@ -237,7 +228,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
               }
           }
         }
-        vmap.int2ObjectEntrySet().fastIterator().filter{!_.getValue()._2.isEmpty}.map{ entry =>
+        vmap.int2ObjectEntrySet().fastIterator().filter(!_.getValue()._2.isEmpty).map{ entry =>
           (entry.getIntKey(), entry.getValue()._2)
         }
       }
@@ -316,14 +307,10 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
 
 object Graph {
 
-  val DEFAULT_NUM_VERTEX_PARTITIONS = 5
-  val DEFAULT_NUM_EDGE_PARTITIONS = 5
-
   /**
    * Load an edge list from file initializing the Graph RDD
    */
-  def textFile[ED: ClassManifest](sc: SparkContext,
-    fname: String, edgeParser: Array[String] => ED ) = {
+  def textFile[ED: ClassManifest](sc: SparkContext, fname: String, edgeParser: Array[String] => ED) = {
 
     // Parse the edge data table
     val edges = sc.textFile(fname).map { line =>

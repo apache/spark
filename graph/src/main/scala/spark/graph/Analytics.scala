@@ -2,24 +2,8 @@ package spark.graph
 
 import spark._
 import spark.SparkContext._
-// import com.esotericsoftware.kryo._
 
 // import breeze.linalg._
-
-
-
-// class AnalyticsKryoRegistrator extends KryoRegistrator {
-//   def registerClasses(kryo: Kryo) {
-//     println("registering kryo")
-//     kryo.register(classOf[(Int,Float,Float)])
-//     Graph.kryoRegister[(Int,Float,Float), Float](kryo)
-//     Graph.kryoRegister[(Int,Float), Float](kryo)
-//     Graph.kryoRegister[Int, Float](kryo)
-//     Graph.kryoRegister[Float, Float](kryo)
-//     kryo.setReferences(false);
-//   }
-// }
-
 
 object Analytics {
 
@@ -110,14 +94,6 @@ object Analytics {
       numIter,
       gatherDirection = EdgeDirection.In)
   }
-
-
-
-
-
-
-
-
 
   // /**
   //  * Compute the connected component membership of each vertex
@@ -249,9 +225,6 @@ object Analytics {
     // System.setProperty("spark.serializer", "spark.KryoSerializer")
     // //System.setProperty("spark.shuffle.compress", "false")
     // System.setProperty("spark.kryo.registrator", "spark.graphlab.AnalyticsKryoRegistrator")
-
-
-
 
     taskType match {
       case "pagerank" => {
