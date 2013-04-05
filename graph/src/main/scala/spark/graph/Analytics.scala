@@ -43,6 +43,22 @@ object Analytics {
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
    */
+  def pregelPagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
+    // Compute the out degree of each vertex
+    val pagerankGraph = graph.updateVertices[Int, (Int, Float)](graph.outDegrees,
+      (vertex, degIter) => (degIter.sum, 1.0F)
+    )
+    Pregel.iterate[(Int, Float), ED, Float](pagerankGraph)(
+      (vertex, a: Float) => (vertex.data._1, (0.15F + 0.85F * a)), // apply
+      (me_id, edge) => Some(edge.src.data._2 / edge.src.data._1), // gather
+      (a: Float, b: Float) => a + b, // merge
+      numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
+  }
+
+
+  /**
+   * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
+   */
   def dynamicPagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED],
     tol: Float, maxIter: Int = 10) = {
     // Compute the out degree of each vertex
