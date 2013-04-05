@@ -55,7 +55,7 @@ object GraphLab {
     g
   }
 
-  def iterateGAS[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](rawGraph: Graph[VD, ED])(
+  def iterateGAS[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](graph: Graph[VD, ED])(
     gatherFunc: (Vid, EdgeWithVertices[VD, ED]) => A,
     mergeFunc: (A, A) => A,
     applyFunc: (Vertex[VD], Option[A]) => VD,
@@ -64,7 +64,7 @@ object GraphLab {
     gatherDirection: EdgeDirection = EdgeDirection.In,
     scatterDirection: EdgeDirection = EdgeDirection.Out) : Graph[VD, ED] = {
 
-    var graph = rawGraph.mapVertices{ case Vertex(id,data) => Vertex(id, (true, data)) }.cache()
+    var g = graph.mapVertices{ case Vertex(id,data) => Vertex(id, (true, data)) }.cache()
 
     def gather(vid: Vid, e: EdgeWithVertices[(Boolean, VD), ED]) = {
       if(e.vertex(vid).data._1) {
@@ -98,24 +98,25 @@ object GraphLab {
       (accum.getOrElse(false), v.data._2)
 
     var i = 0
-    var numActive = graph.numVertices
+    var numActive = g.numVertices
     while (i < numIter && numActive > 0) {
 
       val accUpdates: RDD[(Vid, A)] =
-        graph.flatMapReduceNeighborhood(gather, mergeFunc, gatherDirection)
+        g.flatMapReduceNeighborhood(gather, mergeFunc, gatherDirection)
 
-      graph = graph.updateVertices(accUpdates, apply).cache()
+      g = g.updateVertices(accUpdates, apply).cache()
 
       // Scatter is basically a gather in the opposite direction so we reverse the edge direction
       val activeVertices: RDD[(Vid, Boolean)] =
-        graph.flatMapReduceNeighborhood(scatter, _ || _, scatterDirection.reverse)
+        g.flatMapReduceNeighborhood(scatter, _ || _, scatterDirection.reverse)
 
-      graph = graph.updateVertices(activeVertices, applyActive).cache()
+      g = g.updateVertices(activeVertices, applyActive).cache()
 
-      numActive = graph.vertices.map(v => if (v.data._1) 1 else 0).reduce( _ + _ )
+      numActive = g.vertices.map(v => if (v.data._1) 1 else 0).reduce( _ + _ )
       println("Number active vertices: " + numActive)
       i += 1
     }
-    graph.mapVertices(v => Vertex(v.id, v.data._2))
+
+    g.mapVertices(v => Vertex(v.id, v.data._2))
   }
 }
