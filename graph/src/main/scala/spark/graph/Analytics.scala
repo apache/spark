@@ -287,9 +287,7 @@ object Analytics {
         println("======================================")
 
         val sc = new SparkContext(host, "PageRank(" + fname + ")")
-        val graph = Graph.textFile(sc, fname, a => 1.0F)
-        graph.numVertexPartitions = numVPart
-        graph.numEdgePartitions = numEPart
+        val graph = Graph.textFile(sc, fname, a => 1.0F).withPartitioner(numVPart, numEPart)
         val startTime = System.currentTimeMillis
 
         val pr = Analytics.pagerank(graph, numIter)
