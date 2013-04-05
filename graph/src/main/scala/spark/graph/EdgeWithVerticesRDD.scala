@@ -23,6 +23,9 @@ class EdgeWithVerticesRDD[VD: ClassManifest, ED: ClassManifest](
     eTable: RDD[(Pid, EdgePartition[ED])])
   extends RDD[(VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]])](eTable.context, Nil) {
 
+  println(vTableReplicated.partitioner.get.numPartitions)
+  println(eTable.partitioner.get.numPartitions)
+
   assert(vTableReplicated.partitioner == eTable.partitioner)
 
   override def getDependencies: List[Dependency[_]] = {

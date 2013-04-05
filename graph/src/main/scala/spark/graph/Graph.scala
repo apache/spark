@@ -251,7 +251,7 @@ class Graph[VD: ClassManifest, ED: ClassManifest] protected (
       }
     }, preservesPartitioning = true).cache()
 
-    new Graph(newVTable.partitioner.size, eTable.partitioner.size, null, null, newVTable, eTable)
+    new Graph(newVTable.partitions.size, eTable.partitions.size, null, null, newVTable, eTable)
   }
 
   // def mapPartitions[U: ClassManifest](
