@@ -22,6 +22,7 @@ from __future__ import with_statement
 import logging
 import os
 import random
+from retry_decorator import retry
 import shutil
 import subprocess
 import sys
@@ -541,6 +542,7 @@ def scp(host, opts, local_file, dest_file):
 
 
 # Run a command on a host through ssh, throwing an exception if ssh fails
+@retry(subprocess.CalledProcessError, tries=3, delay=30)
 def ssh(host, opts, command):
   subprocess.check_call(
       "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
