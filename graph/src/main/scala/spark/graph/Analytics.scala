@@ -5,7 +5,7 @@ import spark.SparkContext._
 
 // import breeze.linalg._
 
-object Analytics {
+object Analytics extends Logging {
 
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
@@ -265,18 +265,23 @@ object Analytics {
         println("======================================")
 
         val sc = new SparkContext(host, "PageRank(" + fname + ")")
-        val graph = Graph.textFile(sc, fname, a => 1.0F).withPartitioner(numVPart, numEPart)
+
+        val graph = Graph.textFile(sc, fname, a => 1.0F).withPartitioner(numVPart, numEPart).cache()
+
         val startTime = System.currentTimeMillis
+        logInfo("GRAPHX: starting tasks")
+        logInfo("GRAPHX: Number of vertices " + graph.vertices.count)
+        logInfo("GRAPHX: Number of edges " + graph.edges.count)
 
         val pr = Analytics.pagerank(graph, numIter)
         // val pr = if(isDynamic) Analytics.dynamicPagerank(graph, tol, numIter)
         //   else  Analytics.pagerank(graph, numIter)
-        println("Total rank: " + pr.vertices.map{ case Vertex(id,r) => r }.reduce(_+_) )
+        logInfo("GRAPHX: Total rank: " + pr.vertices.map{ case Vertex(id,r) => r }.reduce(_+_) )
         if (!outFname.isEmpty) {
           println("Saving pageranks of pages to " + outFname)
           pr.vertices.map{case Vertex(id, r) => id + "\t" + r}.saveAsTextFile(outFname)
         }
-        println("Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
+        logInfo("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
         sc.stop()
       }
 
