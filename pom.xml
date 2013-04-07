@@ -558,5 +558,59 @@
         </dependencies>
       </dependencyManagement>
     </profile>
+
+    <profile>
+      <id>hadoop2-yarn</id>
+      <properties>
+        <hadoop.major.version>2</hadoop.major.version>
+        <yarn.version>2.0.3-alpha</yarn.version>
+      </properties>
+
+      <repositories>
+        <repository>
+          <id>maven-root</id>
+          <name>Maven root repository</name>
+          <url>http://repo1.maven.org/maven2/</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+
+      <dependencyManagement>
+        <dependencies>
+          <!-- TODO: check versions, bringover from yarn branch ! -->
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client</artifactId>
+            <version>${yarn.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-api</artifactId>
+            <version>${yarn.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-common</artifactId>
+            <version>${yarn.version}</version>
+          </dependency>
+          <!-- Specify Avro version because Kafka also has it as a dependency -->
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>1.7.1.cloudera.2</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-ipc</artifactId>
+            <version>1.7.1.cloudera.2</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
+    </profile>
   </profiles>
 </project>

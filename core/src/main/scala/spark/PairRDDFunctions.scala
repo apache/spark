@@ -545,8 +545,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = new TaskAttemptID(jobtrackerID,
-        stageId, false, context.splitId, attemptNumber)
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, false, context.splitId, attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
@@ -565,7 +564,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
      * however we're only going to use this local OutputCommitter for
      * setupJob/commitJob, so we just use a dummy "map" task.
      */
-    val jobAttemptId = new TaskAttemptID(jobtrackerID, stageId, true, 0, 0)
+    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, true, 0, 0)
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)

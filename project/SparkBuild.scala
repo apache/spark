@@ -1,3 +1,4 @@
+
 import sbt._
 import sbt.Classpaths.publishTask
 import Keys._
@@ -10,12 +11,18 @@ import twirl.sbt.TwirlPlugin._
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
   // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
-  val HADOOP_VERSION = "1.0.4"
-  val HADOOP_MAJOR_VERSION = "1"
+  //val HADOOP_VERSION = "1.0.4"
+  //val HADOOP_MAJOR_VERSION = "1"
 
   // For Hadoop 2 versions such as "2.0.0-mr1-cdh4.1.1", set the HADOOP_MAJOR_VERSION to "2"
   //val HADOOP_VERSION = "2.0.0-mr1-cdh4.1.1"
   //val HADOOP_MAJOR_VERSION = "2"
+  //val HADOOP_YARN = false
+
+  // For Hadoop 2 YARN support
+  val HADOOP_VERSION = "2.0.3-alpha"
+  val HADOOP_MAJOR_VERSION = "2"
+  val HADOOP_YARN = true
 
   lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming)
 
@@ -129,7 +136,6 @@ object SparkBuild extends Build {
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
       "com.ning" % "compress-lzf" % "0.8.4",
-      "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION,
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.22",
@@ -142,8 +148,26 @@ object SparkBuild extends Build {
       "cc.spray" % "spray-server" % "1.0-M2.1",
       "cc.spray" %%  "spray-json" % "1.1.1",
       "org.apache.mesos" % "mesos" % "0.9.0-incubating"
-    ) ++ (if (HADOOP_MAJOR_VERSION == "2") Some("org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION) else None).toSeq,
-    unmanagedSourceDirectories in Compile <+= baseDirectory{ _ / ("src/hadoop" + HADOOP_MAJOR_VERSION + "/scala") }
+    ) ++ (
+      if (HADOOP_MAJOR_VERSION == "2") {
+        if (HADOOP_YARN) {
+          Seq(
+            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION,
+            "org.apache.hadoop" % "hadoop-yarn-api" % HADOOP_VERSION,
+            "org.apache.hadoop" % "hadoop-yarn-common" % HADOOP_VERSION
+          )
+        } else {
+          Seq(
+            "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION,
+            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION
+          )
+        }
+      } else {
+        Seq("org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION)
+      }),
+    unmanagedSourceDirectories in Compile <+= baseDirectory{ _ /
+      ( if (HADOOP_YARN && HADOOP_MAJOR_VERSION == "2") "src/hadoop2-yarn/scala" else "src/hadoop" + HADOOP_MAJOR_VERSION + "/scala" )
+    }
   ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
 
   def rootSettings = sharedSettings ++ Seq(
