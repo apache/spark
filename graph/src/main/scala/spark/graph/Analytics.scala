@@ -10,15 +10,27 @@ object Analytics {
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
    */
+  // def pagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
+  //   // Compute the out degree of each vertex
+  //   val pagerankGraph = graph.updateVertices[Int, (Int, Float)](graph.outDegrees,
+  //     (vertex, deg) => (deg.getOrElse(0), 1.0F)
+  //   )
+  //   GraphLab.iterateGA[(Int, Float), ED, Float](pagerankGraph)(
+  //     (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
+  //     (a: Float, b: Float) => a + b, // merge
+  //     (vertex, a: Option[Float]) => (vertex.data._1, (0.15F + 0.85F * a.getOrElse(0F))), // apply
+  //     numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
+  // }
   def pagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
     // Compute the out degree of each vertex
     val pagerankGraph = graph.updateVertices[Int, (Int, Float)](graph.outDegrees,
       (vertex, deg) => (deg.getOrElse(0), 1.0F)
     )
-    GraphLab.iterateGA[(Int, Float), ED, Float](pagerankGraph)(
+    GraphLab.iterateGA2[(Int, Float), ED, Float](pagerankGraph)(
       (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
       (a: Float, b: Float) => a + b, // merge
-      (vertex, a: Option[Float]) => (vertex.data._1, (0.15F + 0.85F * a.getOrElse(0F))), // apply
+      0.0F, // default
+      (vertex, a: Float) => (vertex.data._1, (0.15F + 0.85F * a)), // apply
       numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
   }
 

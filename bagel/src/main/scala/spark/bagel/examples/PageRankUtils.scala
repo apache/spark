@@ -13,16 +13,16 @@ import java.io.{InputStream, OutputStream, DataInputStream, DataOutputStream}
 import com.esotericsoftware.kryo._
 
 class PageRankUtils extends Serializable {
-  def computeWithCombiner(numVertices: Long, epsilon: Double)(
+  def computeWithCombiner(numVertices: Long, epsilon: Double, terminateSteps: Int = 10)(
     self: PRVertex, messageSum: Option[Double], superstep: Int
   ): (PRVertex, Array[PRMessage]) = {
     val newValue = messageSum match {
       case Some(msgSum) if msgSum != 0 =>
-        0.15 / numVertices + 0.85 * msgSum
+        0.15 + 0.85 * msgSum
       case _ => self.value
     }
 
-    val terminate = superstep >= 10
+    val terminate = superstep >= terminateSteps
 
     val outbox: Array[PRMessage] =
       if (!terminate)
