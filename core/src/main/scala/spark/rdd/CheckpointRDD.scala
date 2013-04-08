@@ -122,6 +122,6 @@ private[spark] object CheckpointRDD extends Logging {
     val cpRDD = new CheckpointRDD[Int](sc, path.toString)
     assert(cpRDD.partitions.length == rdd.partitions.length, "Number of partitions is not the same")
     assert(cpRDD.collect.toList == rdd.collect.toList, "Data of partitions not the same")
-    fs.delete(path)
+    fs.delete(path, true)
   }
 }
