@@ -17,7 +17,11 @@ import java.nio.ByteBuffer
 /**
  * Schedules the tasks within a single TaskSet in the ClusterScheduler.
  */
-private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSet) extends Schedulable with Logging {
+private[spark] class TaskSetManager(
+    sched: ClusterScheduler,
+    val taskSet: TaskSet)
+  extends Schedulable
+  with Logging {
 
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong

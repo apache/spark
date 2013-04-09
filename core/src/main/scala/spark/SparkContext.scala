@@ -146,7 +146,8 @@ class SparkContext(
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
-        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).newInstance().asInstanceOf[TaskSetQueuesManager]
+        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).
+                                   newInstance().asInstanceOf[TaskSetQueuesManager]
         scheduler.initialize(backend, taskSetQueuesManager)
         scheduler
 
@@ -166,7 +167,8 @@ class SparkContext(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val sparkUrl = localCluster.start()
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
-        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).newInstance().asInstanceOf[TaskSetQueuesManager]
+        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).
+                                   newInstance().asInstanceOf[TaskSetQueuesManager]
         scheduler.initialize(backend, taskSetQueuesManager)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
@@ -186,7 +188,8 @@ class SparkContext(
         } else {
           new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
         }
-        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).newInstance().asInstanceOf[TaskSetQueuesManager]
+        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).
+                                   newInstance().asInstanceOf[TaskSetQueuesManager]
         scheduler.initialize(backend, taskSetQueuesManager)
         scheduler
     }
@@ -602,7 +605,8 @@ class SparkContext(
     val callSite = Utils.getSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler,localProperties.value)
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler
+                                    ,localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result

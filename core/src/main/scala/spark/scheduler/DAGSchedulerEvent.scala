@@ -23,7 +23,8 @@ private[spark] case class JobSubmitted(
     partitions: Array[Int],
     allowLocal: Boolean,
     callSite: String,
-    listener: JobListener, properties: Properties = null)
+    listener: JobListener,
+    properties: Properties = null)
   extends DAGSchedulerEvent
 
 private[spark] case class CompletionEvent(

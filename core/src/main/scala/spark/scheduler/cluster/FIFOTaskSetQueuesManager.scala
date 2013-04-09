@@ -28,13 +28,11 @@ private[spark] class FIFOTaskSetQueuesManager extends TaskSetQueuesManager with 
     activeTaskSetsQueue.foreach(_.executorLost(executorId, host))
   }
 
-  override def receiveOffer(execId:String, host:String,avaiableCpus:Double):Option[TaskDescription] =
-  {
-    for(manager <- activeTaskSetsQueue.sortWith(tasksetSchedulingAlgorithm.comparator))
-    {
+  override def receiveOffer(execId:String, host:String,avaiableCpus:Double):Option[TaskDescription] = {
+ 
+    for (manager <- activeTaskSetsQueue.sortWith(tasksetSchedulingAlgorithm.comparator)) {
       val task = manager.slaveOffer(execId,host,avaiableCpus)
-      if (task != None)
-      {
+      if (task != None) {
         return task
       }
     }

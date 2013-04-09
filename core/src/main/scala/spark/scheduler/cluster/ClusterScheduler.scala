@@ -155,13 +155,11 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       // Build a list of tasks to assign to each slave
       val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
       val availableCpus = offers.map(o => o.cores).toArray
-      for (i <- 0 until offers.size)
-      {
+      for (i <- 0 until offers.size){
             var launchedTask = true
             val execId = offers(i).executorId
             val host = offers(i).hostname
-            while (availableCpus(i) > 0 && launchedTask)
-            {
+            while (availableCpus(i) > 0 && launchedTask){
               launchedTask = false
               taskSetQueuesManager.receiveOffer(execId,host,availableCpus(i)) match {
               case Some(task) =>

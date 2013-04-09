@@ -9,34 +9,25 @@ private[spark] trait SchedulingAlgorithm {
   def comparator(s1: Schedulable,s2: Schedulable): Boolean
 }
 
-private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm
-{
-  override def comparator(s1: Schedulable, s2: Schedulable): Boolean =
-  {
+private[spark] class FIFOSchedulingAlgorithm extends SchedulingAlgorithm {
+  override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
     val priority1 = s1.priority
     val priority2 = s2.priority
     var res = Math.signum(priority1 - priority2)
-    if (res == 0)
-    {
+    if (res == 0) {
         val stageId1 = s1.stageId
         val stageId2 = s2.stageId
         res = Math.signum(stageId1 - stageId2)
     }
     if (res < 0)
-    {
       return true
-    }
     else
-    {
       return false
-    }
   }
 }
 
-private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm
-{
-  def comparator(s1: Schedulable, s2:Schedulable): Boolean =
-  {
+private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
+  def comparator(s1: Schedulable, s2:Schedulable): Boolean = {
     val minShare1 = s1.minShare
     val minShare2 = s2.minShare
     val runningTasks1 = s1.runningTasks
@@ -49,22 +40,15 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm
     val taskToWeightRatio2 = runningTasks2.toDouble / s2.weight.toDouble
     var res:Boolean = true
 
-    if(s1Needy && !s2Needy)
-    {
+    if (s1Needy && !s2Needy)
       res = true
-    }
     else if(!s1Needy && s2Needy)
-    {
       res = false
-    }
     else if (s1Needy && s2Needy)
-    {
       res = minShareRatio1 <= minShareRatio2
-    }
     else
-    {
       res = taskToWeightRatio1 <= taskToWeightRatio2
-    }
+
     return res
   }
 }

@@ -38,71 +38,17 @@ private[spark] class FairTaskSetQueuesManager extends TaskSetQueuesManager with 
 
   loadPoolProperties()
 
-  def loadPoolProperties() {
-    //first check if the file exists
-    val file = new File(schedulerAllocFile)
-    if(file.exists())
-    {
-      val xml = XML.loadFile(file)
-      for (poolNode <- (xml \\ POOL_POOLS_PROPERTY)) {
-
-        val poolName = (poolNode \ POOL_POOL_NAME_PROPERTY).text
-        var schedulingMode = POOL_DEFAULT_SCHEDULING_MODE
-        var minShares = POOL_DEFAULT_MINIMUM_SHARES
-        var weight = POOL_DEFAULT_WEIGHT
-
-        val xmlSchedulingMode = (poolNode \ POOL_SCHEDULING_MODE_PROPERTY).text
-        if( xmlSchedulingMode != "")
-        {
-          try
-          {
-              schedulingMode = SchedulingMode.withName(xmlSchedulingMode)
-          }
-          catch{
-            case e:Exception => logInfo("Error xml schedulingMode, using default schedulingMode")
-          }
-        }
-
-        val xmlMinShares = (poolNode \ POOL_MINIMUM_SHARES_PROPERTY).text
-        if(xmlMinShares != "")
-        {
-          minShares = xmlMinShares.toInt
-        }
-
-        val xmlWeight = (poolNode \ POOL_WEIGHT_PROPERTY).text
-        if(xmlWeight != "")
-        {
-          weight = xmlWeight.toInt
-        }
-
-        val pool = new Pool(poolName,schedulingMode,minShares,weight)
-        pools += pool
-        poolNameToPool(poolName) = pool
-        logInfo("Create new pool with name:%s,schedulingMode:%s,minShares:%d,weight:%d".format(poolName,schedulingMode,minShares,weight))
-      }
-    }
-
-      if(!poolNameToPool.contains(POOL_DEFAULT_POOL_NAME))
-      {
-        val pool = new Pool(POOL_DEFAULT_POOL_NAME, POOL_DEFAULT_SCHEDULING_MODE,POOL_DEFAULT_MINIMUM_SHARES,POOL_DEFAULT_WEIGHT)
-        pools += pool
-        poolNameToPool(POOL_DEFAULT_POOL_NAME) = pool
-        logInfo("Create default pool with name:%s,schedulingMode:%s,minShares:%d,weight:%d".format(POOL_DEFAULT_POOL_NAME,POOL_DEFAULT_SCHEDULING_MODE,POOL_DEFAULT_MINIMUM_SHARES,POOL_DEFAULT_WEIGHT))
-      }
-  }
-
   override def addTaskSetManager(manager: TaskSetManager) {
     var poolName = POOL_DEFAULT_POOL_NAME
-    if(manager.taskSet.properties != null)
-    {
+    if (manager.taskSet.properties != null) {
       poolName = manager.taskSet.properties.getProperty(POOL_FAIR_SCHEDULER_PROPERTIES,POOL_DEFAULT_POOL_NAME)
-      if(!poolNameToPool.contains(poolName))
-      {
+      if (!poolNameToPool.contains(poolName)) {
         //we will create a new pool that user has configured in app instead of being defined in xml file
         val pool = new Pool(poolName,POOL_DEFAULT_SCHEDULING_MODE,POOL_DEFAULT_MINIMUM_SHARES,POOL_DEFAULT_WEIGHT)
         pools += pool
         poolNameToPool(poolName) = pool
-        logInfo("Create pool with name:%s,schedulingMode:%s,minShares:%d,weight:%d".format(poolName,POOL_DEFAULT_SCHEDULING_MODE,POOL_DEFAULT_MINIMUM_SHARES,POOL_DEFAULT_WEIGHT))
+        logInfo("Create pool with name:%s,schedulingMode:%s,minShares:%d,weight:%d".format(
+          poolName,POOL_DEFAULT_SCHEDULING_MODE,POOL_DEFAULT_MINIMUM_SHARES,POOL_DEFAULT_WEIGHT))
       }
     }
     poolNameToPool(poolName).addTaskSetManager(manager)
@@ -110,10 +56,8 @@ private[spark] class FairTaskSetQueuesManager extends TaskSetQueuesManager with 
   }
 
   override def removeTaskSetManager(manager: TaskSetManager) {
-
     var poolName = POOL_DEFAULT_POOL_NAME
-    if(manager.taskSet.properties != null)
-    {
+    if (manager.taskSet.properties != null) {
       poolName = manager.taskSet.properties.getProperty(POOL_FAIR_SCHEDULER_PROPERTIES,POOL_DEFAULT_POOL_NAME)
     }
     logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id,poolName))
@@ -124,8 +68,7 @@ private[spark] class FairTaskSetQueuesManager extends TaskSetQueuesManager with 
 
   override def taskFinished(manager: TaskSetManager) {
     var poolName = POOL_DEFAULT_POOL_NAME
-    if(manager.taskSet.properties != null)
-    {
+    if (manager.taskSet.properties != null) {
       poolName = manager.taskSet.properties.getProperty(POOL_FAIR_SCHEDULER_PROPERTIES,POOL_DEFAULT_POOL_NAME)
     }
     val pool = poolNameToPool(poolName)
@@ -139,19 +82,15 @@ private[spark] class FairTaskSetQueuesManager extends TaskSetQueuesManager with 
     }
   }
 
-  override def receiveOffer(execId: String,host:String,avaiableCpus:Double):Option[TaskDescription] =
-  {
-
+  override def receiveOffer(execId: String,host:String,avaiableCpus:Double):Option[TaskDescription] = {
    val sortedPools = pools.sortWith(poolScheduleAlgorithm.comparator)
-   for(pool <- sortedPools)
-   {
-     logDebug("poolName:%s,tasksetNum:%d,minShares:%d,runningTasks:%d".format(pool.poolName,pool.activeTaskSetsQueue.length,pool.minShare,pool.runningTasks))
+   for (pool <- sortedPools) {
+     logDebug("poolName:%s,tasksetNum:%d,minShares:%d,runningTasks:%d".format(
+       pool.poolName,pool.activeTaskSetsQueue.length,pool.minShare,pool.runningTasks))
    }
-   for (pool <- sortedPools)
-   {
+   for (pool <- sortedPools) {
      val task = pool.receiveOffer(execId,host,avaiableCpus)
-     if(task != None)
-     {
+     if(task != None) {
          pool.runningTasks += 1
          return task
      }
@@ -159,14 +98,60 @@ private[spark] class FairTaskSetQueuesManager extends TaskSetQueuesManager with 
    return None
   }
 
-  override def checkSpeculatableTasks(): Boolean =
-  {
+  override def checkSpeculatableTasks(): Boolean = {
     var shouldRevive = false
-    for (pool <- pools)
-    {
+    for (pool <- pools) {
       shouldRevive |= pool.checkSpeculatableTasks()
     }
     return shouldRevive
   }
 
+  def loadPoolProperties() {
+    //first check if the file exists
+    val file = new File(schedulerAllocFile)
+    if (file.exists()) {
+      val xml = XML.loadFile(file)
+      for (poolNode <- (xml \\ POOL_POOLS_PROPERTY)) {
+
+        val poolName = (poolNode \ POOL_POOL_NAME_PROPERTY).text
+        var schedulingMode = POOL_DEFAULT_SCHEDULING_MODE
+        var minShares = POOL_DEFAULT_MINIMUM_SHARES
+        var weight = POOL_DEFAULT_WEIGHT
+
+        val xmlSchedulingMode = (poolNode \ POOL_SCHEDULING_MODE_PROPERTY).text
+        if (xmlSchedulingMode != "") {
+          try{
+              schedulingMode = SchedulingMode.withName(xmlSchedulingMode)
+          }
+          catch{
+            case e:Exception => logInfo("Error xml schedulingMode, using default schedulingMode")
+          }
+        }
+
+        val xmlMinShares = (poolNode \ POOL_MINIMUM_SHARES_PROPERTY).text 
+        if (xmlMinShares != "") {
+          minShares = xmlMinShares.toInt
+        }
+
+        val xmlWeight = (poolNode \ POOL_WEIGHT_PROPERTY).text
+        if (xmlWeight != "") {
+          weight = xmlWeight.toInt
+        }
+
+        val pool = new Pool(poolName,schedulingMode,minShares,weight)
+        pools += pool
+        poolNameToPool(poolName) = pool
+        logInfo("Create new pool with name:%s,schedulingMode:%s,minShares:%d,weight:%d".format(
+          poolName,schedulingMode,minShares,weight))
+      }
+    }
+
+      if (!poolNameToPool.contains(POOL_DEFAULT_POOL_NAME)) {
+        val pool = new Pool(POOL_DEFAULT_POOL_NAME, POOL_DEFAULT_SCHEDULING_MODE,POOL_DEFAULT_MINIMUM_SHARES,POOL_DEFAULT_WEIGHT)
+        pools += pool
+        poolNameToPool(POOL_DEFAULT_POOL_NAME) = pool
+        logInfo("Create default pool with name:%s,schedulingMode:%s,minShares:%d,weight:%d".format(
+          POOL_DEFAULT_POOL_NAME,POOL_DEFAULT_SCHEDULING_MODE,POOL_DEFAULT_MINIMUM_SHARES,POOL_DEFAULT_WEIGHT))
+      }
+  }
  }
