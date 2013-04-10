@@ -8,7 +8,7 @@ object MultiBroadcastTest {
       System.err.println("Usage: BroadcastTest <master> [<slices>] [numElem]")
       System.exit(1)
     }
-    
+
     val sc = new SparkContext(args(0), "Broadcast Test",
       System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
@@ -19,7 +19,7 @@ object MultiBroadcastTest {
     for (i <- 0 until arr1.length) {
       arr1(i) = i
     }
-    
+
     var arr2 = new Array[Int](num)
     for (i <- 0 until arr2.length) {
       arr2(i) = i
@@ -30,7 +30,7 @@ object MultiBroadcastTest {
     sc.parallelize(1 to 10, slices).foreach {
       i => println(barr1.value.size + barr2.value.size)
     }
-    
+
     System.exit(0)
   }
 }
