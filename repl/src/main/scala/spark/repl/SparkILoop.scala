@@ -121,7 +121,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     intp.reporter printMessage msg
   }
 
-  def isAsync = !settings.Yreplsync.value
+  // def isAsync = !settings.Yreplsync.value
+  def isAsync = false
   // lazy val power = new Power(intp, new StdReplVals(this))(tagOfStdReplVals, classTag[StdReplVals])
   def history = in.history
 
