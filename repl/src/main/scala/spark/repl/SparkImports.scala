@@ -147,11 +147,16 @@ trait SparkImports {
     // add code for a new object to hold some imports
     def addWrapper() {
       val impname = nme.INTERPRETER_IMPORT_WRAPPER
-      code append "object %s {\n".format(impname)
-      trailingBraces append "}\n"
+      code append "class %sC extends Serializable {\n".format(impname)
+      trailingBraces append "}\nval " + impname + " = new " + impname + "C;\n"
       accessPath append ("." + impname)
 
       currentImps.clear
+      // code append "object %s {\n".format(impname)
+      // trailingBraces append "}\n"
+      // accessPath append ("." + impname)
+
+      // currentImps.clear
     }
 
     addWrapper()
@@ -179,8 +184,11 @@ trait SparkImports {
         case x =>
           for (imv <- x.definedNames) {
             if (currentImps contains imv) addWrapper()
-
-            code append ("import " + (req fullPath imv) + "\n")
+            val objName = req.lineRep.readPath
+            val valName = "$VAL" + newValId();
+            code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
+            code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
+            // code append ("import " + (req fullPath imv) + "\n")
             currentImps += imv
           }
       }
@@ -196,4 +204,11 @@ trait SparkImports {
 
   private def membersAtPickler(sym: Symbol): List[Symbol] =
     beforePickler(sym.info.nonPrivateMembers.toList)
+
+  private var curValId = 0
+
+  private def newValId(): Int = {
+    curValId += 1
+    curValId
+  }
 }

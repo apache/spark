@@ -806,10 +806,10 @@ import spark.Logging
      * following accessPath into the outer one.
      */
     def resolvePathToSymbol(accessPath: String): Symbol = {
-      val readRoot  = getRequiredModule(readPath)   // the outermost wrapper
+      // val readRoot  = getRequiredModule(readPath)   // the outermost wrapper
       // MATEI: Changed this to getClass because the root object is no longer a module (Scala singleton object)
-      // PRASHANT: Root object is still an object and experimentations are on.
-      //val readRoot  = definitions.getClass(newTypeName(readPath))   // the outermost wrapper
+
+      val readRoot  = definitions.getClass(newTypeName(readPath))   // the outermost wrapper
       (accessPath split '.').foldLeft(readRoot: Symbol) {
         case (sym, "")    => sym
         case (sym, name)  => afterTyper(termMember(sym, name))
@@ -887,15 +887,17 @@ import spark.Logging
       importsCode(referencedNames.toSet)
 
     /** Code to access a variable with the specified name */
-    def fullPath(vname: String) = (
-      lineRep.readPath + accessPath + ".`%s`".format(vname)
-    )
+    def fullPath(vname: String) = {
+      // lineRep.readPath + accessPath + ".`%s`".format(vname)
+      lineRep.readPath + ".INSTANCE" + accessPath + ".`%s`".format(vname)
+    }
       /** Same as fullpath, but after it has been flattened, so:
        *  $line5.$iw.$iw.$iw.Bippy      // fullPath
        *  $line5.$iw$$iw$$iw$Bippy      // fullFlatName
        */
       def fullFlatName(name: String) =
-        lineRep.readPath + accessPath.replace('.', '$') + nme.NAME_JOIN_STRING + name
+        // lineRep.readPath + accessPath.replace('.', '$') + nme.NAME_JOIN_STRING + name
+        lineRep.readPath + ".INSTANCE" + accessPath.replace('.', '$') + nme.NAME_JOIN_STRING + name
 
     /** The unmangled symbol name, but supplemented with line info. */
     def disambiguated(name: Name): String = name + " (in " + lineRep + ")"
@@ -922,24 +924,25 @@ import spark.Logging
           "def $trees = if ($req eq null) Nil else $req.trees".format(lineRep.readName, path, reqId)
         )
       }
-      //TODO:FIXME,  serialized
-      /*
+
       val preamble = """
         |class %s extends Serializable {
-        |  %s%s
-      """.stripMargin.format(lineRep.readName, importsPreamble, indentCode(toCompute))
+        |  %s%s%s
+      """.stripMargin.format(lineRep.readName, envLines.map("  " + _ + ";\n").mkString, importsPreamble, indentCode(toCompute))
       val postamble = importsTrailer + "\n}" + "\n" +
         "object " + lineRep.readName + " {\n" +
         "  val INSTANCE = new " + lineRep.readName + "();\n" +
         "}\n"
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
-      */
+
+      /*
       val preamble = """
         |object %s extends Serializable {
         |%s%s%s
       """.stripMargin.format(lineRep.readName, envLines.map("  " + _ + ";\n").mkString, importsPreamble, indentCode(toCompute))
       val postamble = importsTrailer + "\n}"
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
+      */
 
     }
 
@@ -965,9 +968,8 @@ import spark.Logging
       |    (""
       """.stripMargin.format(
         lineRep.evalName, evalResult, lineRep.printName,
-        executionWrapper, lineRep.readName + accessPath
+        executionWrapper, lineRep.readName + ".INSTANCE" + accessPath
       )
-
       val postamble = """
       |    )
       |  }
@@ -1246,8 +1248,10 @@ object SparkIMain {
   // $line3.$read.$iw.$iw.Bippy =
   //   $line3.$read$$iw$$iw$Bippy@4a6a00ca
   private def removeLineWrapper(s: String) = s.replaceAll("""\$line\d+[./]\$(read|eval|print)[$.]""", "")
-  private def removeIWPackages(s: String)  = s.replaceAll("""\$(iw|read|eval|print)[$.]""", "")
-  def stripString(s: String)               = removeIWPackages(removeLineWrapper(s))
+  private def removeIWPackages(s: String)  = s.replaceAll("""\$(iw|iwC|read|eval|print)[$.]""", "")
+  private def removeSparkVals(s: String)   = s.replaceAll("""\$VAL[0-9]+[$.]""", "")
+
+  def stripString(s: String)               = removeSparkVals(removeIWPackages(removeLineWrapper(s)))
 
   trait CodeAssembler[T] {
     def preamble: String
