@@ -22,7 +22,6 @@ from __future__ import with_statement
 import logging
 import os
 import random
-from retry_decorator import retry
 import shutil
 import subprocess
 import sys
@@ -541,12 +540,24 @@ def scp(host, opts, local_file, dest_file):
       (opts.identity_file, local_file, opts.user, host, dest_file), shell=True)
 
 
-# Run a command on a host through ssh, throwing an exception if ssh fails
-@retry(subprocess.CalledProcessError, tries=3, delay=30)
+# Run a command on a host through ssh, retrying up to two times
+# and then throwing an exception if ssh continues to fail.
 def ssh(host, opts, command):
-  subprocess.check_call(
-      "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
-      (opts.identity_file, opts.user, host, command), shell=True)
+  tries = 0
+  while True:
+    try:
+      return subprocess.check_call(
+        "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
+        (opts.identity_file, opts.user, host, command), shell=True)
+    except subprocess.CalledProcessError as e:
+      if (tries > 2):
+        raise e
+      print "Error connecting to host {0}, sleeping 30".format(e)
+      time.sleep(30)
+      tries = tries + 1
+    
+    
+    
 
 
 # Gets a list of zones to launch instances in
