@@ -44,7 +44,10 @@ object SparkBuild extends Build {
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
 
-    // shared between both core and streaming.
+    // Only allow one test at a time, even across projects, since they run in the same JVM
+    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
+
+    // Shared between both core and streaming.
     resolvers ++= Seq("Akka Repository" at "http://repo.akka.io/releases/"),
 
     // For Sonatype publishing
@@ -98,7 +101,6 @@ object SparkBuild extends Build {
       "com.novocode" % "junit-interface" % "0.9" % "test",
       "org.easymock" % "easymock" % "3.1" % "test"
     ),
-    parallelExecution := false,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
       const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) },
