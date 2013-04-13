@@ -121,7 +121,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     val toRemove = new HashSet[BlockManagerId]
     for (info <- blockManagerInfo.values) {
       if (info.lastSeenMs < minSeenTime) {
-        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: "
+        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: " +
           (now - info.lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
         toRemove += info.blockManagerId
       }
