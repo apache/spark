@@ -47,14 +47,15 @@ case "$1" in
 esac
 
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
-  if [ `command -v scala` ]; then
-    RUNNER="scala"
+  if [ "$SCALA_HOME" ]; then
+    RUNNER="${SCALA_HOME}/bin/scala"
   else
-    if [ -z "$SCALA_HOME" ]; then
-      echo "SCALA_HOME is not set" >&2
+    if [ `command -v scala` ]; then
+      RUNNER="scala"
+    else
+      echo "SCALA_HOME is not set and scala is not in PATH" >&2
       exit 1
     fi
-    RUNNER="${SCALA_HOME}/bin/scala"
   fi
 else
   if [ `command -v java` ]; then
