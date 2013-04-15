@@ -2,14 +2,10 @@ package org.apache.hadoop.mapred
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.io.Text
 
 import java.text.SimpleDateFormat
 import java.text.NumberFormat
 import java.io.IOException
-import java.net.URI
 import java.util.Date
 
 import spark.Logging
@@ -25,8 +21,6 @@ import spark.SerializableWritable
  */
 class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRedUtil with Serializable {
 
-  println("Created HadoopWriter")
-  
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
   
@@ -43,7 +37,6 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRe
   @transient private var taskContext: TaskAttemptContext = null
 
   def preSetup() {
-    println("preSetup")
     setIDs(0, 0, 0)
     setConfParams()
     
@@ -53,20 +46,17 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRe
 
 
   def setup(jobid: Int, splitid: Int, attemptid: Int) {
-    println("setup")
     setIDs(jobid, splitid, attemptid)
     setConfParams() 
   }
 
   def open() {
-    println("open")
     val numfmt = NumberFormat.getInstance()
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
     
     val outputName = "part-"  + numfmt.format(splitID)
     val path = FileOutputFormat.getOutputPath(conf.value)
-    println("open outputName = " + outputName + ", fs for " + conf.value)
     val fs: FileSystem = {
       if (path != null) {
         path.getFileSystem(conf.value)
@@ -81,7 +71,6 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRe
   }
 
   def write(key: AnyRef, value: AnyRef) {
-    println("write " + key + " = " + value)
     if (writer!=null) {
       //println (">>> Writing ("+key.toString+": " + key.getClass.toString + ", " + value.toString + ": " + value.getClass.toString + ")")
       writer.write(key, value)
@@ -91,19 +80,16 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRe
   }
 
   def close() {
-    println("close")
     writer.close(Reporter.NULL)
   }
 
   def commit() {
-    println("commit")
     val taCtxt = getTaskContext()
     val cmtr = getOutputCommitter() 
     if (cmtr.needsTaskCommit(taCtxt)) {
       try {
         cmtr.commitTask(taCtxt)
         logInfo (taID + ": Committed")
-        println("Committed = " + taID)
       } catch {
         case e: IOException => { 
           logError("Error committing the output of task: " + taID.value, e)
@@ -112,13 +98,17 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRe
         }
       }   
     } else {
-      println("No need to commit")
       logWarning ("No need to commit output of task: " + taID.value)
     }
   }
 
+  def commitJob() {
+    // always ? Or if cmtr.needsTaskCommit ?
+    val cmtr = getOutputCommitter()
+    cmtr.commitJob(getJobContext())
+  }
+
   def cleanup() {
-    println("cleanup")
     getOutputCommitter().cleanupJob(getJobContext())
   }
 

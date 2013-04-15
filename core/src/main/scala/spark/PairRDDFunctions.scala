@@ -636,6 +636,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     }
 
     self.context.runJob(self, writeToFile _)
+    writer.commitJob()
     writer.cleanup()
   }
 

@@ -18,7 +18,6 @@ class FileSuite extends FunSuite with LocalSparkContext {
     val outputDir = new File(tempDir, "output").getAbsolutePath
     val nums = sc.makeRDD(1 to 4)
     nums.saveAsTextFile(outputDir)
-    println("outputDir = " + outputDir)
     // Read the plain text file and check it's OK
     val outputFile = new File(outputDir, "part-00000")
     val content = Source.fromFile(outputFile).mkString
