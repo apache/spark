@@ -75,17 +75,18 @@ private[spark] object StandaloneExecutorBackend {
   def run0(args: Product) {
     assert(4 == args.productArity)
     runImpl(args.productElement(0).asInstanceOf[String], 
-      args.productElement(0).asInstanceOf[String], 
-      args.productElement(0).asInstanceOf[String], 
-      args.productElement(0).asInstanceOf[Int])
+      args.productElement(1).asInstanceOf[String],
+      args.productElement(2).asInstanceOf[String],
+      args.productElement(3).asInstanceOf[Int])
   }
   
   private def runImpl(driverUrl: String, executorId: String, hostname: String, cores: Int) {
+    // Debug code
+    Utils.checkHost(hostname)
+
     // Create a new ActorSystem to run the backend, because we can't create a SparkEnv / Executor
     // before getting started with all our system properties, etc
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0)
-    // Debug code
-    Utils.checkHost(hostname)
     // set it
     val sparkHostPort = hostname + ":" + boundPort
     System.setProperty("spark.hostPort", sparkHostPort)

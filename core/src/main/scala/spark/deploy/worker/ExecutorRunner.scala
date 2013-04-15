@@ -70,7 +70,7 @@ private[spark] class ExecutorRunner(
   /** Replace variables such as {{EXECUTOR_ID}} and {{CORES}} in a command argument passed to us */
   def substituteVariables(argument: String): String = argument match {
     case "{{EXECUTOR_ID}}" => execId.toString
-    case "{{HOSTPORT}}" => hostPort
+    case "{{HOSTNAME}}" => Utils.parseHostPort(hostPort)._1
     case "{{CORES}}" => cores.toString
     case other => other
   }

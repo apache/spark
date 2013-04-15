@@ -54,10 +54,11 @@ private[spark] class Worker(
   def createWorkDir() {
     workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))
     try {
-      if (!workDir.exists() && !workDir.mkdirs()) {
+      if ( (workDir.exists() && !workDir.isDirectory) || (!workDir.exists() && !workDir.mkdirs()) ) {
         logError("Failed to create work directory " + workDir)
         System.exit(1)
       }
+      assert (workDir.isDirectory)
     } catch {
       case e: Exception =>
         logError("Failed to create work directory " + workDir, e)
