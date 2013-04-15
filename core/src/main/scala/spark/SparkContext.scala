@@ -37,7 +37,7 @@ import spark.partial.PartialResult
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
 import spark.scheduler._
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
+import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.BlockManagerUI
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
@@ -59,7 +59,10 @@ class SparkContext(
     val appName: String,
     val sparkHome: String = null,
     val jars: Seq[String] = Nil,
-    val environment: Map[String, String] = Map())
+    val environment: Map[String, String] = Map(),
+    // This is used only by yarn for now, but should be relevant to other cluster types (mesos, etc) too.
+    // This is typically generated from InputFormatInfo.computePreferredLocations .. host, set of data-local splits on host
+    val preferredNodeLocationData: scala.collection.Map[String, scala.collection.Set[SplitInfo]] = scala.collection.immutable.Map())
   extends Logging {
 
   // Ensure logging is initialized before we spawn any threads
@@ -67,7 +70,7 @@ class SparkContext(
 
   // Set Spark driver host and port system properties
   if (System.getProperty("spark.driver.host") == null) {
-    System.setProperty("spark.driver.host", Utils.localIpAddress)
+    System.setProperty("spark.driver.host", Utils.localHostName())
   }
   if (System.getProperty("spark.driver.port") == null) {
     System.setProperty("spark.driver.port", "0")
@@ -99,7 +102,7 @@ class SparkContext(
 
 
   // Add each JAR given through the constructor
-  jars.foreach { addJar(_) }
+  if (jars != null) jars.foreach { addJar(_) }
 
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
@@ -111,7 +114,7 @@ class SparkContext(
       executorEnvs(key) = value
     }
   }
-  executorEnvs ++= environment
+  if (environment != null) executorEnvs ++= environment
 
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
@@ -164,6 +167,22 @@ class SparkContext(
         }
         scheduler
 
+      case "yarn-standalone" =>
+        val scheduler = try {
+          val clazz = Class.forName("spark.scheduler.cluster.YarnClusterScheduler")
+          val cons = clazz.getConstructor(classOf[SparkContext])
+          cons.newInstance(this).asInstanceOf[ClusterScheduler]
+        } catch {
+          // TODO: Enumerate the exact reasons why it can fail
+          // But irrespective of it, it means we cannot proceed !
+          case th: Throwable => {
+            throw new SparkException("YARN mode not available ?", th)
+          }
+        }
+        val backend = new StandaloneSchedulerBackend(scheduler, this.env.actorSystem)
+        scheduler.initialize(backend)
+        scheduler
+
       case _ =>
         if (MESOS_REGEX.findFirstIn(master).isEmpty) {
           logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
@@ -183,7 +202,7 @@ class SparkContext(
   }
   taskScheduler.start()
 
-  private var dagScheduler = new DAGScheduler(taskScheduler)
+  @volatile private var dagScheduler = new DAGScheduler(taskScheduler)
   dagScheduler.start()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
@@ -206,6 +225,9 @@ class SparkContext(
   }
 
   private[spark] var checkpointDir: Option[String] = None
+
+  // Post init
+  taskScheduler.postStartHook()
 
   // Methods for creating RDDs
 
@@ -471,7 +493,7 @@ class SparkContext(
    */
   def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
     env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
-      (blockManagerId.ip + ":" + blockManagerId.port, mem)
+      (blockManagerId.host + ":" + blockManagerId.port, mem)
     }
   }
 
@@ -527,10 +549,13 @@ class SparkContext(
 
   /** Shut down the SparkContext. */
   def stop() {
-    if (dagScheduler != null) {
+    // Do this only if not stopped already - best case effort.
+    // prevent NPE if stopped more than once.
+    val dagSchedulerCopy = dagScheduler
+    dagScheduler = null
+    if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
-      dagScheduler.stop()
-      dagScheduler = null
+      dagSchedulerCopy.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
@@ -545,6 +570,7 @@ class SparkContext(
       logInfo("SparkContext already stopped")
     }
   }
+
 
   /**
    * Get Spark's home location from either a value set through the constructor,

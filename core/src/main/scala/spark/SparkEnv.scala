@@ -72,6 +72,16 @@ object SparkEnv extends Logging {
       System.setProperty("spark.driver.port", boundPort.toString)
     }
 
+    // set only if unset until now.
+    if (System.getProperty("spark.hostPort", null) == null) {
+      if (!isDriver){
+        // unexpected
+        Utils.logErrorWithStack("Unexpected NOT to have spark.hostPort set")
+      }
+      Utils.checkHost(hostname)
+      System.setProperty("spark.hostPort", hostname + ":" + boundPort)
+    }
+
     val classLoader = Thread.currentThread.getContextClassLoader
 
     // Create an instance of the class named by the given Java system property, or by
@@ -88,9 +98,10 @@ object SparkEnv extends Logging {
         logInfo("Registering " + name)
         actorSystem.actorOf(Props(newActor), name = name)
       } else {
-        val driverIp: String = System.getProperty("spark.driver.host", "localhost")
+        val driverHost: String = System.getProperty("spark.driver.host", "localhost")
         val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
-        val url = "akka://spark@%s:%s/user/%s".format(driverIp, driverPort, name)
+        Utils.checkHost(driverHost, "Expected hostname")
+        val url = "akka://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
         logInfo("Connecting to " + name + ": " + url)
         actorSystem.actorFor(url)
       }

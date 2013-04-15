@@ -12,15 +12,19 @@ import spark.scheduler.cluster.RegisteredExecutor
 import spark.scheduler.cluster.LaunchTask
 import spark.scheduler.cluster.RegisterExecutorFailed
 import spark.scheduler.cluster.RegisterExecutor
+import spark.Utils
+import spark.deploy.SparkHadoopUtil
 
 private[spark] class StandaloneExecutorBackend(
     driverUrl: String,
     executorId: String,
-    hostname: String,
+    hostPort: String,
     cores: Int)
   extends Actor
   with ExecutorBackend
   with Logging {
+
+  Utils.checkHostPort(hostPort, "Expected hostport")
 
   var executor: Executor = null
   var driver: ActorRef = null
@@ -28,7 +32,7 @@ private[spark] class StandaloneExecutorBackend(
   override def preStart() {
     logInfo("Connecting to driver: " + driverUrl)
     driver = context.actorFor(driverUrl)
-    driver ! RegisterExecutor(executorId, hostname, cores)
+    driver ! RegisterExecutor(executorId, hostPort, cores)
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     context.watch(driver) // Doesn't work with remote actors, but useful for testing
   }
@@ -36,7 +40,8 @@ private[spark] class StandaloneExecutorBackend(
   override def receive = {
     case RegisteredExecutor(sparkProperties) =>
       logInfo("Successfully registered with driver")
-      executor = new Executor(executorId, hostname, sparkProperties)
+      // Make this host instead of hostPort ?
+      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -63,11 +68,29 @@ private[spark] class StandaloneExecutorBackend(
 
 private[spark] object StandaloneExecutorBackend {
   def run(driverUrl: String, executorId: String, hostname: String, cores: Int) {
+    SparkHadoopUtil.runAsUser(run0, Tuple4[Any, Any, Any, Any] (driverUrl, executorId, hostname, cores))
+  }
+
+  // This will be run 'as' the user
+  def run0(args: Product) {
+    assert(4 == args.productArity)
+    runImpl(args.productElement(0).asInstanceOf[String], 
+      args.productElement(0).asInstanceOf[String], 
+      args.productElement(0).asInstanceOf[String], 
+      args.productElement(0).asInstanceOf[Int])
+  }
+  
+  private def runImpl(driverUrl: String, executorId: String, hostname: String, cores: Int) {
     // Create a new ActorSystem to run the backend, because we can't create a SparkEnv / Executor
     // before getting started with all our system properties, etc
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0)
+    // Debug code
+    Utils.checkHost(hostname)
+    // set it
+    val sparkHostPort = hostname + ":" + boundPort
+    System.setProperty("spark.hostPort", sparkHostPort)
     val actor = actorSystem.actorOf(
-      Props(new StandaloneExecutorBackend(driverUrl, executorId, hostname, cores)),
+      Props(new StandaloneExecutorBackend(driverUrl, executorId, sparkHostPort, cores)),
       name = "Executor")
     actorSystem.awaitTermination()
   }

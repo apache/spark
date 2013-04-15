@@ -12,6 +12,7 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
     def write(obj: WorkerInfo) = JsObject(
       "id" -> JsString(obj.id),
       "host" -> JsString(obj.host),
+      "port" -> JsNumber(obj.port),
       "webuiaddress" -> JsString(obj.webUiAddress),
       "cores" -> JsNumber(obj.cores),
       "coresused" -> JsNumber(obj.coresUsed),

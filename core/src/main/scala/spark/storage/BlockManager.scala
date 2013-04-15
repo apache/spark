@@ -37,17 +37,27 @@ class BlockManager(
     maxMemory: Long)
   extends Logging {
 
-  class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
-    var pending: Boolean = true
-    var size: Long = -1L
-    var failed: Boolean = false
+  private class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
+    @volatile var pending: Boolean = true
+    @volatile var size: Long = -1L
+    @volatile var initThread: Thread = null
+    @volatile var failed = false
+
+    setInitThread()
+
+    private def setInitThread() {
+      // Set current thread as init thread - waitForReady will not block this thread
+      // (in case there is non trivial initialization which ends up calling waitForReady as part of
+      // initialization itself)
+      this.initThread = Thread.currentThread()
+    }
 
     /**
      * Wait for this BlockInfo to be marked as ready (i.e. block is finished writing).
      * Return true if the block is available, false otherwise.
      */
     def waitForReady(): Boolean = {
-      if (pending) {
+      if (initThread != Thread.currentThread() && pending) {
         synchronized {
           while (pending) this.wait()
         }
@@ -57,19 +67,26 @@ class BlockManager(
 
     /** Mark this BlockInfo as ready (i.e. block is finished writing) */
     def markReady(sizeInBytes: Long) {
+      assert (pending)
+      size = sizeInBytes
+      initThread = null
+      failed = false
+      initThread = null
+      pending = false
       synchronized {
-        pending = false
-        failed = false
-        size = sizeInBytes
         this.notifyAll()
       }
     }
 
     /** Mark this BlockInfo as ready but failed */
     def markFailure() {
+      assert (pending)
+      size = 0
+      initThread = null
+      failed = true
+      initThread = null
+      pending = false
       synchronized {
-        failed = true
-        pending = false
         this.notifyAll()
       }
     }
@@ -101,7 +118,7 @@ class BlockManager(
 
   val heartBeatFrequency = BlockManager.getHeartBeatFrequencyFromSystemProperties
 
-  val host = System.getProperty("spark.hostname", Utils.localHostName())
+  val hostPort = Utils.localHostPort()
 
   val slaveActor = actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
     name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
@@ -212,9 +229,12 @@ class BlockManager(
    * Tell the master about the current storage status of a block. This will send a block update
    * message reflecting the current status, *not* the desired storage level in its block info.
    * For example, a block with MEMORY_AND_DISK set might have fallen out to be only on disk.
+   *
+   * droppedMemorySize exists to account for when block is dropped from memory to disk (so it is still valid).
+   * This ensures that update in master will compensate for the increase in memory on slave.
    */
-  def reportBlockStatus(blockId: String, info: BlockInfo) {
-    val needReregister = !tryToReportBlockStatus(blockId, info)
+  def reportBlockStatus(blockId: String, info: BlockInfo, droppedMemorySize: Long = 0L) {
+    val needReregister = !tryToReportBlockStatus(blockId, info, droppedMemorySize)
     if (needReregister) {
       logInfo("Got told to reregister updating block " + blockId)
       // Reregistering will report our new block for free.
@@ -228,7 +248,7 @@ class BlockManager(
    * which will be true if the block was successfully recorded and false if
    * the slave needs to re-register.
    */
-  private def tryToReportBlockStatus(blockId: String, info: BlockInfo): Boolean = {
+  private def tryToReportBlockStatus(blockId: String, info: BlockInfo, droppedMemorySize: Long = 0L): Boolean = {
     val (curLevel, inMemSize, onDiskSize, tellMaster) = info.synchronized {
       info.level match {
         case null =>
@@ -237,7 +257,7 @@ class BlockManager(
           val inMem = level.useMemory && memoryStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
           val storageLevel = StorageLevel(onDisk, inMem, level.deserialized, level.replication)
-          val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
+          val memSize = if (inMem) memoryStore.getSize(blockId) else droppedMemorySize
           val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
           (storageLevel, memSize, diskSize, info.tellMaster)
       }
@@ -257,7 +277,7 @@ class BlockManager(
   def getLocations(blockId: String): Seq[String] = {
     val startTimeMs = System.currentTimeMillis
     var managers = master.getLocations(blockId)
-    val locations = managers.map(_.ip)
+    val locations = managers.map(_.hostPort)
     logDebug("Got block locations in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
@@ -267,7 +287,7 @@ class BlockManager(
    */
   def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
     val startTimeMs = System.currentTimeMillis
-    val locations = master.getLocations(blockIds).map(_.map(_.ip).toSeq).toArray
+    val locations = master.getLocations(blockIds).map(_.map(_.hostPort).toSeq).toArray
     logDebug("Got multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
@@ -339,6 +359,8 @@ class BlockManager(
               case Some(bytes) =>
                 // Put a copy of the block back in memory before returning it. Note that we can't
                 // put the ByteBuffer returned by the disk store as that's a memory-mapped file.
+                // The use of rewind assumes this.
+                assert (0 == bytes.position())
                 val copyForMemory = ByteBuffer.allocate(bytes.limit)
                 copyForMemory.put(bytes)
                 memoryStore.putBytes(blockId, copyForMemory, level)
@@ -411,6 +433,7 @@ class BlockManager(
           // Read it as a byte buffer into memory first, then return it
           diskStore.getBytes(blockId) match {
             case Some(bytes) =>
+              assert (0 == bytes.position())
               if (level.useMemory) {
                 if (level.deserialized) {
                   memoryStore.putBytes(blockId, bytes, level)
@@ -450,7 +473,7 @@ class BlockManager(
     for (loc <- locations) {
       logDebug("Getting remote block " + blockId + " from " + loc)
       val data = BlockManagerWorker.syncGetBlock(
-          GetBlock(blockId), ConnectionManagerId(loc.ip, loc.port))
+          GetBlock(blockId), ConnectionManagerId(loc.host, loc.port))
       if (data != null) {
         return Some(dataDeserialize(blockId, data))
       }
@@ -501,17 +524,17 @@ class BlockManager(
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
 
-    val oldBlock = blockInfo.get(blockId).orNull
-    if (oldBlock != null && oldBlock.waitForReady()) {
-      logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
-      return oldBlock.size
-    }
-
     // Remember the block's storage level so that we can correctly drop it to disk if it needs
     // to be dropped right after it got put into memory. Note, however, that other threads will
     // not be able to get() this block until we call markReady on its BlockInfo.
     val myInfo = new BlockInfo(level, tellMaster)
-    blockInfo.put(blockId, myInfo)
+    // Do atomically !
+    val oldBlockOpt = blockInfo.putIfAbsent(blockId, myInfo)
+
+    if (oldBlockOpt.isDefined && oldBlockOpt.get.waitForReady()) {
+      logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
+      return oldBlockOpt.get.size
+    }
 
     val startTimeMs = System.currentTimeMillis
 
@@ -531,6 +554,7 @@ class BlockManager(
       logTrace("Put for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
         + " to get into synchronized block")
 
+      var marked = false
       try {
         if (level.useMemory) {
           // Save it just to memory first, even if it also has useDisk set to true; we will later
@@ -555,20 +579,20 @@ class BlockManager(
 
         // Now that the block is in either the memory or disk store, let other threads read it,
         // and tell the master about it.
+        marked = true
         myInfo.markReady(size)
         if (tellMaster) {
           reportBlockStatus(blockId, myInfo)
         }
-      } catch {
+      } finally {
         // If we failed at putting the block to memory/disk, notify other possible readers
         // that it has failed, and then remove it from the block info map.
-        case e: Exception => {
+        if (! marked) {
           // Note that the remove must happen before markFailure otherwise another thread
           // could've inserted a new BlockInfo before we remove it.
           blockInfo.remove(blockId)
           myInfo.markFailure()
-          logWarning("Putting block " + blockId + " failed", e)
-          throw e
+          logWarning("Putting block " + blockId + " failed")
         }
       }
     }
@@ -611,16 +635,17 @@ class BlockManager(
       throw new IllegalArgumentException("Storage level is null or invalid")
     }
 
-    if (blockInfo.contains(blockId)) {
-      logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
-      return
-    }
-
     // Remember the block's storage level so that we can correctly drop it to disk if it needs
     // to be dropped right after it got put into memory. Note, however, that other threads will
     // not be able to get() this block until we call markReady on its BlockInfo.
     val myInfo = new BlockInfo(level, tellMaster)
-    blockInfo.put(blockId, myInfo)
+    // Do atomically !
+    val prevInfo = blockInfo.putIfAbsent(blockId, myInfo)
+    if (prevInfo != null) {
+      // Should we check for prevInfo.waitForReady() here ?
+      logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
+      return
+    }
 
     val startTimeMs = System.currentTimeMillis
 
@@ -639,6 +664,7 @@ class BlockManager(
       logDebug("PutBytes for block " + blockId + " took " + Utils.getUsedTimeMs(startTimeMs)
         + " to get into synchronized block")
 
+      var marked = false
       try {
         if (level.useMemory) {
           // Store it only in memory at first, even if useDisk is also set to true
@@ -649,22 +675,24 @@ class BlockManager(
           diskStore.putBytes(blockId, bytes, level)
         }
 
+        // assert (0 == bytes.position(), "" + bytes)
+
         // Now that the block is in either the memory or disk store, let other threads read it,
         // and tell the master about it.
+        marked = true
         myInfo.markReady(bytes.limit)
         if (tellMaster) {
           reportBlockStatus(blockId, myInfo)
         }
-      } catch {
+      } finally {
         // If we failed at putting the block to memory/disk, notify other possible readers
         // that it has failed, and then remove it from the block info map.
-        case e: Exception => {
+        if (! marked) {
           // Note that the remove must happen before markFailure otherwise another thread
           // could've inserted a new BlockInfo before we remove it.
           blockInfo.remove(blockId)
           myInfo.markFailure()
-          logWarning("Putting block " + blockId + " failed", e)
-          throw e
+          logWarning("Putting block " + blockId + " failed")
         }
       }
     }
@@ -698,7 +726,7 @@ class BlockManager(
       logDebug("Try to replicate BlockId " + blockId + " once; The size of the data is "
         + data.limit() + " Bytes. To node: " + peer)
       if (!BlockManagerWorker.syncPutBlock(PutBlock(blockId, data, tLevel),
-        new ConnectionManagerId(peer.ip, peer.port))) {
+        new ConnectionManagerId(peer.host, peer.port))) {
         logError("Failed to call syncPutBlock to " + peer)
       }
       logDebug("Replicated BlockId " + blockId + " once used " +
@@ -730,6 +758,14 @@ class BlockManager(
     val info = blockInfo.get(blockId).orNull
     if (info != null)  {
       info.synchronized {
+        // required ? As of now, this will be invoked only for blocks which are ready
+        // But in case this changes in future, adding for consistency sake.
+        if (! info.waitForReady() ) {
+          // If we get here, the block write failed.
+          logWarning("Block " + blockId + " was marked as failure. Nothing to drop")
+          return
+        }
+
         val level = info.level
         if (level.useDisk && !diskStore.contains(blockId)) {
           logInfo("Writing block " + blockId + " to disk")
@@ -740,12 +776,13 @@ class BlockManager(
               diskStore.putBytes(blockId, bytes, level)
           }
         }
+        val droppedMemorySize = memoryStore.getSize(blockId)
         val blockWasRemoved = memoryStore.remove(blockId)
         if (!blockWasRemoved) {
           logWarning("Block " + blockId + " could not be dropped from memory as it does not exist")
         }
         if (info.tellMaster) {
-          reportBlockStatus(blockId, info)
+          reportBlockStatus(blockId, info, droppedMemorySize)
         }
         if (!level.useDisk) {
           // The block is completely gone from this node; forget it so we can put() it again later.
@@ -938,8 +975,8 @@ class BlockFetcherIterator(
 
   def sendRequest(req: FetchRequest) {
     logDebug("Sending request for %d blocks (%s) from %s".format(
-      req.blocks.size, Utils.memoryBytesToString(req.size), req.address.ip))
-    val cmId = new ConnectionManagerId(req.address.ip, req.address.port)
+      req.blocks.size, Utils.memoryBytesToString(req.size), req.address.hostPort))
+    val cmId = new ConnectionManagerId(req.address.host, req.address.port)
     val blockMessageArray = new BlockMessageArray(req.blocks.map {
       case (blockId, size) => BlockMessage.fromGetBlock(GetBlock(blockId))
     })

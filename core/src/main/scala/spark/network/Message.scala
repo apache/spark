@@ -17,7 +17,8 @@ private[spark] class MessageChunkHeader(
     val other: Int,
     val address: InetSocketAddress) {
   lazy val buffer = {
-    val ip = address.getAddress.getAddress() 
+    // No need to change this, at 'use' time, we do a reverse lookup of the hostname. Refer to network.Connection
+    val ip = address.getAddress.getAddress()
     val port = address.getPort()
     ByteBuffer.
       allocate(MessageChunkHeader.HEADER_SIZE).

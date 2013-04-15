@@ -70,6 +70,14 @@ private[spark] class ResultTask[T, U](
     rdd.partitions(partition)
   }
 
+  // data locality is on a per host basis, not hyper specific to container (host:port). Unique on set of hosts.
+  val preferredLocs: Seq[String] = if (locs == null) Nil else locs.map(loc => Utils.parseHostPort(loc)._1).toSet.toSeq
+
+  {
+    // DEBUG code
+    preferredLocs.foreach (host => Utils.checkHost(host, "preferredLocs : " + preferredLocs))
+  }
+
   override def run(attemptId: Long): U = {
     val context = new TaskContext(stageId, partition, attemptId)
     metrics = Some(context.taskMetrics)
@@ -80,7 +88,7 @@ private[spark] class ResultTask[T, U](
     }
   }
 
-  override def preferredLocations: Seq[String] = locs
+  override def preferredLocations: Seq[String] = preferredLocs
 
   override def toString = "ResultTask(" + stageId + ", " + partition + ")"
 

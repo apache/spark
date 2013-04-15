@@ -1,7 +1,7 @@
 @(worker: spark.deploy.WorkerState)
 @import spark.Utils
 
-@spark.common.html.layout(title = "Spark Worker on " + worker.host) {
+@spark.common.html.layout(title = "Spark Worker on " + worker.host + ":" + worker.port) {
 
   <!-- Worker Details -->
   <div class="row">
