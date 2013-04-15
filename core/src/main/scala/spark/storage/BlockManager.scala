@@ -794,7 +794,7 @@ class BlockManager(
               diskStore.putBytes(blockId, bytes, level)
           }
         }
-        val droppedMemorySize = memoryStore.getSize(blockId)
+        val droppedMemorySize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
         val blockWasRemoved = memoryStore.remove(blockId)
         if (!blockWasRemoved) {
           logWarning("Block " + blockId + " could not be dropped from memory as it does not exist")
