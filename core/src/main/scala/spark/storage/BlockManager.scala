@@ -527,13 +527,22 @@ class BlockManager(
     // Remember the block's storage level so that we can correctly drop it to disk if it needs
     // to be dropped right after it got put into memory. Note, however, that other threads will
     // not be able to get() this block until we call markReady on its BlockInfo.
-    val myInfo = new BlockInfo(level, tellMaster)
-    // Do atomically !
-    val oldBlockOpt = blockInfo.putIfAbsent(blockId, myInfo)
+    val myInfo = {
+      val tinfo = new BlockInfo(level, tellMaster)
+      // Do atomically !
+      val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo)
 
-    if (oldBlockOpt.isDefined && oldBlockOpt.get.waitForReady()) {
-      logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
-      return oldBlockOpt.get.size
+      if (oldBlockOpt.isDefined) {
+        if (oldBlockOpt.get.waitForReady()) {
+          logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
+          return oldBlockOpt.get.size
+        }
+
+        // TODO: So the block info exists - but previous attempt to load it (?) failed. What do we do now ? Retry on it ?
+        oldBlockOpt.get
+      } else {
+        tinfo
+      }
     }
 
     val startTimeMs = System.currentTimeMillis
@@ -638,13 +647,22 @@ class BlockManager(
     // Remember the block's storage level so that we can correctly drop it to disk if it needs
     // to be dropped right after it got put into memory. Note, however, that other threads will
     // not be able to get() this block until we call markReady on its BlockInfo.
-    val myInfo = new BlockInfo(level, tellMaster)
-    // Do atomically !
-    val prevInfo = blockInfo.putIfAbsent(blockId, myInfo)
-    if (prevInfo != null) {
-      // Should we check for prevInfo.waitForReady() here ?
-      logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
-      return
+    val myInfo = {
+      val tinfo = new BlockInfo(level, tellMaster)
+      // Do atomically !
+      val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo)
+
+      if (oldBlockOpt.isDefined) {
+        if (oldBlockOpt.get.waitForReady()) {
+          logWarning("Block " + blockId + " already exists on this machine; not re-adding it")
+          return
+        }
+
+        // TODO: So the block info exists - but previous attempt to load it (?) failed. What do we do now ? Retry on it ?
+        oldBlockOpt.get
+      } else {
+        tinfo
+      }
     }
 
     val startTimeMs = System.currentTimeMillis
