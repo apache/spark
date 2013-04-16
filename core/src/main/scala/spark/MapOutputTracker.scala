@@ -148,7 +148,6 @@ private[spark] class MapOutputTracker extends Logging {
         logInfo("Doing the fetch; tracker actor = " + trackerActor)
         val hostPort = Utils.localHostPort()
         // This try-finally prevents hangs due to timeouts:
-        var fetchedStatuses: Array[MapStatus] = null
         try {
           val fetchedBytes =
             askTracker(GetMapOutputStatuses(shuffleId, hostPort)).asInstanceOf[Array[Byte]]

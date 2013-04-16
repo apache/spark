@@ -1092,7 +1092,7 @@ class BlockFetcherIterator(
   logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
 
   //an iterator that will read fetched blocks off the queue as they arrive.
-  var resultsGotten = 0
+  @volatile private var resultsGotten = 0
 
   def hasNext: Boolean = resultsGotten < totalBlocks
 
@@ -1102,7 +1102,7 @@ class BlockFetcherIterator(
     val result = results.take()
     val stopFetchWait = System.currentTimeMillis()
     _fetchWaitTime += (stopFetchWait - startFetchWait)
-    bytesInFlight -= result.size
+    if (! result.failed) bytesInFlight -= result.size
     while (!fetchRequests.isEmpty &&
       (bytesInFlight == 0 || bytesInFlight + fetchRequests.front.size <= maxBytesInFlight)) {
       sendRequest(fetchRequests.dequeue())

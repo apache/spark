@@ -417,8 +417,9 @@
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
-            <filereports>WDF TestSuite.txt</filereports>
+            <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xms64m -Xmx1024m</argLine>
+            <stderr/>
           </configuration>
           <executions>
             <execution>
