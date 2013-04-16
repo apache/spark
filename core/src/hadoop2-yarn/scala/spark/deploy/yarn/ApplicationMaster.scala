@@ -76,7 +76,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     // Start the user's JAR
     userThread = startUserClass()
     
-    // This a bit hacky, but we need to wait until the spark.master.port property has
+    // This a bit hacky, but we need to wait until the spark.driver.port property has
     // been set by the Thread executing the user class.
     waitForSparkMaster()
     
@@ -124,19 +124,19 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   }
   
   private def waitForSparkMaster() {
-    logInfo("Waiting for spark master to be reachable.")
-    var masterUp = false 
-    while(!masterUp) {
-      val masterHost = System.getProperty("spark.master.host")
-      val masterPort = System.getProperty("spark.master.port")
+    logInfo("Waiting for spark driver to be reachable.")
+    var driverUp = false
+    while(!driverUp) {
+      val driverHost = System.getProperty("spark.driver.host")
+      val driverPort = System.getProperty("spark.driver.port")
       try {
-        val socket = new Socket(masterHost, masterPort.toInt)
+        val socket = new Socket(driverHost, driverPort.toInt)
         socket.close()
-        logInfo("Master now available: " + masterHost + ":" + masterPort)
-        masterUp = true
+        logInfo("Master now available: " + driverHost + ":" + driverPort)
+        driverUp = true
       } catch {
         case e: Exception =>
-          logError("Failed to connect to master at " + masterHost + ":" + masterPort)
+          logError("Failed to connect to driver at " + driverHost + ":" + driverPort)
         Thread.sleep(100)
       }
     }

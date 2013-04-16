@@ -191,8 +191,8 @@ private[yarn] class YarnAllocationHandler(val conf: Configuration, val resourceM
         else {
           // deallocate + allocate can result in reusing id's wrongly - so use a different counter (workerIdCounter)
           val workerId = workerIdCounter.incrementAndGet().toString
-          val masterUrl = "akka://spark@%s:%s/user/%s".format(
-            System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
+          val driverUrl = "akka://spark@%s:%s/user/%s".format(
+            System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
             StandaloneSchedulerBackend.ACTOR_NAME)
 
           logInfo("launching container on " + containerId + " host " + workerHostname)
@@ -209,7 +209,7 @@ private[yarn] class YarnAllocationHandler(val conf: Configuration, val resourceM
           }
 
           new Thread(
-            new WorkerRunnable(container, conf, masterUrl, workerId,
+            new WorkerRunnable(container, conf, driverUrl, workerId,
               workerHostname, workerMemory, workerCores)
           ).start()
         }
