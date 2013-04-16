@@ -21,13 +21,20 @@ class CheckpointRDD[T: ClassManifest](sc: SparkContext, val checkpointPath: Stri
   @transient val fs = new Path(checkpointPath).getFileSystem(sc.hadoopConfiguration)
 
   override def getPartitions: Array[Partition] = {
-    val dirContents = fs.listStatus(new Path(checkpointPath))
-    val partitionFiles = dirContents.map(_.getPath.toString).filter(_.contains("part-")).sorted
-    val numPartitions =  partitionFiles.size
-    if (numPartitions > 0 && (! partitionFiles(0).endsWith(CheckpointRDD.splitIdToFile(0)) ||
-        ! partitionFiles(numPartitions-1).endsWith(CheckpointRDD.splitIdToFile(numPartitions-1)))) {
-      throw new SparkException("Invalid checkpoint directory: " + checkpointPath)
-    }
+    val cpath = new Path(checkpointPath)
+    val numPartitions =
+    // listStatus can throw exception if path does not exist.
+    if (fs.exists(cpath)) {
+      val dirContents = fs.listStatus(cpath)
+      val partitionFiles = dirContents.map(_.getPath.toString).filter(_.contains("part-")).sorted
+      val numPart =  partitionFiles.size
+      if (numPart > 0 && (! partitionFiles(0).endsWith(CheckpointRDD.splitIdToFile(0)) ||
+          ! partitionFiles(numPart-1).endsWith(CheckpointRDD.splitIdToFile(numPart-1)))) {
+        throw new SparkException("Invalid checkpoint directory: " + checkpointPath)
+      }
+      numPart
+    } else 0
+
     Array.tabulate(numPartitions)(i => new CheckpointRDDPartition(i))
   }
 
@@ -64,6 +71,8 @@ private[spark] object CheckpointRDD extends Logging {
     val finalOutputPath = new Path(outputDir, finalOutputName)
     val tempOutputPath = new Path(outputDir, "." + finalOutputName + "-attempt-" + ctx.attemptId)
 
+    println("writeToFile. path = " + path + ", tempOutputPath = " + tempOutputPath + ", finalOutputPath = " + finalOutputPath)
+
     if (fs.exists(tempOutputPath)) {
       throw new IOException("Checkpoint failed: temporary path " +
         tempOutputPath + " already exists")
@@ -81,8 +90,11 @@ private[spark] object CheckpointRDD extends Logging {
     serializeStream.writeAll(iterator)
     serializeStream.close()
 
+    println("writeToFile. serializeStream.close ... renaming from " + tempOutputPath + " to " + finalOutputPath)
+
     if (!fs.rename(tempOutputPath, finalOutputPath)) {
       if (!fs.exists(finalOutputPath)) {
+        logInfo("Deleting tempOutputPath " + tempOutputPath)
         fs.delete(tempOutputPath, false)
         throw new IOException("Checkpoint failed: failed to save output of task: "
           + ctx.attemptId + " and final output path does not exist")
