@@ -71,8 +71,6 @@ private[spark] object CheckpointRDD extends Logging {
     val finalOutputPath = new Path(outputDir, finalOutputName)
     val tempOutputPath = new Path(outputDir, "." + finalOutputName + "-attempt-" + ctx.attemptId)
 
-    println("writeToFile. path = " + path + ", tempOutputPath = " + tempOutputPath + ", finalOutputPath = " + finalOutputPath)
-
     if (fs.exists(tempOutputPath)) {
       throw new IOException("Checkpoint failed: temporary path " +
         tempOutputPath + " already exists")
@@ -89,8 +87,6 @@ private[spark] object CheckpointRDD extends Logging {
     val serializeStream = serializer.serializeStream(fileOutputStream)
     serializeStream.writeAll(iterator)
     serializeStream.close()
-
-    println("writeToFile. serializeStream.close ... renaming from " + tempOutputPath + " to " + finalOutputPath)
 
     if (!fs.rename(tempOutputPath, finalOutputPath)) {
       if (!fs.exists(finalOutputPath)) {
