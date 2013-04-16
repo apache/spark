@@ -885,6 +885,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       val autorun = replProps.replAutorunCode.option flatMap (f => io.File(f).safeSlurp())
       if (autorun.isDefined) intp.quietRun(autorun.get)
     })
+
+    addThunk(printWelcome())
     addThunk(initializeSpark())
 
     loadFiles(settings)
@@ -905,7 +907,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       intp.initializeSynchronous()
       postInitialization()
     }
-    printWelcome()
+    // printWelcome()
 
     try loop()
     catch AbstractOrMissingHandler()

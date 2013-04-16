@@ -117,11 +117,11 @@ trait SparkILoopInit {
  def initializeSpark() {
     intp.beQuietDuring {
       command("""
-         @transient lazy val sc = spark.repl.Main.interp.createSparkContext();
+         @transient val sc = spark.repl.Main.interp.createSparkContext();
         """)
       command("import spark.SparkContext._");
     }
-   echo("... Spark context available as sc.")
+   echo("Spark context available as sc.")
   }
 
   // code to be executed only after the interpreter is initialized
