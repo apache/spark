@@ -51,7 +51,6 @@ public class FileServer {
       }
       if (bootstrap != null){
         bootstrap.shutdown();
-        bootstrap = null;
       }
     }
 }

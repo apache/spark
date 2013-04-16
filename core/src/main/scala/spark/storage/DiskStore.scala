@@ -39,7 +39,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   addShutdownHook()
 
   if(useNetty){
-  startShuffleBlockSender()
+    startShuffleBlockSender()
   }
 
   override def getSize(blockId: String): Long = {
@@ -229,7 +229,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       case e: Exception => {
         logError("Error running ShuffleBlockSender ", e)
         if (shuffleSender != null) {
-        shuffleSender.stop
+          shuffleSender.stop
           shuffleSender = null
         }
       }
