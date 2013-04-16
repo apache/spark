@@ -5,20 +5,32 @@ import spark.SparkContext._
 
 // import breeze.linalg._
 
-object Analytics {
+object Analytics extends Logging {
 
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
    */
+  // def pagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
+  //   // Compute the out degree of each vertex
+  //   val pagerankGraph = graph.updateVertices[Int, (Int, Float)](graph.outDegrees,
+  //     (vertex, deg) => (deg.getOrElse(0), 1.0F)
+  //   )
+  //   GraphLab.iterateGA[(Int, Float), ED, Float](pagerankGraph)(
+  //     (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
+  //     (a: Float, b: Float) => a + b, // merge
+  //     (vertex, a: Option[Float]) => (vertex.data._1, (0.15F + 0.85F * a.getOrElse(0F))), // apply
+  //     numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
+  // }
   def pagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
     // Compute the out degree of each vertex
     val pagerankGraph = graph.updateVertices[Int, (Int, Double)](graph.outDegrees,
       (vertex, deg) => (deg.getOrElse(0), 1.0)
     )
-    GraphLab.iterateGA[(Int, Double), ED, Double](pagerankGraph)(
+    GraphLab.iterateGA2[(Int, Double), ED, Double](pagerankGraph)(
       (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
       (a: Double, b: Double) => a + b, // merge
-      (vertex, a: Option[Double]) => (vertex.data._1, (0.15 + 0.85 * a.getOrElse(0.0))), // apply
+      0.0, // default
+      (vertex, a: Double) => (vertex.data._1, (0.15 + 0.85 * a)), // apply
       numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
   }
 
@@ -253,18 +265,23 @@ object Analytics {
         println("======================================")
 
         val sc = new SparkContext(host, "PageRank(" + fname + ")")
-        val graph = Graph.textFile(sc, fname, a => 1.0).withPartitioner(numVPart, numEPart)
+
+        val graph = Graph.textFile(sc, fname, a => 1.0).withPartitioner(numVPart, numEPart).cache()
+
         val startTime = System.currentTimeMillis
+        logInfo("GRAPHX: starting tasks")
+        logInfo("GRAPHX: Number of vertices " + graph.vertices.count)
+        logInfo("GRAPHX: Number of edges " + graph.edges.count)
 
         val pr = Analytics.pagerank(graph, numIter)
         // val pr = if(isDynamic) Analytics.dynamicPagerank(graph, tol, numIter)
         //   else  Analytics.pagerank(graph, numIter)
-        println("Total rank: " + pr.vertices.map{ case Vertex(id,r) => r }.reduce(_+_) )
+        logInfo("GRAPHX: Total rank: " + pr.vertices.map{ case Vertex(id,r) => r }.reduce(_+_) )
         if (!outFname.isEmpty) {
           println("Saving pageranks of pages to " + outFname)
           pr.vertices.map{case Vertex(id, r) => id + "\t" + r}.saveAsTextFile(outFname)
         }
-        println("Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
+        logInfo("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
         sc.stop()
       }
 
