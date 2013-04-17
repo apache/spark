@@ -564,7 +564,7 @@
       <id>hadoop2-yarn</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
-        <yarn.version>2.0.3-alpha</yarn.version>
+        <yarn.version>2.0.2-alpha</yarn.version>
       </properties>
 
       <repositories>
