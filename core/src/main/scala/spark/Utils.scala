@@ -13,6 +13,7 @@ import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import spark.serializer.SerializerInstance
 import spark.deploy.SparkHadoopUtil
+import java.util.regex.Pattern
 
 /**
  * Various utility methods used by Spark.
@@ -337,9 +338,11 @@ private object Utils extends Logging {
   }
 
   // Used by DEBUG code : remove when all testing done
+  private val ipPattern = Pattern.compile("^[0-9]+(\\.[0-9]+)*$")
   def checkHost(host: String, message: String = "") {
     // Currently catches only ipv4 pattern, this is just a debugging tool - not rigourous !
-    if (host.matches("^[0-9]+(\\.[0-9]+)*$")) {
+    // if (host.matches("^[0-9]+(\\.[0-9]+)*$")) {
+    if (ipPattern.matcher(host).matches()) {
       Utils.logErrorWithStack("Unexpected to have host " + host + " which matches IP pattern. Message " + message)
     }
     if (Utils.parseHostPort(host)._2 != 0){
@@ -355,6 +358,12 @@ private object Utils extends Logging {
       Utils.logErrorWithStack("Unexpected to have port " + port + " which is not valid in " + hostPort + ". Message " + message)
     }
   }
+
+  // Once testing is complete in various modes, replace with this ?
+  /*
+  def checkHost(host: String, message: String = "") {}
+  def checkHostPort(hostPort: String, message: String = "") {}
+  */
 
   def getUserNameFromEnvironment(): String = {
     SparkHadoopUtil.getUserNameFromEnvironment
