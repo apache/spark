@@ -153,8 +153,8 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
     }
 
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
     Client.populateHadoopClasspath(yarnConf, env)
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }

@@ -165,8 +165,8 @@ class Client(conf: Configuration, args: ClientArguments) extends Logging {
     // If log4j present, ensure ours overrides all others
     if (log4jConfLocalRes != null) Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
 
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
     Client.populateHadoopClasspath(yarnConf, env)
     SparkHadoopUtil.setYarnMode(env)
     env("SPARK_YARN_JAR_PATH") = 
