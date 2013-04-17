@@ -162,7 +162,6 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
   // Called by subclasses when notified of a lost worker
   def removeExecutor(executorId: String, reason: String) {
     try {
-      val timeout = 5.seconds
       val future = driverActor.ask(RemoveExecutor(executorId, reason))(timeout)
       Await.result(future, timeout)
     } catch {

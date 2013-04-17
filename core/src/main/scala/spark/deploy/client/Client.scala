@@ -3,6 +3,7 @@ package spark.deploy.client
 import spark.deploy._
 import akka.actor._
 import akka.pattern.ask
+import akka.util.Duration
 import akka.util.duration._
 import akka.pattern.AskTimeoutException
 import spark.{SparkException, Logging}
@@ -112,7 +113,7 @@ private[spark] class Client(
   def stop() {
     if (actor != null) {
       try {
-        val timeout = 5.seconds
+        val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
         val future = actor.ask(StopClient)(timeout)
         Await.result(future, timeout)
       } catch {

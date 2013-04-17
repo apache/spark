@@ -3,7 +3,7 @@ package spark.deploy.worker
 import akka.actor.{ActorRef, ActorSystem}
 import akka.dispatch.Await
 import akka.pattern.ask
-import akka.util.Timeout
+import akka.util.{Duration, Timeout}
 import akka.util.duration._
 import cc.spray.Directives
 import cc.spray.typeconversion.TwirlSupport._
@@ -22,7 +22,7 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef, workDir: File)
   val RESOURCE_DIR = "spark/deploy/worker/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
   
-  implicit val timeout = Timeout(10 seconds)
+  implicit val timeout = Timeout(Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds"))
   
   val handler = {
     get {
