@@ -47,6 +47,11 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
    - ANY
 
    Note that this property makes more sense when used in conjugation with spark.tasks.revive.interval > 0 : else it is not very effective.
+
+   Additional Note: For non trivial clusters, there is a 4x - 5x reduction in running time (in some of our experiments) based on whether
+   it is left at default HOST_LOCAL, RACK_LOCAL (if cluster is configured to be rack aware) or ANY.
+   If cluster is rack aware, then setting it to RACK_LOCAL gives best tradeoff and a 3x - 4x performance improvement while minimizing IO impact.
+   Also, it brings down the variance in running time drastically.
     */
   val TASK_SCHEDULING_AGGRESSION = TaskLocality.parse(System.getProperty("spark.tasks.schedule.aggression", "HOST_LOCAL"))
 
@@ -68,7 +73,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   val activeExecutorIds = new HashSet[String]
 
   // TODO: We might want to remove this and merge it with execId datastructures - but later.
-  // Which hosts in the cluster are alive (contains hostPort's)
+  // Which hosts in the cluster are alive (contains hostPort's) - used for hyper local and local task locality.
   private val hostPortsAlive = new HashSet[String]
   private val hostToAliveHostPorts = new HashMap[String, HashSet[String]]
 
