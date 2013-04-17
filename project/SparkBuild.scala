@@ -20,7 +20,7 @@ object SparkBuild extends Build {
   //val HADOOP_YARN = false
 
   // For Hadoop 2 YARN support
-  val HADOOP_VERSION = "2.0.3-alpha"
+  val HADOOP_VERSION = "2.0.2-alpha"
   val HADOOP_MAJOR_VERSION = "2"
   val HADOOP_YARN = true
 
@@ -47,9 +47,10 @@ object SparkBuild extends Build {
     scalacOptions := Seq("-unchecked", "-optimize", "-deprecation"),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
-    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
+    // retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
-    testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
+    // For some reason this fails on some nodes and works on others - not yet debugged why
+    // testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
 
     // shared between both core and streaming.
     resolvers ++= Seq("Akka Repository" at "http://repo.akka.io/releases/"),
@@ -99,6 +100,7 @@ object SparkBuild extends Build {
 */
 
     libraryDependencies ++= Seq(
+      "io.netty" % "netty" % "3.5.3.Final",
       "org.eclipse.jetty" % "jetty-server" % "7.5.3.v20111011",
       "org.scalatest" %% "scalatest" % "1.8" % "test",
       "org.scalacheck" %% "scalacheck" % "1.9" % "test",
@@ -131,11 +133,13 @@ object SparkBuild extends Build {
     ),
 
     libraryDependencies ++= Seq(
+      "io.netty" % "netty" % "3.5.3.Final",
       "com.google.guava" % "guava" % "11.0.1",
       "log4j" % "log4j" % "1.2.16",
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
       "com.ning" % "compress-lzf" % "0.8.4",
+      "commons-daemon" % "commons-daemon" % "1.0.10",
       "asm" % "asm-all" % "3.3.1",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.22",
