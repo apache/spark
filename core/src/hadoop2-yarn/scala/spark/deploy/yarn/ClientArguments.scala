@@ -94,9 +94,11 @@ class ClientArguments(val args: Array[String]) {
       "                       Mutliple invocations are possible, each will be passed in order.\n" +
       "                       Note that first argument will ALWAYS be yarn-standalone : will be added if missing.\n" +
       "  --num-workers NUM    Number of workers to start (Default: 2)\n" +
-      "  --worker-cores NUM   Number of cores for the workers (Default: 1)\n" +
+      "  --worker-cores NUM   Number of cores for the workers (Default: 1). This is unsused right now.\n" +
+      "  --master-memory MEM  Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
       "  --worker-memory MEM  Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n" +
-      "  --user USERNAME      Run the ApplicationMaster as a different user\n"
+      "  --queue QUEUE        The hadoop queue to use for allocation requests (Default: 'default')\n" +
+      "  --user USERNAME      Run the ApplicationMaster (and slaves) as a different user\n"
       )
     System.exit(exitCode)
   }
