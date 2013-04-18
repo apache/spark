@@ -39,7 +39,7 @@ import spark.partial.PartialResult
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
 import spark.scheduler._
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler, TaskSetQueuesManager}
+import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.BlockManagerUI
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
@@ -73,11 +73,6 @@ class SparkContext(
   }
   if (System.getProperty("spark.driver.port") == null) {
     System.setProperty("spark.driver.port", "0")
-  }
-
-  //Set the default task scheduler
-  if (System.getProperty("spark.cluster.taskscheduler") == null) {
-    System.setProperty("spark.cluster.taskscheduler", "spark.scheduler.cluster.FIFOTaskSetQueuesManager")
   }
 
   private val isLocal = (master == "local" || master.startsWith("local["))
@@ -599,8 +594,7 @@ class SparkContext(
     val callSite = Utils.getSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler
-                                    ,localProperties.value)
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler, localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result

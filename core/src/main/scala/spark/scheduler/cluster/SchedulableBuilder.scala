@@ -86,14 +86,14 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool) extends Schedula
       }
     }
 
-  //finally create "default" pool
-  if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
-    val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
-    rootPool.addSchedulable(pool)
-    logInfo("Create default pool with name:%s,schedulingMode:%s,minShare:%d,weight:%d".format(
-      DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+    //finally create "default" pool
+    if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
+      val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
+      rootPool.addSchedulable(pool)
+      logInfo("Create default pool with name:%s,schedulingMode:%s,minShare:%d,weight:%d".format(
+        DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+    }
   }
-}
 
   override def addTaskSetManager(manager: Schedulable, properties: Properties) {
     var poolName = DEFAULT_POOL_NAME

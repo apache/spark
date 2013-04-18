@@ -1,6 +1,5 @@
 package spark.scheduler
 
-
 import java.util.Properties
 
 import spark.scheduler.cluster.TaskInfo
