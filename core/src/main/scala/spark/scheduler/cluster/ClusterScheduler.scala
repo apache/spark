@@ -61,16 +61,30 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
-  var taskSetQueuesManager: TaskSetQueuesManager = null
+  var schedulableBuilder: SchedulableBuilder = null
+  var rootPool: Pool = null
 
   override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener
   }
 
-  def initialize(context: SchedulerBackend, taskSetQueuesManager: TaskSetQueuesManager) {
+  def initialize(context: SchedulerBackend) {
     backend = context
-    this.taskSetQueuesManager = taskSetQueuesManager
+    //default scheduler is FIFO
+    val schedulingMode = System.getProperty("spark.cluster.schedulingmode", "FIFO")
+    //temporarily set rootPool name to empty
+    rootPool = new Pool("", SchedulingMode.withName(schedulingMode), 0, 0)
+    schedulableBuilder = {
+      schedulingMode match {
+        case "FIFO" =>
+          new FIFOSchedulableBuilder(rootPool)
+        case "FAIR" =>
+          new FairSchedulableBuilder(rootPool)
+      }
+    }
+    schedulableBuilder.buildPools()
   }
+
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
@@ -101,7 +115,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet)
       activeTaskSets(taskSet.id) = manager
-      taskSetQueuesManager.addTaskSetManager(manager)
+      schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
 
       if (hasReceivedTask == false) {
@@ -124,16 +138,11 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   def taskSetFinished(manager: TaskSetManager) {
     this.synchronized {
       activeTaskSets -= manager.taskSet.id
-      taskSetQueuesManager.removeTaskSetManager(manager)
+      manager.parent.removeSchedulable(manager)
+      logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
       taskIdToTaskSetId --= taskSetTaskIds(manager.taskSet.id)
       taskIdToExecutorId --= taskSetTaskIds(manager.taskSet.id)
       taskSetTaskIds.remove(manager.taskSet.id)
-    }
-  }
-
-  def taskFinished(manager: TaskSetManager) {
-    this.synchronized {
-      taskSetQueuesManager.taskFinished(manager)
     }
   }
 
@@ -143,7 +152,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
    * that tasks are balanced across the cluster.
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = {
-     synchronized {
+    synchronized {
       SparkEnv.set(sc.env)
       // Mark each slave as alive and remember its hostname
       for (o <- offers) {
@@ -155,27 +164,27 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       // Build a list of tasks to assign to each slave
       val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
       val availableCpus = offers.map(o => o.cores).toArray
-      for (i <- 0 until offers.size){
-            var launchedTask = true
-            val execId = offers(i).executorId
-            val host = offers(i).hostname
-            while (availableCpus(i) > 0 && launchedTask){
-              launchedTask = false
-              taskSetQueuesManager.receiveOffer(execId,host,availableCpus(i)) match {
-              case Some(task) =>
-                tasks(i) += task
-                val tid = task.taskId
-                taskIdToTaskSetId(tid) = task.taskSetId
-                taskSetTaskIds(task.taskSetId) += tid
-                taskIdToExecutorId(tid) = execId
-                activeExecutorIds += execId
-                executorsByHost(host) += execId
-                availableCpus(i) -= 1
-                launchedTask = true
+      for (i <- 0 until offers.size) {
+        var launchedTask = true
+        val execId = offers(i).executorId
+        val host = offers(i).hostname
+        while (availableCpus(i) > 0 && launchedTask) {
+          launchedTask = false
+          rootPool.receiveOffer(execId,host,availableCpus(i)) match {
+          case Some(task) =>
+            tasks(i) += task
+            val tid = task.taskId
+            taskIdToTaskSetId(tid) = task.taskSetId
+            taskSetTaskIds(task.taskSetId) += tid
+            taskIdToExecutorId(tid) = execId
+            activeExecutorIds += execId
+            executorsByHost(host) += execId
+            availableCpus(i) -= 1
+            launchedTask = true
 
-              case None => {}
-            }
+          case None => {}
           }
+        }
       }
       if (tasks.size > 0) {
         hasLaunchedTask = true
@@ -271,7 +280,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   def checkSpeculatableTasks() {
     var shouldRevive = false
     synchronized {
-      shouldRevive = taskSetQueuesManager.checkSpeculatableTasks()
+      shouldRevive = rootPool.checkSpeculatableTasks()
     }
     if (shouldRevive) {
       backend.reviveOffers()
@@ -314,6 +323,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       executorsByHost -= host
     }
     executorIdToHost -= executorId
-    taskSetQueuesManager.removeExecutor(executorId, host)
+    rootPool.executorLost(executorId, host)
   }
 }

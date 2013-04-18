@@ -146,9 +146,7 @@ class SparkContext(
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new ClusterScheduler(this)
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
-        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).
-                                   newInstance().asInstanceOf[TaskSetQueuesManager]
-        scheduler.initialize(backend, taskSetQueuesManager)
+        scheduler.initialize(backend)
         scheduler
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
@@ -167,9 +165,7 @@ class SparkContext(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val sparkUrl = localCluster.start()
         val backend = new SparkDeploySchedulerBackend(scheduler, this, sparkUrl, appName)
-        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).
-                                   newInstance().asInstanceOf[TaskSetQueuesManager]
-        scheduler.initialize(backend, taskSetQueuesManager)
+        scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
         }
@@ -188,9 +184,7 @@ class SparkContext(
         } else {
           new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
         }
-        val taskSetQueuesManager = Class.forName(System.getProperty("spark.cluster.taskscheduler")).
-                                   newInstance().asInstanceOf[TaskSetQueuesManager]
-        scheduler.initialize(backend, taskSetQueuesManager)
+        scheduler.initialize(backend)
         scheduler
     }
   }

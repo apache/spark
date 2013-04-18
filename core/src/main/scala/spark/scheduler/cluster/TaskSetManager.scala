@@ -32,20 +32,12 @@ private[spark] class TaskSetManager(
   // Maximum times a task is allowed to fail before failing the job
   val MAX_TASK_FAILURES = 4
 
-  val TASKSET_MINIMUM_SHARES = 1
-  val TASKSET_WEIGHT = 1
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = System.getProperty("spark.speculation.quantile", "0.75").toDouble
   val SPECULATION_MULTIPLIER = System.getProperty("spark.speculation.multiplier", "1.5").toDouble
 
   // Serializer for closures and tasks.
   val ser = SparkEnv.get.closureSerializer.newInstance()
-
-  var weight = TASKSET_WEIGHT
-  var minShare = TASKSET_MINIMUM_SHARES
-  var runningTasks = 0
-  val priority = taskSet.priority
-  val stageId = taskSet.stageId
 
   val tasks = taskSet.tasks
   val numTasks = tasks.length
@@ -54,6 +46,14 @@ private[spark] class TaskSetManager(
   val numFailures = new Array[Int](numTasks)
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksFinished = 0
+
+  var weight = 1
+  var minShare = 0
+  var runningTasks = 0
+  var priority = taskSet.priority
+  var stageId = taskSet.stageId
+  var name = "TaskSet_"+taskSet.stageId.toString
+  var parent:Schedulable = null
 
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
@@ -198,7 +198,7 @@ private[spark] class TaskSetManager(
   }
 
   // Respond to an offer of a single slave from the scheduler by finding a task
-  def slaveOffer(execId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
+  override def receiveOffer(execId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
       val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
@@ -230,10 +230,11 @@ private[spark] class TaskSetManager(
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           val timeTaken = System.currentTimeMillis - startTime
+          increaseRunningTasks(1)
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
-          return Some(new TaskDescription(taskId,taskSet.id,execId, taskName, serializedTask))
+          return Some(new TaskDescription(taskId, taskSet.id, execId, taskName, serializedTask))
         }
         case _ =>
       }
@@ -264,7 +265,7 @@ private[spark] class TaskSetManager(
     }
     val index = info.index
     info.markSuccessful()
-    sched.taskFinished(this)
+    decreaseRunningTasks(1)
     if (!finished(index)) {
       tasksFinished += 1
       logInfo("Finished TID %s in %d ms (progress: %d/%d)".format(
@@ -293,7 +294,7 @@ private[spark] class TaskSetManager(
     }
     val index = info.index
     info.markFailed()
-    sched.taskFinished(this)
+    decreaseRunningTasks(1)
     if (!finished(index)) {
       logInfo("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
       copiesRunning(index) -= 1
@@ -308,6 +309,7 @@ private[spark] class TaskSetManager(
             finished(index) = true
             tasksFinished += 1
             sched.taskSetFinished(this)
+            decreaseRunningTasks(runningTasks)
             return
 
           case ef: ExceptionFailure =>
@@ -365,10 +367,38 @@ private[spark] class TaskSetManager(
     causeOfFailure = message
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.listener.taskSetFailed(taskSet, message)
+    decreaseRunningTasks(runningTasks)
     sched.taskSetFinished(this)
   }
 
-  def executorLost(execId: String, hostname: String) {
+  override def increaseRunningTasks(taskNum: Int) {
+    runningTasks += taskNum
+    if (parent != null) {
+      parent.increaseRunningTasks(taskNum)
+    }
+  }
+
+  override def decreaseRunningTasks(taskNum: Int) {
+    runningTasks -= taskNum
+    if (parent != null) {
+      parent.decreaseRunningTasks(taskNum)
+    }
+  }
+
+  //TODO: for now we just find Pool not TaskSetManager, we can extend this function in future if needed
+  override def getSchedulableByName(name: String): Schedulable = {
+    return null
+  }
+
+  override def addSchedulable(schedulable:Schedulable) {
+    //nothing
+  }
+
+  override def removeSchedulable(schedulable:Schedulable) {
+    //nothing
+  }
+
+  override def executorLost(execId: String, hostname: String) {
     logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
     val newHostsAlive = sched.hostsAlive
     // If some task has preferred locations only on hostname, and there are no more executors there,
@@ -409,7 +439,7 @@ private[spark] class TaskSetManager(
    * TODO: To make this scale to large jobs, we need to maintain a list of running tasks, so that
    * we don't scan the whole task set. It might also help to make this sorted by launch time.
    */
-  def checkSpeculatableTasks(): Boolean = {
+  override def checkSpeculatableTasks(): Boolean = {
     // Can't speculate if we only have one task, or if all tasks have finished.
     if (numTasks == 1 || tasksFinished == numTasks) {
       return false
