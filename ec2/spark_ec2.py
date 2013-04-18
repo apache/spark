@@ -452,7 +452,9 @@ def get_num_disks(instance_type):
     "m2.4xlarge":  2,
     "cc1.4xlarge": 2,
     "cc2.8xlarge": 4,
-    "cg1.4xlarge": 2
+    "cg1.4xlarge": 2,
+    "hs1.8xlarge": 24,
+    "cr1.8xlarge": 2
   }
   if instance_type in disks_by_instance:
     return disks_by_instance[instance_type]
