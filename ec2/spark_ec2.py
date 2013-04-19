@@ -34,8 +34,8 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
 from boto import ec2
 
-# A static URL from which to figure out the latest Mesos EC2 AMI
-LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.7"
+# A URL prefix from which to fetch AMI information
+AMI_PREFIX = "https://raw.github.com/pwendell/spark-ec2/ec2-updates/ami-list"
 
 
 # Configure and parse our command-line arguments
@@ -156,6 +156,48 @@ def wait_for_instances(conn, instances):
 def is_active(instance):
   return (instance.state in ['pending', 'running', 'stopping', 'stopped'])
 
+# Attempt to resolve an appropriate AMI given the architecture and
+# region of the request.
+def get_spark_ami(opts):
+  version_prefix = opts.ami
+  instance_types = {
+    "m1.small":    "pvm",
+    "m1.medium":   "pvm",
+    "m1.large":    "pvm",
+    "m1.xlarge":   "pvm",
+    "t1.micro":    "pvm",
+    "c1.medium":   "pvm",
+    "c1.xlarge":   "pvm",
+    "m2.xlarge":   "pvm",
+    "m2.2xlarge":  "pvm",
+    "m2.4xlarge":  "pvm",
+    "cc1.4xlarge": "hvm",
+    "cc2.8xlarge": "hvm",
+    "cg1.4xlarge": "hvm",
+    "hs1.8xlarge": "hvm",
+    "hi1.4xlarge": "hvm",
+    "m3.xlarge":   "hvm",
+    "m3.2xlarge":  "hvm",
+    "cr1.8xlarge": "hvm"
+  }
+  if opts.instance_type in instance_types:
+    instance_type = instance_types[opts.instance_type]
+  else:
+    instance_type = "pvm"
+    print >> stderr,\
+        "Don't recognize %s, assuming type is pvm" % opts.instance_type
+  if version_prefix != "latest":
+    print >> stderr, \
+      "Don't know how to resolve AMI for version: %s" % version_prefix
+  ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version_prefix, "us-east", instance_type)
+  try:
+    ami = urllib2.urlopen(ami_path).read().strip()
+    print "Spark AMI: " + ami
+  except:
+    print >> stderr, "Could not read " + ami_path
+    sys.exit(1)
+
+  return ami
 
 # Launch a cluster of the given name, by setting up its security groups,
 # and then starting new instances in them.
@@ -209,13 +251,7 @@ def launch_cluster(conn, opts, cluster_name):
 
   # Figure out the latest AMI from our static URL
   if opts.ami == "latest":
-    try:
-      opts.ami = urllib2.urlopen(LATEST_AMI_URL).read().strip()
-      print "Latest Spark AMI: " + opts.ami
-    except:
-      print >> stderr, "Could not read " + LATEST_AMI_URL
-      sys.exit(1)
-
+    opts.ami = get_spark_ami(opts)
   print "Launching instances..."
 
   try:
@@ -455,7 +491,10 @@ def get_num_disks(instance_type):
     "cc2.8xlarge": 4,
     "cg1.4xlarge": 2,
     "hs1.8xlarge": 24,
-    "cr1.8xlarge": 2
+    "cr1.8xlarge": 2,
+    "hi1.4xlarge": 2,
+    "m3.xlarge":   0,
+    "m3.2xlarge":  0
   }
   if instance_type in disks_by_instance:
     return disks_by_instance[instance_type]
