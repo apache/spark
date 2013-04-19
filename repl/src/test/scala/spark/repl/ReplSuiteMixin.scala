@@ -14,12 +14,15 @@ import spark.deploy.master.Master
 import spark.deploy.worker.Worker
 
 trait ReplSuiteMixin {
+  val localIp = "127.0.1.2"
+  val port = "7089"
+  val sparkUrl = s"spark://$localIp:$port"
   def setupStandaloneCluster() {
-    future { Master.main(Array("-i", "127.0.1.2", "-p", "7089")) }
+    future { Master.main(Array("-i", localIp, "-p", port, "--webui-port", "0")) }
     Thread.sleep(2000)
-    future { Worker.main(Array("spark://127.0.1.2:7089", "--webui-port", "0")) }
+    future { Worker.main(Array(sparkUrl, "--webui-port", "0")) }
   }
-  
+
   def runInterpreter(master: String, input: String): String = {
     val in = new BufferedReader(new StringReader(input + "\n"))
     val out = new StringWriter()
@@ -33,6 +36,7 @@ trait ReplSuiteMixin {
         }
       }
     }
+
     val interp = new SparkILoop(in, new PrintWriter(out), master)
     spark.repl.Main.interp = interp
     val separator = System.getProperty("path.separator")

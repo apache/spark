@@ -152,10 +152,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     finally in = saved
   }
 
-  /*PRASHANT:Detecting if a lazy val has been materialized or not is possible but not worth it
-   * as in most cases of spark shell usages they will be. Incase they are not user will find
-   * shutdown slower than the shell start up itself
-   * */
+  
   def sparkCleanUp(){
     echo("Stopping spark context.")
     intp.beQuietDuring {
