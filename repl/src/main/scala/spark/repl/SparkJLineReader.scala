@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2011 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author Stepan Koltsov
  */
 
@@ -15,28 +15,33 @@ import scala.collection.JavaConverters._
 import Completion._
 import io.Streamable.slurp
 
-/** Reads from the console using JLine */
-class SparkJLineReader(val completion: Completion) extends InteractiveReader {
+/**
+ *  Reads from the console using JLine.
+ */
+class SparkJLineReader(_completion: => Completion) extends InteractiveReader {
   val interactive = true
+  val consoleReader = new JLineConsoleReader()
+
+  lazy val completion = _completion
   lazy val history: JLineHistory = JLineHistory()
-  lazy val keyBindings =
-    try KeyBinding parse slurp(term.getDefaultBindings)
-    catch { case _: Exception => Nil }
 
   private def term = consoleReader.getTerminal()
   def reset() = term.reset()
   def init()  = term.init()
-  
+
   def scalaToJline(tc: ScalaCompleter): Completer = new Completer {
     def complete(_buf: String, cursor: Int, candidates: JList[CharSequence]): Int = {
-      val buf   = if (_buf == null) "" else _buf      
+      val buf   = if (_buf == null) "" else _buf
       val Candidates(newCursor, newCandidates) = tc.complete(buf, cursor)
       newCandidates foreach (candidates add _)
       newCursor
     }
   }
-    
+
   class JLineConsoleReader extends ConsoleReader with ConsoleReaderHelper {
+    if ((history: History) ne NoHistory)
+      this setHistory history
+
     // working around protected/trait/java insufficiencies.
     def goBack(num: Int): Unit = back(num)
     def readOneKey(prompt: String) = {
@@ -46,34 +51,28 @@ class SparkJLineReader(val completion: Completion) extends InteractiveReader {
     }
     def eraseLine() = consoleReader.resetPromptLine("", "", 0)
     def redrawLineAndFlush(): Unit = { flush() ; drawLine() ; flush() }
-    
-    this setBellEnabled false
-    if (history ne NoHistory)
-      this setHistory history
-    
-    if (completion ne NoCompletion) {
-      val argCompletor: ArgumentCompleter =
-        new ArgumentCompleter(new JLineDelimiter, scalaToJline(completion.completer()))
-      argCompletor setStrict false
-      
-      this addCompleter argCompletor
-      this setAutoprintThreshold 400 // max completion candidates without warning
+    // override def readLine(prompt: String): String
+
+    // A hook for running code after the repl is done initializing.
+    lazy val postInit: Unit = {
+      this setBellEnabled false
+
+      if (completion ne NoCompletion) {
+        val argCompletor: ArgumentCompleter =
+          new ArgumentCompleter(new JLineDelimiter, scalaToJline(completion.completer()))
+        argCompletor setStrict false
+
+        this addCompleter argCompletor
+        this setAutoprintThreshold 400 // max completion candidates without warning
+      }
     }
   }
-  
-  val consoleReader: JLineConsoleReader = new JLineConsoleReader()
 
-  def currentLine: String = consoleReader.getCursorBuffer.buffer.toString
+  def currentLine = consoleReader.getCursorBuffer.buffer.toString
   def redrawLine() = consoleReader.redrawLineAndFlush()
-  def eraseLine() = {
-    while (consoleReader.delete()) { }
-    // consoleReader.eraseLine()
-  }
+  def eraseLine() = consoleReader.eraseLine()
+  // Alternate implementation, not sure if/when I need this.
+  // def eraseLine() = while (consoleReader.delete()) { }
   def readOneLine(prompt: String) = consoleReader readLine prompt
   def readOneKey(prompt: String)  = consoleReader readOneKey prompt
-}
-
-object SparkJLineReader {
-  def apply(intp: SparkIMain): SparkJLineReader = apply(new SparkJLineCompletion(intp))
-  def apply(comp: Completion): SparkJLineReader = new SparkJLineReader(comp)
 }
