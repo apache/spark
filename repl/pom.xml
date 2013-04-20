@@ -97,13 +97,6 @@
           <scope>runtime</scope>
         </dependency>
         <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-streaming</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
           <scope>provided</scope>
@@ -143,13 +136,6 @@
         <dependency>
           <groupId>org.spark-project</groupId>
           <artifactId>spark-examples</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-streaming</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
           <scope>runtime</scope>
