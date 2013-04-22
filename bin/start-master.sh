@@ -26,9 +26,10 @@ fi
 # Set SPARK_PUBLIC_DNS so the master report the correct webUI address to the slaves
 if [ "$SPARK_PUBLIC_DNS" = "" ]; then
     # If we appear to be running on EC2, use the public address by default:
-    if [[ `hostname` == *ec2.internal ]]; then
+    # NOTE: ec2-metadata is installed on Amazon Linux AMI. Check based on that and hostname
+    if command -v ec2-metadata > /dev/null || [[ `hostname` == *ec2.internal ]]; then
         export SPARK_PUBLIC_DNS=`wget -q -O - http://instance-data.ec2.internal/latest/meta-data/public-hostname`
     fi
 fi
 
-"$bin"/spark-daemon.sh start spark.deploy.master.Master --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT
+"$bin"/spark-daemon.sh start spark.deploy.master.Master 1 --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT

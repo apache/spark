@@ -3,10 +3,12 @@ package spark.scheduler
 import scala.collection.mutable.ArrayBuffer
 
 /**
- * An object that waits for a DAGScheduler job to complete.
+ * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
+ * results to the given handler function.
  */
-private[spark] class JobWaiter(totalTasks: Int) extends JobListener {
-  private val taskResults = ArrayBuffer.fill[Any](totalTasks)(null)
+private[spark] class JobWaiter[T](totalTasks: Int, resultHandler: (Int, T) => Unit)
+  extends JobListener {
+
   private var finishedTasks = 0
 
   private var jobFinished = false          // Is the job as a whole finished (succeeded or failed)?
@@ -17,11 +19,11 @@ private[spark] class JobWaiter(totalTasks: Int) extends JobListener {
       if (jobFinished) {
         throw new UnsupportedOperationException("taskSucceeded() called on a finished JobWaiter")
       }
-      taskResults(index) = result
+      resultHandler(index, result.asInstanceOf[T])
       finishedTasks += 1
       if (finishedTasks == totalTasks) {
         jobFinished = true
-        jobResult = JobSucceeded(taskResults)
+        jobResult = JobSucceeded
         this.notifyAll()
       }
     }
@@ -38,7 +40,7 @@ private[spark] class JobWaiter(totalTasks: Int) extends JobListener {
     }
   }
 
-  def getResult(): JobResult = synchronized {
+  def awaitResult(): JobResult = synchronized {
     while (!jobFinished) {
       this.wait()
     }

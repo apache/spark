@@ -1,5 +1,6 @@
 package spark
 
+import network.ConnectionManagerId
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.ShouldMatchers
@@ -13,43 +14,30 @@ import com.google.common.io.Files
 import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
-import storage.StorageLevel
+import storage.{GetBlock, BlockManagerWorker, StorageLevel}
 
-class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter {
+class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"
 
-  @transient var sc: SparkContext = _
-
   after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
     System.clearProperty("spark.reducer.maxMbInFlight")
     System.clearProperty("spark.storage.memoryFraction")
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
   }
 
   test("local-cluster format") {
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[2 , 1 , 512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[2, 1, 512]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
+    resetSparkContext()
     sc = new SparkContext("local-cluster[ 2, 1, 512 ]", "test")
     assert(sc.parallelize(1 to 2, 2).count() == 2)
-    sc.stop()
-    System.clearProperty("spark.master.port")
-    sc = null
+    resetSparkContext()
   }
 
   test("simple groupByKey") {
@@ -153,9 +141,22 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
   test("caching in memory and disk, serialized, replicated") {
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(1 to 1000, 10).persist(StorageLevel.MEMORY_AND_DISK_SER_2)
+
     assert(data.count() === 1000)
     assert(data.count() === 1000)
     assert(data.count() === 1000)
+
+    // Get all the locations of the first partition and try to fetch the partitions
+    // from those locations.
+    val blockIds = data.partitions.indices.map(index => "rdd_%d_%d".format(data.id, index)).toArray
+    val blockId = blockIds(0)
+    val blockManager = SparkEnv.get.blockManager
+    blockManager.master.getLocations(blockId).foreach(id => {
+      val bytes = BlockManagerWorker.syncGetBlock(
+        GetBlock(blockId), ConnectionManagerId(id.ip, id.port))
+      val deserialized = blockManager.dataDeserialize(blockId, bytes).asInstanceOf[Iterator[Int]].toList
+      assert(deserialized === (1 to 100).toList)
+    })
   }
 
   test("compute without caching when no partitions fit in memory") {
@@ -188,4 +189,94 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     val values = sc.parallelize(1 to 2, 2).map(x => System.getenv("TEST_VAR")).collect()
     assert(values.toSeq === Seq("TEST_VALUE", "TEST_VALUE"))
   }
+
+  test("recover from node failures") {
+    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    DistributedSuite.amMaster = true
+    sc = new SparkContext(clusterUrl, "test")
+    val data = sc.parallelize(Seq(true, true), 2)
+    assert(data.count === 2) // force executors to start
+    val masterId = SparkEnv.get.blockManager.blockManagerId
+    assert(data.map(markNodeIfIdentity).collect.size === 2)
+    assert(data.map(failOnMarkedIdentity).collect.size === 2)
+  }
+
+  test("recover from repeated node failures during shuffle-map") {
+    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    DistributedSuite.amMaster = true
+    sc = new SparkContext(clusterUrl, "test")
+    for (i <- 1 to 3) {
+      val data = sc.parallelize(Seq(true, false), 2)
+      assert(data.count === 2)
+      assert(data.map(markNodeIfIdentity).collect.size === 2)
+      assert(data.map(failOnMarkedIdentity).map(x => x -> x).groupByKey.count === 2)
+    }
+  }
+
+  test("recover from repeated node failures during shuffle-reduce") {
+    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    DistributedSuite.amMaster = true
+    sc = new SparkContext(clusterUrl, "test")
+    for (i <- 1 to 3) {
+      val data = sc.parallelize(Seq(true, true), 2)
+      assert(data.count === 2)
+      assert(data.map(markNodeIfIdentity).collect.size === 2)
+      // This relies on mergeCombiners being used to perform the actual reduce for this
+      // test to actually be testing what it claims.
+      val grouped = data.map(x => x -> x).combineByKey(
+                      x => x,
+                      (x: Boolean, y: Boolean) => x,
+                      (x: Boolean, y: Boolean) => failOnMarkedIdentity(x)
+                    )
+      assert(grouped.collect.size === 1)
+    }
+  }
+
+  test("recover from node failures with replication") {
+    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    DistributedSuite.amMaster = true
+    // Using more than two nodes so we don't have a symmetric communication pattern and might
+    // cache a partially correct list of peers.
+    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    for (i <- 1 to 3) {
+      val data = sc.parallelize(Seq(true, false, false, false), 4)
+      data.persist(StorageLevel.MEMORY_ONLY_2)
+
+      assert(data.count === 4)
+      assert(data.map(markNodeIfIdentity).collect.size === 4)
+      assert(data.map(failOnMarkedIdentity).collect.size === 4)
+
+      // Create a new replicated RDD to make sure that cached peer information doesn't cause
+      // problems.
+      val data2 = sc.parallelize(Seq(true, true), 2).persist(StorageLevel.MEMORY_ONLY_2)
+      assert(data2.count === 2)
+    }
+  }
+}
+
+object DistributedSuite {
+  // Indicates whether this JVM is marked for failure.
+  var mark = false
+  
+  // Set by test to remember if we are in the driver program so we can assert
+  // that we are not.
+  var amMaster = false
+
+  // Act like an identity function, but if the argument is true, set mark to true.
+  def markNodeIfIdentity(item: Boolean): Boolean = {
+    if (item) {
+      assert(!amMaster)
+      mark = true
+    }
+    item
+  }
+
+  // Act like an identity function, but if mark was set to true previously, fail,
+  // crashing the entire JVM.
+  def failOnMarkedIdentity(item: Boolean): Boolean = {
+    if (mark) { 
+      System.exit(42)
+    } 
+    item
+  } 
 }

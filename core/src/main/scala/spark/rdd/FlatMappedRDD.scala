@@ -1,16 +1,16 @@
 package spark.rdd
 
-import spark.{OneToOneDependency, RDD, Split, TaskContext}
+import spark.{RDD, Partition, TaskContext}
+
 
 private[spark]
 class FlatMappedRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
     f: T => TraversableOnce[U])
-  extends RDD[U](prev.context) {
+  extends RDD[U](prev) {
 
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
+  override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  override def compute(split: Split, context: TaskContext) =
-    prev.iterator(split, context).flatMap(f)
+  override def compute(split: Partition, context: TaskContext) =
+    firstParent[T].iterator(split, context).flatMap(f)
 }

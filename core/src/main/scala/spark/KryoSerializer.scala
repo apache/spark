@@ -157,27 +157,34 @@ class KryoSerializer extends spark.serializer.Serializer with Logging {
 
     // Register maps with a special serializer since they have complex internal structure
     class ScalaMapSerializer(buildMap: Array[(Any, Any)] => scala.collection.Map[Any, Any])
-    extends KSerializer[Array[(Any, Any)] => scala.collection.Map[Any, Any]] {
+      extends KSerializer[Array[(Any, Any)] => scala.collection.Map[Any, Any]] {
+
+      //hack, look at https://groups.google.com/forum/#!msg/kryo-users/Eu5V4bxCfws/k-8UQ22y59AJ
+      private final val FAKE_REFERENCE = new Object()
       override def write(
-        kryo: Kryo,
-        output: KryoOutput,
-        obj: Array[(Any, Any)] => scala.collection.Map[Any, Any]) {
+                          kryo: Kryo,
+                          output: KryoOutput,
+                          obj: Array[(Any, Any)] => scala.collection.Map[Any, Any]) {
         val map = obj.asInstanceOf[scala.collection.Map[Any, Any]]
-        kryo.writeObject(output, map.size.asInstanceOf[java.lang.Integer])
+        output.writeInt(map.size)
         for ((k, v) <- map) {
           kryo.writeClassAndObject(output, k)
           kryo.writeClassAndObject(output, v)
         }
       }
       override def read (
-        kryo: Kryo,
-        input: KryoInput,
-        cls: Class[Array[(Any, Any)] => scala.collection.Map[Any, Any]])
+                          kryo: Kryo,
+                          input: KryoInput,
+                          cls: Class[Array[(Any, Any)] => scala.collection.Map[Any, Any]])
       : Array[(Any, Any)] => scala.collection.Map[Any, Any] = {
-        val size = kryo.readObject(input, classOf[java.lang.Integer]).intValue
+        kryo.reference(FAKE_REFERENCE)
+        val size = input.readInt()
         val elems = new Array[(Any, Any)](size)
-        for (i <- 0 until size)
-          elems(i) = (kryo.readClassAndObject(input), kryo.readClassAndObject(input))
+        for (i <- 0 until size) {
+          val k = kryo.readClassAndObject(input)
+          val v = kryo.readClassAndObject(input)
+          elems(i)=(k,v)
+        }
         buildMap(elems).asInstanceOf[Array[(Any, Any)] => scala.collection.Map[Any, Any]]
       }
     }
@@ -206,5 +213,8 @@ class KryoSerializer extends spark.serializer.Serializer with Logging {
     kryo
   }
 
-  def newInstance(): SerializerInstance = new KryoSerializerInstance(this)
+  def newInstance(): SerializerInstance = {
+    this.kryo.get().setClassLoader(Thread.currentThread().getContextClassLoader)
+    new KryoSerializerInstance(this)
+  }
 }

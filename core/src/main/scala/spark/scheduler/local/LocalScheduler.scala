@@ -1,14 +1,13 @@
 package spark.scheduler.local
 
 import java.io.File
-import java.net.URLClassLoader
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.HashMap
 
 import spark._
-import executor.ExecutorURLClassLoader
+import spark.executor.ExecutorURLClassLoader
 import spark.scheduler._
+import spark.scheduler.cluster.TaskInfo
 
 /**
  * A simple TaskScheduler implementation that runs tasks locally in a thread pool. Optionally
@@ -20,7 +19,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
   with Logging {
 
   var attemptId = new AtomicInteger(0)
-  var threadPool = Executors.newFixedThreadPool(threads, DaemonThreadFactory)
+  var threadPool = Utils.newDaemonFixedThreadPool(threads)
   val env = SparkEnv.get
   var listener: TaskSchedulerListener = null
 
@@ -53,7 +52,8 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
     }
 
     def runTask(task: Task[_], idInJob: Int, attemptId: Int) {
-      logInfo("Running task " + idInJob)
+      logInfo("Running " + task)
+      val info = new TaskInfo(attemptId, idInJob, System.currentTimeMillis(), "local", "local", true)
       // Set the Spark execution environment for the worker thread
       SparkEnv.set(env)
       try {
@@ -67,8 +67,10 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
         logInfo("Size of task " + idInJob + " is " + bytes.limit + " bytes")
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(bytes)
         updateDependencies(taskFiles, taskJars)   // Download any files added with addFile
+        val deserStart = System.currentTimeMillis()
         val deserializedTask = ser.deserialize[Task[_]](
             taskBytes, Thread.currentThread.getContextClassLoader)
+        val deserTime = System.currentTimeMillis() - deserStart
 
         // Run it
         val result: Any = deserializedTask.run(attemptId)
@@ -77,11 +79,19 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
         // executor does. This is useful to catch serialization errors early
         // on in development (so when users move their local Spark programs
         // to the cluster, they don't get surprised by serialization errors).
-        val resultToReturn = ser.deserialize[Any](ser.serialize(result))
+        val serResult = ser.serialize(result)
+        deserializedTask.metrics.get.resultSize = serResult.limit()
+        val resultToReturn = ser.deserialize[Any](serResult)
         val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
           ser.serialize(Accumulators.values))
-        logInfo("Finished task " + idInJob)
-        listener.taskEnded(task, Success, resultToReturn, accumUpdates)
+        logInfo("Finished " + task)
+        info.markSuccessful()
+        deserializedTask.metrics.get.executorRunTime = info.duration.toInt  //close enough
+        deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
+
+        // If the threadpool has not already been shutdown, notify DAGScheduler
+        if (!Thread.currentThread().isInterrupted)
+          listener.taskEnded(task, Success, resultToReturn, accumUpdates, info, deserializedTask.metrics.getOrElse(null))
       } catch {
         case t: Throwable => {
           logError("Exception in task " + idInJob, t)
@@ -91,7 +101,8 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
               submitTask(task, idInJob)
             } else {
               // TODO: Do something nicer here to return all the way to the user
-              listener.taskEnded(task, new ExceptionFailure(t), null, null)
+              if (!Thread.currentThread().isInterrupted)
+                listener.taskEnded(task, new ExceptionFailure(t), null, null, info, null)
             }
           }
         }
@@ -112,16 +123,16 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File("."))
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File("."))
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last
-        val url = new File(".", localName).toURI.toURL
+        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
         if (!classLoader.getURLs.contains(url)) {
           logInfo("Adding " + url + " to class loader")
           classLoader.addURL(url)

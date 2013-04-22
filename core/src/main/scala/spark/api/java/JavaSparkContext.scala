@@ -23,41 +23,41 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
+   * @param appName A name for your application, to display on the cluster web UI
    */
-  def this(master: String, jobName: String) = this(new SparkContext(master, jobName))
+  def this(master: String, appName: String) = this(new SparkContext(master, appName))
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
+   * @param appName A name for your application, to display on the cluster web UI
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jarFile JAR file to send to the cluster. This can be a path on the local file system
+   *                or an HDFS, HTTP, HTTPS, or FTP URL.
+   */
+  def this(master: String, appName: String, sparkHome: String, jarFile: String) =
+    this(new SparkContext(master, appName, sparkHome, Seq(jarFile)))
+
+  /**
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the slave nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
-  def this(master: String, jobName: String, sparkHome: String, jarFile: String) =
-    this(new SparkContext(master, jobName, sparkHome, Seq(jarFile)))
+  def this(master: String, appName: String, sparkHome: String, jars: Array[String]) =
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq))
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
-   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
-   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
-   */
-  def this(master: String, jobName: String, sparkHome: String, jars: Array[String]) =
-    this(new SparkContext(master, jobName, sparkHome, jars.toSeq))
-
-  /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param jobName A name for your job, to display on the cluster web UI
+   * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the slave nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes
    */
-  def this(master: String, jobName: String, sparkHome: String, jars: Array[String],
+  def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, jobName, sparkHome, jars.toSeq, environment))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment))
 
   private[spark] val env = sc.env
 
@@ -323,9 +323,10 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def getSparkHome(): Option[String] = sc.getSparkHome()
 
   /**
-   * Add a file to be downloaded into the working directory of this Spark job on every node.
+   * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), or an HTTP, HTTPS or FTP URI.
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(path)` to find its download location.
    */
   def addFile(path: String) {
     sc.addFile(path)
@@ -354,6 +355,40 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    */
   def clearFiles() {
     sc.clearFiles()
+  }
+
+  /**
+   * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
+   */
+  def hadoopConfiguration(): Configuration = {
+    sc.hadoopConfiguration
+  }
+
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists and useExisting is set to true, then the
+   * exisiting directory will be used. Otherwise an exception will be thrown to
+   * prevent accidental overriding of checkpoint files in the existing directory.
+   */
+  def setCheckpointDir(dir: String, useExisting: Boolean) {
+    sc.setCheckpointDir(dir, useExisting)
+  }
+
+  /**
+   * Set the directory under which RDDs are going to be checkpointed. The directory must
+   * be a HDFS path if running on a cluster. If the directory does not exist, it will
+   * be created. If the directory exists, an exception will be thrown to prevent accidental
+   * overriding of checkpoint files.
+   */
+  def setCheckpointDir(dir: String) {
+    sc.setCheckpointDir(dir)
+  }
+
+  protected def checkpointFile[T](path: String): JavaRDD[T] = {
+    implicit val cm: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    new JavaRDD(sc.checkpointFile(path))
   }
 }
 

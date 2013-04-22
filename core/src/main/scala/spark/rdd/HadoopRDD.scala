@@ -15,16 +15,17 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
-import spark.{Dependency, RDD, SerializableWritable, SparkContext, Split, TaskContext}
+import spark.{Dependency, Logging, Partition, RDD, SerializableWritable, SparkContext, TaskContext}
+import spark.util.NextIterator
+import org.apache.hadoop.conf.Configurable
 
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
-private[spark] class HadoopSplit(rddId: Int, idx: Int, @transient s: InputSplit)
-  extends Split
-  with Serializable {
-
+private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSplit)
+  extends Partition {
+  
   val inputSplit = new SerializableWritable[InputSplit](s)
 
   override def hashCode(): Int = (41 * (41 + rddId) + idx).toInt
@@ -43,18 +44,20 @@ class HadoopRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     minSplits: Int)
-  extends RDD[(K, V)](sc) {
+  extends RDD[(K, V)](sc, Nil) with Logging {
 
   // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it
-  val confBroadcast = sc.broadcast(new SerializableWritable(conf))
+  private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
 
-  @transient
-  val splits_ : Array[Split] = {
+  override def getPartitions: Array[Partition] = {
     val inputFormat = createInputFormat(conf)
+    if (inputFormat.isInstanceOf[Configurable]) {
+      inputFormat.asInstanceOf[Configurable].setConf(conf)
+    }
     val inputSplits = inputFormat.getSplits(conf, minSplits)
-    val array = new Array[Split](inputSplits.size)
+    val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
-      array(i) = new HadoopSplit(id, i, inputSplits(i))
+      array(i) = new HadoopPartition(id, i, inputSplits(i))
     }
     array
   }
@@ -64,57 +67,49 @@ class HadoopRDD[K, V](
       .asInstanceOf[InputFormat[K, V]]
   }
 
-  override def splits = splits_
-
-  override def compute(theSplit: Split, context: TaskContext) = new Iterator[(K, V)] {
-    val split = theSplit.asInstanceOf[HadoopSplit]
+  override def compute(theSplit: Partition, context: TaskContext) = new NextIterator[(K, V)] {
+    val split = theSplit.asInstanceOf[HadoopPartition]
     var reader: RecordReader[K, V] = null
 
     val conf = confBroadcast.value.value
     val fmt = createInputFormat(conf)
+    if (fmt.isInstanceOf[Configurable]) {
+      fmt.asInstanceOf[Configurable].setConf(conf)
+    }
     reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 
     // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback(() => reader.close())
+    context.addOnCompleteCallback{ () => closeIfNeeded() }
 
     val key: K = reader.createKey()
     val value: V = reader.createValue()
-    var gotNext = false
-    var finished = false
 
-    override def hasNext: Boolean = {
-      if (!gotNext) {
-        try {
-          finished = !reader.next(key, value)
-        } catch {
-          case eof: EOFException =>
-            finished = true
-        }
-        gotNext = true
+    override def getNext() = {
+      try {
+        finished = !reader.next(key, value)
+      } catch {
+        case eof: EOFException =>
+          finished = true
       }
-      if (finished) {
-        reader.close()
-      }
-      !finished
+      (key, value)
     }
 
-    override def next: (K, V) = {
-      if (!gotNext) {
-        finished = !reader.next(key, value)
+    override def close() {
+      try {
+        reader.close()
+      } catch {
+        case e: Exception => logWarning("Exception in RecordReader.close()", e)
       }
-      if (finished) {
-        throw new NoSuchElementException("End of stream")
-      }
-      gotNext = false
-      (key, value)
     }
   }
 
-  override def preferredLocations(split: Split) = {
+  override def getPreferredLocations(split: Partition): Seq[String] = {
     // TODO: Filtering out "localhost" in case of file:// URLs
-    val hadoopSplit = split.asInstanceOf[HadoopSplit]
+    val hadoopSplit = split.asInstanceOf[HadoopPartition]
     hadoopSplit.inputSplit.value.getLocations.filter(_ != "localhost")
   }
 
-  override val dependencies: List[Dependency[_]] = Nil
+  override def checkpoint() {
+    // Do nothing. Hadoop RDD should not be checkpointed.
+  }
 }

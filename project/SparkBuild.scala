@@ -9,23 +9,25 @@ import twirl.sbt.TwirlPlugin._
 
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
-  // "1.0.3" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
-  val HADOOP_VERSION = "1.0.3"
+  // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
+  val HADOOP_VERSION = "1.0.4"
   val HADOOP_MAJOR_VERSION = "1"
 
   // For Hadoop 2 versions such as "2.0.0-mr1-cdh4.1.1", set the HADOOP_MAJOR_VERSION to "2"
   //val HADOOP_VERSION = "2.0.0-mr1-cdh4.1.1"
   //val HADOOP_MAJOR_VERSION = "2"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
-  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn (core)
+  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn (core) dependsOn (streaming)
 
-  lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core)
+  lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core) dependsOn (streaming)
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
+
+  lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -33,14 +35,24 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.spark-project",
-    version            := "0.7.0-SNAPSHOT",
+    version            := "0.8.0-SNAPSHOT",
     scalaVersion       := "2.10.0",
-    scalacOptions      := Seq("-unchecked", "-optimize"),
+    scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation"),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
     testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
+
+    // Fork new JVMs for tests and set Java options for those
+    fork := true,
+    javaOptions += "-Xmx1g",
+
+    // Only allow one test at a time, even across projects, since they run in the same JVM
+    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
+
+    // Shared between both core and streaming.
+    resolvers ++= Seq("Akka Repository" at "http://repo.akka.io/releases/"),
 
     // For Sonatype publishing
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
@@ -90,7 +102,8 @@ object SparkBuild extends Build {
     "org.eclipse.jetty" % "jetty-server"    % "7.5.3.v20111011",
     "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
     "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
-    "com.novocode"      % "junit-interface" % "0.8"    % "test"
+    "com.novocode"      % "junit-interface" % "0.8"    % "test",
+    "org.easymock"      % "easymock"        % "3.1"    % "test"
   ),
     parallelExecution := false,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
@@ -111,10 +124,11 @@ object SparkBuild extends Build {
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
     resolvers ++= Seq(
-      "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
-      "JBoss Repository"    at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      "Spray Repository"    at "http://repo.spray.cc/",
-      "Cloudera Repository" at "https://repository.cloudera.com/artifactory/cloudera-repos/"
+      "Typesafe Repository"  at "http://repo.typesafe.com/typesafe/releases/",
+      "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
+      "Spray Repository"     at "http://repo.spray.cc/",
+      "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/",
+      "Twitter4J Repository" at "http://twitter4j.org/maven2/"
     ),
 
     libraryDependencies ++= Seq(
@@ -155,10 +169,21 @@ object SparkBuild extends Build {
   )
 
   def examplesSettings = sharedSettings ++ Seq(
-    name := "spark-examples"
+    name := "spark-examples",
+    libraryDependencies ++= Seq("com.twitter" % "algebird-core_2.9.2" % "0.1.11")
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
+
+  def streamingSettings = sharedSettings ++ Seq(
+    name := "spark-streaming",
+    libraryDependencies ++= Seq(
+      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile",
+      "com.github.sgroschupf" % "zkclient" % "0.1",
+      "org.twitter4j" % "twitter4j-stream" % "3.0.3",
+      "com.typesafe.akka" % "akka-zeromq" % "2.0.3"
+    )
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
     mergeStrategy in assembly := {

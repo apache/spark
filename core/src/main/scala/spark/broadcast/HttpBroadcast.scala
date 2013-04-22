@@ -11,6 +11,7 @@ import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import spark._
 import spark.storage.StorageLevel
+import util.{MetadataCleaner, TimeStampedHashSet}
 
 private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
 extends Broadcast[T](id) with Logging with Serializable {
@@ -47,7 +48,7 @@ extends Broadcast[T](id) with Logging with Serializable {
 }
 
 private[spark] class HttpBroadcastFactory extends BroadcastFactory {
-  def initialize(isMaster: Boolean) { HttpBroadcast.initialize(isMaster) }
+  def initialize(isDriver: Boolean) { HttpBroadcast.initialize(isDriver) }
 
   def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
     new HttpBroadcast[T](value_, isLocal, id)
@@ -64,12 +65,16 @@ private object HttpBroadcast extends Logging {
   private var serverUri: String = null
   private var server: HttpServer = null
 
-  def initialize(isMaster: Boolean) {
+  private val files = new TimeStampedHashSet[String]
+  private val cleaner = new MetadataCleaner("HttpBroadcast", cleanup)
+
+
+  def initialize(isDriver: Boolean) {
     synchronized {
       if (!initialized) {
         bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
         compress = System.getProperty("spark.broadcast.compress", "true").toBoolean
-        if (isMaster) {
+        if (isDriver) {
           createServer()
         }
         serverUri = System.getProperty("spark.httpBroadcast.uri")
@@ -85,6 +90,7 @@ private object HttpBroadcast extends Logging {
         server = null
       }
       initialized = false
+      cleaner.cancel()
     }
   }
 
@@ -108,6 +114,7 @@ private object HttpBroadcast extends Logging {
     val serOut = ser.serializeStream(out)
     serOut.writeObject(value)
     serOut.close()
+    files += file.getAbsolutePath
   }
 
   def read[T](id: Long): T = {
@@ -122,5 +129,22 @@ private object HttpBroadcast extends Logging {
     val obj = serIn.readObject[T]()
     serIn.close()
     obj
+  }
+
+  def cleanup(cleanupTime: Long) {
+    val iterator = files.internalMap.entrySet().iterator()
+    while(iterator.hasNext) {
+      val entry = iterator.next()
+      val (file, time) = (entry.getKey, entry.getValue)
+      if (time < cleanupTime) {
+        try {
+          iterator.remove()
+          new File(file.toString).delete()
+          logInfo("Deleted broadcast file '" + file + "'")
+        } catch {
+          case e: Exception => logWarning("Could not delete broadcast file '" + file + "'", e)
+        }
+      }
+    }
   }
 }

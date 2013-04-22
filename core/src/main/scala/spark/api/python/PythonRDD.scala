@@ -1,7 +1,8 @@
 package spark.api.python
 
 import java.io._
-import java.util.{List => JList}
+import java.net._
+import java.util.{List => JList, ArrayList => JArrayList, Collections}
 
 import scala.collection.JavaConversions._
 import scala.io.Source
@@ -10,33 +11,32 @@ import spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import spark.broadcast.Broadcast
 import spark._
 import spark.rdd.PipedRDD
-import java.util
 
 
 private[spark] class PythonRDD[T: ClassManifest](
-  parent: RDD[T],
-  command: Seq[String],
-  envVars: java.util.Map[String, String],
-  preservePartitoning: Boolean,
-  pythonExec: String,
-  broadcastVars: java.util.List[Broadcast[Array[Byte]]])
-  extends RDD[Array[Byte]](parent.context) {
+    parent: RDD[T],
+    command: Seq[String],
+    envVars: java.util.Map[String, String],
+    preservePartitoning: Boolean,
+    pythonExec: String,
+    broadcastVars: JList[Broadcast[Array[Byte]]],
+    accumulator: Accumulator[JList[Array[Byte]]])
+  extends RDD[Array[Byte]](parent) {
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
   def this(parent: RDD[T], command: String, envVars: java.util.Map[String, String],
-    preservePartitoning: Boolean, pythonExec: String,
-    broadcastVars: java.util.List[Broadcast[Array[Byte]]]) =
+      preservePartitoning: Boolean, pythonExec: String,
+      broadcastVars: JList[Broadcast[Array[Byte]]],
+      accumulator: Accumulator[JList[Array[Byte]]]) =
     this(parent, PipedRDD.tokenize(command), envVars, preservePartitoning, pythonExec,
-      broadcastVars)
+      broadcastVars, accumulator)
 
-  override def splits = parent.splits
-
-  override val dependencies = List(new OneToOneDependency(parent))
+  override def getPartitions = parent.partitions
 
   override val partitioner = if (preservePartitoning) parent.partitioner else None
 
-  override def compute(split: Split, context: TaskContext): Iterator[Array[Byte]] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val SPARK_HOME = new ProcessBuilder().environment().get("SPARK_HOME")
 
     val pb = new ProcessBuilder(Seq(pythonExec, SPARK_HOME + "/python/pyspark/worker.py"))
@@ -51,7 +51,7 @@ private[spark] class PythonRDD[T: ClassManifest](
     val env = SparkEnv.get
 
     // Start a thread to print the process's stderr to ours
-    new Thread("stderr reader for " + command) {
+    new Thread("stderr reader for " + pythonExec) {
       override def run() {
         for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
           System.err.println(line)
@@ -60,13 +60,15 @@ private[spark] class PythonRDD[T: ClassManifest](
     }.start()
 
     // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for " + command) {
+    new Thread("stdin writer for " + pythonExec) {
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
         val dOut = new DataOutputStream(proc.getOutputStream)
-        // Split index
+        // Partition index
         dOut.writeInt(split.index)
+        // sparkFilesDir
+        PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dOut)
         // Broadcast variables
         dOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
@@ -93,18 +95,36 @@ private[spark] class PythonRDD[T: ClassManifest](
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(proc.getInputStream)
     return new Iterator[Array[Byte]] {
-      def next() = {
+      def next(): Array[Byte] = {
         val obj = _nextObj
         _nextObj = read()
         obj
       }
 
-      private def read() = {
+      private def read(): Array[Byte] = {
         try {
-          val length = stream.readInt()
-          val obj = new Array[Byte](length)
-          stream.readFully(obj)
-          obj
+          stream.readInt() match {
+            case length if length > 0 =>
+              val obj = new Array[Byte](length)
+              stream.readFully(obj)
+              obj
+            case -2 =>
+              // Signals that an exception has been thrown in python
+              val exLength = stream.readInt()
+              val obj = new Array[Byte](exLength)
+              stream.readFully(obj)
+              throw new PythonException(new String(obj))
+            case -1 =>
+              // We've finished the data section of the output, but we can still read some
+              // accumulator updates; let's do that, breaking when we get EOFException
+              while (true) {
+                val len2 = stream.readInt()
+                val update = new Array[Byte](len2)
+                stream.readFully(update)
+                accumulator += Collections.singletonList(update)
+              }
+              new Array[Byte](0)
+          }
         } catch {
           case eof: EOFException => {
             val exitStatus = proc.waitFor()
@@ -126,15 +146,17 @@ private[spark] class PythonRDD[T: ClassManifest](
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
 
+/** Thrown for exceptions in user Python code. */
+private class PythonException(msg: String) extends Exception(msg)
+
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
  * This is used by PySpark's shuffle operations.
  */
 private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
-  RDD[(Array[Byte], Array[Byte])](prev.context) {
-  override def splits = prev.splits
-  override val dependencies = List(new OneToOneDependency(prev))
-  override def compute(split: Split, context: TaskContext) =
+  RDD[(Array[Byte], Array[Byte])](prev) {
+  override def getPartitions = prev.partitions
+  override def compute(split: Partition, context: TaskContext) =
     prev.iterator(split, context).grouped(2).map {
       case Seq(a, b) => (a, b)
       case x          => throw new Exception("PairwiseRDD: unexpected value: " + x)
@@ -216,6 +238,11 @@ private[spark] object PythonRDD {
   }
 
   def writeIteratorToPickleFile[T](items: java.util.Iterator[T], filename: String) {
+    import scala.collection.JavaConverters._
+    writeIteratorToPickleFile(items.asScala, filename)
+  }
+
+  def writeIteratorToPickleFile[T](items: Iterator[T], filename: String) {
     val file = new DataOutputStream(new FileOutputStream(filename))
     for (item <- items) {
       writeAsPickle(item, file)
@@ -223,8 +250,10 @@ private[spark] object PythonRDD {
     file.close()
   }
 
-  def takePartition[T](rdd: RDD[T], partition: Int): java.util.Iterator[T] =
-    rdd.context.runJob(rdd, ((x: Iterator[T]) => x), Seq(partition), true).head
+  def takePartition[T](rdd: RDD[T], partition: Int): Iterator[T] = {
+    implicit val cm : ClassManifest[T] = rdd.elementClassManifest
+    rdd.context.runJob(rdd, ((x: Iterator[T]) => x.toArray), Seq(partition), true).head.iterator
+  }
 }
 
 private object Pickle {
@@ -238,11 +267,43 @@ private object Pickle {
   val APPENDS: Byte = 'e'
 }
 
-private class ExtractValue extends spark.api.java.function.Function[(Array[Byte],
-  Array[Byte]), Array[Byte]] {
-  override def call(pair: (Array[Byte], Array[Byte])) : Array[Byte] = pair._2
-}
-
 private class BytesToString extends spark.api.java.function.Function[Array[Byte], String] {
   override def call(arr: Array[Byte]) : String = new String(arr, "UTF-8")
+}
+
+/**
+ * Internal class that acts as an `AccumulatorParam` for Python accumulators. Inside, it
+ * collects a list of pickled strings that we pass to Python through a socket.
+ */
+class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
+  extends AccumulatorParam[JList[Array[Byte]]] {
+  
+  override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
+
+  override def addInPlace(val1: JList[Array[Byte]], val2: JList[Array[Byte]])
+      : JList[Array[Byte]] = {
+    if (serverHost == null) {
+      // This happens on the worker node, where we just want to remember all the updates
+      val1.addAll(val2)
+      val1
+    } else {
+      // This happens on the master, where we pass the updates to Python through a socket
+      val socket = new Socket(serverHost, serverPort)
+      val in = socket.getInputStream
+      val out = new DataOutputStream(socket.getOutputStream)
+      out.writeInt(val2.size)
+      for (array <- val2) {
+        out.writeInt(array.length)
+        out.write(array)
+      }
+      out.flush()
+      // Wait for a byte from the Python side as an acknowledgement
+      val byteRead = in.read()
+      if (byteRead == -1) {
+        throw new SparkException("EOF reached before Python server acknowledged")
+      }
+      socket.close()
+      null
+    }
+  }
 }

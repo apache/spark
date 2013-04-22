@@ -11,15 +11,16 @@ object SimpleSkewedGroupByTest {
         "[numMappers] [numKVPairs] [valSize] [numReducers] [ratio]")
       System.exit(1)
     }  
-    
+
     var numMappers = if (args.length > 1) args(1).toInt else 2
     var numKVPairs = if (args.length > 2) args(2).toInt else 1000
     var valSize = if (args.length > 3) args(3).toInt else 1000
     var numReducers = if (args.length > 4) args(4).toInt else numMappers
     var ratio = if (args.length > 5) args(5).toInt else 5.0
 
-    val sc = new SparkContext(args(0), "GroupBy Test")
-    
+    val sc = new SparkContext(args(0), "GroupBy Test",
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random
       var result = new Array[(Int, Array[Byte])](numKVPairs)

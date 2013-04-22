@@ -14,6 +14,9 @@ import spray.http.MediaTypes._
 import spark.deploy._
 import spark.deploy.JsonProtocol._
 
+/**
+ * Web UI server for the standalone master.
+ */
 private[spark]
 class MasterWebUI(master: ActorRef)(implicit val context: ActorContext) extends Directives {
   import context.dispatcher
@@ -22,7 +25,7 @@ class MasterWebUI(master: ActorRef)(implicit val context: ActorContext) extends 
   val RESOURCE_DIR = "spark/deploy/master/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
 
-  implicit val timeout = Timeout(1 seconds)
+  implicit val timeout = Timeout(10 seconds)
 
   val handler = {
     get {
@@ -40,19 +43,16 @@ class MasterWebUI(master: ActorRef)(implicit val context: ActorContext) extends 
             }
           }
       } ~
-      path("job") {
-        parameters("jobId", 'format ?) {
-          case (jobId, Some(js)) if (js.equalsIgnoreCase("json")) =>
+      path("app") {
+        parameters("appId", 'format ?) {
+          case (appId, Some(js)) if (js.equalsIgnoreCase("json")) =>
             val future = master ? RequestMasterState
-            val jobInfo = for (masterState <- future.mapTo[MasterState]) yield {
-              masterState.activeJobs.find(_.id == jobId) match {
-                case Some(job) => job
-                case _ => masterState.completedJobs.find(_.id == jobId) match {
-                  case Some(job) => job
-                  case _ => null
-                }
-              }
+            val appInfo = for (masterState <- future.mapTo[MasterState]) yield {
+              masterState.activeApps.find(_.id == appId).getOrElse({
+                masterState.completedApps.find(_.id == appId).getOrElse(null)
+              })
             }
+<<<<<<< HEAD
             respondWithMediaType(`application/json`) { ctx =>
               ctx.complete(jobInfo.mapTo[JobInfo])
             }
@@ -67,6 +67,20 @@ class MasterWebUI(master: ActorRef)(implicit val context: ActorContext) extends 
                     case _ => null
                   }
                 }
+=======
+            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
+              ctx.complete(appInfo.mapTo[ApplicationInfo])
+            }
+          case (appId, _) =>
+            completeWith {
+              val future = master ? RequestMasterState
+              future.map { state =>
+                val masterState = state.asInstanceOf[MasterState]
+                val app = masterState.activeApps.find(_.id == appId).getOrElse({
+                  masterState.completedApps.find(_.id == appId).getOrElse(null)
+                })
+                spark.deploy.master.html.app_details.render(app)
+>>>>>>> 17e076de800ea0d4c55f2bd657348641f6f9c55b
               }
             }
         }
@@ -77,5 +91,4 @@ class MasterWebUI(master: ActorRef)(implicit val context: ActorContext) extends 
       getFromResourceDirectory(RESOURCE_DIR)
     }
   }
-
 }

@@ -3,6 +3,7 @@ package spark.deploy.master
 import akka.actor._
 import akka.actor.Terminated
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
+import akka.util.duration._
 
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -15,21 +16,24 @@ import spark.util.AkkaUtils
 
 
 private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
-  val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For job IDs
+  val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
+  val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
 
-  var nextJobNumber = 0
+  var nextAppNumber = 0
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
   val actorToWorker = new HashMap[ActorRef, WorkerInfo]
   val addressToWorker = new HashMap[Address, WorkerInfo]
 
-  val jobs = new HashSet[JobInfo]
-  val idToJob = new HashMap[String, JobInfo]
-  val actorToJob = new HashMap[ActorRef, JobInfo]
-  val addressToJob = new HashMap[Address, JobInfo]
+  val apps = new HashSet[ApplicationInfo]
+  val idToApp = new HashMap[String, ApplicationInfo]
+  val actorToApp = new HashMap[ActorRef, ApplicationInfo]
+  val addressToApp = new HashMap[Address, ApplicationInfo]
 
-  val waitingJobs = new ArrayBuffer[JobInfo]
-  val completedJobs = new ArrayBuffer[JobInfo]
+  val waitingApps = new ArrayBuffer[ApplicationInfo]
+  val completedApps = new ArrayBuffer[ApplicationInfo]
+
+  var firstApp: Option[ApplicationInfo] = None
 
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
@@ -37,15 +41,16 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
   }
 
   // As a temporary workaround before better ways of configuring memory, we allow users to set
-  // a flag that will perform round-robin scheduling across the nodes (spreading out each job
-  // among all the nodes) instead of trying to consolidate each job onto a small # of nodes.
-  val spreadOutJobs = System.getProperty("spark.deploy.spreadOut", "false").toBoolean
+  // a flag that will perform round-robin scheduling across the nodes (spreading out each app
+  // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
+  val spreadOutApps = System.getProperty("spark.deploy.spreadOut", "true").toBoolean
 
   override def preStart() {
     logInfo("Starting Spark master at spark://" + ip + ":" + port)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     startWebUi()
+    context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
   }
 
   def startWebUi() {
@@ -73,94 +78,101 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       }
     }
 
-    case RegisterJob(description) => {
-      logInfo("Registering job " + description.name)
-      val job = addJob(description, sender)
-      logInfo("Registered job " + description.name + " with ID " + job.id)
-      waitingJobs += job
+    case RegisterApplication(description) => {
+      logInfo("Registering app " + description.name)
+      val app = addApplication(description, sender)
+      logInfo("Registered app " + description.name + " with ID " + app.id)
+      waitingApps += app
       context.watch(sender)  // This doesn't work with remote actors but helps for testing
-      sender ! RegisteredJob(job.id)
+      sender ! RegisteredApplication(app.id)
       schedule()
     }
 
-    case ExecutorStateChanged(jobId, execId, state, message, exitStatus) => {
-      val execOption = idToJob.get(jobId).flatMap(job => job.executors.get(execId))
+    case ExecutorStateChanged(appId, execId, state, message, exitStatus) => {
+      val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
       execOption match {
         case Some(exec) => {
           exec.state = state
-          exec.job.actor ! ExecutorUpdated(execId, state, message, exitStatus)
+          exec.application.driver ! ExecutorUpdated(execId, state, message, exitStatus)
           if (ExecutorState.isFinished(state)) {
-            val jobInfo = idToJob(jobId)
-            // Remove this executor from the worker and job
+            val appInfo = idToApp(appId)
+            // Remove this executor from the worker and app
             logInfo("Removing executor " + exec.fullId + " because it is " + state)
-            jobInfo.removeExecutor(exec)
+            appInfo.removeExecutor(exec)
             exec.worker.removeExecutor(exec)
 
             // Only retry certain number of times so we don't go into an infinite loop.
-            if (jobInfo.incrementRetryCount <= JobState.MAX_NUM_RETRY) {
+            if (appInfo.incrementRetryCount < ApplicationState.MAX_NUM_RETRY) {
               schedule()
             } else {
-              val e = new SparkException("Job %s wth ID %s failed %d times.".format(
-                jobInfo.desc.name, jobInfo.id, jobInfo.retryCount))
-              logError(e.getMessage, e)
-              throw e
-              //System.exit(1)
+              logError("Application %s with ID %s failed %d times, removing it".format(
+                appInfo.desc.name, appInfo.id, appInfo.retryCount))
+              removeApplication(appInfo, ApplicationState.FAILED)
             }
           }
         }
         case None =>
-          logWarning("Got status update for unknown executor " + jobId + "/" + execId)
+          logWarning("Got status update for unknown executor " + appId + "/" + execId)
+      }
+    }
+
+    case Heartbeat(workerId) => {
+      idToWorker.get(workerId) match {
+        case Some(workerInfo) =>
+          workerInfo.lastHeartbeat = System.currentTimeMillis()
+        case None =>
+          logWarning("Got heartbeat from unregistered worker " + workerId)
       }
     }
 
     case Terminated(actor) => {
-      // The disconnected actor could've been either a worker or a job; remove whichever of
+      // The disconnected actor could've been either a worker or an app; remove whichever of
       // those we have an entry for in the corresponding actor hashmap
       actorToWorker.get(actor).foreach(removeWorker)
-      actorToJob.get(actor).foreach(removeJob)
+      actorToApp.get(actor).foreach(finishApplication)
     }
 
     case RemoteClientDisconnected(transport, address) => {
-      // The disconnected client could've been either a worker or a job; remove whichever it was
+      // The disconnected client could've been either a worker or an app; remove whichever it was
       addressToWorker.get(address).foreach(removeWorker)
-      addressToJob.get(address).foreach(removeJob)
+      addressToApp.get(address).foreach(finishApplication)
     }
 
     case RemoteClientShutdown(transport, address) => {
-      // The disconnected client could've been either a worker or a job; remove whichever it was
+      // The disconnected client could've been either a worker or an app; remove whichever it was
       addressToWorker.get(address).foreach(removeWorker)
-      addressToJob.get(address).foreach(removeJob)
+      addressToApp.get(address).foreach(finishApplication)
     }
 
     case RequestMasterState => {
-      sender ! MasterState(ip + ":" + port, workers.toArray, jobs.toArray, completedJobs.toArray)
+      sender ! MasterState(ip, port, workers.toArray, apps.toArray, completedApps.toArray)
     }
   }
 
   /**
-   * Can a job use the given worker? True if the worker has enough memory and we haven't already
-   * launched an executor for the job on it (right now the standalone backend doesn't like having
+   * Can an app use the given worker? True if the worker has enough memory and we haven't already
+   * launched an executor for the app on it (right now the standalone backend doesn't like having
    * two executors on the same worker).
    */
-  def canUse(job: JobInfo, worker: WorkerInfo): Boolean = {
-    worker.memoryFree >= job.desc.memoryPerSlave && !worker.hasExecutor(job)
+  def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
+    worker.memoryFree >= app.desc.memoryPerSlave && !worker.hasExecutor(app)
   }
 
   /**
-   * Schedule the currently available resources among waiting jobs. This method will be called
-   * every time a new job joins or resource availability changes.
+   * Schedule the currently available resources among waiting apps. This method will be called
+   * every time a new app joins or resource availability changes.
    */
   def schedule() {
-    // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first job
-    // in the queue, then the second job, etc.
-    if (spreadOutJobs) {
-      // Try to spread out each job among all the nodes, until it has all its cores
-      for (job <- waitingJobs if job.coresLeft > 0) {
+    // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
+    // in the queue, then the second app, etc.
+    if (spreadOutApps) {
+      // Try to spread out each app among all the nodes, until it has all its cores
+      for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(canUse(job, _)).sortBy(_.coresFree).reverse
+                                   .filter(canUse(app, _)).sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
-        var toAssign = math.min(job.coresLeft, usableWorkers.map(_.coresFree).sum)
+        var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         var pos = 0
         while (toAssign > 0) {
           if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
@@ -172,22 +184,22 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
         // Now that we've decided how many cores to give on each node, let's actually give them
         for (pos <- 0 until numUsable) {
           if (assigned(pos) > 0) {
-            val exec = job.addExecutor(usableWorkers(pos), assigned(pos))
-            launchExecutor(usableWorkers(pos), exec)
-            job.state = JobState.RUNNING
+            val exec = app.addExecutor(usableWorkers(pos), assigned(pos))
+            launchExecutor(usableWorkers(pos), exec, app.desc.sparkHome)
+            app.state = ApplicationState.RUNNING
           }
         }
       }
     } else {
-      // Pack each job into as few nodes as possible until we've assigned all its cores
-      for (worker <- workers if worker.coresFree > 0) {
-        for (job <- waitingJobs if job.coresLeft > 0) {
-          if (canUse(job, worker)) {
-            val coresToUse = math.min(worker.coresFree, job.coresLeft)
+      // Pack each app into as few nodes as possible until we've assigned all its cores
+      for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
+        for (app <- waitingApps if app.coresLeft > 0) {
+          if (canUse(app, worker)) {
+            val coresToUse = math.min(worker.coresFree, app.coresLeft)
             if (coresToUse > 0) {
-              val exec = job.addExecutor(worker, coresToUse)
-              launchExecutor(worker, exec)
-              job.state = JobState.RUNNING
+              val exec = app.addExecutor(worker, coresToUse)
+              launchExecutor(worker, exec, app.desc.sparkHome)
+              app.state = ApplicationState.RUNNING
             }
           }
         }
@@ -195,11 +207,11 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     }
   }
 
-  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo) {
+  def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo, sparkHome: String) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
-    worker.actor ! LaunchExecutor(exec.job.id, exec.id, exec.job.desc, exec.cores, exec.memory)
-    exec.job.actor ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
+    worker.actor ! LaunchExecutor(exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory, sparkHome)
+    exec.application.driver ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
   }
 
   def addWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int,
@@ -221,54 +233,97 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     actorToWorker -= worker.actor
     addressToWorker -= worker.actor.path.address
     for (exec <- worker.executors.values) {
-      exec.job.actor ! ExecutorStateChanged(exec.job.id, exec.id, ExecutorState.LOST, None, None)
-      exec.job.executors -= exec.id
+      logInfo("Telling app of lost executor: " + exec.id)
+      exec.application.driver ! ExecutorUpdated(exec.id, ExecutorState.LOST, Some("worker lost"), None)
+      exec.application.removeExecutor(exec)
     }
   }
 
-  def addJob(desc: JobDescription, actor: ActorRef): JobInfo = {
+  def addApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    val job = new JobInfo(now, newJobId(date), desc, date, actor)
-    jobs += job
-    idToJob(job.id) = job
-    actorToJob(sender) = job
-    addressToJob(sender.path.address) = job
-    return job
+    val app = new ApplicationInfo(now, newApplicationId(date), desc, date, driver)
+    apps += app
+    idToApp(app.id) = app
+    actorToApp(driver) = app
+    addressToApp(driver.path.address) = app
+    if (firstApp == None) {
+      firstApp = Some(app)
+    }
+    val workersAlive = workers.filter(_.state == WorkerState.ALIVE).toArray
+    if (workersAlive.size > 0 && !workersAlive.exists(_.memoryFree >= desc.memoryPerSlave)) {
+      logWarning("Could not find any workers with enough memory for " + firstApp.get.id)
+    }
+    return app
   }
 
-  def removeJob(job: JobInfo) {
-    if (jobs.contains(job)) {
-      logInfo("Removing job " + job.id)
-      jobs -= job
-      idToJob -= job.id
-      actorToJob -= job.actor
-      addressToWorker -= job.actor.path.address
-      completedJobs += job   // Remember it in our history
-      waitingJobs -= job
-      for (exec <- job.executors.values) {
+  def finishApplication(app: ApplicationInfo) {
+    removeApplication(app, ApplicationState.FINISHED)
+  }
+
+  def removeApplication(app: ApplicationInfo, state: ApplicationState.Value) {
+    if (apps.contains(app)) {
+      logInfo("Removing app " + app.id)
+      apps -= app
+      idToApp -= app.id
+      actorToApp -= app.driver
+      addressToApp -= app.driver.path.address
+      completedApps += app   // Remember it in our history
+      waitingApps -= app
+      for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
-        exec.worker.actor ! KillExecutor(exec.job.id, exec.id)
+        exec.worker.actor ! KillExecutor(exec.application.id, exec.id)
       }
-      job.markFinished(JobState.FINISHED)  // TODO: Mark it as FAILED if it failed
+      app.markFinished(state)
+      app.driver ! ApplicationRemoved(state.toString)
       schedule()
     }
   }
 
-  /** Generate a new job ID given a job's submission date */
-  def newJobId(submitDate: Date): String = {
-    val jobId = "job-%s-%04d".format(DATE_FORMAT.format(submitDate), nextJobNumber)
-    nextJobNumber += 1
-    jobId
+  /** Generate a new app ID given a app's submission date */
+  def newApplicationId(submitDate: Date): String = {
+    val appId = "app-%s-%04d".format(DATE_FORMAT.format(submitDate), nextAppNumber)
+    nextAppNumber += 1
+    appId
+  }
+
+  /** Check for, and remove, any timed-out workers */
+  def timeOutDeadWorkers() {
+    // Copy the workers into an array so we don't modify the hashset while iterating through it
+    val expirationTime = System.currentTimeMillis() - WORKER_TIMEOUT
+    val toRemove = workers.filter(_.lastHeartbeat < expirationTime).toArray
+    for (worker <- toRemove) {
+      logWarning("Removing %s because we got no heartbeat in %d seconds".format(
+        worker.id, WORKER_TIMEOUT))
+      removeWorker(worker)
+    }
   }
 }
 
 private[spark] object Master {
+  private val systemName = "sparkMaster"
+  private val actorName = "Master"
+  private val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
+
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", args.ip, args.port)
-    val actor = actorSystem.actorOf(
-      Props(new Master(args.ip, boundPort, args.webUiPort)), name = "Master")
+    val (actorSystem, _) = startSystemAndActor(args.ip, args.port, args.webUiPort)
     actorSystem.awaitTermination()
+  }
+
+  /** Returns an `akka://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
+  def toAkkaUrl(sparkUrl: String): String = {
+    sparkUrl match {
+      case sparkUrlRegex(host, port) =>
+        "akka://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
+      case _ =>
+        throw new SparkException("Invalid master URL: " + sparkUrl)
+    }
+  }
+
+  def startSystemAndActor(host: String, port: Int, webUiPort: Int): (ActorSystem, Int) = {
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
+    val actor = actorSystem.actorOf(Props(new Master(host, boundPort, webUiPort)), name = actorName)
+    (actorSystem, boundPort)
   }
 }

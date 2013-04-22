@@ -2,8 +2,8 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.spark-project</groupId>
-  <artifactId>parent</artifactId>
-  <version>0.7.0-SNAPSHOT</version>
+  <artifactId>spark-parent</artifactId>
+  <version>0.8.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark-project.org/</url>
@@ -41,8 +41,9 @@
     <module>core</module>
     <module>bagel</module>
     <module>examples</module>
-    <!--<module>repl</module>
-    <module>repl-bin</module>-->
+    <module>streaming</module>
+    <module>repl</module>
+    <module>repl-bin</module>
   </modules>
 
   <properties>
@@ -57,6 +58,7 @@
     <spray.json.version>1.2.3</spray.json.version>
     <slf4j.version>1.6.1</slf4j.version>
     <cdh.version>4.1.2</cdh.version>
+    <log4j.version>1.2.17</log4j.version>
   </properties>
 
   <repositories>
@@ -83,9 +85,9 @@
       </snapshots>
     </repository>
     <repository>
-      <id>cloudera-repo</id>
-      <name>Cloudera Repository</name>
-      <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+      <id>akka-repo</id>
+      <name>Akka Repository</name>
+      <url>http://repo.akka.io/releases/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -97,6 +99,17 @@
       <id>spray-repo</id>
       <name>Spray Repository</name>
       <url>http://repo.spray.cc/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>twitter4j-repo</id>
+      <name>Twitter4J Repository</name>
+      <url>http://twitter4j.org/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -186,7 +199,7 @@
       <dependency>
         <groupId>de.javakaffee</groupId>
         <artifactId>kryo-serializers</artifactId>
-        <version>0.20</version>
+        <version>0.22</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -261,9 +274,21 @@
       </dependency>
 
       <dependency>
+        <groupId>log4j</groupId>
+        <artifactId>log4j</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.version}</artifactId>
         <version>1.9.1</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.easymock</groupId>
+        <artifactId>easymock</artifactId>
+        <version>3.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -492,11 +517,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <activation>
-        <property>
-          <name>!hadoopVersion</name>
-        </property>
-      </activation>
 
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
@@ -506,7 +526,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-core</artifactId>
-            <version>1.0.3</version>
+            <version>1.0.4</version>
           </dependency>
         </dependencies>
       </dependencyManagement>
@@ -514,12 +534,6 @@
 
     <profile>
       <id>hadoop2</id>
-      <activation>
-        <property>
-          <name>hadoopVersion</name>
-          <value>2</value>
-        </property>
-      </activation>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
       </properties>
@@ -534,6 +548,17 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
             <version>2.0.0-mr1-cdh${cdh.version}</version>
+          </dependency>
+          <!-- Specify Avro version because Kafka also has it as a dependency -->
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>1.7.1.cloudera.2</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-ipc</artifactId>
+            <version>1.7.1.cloudera.2</version>
           </dependency>
         </dependencies>
       </dependencyManagement>

@@ -4,21 +4,51 @@ import spark._
 import spark.SparkContext._
 
 import scala.collection.mutable.ArrayBuffer
+import storage.StorageLevel
 
 object Bagel extends Logging {
-  def run[K : Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest,
-          C : Manifest, A : Manifest](
+  val DEFAULT_STORAGE_LEVEL = StorageLevel.MEMORY_AND_DISK
+
+  /**
+   * Runs a Bagel program.
+   * @param sc [[spark.SparkContext]] to use for the program.
+   * @param vertices vertices of the graph represented as an RDD of (Key, Vertex) pairs. Often the Key will be
+   *                 the vertex id.
+   * @param messages initial set of messages represented as an RDD of (Key, Message) pairs. Often this will be an
+   *                 empty array, i.e. sc.parallelize(Array[K, Message]()).
+   * @param combiner [[spark.bagel.Combiner]] combines multiple individual messages to a given vertex into one
+   *                message before sending (which often involves network I/O).
+   * @param aggregator [[spark.bagel.Aggregator]] performs a reduce across all vertices after each superstep,
+   *                  and provides the result to each vertex in the next superstep.
+   * @param partitioner [[spark.Partitioner]] partitions values by key
+   * @param numPartitions number of partitions across which to split the graph.
+   *                      Default is the default parallelism of the SparkContext
+   * @param storageLevel [[spark.storage.StorageLevel]] to use for caching of intermediate RDDs in each superstep.
+   *                    Defaults to caching in memory.
+   * @param compute function that takes a Vertex, optional set of (possibly combined) messages to the Vertex,
+   *                optional Aggregator and the current superstep,
+   *                and returns a set of (Vertex, outgoing Messages) pairs
+   * @tparam K key
+   * @tparam V vertex type
+   * @tparam M message type
+   * @tparam C combiner
+   * @tparam A aggregator
+   * @return an RDD of (K, V) pairs representing the graph after completion of the program
+   */
+  def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest,
+          C: Manifest, A: Manifest](
     sc: SparkContext,
     vertices: RDD[(K, V)],
     messages: RDD[(K, M)],
     combiner: Combiner[M, C],
     aggregator: Option[Aggregator[V, A]],
     partitioner: Partitioner,
-    numSplits: Int
+    numPartitions: Int,
+    storageLevel: StorageLevel = DEFAULT_STORAGE_LEVEL
   )(
     compute: (V, Option[C], Option[A], Int) => (V, Array[M])
   ): RDD[(K, V)] = {
-    val splits = if (numSplits != 0) numSplits else sc.defaultParallelism
+    val splits = if (numPartitions != 0) numPartitions else sc.defaultParallelism
 
     var superstep = 0
     var verts = vertices
@@ -32,8 +62,9 @@ object Bagel extends Logging {
       val combinedMsgs = msgs.combineByKey(
         combiner.createCombiner _, combiner.mergeMsg _, combiner.mergeCombiners _, partitioner)
       val grouped = combinedMsgs.groupWith(verts)
+      val superstep_ = superstep  // Create a read-only copy of superstep for capture in closure
       val (processed, numMsgs, numActiveVerts) =
-        comp[K, V, M, C](sc, grouped, compute(_, _, aggregated, superstep))
+        comp[K, V, M, C](sc, grouped, compute(_, _, aggregated, superstep_), storageLevel)
 
       val timeTaken = System.currentTimeMillis - startTime
       logInfo("Superstep %d took %d s".format(superstep, timeTaken / 1000))
@@ -50,49 +81,95 @@ object Bagel extends Logging {
     verts
   }
 
-  def run[K : Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest,
-          C : Manifest](
+  /** Runs a Bagel program with no [[spark.bagel.Aggregator]] and the default storage level */
+  def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
     sc: SparkContext,
     vertices: RDD[(K, V)],
     messages: RDD[(K, M)],
     combiner: Combiner[M, C],
     partitioner: Partitioner,
-    numSplits: Int
+    numPartitions: Int
   )(
     compute: (V, Option[C], Int) => (V, Array[M])
-  ): RDD[(K, V)] = {
-    run[K, V, M, C, Nothing](
-      sc, vertices, messages, combiner, None, partitioner, numSplits)(
-      addAggregatorArg[K, V, M, C](compute))
-  }
+  ): RDD[(K, V)] = run(sc, vertices, messages, combiner, numPartitions, DEFAULT_STORAGE_LEVEL)(compute)
 
-  def run[K : Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest,
-          C : Manifest](
+  /** Runs a Bagel program with no [[spark.bagel.Aggregator]] */
+  def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
     sc: SparkContext,
     vertices: RDD[(K, V)],
     messages: RDD[(K, M)],
     combiner: Combiner[M, C],
-    numSplits: Int
+    partitioner: Partitioner,
+    numPartitions: Int,
+    storageLevel: StorageLevel
   )(
     compute: (V, Option[C], Int) => (V, Array[M])
   ): RDD[(K, V)] = {
-    val part = new HashPartitioner(numSplits)
     run[K, V, M, C, Nothing](
-      sc, vertices, messages, combiner, None, part, numSplits)(
+      sc, vertices, messages, combiner, None, partitioner, numPartitions, storageLevel)(
       addAggregatorArg[K, V, M, C](compute))
   }
 
-  def run[K : Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](
+  /**
+   * Runs a Bagel program with no [[spark.bagel.Aggregator]], default [[spark.HashPartitioner]]
+   * and default storage level
+   */
+  def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
     sc: SparkContext,
     vertices: RDD[(K, V)],
     messages: RDD[(K, M)],
-    numSplits: Int
+    combiner: Combiner[M, C],
+    numPartitions: Int
+  )(
+    compute: (V, Option[C], Int) => (V, Array[M])
+  ): RDD[(K, V)] = run(sc, vertices, messages, combiner, numPartitions, DEFAULT_STORAGE_LEVEL)(compute)
+
+  /** Runs a Bagel program with no [[spark.bagel.Aggregator]] and the default [[spark.HashPartitioner]]*/
+  def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
+    sc: SparkContext,
+    vertices: RDD[(K, V)],
+    messages: RDD[(K, M)],
+    combiner: Combiner[M, C],
+    numPartitions: Int,
+    storageLevel: StorageLevel
+  )(
+    compute: (V, Option[C], Int) => (V, Array[M])
+  ): RDD[(K, V)] = {
+    val part = new HashPartitioner(numPartitions)
+    run[K, V, M, C, Nothing](
+      sc, vertices, messages, combiner, None, part, numPartitions, storageLevel)(
+      addAggregatorArg[K, V, M, C](compute))
+  }
+
+  /**
+   * Runs a Bagel program with no [[spark.bagel.Aggregator]], default [[spark.HashPartitioner]],
+   * [[spark.bagel.DefaultCombiner]] and the default storage level
+   */
+  def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](
+    sc: SparkContext,
+    vertices: RDD[(K, V)],
+    messages: RDD[(K, M)],
+    numPartitions: Int
   )(
     compute: (V, Option[Array[M]], Int) => (V, Array[M])
-  ): RDD[(K, V)] = {
-    val part = new HashPartitioner(numSplits)
+  ): RDD[(K, V)] = run(sc, vertices, messages, numPartitions, DEFAULT_STORAGE_LEVEL)(compute)
+
+  /**
+   * Runs a Bagel program with no [[spark.bagel.Aggregator]], the default [[spark.HashPartitioner]]
+   * and [[spark.bagel.DefaultCombiner]]
+   */
+  def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](
+    sc: SparkContext,
+    vertices: RDD[(K, V)],
+    messages: RDD[(K, M)],
+    numPartitions: Int,
+    storageLevel: StorageLevel
+   )(
+    compute: (V, Option[Array[M]], Int) => (V, Array[M])
+   ): RDD[(K, V)] = {
+    val part = new HashPartitioner(numPartitions)
     run[K, V, M, Array[M], Nothing](
-      sc, vertices, messages, new DefaultCombiner(), None, part, numSplits)(
+      sc, vertices, messages, new DefaultCombiner(), None, part, numPartitions, storageLevel)(
       addAggregatorArg[K, V, M, Array[M]](compute))
   }
 
@@ -100,7 +177,7 @@ object Bagel extends Logging {
    * Aggregates the given vertices using the given aggregator, if it
    * is specified.
    */
-  private def agg[K, V <: Vertex, A : Manifest](
+  private def agg[K, V <: Vertex, A: Manifest](
     verts: RDD[(K, V)],
     aggregator: Option[Aggregator[V, A]]
   ): Option[A] = aggregator match {
@@ -116,10 +193,11 @@ object Bagel extends Logging {
    * function. Returns the processed RDD, the number of messages
    * created, and the number of active vertices.
    */
-  private def comp[K : Manifest, V <: Vertex, M <: Message[K], C](
+  private def comp[K: Manifest, V <: Vertex, M <: Message[K], C](
     sc: SparkContext,
     grouped: RDD[(K, (Seq[C], Seq[V]))],
-    compute: (V, Option[C]) => (V, Array[M])
+    compute: (V, Option[C]) => (V, Array[M]),
+    storageLevel: StorageLevel
   ): (RDD[(K, (V, Array[M]))], Int, Int) = {
     var numMsgs = sc.accumulator(0)
     var numActiveVerts = sc.accumulator(0)
@@ -137,7 +215,7 @@ object Bagel extends Logging {
           numActiveVerts += 1
 
         Some((newVert, newMsgs))
-    }.cache
+    }.persist(storageLevel)
 
     // Force evaluation of processed RDD for accurate performance measurements
     processed.foreach(x => {})
@@ -149,9 +227,7 @@ object Bagel extends Logging {
    * Converts a compute function that doesn't take an aggregator to
    * one that does, so it can be passed to Bagel.run.
    */
-  private def addAggregatorArg[
-    K : Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C
-  ](
+  private def addAggregatorArg[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C](
     compute: (V, Option[C], Int) => (V, Array[M])
   ): (V, Option[C], Option[Nothing], Int) => (V, Array[M]) = {
     (vert: V, msgs: Option[C], aggregated: Option[Nothing], superstep: Int) =>
@@ -170,7 +246,8 @@ trait Aggregator[V, A] {
   def mergeAggregators(a: A, b: A): A
 }
 
-class DefaultCombiner[M : Manifest] extends Combiner[M, Array[M]] with Serializable {
+/** Default combiner that simply appends messages together (i.e. performs no aggregation) */
+class DefaultCombiner[M: Manifest] extends Combiner[M, Array[M]] with Serializable {
   def createCombiner(msg: M): Array[M] =
     Array(msg)
   def mergeMsg(combiner: Array[M], msg: M): Array[M] =

@@ -1,53 +1,60 @@
 package spark.rdd
 
-import spark.{OneToOneDependency, RDD, SparkContext, Split, TaskContext}
+import spark.{OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
+import java.io.{ObjectOutputStream, IOException}
 
 
-private[spark] class ZippedSplit[T: ClassManifest, U: ClassManifest](
+private[spark] class ZippedPartition[T: ClassManifest, U: ClassManifest](
     idx: Int,
-    rdd1: RDD[T],
-    rdd2: RDD[U],
-    split1: Split,
-    split2: Split)
-  extends Split
-  with Serializable {
+    @transient rdd1: RDD[T],
+    @transient rdd2: RDD[U]
+  ) extends Partition {
 
-  def iterator(context: TaskContext): Iterator[(T, U)] =
-    rdd1.iterator(split1, context).zip(rdd2.iterator(split2, context))
-
-  def preferredLocations(): Seq[String] =
-    rdd1.preferredLocations(split1).intersect(rdd2.preferredLocations(split2))
-
+  var partition1 = rdd1.partitions(idx)
+  var partition2 = rdd2.partitions(idx)
   override val index: Int = idx
+
+  def partitions = (partition1, partition2)
+
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    // Update the reference to parent partition at the time of task serialization
+    partition1 = rdd1.partitions(idx)
+    partition2 = rdd2.partitions(idx)
+    oos.defaultWriteObject()
+  }
 }
 
 class ZippedRDD[T: ClassManifest, U: ClassManifest](
     sc: SparkContext,
-    @transient rdd1: RDD[T],
-    @transient rdd2: RDD[U])
-  extends RDD[(T, U)](sc)
-  with Serializable {
+    var rdd1: RDD[T],
+    var rdd2: RDD[U])
+  extends RDD[(T, U)](sc, List(new OneToOneDependency(rdd1), new OneToOneDependency(rdd2))) {
 
-  @transient
-  val splits_ : Array[Split] = {
-    if (rdd1.splits.size != rdd2.splits.size) {
+  override def getPartitions: Array[Partition] = {
+    if (rdd1.partitions.size != rdd2.partitions.size) {
       throw new IllegalArgumentException("Can't zip RDDs with unequal numbers of partitions")
     }
-    val array = new Array[Split](rdd1.splits.size)
-    for (i <- 0 until rdd1.splits.size) {
-      array(i) = new ZippedSplit(i, rdd1, rdd2, rdd1.splits(i), rdd2.splits(i))
+    val array = new Array[Partition](rdd1.partitions.size)
+    for (i <- 0 until rdd1.partitions.size) {
+      array(i) = new ZippedPartition(i, rdd1, rdd2)
     }
     array
   }
 
-  override def splits = splits_
+  override def compute(s: Partition, context: TaskContext): Iterator[(T, U)] = {
+    val (partition1, partition2) = s.asInstanceOf[ZippedPartition[T, U]].partitions
+    rdd1.iterator(partition1, context).zip(rdd2.iterator(partition2, context))
+  }
 
-  @transient
-  override val dependencies = List(new OneToOneDependency(rdd1), new OneToOneDependency(rdd2))
+  override def getPreferredLocations(s: Partition): Seq[String] = {
+    val (partition1, partition2) = s.asInstanceOf[ZippedPartition[T, U]].partitions
+    rdd1.preferredLocations(partition1).intersect(rdd2.preferredLocations(partition2))
+  }
 
-  override def compute(s: Split, context: TaskContext): Iterator[(T, U)] =
-    s.asInstanceOf[ZippedSplit[T, U]].iterator(context)
-
-  override def preferredLocations(s: Split): Seq[String] =
-    s.asInstanceOf[ZippedSplit[T, U]].preferredLocations()
+  override def clearDependencies() {
+    super.clearDependencies()
+    rdd1 = null
+    rdd2 = null
+  }
 }

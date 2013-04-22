@@ -12,7 +12,14 @@ import java.net._
 
 
 private[spark]
-abstract class Connection(val channel: SocketChannel, val selector: Selector) extends Logging {
+abstract class Connection(val channel: SocketChannel, val selector: Selector,
+                          val remoteConnectionManagerId: ConnectionManagerId) extends Logging {
+  def this(channel_ : SocketChannel, selector_ : Selector) = {
+    this(channel_, selector_,
+         ConnectionManagerId.fromSocketAddress(
+            channel_.socket.getRemoteSocketAddress().asInstanceOf[InetSocketAddress]
+         ))
+  }
 
   channel.configureBlocking(false)
   channel.socket.setTcpNoDelay(true)
@@ -25,7 +32,6 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector) ex
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
 
   val remoteAddress = getRemoteAddress()
-  val remoteConnectionManagerId = ConnectionManagerId.fromSocketAddress(remoteAddress)
 
   def key() = channel.keyFor(selector)
 
@@ -103,8 +109,9 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector) ex
 }
 
 
-private[spark] class SendingConnection(val address: InetSocketAddress, selector_ : Selector) 
-extends Connection(SocketChannel.open, selector_) {
+private[spark] class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
+                                       remoteId_ : ConnectionManagerId)
+extends Connection(SocketChannel.open, selector_, remoteId_) {
 
   class Outbox(fair: Int = 0) {
     val messages = new Queue[Message]()
@@ -191,7 +198,7 @@ extends Connection(SocketChannel.open, selector_) {
     outbox.synchronized {
       outbox.addMessage(message)
       if (channel.isConnected) {
-        changeConnectionKeyInterest(SelectionKey.OP_WRITE)
+        changeConnectionKeyInterest(SelectionKey.OP_WRITE | SelectionKey.OP_READ)
       }
     }
   }
@@ -212,7 +219,7 @@ extends Connection(SocketChannel.open, selector_) {
   def finishConnect() {
     try {
       channel.finishConnect
-      changeConnectionKeyInterest(SelectionKey.OP_WRITE)
+      changeConnectionKeyInterest(SelectionKey.OP_WRITE | SelectionKey.OP_READ)
       logInfo("Connected to [" + address + "], " + outbox.messages.size + " messages pending")
     } catch {
       case e: Exception => {
@@ -232,8 +239,7 @@ extends Connection(SocketChannel.open, selector_) {
                 currentBuffers ++= chunk.buffers 
               }
               case None => {
-                changeConnectionKeyInterest(0)
-                /*key.interestOps(0)*/
+                changeConnectionKeyInterest(SelectionKey.OP_READ)
                 return
               }
             }
@@ -258,6 +264,23 @@ extends Connection(SocketChannel.open, selector_) {
         callOnExceptionCallback(e)
         close()
       }
+    }
+  }
+
+  override def read() {
+    // We don't expect the other side to send anything; so, we just read to detect an error or EOF.
+    try {
+      val length = channel.read(ByteBuffer.allocate(1))
+      if (length == -1) { // EOF
+        close()
+      } else if (length > 0) {
+        logWarning("Unexpected data read from SendingConnection to " + remoteConnectionManagerId)
+      }
+    } catch {
+      case e: Exception =>
+        logError("Exception while reading SendingConnection to " + remoteConnectionManagerId, e)
+        callOnExceptionCallback(e)
+        close()
     }
   }
 }

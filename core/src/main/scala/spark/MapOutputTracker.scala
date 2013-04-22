@@ -17,6 +17,7 @@ import scala.concurrent.duration._
 
 import spark.scheduler.MapStatus
 import spark.storage.BlockManagerId
+import spark.util.{MetadataCleaner, TimeStampedHashMap}
 
 
 private[spark] sealed trait MapOutputTrackerMessage
@@ -37,14 +38,12 @@ private[spark] class MapOutputTrackerActor(tracker: MapOutputTracker) extends Ac
   }
 }
 
-private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolean) extends Logging {
-  val ip: String = System.getProperty("spark.master.host", "localhost")
-  val port: Int = System.getProperty("spark.master.port", "7077").toInt
-  val actorName: String = "MapOutputTracker"
+private[spark] class MapOutputTracker extends Logging {
 
-  val timeout = 10.seconds
+  // Set to the MapOutputTrackerActor living on the driver
+  var trackerActor: ActorRef = _
 
-  var mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]
+  var mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]
 
   // Incremented every time a fetch fails so that client nodes know to clear
   // their cache of map output locations if this happens.
@@ -53,21 +52,15 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
 
   // Cache a serialized version of the output statuses for each shuffle to send them out faster
   var cacheGeneration = generation
-  val cachedSerializedStatuses = new HashMap[Int, Array[Byte]]
+  val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]
 
-  var trackerActor: ActorRef = if (isMaster) {
-    val actor = actorSystem.actorOf(Props(new MapOutputTrackerActor(this)), name = actorName)
-    logInfo("Registered MapOutputTrackerActor actor")
-    actor
-  } else {
-    val url = "akka://spark@%s:%s/user/%s".format(ip, port, actorName)
-    actorSystem.actorFor(url)
-  }
+  val metadataCleaner = new MetadataCleaner("MapOutputTracker", this.cleanup)
 
   // Send a message to the trackerActor and get its result within a default timeout, or
   // throw a SparkException if this fails.
   def askTracker(message: Any): Any = {
     try {
+      val timeout = 10.seconds
       val future = trackerActor.ask(message)(timeout)
       return Await.result(future, timeout)
     } catch {
@@ -84,14 +77,14 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
   }
 
   def registerShuffle(shuffleId: Int, numMaps: Int) {
-    if (mapStatuses.get(shuffleId) != null) {
+    if (mapStatuses.get(shuffleId) != None) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
     mapStatuses.put(shuffleId, new Array[MapStatus](numMaps))
   }
 
   def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) {
-    var array = mapStatuses.get(shuffleId)
+    var array = mapStatuses(shuffleId)
     array.synchronized {
       array(mapId) = status
     }
@@ -108,10 +101,10 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
   }
 
   def unregisterMapOutput(shuffleId: Int, mapId: Int, bmAddress: BlockManagerId) {
-    var array = mapStatuses.get(shuffleId)
+    var array = mapStatuses(shuffleId)
     if (array != null) {
       array.synchronized {
-        if (array(mapId) != null && array(mapId).address == bmAddress) {
+        if (array(mapId) != null && array(mapId).location == bmAddress) {
           array(mapId) = null
         }
       }
@@ -126,7 +119,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
 
   // Called on possibly remote nodes to get the server URIs and output sizes for a given shuffle
   def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
-    val statuses = mapStatuses.get(shuffleId)
+    val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
       logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
       fetching.synchronized {
@@ -139,8 +132,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
               case e: InterruptedException =>
             }
           }
-          return MapOutputTracker.convertMapStatuses(shuffleId, reduceId,
-                                                     mapStatuses.get(shuffleId))
+          return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, mapStatuses(shuffleId))
         } else {
           fetching += shuffleId
         }
@@ -168,9 +160,15 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
     }
   }
 
+  private def cleanup(cleanupTime: Long) {
+    mapStatuses.clearOldValues(cleanupTime)
+    cachedSerializedStatuses.clearOldValues(cleanupTime)
+  }
+
   def stop() {
     communicate(StopMapOutputTracker)
     mapStatuses.clear()
+    metadataCleaner.cancel()
     trackerActor = null
   }
 
@@ -196,7 +194,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
     generationLock.synchronized {
       if (newGen > generation) {
         logInfo("Updating generation to " + newGen + " and clearing cache")
-        mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]
+        mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]
         generation = newGen
       }
     }
@@ -214,7 +212,7 @@ private[spark] class MapOutputTracker(actorSystem: ActorSystem, isMaster: Boolea
         case Some(bytes) =>
           return bytes
         case None =>
-          statuses = mapStatuses.get(shuffleId)
+          statuses = mapStatuses(shuffleId)
           generationGotten = generation
       }
     }
@@ -269,7 +267,7 @@ private[spark] object MapOutputTracker {
           throw new FetchFailedException(null, shuffleId, -1, reduceId,
             new Exception("Missing an output location for shuffle " + shuffleId))
         } else {
-          (status.address, decompressSize(status.compressedSizes(reduceId)))
+          (status.location, decompressSize(status.compressedSizes(reduceId)))
         }
     }
   }

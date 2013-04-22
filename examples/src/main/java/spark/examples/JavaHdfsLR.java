@@ -10,6 +10,9 @@ import java.util.Arrays;
 import java.util.StringTokenizer;
 import java.util.Random;
 
+/**
+ * Logistic regression based classification.
+ */
 public class JavaHdfsLR {
 
   static int D = 10;   // Number of dimensions
@@ -85,7 +88,8 @@ public class JavaHdfsLR {
       System.exit(1);
     }
 
-    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaHdfsLR");
+    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaHdfsLR",
+        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
     JavaRDD<String> lines = sc.textFile(args[1]);
     JavaRDD<DataPoint> points = lines.map(new ParsePoint()).cache();
     int ITERATIONS = Integer.parseInt(args[2]);

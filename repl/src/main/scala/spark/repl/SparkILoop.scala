@@ -152,7 +152,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     finally in = saved
   }
 
-  
+
   def sparkCleanUp(){
     echo("Stopping spark context.")
     intp.beQuietDuring {
@@ -220,6 +220,21 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       // exact match OK even if otherwise appears ambiguous
       case xs       => xs find (_.name == cmd)
     }
+  }
+
+  /** Print a welcome message */
+  def printWelcome() {
+    echo("""Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version 0.8.0
+      /_/
+""")
+    import Properties._
+    val welcomeMsg = "Using Scala %s (%s, Java %s)".format(
+      versionString, javaVmName, javaVersion)
+    echo(welcomeMsg)
   }
 
   /** Show the history */

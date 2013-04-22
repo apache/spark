@@ -17,7 +17,6 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   private val entries = new LinkedHashMap[String, Entry](32, 0.75f, true)
   private var currentMemory = 0L
-
   // Object used to ensure that only one thread is putting blocks and if necessary, dropping
   // blocks from the memory store.
   private val putLock = new Object()
@@ -33,8 +32,8 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   override def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel) {
+    bytes.rewind()
     if (level.deserialized) {
-      bytes.rewind()
       val values = blockManager.dataDeserialize(blockId, bytes)
       val elements = new ArrayBuffer[Any]
       elements ++= values
@@ -59,7 +58,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     } else {
       val bytes = blockManager.dataSerialize(blockId, values.iterator)
       tryToPut(blockId, bytes, bytes.limit, false)
-      PutResult(bytes.limit(), Right(bytes))
+      PutResult(bytes.limit(), Right(bytes.duplicate()))
     }
   }
 

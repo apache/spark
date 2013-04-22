@@ -1,6 +1,6 @@
 package spark.deploy
 
-import master.{JobInfo, WorkerInfo}
+import master.{ApplicationInfo, WorkerInfo}
 import worker.ExecutorRunner
 import spray.json._
 
@@ -20,8 +20,8 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
     )
   }
 
-  implicit object JobInfoJsonFormat extends RootJsonWriter[JobInfo] {
-    def write(obj: JobInfo) = JsObject(
+  implicit object AppInfoJsonFormat extends RootJsonWriter[ApplicationInfo] {
+    def write(obj: ApplicationInfo) = JsObject(
       "starttime" -> JsNumber(obj.startTime),
       "id" -> JsString(obj.id),
       "name" -> JsString(obj.desc.name),
@@ -31,8 +31,8 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
       "submitdate" -> JsString(obj.submitDate.toString))
   }
 
-  implicit object JobDescriptionJsonFormat extends RootJsonWriter[JobDescription] {
-    def write(obj: JobDescription) = JsObject(
+  implicit object AppDescriptionJsonFormat extends RootJsonWriter[ApplicationDescription] {
+    def write(obj: ApplicationDescription) = JsObject(
       "name" -> JsString(obj.name),
       "cores" -> JsNumber(obj.cores),
       "memoryperslave" -> JsNumber(obj.memoryPerSlave),
@@ -44,8 +44,8 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
     def write(obj: ExecutorRunner) = JsObject(
       "id" -> JsNumber(obj.execId),
       "memory" -> JsNumber(obj.memory),
-      "jobid" -> JsString(obj.jobId),
-      "jobdesc" -> obj.jobDesc.toJson.asJsObject
+      "appid" -> JsString(obj.appId),
+      "appdesc" -> obj.appDesc.toJson.asJsObject
     )
   }
 
@@ -57,8 +57,8 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
       "coresused" -> JsNumber(obj.workers.map(_.coresUsed).sum),
       "memory" -> JsNumber(obj.workers.map(_.memory).sum),
       "memoryused" -> JsNumber(obj.workers.map(_.memoryUsed).sum),
-      "activejobs" -> JsArray(obj.activeJobs.toList.map(_.toJson)),
-      "completedjobs" -> JsArray(obj.completedJobs.toList.map(_.toJson))
+      "activeapps" -> JsArray(obj.activeApps.toList.map(_.toJson)),
+      "completedapps" -> JsArray(obj.completedApps.toList.map(_.toJson))
     )
   }
 

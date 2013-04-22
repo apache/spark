@@ -20,7 +20,7 @@ private[spark] class ApproximateActionListener[T, U, R](
   extends JobListener {
 
   val startTime = System.currentTimeMillis()
-  val totalTasks = rdd.splits.size
+  val totalTasks = rdd.partitions.size
   var finishedTasks = 0
   var failure: Option[Exception] = None             // Set if the job has failed (permanently)
   var resultObject: Option[PartialResult[R]] = None // Set if we've already returned a PartialResult
@@ -32,7 +32,7 @@ private[spark] class ApproximateActionListener[T, U, R](
       if (finishedTasks == totalTasks) {
         // If we had already returned a PartialResult, set its final value
         resultObject.foreach(r => r.setFinalValue(evaluator.currentResult()))
-        // Notify any waiting thread that may have called getResult
+        // Notify any waiting thread that may have called awaitResult
         this.notifyAll()
       }
     }
@@ -49,7 +49,7 @@ private[spark] class ApproximateActionListener[T, U, R](
    * Waits for up to timeout milliseconds since the listener was created and then returns a
    * PartialResult with the result so far. This may be complete if the whole job is done.
    */
-  def getResult(): PartialResult[R] = synchronized {
+  def awaitResult(): PartialResult[R] = synchronized {
     val finishTime = startTime + timeout
     while (true) {
       val time = System.currentTimeMillis()

@@ -1,53 +1,73 @@
 package spark.rdd
 
-import spark.{NarrowDependency, RDD, SparkContext, Split, TaskContext}
+import java.io.{ObjectOutputStream, IOException}
+import spark._
 
 
 private[spark]
-class CartesianSplit(idx: Int, val s1: Split, val s2: Split) extends Split with Serializable {
+class CartesianPartition(
+    idx: Int,
+    @transient rdd1: RDD[_],
+    @transient rdd2: RDD[_],
+    s1Index: Int,
+    s2Index: Int
+  ) extends Partition {
+  var s1 = rdd1.partitions(s1Index)
+  var s2 = rdd2.partitions(s2Index)
   override val index: Int = idx
+
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    // Update the reference to parent split at the time of task serialization
+    s1 = rdd1.partitions(s1Index)
+    s2 = rdd2.partitions(s2Index)
+    oos.defaultWriteObject()
+  }
 }
 
 private[spark]
 class CartesianRDD[T: ClassManifest, U:ClassManifest](
     sc: SparkContext,
-    rdd1: RDD[T],
-    rdd2: RDD[U])
-  extends RDD[Pair[T, U]](sc)
+    var rdd1 : RDD[T],
+    var rdd2 : RDD[U])
+  extends RDD[Pair[T, U]](sc, Nil)
   with Serializable {
 
-  val numSplitsInRdd2 = rdd2.splits.size
+  val numPartitionsInRdd2 = rdd2.partitions.size
 
-  @transient
-  val splits_ = {
+  override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val array = new Array[Split](rdd1.splits.size * rdd2.splits.size)
-    for (s1 <- rdd1.splits; s2 <- rdd2.splits) {
-      val idx = s1.index * numSplitsInRdd2 + s2.index
-      array(idx) = new CartesianSplit(idx, s1, s2)
+    val array = new Array[Partition](rdd1.partitions.size * rdd2.partitions.size)
+    for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {
+      val idx = s1.index * numPartitionsInRdd2 + s2.index
+      array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)
     }
     array
   }
 
-  override def splits = splits_
-
-  override def preferredLocations(split: Split) = {
-    val currSplit = split.asInstanceOf[CartesianSplit]
+  override def getPreferredLocations(split: Partition): Seq[String] = {
+    val currSplit = split.asInstanceOf[CartesianPartition]
     rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)
   }
 
-  override def compute(split: Split, context: TaskContext) = {
-    val currSplit = split.asInstanceOf[CartesianSplit]
+  override def compute(split: Partition, context: TaskContext) = {
+    val currSplit = split.asInstanceOf[CartesianPartition]
     for (x <- rdd1.iterator(currSplit.s1, context);
       y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
   }
 
-  override val dependencies = List(
+  override def getDependencies: Seq[Dependency[_]] = List(
     new NarrowDependency(rdd1) {
-      def getParents(id: Int): Seq[Int] = List(id / numSplitsInRdd2)
+      def getParents(id: Int): Seq[Int] = List(id / numPartitionsInRdd2)
     },
     new NarrowDependency(rdd2) {
-      def getParents(id: Int): Seq[Int] = List(id % numSplitsInRdd2)
+      def getParents(id: Int): Seq[Int] = List(id % numPartitionsInRdd2)
     }
   )
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    rdd1 = null
+    rdd2 = null
+  }
 }

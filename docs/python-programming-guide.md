@@ -16,7 +16,6 @@ There are a few key differences between the Python and Scala APIs:
 
 * Python is dynamically typed, so RDDs can hold objects of different types.
 * PySpark does not currently support the following Spark features:
-    - Accumulators
     - Special functions on RDDs of doubles, such as `mean` and `stdev`
     - `lookup`
     - `persist` at storage levels other than `MEMORY_ONLY`
@@ -68,20 +67,27 @@ The script automatically adds the `pyspark` package to the `PYTHONPATH`.
 
 # Interactive Use
 
-The `pyspark` script launches a Python interpreter that is configured to run PySpark jobs.
-When run without any input files, `pyspark` launches a shell that can be used explore data interactively, which is a simple way to learn the API:
+The `pyspark` script launches a Python interpreter that is configured to run PySpark jobs. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
+
+{% highlight bash %}
+$ sbt/sbt package
+$ ./pyspark
+{% endhighlight %}
+
+The Python shell can be used explore data interactively and is a simple way to learn the API:
 
 {% highlight python %}
 >>> words = sc.textFile("/usr/share/dict/words")
 >>> words.filter(lambda w: w.startswith("spar")).take(5)
 [u'spar', u'sparable', u'sparada', u'sparadrap', u'sparagrass']
+>>> help(pyspark) # Show all pyspark functions
 {% endhighlight %}
 
 By default, the `pyspark` shell creates SparkContext that runs jobs locally.
 To connect to a non-local cluster, set the `MASTER` environment variable.
 For example, to use the `pyspark` shell with a [standalone Spark cluster](spark-standalone.html):
 
-{% highlight shell %}
+{% highlight bash %}
 $ MASTER=spark://IP:PORT ./pyspark
 {% endhighlight %}
 
@@ -103,9 +109,9 @@ Code dependencies can be added to an existing SparkContext using its `addPyFile(
 
 # Where to Go from Here
 
-PySpark includes several sample programs using the Python API in `python/examples`.
+PySpark includes several sample programs in the [`python/examples` folder](https://github.com/mesos/spark/tree/master/python/examples).
 You can run them by passing the files to the `pyspark` script -- for example `./pyspark python/examples/wordcount.py`.
-Each example program prints usage help when run without any arguments.
+Each program prints usage help when run without arguments.
 
 We currently provide [API documentation](api/pyspark/index.html) for the Python API as Epydoc.
 Many of the RDD method descriptions contain [doctests](http://docs.python.org/2/library/doctest.html) that provide additional usage examples.

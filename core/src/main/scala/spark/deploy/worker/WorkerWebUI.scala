@@ -12,16 +12,17 @@ import spray.http.MediaTypes._
 
 import spark.deploy.{WorkerState, RequestWorkerState}
 import spark.deploy.JsonProtocol._
+import java.io.File
 
+/**
+ * Web UI server for the standalone worker.
+ */
 private[spark]
-class WorkerWebUI(worker: ActorRef)(implicit val context: ActorContext) extends Directives {
-  import context.dispatcher
-
-  val actorSystem         = context.system
-  val RESOURCE_DIR        = "spark/deploy/worker/webui"
+class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef, workDir: File) extends Directives {
+  val RESOURCE_DIR = "spark/deploy/worker/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
 
-  implicit val timeout = Timeout(1 seconds)
+  implicit val timeout = Timeout(10 seconds)
 
   val handler = {
     get {
@@ -43,7 +44,7 @@ class WorkerWebUI(worker: ActorRef)(implicit val context: ActorContext) extends 
       path("log") {
         parameters("jobId", "executorId", "logType") { (jobId, executorId, logType) =>
           respondWithMediaType(`text/plain`) {
-            getFromFile("work/" + jobId + "/" + executorId + "/" + logType)
+            getFromFileName(workDir.getPath() + "/" + appId + "/" + executorId + "/" + logType)
           }
         }
       } ~
@@ -53,5 +54,4 @@ class WorkerWebUI(worker: ActorRef)(implicit val context: ActorContext) extends 
       getFromResourceDirectory(RESOURCE_DIR)
     }
   }
-  
 }

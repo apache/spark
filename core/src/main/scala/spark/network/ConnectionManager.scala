@@ -52,9 +52,8 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   val keyInterestChangeRequests = new SynchronizedQueue[(SelectionKey, Int)]
   val sendMessageRequests = new Queue[(Message, SendingConnection)]
 
-  implicit val futureExecContext = ExecutionContext.fromExecutor(
-    Executors.newCachedThreadPool(DaemonThreadFactory))
-  
+  implicit val futureExecContext = ExecutionContext.fromExecutor(Utils.newDaemonCachedThreadPool())
+
   var onReceiveCallback: (BufferMessage, ConnectionManagerId) => Option[Message]= null
 
   serverChannel.configureBlocking(false)
@@ -67,31 +66,28 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)
   logInfo("Bound socket to port " + serverChannel.socket.getLocalPort() + " with id = " + id)
   
-  val thisInstance = this
   val selectorThread = new Thread("connection-manager-thread") {
-    override def run() {
-      thisInstance.run()
-    }
+    override def run() = ConnectionManager.this.run()
   }
   selectorThread.setDaemon(true)
   selectorThread.start()
 
-  def run() {
+  private def run() {
     try {
       while(!selectorThread.isInterrupted) {
-        for( (connectionManagerId, sendingConnection) <- connectionRequests) {
+        for ((connectionManagerId, sendingConnection) <- connectionRequests) {
           sendingConnection.connect() 
           addConnection(sendingConnection)
           connectionRequests -= connectionManagerId
         }
         sendMessageRequests.synchronized {
-          while(!sendMessageRequests.isEmpty) {
+          while (!sendMessageRequests.isEmpty) {
             val (message, connection) = sendMessageRequests.dequeue
             connection.send(message)
           }
         }
 
-        while(!keyInterestChangeRequests.isEmpty) {
+        while (!keyInterestChangeRequests.isEmpty) {
           val (key, ops) = keyInterestChangeRequests.dequeue
           val connection = connectionsByKey(key)
           val lastOps = key.interestOps()
@@ -127,14 +123,11 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
           if (key.isValid) {
             if (key.isAcceptable) {
               acceptConnection(key)
-            } else 
-            if (key.isConnectable) {
+            } else if (key.isConnectable) {
               connectionsByKey(key).asInstanceOf[SendingConnection].finishConnect()
-            } else 
-            if (key.isReadable) {
+            } else if (key.isReadable) {
               connectionsByKey(key).read()
-            } else 
-            if (key.isWritable) {
+            } else if (key.isWritable) {
               connectionsByKey(key).write()
             }
           }
@@ -145,7 +138,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
     }
   }
   
-  def acceptConnection(key: SelectionKey) {
+  private def acceptConnection(key: SelectionKey) {
     val serverChannel = key.channel.asInstanceOf[ServerSocketChannel]
     val newChannel = serverChannel.accept()
     val newConnection = new ReceivingConnection(newChannel, selector)
@@ -155,7 +148,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
     logInfo("Accepted connection from [" + newConnection.remoteAddress.getAddress + "]")
   }
 
-  def addConnection(connection: Connection) {
+  private def addConnection(connection: Connection) {
     connectionsByKey += ((connection.key, connection))
     if (connection.isInstanceOf[SendingConnection]) {
       val sendingConnection = connection.asInstanceOf[SendingConnection]
@@ -166,7 +159,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
     connection.onClose(removeConnection)
   }
 
-  def removeConnection(connection: Connection) {
+  private def removeConnection(connection: Connection) {
     connectionsByKey -= connection.key
     if (connection.isInstanceOf[SendingConnection]) {
       val sendingConnection = connection.asInstanceOf[SendingConnection]
@@ -223,16 +216,16 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
     }
   }
 
-  def handleConnectionError(connection: Connection, e: Exception) {
+  private def handleConnectionError(connection: Connection, e: Exception) {
     logInfo("Handling connection error on connection to " + connection.remoteConnectionManagerId)
     removeConnection(connection)
   }
 
-  def changeConnectionKeyInterest(connection: Connection, ops: Int) {
+  private def changeConnectionKeyInterest(connection: Connection, ops: Int) {
     keyInterestChangeRequests += ((connection.key, ops))  
   }
 
-  def receiveMessage(connection: Connection, message: Message) {
+  private def receiveMessage(connection: Connection, message: Message) {
     val connectionManagerId = ConnectionManagerId.fromSocketAddress(message.senderAddress)
     logDebug("Received [" + message + "] from [" + connectionManagerId + "]") 
     val runnable = new Runnable() {
@@ -300,7 +293,8 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
   private def sendMessage(connectionManagerId: ConnectionManagerId, message: Message) {
     def startNewConnection(): SendingConnection = {
       val inetSocketAddress = new InetSocketAddress(connectionManagerId.host, connectionManagerId.port)
-      val newConnection = connectionRequests.getOrElseUpdate(connectionManagerId, new SendingConnection(inetSocketAddress, selector))
+      val newConnection = connectionRequests.getOrElseUpdate(connectionManagerId,
+          new SendingConnection(inetSocketAddress, selector, connectionManagerId))
       newConnection   
     }
     val lookupKey = ConnectionManagerId.fromSocketAddress(connectionManagerId.toSocketAddress)
@@ -351,7 +345,6 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
-  
     val manager = new ConnectionManager(9999)
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => { 
       println("Received [" + msg + "] from [" + id + "]")

@@ -3,8 +3,8 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.spark-project</groupId>
-    <artifactId>parent</artifactId>
-    <version>0.7.0-SNAPSHOT</version>
+    <artifactId>spark-parent</artifactId>
+    <version>0.8.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -91,6 +91,10 @@
       <groupId>org.apache.mesos</groupId>
       <artifactId>mesos</artifactId>
     </dependency>
+    <dependency>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.scalatest</groupId>
@@ -100,6 +104,11 @@
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.easymock</groupId>
+      <artifactId>easymock</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -167,11 +176,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <activation>
-        <property>
-          <name>!hadoopVersion</name>
-        </property>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
@@ -224,12 +228,6 @@
     </profile>
     <profile>
       <id>hadoop2</id>
-      <activation>
-        <property>
-          <name>hadoopVersion</name>
-          <value>2</value>
-        </property>
-      </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>

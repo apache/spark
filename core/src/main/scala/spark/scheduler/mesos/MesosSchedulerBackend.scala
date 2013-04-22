@@ -24,20 +24,10 @@ private[spark] class MesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
-    frameworkName: String)
+    appName: String)
   extends SchedulerBackend
   with MScheduler
   with Logging {
-
-  // Memory used by each executor (in megabytes)
-  val EXECUTOR_MEMORY = {
-    if (System.getenv("SPARK_MEM") != null) {
-      Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
-      // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    } else {
-      512
-    }
-  }
 
   // Lock used to wait for scheduler to be registered
   var isRegistered = false
@@ -51,7 +41,7 @@ private[spark] class MesosSchedulerBackend(
   val taskIdToSlaveId = new HashMap[Long, String]
 
   // An ExecutorInfo for our tasks
-  var executorInfo: ExecutorInfo = null
+  var execArgs: Array[Byte] = null
 
   override def start() {
     synchronized {
@@ -59,7 +49,7 @@ private[spark] class MesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = MesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(frameworkName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try {
             val ret = driver.run()
@@ -70,19 +60,14 @@ private[spark] class MesosSchedulerBackend(
         }
       }.start()
 
-      executorInfo = createExecutorInfo()
       waitForRegister()
     }
   }
 
-  def createExecutorInfo(): ExecutorInfo = {
-    val sparkHome = sc.getSparkHome() match {
-      case Some(path) =>
-        path
-      case None =>
-        throw new SparkException("Spark home is not set; set it through the spark.home system " +
-          "property, the SPARK_HOME environment variable or the SparkContext constructor")
-    }
+  def createExecutorInfo(execId: String): ExecutorInfo = {
+    val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
+      "Spark home is not set; set it through the spark.home system " +
+      "property, the SPARK_HOME environment variable or the SparkContext constructor"))
     val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
@@ -94,14 +79,14 @@ private[spark] class MesosSchedulerBackend(
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(EXECUTOR_MEMORY).build())
+      .setScalar(Value.Scalar.newBuilder().setValue(executorMemory).build())
       .build()
     val command = CommandInfo.newBuilder()
       .setValue(execScript)
       .setEnvironment(environment)
       .build()
     ExecutorInfo.newBuilder()
-      .setExecutorId(ExecutorID.newBuilder().setValue("default").build())
+      .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
       .addResources(memory)
@@ -113,17 +98,20 @@ private[spark] class MesosSchedulerBackend(
    * containing all the spark.* system properties in the form of (String, String) pairs.
    */
   private def createExecArg(): Array[Byte] = {
-    val props = new HashMap[String, String]
-    val iterator = System.getProperties.entrySet.iterator
-    while (iterator.hasNext) {
-      val entry = iterator.next
-      val (key, value) = (entry.getKey.toString, entry.getValue.toString)
-      if (key.startsWith("spark.")) {
-        props(key) = value
+    if (execArgs == null) {
+      val props = new HashMap[String, String]
+      val iterator = System.getProperties.entrySet.iterator
+      while (iterator.hasNext) {
+        val entry = iterator.next
+        val (key, value) = (entry.getKey.toString, entry.getValue.toString)
+        if (key.startsWith("spark.")) {
+          props(key) = value
+        }
       }
+      // Serialize the map as an array of (String, String) pairs
+      execArgs = Utils.serialize(props.toArray)
     }
-    // Serialize the map as an array of (String, String) pairs
-    return Utils.serialize(props.toArray)
+    return execArgs
   }
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
@@ -163,7 +151,7 @@ private[spark] class MesosSchedulerBackend(
       def enoughMemory(o: Offer) = {
         val mem = getResource(o.getResourcesList, "mem")
         val slaveId = o.getSlaveId.getValue
-        mem >= EXECUTOR_MEMORY || slaveIdsWithExecutors.contains(slaveId)
+        mem >= executorMemory || slaveIdsWithExecutors.contains(slaveId)
       }
 
       for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
@@ -220,7 +208,7 @@ private[spark] class MesosSchedulerBackend(
     return MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
-      .setExecutor(executorInfo)
+      .setExecutor(createExecutorInfo(slaveId))
       .setName(task.name)
       .addResources(cpuResource)
       .setData(ByteString.copyFrom(task.serializedTask))
@@ -272,7 +260,7 @@ private[spark] class MesosSchedulerBackend(
     synchronized {
       slaveIdsWithExecutors -= slaveId.getValue
     }
-    scheduler.slaveLost(slaveId.getValue, reason)
+    scheduler.executorLost(slaveId.getValue, reason)
   }
 
   override def slaveLost(d: SchedulerDriver, slaveId: SlaveID) {

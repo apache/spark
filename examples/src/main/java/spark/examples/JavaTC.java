@@ -28,7 +28,7 @@ public class JavaTC {
       Tuple2<Integer, Integer> e = new Tuple2<Integer, Integer>(from, to);
       if (from != to) edges.add(e);
     }
-    return new ArrayList(edges);
+    return new ArrayList<Tuple2<Integer, Integer>>(edges);
   }
 
   static class ProjectFn extends PairFunction<Tuple2<Integer, Tuple2<Integer, Integer>>,
@@ -46,7 +46,8 @@ public class JavaTC {
       System.exit(1);
     }
 
-    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaTC");
+    JavaSparkContext sc = new JavaSparkContext(args[0], "JavaTC",
+        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
     Integer slices = (args.length > 1) ? Integer.parseInt(args[1]): 2;
     JavaPairRDD<Integer, Integer> tc = sc.parallelizePairs(generateGraph(), slices).cache();
 

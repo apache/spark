@@ -1,17 +1,13 @@
 package spark
 
 import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
 
 import akka.actor._
 import spark.scheduler.MapStatus
 import spark.storage.BlockManagerId
 import spark.util.AkkaUtils
 
-class MapOutputTrackerSuite extends FunSuite with BeforeAndAfter {
-  after {
-    System.clearProperty("spark.master.port")
-  }
+class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
  
   test("compressSize") {
     assert(MapOutputTracker.compressSize(0L) === 0)
@@ -35,58 +31,65 @@ class MapOutputTrackerSuite extends FunSuite with BeforeAndAfter {
 
   test("master start and stop") {
     val actorSystem = ActorSystem("test")
-    val tracker = new MapOutputTracker(actorSystem, true)
+    val tracker = new MapOutputTracker()
+    tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerActor(tracker)))
     tracker.stop()
   }
 
   test("master register and fetch") {
     val actorSystem = ActorSystem("test")
-    val tracker = new MapOutputTracker(actorSystem, true)
+    val tracker = new MapOutputTracker()
+    tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerActor(tracker)))
     tracker.registerShuffle(10, 2)
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val compressedSize10000 = MapOutputTracker.compressSize(10000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     val size10000 = MapOutputTracker.decompressSize(compressedSize10000)
-    tracker.registerMapOutput(10, 0, new MapStatus(new BlockManagerId("hostA", 1000),
+    tracker.registerMapOutput(10, 0, new MapStatus(BlockManagerId("a", "hostA", 1000),
         Array(compressedSize1000, compressedSize10000)))
-    tracker.registerMapOutput(10, 1, new MapStatus(new BlockManagerId("hostB", 1000),
+    tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("b", "hostB", 1000),
         Array(compressedSize10000, compressedSize1000)))
     val statuses = tracker.getServerStatuses(10, 0)
-    assert(statuses.toSeq === Seq((new BlockManagerId("hostA", 1000), size1000),
-                                  (new BlockManagerId("hostB", 1000), size10000)))
+    assert(statuses.toSeq === Seq((BlockManagerId("a", "hostA", 1000), size1000),
+                                  (BlockManagerId("b", "hostB", 1000), size10000)))
     tracker.stop()
   }
 
   test("master register and unregister and fetch") {
     val actorSystem = ActorSystem("test")
-    val tracker = new MapOutputTracker(actorSystem, true)
+    val tracker = new MapOutputTracker()
+    tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerActor(tracker)))
     tracker.registerShuffle(10, 2)
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val compressedSize10000 = MapOutputTracker.compressSize(10000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     val size10000 = MapOutputTracker.decompressSize(compressedSize10000)
-    tracker.registerMapOutput(10, 0, new MapStatus(new BlockManagerId("hostA", 1000),
+    tracker.registerMapOutput(10, 0, new MapStatus(BlockManagerId("a", "hostA", 1000),
         Array(compressedSize1000, compressedSize1000, compressedSize1000)))
-    tracker.registerMapOutput(10, 1, new MapStatus(new BlockManagerId("hostB", 1000),
+    tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("b", "hostB", 1000),
         Array(compressedSize10000, compressedSize1000, compressedSize1000)))
 
     // As if we had two simulatenous fetch failures
-    tracker.unregisterMapOutput(10, 0, new BlockManagerId("hostA", 1000))
-    tracker.unregisterMapOutput(10, 0, new BlockManagerId("hostA", 1000))
+    tracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
+    tracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
 
-    // The remaining reduce task might try to grab the output dispite the shuffle failure;
+    // The remaining reduce task might try to grab the output despite the shuffle failure;
     // this should cause it to fail, and the scheduler will ignore the failure due to the
     // stage already being aborted.
     intercept[FetchFailedException] { tracker.getServerStatuses(10, 1) }
   }
 
   test("remote fetch") {
-    System.clearProperty("spark.master.host")
-    val (actorSystem, boundPort) =
-      AkkaUtils.createActorSystem("test", "localhost", 0)
-    System.setProperty("spark.master.port", boundPort.toString)
-    val masterTracker = new MapOutputTracker(actorSystem, true)
-    val slaveTracker = new MapOutputTracker(actorSystem, false)
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", "localhost", 0)
+    val masterTracker = new MapOutputTracker()
+    masterTracker.trackerActor = actorSystem.actorOf(
+        Props(new MapOutputTrackerActor(masterTracker)), "MapOutputTracker")
+    
+    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", "localhost", 0)
+    val slaveTracker = new MapOutputTracker()
+    slaveTracker.trackerActor = slaveSystem.actorFor(
+        "akka://spark@localhost:" + boundPort + "/user/MapOutputTracker")
+    
     masterTracker.registerShuffle(10, 1)
     masterTracker.incrementGeneration()
     slaveTracker.updateGeneration(masterTracker.getGeneration)
@@ -95,13 +98,13 @@ class MapOutputTrackerSuite extends FunSuite with BeforeAndAfter {
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     masterTracker.registerMapOutput(10, 0, new MapStatus(
-      new BlockManagerId("hostA", 1000), Array(compressedSize1000)))
+      BlockManagerId("a", "hostA", 1000), Array(compressedSize1000)))
     masterTracker.incrementGeneration()
     slaveTracker.updateGeneration(masterTracker.getGeneration)
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq((new BlockManagerId("hostA", 1000), size1000)))
+           Seq((BlockManagerId("a", "hostA", 1000), size1000)))
 
-    masterTracker.unregisterMapOutput(10, 0, new BlockManagerId("hostA", 1000))
+    masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
     masterTracker.incrementGeneration()
     slaveTracker.updateGeneration(masterTracker.getGeneration)
     intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }

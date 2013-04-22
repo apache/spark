@@ -3,8 +3,8 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.spark-project</groupId>
-    <artifactId>parent</artifactId>
-    <version>0.7.0-SNAPSHOT</version>
+    <artifactId>spark-parent</artifactId>
+    <version>0.8.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -72,11 +72,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <activation>
-        <property>
-          <name>!hadoopVersion</name>
-        </property>
-      </activation>
       <properties>
         <classifier>hadoop1</classifier>
       </properties>
@@ -102,6 +97,13 @@
           <scope>runtime</scope>
         </dependency>
         <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-streaming</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop1</classifier>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
           <scope>provided</scope>
@@ -121,12 +123,6 @@
     </profile>
     <profile>
       <id>hadoop2</id>
-      <activation>
-        <property>
-          <name>hadoopVersion</name>
-          <value>2</value>
-        </property>
-      </activation>
       <properties>
         <classifier>hadoop2</classifier>
       </properties>
@@ -152,6 +148,13 @@
           <scope>runtime</scope>
         </dependency>
         <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-streaming</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop2</classifier>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
           <scope>provided</scope>
@@ -159,6 +162,16 @@
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-client</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro-ipc</artifactId>
           <scope>provided</scope>
         </dependency>
       </dependencies>

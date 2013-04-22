@@ -28,22 +28,12 @@ private[spark] class CoarseMesosSchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
-    frameworkName: String)
+    appName: String)
   extends StandaloneSchedulerBackend(scheduler, sc.env.actorSystem)
   with MScheduler
   with Logging {
 
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
-
-  // Memory used by each executor (in megabytes)
-  val executorMemory = {
-    if (System.getenv("SPARK_MEM") != null) {
-      Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
-      // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    } else {
-      512
-    }
-  }
 
   // Lock used to wait for scheduler to be registered
   var isRegistered = false
@@ -64,13 +54,9 @@ private[spark] class CoarseMesosSchedulerBackend(
   val taskIdToSlaveId = new HashMap[Int, String]
   val failuresBySlaveId = new HashMap[String, Int] // How many times tasks on each slave failed
 
-  val sparkHome = sc.getSparkHome() match {
-    case Some(path) =>
-      path
-    case None =>
-      throw new SparkException("Spark home is not set; set it through the spark.home system " +
-        "property, the SPARK_HOME environment variable or the SparkContext constructor")
-  }
+  val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
+    "Spark home is not set; set it through the spark.home system " +
+    "property, the SPARK_HOME environment variable or the SparkContext constructor"))
 
   val extraCoresPerSlave = System.getProperty("spark.mesos.extra.cores", "0").toInt
 
@@ -90,7 +76,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = CoarseMesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(frameworkName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try { {
             val ret = driver.run()
@@ -108,11 +94,11 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
     val runScript = new File(sparkHome, "run").getCanonicalPath
-    val masterUrl = "akka://spark@%s:%s/user/%s".format(
-      System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
+    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+      System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
       StandaloneSchedulerBackend.ACTOR_NAME)
     val command = "\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
-      runScript, masterUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
+      runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -184,7 +170,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /** Helper function to pull out a resource from a Mesos Resources protobuf */
-  def getResource(res: JList[Resource], name: String): Double = {
+  private def getResource(res: JList[Resource], name: String): Double = {
     for (r <- res if r.getName == name) {
       return r.getScalar.getValue
     }
@@ -193,7 +179,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /** Build a Mesos resource protobuf object */
-  def createResource(resourceName: String, quantity: Double): Protos.Resource = {
+  private def createResource(resourceName: String, quantity: Double): Protos.Resource = {
     Resource.newBuilder()
       .setName(resourceName)
       .setType(Value.Type.SCALAR)
@@ -202,7 +188,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   /** Check whether a Mesos task state represents a finished task */
-  def isFinished(state: MesosTaskState) = {
+  private def isFinished(state: MesosTaskState) = {
     state == MesosTaskState.TASK_FINISHED ||
       state == MesosTaskState.TASK_FAILED ||
       state == MesosTaskState.TASK_KILLED ||
@@ -253,7 +239,11 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def slaveLost(d: SchedulerDriver, slaveId: SlaveID) {
     logInfo("Mesos slave lost: " + slaveId.getValue)
     synchronized {
-      slaveIdsWithExecutors -= slaveId.getValue
+      if (slaveIdsWithExecutors.contains(slaveId.getValue)) {
+        // Note that the slave ID corresponds to the executor ID on that slave
+        slaveIdsWithExecutors -= slaveId.getValue
+        removeExecutor(slaveId.getValue, "Mesos slave lost")
+      }
     }
   }
 

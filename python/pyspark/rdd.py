@@ -1,4 +1,3 @@
-import atexit
 from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
@@ -32,7 +31,9 @@ class RDD(object):
     def __init__(self, jrdd, ctx):
         self._jrdd = jrdd
         self.is_cached = False
+        self.is_checkpointed = False
         self.ctx = ctx
+        self._partitionFunc = None
 
     @property
     def context(self):
@@ -48,6 +49,34 @@ class RDD(object):
         self.is_cached = True
         self._jrdd.cache()
         return self
+
+    def checkpoint(self):
+        """
+        Mark this RDD for checkpointing. It will be saved to a file inside the
+        checkpoint directory set with L{SparkContext.setCheckpointDir()} and
+        all references to its parent RDDs will be removed. This function must
+        be called before any job has been executed on this RDD. It is strongly
+        recommended that this RDD is persisted in memory, otherwise saving it
+        on a file will require recomputation.
+        """
+        self.is_checkpointed = True
+        self._jrdd.rdd().checkpoint()
+
+    def isCheckpointed(self):
+        """
+        Return whether this RDD has been checkpointed or not
+        """
+        return self._jrdd.rdd().isCheckpointed()
+
+    def getCheckpointFile(self):
+        """
+        Gets the name of the file to which this RDD was checkpointed
+        """
+        checkpointFile = self._jrdd.rdd().getCheckpointFile()
+        if checkpointFile.isDefined():
+            return checkpointFile.get()
+        else:
+            return None
 
     # TODO persist(self, storageLevel)
 
@@ -186,7 +215,7 @@ class RDD(object):
                 yield pair
         return java_cartesian.flatMap(unpack_batches)
 
-    def groupBy(self, f, numSplits=None):
+    def groupBy(self, f, numPartitions=None):
         """
         Return an RDD of grouped items.
 
@@ -195,7 +224,7 @@ class RDD(object):
         >>> sorted([(x, sorted(y)) for (x, y) in result])
         [(0, [2, 8]), (1, [1, 1, 3, 5])]
         """
-        return self.map(lambda x: (f(x), x)).groupByKey(numSplits)
+        return self.map(lambda x: (f(x), x)).groupByKey(numPartitions)
 
     def pipe(self, command, env={}):
         """
@@ -234,12 +263,8 @@ class RDD(object):
         # Transferring lots of data through Py4J can be slow because
         # socket.readline() is inefficient.  Instead, we'll dump the data to a
         # file and read it back.
-        tempFile = NamedTemporaryFile(delete=False)
+        tempFile = NamedTemporaryFile(delete=False, dir=self.ctx._temp_dir)
         tempFile.close()
-        def clean_up_file():
-            try: os.unlink(tempFile.name)
-            except: pass
-        atexit.register(clean_up_file)
         self.ctx._writeIteratorToPickleFile(iterator, tempFile.name)
         # Read the data into Python and deserialize it:
         with open(tempFile.name, 'rb') as tempFile:
@@ -249,8 +274,8 @@ class RDD(object):
 
     def reduce(self, f):
         """
-        Reduces the elements of this RDD using the specified associative binary
-        operator.
+        Reduces the elements of this RDD using the specified commutative and
+        associative binary operator.
 
         >>> from operator import add
         >>> sc.parallelize([1, 2, 3, 4, 5]).reduce(add)
@@ -347,6 +372,10 @@ class RDD(object):
         items = []
         for partition in range(self._jrdd.splits().size()):
             iterator = self.ctx._takePartition(self._jrdd.rdd(), partition)
+            # Each item in the iterator is a string, Python object, batch of
+            # Python objects.  Regardless, it is sufficient to take `num`
+            # of these objects in order to collect `num` Python objects:
+            iterator = iterator.take(num)
             items.extend(self._collect_iterator_through_file(iterator))
             if len(items) >= num:
                 break
@@ -370,14 +399,14 @@ class RDD(object):
         >>> sc.parallelize(range(10)).saveAsTextFile(tempFile.name)
         >>> from fileinput import input
         >>> from glob import glob
-        >>> ''.join(input(glob(tempFile.name + "/part-0000*")))
+        >>> ''.join(sorted(input(glob(tempFile.name + "/part-0000*"))))
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
         """
         def func(split, iterator):
             return (str(x).encode("utf-8") for x in iterator)
         keyed = PipelinedRDD(self, func)
         keyed._bypass_serializer = True
-        keyed._jrdd.map(self.ctx.jvm.BytesToString()).saveAsTextFile(path)
+        keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
 
     # Pair functions
 
@@ -393,22 +422,22 @@ class RDD(object):
         """
         return dict(self.collect())
 
-    def reduceByKey(self, func, numSplits=None):
+    def reduceByKey(self, func, numPartitions=None):
         """
         Merge the values for each key using an associative reduce function.
 
         This will also perform the merging locally on each mapper before
         sending results to a reducer, similarly to a "combiner" in MapReduce.
 
-        Output will be hash-partitioned with C{numSplits} splits, or the
-        default parallelism level if C{numSplits} is not specified.
+        Output will be hash-partitioned with C{numPartitions} partitions, or
+        the default parallelism level if C{numPartitions} is not specified.
 
         >>> from operator import add
         >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> sorted(rdd.reduceByKey(add).collect())
         [('a', 2), ('b', 1)]
         """
-        return self.combineByKey(lambda x: x, func, func, numSplits)
+        return self.combineByKey(lambda x: x, func, func, numPartitions)
 
     def reduceByKeyLocally(self, func):
         """
@@ -445,7 +474,7 @@ class RDD(object):
         """
         return self.map(lambda x: x[0]).countByValue()
 
-    def join(self, other, numSplits=None):
+    def join(self, other, numPartitions=None):
         """
         Return an RDD containing all pairs of elements with matching keys in
         C{self} and C{other}.
@@ -460,9 +489,9 @@ class RDD(object):
         >>> sorted(x.join(y).collect())
         [('a', (1, 2)), ('a', (1, 3))]
         """
-        return python_join(self, other, numSplits)
+        return python_join(self, other, numPartitions)
 
-    def leftOuterJoin(self, other, numSplits=None):
+    def leftOuterJoin(self, other, numPartitions=None):
         """
         Perform a left outer join of C{self} and C{other}.
 
@@ -477,9 +506,9 @@ class RDD(object):
         >>> sorted(x.leftOuterJoin(y).collect())
         [('a', (1, 2)), ('b', (4, None))]
         """
-        return python_left_outer_join(self, other, numSplits)
+        return python_left_outer_join(self, other, numPartitions)
 
-    def rightOuterJoin(self, other, numSplits=None):
+    def rightOuterJoin(self, other, numPartitions=None):
         """
         Perform a right outer join of C{self} and C{other}.
 
@@ -494,10 +523,10 @@ class RDD(object):
         >>> sorted(y.rightOuterJoin(x).collect())
         [('a', (2, 1)), ('b', (None, 4))]
         """
-        return python_right_outer_join(self, other, numSplits)
+        return python_right_outer_join(self, other, numPartitions)
 
     # TODO: add option to control map-side combining
-    def partitionBy(self, numSplits, hashFunc=hash):
+    def partitionBy(self, numPartitions, partitionFunc=hash):
         """
         Return a copy of the RDD partitioned using the specified partitioner.
 
@@ -506,29 +535,33 @@ class RDD(object):
         >>> set(sets[0]).intersection(set(sets[1]))
         set([])
         """
-        if numSplits is None:
-            numSplits = self.ctx.defaultParallelism
+        if numPartitions is None:
+            numPartitions = self.ctx.defaultParallelism
         # Transferring O(n) objects to Java is too expensive.  Instead, we'll
-        # form the hash buckets in Python, transferring O(numSplits) objects
+        # form the hash buckets in Python, transferring O(numPartitions) objects
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         def add_shuffle_key(split, iterator):
             buckets = defaultdict(list)
             for (k, v) in iterator:
-                buckets[hashFunc(k) % numSplits].append((k, v))
+                buckets[partitionFunc(k) % numPartitions].append((k, v))
             for (split, items) in buckets.iteritems():
                 yield str(split)
                 yield dump_pickle(Batch(items))
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
-        pairRDD = self.ctx.jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
-        partitioner = self.ctx.jvm.spark.api.python.PythonPartitioner(numSplits)
-        jrdd = pairRDD.partitionBy(partitioner)
-        jrdd = jrdd.map(self.ctx.jvm.ExtractValue())
-        return RDD(jrdd, self.ctx)
+        pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
+        partitioner = self.ctx._jvm.PythonPartitioner(numPartitions,
+                                                     id(partitionFunc))
+        jrdd = pairRDD.partitionBy(partitioner).values()
+        rdd = RDD(jrdd, self.ctx)
+        # This is required so that id(partitionFunc) remains unique, even if
+        # partitionFunc is a lambda:
+        rdd._partitionFunc = partitionFunc
+        return rdd
 
     # TODO: add control over map-side aggregation
     def combineByKey(self, createCombiner, mergeValue, mergeCombiners,
-                     numSplits=None):
+                     numPartitions=None):
         """
         Generic function to combine the elements for each key using a custom
         set of aggregation functions.
@@ -553,8 +586,8 @@ class RDD(object):
         >>> sorted(x.combineByKey(str, add, add).collect())
         [('a', '11'), ('b', '1')]
         """
-        if numSplits is None:
-            numSplits = self.ctx.defaultParallelism
+        if numPartitions is None:
+            numPartitions = self.ctx.defaultParallelism
         def combineLocally(iterator):
             combiners = {}
             for (k, v) in iterator:
@@ -564,7 +597,7 @@ class RDD(object):
                     combiners[k] = mergeValue(combiners[k], v)
             return combiners.iteritems()
         locally_combined = self.mapPartitions(combineLocally)
-        shuffled = locally_combined.partitionBy(numSplits)
+        shuffled = locally_combined.partitionBy(numPartitions)
         def _mergeCombiners(iterator):
             combiners = {}
             for (k, v) in iterator:
@@ -576,10 +609,10 @@ class RDD(object):
         return shuffled.mapPartitions(_mergeCombiners)
 
     # TODO: support variant with custom partitioner
-    def groupByKey(self, numSplits=None):
+    def groupByKey(self, numPartitions=None):
         """
         Group the values for each key in the RDD into a single sequence.
-        Hash-partitions the resulting RDD with into numSplits partitions.
+        Hash-partitions the resulting RDD with into numPartitions partitions.
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> sorted(x.groupByKey().collect())
@@ -597,7 +630,7 @@ class RDD(object):
             return a + b
 
         return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
-                numSplits)
+                numPartitions)
 
     # TODO: add tests
     def flatMapValues(self, f):
@@ -626,7 +659,7 @@ class RDD(object):
         return self.cogroup(other)
 
     # TODO: add variant with custom parittioner
-    def cogroup(self, other, numSplits=None):
+    def cogroup(self, other, numPartitions=None):
         """
         For each key k in C{self} or C{other}, return a resulting RDD that
         contains a tuple with the list of values for that key in C{self} as well
@@ -637,7 +670,7 @@ class RDD(object):
         >>> sorted(x.cogroup(y).collect())
         [('a', ([1], [2])), ('b', ([4], []))]
         """
-        return python_cogroup(self, other, numSplits)
+        return python_cogroup(self, other, numPartitions)
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the
@@ -662,7 +695,7 @@ class PipelinedRDD(RDD):
     20
     """
     def __init__(self, prev, func, preservesPartitioning=False):
-        if isinstance(prev, PipelinedRDD) and not prev.is_cached:
+        if isinstance(prev, PipelinedRDD) and prev._is_pipelinable():
             prev_func = prev.func
             def pipeline_func(split, iterator):
                 return func(split, prev_func(split, iterator))
@@ -675,6 +708,7 @@ class PipelinedRDD(RDD):
             self.preservesPartitioning = preservesPartitioning
             self._prev_jrdd = prev._jrdd
         self.is_cached = False
+        self.is_checkpointed = False
         self.ctx = prev.ctx
         self.prev = prev
         self._jrdd_val = None
@@ -695,17 +729,20 @@ class PipelinedRDD(RDD):
         pipe_command = ' '.join(b64enc(cloudpickle.dumps(f)) for f in cmds)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
-            self.ctx.gateway._gateway_client)
+            self.ctx._gateway._gateway_client)
         self.ctx._pickled_broadcast_vars.clear()
         class_manifest = self._prev_jrdd.classManifest()
         env = copy.copy(self.ctx.environment)
         env['PYTHONPATH'] = os.environ.get("PYTHONPATH", "")
-        env = MapConverter().convert(env, self.ctx.gateway._gateway_client)
-        python_rdd = self.ctx.jvm.PythonRDD(self._prev_jrdd.rdd(),
+        env = MapConverter().convert(env, self.ctx._gateway._gateway_client)
+        python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
             pipe_command, env, self.preservesPartitioning, self.ctx.pythonExec,
-            broadcast_vars, class_manifest)
+            broadcast_vars, self.ctx._javaAccumulator, class_manifest)
         self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
+
+    def _is_pipelinable(self):
+        return not (self.is_cached or self.is_checkpointed)
 
 
 def _test():
@@ -715,8 +752,10 @@ def _test():
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
-    doctest.testmod(globs=globs)
+    (failure_count, test_count) = doctest.testmod(globs=globs)
     globs['sc'].stop()
+    if failure_count:
+        exit(-1)
 
 
 if __name__ == "__main__":

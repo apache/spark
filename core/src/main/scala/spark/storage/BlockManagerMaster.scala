@@ -1,6 +1,10 @@
 package spark.storage
 
-import scala.collection.mutable.ArrayBuffer
+import java.io._
+import java.util.{HashMap => JHashMap}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
@@ -10,54 +14,33 @@ import scala.concurrent.duration._
 
 import spark.{Logging, SparkException, Utils}
 
+private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {
 
-private[spark] class BlockManagerMaster(
-    val actorSystem: ActorSystem,
-    isMaster: Boolean,
-    isLocal: Boolean,
-    masterIp: String,
-    masterPort: Int)
-  extends Logging {
-
-  val AKKA_RETRY_ATTEMPS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
+  val AKKA_RETRY_ATTEMPTS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
   val AKKA_RETRY_INTERVAL_MS: Int = System.getProperty("spark.akka.retry.wait", "3000").toInt
 
-  val MASTER_AKKA_ACTOR_NAME = "BlockMasterManager"
-  val SLAVE_AKKA_ACTOR_NAME = "BlockSlaveManager"
-  val DEFAULT_MANAGER_IP: String = Utils.localHostName()
+  val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
   val timeout = 10.seconds
-  var masterActor: ActorRef = {
-    if (isMaster) {
-      val masterActor = actorSystem.actorOf(Props(new BlockManagerMasterActor(isLocal)),
-        name = MASTER_AKKA_ACTOR_NAME)
-      logInfo("Registered BlockManagerMaster Actor")
-      masterActor
-    } else {
-      val url = "akka://spark@%s:%s/user/%s".format(masterIp, masterPort, MASTER_AKKA_ACTOR_NAME)
-      logInfo("Connecting to BlockManagerMaster: " + url)
-      actorSystem.actorFor(url)
-    }
-  }
 
-  /** Remove a dead host from the master actor. This is only called on the master side. */
-  def notifyADeadHost(host: String) {
-    tell(RemoveHost(host))
-    logInfo("Removed " + host + " successfully in notifyADeadHost")
+  /** Remove a dead executor from the driver actor. This is only called on the driver side. */
+  def removeExecutor(execId: String) {
+    tell(RemoveExecutor(execId))
+    logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
   /**
-   * Send the master actor a heart beat from the slave. Returns true if everything works out,
-   * false if the master does not know about the given block manager, which means the block
+   * Send the driver actor a heart beat from the slave. Returns true if everything works out,
+   * false if the driver does not know about the given block manager, which means the block
    * manager should re-register.
    */
   def sendHeartBeat(blockManagerId: BlockManagerId): Boolean = {
-    askMasterWithRetry[Boolean](HeartBeat(blockManagerId))
+    askDriverWithReply[Boolean](HeartBeat(blockManagerId))
   }
 
-  /** Register the BlockManager's id with the master. */
+  /** Register the BlockManager's id with the driver. */
   def registerBlockManager(
-    blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+      blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     logInfo("Trying to register BlockManager")
     tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
     logInfo("Registered BlockManager")
@@ -69,25 +52,25 @@ private[spark] class BlockManagerMaster(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
-    val res = askMasterWithRetry[Boolean](
+    val res = askDriverWithReply[Boolean](
       UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize))
     logInfo("Updated info of block " + blockId)
     res
   }
 
-  /** Get locations of the blockId from the master */
+  /** Get locations of the blockId from the driver */
   def getLocations(blockId: String): Seq[BlockManagerId] = {
-    askMasterWithRetry[Seq[BlockManagerId]](GetLocations(blockId))
+    askDriverWithReply[Seq[BlockManagerId]](GetLocations(blockId))
   }
 
-  /** Get locations of multiple blockIds from the master */
+  /** Get locations of multiple blockIds from the driver */
   def getLocations(blockIds: Array[String]): Seq[Seq[BlockManagerId]] = {
-    askMasterWithRetry[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
+    askDriverWithReply[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
   }
 
-  /** Get ids of other nodes in the cluster from the master */
+  /** Get ids of other nodes in the cluster from the driver */
   def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId] = {
-    val result = askMasterWithRetry[Seq[BlockManagerId]](GetPeers(blockManagerId, numPeers))
+    val result = askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId, numPeers))
     if (result.length != numPeers) {
       throw new SparkException(
         "Error getting peers, only got " + result.size + " instead of " + numPeers)
@@ -97,10 +80,10 @@ private[spark] class BlockManagerMaster(
 
   /**
    * Remove a block from the slaves that have it. This can only be used to remove
-   * blocks that the master knows about.
+   * blocks that the driver knows about.
    */
   def removeBlock(blockId: String) {
-    askMasterWithRetry(RemoveBlock(blockId))
+    askDriverWithReply(RemoveBlock(blockId))
   }
 
   /**
@@ -110,41 +93,45 @@ private[spark] class BlockManagerMaster(
    * amount of remaining memory.
    */
   def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
-    askMasterWithRetry[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
+    askDriverWithReply[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
   }
 
-  /** Stop the master actor, called only on the Spark master node */
+  def getStorageStatus: Array[StorageStatus] = {
+    askDriverWithReply[ArrayBuffer[StorageStatus]](GetStorageStatus).toArray
+  }
+
+  /** Stop the driver actor, called only on the Spark driver node */
   def stop() {
-    if (masterActor != null) {
+    if (driverActor != null) {
       tell(StopBlockManagerMaster)
-      masterActor = null
+      driverActor = null
       logInfo("BlockManagerMaster stopped")
     }
   }
 
   /** Send a one-way message to the master actor, to which we expect it to reply with true. */
   private def tell(message: Any) {
-    if (!askMasterWithRetry[Boolean](message)) {
+    if (!askDriverWithReply[Boolean](message)) {
       throw new SparkException("BlockManagerMasterActor returned false, expected true.")
     }
   }
 
   /**
-   * Send a message to the master actor and get its result within a default timeout, or
+   * Send a message to the driver actor and get its result within a default timeout, or
    * throw a SparkException if this fails.
    */
-  private def askMasterWithRetry[T](message: Any): T = {
+  private def askDriverWithReply[T](message: Any): T = {
     // TODO: Consider removing multiple attempts
-    if (masterActor == null) {
-      throw new SparkException("Error sending message to BlockManager as masterActor is null " +
+    if (driverActor == null) {
+      throw new SparkException("Error sending message to BlockManager as driverActor is null " +
         "[message = " + message + "]")
     }
     var attempts = 0
     var lastException: Exception = null
-    while (attempts < AKKA_RETRY_ATTEMPS) {
+    while (attempts < AKKA_RETRY_ATTEMPTS) {
       attempts += 1
       try {
-        val future = masterActor.ask(message)(timeout)
+        val future = driverActor.ask(message)(timeout)
         val result = Await.result(future, timeout)
         if (result == null) {
           throw new Exception("BlockManagerMaster returned null")

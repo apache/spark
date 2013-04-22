@@ -18,7 +18,8 @@ public class JavaWordCount {
       System.exit(1);
     }
 
-    JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaWordCount");
+    JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaWordCount",
+        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
     JavaRDD<String> lines = ctx.textFile(args[1], 1);
 
     JavaRDD<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
@@ -29,7 +30,7 @@ public class JavaWordCount {
     
     JavaPairRDD<String, Integer> ones = words.map(new PairFunction<String, String, Integer>() {
       public Tuple2<String, Integer> call(String s) {
-        return new Tuple2(s, 1);
+        return new Tuple2<String, Integer>(s, 1);
       }
     });
     

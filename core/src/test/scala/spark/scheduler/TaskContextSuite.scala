@@ -5,28 +5,17 @@ import org.scalatest.BeforeAndAfter
 import spark.TaskContext
 import spark.RDD
 import spark.SparkContext
-import spark.Split
+import spark.Partition
+import spark.LocalSparkContext
 
-class TaskContextSuite extends FunSuite with BeforeAndAfter {
-
-  var sc: SparkContext = _
-
-  after {
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
-  }
+class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
   test("Calls executeOnCompleteCallbacks after failure") {
     var completed = false
     sc = new SparkContext("local", "test")
-    val rdd = new RDD[String](sc) {
-      override val splits = Array[Split](StubSplit(0))
-      override val dependencies = List()
-      override def compute(split: Split, context: TaskContext) = {
+    val rdd = new RDD[String](sc, List()) {
+      override def getPartitions = Array[Partition](StubPartition(0))
+      override def compute(split: Partition, context: TaskContext) = {
         context.addOnCompleteCallback(() => completed = true)
         sys.error("failed")
       }
@@ -39,5 +28,5 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter {
     assert(completed === true)
   }
 
-  case class StubSplit(val index: Int) extends Split
+  case class StubPartition(val index: Int) extends Partition
 }

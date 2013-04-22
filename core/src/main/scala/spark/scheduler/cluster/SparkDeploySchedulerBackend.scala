@@ -2,14 +2,14 @@ package spark.scheduler.cluster
 
 import spark.{Utils, Logging, SparkContext}
 import spark.deploy.client.{Client, ClientListener}
-import spark.deploy.{Command, JobDescription}
+import spark.deploy.{Command, ApplicationDescription}
 import scala.collection.mutable.HashMap
 
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
-    jobName: String)
+    appName: String)
   extends StandaloneSchedulerBackend(scheduler, sc.env.actorSystem)
   with ClientListener
   with Logging {
@@ -19,34 +19,26 @@ private[spark] class SparkDeploySchedulerBackend(
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = System.getProperty("spark.cores.max", Int.MaxValue.toString).toInt
-  val executorIdToSlaveId = new HashMap[String, String]
-
-  // Memory used by each executor (in megabytes)
-  val executorMemory = {
-    if (System.getenv("SPARK_MEM") != null) {
-      Utils.memoryStringToMb(System.getenv("SPARK_MEM"))
-      // TODO: Might need to add some extra memory for the non-heap parts of the JVM
-    } else {
-      512
-    }
-  }
 
   override def start() {
     super.start()
 
-    val masterUrl = "akka://spark@%s:%s/user/%s".format(
-      System.getProperty("spark.master.host"), System.getProperty("spark.master.port"),
+    // The endpoint for executors to talk to us
+    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+      System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
       StandaloneSchedulerBackend.ACTOR_NAME)
-    val args = Seq(masterUrl, "{{SLAVEID}}", "{{HOSTNAME}}", "{{CORES}}")
+    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
-    val jobDesc = new JobDescription(jobName, maxCores, executorMemory, command)
+    val sparkHome = sc.getSparkHome().getOrElse(
+      throw new IllegalArgumentException("must supply spark home for spark standalone"))
+    val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome)
 
-    client = new Client(sc.env.actorSystem, master, jobDesc, this)
+    client = new Client(sc.env.actorSystem, master, appDesc, this)
     client.start()
   }
 
   override def stop() {
-    stopping = true;
+    stopping = true
     super.stop()
     client.stop()
     if (shutdownCallback != null) {
@@ -54,35 +46,28 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  def connected(jobId: String) {
-    logInfo("Connected to Spark cluster with job ID " + jobId)
+  override def connected(appId: String) {
+    logInfo("Connected to Spark cluster with app ID " + appId)
   }
 
-  def disconnected() {
+  override def disconnected() {
     if (!stopping) {
       logError("Disconnected from Spark cluster!")
       scheduler.error("Disconnected from Spark cluster")
     }
   }
 
-  def executorAdded(id: String, workerId: String, host: String, cores: Int, memory: Int) {
-    executorIdToSlaveId += id -> workerId
+  override def executorAdded(executorId: String, workerId: String, host: String, cores: Int, memory: Int) {
     logInfo("Granted executor ID %s on host %s with %d cores, %s RAM".format(
-       id, host, cores, Utils.memoryMegabytesToString(memory)))
+       executorId, host, cores, Utils.memoryMegabytesToString(memory)))
   }
 
-  def executorRemoved(id: String, message: String, exitStatus: Option[Int]) {
+  override def executorRemoved(executorId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code)
       case None => SlaveLost(message)
     }
-    logInfo("Executor %s removed: %s".format(id, message))
-    executorIdToSlaveId.get(id) match {
-      case Some(slaveId) => 
-        executorIdToSlaveId.remove(id)
-        scheduler.slaveLost(slaveId, reason)
-      case None =>
-        logInfo("No slave ID known for executor %s".format(id))
-    }
+    logInfo("Executor %s removed: %s".format(executorId, message))
+    removeExecutor(executorId, reason.toString)
   }
 }

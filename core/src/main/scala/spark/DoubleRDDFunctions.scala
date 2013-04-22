@@ -42,14 +42,14 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /** (Experimental) Approximate operation to return the mean within a timeout. */
   def meanApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
-    val evaluator = new MeanEvaluator(self.splits.size, confidence)
+    val evaluator = new MeanEvaluator(self.partitions.size, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
   }
 
   /** (Experimental) Approximate operation to return the sum within a timeout. */
   def sumApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
-    val evaluator = new SumEvaluator(self.splits.size, confidence)
+    val evaluator = new SumEvaluator(self.partitions.size, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
   }
 }

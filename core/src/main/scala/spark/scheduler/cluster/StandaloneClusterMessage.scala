@@ -6,32 +6,37 @@ import spark.util.SerializableBuffer
 
 private[spark] sealed trait StandaloneClusterMessage extends Serializable
 
-// Master to slaves
+// Driver to executors
 private[spark]
 case class LaunchTask(task: TaskDescription) extends StandaloneClusterMessage
 
 private[spark]
-case class RegisteredSlave(sparkProperties: Seq[(String, String)]) extends StandaloneClusterMessage
+case class RegisteredExecutor(sparkProperties: Seq[(String, String)])
+  extends StandaloneClusterMessage
 
 private[spark]
-case class RegisterSlaveFailed(message: String) extends StandaloneClusterMessage
+case class RegisterExecutorFailed(message: String) extends StandaloneClusterMessage
 
-// Slaves to master
+// Executors to driver
 private[spark]
-case class RegisterSlave(slaveId: String, host: String, cores: Int) extends StandaloneClusterMessage
+case class RegisterExecutor(executorId: String, host: String, cores: Int)
+  extends StandaloneClusterMessage
 
 private[spark]
-case class StatusUpdate(slaveId: String, taskId: Long, state: TaskState, data: SerializableBuffer)
+case class StatusUpdate(executorId: String, taskId: Long, state: TaskState, data: SerializableBuffer)
   extends StandaloneClusterMessage
 
 private[spark]
 object StatusUpdate {
   /** Alternate factory method that takes a ByteBuffer directly for the data field */
-  def apply(slaveId: String, taskId: Long, state: TaskState, data: ByteBuffer): StatusUpdate = {
-    StatusUpdate(slaveId, taskId, state, new SerializableBuffer(data))
+  def apply(executorId: String, taskId: Long, state: TaskState, data: ByteBuffer): StatusUpdate = {
+    StatusUpdate(executorId, taskId, state, new SerializableBuffer(data))
   }
 }
 
-// Internal messages in master
+// Internal messages in driver
 private[spark] case object ReviveOffers extends StandaloneClusterMessage
-private[spark] case object StopMaster extends StandaloneClusterMessage
+private[spark] case object StopDriver extends StandaloneClusterMessage
+
+private[spark] case class RemoveExecutor(executorId: String, reason: String)
+  extends StandaloneClusterMessage

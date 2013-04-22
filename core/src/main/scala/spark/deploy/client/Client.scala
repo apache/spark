@@ -8,30 +8,25 @@ import akka.pattern.AskTimeoutException
 import spark.{SparkException, Logging}
 import akka.remote.RemoteClientLifeCycleEvent
 import akka.remote.RemoteClientShutdown
-import spark.deploy.RegisterJob
+import spark.deploy.RegisterApplication
+import spark.deploy.master.Master
 import akka.remote.RemoteClientDisconnected
 import akka.actor.Terminated
 import scala.concurrent.Await
 
 /**
- * The main class used to talk to a Spark deploy cluster. Takes a master URL, a job description,
- * and a listener for job events, and calls back the listener when various events occur.
+ * The main class used to talk to a Spark deploy cluster. Takes a master URL, an app description,
+ * and a listener for cluster events, and calls back the listener when various events occur.
  */
 private[spark] class Client(
     actorSystem: ActorSystem,
     masterUrl: String,
-    jobDescription: JobDescription,
+    appDescription: ApplicationDescription,
     listener: ClientListener)
   extends Logging {
 
-  val MASTER_REGEX = "spark://([^:]+):([0-9]+)".r
-
   var actor: ActorRef = null
-  var jobId: String = null
-
-  if (MASTER_REGEX.unapplySeq(masterUrl) == None) {
-    throw new SparkException("Invalid master URL: " + masterUrl)
-  }
+  var appId: String = null
 
   class ClientActor extends Actor with Logging {
     var master: ActorRef = null
@@ -39,13 +34,11 @@ private[spark] class Client(
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
 
     override def preStart() {
-      val Seq(masterHost, masterPort) = MASTER_REGEX.unapplySeq(masterUrl).get
-      logInfo("Connecting to master spark://" + masterHost + ":" + masterPort)
-      val akkaUrl = "akka://spark@%s:%s/user/Master".format(masterHost, masterPort)
+      logInfo("Connecting to master " + masterUrl)
       try {
-        master = context.actorFor(akkaUrl)
+        master = context.actorFor(Master.toAkkaUrl(masterUrl))
         masterAddress = master.path.address
-        master ! RegisterJob(jobDescription)
+        master ! RegisterApplication(appDescription)
         context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
         context.watch(master)  // Doesn't work with remote actors, but useful for testing
       } catch {
@@ -57,17 +50,22 @@ private[spark] class Client(
     }
 
     override def receive = {
-      case RegisteredJob(jobId_) =>
-        jobId = jobId_
-        listener.connected(jobId)
+      case RegisteredApplication(appId_) =>
+        appId = appId_
+        listener.connected(appId)
+
+      case ApplicationRemoved(message) =>
+        logError("Master removed our application: %s; stopping client".format(message))
+        markDisconnected()
+        context.stop(self)
 
       case ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int) =>
-        val fullId = jobId + "/" + id
+        val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, host, cores))
         listener.executorAdded(fullId, workerId, host, cores, memory)
 
       case ExecutorUpdated(id, state, message, exitStatus) =>
-        val fullId = jobId + "/" + id
+        val fullId = appId + "/" + id
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
@@ -114,7 +112,7 @@ private[spark] class Client(
   def stop() {
     if (actor != null) {
       try {
-        val timeout = 1.seconds
+        val timeout = 5.seconds
         val future = actor.ask(StopClient)(timeout)
         Await.result(future, timeout)
       } catch {

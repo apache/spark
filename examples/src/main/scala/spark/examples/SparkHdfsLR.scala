@@ -5,6 +5,9 @@ import scala.math.exp
 import spark.util.Vector
 import spark._
 
+/**
+ * Logistic regression based classification.
+ */
 object SparkHdfsLR {
   val D = 10   // Numer of dimensions
   val rand = new Random(42)
@@ -29,7 +32,8 @@ object SparkHdfsLR {
       System.err.println("Usage: SparkHdfsLR <master> <file> <iters>")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "SparkHdfsLR")
+    val sc = new SparkContext(args(0), "SparkHdfsLR",
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
     val lines = sc.textFile(args(1))
     val points = lines.map(parsePoint _).cache()
     val ITERATIONS = args(2).toInt

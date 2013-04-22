@@ -38,10 +38,10 @@ The first thing a Spark program must do is to create a `SparkContext` object, wh
 This is done through the following constructor:
 
 {% highlight scala %}
-new SparkContext(master, jobName, [sparkHome], [jars])
+new SparkContext(master, appName, [sparkHome], [jars])
 {% endhighlight %}
 
-The `master` parameter is a string specifying a [Mesos](running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
+The `master` parameter is a string specifying a [Spark or Mesos cluster URL](#master-urls) to connect to, or a special "local" string to run in local mode, as described below. `appName` is a name for your application, which will be shown in the cluster web UI. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
 
 In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, to run on four cores, use
 
@@ -203,7 +203,7 @@ A complete list of transformations is available in the [RDD API doc](api/core/in
 <tr><th>Action</th><th>Meaning</th></tr>
 <tr>
   <td> <b>reduce</b>(<i>func</i>) </td>
-  <td> Aggregate the elements of the dataset using a function <i>func</i> (which takes two arguments and returns one). The function should be associative so that it can be computed correctly in parallel. </td>
+  <td> Aggregate the elements of the dataset using a function <i>func</i> (which takes two arguments and returns one). The function should be commutative and associative so that it can be computed correctly in parallel. </td>
 </tr>
 <tr>
   <td> <b>collect</b>() </td>
@@ -301,7 +301,8 @@ We recommend going through the following process to select one:
 * Use the replicated storage levels if you want fast fault recovery (e.g. if using Spark to serve requests from a web
   application). *All* the storage levels provide full fault tolerance by recomputing lost data, but the replicated ones
   let you continue running tasks on the RDD without waiting to recompute a lost partition.
-  
+ 
+If you want to define your own storage level (say, with replication factor of 3 instead of 2), then use the function factor method `apply()` of the [`StorageLevel`](api/core/index.html#spark.storage.StorageLevel$) singleton object.  
 
 # Shared Variables
 
