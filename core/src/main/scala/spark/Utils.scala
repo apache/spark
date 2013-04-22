@@ -4,7 +4,6 @@ import java.io._
 import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address, ServerSocket}
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConversions._
@@ -208,7 +207,7 @@ private object Utils extends Logging {
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val uri = new URI(url)
-        val conf = new Configuration()
+        val conf = SparkHadoopUtil.newConfiguration()
         val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
@@ -317,7 +316,6 @@ private object Utils extends Logging {
    * Get the local machine's hostname.
    */
   def localHostName(): String = {
-    // customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
     customHostname.getOrElse(localIpAddressHostname)
   }
 
@@ -337,6 +335,7 @@ private object Utils extends Logging {
     retval
   }
 
+  /*
   // Used by DEBUG code : remove when all testing done
   private val ipPattern = Pattern.compile("^[0-9]+(\\.[0-9]+)*$")
   def checkHost(host: String, message: String = "") {
@@ -358,12 +357,11 @@ private object Utils extends Logging {
       Utils.logErrorWithStack("Unexpected to have port " + port + " which is not valid in " + hostPort + ". Message " + message)
     }
   }
+  */
 
   // Once testing is complete in various modes, replace with this ?
-  /*
   def checkHost(host: String, message: String = "") {}
   def checkHostPort(hostPort: String, message: String = "") {}
-  */
 
   def getUserNameFromEnvironment(): String = {
     SparkHadoopUtil.getUserNameFromEnvironment

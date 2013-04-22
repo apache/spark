@@ -8,6 +8,7 @@ import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.fs.Path
 import java.io.{File, IOException, EOFException}
 import java.text.NumberFormat
+import spark.deploy.SparkHadoopUtil
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}
 
@@ -65,7 +66,7 @@ private[spark] object CheckpointRDD extends Logging {
 
   def writeToFile[T](path: String, blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
     val outputDir = new Path(path)
-    val fs = outputDir.getFileSystem(new Configuration())
+    val fs = outputDir.getFileSystem(SparkHadoopUtil.newConfiguration())
 
     val finalOutputName = splitIdToFile(ctx.splitId)
     val finalOutputPath = new Path(outputDir, finalOutputName)
@@ -103,7 +104,7 @@ private[spark] object CheckpointRDD extends Logging {
   }
 
   def readFromFile[T](path: Path, context: TaskContext): Iterator[T] = {
-    val fs = path.getFileSystem(new Configuration())
+    val fs = path.getFileSystem(SparkHadoopUtil.newConfiguration())
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
     val fileInputStream = fs.open(path, bufferSize)
     val serializer = SparkEnv.get.serializer.newInstance()
@@ -125,7 +126,7 @@ private[spark] object CheckpointRDD extends Logging {
     val sc = new SparkContext(cluster, "CheckpointRDD Test")
     val rdd = sc.makeRDD(1 to 10, 10).flatMap(x => 1 to 10000)
     val path = new Path(hdfsPath, "temp")
-    val fs = path.getFileSystem(new Configuration())
+    val fs = path.getFileSystem(SparkHadoopUtil.newConfiguration())
     sc.runJob(rdd, CheckpointRDD.writeToFile(path.toString, 1024) _)
     val cpRDD = new CheckpointRDD[Int](sc, path.toString)
     assert(cpRDD.partitions.length == rdd.partitions.length, "Number of partitions is not the same")

@@ -47,10 +47,8 @@ object SparkBuild extends Build {
     scalacOptions := Seq("-unchecked", "-optimize", "-deprecation"),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
-    // retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
-    // For some reason this fails on some nodes and works on others - not yet debugged why
-    // testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
+    testListeners <<= target.map(t => Seq(new eu.henkelmann.sbt.JUnitXmlTestsListener(t.getAbsolutePath))),
 
     // shared between both core and streaming.
     resolvers ++= Seq("Akka Repository" at "http://repo.akka.io/releases/"),
@@ -170,7 +168,11 @@ object SparkBuild extends Build {
         Seq("org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION)
       }),
     unmanagedSourceDirectories in Compile <+= baseDirectory{ _ /
-      ( if (HADOOP_YARN && HADOOP_MAJOR_VERSION == "2") "src/hadoop2-yarn/scala" else "src/hadoop" + HADOOP_MAJOR_VERSION + "/scala" )
+      ( if (HADOOP_YARN && HADOOP_MAJOR_VERSION == "2") {
+        "src/hadoop2-yarn/scala"
+      } else {
+        "src/hadoop" + HADOOP_MAJOR_VERSION + "/scala"
+      } )
     }
   ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
 

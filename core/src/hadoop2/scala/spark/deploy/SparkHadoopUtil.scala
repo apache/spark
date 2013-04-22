@@ -1,4 +1,6 @@
 package spark.deploy
+import org.apache.hadoop.conf.Configuration
+
 
 /**
  * Contains util methods to interact with Hadoop from spark.
@@ -15,4 +17,7 @@ object SparkHadoopUtil {
     // Add support, if exists - for now, simply run func !
     func(args)
   }
+
+  // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
+  def newConfiguration(): Configuration = new Configuration()
 }

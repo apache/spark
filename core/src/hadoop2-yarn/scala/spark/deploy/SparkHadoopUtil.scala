@@ -12,7 +12,7 @@ import java.security.PrivilegedExceptionAction
  */
 object SparkHadoopUtil {
 
-  val yarnConf = new YarnConfiguration(new Configuration())
+  val yarnConf = newConfiguration()
 
   def getUserNameFromEnvironment(): String = {
     // defaulting to env if -D is not present ...
@@ -56,4 +56,8 @@ object SparkHadoopUtil {
   def setYarnMode(env: HashMap[String, String]) {
     env("SPARK_YARN_MODE") = "true"
   }
+
+  // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
+  // Always create a new config, dont reuse yarnConf.
+  def newConfiguration(): Configuration = new YarnConfiguration(new Configuration())
 }

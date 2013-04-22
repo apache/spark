@@ -31,7 +31,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
 import org.apache.mesos.MesosNativeLibrary
 
-import spark.deploy.LocalSparkCluster
+import spark.deploy.{SparkHadoopUtil, LocalSparkCluster}
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
@@ -102,7 +102,9 @@ class SparkContext(
 
 
   // Add each JAR given through the constructor
-  if (jars != null) jars.foreach { addJar(_) }
+  if (jars != null) {
+    jars.foreach { addJar(_) }
+  }
 
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
@@ -114,7 +116,9 @@ class SparkContext(
       executorEnvs(key) = value
     }
   }
-  if (environment != null) executorEnvs ++= environment
+  if (environment != null) {
+    executorEnvs ++= environment
+  }
 
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
@@ -207,7 +211,7 @@ class SparkContext(
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
-    val conf = new Configuration()
+    val conf = SparkHadoopUtil.newConfiguration()
     // Explicitly check for S3 environment variables
     if (System.getenv("AWS_ACCESS_KEY_ID") != null && System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
       conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
@@ -711,7 +715,7 @@ class SparkContext(
    */
   def setCheckpointDir(dir: String, useExisting: Boolean = false) {
     val path = new Path(dir)
-    val fs = path.getFileSystem(new Configuration())
+    val fs = path.getFileSystem(SparkHadoopUtil.newConfiguration())
     if (!useExisting) {
       if (fs.exists(path)) {
         throw new Exception("Checkpoint directory '" + path + "' already exists.")
