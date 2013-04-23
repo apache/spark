@@ -564,7 +564,9 @@
       <id>hadoop2-yarn</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
-        <yarn.version>2.0.2-alpha</yarn.version>
+        <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
+        <yarn.version>0.23.7</yarn.version>
+        <!-- <yarn.version>2.0.2-alpha</yarn.version> -->
       </properties>
 
       <repositories>
@@ -597,6 +599,11 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-common</artifactId>
+            <version>${yarn.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-client</artifactId>
             <version>${yarn.version}</version>
           </dependency>
           <!-- Specify Avro version because Kafka also has it as a dependency -->

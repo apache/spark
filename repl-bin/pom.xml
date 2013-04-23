@@ -201,6 +201,11 @@
           <artifactId>hadoop-yarn-common</artifactId>
           <scope>runtime</scope>
         </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-client</artifactId>
+          <scope>runtime</scope>
+        </dependency>
       </dependencies>
     </profile>
     <profile>

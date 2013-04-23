@@ -20,7 +20,7 @@ object SparkBuild extends Build {
   //val HADOOP_YARN = false
 
   // For Hadoop 2 YARN support
-  val HADOOP_VERSION = "2.0.2-alpha"
+  val HADOOP_VERSION = "0.23.7"
   val HADOOP_MAJOR_VERSION = "2"
   val HADOOP_YARN = true
 
@@ -156,7 +156,8 @@ object SparkBuild extends Build {
           Seq(
             "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION,
             "org.apache.hadoop" % "hadoop-yarn-api" % HADOOP_VERSION,
-            "org.apache.hadoop" % "hadoop-yarn-common" % HADOOP_VERSION
+            "org.apache.hadoop" % "hadoop-yarn-common" % HADOOP_VERSION,
+            "org.apache.hadoop" % "hadoop-yarn-client" % HADOOP_VERSION
           )
         } else {
           Seq(
