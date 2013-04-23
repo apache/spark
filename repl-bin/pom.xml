@@ -189,17 +189,17 @@
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-client</artifactId>
-          <scope>provided</scope>
+          <scope>runtime</scope>
         </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-yarn-api</artifactId>
-          <scope>provided</scope>
+          <scope>runtime</scope>
         </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-yarn-common</artifactId>
-          <scope>provided</scope>
+          <scope>runtime</scope>
         </dependency>
       </dependencies>
     </profile>
