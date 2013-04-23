@@ -16,6 +16,7 @@
   </licenses>
   <scm>
     <connection>scm:git:git@github.com:mesos/spark.git</connection>
+    <developerConnection>scm:git:git@github.com:mesos/spark.git</developerConnection>
     <url>scm:git:git@github.com:mesos/spark.git</url>
   </scm>
   <developers>
@@ -36,6 +37,12 @@
   <prerequisites>
     <maven>3.0.0</maven>
   </prerequisites>
+
+  <parent>
+    <groupId>org.sonatype.oss</groupId>
+    <artifactId>oss-parent</artifactId>
+    <version>7</version>
+  </parent>
 
   <modules>
     <module>core</module>
@@ -460,6 +467,16 @@
             </execution>
           </executions>
         </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-release-plugin</artifactId>
+          <version>2.4.1</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>2.7</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -505,6 +522,14 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-release-plugin</artifactId>
+        <configuration>
+          <localCheckout>true</localCheckout>
+          <pushChanges>false</pushChanges>
+        </configuration>
       </plugin>
     </plugins>
   </build>
