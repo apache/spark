@@ -257,7 +257,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
 object DistributedSuite {
   // Indicates whether this JVM is marked for failure.
   var mark = false
-  
+
   // Set by test to remember if we are in the driver program so we can assert
   // that we are not.
   var amMaster = false
@@ -274,9 +274,9 @@ object DistributedSuite {
   // Act like an identity function, but if mark was set to true previously, fail,
   // crashing the entire JVM.
   def failOnMarkedIdentity(item: Boolean): Boolean = {
-    if (mark) { 
+    if (mark) {
       System.exit(42)
-    } 
+    }
     item
-  } 
+  }
 }

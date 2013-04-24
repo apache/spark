@@ -3,6 +3,8 @@ package spark.streaming.receivers
 import akka.actor.{ Actor, PoisonPill, Props, SupervisorStrategy }
 import akka.actor.{ actorRef2Scala, ActorRef }
 import akka.actor.{ PossiblyHarmful, OneForOneStrategy }
+import akka.actor.SupervisorStrategy._
+import scala.concurrent.duration._
 
 import spark.storage.StorageLevel
 import spark.streaming.dstream.NetworkReceiver
@@ -11,9 +13,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** A helper with set of defaults for supervisor strategy **/
 object ReceiverSupervisorStrategy {
-
-  import akka.util.duration._
-  import akka.actor.SupervisorStrategy._
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
     15 millis) {
@@ -27,10 +26,10 @@ object ReceiverSupervisorStrategy {
  * pushBlock API.
  *
  * @example {{{
- * 	class MyActor extends Actor with Receiver{
- * 		def receive {
- * 			case anything :String ⇒ pushBlock(anything)
- * 		}
+ *  class MyActor extends Actor with Receiver{
+ *      def receive {
+ *          case anything :String ⇒ pushBlock(anything)
+ *      }
  *  }
  *  //Can be plugged in actorStream as follows
  *  ssc.actorStream[String](Props(new MyActor),"MyActorReceiver")
@@ -74,12 +73,12 @@ private[streaming] case class Data[T: ClassManifest](data: T)
  * his own Actor to run as receiver for Spark Streaming input source.
  *
  * This starts a supervisor actor which starts workers and also provides
- * 	[http://doc.akka.io/docs/akka/2.0.5/scala/fault-tolerance.html fault-tolerance].
- * 
+ *  [http://doc.akka.io/docs/akka/2.0.5/scala/fault-tolerance.html fault-tolerance].
+ *
  *  Here's a way to start more supervisor/workers as its children.
  *
  * @example {{{
- * 	context.parent ! Props(new Supervisor)
+ *  context.parent ! Props(new Supervisor)
  * }}} OR {{{
  *  context.parent ! Props(new Worker,"Worker")
  * }}}

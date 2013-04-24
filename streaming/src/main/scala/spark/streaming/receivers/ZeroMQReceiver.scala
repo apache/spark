@@ -13,7 +13,7 @@ private[streaming] class ZeroMQReceiver[T: ClassManifest](publisherUrl: String,
   bytesToObjects: Seq[Seq[Byte]] ⇒ Iterator[T])
   extends Actor with Receiver with Logging {
 
-  override def preStart() = context.system.newSocket(SocketType.Sub, Listener(self),
+  override def preStart() = ZeroMQExtension(context.system).newSocket(SocketType.Sub, Listener(self),
     Connect(publisherUrl), subscribe)
 
   def receive: Receive = {

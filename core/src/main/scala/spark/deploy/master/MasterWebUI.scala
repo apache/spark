@@ -27,6 +27,7 @@ class MasterWebUI(master: ActorRef)(implicit val context: ActorContext) extends 
 
   implicit val timeout = Timeout(10 seconds)
 
+
   val handler = {
     get {
       (path("") & parameters('format ?)) {
@@ -52,27 +53,11 @@ class MasterWebUI(master: ActorRef)(implicit val context: ActorContext) extends 
                 masterState.completedApps.find(_.id == appId).getOrElse(null)
               })
             }
-<<<<<<< HEAD
             respondWithMediaType(`application/json`) { ctx =>
-              ctx.complete(jobInfo.mapTo[JobInfo])
-            }
-          case (jobId, _) =>
-            complete {
-              val future = (master ? RequestMasterState).mapTo[MasterState]
-              future.map { masterState =>
-                masterState.activeJobs.find(_.id == jobId) match {
-                  case Some(job) => spark.deploy.master.html.job_details.render(job)
-                  case _ => masterState.completedJobs.find(_.id == jobId) match {
-                    case Some(job) => spark.deploy.master.html.job_details.render(job)
-                    case _ => null
-                  }
-                }
-=======
-            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
               ctx.complete(appInfo.mapTo[ApplicationInfo])
             }
           case (appId, _) =>
-            completeWith {
+            complete {
               val future = master ? RequestMasterState
               future.map { state =>
                 val masterState = state.asInstanceOf[MasterState]
@@ -80,7 +65,6 @@ class MasterWebUI(master: ActorRef)(implicit val context: ActorContext) extends 
                   masterState.completedApps.find(_.id == appId).getOrElse(null)
                 })
                 spark.deploy.master.html.app_details.render(app)
->>>>>>> 17e076de800ea0d4c55f2bd657348641f6f9c55b
               }
             }
         }

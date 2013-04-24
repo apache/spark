@@ -222,21 +222,6 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     }
   }
 
-  /** Print a welcome message */
-  def printWelcome() {
-    echo("""Welcome to
-      ____              __
-     / __/__  ___ _____/ /__
-    _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 0.8.0
-      /_/
-""")
-    import Properties._
-    val welcomeMsg = "Using Scala %s (%s, Java %s)".format(
-      versionString, javaVmName, javaVersion)
-    echo(welcomeMsg)
-  }
-
   /** Show the history */
   lazy val historyCommand = new LoopCommand("history", "show the history (optional num is commands to show)") {
     override def usage = "[num]"

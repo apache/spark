@@ -164,4 +164,4 @@ else
   EXTRA_ARGS="$JAVA_OPTS"
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"
+exec "$RUNNER" -cp  "$CLASSPATH" $EXTRA_ARGS "$@"

@@ -3,7 +3,7 @@ package spark.deploy.master
 import akka.actor._
 import akka.actor.Terminated
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
-import akka.util.duration._
+import scala.concurrent.duration._
 
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,6 +50,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     startWebUi()
+    import context.dispatcher
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
   }
 

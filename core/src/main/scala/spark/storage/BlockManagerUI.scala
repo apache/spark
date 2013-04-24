@@ -2,9 +2,9 @@ package spark.storage
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.util.Timeout
-import akka.util.duration._
-import cc.spray.typeconversion.TwirlSupport._
-import cc.spray.Directives
+import scala.concurrent.duration._
+import spray.httpx.TwirlSupport._
+import spray.routing.Directives
 import spark.{Logging, SparkContext}
 import spark.util.AkkaUtils
 import spark.Utils
@@ -17,7 +17,8 @@ private[spark]
 class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef, sc: SparkContext)
   extends Directives with Logging {
 
-  val STATIC_RESOURCE_DIR = "spark/deploy/static"
+  implicit val implicitActorSystem = actorSystem
+  val STATIC_RESOURCE_DIR          = "spark/deploy/static"
 
   implicit val timeout = Timeout(10 seconds)
 
@@ -31,7 +32,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
         // random port it bound to, so we have to try to find a local one by creating a socket.
         Utils.findFreePort()
       }
-      AkkaUtils.startSprayServer(actorSystem, "0.0.0.0", port, handler, "BlockManagerHTTPServer")
+      AkkaUtils.startSprayServer(actorSystem, "0.0.0.0", port, handler)
       logInfo("Started BlockManager web UI at http://%s:%d".format(Utils.localHostName(), port))
     } catch {
       case e: Exception =>
@@ -43,7 +44,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
   val handler = {
     get {
       path("") {
-        completeWith {
+        complete {
           // Request the current storage status from the Master
           val storageStatusList = sc.getExecutorStorageStatus
           // Calculate macro-level statistics
@@ -58,7 +59,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
       } ~
       path("rdd") {
         parameter("id") { id =>
-          completeWith {
+          complete {
             val prefix = "rdd_" + id.toString
             val storageStatusList = sc.getExecutorStorageStatus
             val filteredStorageStatusList = StorageUtils.

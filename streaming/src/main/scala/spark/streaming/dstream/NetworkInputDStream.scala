@@ -7,13 +7,15 @@ import spark.rdd.BlockRDD
 import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 
 import java.nio.ByteBuffer
 
 import akka.actor.{Props, Actor}
 import akka.pattern.ask
-import akka.dispatch.Await
-import akka.util.duration._
+import scala.concurrent.Await
+import akka.util.Timeout
+
 import spark.streaming.util.{RecurringTimer, SystemClock}
 import java.util.concurrent.ArrayBlockingQueue
 

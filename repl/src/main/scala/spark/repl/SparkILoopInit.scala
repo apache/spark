@@ -24,7 +24,7 @@ trait SparkILoopInit {
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 0.7.1-SNAPSHOT
+   /___/ .__/\_,_/_/ /_/\_\   version 0.8.0
       /_/
 """)
     import Properties._

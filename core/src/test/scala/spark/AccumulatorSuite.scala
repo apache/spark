@@ -8,7 +8,7 @@ import scala.math.exp
 import scala.math.signum
 import spark.SparkContext._
 
-class AccumulatorSuite extends FunSuite with ShouldMatchers with BeforeAndAfter with LocalSparkContext {
+class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
 
 
   implicit def setAccum[A] = new AccumulableParam[mutable.Set[A], A] {

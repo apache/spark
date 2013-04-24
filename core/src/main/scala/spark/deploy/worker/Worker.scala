@@ -2,7 +2,7 @@ package spark.deploy.worker
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
-import akka.util.duration._
+import scala.concurrent.duration._
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
 import spark.deploy._
@@ -14,6 +14,7 @@ import spark.deploy.LaunchExecutor
 import spark.deploy.RegisterWorkerFailed
 import spark.deploy.master.Master
 import java.io.File
+
 
 private[spark] class Worker(
     ip: String,
@@ -81,7 +82,7 @@ private[spark] class Worker(
   }
 
   def startWebUi() {
-    val webUi = new WorkerWebUI(context.system, self, workDir)
+    val webUi = new WorkerWebUI(self, workDir)
     try {
       AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
     } catch {
@@ -95,6 +96,7 @@ private[spark] class Worker(
     case RegisteredWorker(url) =>
       masterWebUiUrl = url
       logInfo("Successfully registered with master")
+      import context.dispatcher
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
         master ! Heartbeat(workerId)
       }

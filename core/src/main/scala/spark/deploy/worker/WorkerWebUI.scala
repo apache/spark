@@ -18,8 +18,11 @@ import java.io.File
  * Web UI server for the standalone worker.
  */
 private[spark]
-class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef, workDir: File) extends Directives {
-  val RESOURCE_DIR = "spark/deploy/worker/webui"
+class WorkerWebUI(worker: ActorRef, workDir: File)(implicit val context: ActorContext) extends Directives {
+  import context.dispatcher
+
+  val actorSystem         = context.system
+  val RESOURCE_DIR        = "spark/deploy/worker/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
 
   implicit val timeout = Timeout(10 seconds)
@@ -42,9 +45,9 @@ class WorkerWebUI(val actorSystem: ActorSystem, worker: ActorRef, workDir: File)
           }
       } ~
       path("log") {
-        parameters("jobId", "executorId", "logType") { (jobId, executorId, logType) =>
+        parameters("appId", "executorId", "logType") { (appId, executorId, logType) =>
           respondWithMediaType(`text/plain`) {
-            getFromFileName(workDir.getPath() + "/" + appId + "/" + executorId + "/" + logType)
+            getFromFile(workDir.getPath() + "/" + appId + "/" + executorId + "/" + logType)
           }
         }
       } ~

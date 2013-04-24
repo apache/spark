@@ -32,7 +32,6 @@ private[spark] object AkkaUtils {
     val akkaTimeout   = System.getProperty("spark.akka.timeout", "20").toInt
     val akkaFrameSize = System.getProperty("spark.akka.frameSize", "10").toInt
     val lifecycleEvents = System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean
-    val lifecycleEvents = System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean
     val akkaConf = ConfigFactory.parseString("""
       akka.daemonic = on
       akka.event-handlers = ["akka.event.slf4j.Slf4jEventHandler"]

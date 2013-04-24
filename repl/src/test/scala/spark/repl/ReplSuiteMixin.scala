@@ -17,6 +17,7 @@ trait ReplSuiteMixin {
   val localIp = "127.0.1.2"
   val port = "7089"
   val sparkUrl = s"spark://$localIp:$port"
+
   def setupStandaloneCluster() {
     future { Master.main(Array("-i", localIp, "-p", port, "--webui-port", "0")) }
     Thread.sleep(2000)
