@@ -333,8 +333,8 @@ object BlockManagerMasterActor {
     // Mapping from block id to its status.
     private val _blocks = new JHashMap[String, BlockStatus]
 
-    logInfo("Registering block manager %s:%d with %s RAM".format(
-      blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(maxMem)))
+    logInfo("Registering block manager %s with %s RAM".format(
+      blockManagerId.hostPort, Utils.memoryBytesToString(maxMem)))
 
     def updateLastSeenMs() {
       _lastSeenMs = System.currentTimeMillis()
@@ -359,13 +359,13 @@ object BlockManagerMasterActor {
         _blocks.put(blockId, BlockStatus(storageLevel, memSize, diskSize))
         if (storageLevel.useMemory) {
           _remainingMem -= memSize
-          logInfo("Added %s in memory on %s:%d (size: %s, free: %s)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
+          logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.memoryBytesToString(memSize),
             Utils.memoryBytesToString(_remainingMem)))
         }
         if (storageLevel.useDisk) {
-          logInfo("Added %s on disk on %s:%d (size: %s)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
+          logInfo("Added %s on disk on %s (size: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.memoryBytesToString(diskSize)))
         }
       } else if (_blocks.containsKey(blockId)) {
         // If isValid is not true, drop the block.
@@ -373,13 +373,13 @@ object BlockManagerMasterActor {
         _blocks.remove(blockId)
         if (blockStatus.storageLevel.useMemory) {
           _remainingMem += blockStatus.memSize
-          logInfo("Removed %s on %s:%d in memory (size: %s, free: %s)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(memSize),
+          logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.memoryBytesToString(memSize),
             Utils.memoryBytesToString(_remainingMem)))
         }
         if (blockStatus.storageLevel.useDisk) {
-          logInfo("Removed %s on %s:%d on disk (size: %s)".format(
-            blockId, blockManagerId.ip, blockManagerId.port, Utils.memoryBytesToString(diskSize)))
+          logInfo("Removed %s on %s on disk (size: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.memoryBytesToString(diskSize)))
         }
       }
     }

@@ -50,6 +50,11 @@ class DAGScheduler(
     eventQueue.put(ExecutorLost(execId))
   }
 
+  // Called by TaskScheduler when a host is added
+  override def executorGained(execId: String, hostPort: String) {
+    eventQueue.put(ExecutorGained(execId, hostPort))
+  }
+
   // Called by TaskScheduler to cancel an entire TaskSet due to repeated failures.
   override def taskSetFailed(taskSet: TaskSet, reason: String) {
     eventQueue.put(TaskSetFailed(taskSet, reason))
@@ -113,7 +118,7 @@ class DAGScheduler(
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
       cacheLocs(rdd.id) = blockManagerMaster.getLocations(blockIds).map {
-        locations => locations.map(_.ip).toList
+        locations => locations.map(_.hostPort).toList
       }.toArray
     }
     cacheLocs(rdd.id)
@@ -292,6 +297,9 @@ class DAGScheduler(
           resultStageToJob(finalStage) = job
           submitStage(finalStage)
         }
+
+      case ExecutorGained(execId, hostPort) =>
+        handleExecutorGained(execId, hostPort)
 
       case ExecutorLost(execId) =>
         handleExecutorLost(execId)
@@ -628,6 +636,14 @@ class DAGScheduler(
     } else {
       logDebug("Additional executor lost message for " + execId +
                "(generation " + currentGeneration + ")")
+    }
+  }
+  
+  private def handleExecutorGained(execId: String, hostPort: String) {
+    // remove from failedGeneration(execId) ?
+    if (failedGeneration.contains(execId)) {
+      logInfo("Host gained which was in lost list earlier: " + hostPort)
+      failedGeneration -= execId
     }
   }
 

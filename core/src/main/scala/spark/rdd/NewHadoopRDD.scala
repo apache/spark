@@ -57,7 +57,7 @@ class NewHadoopRDD[K, V](
   override def compute(theSplit: Partition, context: TaskContext) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[NewHadoopPartition]
     val conf = confBroadcast.value.value
-    val attemptId = new TaskAttemptID(jobtrackerId, id, true, split.index, 0)
+    val attemptId = newTaskAttemptID(jobtrackerId, id, true, split.index, 0)
     val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
     val format = inputFormatClass.newInstance
     if (format.isInstanceOf[Configurable]) {

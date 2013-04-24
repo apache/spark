@@ -3,7 +3,7 @@ package spark.deploy.master
 import akka.actor.{ActorRef, ActorSystem}
 import akka.dispatch.Await
 import akka.pattern.ask
-import akka.util.Timeout
+import akka.util.{Duration, Timeout}
 import akka.util.duration._
 import cc.spray.Directives
 import cc.spray.directives._
@@ -22,7 +22,7 @@ class MasterWebUI(val actorSystem: ActorSystem, master: ActorRef) extends Direct
   val RESOURCE_DIR = "spark/deploy/master/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
   
-  implicit val timeout = Timeout(10 seconds)
+  implicit val timeout = Timeout(Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds"))
   
   val handler = {
     get {

@@ -77,12 +77,20 @@ private[spark] class ShuffleMapTask(
     var rdd: RDD[_],
     var dep: ShuffleDependency[_,_],
     var partition: Int,
-    @transient var locs: Seq[String])
+    @transient private var locs: Seq[String])
   extends Task[MapStatus](stageId)
   with Externalizable
   with Logging {
 
   protected def this() = this(0, null, null, 0, null)
+
+  // data locality is on a per host basis, not hyper specific to container (host:port). Unique on set of hosts.
+  private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.map(loc => Utils.parseHostPort(loc)._1).toSet.toSeq
+
+  {
+    // DEBUG code
+    preferredLocs.foreach (host => Utils.checkHost(host, "preferredLocs : " + preferredLocs))
+  }
 
   var split = if (rdd == null) {
     null
@@ -154,7 +162,7 @@ private[spark] class ShuffleMapTask(
     }
   }
 
-  override def preferredLocations: Seq[String] = locs
+  override def preferredLocations: Seq[String] = preferredLocs
 
   override def toString = "ShuffleMapTask(%d, %d)".format(stageId, partition)
 }
