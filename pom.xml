@@ -7,6 +7,12 @@
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark-project.org/</url>
+  <description>
+      Spark is a MapReduce-like cluster computing framework designed for
+      low-latency iterative jobs and interactive use from an interpreter.
+      It provides clean, language-integrated APIs in Scala, Java, and Python,
+      with a rich array of parallel operators.
+  </description>
   <licenses>
     <license>
       <name>BSD License</name>

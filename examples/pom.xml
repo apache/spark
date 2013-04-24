@@ -73,9 +73,17 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-jar-plugin</artifactId>
-            <configuration>
-              <classifier>hadoop1</classifier>
-            </configuration>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>hadoop1</classifier>
+                </configuration>
+              </execution>
+            </executions>
           </plugin>
         </plugins>
       </build>
