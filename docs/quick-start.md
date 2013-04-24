@@ -53,8 +53,8 @@ scala> textFile.filter(line => line.contains("Spark")).count() // How many lines
 res3: Long = 15
 {% endhighlight %}
 
-## Transformations
-RDD transformations can be used for more complex computations. Let's say we want to find the line with the most words:
+## More On RDD Operations
+RDD actions and transformations can be used for more complex computations. Let's say we want to find the line with the most words:
 
 {% highlight scala %}
 scala> textFile.map(line => line.split(" ").size).reduce((a, b) => if (a > b) a else b)

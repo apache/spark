@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCALA_VERSION=2.9.2
+SCALA_VERSION=2.9.3
 
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
@@ -22,6 +22,7 @@ fi
 # values for that; it doesn't need a lot
 if [ "$1" = "spark.deploy.master.Master" -o "$1" = "spark.deploy.worker.Worker" ]; then
   SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
+  SPARK_DAEMON_JAVA_OPTS+=" -Dspark.akka.logLifecycleEvents=true"
   SPARK_JAVA_OPTS=$SPARK_DAEMON_JAVA_OPTS   # Empty by default
 fi
 
@@ -46,14 +47,15 @@ case "$1" in
 esac
 
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
-  if [ `command -v scala` ]; then
-    RUNNER="scala"
+  if [ "$SCALA_HOME" ]; then
+    RUNNER="${SCALA_HOME}/bin/scala"
   else
-    if [ -z "$SCALA_HOME" ]; then
-      echo "SCALA_HOME is not set" >&2
+    if [ `command -v scala` ]; then
+      RUNNER="scala"
+    else
+      echo "SCALA_HOME is not set and scala is not in PATH" >&2
       exit 1
     fi
-    RUNNER="${SCALA_HOME}/bin/scala"
   fi
 else
   if [ `command -v java` ]; then

@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.spark-project</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.7.1-SNAPSHOT</version>
+    <version>0.8.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -22,7 +22,7 @@
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>algebird-core_2.9.2</artifactId>
-      <version>0.1.8</version>
+      <version>0.1.11</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
