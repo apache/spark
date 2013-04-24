@@ -106,6 +106,12 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRe
     }
   }
 
+  def commitJob() {
+    // always? Or if cmtr.needsTaskCommit?
+    val cmtr = getOutputCommitter()
+    cmtr.commitJob(getJobContext())
+  }
+
   def cleanup() {
     getOutputCommitter().cleanupJob(getJobContext())
   }
