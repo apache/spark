@@ -25,15 +25,12 @@ import sun.nio.ch.DirectBuffer
 
 
 private[spark]
-case class BlockException(blockId: String, message: String, ex: Exception = null)
-extends Exception(message)
-
-private[spark]
 class BlockManager(
     executorId: String,
     actorSystem: ActorSystem,
     val master: BlockManagerMaster,
     val serializer: Serializer,
+    val shuffleSerializer: Serializer,
     maxMemory: Long)
   extends Logging {
 
@@ -78,7 +75,7 @@ class BlockManager(
   private val blockInfo = new TimeStampedHashMap[String, BlockInfo]
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
-  private[storage] val diskStore: BlockStore =
+  private[storage] val diskStore: DiskStore =
     new DiskStore(this, System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
 
   val connectionManager = new ConnectionManager(0)
@@ -126,8 +123,17 @@ class BlockManager(
    * Construct a BlockManager with a memory limit set based on system properties.
    */
   def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
-           serializer: Serializer) = {
-    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
+           serializer: Serializer, shuffleSerializer: Serializer) = {
+    this(execId, actorSystem, master, serializer, shuffleSerializer,
+      BlockManager.getMaxMemoryFromSystemProperties)
+  }
+
+  /**
+   * Construct a BlockManager with a memory limit set based on system properties.
+   */
+  def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
+           serializer: Serializer, maxMemory: Long) = {
+    this(execId, actorSystem, master, serializer, serializer, maxMemory)
   }
 
   /**
@@ -486,6 +492,21 @@ class BlockManager(
   }
 
   /**
+   * A short circuited method to get a block writer that can write data directly to disk.
+   * This is currently used for writing shuffle files out.
+   */
+  def getBlockWriter(blockId: String): BlockObjectWriter = {
+    val writer = diskStore.getBlockWriter(blockId)
+    writer.registerCloseEventHandler(() => {
+      // TODO(rxin): This doesn't handle error cases.
+      val myInfo = new BlockInfo(StorageLevel.DISK_ONLY, false)
+      blockInfo.put(blockId, myInfo)
+      myInfo.markReady(writer.size())
+    })
+    writer
+  }
+
+  /**
    * Put a new block of values to the block manager. Returns its (estimated) size in bytes.
    */
   def put(blockId: String, values: ArrayBuffer[Any], level: StorageLevel,
@@ -573,7 +594,6 @@ class BlockManager(
       }
     }
     logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))
-
 
     // Replicate block if required
     if (level.replication > 1) {

@@ -122,27 +122,33 @@ private[spark] class ShuffleMapTask(
     val taskContext = new TaskContext(stageId, partition, attemptId)
     metrics = Some(taskContext.taskMetrics)
     try {
-      // Partition the map output.
-      val buckets = Array.fill(numOutputSplits)(new ArrayBuffer[(Any, Any)])
+      // Obtain all the block writers for shuffle blocks.
+      val blockManager = SparkEnv.get.blockManager
+      val buckets = Array.tabulate[BlockObjectWriter](numOutputSplits) { bucketId =>
+        val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + bucketId
+        blockManager.getBlockWriter(blockId)
+      }
+
+      // Write the map output to its associated buckets.
       for (elem <- rdd.iterator(split, taskContext)) {
         val pair = elem.asInstanceOf[(Any, Any)]
         val bucketId = dep.partitioner.getPartition(pair._1)
-        buckets(bucketId) += pair
+        buckets(bucketId).write(pair)
       }
 
+      // Close the bucket writers and get the sizes of each block.
       val compressedSizes = new Array[Byte](numOutputSplits)
-
-      var totalBytes = 0l
-
-      val blockManager = SparkEnv.get.blockManager
-      for (i <- 0 until numOutputSplits) {
-        val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + i
-        // Get a Scala iterator from Java map
-        val iter: Iterator[(Any, Any)] = buckets(i).iterator
-        val size = blockManager.put(blockId, iter, StorageLevel.DISK_ONLY, false)
+      var i = 0
+      var totalBytes = 0L
+      while (i < numOutputSplits) {
+        buckets(i).close()
+        val size = buckets(i).size()
         totalBytes += size
         compressedSizes(i) = MapOutputTracker.compressSize(size)
+        i += 1
       }
+
+      // Update shuffle metrics.
       val shuffleMetrics = new ShuffleWriteMetrics
       shuffleMetrics.shuffleBytesWritten = totalBytes
       metrics.get.shuffleWriteMetrics = Some(shuffleMetrics)

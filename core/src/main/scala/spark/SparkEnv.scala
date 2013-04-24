@@ -22,6 +22,7 @@ class SparkEnv (
     val actorSystem: ActorSystem,
     val serializer: Serializer,
     val closureSerializer: Serializer,
+    val shuffleSerializer: Serializer,
     val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
@@ -82,7 +83,7 @@ object SparkEnv extends Logging {
     }
 
     val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
-    
+
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
       if (isDriver) {
         logInfo("Registering " + name)
@@ -96,17 +97,21 @@ object SparkEnv extends Logging {
       }
     }
 
+    val closureSerializer = instantiateClass[Serializer](
+      "spark.closure.serializer", "spark.JavaSerializer")
+
+    val shuffleSerializer = instantiateClass[Serializer](
+      "spark.shuffle.serializer", "spark.JavaSerializer")
+
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new spark.storage.BlockManagerMasterActor(isLocal)))
-    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, serializer)
+    val blockManager = new BlockManager(
+      executorId, actorSystem, blockManagerMaster, serializer, shuffleSerializer)
 
     val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isDriver)
-
-    val closureSerializer = instantiateClass[Serializer](
-      "spark.closure.serializer", "spark.JavaSerializer")
 
     val cacheManager = new CacheManager(blockManager)
 
@@ -144,6 +149,7 @@ object SparkEnv extends Logging {
       actorSystem,
       serializer,
       closureSerializer,
+      shuffleSerializer,
       cacheManager,
       mapOutputTracker,
       shuffleFetcher,
@@ -153,5 +159,5 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir)
   }
-  
+
 }
