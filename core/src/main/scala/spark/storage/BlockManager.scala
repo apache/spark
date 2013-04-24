@@ -29,8 +29,7 @@ class BlockManager(
     executorId: String,
     actorSystem: ActorSystem,
     val master: BlockManagerMaster,
-    val serializer: Serializer,
-    val shuffleSerializer: Serializer,
+    val defaultSerializer: Serializer,
     maxMemory: Long)
   extends Logging {
 
@@ -123,17 +122,8 @@ class BlockManager(
    * Construct a BlockManager with a memory limit set based on system properties.
    */
   def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
-           serializer: Serializer, shuffleSerializer: Serializer) = {
-    this(execId, actorSystem, master, serializer, shuffleSerializer,
-      BlockManager.getMaxMemoryFromSystemProperties)
-  }
-
-  /**
-   * Construct a BlockManager with a memory limit set based on system properties.
-   */
-  def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
-           serializer: Serializer, maxMemory: Long) = {
-    this(execId, actorSystem, master, serializer, serializer, maxMemory)
+           serializer: Serializer) = {
+    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemoryFromSystemProperties)
   }
 
   /**
@@ -479,9 +469,10 @@ class BlockManager(
    * fashion as they're received. Expects a size in bytes to be provided for each block fetched,
    * so that we can control the maxMegabytesInFlight for the fetch.
    */
-  def getMultiple(blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])])
+  def getMultiple(
+    blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])], serializer: Serializer)
       : BlockFetcherIterator = {
-    return new BlockFetcherIterator(this, blocksByAddress)
+    return new BlockFetcherIterator(this, blocksByAddress, serializer)
   }
 
   def put(blockId: String, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean)
@@ -495,8 +486,8 @@ class BlockManager(
    * A short circuited method to get a block writer that can write data directly to disk.
    * This is currently used for writing shuffle files out.
    */
-  def getBlockWriter(blockId: String): BlockObjectWriter = {
-    val writer = diskStore.getBlockWriter(blockId)
+  def getBlockWriter(blockId: String, serializer: Serializer): BlockObjectWriter = {
+    val writer = diskStore.getBlockWriter(blockId, serializer)
     writer.registerCloseEventHandler(() => {
       // TODO(rxin): This doesn't handle error cases.
       val myInfo = new BlockInfo(StorageLevel.DISK_ONLY, false)
@@ -850,7 +841,10 @@ class BlockManager(
     if (shouldCompress(blockId)) new LZFInputStream(s) else s
   }
 
-  def dataSerialize(blockId: String, values: Iterator[Any]): ByteBuffer = {
+  def dataSerialize(
+      blockId: String,
+      values: Iterator[Any],
+      serializer: Serializer = defaultSerializer): ByteBuffer = {
     val byteStream = new FastByteArrayOutputStream(4096)
     val ser = serializer.newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
@@ -862,7 +856,10 @@ class BlockManager(
    * Deserializes a ByteBuffer into an iterator of values and disposes of it when the end of
    * the iterator is reached.
    */
-  def dataDeserialize(blockId: String, bytes: ByteBuffer): Iterator[Any] = {
+  def dataDeserialize(
+      blockId: String,
+      bytes: ByteBuffer,
+      serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
     val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
     serializer.newInstance().deserializeStream(stream).asIterator
@@ -916,7 +913,8 @@ object BlockManager extends Logging {
 
 class BlockFetcherIterator(
     private val blockManager: BlockManager,
-    val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])]
+    val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])],
+    serializer: Serializer
 ) extends Iterator[(String, Option[Iterator[Any]])] with Logging with BlockFetchTracker {
 
   import blockManager._
@@ -979,8 +977,8 @@ class BlockFetcherIterator(
               "Unexpected message " + blockMessage.getType + " received from " + cmId)
           }
           val blockId = blockMessage.getId
-          results.put(new FetchResult(
-            blockId, sizeMap(blockId), () => dataDeserialize(blockId, blockMessage.getData)))
+          results.put(new FetchResult(blockId, sizeMap(blockId),
+            () => dataDeserialize(blockId, blockMessage.getData, serializer)))
           _remoteBytesRead += req.size
           logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }

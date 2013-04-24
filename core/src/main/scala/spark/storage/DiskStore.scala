@@ -1,17 +1,18 @@
 package spark.storage
 
-import java.nio.ByteBuffer
 import java.io.{File, FileOutputStream, OutputStream, RandomAccessFile}
+import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 import java.util.{Random, Date}
 import java.text.SimpleDateFormat
 
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-
 import scala.collection.mutable.ArrayBuffer
+
+import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import spark.Utils
 import spark.executor.ExecutorExitCode
+import spark.serializer.Serializer
 
 
 /**
@@ -20,12 +21,13 @@ import spark.executor.ExecutorExitCode
 private class DiskStore(blockManager: BlockManager, rootDirs: String)
   extends BlockStore(blockManager) {
 
-  class DiskBlockObjectWriter(blockId: String) extends BlockObjectWriter(blockId) {
+  class DiskBlockObjectWriter(blockId: String, serializer: Serializer)
+    extends BlockObjectWriter(blockId) {
 
     private val f: File = createFile(blockId /*, allowAppendExisting */)
     private val bs: OutputStream = blockManager.wrapForCompression(blockId,
       new FastBufferedOutputStream(new FileOutputStream(f)))
-    private val objOut = blockManager.shuffleSerializer.newInstance().serializeStream(bs)
+    private val objOut = serializer.newInstance().serializeStream(bs)
 
     private var _size: Long = -1L
 
@@ -58,8 +60,8 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   addShutdownHook()
 
-  def getBlockWriter(blockId: String): BlockObjectWriter = {
-    new DiskBlockObjectWriter(blockId)
+  def getBlockWriter(blockId: String, serializer: Serializer): BlockObjectWriter = {
+    new DiskBlockObjectWriter(blockId, serializer)
   }
 
   override def getSize(blockId: String): Long = {
@@ -92,7 +94,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     val file = createFile(blockId)
     val fileOut = blockManager.wrapForCompression(blockId,
       new FastBufferedOutputStream(new FileOutputStream(file)))
-    val objOut = blockManager.serializer.newInstance().serializeStream(fileOut)
+    val objOut = blockManager.defaultSerializer.newInstance().serializeStream(fileOut)
     objOut.writeAll(values.iterator)
     objOut.close()
     val length = file.length()

@@ -11,6 +11,7 @@ import spark.Partition
 import spark.SparkEnv
 import spark.ShuffleDependency
 import spark.OneToOneDependency
+import spark.serializer.Serializer
 
 /**
  * An optimized version of cogroup for set difference/subtraction.
@@ -31,7 +32,9 @@ import spark.OneToOneDependency
 private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassManifest](
     @transient var rdd1: RDD[(K, V)],
     @transient var rdd2: RDD[(K, W)],
-    part: Partitioner) extends RDD[(K, V)](rdd1.context, Nil) {
+    part: Partitioner,
+    val serializerClass: String = null)
+  extends RDD[(K, V)](rdd1.context, Nil) {
 
   override def getDependencies: Seq[Dependency[_]] = {
     Seq(rdd1, rdd2).map { rdd =>
@@ -40,7 +43,7 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassM
         new OneToOneDependency(rdd)
       } else {
         logInfo("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency(rdd.asInstanceOf[RDD[(K, Any)]], part)
+        new ShuffleDependency(rdd.asInstanceOf[RDD[(K, Any)]], part, serializerClass)
       }
     }
   }
@@ -65,6 +68,7 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassM
 
   override def compute(p: Partition, context: TaskContext): Iterator[(K, V)] = {
     val partition = p.asInstanceOf[CoGroupPartition]
+    val serializer = Serializer.get(serializerClass)
     val map = new JHashMap[K, ArrayBuffer[V]]
     def getSeq(k: K): ArrayBuffer[V] = {
       val seq = map.get(k)
@@ -77,12 +81,16 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassM
       }
     }
     def integrate(dep: CoGroupSplitDep, op: ((K, V)) => Unit) = dep match {
-      case NarrowCoGroupSplitDep(rdd, _, itsSplit) =>
+      case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         for (t <- rdd.iterator(itsSplit, context))
           op(t.asInstanceOf[(K, V)])
-      case ShuffleCoGroupSplitDep(shuffleId) =>
-        for (t <- SparkEnv.get.shuffleFetcher.fetch(shuffleId, partition.index, context.taskMetrics))
+      }
+      case ShuffleCoGroupSplitDep(shuffleId) => {
+        val iter = SparkEnv.get.shuffleFetcher.fetch(shuffleId, partition.index,
+          context.taskMetrics, serializer)
+        for (t <- iter)
           op(t.asInstanceOf[(K, V)])
+      }
     }
     // the first dep is rdd1; add all values to the map
     integrate(partition.deps(0), t => getSeq(t._1) += t._2)

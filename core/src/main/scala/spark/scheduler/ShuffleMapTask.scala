@@ -13,9 +13,11 @@ import com.ning.compress.lzf.LZFInputStream
 import com.ning.compress.lzf.LZFOutputStream
 
 import spark._
-import executor.ShuffleWriteMetrics
+import spark.executor.ShuffleWriteMetrics
+import spark.serializer.Serializer
 import spark.storage._
-import util.{TimeStampedHashMap, MetadataCleaner}
+import spark.util.{TimeStampedHashMap, MetadataCleaner}
+
 
 private[spark] object ShuffleMapTask {
 
@@ -126,7 +128,7 @@ private[spark] class ShuffleMapTask(
       val blockManager = SparkEnv.get.blockManager
       val buckets = Array.tabulate[BlockObjectWriter](numOutputSplits) { bucketId =>
         val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + bucketId
-        blockManager.getBlockWriter(blockId)
+        blockManager.getBlockWriter(blockId, Serializer.get(dep.serializerClass))
       }
 
       // Write the map output to its associated buckets.

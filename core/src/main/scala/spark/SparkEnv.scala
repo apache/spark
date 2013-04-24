@@ -3,12 +3,13 @@ package spark
 import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
-import serializer.Serializer
 import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
+import spark.serializer.Serializer
 import spark.util.AkkaUtils
+
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -22,7 +23,6 @@ class SparkEnv (
     val actorSystem: ActorSystem,
     val serializer: Serializer,
     val closureSerializer: Serializer,
-    val shuffleSerializer: Serializer,
     val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
@@ -82,7 +82,11 @@ object SparkEnv extends Logging {
       Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
     }
 
-    val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
+    val serializer = Serializer.setDefault(
+      System.getProperty("spark.serializer", "spark.JavaSerializer"))
+
+    val closureSerializer = Serializer.get(
+      System.getProperty("spark.closure.serializer", "spark.JavaSerializer"))
 
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
       if (isDriver) {
@@ -97,17 +101,10 @@ object SparkEnv extends Logging {
       }
     }
 
-    val closureSerializer = instantiateClass[Serializer](
-      "spark.closure.serializer", "spark.JavaSerializer")
-
-    val shuffleSerializer = instantiateClass[Serializer](
-      "spark.shuffle.serializer", "spark.JavaSerializer")
-
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new spark.storage.BlockManagerMasterActor(isLocal)))
-    val blockManager = new BlockManager(
-      executorId, actorSystem, blockManagerMaster, serializer, shuffleSerializer)
+    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, serializer)
 
     val connectionManager = blockManager.connectionManager
 
@@ -149,7 +146,6 @@ object SparkEnv extends Logging {
       actorSystem,
       serializer,
       closureSerializer,
-      shuffleSerializer,
       cacheManager,
       mapOutputTracker,
       shuffleFetcher,
