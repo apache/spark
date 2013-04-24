@@ -54,7 +54,7 @@ object SparkBuild extends Build {
 
     // Fork new JVMs for tests and set Java options for those
     fork := true,
-    javaOptions += "-Xmx1g",
+    javaOptions += "-Xmx2g",
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
