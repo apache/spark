@@ -55,9 +55,6 @@ object SparkBuild extends Build {
     fork := true,
     javaOptions += "-Xmx1g",
 
-    // Only allow one test at a time, even across projects, since they run in the same JVM
-    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-
     // Shared between both core and streaming.
     resolvers ++= Seq("Akka Repository" at "http://repo.akka.io/releases/"),
 
