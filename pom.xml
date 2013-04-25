@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.spark-project</groupId>
   <artifactId>spark-parent</artifactId>
-  <version>0.7.1</version>
+  <version>0.7.2-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark-project.org/</url>
@@ -24,7 +24,6 @@
     <connection>scm:git:git@github.com:mesos/spark.git</connection>
     <developerConnection>scm:git:git@github.com:mesos/spark.git</developerConnection>
     <url>scm:git:git@github.com:mesos/spark.git</url>
-    <tag>v0.7.1</tag>
   </scm>
   <developers>
     <developer>
