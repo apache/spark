@@ -128,7 +128,7 @@ private[spark] class ShuffleMapTask(
       val blockManager = SparkEnv.get.blockManager
       val buckets = Array.tabulate[BlockObjectWriter](numOutputSplits) { bucketId =>
         val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + bucketId
-        blockManager.getBlockWriter(blockId, Serializer.get(dep.serializerClass))
+        blockManager.getDiskBlockWriter(blockId, Serializer.get(dep.serializerClass))
       }
 
       // Write the map output to its associated buckets.

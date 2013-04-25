@@ -269,22 +269,23 @@ class BlockManager(
   }
 
   /**
+   * A short-circuited method to get blocks directly from disk. This is used for getting
+   * shuffle blocks. It is safe to do so without a lock on block info since disk store
+   * never deletes (recent) items.
+   */
+  def getLocalFromDisk(blockId: String, serializer: Serializer): Option[Iterator[Any]] = {
+    diskStore.getValues(blockId, serializer) match {
+      case Some(iterator) => Some(iterator)
+      case None =>
+        throw new Exception("Block " + blockId + " not found on disk, though it should be")
+    }
+  }
+
+  /**
    * Get block from local block manager.
    */
   def getLocal(blockId: String): Option[Iterator[Any]] = {
     logDebug("Getting local block " + blockId)
-
-    // As an optimization for map output fetches, if the block is for a shuffle, return it
-    // without acquiring a lock; the disk store never deletes (recent) items so this should work
-    if (blockId.startsWith("shuffle_")) {
-      return diskStore.getValues(blockId) match {
-        case Some(iterator) =>
-          Some(iterator)
-        case None =>
-          throw new Exception("Block " + blockId + " not found on disk, though it should be")
-      }
-    }
-
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
@@ -486,7 +487,7 @@ class BlockManager(
    * A short circuited method to get a block writer that can write data directly to disk.
    * This is currently used for writing shuffle files out.
    */
-  def getBlockWriter(blockId: String, serializer: Serializer): BlockObjectWriter = {
+  def getDiskBlockWriter(blockId: String, serializer: Serializer): BlockObjectWriter = {
     val writer = diskStore.getBlockWriter(blockId, serializer)
     writer.registerCloseEventHandler(() => {
       // TODO(rxin): This doesn't handle error cases.
@@ -1042,7 +1043,7 @@ class BlockFetcherIterator(
   // any memory that might exceed our maxBytesInFlight
   startTime = System.currentTimeMillis
   for (id <- localBlockIds) {
-    getLocal(id) match {
+    getLocalFromDisk(id, serializer) match {
       case Some(iter) => {
         results.put(new FetchResult(id, 0, () => iter)) // Pass 0 as size since it's not in flight
         logDebug("Got local block " + id)
