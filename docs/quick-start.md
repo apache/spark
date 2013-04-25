@@ -113,8 +113,8 @@ import SparkContext._
 
 object SimpleJob {
   def main(args: Array[String]) {
-    val logFile = "/var/log/syslog" // Should be some file on your system
-    val sc = new SparkContext("local", "Simple Job", "$YOUR_SPARK_HOME",
+    val logFile = "$YOUR_SPARK_HOME/README.md" // Should be some file on your system
+    val sc = new SparkContext("local", "Simple Job", "YOUR_SPARK_HOME",
       List("target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar"))
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
@@ -124,7 +124,7 @@ object SimpleJob {
 }
 {% endhighlight %}
 
-This job simply counts the number of lines containing 'a' and the number containing 'b' in a system log file. Unlike the earlier examples with the Spark shell, which initializes its own SparkContext, we initialize a SparkContext as part of the job. We pass the SparkContext constructor four arguments, the type of scheduler we want to use (in this case, a local scheduler), a name for the job, the directory where Spark is installed, and a name for the jar file containing the job's sources. The final two arguments are needed in a distributed setting, where Spark is running across several nodes, so we include them for completeness. Spark will automatically ship the jar files you list to slave nodes.
+This job simply counts the number of lines containing 'a' and the number containing 'b' in the Spark README. Note that you'll need to replace $YOUR_SPARK_HOME with the location where Spark is installed. Unlike the earlier examples with the Spark shell, which initializes its own SparkContext, we initialize a SparkContext as part of the job. We pass the SparkContext constructor four arguments, the type of scheduler we want to use (in this case, a local scheduler), a name for the job, the directory where Spark is installed, and a name for the jar file containing the job's sources. The final two arguments are needed in a distributed setting, where Spark is running across several nodes, so we include them for completeness. Spark will automatically ship the jar files you list to slave nodes.
 
 This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt` which explains that Spark is a dependency. This file also adds two repositories which host Spark dependencies:
 
@@ -156,7 +156,7 @@ $ find .
 $ sbt package
 $ sbt run
 ...
-Lines with a: 8422, Lines with b: 1836
+Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
 This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
@@ -173,7 +173,7 @@ import spark.api.java.function.Function;
 
 public class SimpleJob {
   public static void main(String[] args) {
-    String logFile = "/var/log/syslog"; // Should be some file on your system
+    String logFile = "$YOUR_SPARK_HOME/README.md"; // Should be some file on your system
     JavaSparkContext sc = new JavaSparkContext("local", "Simple Job",
       "$YOUR_SPARK_HOME", new String[]{"target/simple-project-1.0.jar"});
     JavaRDD<String> logData = sc.textFile(logFile).cache();
@@ -191,7 +191,7 @@ public class SimpleJob {
 }
 {% endhighlight %}
 
-This job simply counts the number of lines containing 'a' and the number containing 'b' in a system log file. Note that like in the Scala example, we initialize a SparkContext, though we use the special `JavaSparkContext` class to get a Java-friendly one. We also create RDDs (represented by `JavaRDD`) and run transformations on them. Finally, we pass functions to Spark by creating classes that extend `spark.api.java.function.Function`. The [Java programming guide](java-programming-guide.html) describes these differences in more detail.
+This job simply counts the number of lines containing 'a' and the number containing 'b' in a system log file. Note that you'll need to replace $YOUR_SPARK_HOME with the location where Spark is installed. As with the Scala example, we initialize a SparkContext, though we use the special `JavaSparkContext` class to get a Java-friendly one. We also create RDDs (represented by `JavaRDD`) and run transformations on them. Finally, we pass functions to Spark by creating classes that extend `spark.api.java.function.Function`. The [Java programming guide](java-programming-guide.html) describes these differences in more detail.
 
 To build the job, we also write a Maven `pom.xml` file that lists Spark as a dependency. Note that Spark artifacts are tagged with a Scala version.
 
@@ -239,7 +239,7 @@ Now, we can execute the job using Maven:
 $ mvn package
 $ mvn exec:java -Dexec.mainClass="SimpleJob"
 ...
-Lines with a: 8422, Lines with b: 1836
+Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
 This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
@@ -253,7 +253,7 @@ As an example, we'll create a simple Spark job, `SimpleJob.py`:
 """SimpleJob.py"""
 from pyspark import SparkContext
 
-logFile = "/var/log/syslog"  # Should be some file on your system
+logFile = "$YOUR_SPARK_HOME/README.md"  # Should be some file on your system
 sc = SparkContext("local", "Simple job")
 logData = sc.textFile(logFile).cache()
 
@@ -265,7 +265,8 @@ print "Lines with a: %i, lines with b: %i" % (numAs, numBs)
 
 
 This job simply counts the number of lines containing 'a' and the number containing 'b' in a system log file.
-Like in the Scala and Java examples, we use a SparkContext to create RDDs.
+Note that you'll need to replace $YOUR_SPARK_HOME with the location where Spark is installed. 
+As with the Scala and Java examples, we use a SparkContext to create RDDs.
 We can pass Python functions to Spark, which are automatically serialized along with any variables that they reference.
 For jobs that use custom classes or third-party libraries, we can add those code dependencies to SparkContext to ensure that they will be available on remote machines; this is described in more detail in the [Python programming guide](python-programming-guide.html).
 `SimpleJob` is simple enough that we do not need to specify any code dependencies.
@@ -276,7 +277,7 @@ We can run this job using the `pyspark` script:
 $ cd $SPARK_HOME
 $ ./pyspark SimpleJob.py
 ...
-Lines with a: 8422, Lines with b: 1836
+Lines with a: 46, Lines with b: 23
 {% endhighlight python %}
 
 This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
