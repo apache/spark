@@ -9,7 +9,7 @@
   </parent>
 
   <groupId>org.spark-project</groupId>
-  <artifactId>spark-examples</artifactId>
+  <artifactId>spark-examples_${scala.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
   <url>http://spark-project.org/</url>
@@ -52,13 +52,13 @@
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-core</artifactId>
+          <artifactId>spark-core_${scala.version}</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop1</classifier>
         </dependency>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-streaming</artifactId>
+          <artifactId>spark-streaming_${scala.version}</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop1</classifier>
         </dependency>
@@ -93,13 +93,13 @@
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-core</artifactId>
+          <artifactId>spark-core_${scala.version}</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
         </dependency>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-streaming</artifactId>
+          <artifactId>spark-streaming_${scala.version}</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
         </dependency>

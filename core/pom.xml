@@ -9,7 +9,7 @@
   </parent>
 
   <groupId>org.spark-project</groupId>
-  <artifactId>spark-core</artifactId>
+  <artifactId>spark-core_${scala.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
   <url>http://spark-project.org/</url>
