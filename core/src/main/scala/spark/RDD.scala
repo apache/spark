@@ -35,6 +35,9 @@ import spark.rdd.ShuffledRDD
 import spark.rdd.SubtractedRDD
 import spark.rdd.UnionRDD
 import spark.rdd.ZippedRDD
+import spark.rdd.MapZippedPartitionsRDD2
+import spark.rdd.MapZippedPartitionsRDD3
+import spark.rdd.MapZippedPartitionsRDD4
 import spark.storage.StorageLevel
 
 import SparkContext._
@@ -435,6 +438,25 @@ abstract class RDD[T: ClassManifest](
    * a map on the other).
    */
   def zip[U: ClassManifest](other: RDD[U]): RDD[(T, U)] = new ZippedRDD(sc, this, other)
+
+  def zipAndMapPartitions[B: ClassManifest, V: ClassManifest](
+    f: (Iterator[T], Iterator[B]) => Iterator[V],
+    rdd2: RDD[B]) =
+    new MapZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2)
+
+  def zipAndMapPartitions[B: ClassManifest, C: ClassManifest, V: ClassManifest](
+    f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V],
+    rdd2: RDD[B],
+    rdd3: RDD[C]) =
+    new MapZippedPartitionsRDD3(sc, sc.clean(f), this, rdd2, rdd3)
+
+  def zipAndMapPartitions[B: ClassManifest, C: ClassManifest, D: ClassManifest, V: ClassManifest](
+    f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
+    rdd2: RDD[B],
+    rdd3: RDD[C],
+    rdd4: RDD[D]) =
+    new MapZippedPartitionsRDD4(sc, sc.clean(f), this, rdd2, rdd3, rdd4)
+
 
   // Actions (launch a job to return a value to the user program)
 
