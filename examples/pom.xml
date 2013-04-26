@@ -14,6 +14,14 @@
   <name>Spark Project Examples</name>
   <url>http://spark-project.org/</url>
 
+  <repositories>
+    <!-- For the Kafka JAR, which we modified for Scala 2.9 -->
+    <repository>
+      <id>streaming-lib</id>
+      <url>file://${project.basedir}/../streaming/lib</url>
+    </repository>
+  </repositories>
+
   <dependencies>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
@@ -33,6 +41,12 @@
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.version}</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka</artifactId>
+      <version>0.7.2-spark</version>  <!-- Comes from our in-project repository -->
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <build>
