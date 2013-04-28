@@ -439,6 +439,12 @@ abstract class RDD[T: ClassManifest](
    */
   def zip[U: ClassManifest](other: RDD[U]): RDD[(T, U)] = new ZippedRDD(sc, this, other)
 
+  /**
+   * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by
+   * applying a function to the zipped partitions. Assumes that all the RDDs have the
+   * *same number of partitions*, but does *not* require them to have the same number
+   * of elements in each partition.
+   */
   def zipPartitions[B: ClassManifest, V: ClassManifest](
       f: (Iterator[T], Iterator[B]) => Iterator[V],
       rdd2: RDD[B]): RDD[V] =
