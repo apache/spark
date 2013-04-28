@@ -74,6 +74,7 @@ object MasterFailureTest extends Logging {
 
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Long], state: Option[Long]) => {
+        logInfo("UpdateFunc .. state = " + state.getOrElse(0L) + ", values = " + values)
         Some(values.foldLeft(0L)(_ + _) + state.getOrElse(0L))
       }
       st.flatMap(_.split(" "))
@@ -159,6 +160,7 @@ object MasterFailureTest extends Logging {
 
     // Setup the streaming computation with the given operation
     System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
     var ssc = new StreamingContext("local[4]", "MasterFailureTest", batchDuration, null, Nil, Map())
     ssc.checkpoint(checkpointDir.toString)
     val inputStream = ssc.textFileStream(testDir.toString)
@@ -205,6 +207,7 @@ object MasterFailureTest extends Logging {
         // (iii) Its not timed out yet
         System.clearProperty("spark.streaming.clock")
         System.clearProperty("spark.driver.port")
+        System.clearProperty("spark.hostPort")
         ssc.start()
         val startTime = System.currentTimeMillis()
         while (!killed && !isLastOutputGenerated && !isTimedOut) {
@@ -357,13 +360,16 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
         // Write the data to a local file and then move it to the target test directory
         val localFile = new File(localTestDir, (i+1).toString)
         val hadoopFile = new Path(testDir, (i+1).toString)
+        val tempHadoopFile = new Path(testDir, ".tmp_" + (i+1).toString)
         FileUtils.writeStringToFile(localFile, input(i).toString + "\n")
         var tries = 0
 	var done = false
         while (!done && tries < maxTries) {
           tries += 1
           try {
-            fs.copyFromLocalFile(new Path(localFile.toString), hadoopFile)
+            // fs.copyFromLocalFile(new Path(localFile.toString), hadoopFile)
+            fs.copyFromLocalFile(new Path(localFile.toString), tempHadoopFile)
+            fs.rename(tempHadoopFile, hadoopFile)
 	    done = true
 	  } catch {
 	    case ioe: IOException => { 

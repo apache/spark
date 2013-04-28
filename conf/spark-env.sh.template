@@ -12,6 +12,7 @@
 # - SPARK_WORKER_CORES, to set the number of cores to use on this machine
 # - SPARK_WORKER_MEMORY, to set how much memory to use (e.g. 1000m, 2g)
 # - SPARK_WORKER_PORT / SPARK_WORKER_WEBUI_PORT
+# - SPARK_WORKER_INSTANCES, to set the number of worker instances/processes to be spawned on every slave machine
 #
 # Finally, Spark also relies on the following variables, but these can be set
 # on just the *master* (i.e. in your driver program), and will automatically
