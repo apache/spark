@@ -42,7 +42,7 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
   private val writeFile = new Path(file.getParent, file.getName + ".next")
   private val bakFile = new Path(file.getParent, file.getName + ".bk")
 
-  @volatile private var stopped = false
+  private var stopped = false
 
   val conf = new Configuration()
   var fs = file.getFileSystem(conf)
@@ -57,10 +57,6 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
       var attempts = 0
       val startTime = System.currentTimeMillis()
       while (attempts < maxAttempts) {
-        if (stopped) {
-          logInfo("Already stopped, ignore checkpoint attempt for " + file)
-          return
-        }
         attempts += 1
         try {
           logDebug("Saving checkpoint for time " + checkpointTime + " to file '" + file + "'")
@@ -99,8 +95,13 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
   }
 
   def stop() {
-    stopped = true
+    synchronized {
+      if (stopped) return ;
+      stopped = true
+    }
     executor.shutdown()
+    val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
+    logInfo("CheckpointWriter executor terminated ? " + terminated)
   }
 }
 
