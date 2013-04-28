@@ -4,13 +4,13 @@ import spark.{OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
 import java.io.{ObjectOutputStream, IOException}
 
 private[spark] class MapZippedPartition(
-    idx: Int, 
-    @transient rdds: Seq[RDD[_]]
-  ) extends Partition {
+    idx: Int,
+    @transient rdds: Seq[RDD[_]])
+  extends Partition {
 
   override val index: Int = idx
   var partitionValues = rdds.map(rdd => rdd.partitions(idx))
-  def partitions = partitionValues 
+  def partitions = partitionValues
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
@@ -68,7 +68,8 @@ class MapZippedPartitionsRDD2[A: ClassManifest, B: ClassManifest, V: ClassManife
   }
 }
 
-class MapZippedPartitionsRDD3[A: ClassManifest, B: ClassManifest, C: ClassManifest, V: ClassManifest](
+class MapZippedPartitionsRDD3
+  [A: ClassManifest, B: ClassManifest, C: ClassManifest, V: ClassManifest](
     sc: SparkContext,
     f: (Iterator[A], Iterator[B], Iterator[C]) => Iterator[V],
     var rdd1: RDD[A],
@@ -78,8 +79,8 @@ class MapZippedPartitionsRDD3[A: ClassManifest, B: ClassManifest, C: ClassManife
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[MapZippedPartition].partitions
-    f(rdd1.iterator(partitions(0), context), 
-      rdd2.iterator(partitions(1), context), 
+    f(rdd1.iterator(partitions(0), context),
+      rdd2.iterator(partitions(1), context),
       rdd3.iterator(partitions(2), context))
   }
 
@@ -91,7 +92,8 @@ class MapZippedPartitionsRDD3[A: ClassManifest, B: ClassManifest, C: ClassManife
   }
 }
 
-class MapZippedPartitionsRDD4[A: ClassManifest, B: ClassManifest, C: ClassManifest, D:ClassManifest, V: ClassManifest](
+class MapZippedPartitionsRDD4
+  [A: ClassManifest, B: ClassManifest, C: ClassManifest, D:ClassManifest, V: ClassManifest](
     sc: SparkContext,
     f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
     var rdd1: RDD[A],
@@ -102,8 +104,8 @@ class MapZippedPartitionsRDD4[A: ClassManifest, B: ClassManifest, C: ClassManife
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[MapZippedPartition].partitions
-    f(rdd1.iterator(partitions(0), context), 
-      rdd2.iterator(partitions(1), context), 
+    f(rdd1.iterator(partitions(0), context),
+      rdd2.iterator(partitions(1), context),
       rdd3.iterator(partitions(2), context),
       rdd4.iterator(partitions(3), context))
   }

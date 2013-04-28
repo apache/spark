@@ -24,7 +24,7 @@ class MapZippedPartitionsSuite extends FunSuite with LocalSparkContext {
     val data2 = sc.makeRDD(Array("1", "2", "3", "4", "5", "6"), 2)
     val data3 = sc.makeRDD(Array(1.0, 2.0), 2)
 
-    val zippedRDD = data1.zipAndMapPartitions(MapZippedPartitionsSuite.procZippedData, data2, data3)
+    val zippedRDD = data1.zipPartitions(MapZippedPartitionsSuite.procZippedData, data2, data3)
 
     val obtainedSizes = zippedRDD.collect()
     val expectedSizes = Array(2, 3, 1, 2, 3, 1)

@@ -439,22 +439,22 @@ abstract class RDD[T: ClassManifest](
    */
   def zip[U: ClassManifest](other: RDD[U]): RDD[(T, U)] = new ZippedRDD(sc, this, other)
 
-  def zipAndMapPartitions[B: ClassManifest, V: ClassManifest](
-    f: (Iterator[T], Iterator[B]) => Iterator[V],
-    rdd2: RDD[B]) =
+  def zipPartitions[B: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B]) => Iterator[V],
+      rdd2: RDD[B]) =
     new MapZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2)
 
-  def zipAndMapPartitions[B: ClassManifest, C: ClassManifest, V: ClassManifest](
-    f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V],
-    rdd2: RDD[B],
-    rdd3: RDD[C]) =
+  def zipPartitions[B: ClassManifest, C: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V],
+      rdd2: RDD[B],
+      rdd3: RDD[C]) =
     new MapZippedPartitionsRDD3(sc, sc.clean(f), this, rdd2, rdd3)
 
-  def zipAndMapPartitions[B: ClassManifest, C: ClassManifest, D: ClassManifest, V: ClassManifest](
-    f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
-    rdd2: RDD[B],
-    rdd3: RDD[C],
-    rdd4: RDD[D]) =
+  def zipPartitions[B: ClassManifest, C: ClassManifest, D: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
+      rdd2: RDD[B],
+      rdd3: RDD[C],
+      rdd4: RDD[D]) =
     new MapZippedPartitionsRDD4(sc, sc.clean(f), this, rdd2, rdd3, rdd4)
 
 
