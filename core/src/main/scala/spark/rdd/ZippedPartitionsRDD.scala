@@ -3,7 +3,7 @@ package spark.rdd
 import spark.{OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
 import java.io.{ObjectOutputStream, IOException}
 
-private[spark] class MapZippedPartition(
+private[spark] class ZippedPartitions(
     idx: Int,
     @transient rdds: Seq[RDD[_]])
   extends Partition {
@@ -20,7 +20,7 @@ private[spark] class MapZippedPartition(
   }
 }
 
-abstract class MapZippedPartitionsBaseRDD[V: ClassManifest](
+abstract class ZippedPartitionsBaseRDD[V: ClassManifest](
     sc: SparkContext,
     var rdds: Seq[RDD[_]])
   extends RDD[V](sc, rdds.map(x => new OneToOneDependency(x))) {
@@ -32,13 +32,13 @@ abstract class MapZippedPartitionsBaseRDD[V: ClassManifest](
     }
     val array = new Array[Partition](sizes(0))
     for (i <- 0 until sizes(0)) {
-      array(i) = new MapZippedPartition(i, rdds)
+      array(i) = new ZippedPartitions(i, rdds)
     }
     array
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] = {
-    val splits = s.asInstanceOf[MapZippedPartition].partitions
+    val splits = s.asInstanceOf[ZippedPartitions].partitions
     val preferredLocations = rdds.zip(splits).map(x => x._1.preferredLocations(x._2))
     preferredLocations.reduce((x, y) => x.intersect(y))
   }
@@ -49,15 +49,15 @@ abstract class MapZippedPartitionsBaseRDD[V: ClassManifest](
   }
 }
 
-class MapZippedPartitionsRDD2[A: ClassManifest, B: ClassManifest, V: ClassManifest](
+class ZippedPartitionsRDD2[A: ClassManifest, B: ClassManifest, V: ClassManifest](
     sc: SparkContext,
     f: (Iterator[A], Iterator[B]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B])
-  extends MapZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2)) {
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2)) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
-    val partitions = s.asInstanceOf[MapZippedPartition].partitions
+    val partitions = s.asInstanceOf[ZippedPartitions].partitions
     f(rdd1.iterator(partitions(0), context), rdd2.iterator(partitions(1), context))
   }
 
@@ -68,17 +68,17 @@ class MapZippedPartitionsRDD2[A: ClassManifest, B: ClassManifest, V: ClassManife
   }
 }
 
-class MapZippedPartitionsRDD3
+class ZippedPartitionsRDD3
   [A: ClassManifest, B: ClassManifest, C: ClassManifest, V: ClassManifest](
     sc: SparkContext,
     f: (Iterator[A], Iterator[B], Iterator[C]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B],
     var rdd3: RDD[C])
-  extends MapZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3)) {
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3)) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
-    val partitions = s.asInstanceOf[MapZippedPartition].partitions
+    val partitions = s.asInstanceOf[ZippedPartitions].partitions
     f(rdd1.iterator(partitions(0), context),
       rdd2.iterator(partitions(1), context),
       rdd3.iterator(partitions(2), context))
@@ -92,7 +92,7 @@ class MapZippedPartitionsRDD3
   }
 }
 
-class MapZippedPartitionsRDD4
+class ZippedPartitionsRDD4
   [A: ClassManifest, B: ClassManifest, C: ClassManifest, D:ClassManifest, V: ClassManifest](
     sc: SparkContext,
     f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
@@ -100,10 +100,10 @@ class MapZippedPartitionsRDD4
     var rdd2: RDD[B],
     var rdd3: RDD[C],
     var rdd4: RDD[D])
-  extends MapZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3, rdd4)) {
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3, rdd4)) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
-    val partitions = s.asInstanceOf[MapZippedPartition].partitions
+    val partitions = s.asInstanceOf[ZippedPartitions].partitions
     f(rdd1.iterator(partitions(0), context),
       rdd2.iterator(partitions(1), context),
       rdd3.iterator(partitions(2), context),
