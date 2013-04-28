@@ -22,12 +22,10 @@ class FailureSuite extends FunSuite with BeforeAndAfter with Logging {
   val batchDuration = Milliseconds(1000)
 
   before {
-    logInfo("BEFORE ...")
     FileUtils.deleteDirectory(new File(directory))
   }
 
   after {
-    logInfo("AFTER ...")
     FileUtils.deleteDirectory(new File(directory))
   }
 

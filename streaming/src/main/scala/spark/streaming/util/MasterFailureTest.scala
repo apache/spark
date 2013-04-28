@@ -74,7 +74,6 @@ object MasterFailureTest extends Logging {
 
     val operation = (st: DStream[String]) => {
       val updateFunc = (values: Seq[Long], state: Option[Long]) => {
-        logInfo("UpdateFunc .. state = " + state.getOrElse(0L) + ", values = " + values)
         Some(values.foldLeft(0L)(_ + _) + state.getOrElse(0L))
       }
       st.flatMap(_.split(" "))
