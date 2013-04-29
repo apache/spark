@@ -35,6 +35,9 @@ import spark.rdd.ShuffledRDD
 import spark.rdd.SubtractedRDD
 import spark.rdd.UnionRDD
 import spark.rdd.ZippedRDD
+import spark.rdd.ZippedPartitionsRDD2
+import spark.rdd.ZippedPartitionsRDD3
+import spark.rdd.ZippedPartitionsRDD4
 import spark.storage.StorageLevel
 
 import SparkContext._
@@ -435,6 +438,31 @@ abstract class RDD[T: ClassManifest](
    * a map on the other).
    */
   def zip[U: ClassManifest](other: RDD[U]): RDD[(T, U)] = new ZippedRDD(sc, this, other)
+
+  /**
+   * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by
+   * applying a function to the zipped partitions. Assumes that all the RDDs have the
+   * *same number of partitions*, but does *not* require them to have the same number
+   * of elements in each partition.
+   */
+  def zipPartitions[B: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B]) => Iterator[V],
+      rdd2: RDD[B]): RDD[V] =
+    new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2)
+
+  def zipPartitions[B: ClassManifest, C: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V],
+      rdd2: RDD[B],
+      rdd3: RDD[C]): RDD[V] =
+    new ZippedPartitionsRDD3(sc, sc.clean(f), this, rdd2, rdd3)
+
+  def zipPartitions[B: ClassManifest, C: ClassManifest, D: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
+      rdd2: RDD[B],
+      rdd3: RDD[C],
+      rdd4: RDD[D]): RDD[V] =
+    new ZippedPartitionsRDD4(sc, sc.clean(f), this, rdd2, rdd3, rdd4)
+
 
   // Actions (launch a job to return a value to the user program)
 
