@@ -57,7 +57,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
           taskMetrics.shuffleReadMetrics should be ('defined)
           val sm = taskMetrics.shuffleReadMetrics.get
           sm.totalBlocksFetched should be > (0)
-          sm.shuffleReadMillis should be > (0l)
           sm.localBlocksFetched should be > (0)
           sm.remoteBlocksFetched should be (0)
           sm.remoteBytesRead should be (0l)
