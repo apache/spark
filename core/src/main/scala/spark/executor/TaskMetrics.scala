@@ -51,7 +51,7 @@ class ShuffleReadMetrics extends Serializable {
   /**
    * Total time to read shuffle data
    */
-  var shuffleReadMillis: Long = _
+  var shuffleReadMillis: Option[Long] = _
 
   /**
    * Total time that is spent blocked waiting for shuffle to fetch data
