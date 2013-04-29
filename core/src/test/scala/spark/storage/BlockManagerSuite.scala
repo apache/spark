@@ -15,6 +15,8 @@ import org.scalatest.time.SpanSugar._
 import spark.JavaSerializer
 import spark.KryoSerializer
 import spark.SizeEstimator
+import spark.Utils
+import spark.util.AkkaUtils
 import spark.util.ByteBufferInputStream
 
 class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
@@ -31,7 +33,12 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   val serializer = new KryoSerializer
 
   before {
-    actorSystem = ActorSystem("test")
+    val hostname = Utils.localHostName
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("test", hostname, 0)
+    this.actorSystem = actorSystem
+    System.setProperty("spark.driver.port", boundPort.toString)
+    System.setProperty("spark.hostPort", hostname + ":" + boundPort)
+
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new spark.storage.BlockManagerMasterActor(true))))
 
@@ -44,6 +51,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   after {
+    System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
+
     if (store != null) {
       store.stop()
       store = null
