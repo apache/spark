@@ -21,7 +21,7 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>algebird-core_2.9.2</artifactId>
+      <artifactId>algebird-core_2.10</artifactId>
       <version>0.1.11</version>
     </dependency>
     <dependency>
