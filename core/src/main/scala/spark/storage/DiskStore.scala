@@ -1,18 +1,19 @@
 package spark.storage
 
+import java.io.{File, FileOutputStream, OutputStream, RandomAccessFile}
 import java.nio.ByteBuffer
-import java.io.{File, FileOutputStream, RandomAccessFile}
 import java.nio.channels.FileChannel.MapMode
 import java.util.{Random, Date}
 import java.text.SimpleDateFormat
 
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-
 import scala.collection.mutable.ArrayBuffer
 
-import spark.executor.ExecutorExitCode
+import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import spark.Utils
+import spark.executor.ExecutorExitCode
+import spark.serializer.Serializer
+
 
 /**
  * Stores BlockManager blocks on disk.
@@ -22,6 +23,34 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   private val mapMode = MapMode.READ_ONLY
   private var mapOpenMode = "r"
+
+  class DiskBlockObjectWriter(blockId: String, serializer: Serializer)
+    extends BlockObjectWriter(blockId) {
+
+    private val f: File = createFile(blockId /*, allowAppendExisting */)
+    private val bs: OutputStream = blockManager.wrapForCompression(blockId,
+      new FastBufferedOutputStream(new FileOutputStream(f)))
+    private val objOut = serializer.newInstance().serializeStream(bs)
+
+    private var _size: Long = -1L
+
+    override def write(value: Any) {
+      objOut.writeObject(value)
+    }
+
+    override def close() {
+      objOut.close()
+      bs.close()
+      super.close()
+    }
+
+    override def size(): Long = {
+      if (_size < 0) {
+        _size = f.length()
+      }
+      _size
+    }
+  }
 
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   val subDirsPerLocalDir = System.getProperty("spark.diskStore.subDirectories", "64").toInt
@@ -33,6 +62,10 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
   addShutdownHook()
+
+  def getBlockWriter(blockId: String, serializer: Serializer): BlockObjectWriter = {
+    new DiskBlockObjectWriter(blockId, serializer)
+  }
 
   override def getSize(blockId: String): Long = {
     getFile(blockId).length()
@@ -79,12 +112,14 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     val file = createFile(blockId)
     val fileOut = blockManager.wrapForCompression(blockId,
       new FastBufferedOutputStream(new FileOutputStream(file)))
-    val objOut = blockManager.serializer.newInstance().serializeStream(fileOut)
+    val objOut = blockManager.defaultSerializer.newInstance().serializeStream(fileOut)
     objOut.writeAll(values.iterator)
     objOut.close()
     val length = file.length()
+
+    val timeTaken = System.currentTimeMillis - startTime
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      blockId, Utils.memoryBytesToString(length), (System.currentTimeMillis - startTime)))
+      blockId, Utils.memoryBytesToString(length), timeTaken))
 
     if (returnValues) {
       // Return a byte buffer for the contents of the file
@@ -105,6 +140,14 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes))
   }
 
+  /**
+   * A version of getValues that allows a custom serializer. This is used as part of the
+   * shuffle short-circuit code.
+   */
+  def getValues(blockId: String, serializer: Serializer): Option[Iterator[Any]] = {
+    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
+  }
+
   override def remove(blockId: String): Boolean = {
     val file = getFile(blockId)
     if (file.exists()) {
@@ -118,9 +161,9 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     getFile(blockId).exists()
   }
 
-  private def createFile(blockId: String): File = {
+  private def createFile(blockId: String, allowAppendExisting: Boolean = false): File = {
     val file = getFile(blockId)
-    if (file.exists()) {
+    if (!allowAppendExisting && file.exists()) {
       throw new Exception("File for block " + blockId + " already exists on disk: " + file)
     }
     file

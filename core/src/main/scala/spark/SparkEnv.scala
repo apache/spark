@@ -3,12 +3,13 @@ package spark
 import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
-import serializer.Serializer
 import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
+import spark.serializer.Serializer
 import spark.util.AkkaUtils
+
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -91,8 +92,12 @@ object SparkEnv extends Logging {
       Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
     }
 
-    val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
-    
+    val serializer = Serializer.setDefault(
+      System.getProperty("spark.serializer", "spark.JavaSerializer"))
+
+    val closureSerializer = Serializer.get(
+      System.getProperty("spark.closure.serializer", "spark.JavaSerializer"))
+
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
       if (isDriver) {
         logInfo("Registering " + name)
@@ -115,9 +120,6 @@ object SparkEnv extends Logging {
     val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isDriver)
-
-    val closureSerializer = instantiateClass[Serializer](
-      "spark.closure.serializer", "spark.JavaSerializer")
 
     val cacheManager = new CacheManager(blockManager)
 
@@ -164,5 +166,5 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir)
   }
-  
+
 }

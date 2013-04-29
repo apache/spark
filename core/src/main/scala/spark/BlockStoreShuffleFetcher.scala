@@ -1,14 +1,19 @@
 package spark
 
-import executor.{ShuffleReadMetrics, TaskMetrics}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
+import spark.executor.{ShuffleReadMetrics, TaskMetrics}
+import spark.serializer.Serializer
 import spark.storage.{DelegateBlockFetchTracker, BlockManagerId}
-import util.{CompletionIterator, TimedIterator}
+import spark.util.{CompletionIterator, TimedIterator}
+
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
-  override def fetch[K, V](shuffleId: Int, reduceId: Int, metrics: TaskMetrics) = {
+
+  override def fetch[K, V](
+    shuffleId: Int, reduceId: Int, metrics: TaskMetrics, serializer: Serializer) = {
+
     logDebug("Fetching outputs for shuffle %d, reduce %d".format(shuffleId, reduceId))
     val blockManager = SparkEnv.get.blockManager
 
@@ -48,7 +53,7 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
       }
     }
 
-    val blockFetcherItr = blockManager.getMultiple(blocksByAddress)
+    val blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer)
     val itr = new TimedIterator(blockFetcherItr.flatMap(unpackBlock)) with DelegateBlockFetchTracker
     itr.setDelegate(blockFetcherItr)
     CompletionIterator[(K,V), Iterator[(K,V)]](itr, {
