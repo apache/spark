@@ -608,7 +608,7 @@ abstract class RDD[T: ClassTag](
    * combine step happens locally on the master, equivalent to running a single reduce task.
    */
   def countByValue(): Map[T, Long] = {
-    if (elementClassTag.erasure.isArray) {
+    if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValue() does not support arrays")
     }
     // TODO: This should perhaps be distributed by default.
@@ -639,7 +639,7 @@ abstract class RDD[T: ClassTag](
       timeout: Long,
       confidence: Double = 0.95
       ): PartialResult[Map[T, BoundedDouble]] = {
-    if (elementClassTag.erasure.isArray) {
+    if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }
     val countPartition: (TaskContext, Iterator[T]) => OLMap[T] = { (ctx, iter) =>

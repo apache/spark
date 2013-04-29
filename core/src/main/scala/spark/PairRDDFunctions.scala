@@ -512,7 +512,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](
    * supporting the key and value types K and V in this RDD.
    */
   def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
-    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -520,7 +520,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](
    * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
    */
   def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
-    saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+    saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -651,9 +651,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](
    */
   def values: RDD[V] = self.map(_._2)
 
-  private[spark] def getKeyClass() = implicitly[ClassTag[K]].erasure
+  private[spark] def getKeyClass() = implicitly[ClassTag[K]].runtimeClass
 
-  private[spark] def getValueClass() = implicitly[ClassTag[V]].erasure
+  private[spark] def getValueClass() = implicitly[ClassTag[V]].runtimeClass
 }
 
 /**

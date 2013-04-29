@@ -457,7 +457,7 @@ extends Serializable {
       prefix: String,
       suffix: String
     )(implicit fm: ClassTag[F]) {
-    saveAsHadoopFiles(prefix, suffix, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+    saveAsHadoopFiles(prefix, suffix, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -487,7 +487,7 @@ extends Serializable {
       prefix: String,
       suffix: String
     )(implicit fm: ClassTag[F])  {
-    saveAsNewAPIHadoopFiles(prefix, suffix, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+    saveAsNewAPIHadoopFiles(prefix, suffix, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -509,7 +509,7 @@ extends Serializable {
     self.foreach(saveFunc)
   }
 
-  private def getKeyClass() = implicitly[ClassTag[K]].erasure
+  private def getKeyClass() = implicitly[ClassTag[K]].runtimeClass
 
-  private def getValueClass() = implicitly[ClassTag[V]].erasure
+  private def getValueClass() = implicitly[ClassTag[V]].runtimeClass
 }
