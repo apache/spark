@@ -33,11 +33,10 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   val serializer = new KryoSerializer
 
   before {
-    val hostname = Utils.localHostName
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("test", hostname, 0)
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("test", "localhost", 0)
     this.actorSystem = actorSystem
     System.setProperty("spark.driver.port", boundPort.toString)
-    System.setProperty("spark.hostPort", hostname + ":" + boundPort)
+    System.setProperty("spark.hostPort", "localhost:" + boundPort)
 
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new spark.storage.BlockManagerMasterActor(true))))
