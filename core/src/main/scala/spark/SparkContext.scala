@@ -8,6 +8,7 @@ import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
+import scala.reflect.{ ClassTag, classTag}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
@@ -210,19 +211,19 @@ class SparkContext(
   // Methods for creating RDDs
 
   /** Distribute a local Scala collection to form an RDD. */
-  def parallelize[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
+  def parallelize[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
   /** Distribute a local Scala collection to form an RDD. */
-  def makeRDD[T: ClassManifest](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
+  def makeRDD[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     parallelize(seq, numSlices)
   }
 
   /** Distribute a local Scala collection to form an RDD, with one or more
     * location preferences (hostnames of Spark nodes) for each object.
     * Create a new partition for each collection item. */
-   def makeRDD[T: ClassManifest](seq: Seq[(T, Seq[String])]): RDD[T] = {
+   def makeRDD[T: ClassTag](seq: Seq[(T, Seq[String])]): RDD[T] = {
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
     new ParallelCollectionRDD[T](this, seq.map(_._1), seq.size, indexToPrefs)
   }
@@ -265,7 +266,7 @@ class SparkContext(
   }
 
   /**
-   * Smarter version of hadoopFile() that uses class manifests to figure out the classes of keys,
+   * Smarter version of hadoopFile() that uses class tags to figure out the classes of keys,
    * values and the InputFormat so that users don't need to pass them directly. Instead, callers
    * can just write, for example,
    * {{{
@@ -273,7 +274,7 @@ class SparkContext(
    * }}}
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String, minSplits: Int)
-      (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F])
+      (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
       : RDD[(K, V)] = {
     hadoopFile(path,
         fm.erasure.asInstanceOf[Class[F]],
@@ -283,7 +284,7 @@ class SparkContext(
   }
 
   /**
-   * Smarter version of hadoopFile() that uses class manifests to figure out the classes of keys,
+   * Smarter version of hadoopFile() that uses class tags to figure out the classes of keys,
    * values and the InputFormat so that users don't need to pass them directly. Instead, callers
    * can just write, for example,
    * {{{
@@ -291,12 +292,12 @@ class SparkContext(
    * }}}
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
-      (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F]): RDD[(K, V)] =
+      (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
     hadoopFile[K, V, F](path, defaultMinSplits)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](path: String)
-      (implicit km: ClassManifest[K], vm: ClassManifest[V], fm: ClassManifest[F]): RDD[(K, V)] = {
+      (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     newAPIHadoopFile(
         path,
         fm.erasure.asInstanceOf[Class[F]],
@@ -359,11 +360,11 @@ class SparkContext(
    * IntWritable). The most natural thing would've been to have implicit objects for the
    * converters, but then we couldn't have an object for every subclass of Writable (you can't
    * have a parameterized singleton object). We use functions instead to create a new converter
-   * for the appropriate type. In addition, we pass the converter a ClassManifest of its type to
+   * for the appropriate type. In addition, we pass the converter a ClassTag of its type to
    * allow it to figure out the Writable class to use in the subclass case.
    */
    def sequenceFile[K, V](path: String, minSplits: Int = defaultMinSplits)
-      (implicit km: ClassManifest[K], vm: ClassManifest[V],
+      (implicit km: ClassTag[K], vm: ClassTag[V],
           kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
       : RDD[(K, V)] = {
     val kc = kcf()
@@ -382,7 +383,7 @@ class SparkContext(
    * slow if you use the default serializer (Java serialization), though the nice thing about it is
    * that there's very little effort required to save arbitrary objects.
    */
-  def objectFile[T: ClassManifest](
+  def objectFile[T: ClassTag](
       path: String,
       minSplits: Int = defaultMinSplits
       ): RDD[T] = {
@@ -391,17 +392,17 @@ class SparkContext(
   }
 
 
-  protected[spark] def checkpointFile[T: ClassManifest](
+  protected[spark] def checkpointFile[T: ClassTag](
       path: String
     ): RDD[T] = {
     new CheckpointRDD[T](this, path)
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassManifest](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
+  def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
 
   /** Build the union of a list of RDDs passed as variable-length arguments. */
-  def union[T: ClassManifest](first: RDD[T], rest: RDD[T]*): RDD[T] =
+  def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] =
     new UnionRDD(this, Seq(first) ++ rest)
 
   // Methods for creating shared variables
@@ -569,7 +570,7 @@ class SparkContext(
    * flag specifies whether the scheduler can run the computation on the driver rather than
    * shipping it out to the cluster, for short actions like first().
    */
-  def runJob[T, U: ClassManifest](
+  def runJob[T, U: ClassTag](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
@@ -589,7 +590,7 @@ class SparkContext(
    * allowLocal flag specifies whether the scheduler can run the computation on the driver rather
    * than shipping it out to the cluster, for short actions like first().
    */
-  def runJob[T, U: ClassManifest](
+  def runJob[T, U: ClassTag](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
@@ -604,7 +605,7 @@ class SparkContext(
    * Run a job on a given set of partitions of an RDD, but take a function of type
    * `Iterator[T] => U` instead of `(TaskContext, Iterator[T]) => U`.
    */
-  def runJob[T, U: ClassManifest](
+  def runJob[T, U: ClassTag](
       rdd: RDD[T],
       func: Iterator[T] => U,
       partitions: Seq[Int],
@@ -616,21 +617,21 @@ class SparkContext(
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
-  def runJob[T, U: ClassManifest](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
+  def runJob[T, U: ClassTag](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
     runJob(rdd, func, 0 until rdd.partitions.size, false)
   }
 
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
    */
-  def runJob[T, U: ClassManifest](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
+  def runJob[T, U: ClassTag](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
     runJob(rdd, func, 0 until rdd.partitions.size, false)
   }
 
   /**
    * Run a job on all partitions in an RDD and pass the results to a handler function.
    */
-  def runJob[T, U: ClassManifest](
+  def runJob[T, U: ClassTag](
     rdd: RDD[T],
     processPartition: (TaskContext, Iterator[T]) => U,
     resultHandler: (Int, U) => Unit)
@@ -641,7 +642,7 @@ class SparkContext(
   /**
    * Run a job on all partitions in an RDD and pass the results to a handler function.
    */
-  def runJob[T, U: ClassManifest](
+  def runJob[T, U: ClassTag](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
       resultHandler: (Int, U) => Unit)
@@ -745,14 +746,14 @@ object SparkContext {
 
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
-  implicit def rddToPairRDDFunctions[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
+  implicit def rddToPairRDDFunctions[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]) =
     new PairRDDFunctions(rdd)
 
-  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable: ClassManifest](
+  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
       rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
 
-  implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
+  implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
     new OrderedRDDFunctions(rdd)
 
@@ -777,16 +778,16 @@ object SparkContext {
 
   implicit def stringToText(s: String) = new Text(s)
 
-  private implicit def arrayToArrayWritable[T <% Writable: ClassManifest](arr: Traversable[T]): ArrayWritable = {
+  private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T]): ArrayWritable = {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
-    new ArrayWritable(classManifest[T].erasure.asInstanceOf[Class[Writable]],
+    new ArrayWritable(classTag[T].erasure.asInstanceOf[Class[Writable]],
         arr.map(x => anyToWritable(x)).toArray)
   }
 
   // Helper objects for converting common types to Writable
-  private def simpleWritableConverter[T, W <: Writable: ClassManifest](convert: W => T) = {
-    val wClass = classManifest[W].erasure.asInstanceOf[Class[W]]
+  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T) = {
+    val wClass = classTag[W].erasure.asInstanceOf[Class[W]]
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
   }
 
@@ -834,11 +835,11 @@ object SparkContext {
 /**
  * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
  * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
- * The getter for the writable class takes a ClassManifest[T] in case this is a generic object
+ * The getter for the writable class takes a ClassTag[T] in case this is a generic object
  * that doesn't know the type of T when it is created. This sounds strange but is necessary to
  * support converting subclasses of Writable to themselves (writableWritableConverter).
  */
 private[spark] class WritableConverter[T](
-    val writableClass: ClassManifest[T] => Class[_ <: Writable],
+    val writableClass: ClassTag[T] => Class[_ <: Writable],
     val convert: Writable => T)
   extends Serializable

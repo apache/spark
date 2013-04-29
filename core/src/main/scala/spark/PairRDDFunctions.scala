@@ -7,6 +7,7 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
+import scala.reflect.{ ClassTag, classTag}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -29,7 +30,7 @@ import spark.Partitioner._
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  * Import `spark.SparkContext._` at the top of your program to use these functions.
  */
-class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
+class PairRDDFunctions[K: ClassTag, V: ClassTag](
     self: RDD[(K, V)])
   extends Logging
   with HadoopMapReduceUtil
@@ -394,7 +395,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     val cg = new CoGroupedRDD[K](
         Seq(self.asInstanceOf[RDD[(K, _)]], other.asInstanceOf[RDD[(K, _)]]),
         partitioner)
-    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
+    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classTag[K], ClassTags.seqSeqClassTag)
     prfs.mapValues {
       case Seq(vs, ws) =>
         (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
@@ -415,7 +416,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
             other1.asInstanceOf[RDD[(K, _)]],
             other2.asInstanceOf[RDD[(K, _)]]),
         partitioner)
-    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
+    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classTag[K],  ClassTags.seqSeqClassTag)
     prfs.mapValues {
       case Seq(vs, w1s, w2s) =>
         (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]])
@@ -469,19 +470,19 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
   /**
    * Return an RDD with the pairs from `this` whose keys are not in `other`.
-   * 
+   *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
-  def subtractByKey[W: ClassManifest](other: RDD[(K, W)]): RDD[(K, V)] =
+  def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] =
     subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.size)))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  def subtractByKey[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =
+  def subtractByKey[W: ClassTag](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =
     subtractByKey(other, new HashPartitioner(numPartitions))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  def subtractByKey[W: ClassManifest](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] =
+  def subtractByKey[W: ClassTag](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] =
     new SubtractedRDD[K, V, W](self, other, p)
 
   /**
@@ -510,7 +511,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
    */
-  def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassManifest[F]) {
+  def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
     saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
   }
 
@@ -518,7 +519,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * Output the RDD to any Hadoop-supported file system, using a new Hadoop API `OutputFormat`
    * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
    */
-  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassManifest[F]) {
+  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
     saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
   }
 
@@ -644,15 +645,15 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * Return an RDD with the keys of each tuple.
    */
   def keys: RDD[K] = self.map(_._1)
-  
+
   /**
    * Return an RDD with the values of each tuple.
    */
   def values: RDD[V] = self.map(_._2)
 
-  private[spark] def getKeyClass() = implicitly[ClassManifest[K]].erasure
+  private[spark] def getKeyClass() = implicitly[ClassTag[K]].erasure
 
-  private[spark] def getValueClass() = implicitly[ClassManifest[V]].erasure
+  private[spark] def getValueClass() = implicitly[ClassTag[V]].erasure
 }
 
 /**
@@ -660,7 +661,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
  * an implicit conversion. Import `spark.SparkContext._` at the top of your program to use these
  * functions. They will work with any key type that has a `scala.math.Ordered` implementation.
  */
-class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
+class OrderedRDDFunctions[K <% Ordered[K]: ClassTag, V: ClassTag](
   self: RDD[(K, V)])
   extends Logging
   with Serializable {
@@ -704,6 +705,6 @@ class FlatMappedValuesRDD[K, V, U](prev: RDD[(K, V)], f: V => TraversableOnce[U]
   }
 }
 
-private[spark] object Manifests {
-  val seqSeqManifest = classManifest[Seq[Seq[_]]]
+private[spark] object ClassTags {
+  val seqSeqClassTag = classTag[Seq[Seq[_]]]
 }

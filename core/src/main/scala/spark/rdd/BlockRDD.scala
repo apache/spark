@@ -1,6 +1,7 @@
 package spark.rdd
 
 import scala.collection.mutable.HashMap
+import scala.reflect.ClassTag
 import spark.{RDD, SparkContext, SparkEnv, Partition, TaskContext}
 
 private[spark] class BlockRDDPartition(val blockId: String, idx: Int) extends Partition {
@@ -8,7 +9,7 @@ private[spark] class BlockRDDPartition(val blockId: String, idx: Int) extends Pa
 }
 
 private[spark]
-class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[String])
+class BlockRDD[T: ClassTag](sc: SparkContext, @transient blockIds: Array[String])
   extends RDD[T](sc, Nil) {
 
   @transient lazy val locations_  = {
@@ -37,4 +38,3 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     locations_(split.asInstanceOf[BlockRDDPartition].blockId)
 
 }
-

@@ -6,6 +6,8 @@ import spark.api.java.JavaRDD
 import spark.storage.StorageLevel
 import spark.RDD
 
+import scala.reflect.ClassTag
+
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
  * sequence of RDDs (of the same type) representing a continuous stream of data (see [[spark.RDD]]
@@ -24,7 +26,7 @@ import spark.RDD
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
  */
-class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassManifest[T])
+class JavaDStream[T](val dstream: DStream[T])(implicit val classTag: ClassTag[T])
     extends JavaDStreamLike[T, JavaDStream[T], JavaRDD[T]] {
 
   override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
@@ -80,6 +82,6 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
 }
 
 object JavaDStream {
-  implicit def fromDStream[T: ClassManifest](dstream: DStream[T]): JavaDStream[T] =
+  implicit def fromDStream[T: ClassTag](dstream: DStream[T]): JavaDStream[T] =
     new JavaDStream[T](dstream)
 }

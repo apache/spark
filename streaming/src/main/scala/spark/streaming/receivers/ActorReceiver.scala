@@ -4,14 +4,16 @@ import akka.actor.{ Actor, PoisonPill, Props, SupervisorStrategy }
 import akka.actor.{ actorRef2Scala, ActorRef }
 import akka.actor.{ PossiblyHarmful, OneForOneStrategy }
 import akka.actor.SupervisorStrategy._
+
 import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
 import spark.storage.StorageLevel
 import spark.streaming.dstream.NetworkReceiver
 
 import java.util.concurrent.atomic.AtomicInteger
 
-/** A helper with set of defaults for supervisor strategy **/
+/** A helper with set of defaults for supervisor strategy */
 object ReceiverSupervisorStrategy {
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
@@ -43,11 +45,11 @@ object ReceiverSupervisorStrategy {
  *
  */
 trait Receiver { self: Actor ⇒
-  def pushBlock[T: ClassManifest](iter: Iterator[T]) {
+  def pushBlock[T: ClassTag](iter: Iterator[T]) {
     context.parent ! Data(iter)
   }
 
-  def pushBlock[T: ClassManifest](data: T) {
+  def pushBlock[T: ClassTag](data: T) {
     context.parent ! Data(data)
   }
 
@@ -61,8 +63,8 @@ case class Statistics(numberOfMsgs: Int,
   numberOfHiccups: Int,
   otherInfo: String)
 
-/** Case class to receive data sent by child actors **/
-private[streaming] case class Data[T: ClassManifest](data: T)
+/** Case class to receive data sent by child actors */
+private[streaming] case class Data[T: ClassTag](data: T)
 
 /**
  * Provides Actors as receivers for receiving stream.
@@ -85,7 +87,7 @@ private[streaming] case class Data[T: ClassManifest](data: T)
  *
  *
  */
-private[streaming] class ActorReceiver[T: ClassManifest](
+private[streaming] class ActorReceiver[T: ClassTag](
   props: Props,
   name: String,
   storageLevel: StorageLevel,

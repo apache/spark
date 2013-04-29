@@ -1,5 +1,6 @@
 package spark.rdd
 
+import scala.reflect.ClassTag
 import spark._
 import org.apache.hadoop.mapred.{FileInputFormat, SequenceFileInputFormat, JobConf, Reporter}
 import org.apache.hadoop.conf.Configuration
@@ -15,7 +16,7 @@ private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}
  * This RDD represents a RDD checkpoint file (similar to HadoopRDD).
  */
 private[spark]
-class CheckpointRDD[T: ClassManifest](sc: SparkContext, val checkpointPath: String)
+class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
   extends RDD[T](sc, Nil) {
 
   @transient val fs = new Path(checkpointPath).getFileSystem(sc.hadoopConfiguration)

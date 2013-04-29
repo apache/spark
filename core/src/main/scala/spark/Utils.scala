@@ -4,14 +4,19 @@ import java.io._
 import java.net._
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.io.Source
+import scala.reflect.ClassTag
+import scala.Some
+
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import scala.Some
+
 import spark.serializer.SerializerInstance
 
 /**
@@ -207,7 +212,7 @@ private object Utils extends Logging {
    * result in a new collection. Unlike scala.util.Random.shuffle, this method
    * uses a local random number generator, avoiding inter-thread contention.
    */
-  def randomize[T: ClassManifest](seq: TraversableOnce[T]): Seq[T] = {
+  def randomize[T: ClassTag](seq: TraversableOnce[T]): Seq[T] = {
     randomizeInPlace(seq.toArray)
   }
 

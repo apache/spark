@@ -2,11 +2,13 @@ package spark.streaming.dstream
 
 import spark.streaming.{Duration, DStream, Time}
 import spark.RDD
-import collection.mutable.ArrayBuffer
 import spark.rdd.UnionRDD
 
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 private[streaming]
-class UnionDStream[T: ClassManifest](parents: Array[DStream[T]])
+class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
   extends DStream[T](parents.head.ssc) {
 
   if (parents.length == 0) {

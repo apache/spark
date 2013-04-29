@@ -7,18 +7,20 @@ import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 import spark.streaming.{Time, StreamingContext}
 
+import scala.reflect.ClassTag
+
 private[streaming]
-class QueueInputDStream[T: ClassManifest](
+class QueueInputDStream[T: ClassTag](
     @transient ssc: StreamingContext,
     val queue: Queue[RDD[T]],
     oneAtATime: Boolean,
     defaultRDD: RDD[T]
   ) extends InputDStream[T](ssc) {
-  
+
   override def start() { }
-  
+
   override def stop() { }
-  
+
   override def compute(validTime: Time): Option[RDD[T]] = {
     val buffer = new ArrayBuffer[RDD[T]]()
     if (oneAtATime && queue.size > 0) {
@@ -38,5 +40,5 @@ class QueueInputDStream[T: ClassManifest](
       None
     }
   }
-  
+
 }

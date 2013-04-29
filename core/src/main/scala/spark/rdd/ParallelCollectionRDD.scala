@@ -3,9 +3,11 @@ package spark.rdd
 import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Map
+import scala.reflect.ClassTag
+
 import spark.{RDD, TaskContext, SparkContext, Partition}
 
-private[spark] class ParallelCollectionPartition[T: ClassManifest](
+private[spark] class ParallelCollectionPartition[T: ClassTag](
     val rddId: Long,
     val slice: Int,
     values: Seq[T])
@@ -23,7 +25,7 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
   override val index: Int = slice
 }
 
-private[spark] class ParallelCollectionRDD[T: ClassManifest](
+private[spark] class ParallelCollectionRDD[T: ClassTag](
     @transient sc: SparkContext,
     @transient data: Seq[T],
     numSlices: Int,
@@ -53,7 +55,7 @@ private object ParallelCollectionRDD {
    * collections specially, encoding the slices as other Ranges to minimize memory cost. This makes
    * it efficient to run Spark over RDDs representing large sets of numbers.
    */
-  def slice[T: ClassManifest](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
+  def slice[T: ClassTag](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
     if (numSlices < 1) {
       throw new IllegalArgumentException("Positive number of slices required")
     }

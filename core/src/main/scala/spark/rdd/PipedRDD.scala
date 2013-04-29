@@ -7,6 +7,7 @@ import scala.collection.Map
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.reflect.ClassTag
 
 import spark.{RDD, SparkEnv, Partition, TaskContext}
 
@@ -15,7 +16,7 @@ import spark.{RDD, SparkEnv, Partition, TaskContext}
  * An RDD that pipes the contents of each parent partition through an external command
  * (printing them one per line) and returns the output as a collection of strings.
  */
-class PipedRDD[T: ClassManifest](
+class PipedRDD[T: ClassTag](
     prev: RDD[T],
     command: Seq[String],
     envVars: Map[String, String])

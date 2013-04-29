@@ -6,8 +6,10 @@ import spark.SparkContext._
 import spark.storage.StorageLevel
 import spark.streaming.{Duration, Time, DStream}
 
+import scala.reflect.ClassTag
+
 private[streaming]
-class StateDStream[K: ClassManifest, V: ClassManifest, S: ClassManifest](
+class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     parent: DStream[(K, V)],
     updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
     partitioner: Partitioner,

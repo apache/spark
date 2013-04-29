@@ -5,18 +5,19 @@ import spark.streaming.dstream.{ReducedWindowedDStream, StateDStream}
 import spark.streaming.dstream.{CoGroupedDStream, ShuffledDStream}
 import spark.streaming.dstream.{MapValuedDStream, FlatMapValuedDStream}
 
-import spark.{Manifests, RDD, Partitioner, HashPartitioner}
+import spark.{ClassTags, RDD, Partitioner, HashPartitioner}
 import spark.SparkContext._
 import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.{ClassTag, classTag}
 
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.conf.Configuration
 
-class PairDStreamFunctions[K: ClassManifest, V: ClassManifest](self: DStream[(K,V)])
+class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
 extends Serializable {
 
   private[streaming] def ssc = self.ssc
@@ -86,7 +87,7 @@ extends Serializable {
    * combineByKey for RDDs. Please refer to combineByKey in [[spark.PairRDDFunctions]] for more
    * information.
    */
-  def combineByKey[C: ClassManifest](
+  def combineByKey[C: ClassTag](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
@@ -186,7 +187,7 @@ extends Serializable {
    *                       DStream's batching interval
    */
   def reduceByKeyAndWindow(
-      reduceFunc: (V, V) => V, 
+      reduceFunc: (V, V) => V,
       windowDuration: Duration,
       slideDuration: Duration
     ): DStream[(K, V)] = {
@@ -317,7 +318,7 @@ extends Serializable {
    *                   corresponding state key-value pair will be eliminated.
    * @tparam S State type
    */
-  def updateStateByKey[S: ClassManifest](
+  def updateStateByKey[S: ClassTag](
       updateFunc: (Seq[V], Option[S]) => Option[S]
     ): DStream[(K, S)] = {
     updateStateByKey(updateFunc, defaultPartitioner())
@@ -332,7 +333,7 @@ extends Serializable {
    * @param numPartitions Number of partitions of each RDD in the new DStream.
    * @tparam S State type
    */
-  def updateStateByKey[S: ClassManifest](
+  def updateStateByKey[S: ClassTag](
       updateFunc: (Seq[V], Option[S]) => Option[S],
       numPartitions: Int
     ): DStream[(K, S)] = {
@@ -348,7 +349,7 @@ extends Serializable {
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new DStream.
    * @tparam S State type
    */
-  def updateStateByKey[S: ClassManifest](
+  def updateStateByKey[S: ClassTag](
       updateFunc: (Seq[V], Option[S]) => Option[S],
       partitioner: Partitioner
     ): DStream[(K, S)] = {
@@ -371,7 +372,7 @@ extends Serializable {
    * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
    * @tparam S State type
    */
-  def updateStateByKey[S: ClassManifest](
+  def updateStateByKey[S: ClassTag](
       updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
       partitioner: Partitioner,
       rememberPartitioner: Boolean
@@ -380,11 +381,11 @@ extends Serializable {
   }
 
 
-  def mapValues[U: ClassManifest](mapValuesFunc: V => U): DStream[(K, U)] = {
+  def mapValues[U: ClassTag](mapValuesFunc: V => U): DStream[(K, U)] = {
     new MapValuedDStream[K, V, U](self, mapValuesFunc)
   }
 
-  def flatMapValues[U: ClassManifest](
+  def flatMapValues[U: ClassTag](
       flatMapValuesFunc: V => TraversableOnce[U]
     ): DStream[(K, U)] = {
     new FlatMapValuedDStream[K, V, U](self, flatMapValuesFunc)
@@ -396,7 +397,7 @@ extends Serializable {
    * key in both RDDs. HashPartitioner is used to partition each generated RDD into default number
    * of partitions.
    */
-  def cogroup[W: ClassManifest](other: DStream[(K, W)]): DStream[(K, (Seq[V], Seq[W]))] = {
+  def cogroup[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Seq[V], Seq[W]))] = {
     cogroup(other, defaultPartitioner())
   }
 
@@ -405,7 +406,7 @@ extends Serializable {
    * or `other` DStreams, the generated RDD will contains a tuple with the list of values for that
    * key in both RDDs. Partitioner is used to partition each generated RDD.
    */
-  def cogroup[W: ClassManifest](
+  def cogroup[W: ClassTag](
       other: DStream[(K, W)],
       partitioner: Partitioner
     ): DStream[(K, (Seq[V], Seq[W]))] = {
@@ -415,8 +416,8 @@ extends Serializable {
       partitioner
     )
     val pdfs = new PairDStreamFunctions[K, Seq[Seq[_]]](cgd)(
-      classManifest[K],
-      Manifests.seqSeqManifest
+      classTag[K],
+      ClassTags.seqSeqClassTag
     )
     pdfs.mapValues {
       case Seq(vs, ws) =>
@@ -428,7 +429,7 @@ extends Serializable {
    * Join `this` DStream with `other` DStream. HashPartitioner is used
    * to partition each generated RDD into default number of partitions.
    */
-  def join[W: ClassManifest](other: DStream[(K, W)]): DStream[(K, (V, W))] = {
+  def join[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (V, W))] = {
     join[W](other, defaultPartitioner())
   }
 
@@ -437,7 +438,7 @@ extends Serializable {
    * be generated by joining RDDs from `this` and other DStream. Uses the given
    * Partitioner to partition each generated RDD.
    */
-  def join[W: ClassManifest](
+  def join[W: ClassTag](
       other: DStream[(K, W)],
       partitioner: Partitioner
     ): DStream[(K, (V, W))] = {
@@ -455,7 +456,7 @@ extends Serializable {
   def saveAsHadoopFiles[F <: OutputFormat[K, V]](
       prefix: String,
       suffix: String
-    )(implicit fm: ClassManifest[F]) {
+    )(implicit fm: ClassTag[F]) {
     saveAsHadoopFiles(prefix, suffix, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
   }
 
@@ -485,7 +486,7 @@ extends Serializable {
   def saveAsNewAPIHadoopFiles[F <: NewOutputFormat[K, V]](
       prefix: String,
       suffix: String
-    )(implicit fm: ClassManifest[F])  {
+    )(implicit fm: ClassTag[F])  {
     saveAsNewAPIHadoopFiles(prefix, suffix, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
   }
 
@@ -508,9 +509,7 @@ extends Serializable {
     self.foreach(saveFunc)
   }
 
-  private def getKeyClass() = implicitly[ClassManifest[K]].erasure
+  private def getKeyClass() = implicitly[ClassTag[K]].erasure
 
-  private def getValueClass() = implicitly[ClassManifest[V]].erasure
+  private def getValueClass() = implicitly[ClassTag[V]].erasure
 }
-
-

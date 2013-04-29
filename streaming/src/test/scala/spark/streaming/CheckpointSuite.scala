@@ -3,6 +3,7 @@ package spark.streaming
 import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
@@ -297,7 +298,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
    * NOTE: This takes into consideration that the last batch processed before
    * master failure will be re-processed after restart/recovery.
    */
-  def testCheckpointedOperation[U: ClassManifest, V: ClassManifest](
+  def testCheckpointedOperation[U: ClassTag, V: ClassTag](
     input: Seq[Seq[U]],
     operation: DStream[U] => DStream[V],
     expectedOutput: Seq[Seq[V]],
@@ -340,7 +341,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.
    */
-  def advanceTimeWithRealDelay[V: ClassManifest](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
+  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     logInfo("Manual clock before advancing = " + clock.time)
     for (i <- 1 to numBatches.toInt) {

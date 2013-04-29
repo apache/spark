@@ -11,6 +11,7 @@ import java.util.Date
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
+import scala.reflect.{ classTag, ClassTag}
 
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputFormat
@@ -32,15 +33,15 @@ import spark.SparkContext._
  *
  * Users should import `spark.SparkContext._` at the top of their program to use these functions.
  */
-class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : ClassManifest](
+class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag](
     self: RDD[(K, V)])
   extends Logging
   with Serializable {
 
-  private def getWritableClass[T <% Writable: ClassManifest](): Class[_ <: Writable] = {
+  private def getWritableClass[T <% Writable: ClassTag](): Class[_ <: Writable] = {
     val c = {
-      if (classOf[Writable].isAssignableFrom(classManifest[T].erasure)) {
-        classManifest[T].erasure
+      if (classOf[Writable].isAssignableFrom(classTag[T].erasure)) {
+        classTag[T].erasure
       } else {
         // We get the type of the Writable class by looking at the apply method which converts
         // from T to Writable. Since we have two apply methods we filter out the one which

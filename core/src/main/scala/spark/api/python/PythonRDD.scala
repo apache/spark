@@ -6,6 +6,7 @@ import java.util.{List => JList, ArrayList => JArrayList, Collections}
 
 import scala.collection.JavaConversions._
 import scala.io.Source
+import scala.reflect.ClassTag
 
 import spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import spark.broadcast.Broadcast
@@ -13,7 +14,7 @@ import spark._
 import spark.rdd.PipedRDD
 
 
-private[spark] class PythonRDD[T: ClassManifest](
+private[spark] class PythonRDD[T: ClassTag](
     parent: RDD[T],
     command: Seq[String],
     envVars: java.util.Map[String, String],
@@ -251,7 +252,7 @@ private[spark] object PythonRDD {
   }
 
   def takePartition[T](rdd: RDD[T], partition: Int): Iterator[T] = {
-    implicit val cm : ClassManifest[T] = rdd.elementClassManifest
+    implicit val cm : ClassTag[T] = rdd.elementClassTag
     rdd.context.runJob(rdd, ((x: Iterator[T]) => x.toArray), Seq(partition), true).head.iterator
   }
 }
@@ -277,7 +278,7 @@ private class BytesToString extends spark.api.java.function.Function[Array[Byte]
  */
 class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
   extends AccumulatorParam[JList[Array[Byte]]] {
-  
+
   override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
 
   override def addInPlace(val1: JList[Array[Byte]], val2: JList[Array[Byte]])

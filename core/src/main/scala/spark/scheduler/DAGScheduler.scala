@@ -6,6 +6,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.reflect.ClassTag
 
 import spark._
 import spark.executor.TaskMetrics
@@ -215,7 +216,7 @@ class DAGScheduler(
    * The job is assumed to have at least one partition; zero partition jobs should be handled
    * without a JobSubmitted event.
    */
-  private[scheduler] def prepareJob[T, U: ClassManifest](
+  private[scheduler] def prepareJob[T, U: ClassTag](
       finalRdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
@@ -231,7 +232,7 @@ class DAGScheduler(
     return (toSubmit, waiter)
   }
 
-  def runJob[T, U: ClassManifest](
+  def runJob[T, U: ClassTag](
       finalRdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
@@ -326,7 +327,7 @@ class DAGScheduler(
       submitStage(stage)
     }
   }
-  
+
   /**
    * Check for waiting or failed stages which are now eligible for resubmission.
    * Ordinarily run on every iteration of the event loop.
@@ -712,7 +713,7 @@ class DAGScheduler(
     sizeBefore = shuffleToMapStage.size
     shuffleToMapStage.clearOldValues(cleanupTime)
     logInfo("shuffleToMapStage " + sizeBefore + " --> " + shuffleToMapStage.size)
-    
+
     sizeBefore = pendingTasks.size
     pendingTasks.clearOldValues(cleanupTime)
     logInfo("pendingTasks " + sizeBefore + " --> " + pendingTasks.size)

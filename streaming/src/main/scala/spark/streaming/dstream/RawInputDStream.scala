@@ -4,6 +4,8 @@ import spark.Logging
 import spark.storage.StorageLevel
 import spark.streaming.StreamingContext
 
+import scala.reflect.ClassTag
+
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, SocketChannel}
@@ -18,7 +20,7 @@ import java.util.concurrent.ArrayBlockingQueue
  * in the format that the system is configured with.
  */
 private[streaming]
-class RawInputDStream[T: ClassManifest](
+class RawInputDStream[T: ClassTag](
     @transient ssc_ : StreamingContext,
     host: String,
     port: Int,

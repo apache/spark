@@ -8,11 +8,13 @@ import spark.Partitioner
 import spark.SparkContext._
 import spark.storage.StorageLevel
 
-import scala.collection.mutable.ArrayBuffer
 import spark.streaming.{Duration, Interval, Time, DStream}
 
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 private[streaming]
-class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
+class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     parent: DStream[(K, V)],
     reduceFunc: (V, V) => V,
     invReduceFunc: (V, V) => V,
@@ -32,7 +34,7 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
-  // Reduce each batch of data using reduceByKey which will be further reduced by window 
+  // Reduce each batch of data using reduceByKey which will be further reduced by window
   // by ReducedWindowedDStream
   val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
 
@@ -153,5 +155,3 @@ class ReducedWindowedDStream[K: ClassManifest, V: ClassManifest](
     }
   }
 }
-
-

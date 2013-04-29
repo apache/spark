@@ -4,8 +4,10 @@ import spark.{RDD, Partitioner}
 import spark.SparkContext._
 import spark.streaming.{Duration, DStream, Time}
 
+import scala.reflect.ClassTag
+
 private[streaming]
-class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
+class ShuffledDStream[K: ClassTag, V: ClassTag, C: ClassTag](
     parent: DStream[(K,V)],
     createCombiner: V => C,
     mergeValue: (C, V) => C,

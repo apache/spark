@@ -12,13 +12,14 @@ import org.apache.avro.ipc.specific.SpecificResponder
 import org.apache.avro.ipc.NettyServer
 
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
 import java.net.InetSocketAddress
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
 
 private[streaming]
-class FlumeInputDStream[T: ClassManifest](
+class FlumeInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
   host: String,
   port: Int,

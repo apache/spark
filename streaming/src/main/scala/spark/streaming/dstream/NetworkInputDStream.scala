@@ -8,6 +8,7 @@ import spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
 import java.nio.ByteBuffer
 
@@ -28,7 +29,7 @@ import java.util.concurrent.ArrayBlockingQueue
  * @param ssc_ Streaming context that will execute this input stream
  * @tparam T Class type of the object of this stream
  */
-abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : StreamingContext)
+abstract class NetworkInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
   // This is an unique identifier that is used to match the network receiver with the
@@ -70,7 +71,7 @@ private[streaming] case class ReportError(msg: String) extends NetworkReceiverMe
  * Abstract class of a receiver that can be run on worker nodes to receive external data. See
  * [[spark.streaming.dstream.NetworkInputDStream]] for an explanation.
  */
-abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Logging {
+abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging {
 
   initLogging()
 

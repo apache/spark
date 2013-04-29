@@ -9,14 +9,16 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import scala.collection.mutable.{HashSet, HashMap}
+import scala.reflect.ClassTag
+
 import java.io.{ObjectInputStream, IOException}
 
 private[streaming]
-class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] : ClassManifest](
+class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : ClassTag](
     @transient ssc_ : StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
-    newFilesOnly: Boolean = true) 
+    newFilesOnly: Boolean = true)
   extends InputDStream[(K, V)](ssc_) {
 
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
@@ -37,7 +39,7 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
     }
     logDebug("LastModTime initialized to " + lastModTime + ", new files only = " + newFilesOnly)
   }
-  
+
   override def stop() { }
 
   /**
@@ -83,7 +85,7 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
           latestModTimeFiles += path.toString
           logDebug("Accepted " + path)
           return true
-        }        
+        }
       }
     }
     logDebug("Finding new files at time " + validTime + " for last mod time = " + lastModTime)
@@ -178,5 +180,3 @@ private[streaming]
 object FileInputDStream {
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 }
-
-

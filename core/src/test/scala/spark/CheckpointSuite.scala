@@ -1,5 +1,6 @@
 package spark
 
+import scala.reflect.ClassTag
 import org.scalatest.FunSuite
 import java.io.File
 import spark.rdd._
@@ -179,7 +180,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
    * not, but this is not done by default as usually the partitions do not refer to any RDD and
    * therefore never store the lineage.
    */
-  def testCheckpointing[U: ClassManifest](
+  def testCheckpointing[U: ClassTag](
       op: (RDD[Int]) => RDD[U],
       testRDDSize: Boolean = true,
       testRDDPartitionSize: Boolean = false
@@ -248,7 +249,7 @@ class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
    * RDDs partitions. So even if the parent RDD is checkpointed and its partitions changed,
    * this RDD will remember the partitions and therefore potentially the whole lineage.
    */
-  def testParentCheckpointing[U: ClassManifest](
+  def testParentCheckpointing[U: ClassTag](
       op: (RDD[Int]) => RDD[U],
       testRDDSize: Boolean,
       testRDDPartitionSize: Boolean
