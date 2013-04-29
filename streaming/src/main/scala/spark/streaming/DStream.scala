@@ -466,9 +466,7 @@ abstract class DStream[T: ClassTag] (
    * this DStream will be registered as an output stream and therefore materialized.
    */
   def foreach(foreachFunc: (RDD[T], Time) => Unit) {
-    val newStream = new ForEachDStream(this, context.sparkContext.clean(foreachFunc))
-    ssc.registerOutputStream(newStream)
-    newStream
+    ssc.registerOutputStream(new ForEachDStream(this, context.sparkContext.clean(foreachFunc)))
   }
 
   /**

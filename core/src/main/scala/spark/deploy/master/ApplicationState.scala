@@ -1,7 +1,6 @@
 package spark.deploy.master
 
-private[spark] object ApplicationState
-  extends Enumeration("WAITING", "RUNNING", "FINISHED", "FAILED") {
+private[spark] object ApplicationState extends Enumeration {
 
   type ApplicationState = Value
 

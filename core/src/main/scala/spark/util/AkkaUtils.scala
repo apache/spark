@@ -61,7 +61,7 @@ private[spark] object AkkaUtils {
    * Creates a Spray HTTP server bound to a given IP and port with a given Spray Route object to
    * handle requests. Returns the bound port or throws a SparkException on failure.
    */
-  def startSprayServer(actorSystem: ActorSystem, ip: String, port: Int, route: Route) {
+  def startSprayServer(actorSystem: ActorSystem, ip: String, port: Int, route: Route) = {
     val ioWorker    = IOExtension(actorSystem).ioBridge()
     val httpService = actorSystem.actorOf(Props(HttpServiceActor(route)))
     val server      = actorSystem.actorOf(
@@ -72,7 +72,7 @@ private[spark] object AkkaUtils {
     try {
       Await.result(future, timeout) match {
         case bound: HttpServer.Bound =>
-          return server
+          server
         case other: Any =>
           throw new SparkException("Failed to bind web UI to port " + port + ": " + other)
       }

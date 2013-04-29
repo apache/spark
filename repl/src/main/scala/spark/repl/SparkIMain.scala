@@ -809,7 +809,7 @@ import spark.Logging
       // val readRoot  = getRequiredModule(readPath)   // the outermost wrapper
       // MATEI: Changed this to getClass because the root object is no longer a module (Scala singleton object)
 
-      val readRoot  = definitions.getClass(newTypeName(readPath))   // the outermost wrapper
+      val readRoot  = rootMirror.getClassByName(newTypeName(readPath))   // the outermost wrapper
       (accessPath split '.').foldLeft(readRoot: Symbol) {
         case (sym, "")    => sym
         case (sym, name)  => afterTyper(termMember(sym, name))
