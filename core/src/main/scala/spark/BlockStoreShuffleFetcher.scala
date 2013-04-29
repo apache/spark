@@ -5,7 +5,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
 import spark.storage.BlockManagerId
-import util.CompletionIterator
+import spark.util.CompletionIterator
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
   override def fetch[K, V](shuffleId: Int, reduceId: Int, metrics: TaskMetrics) = {
