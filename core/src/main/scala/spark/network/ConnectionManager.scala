@@ -255,30 +255,30 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
         }
 
         val selectedKeysCount =
-        try {
-          selector.select()
-        } catch {
-          case e: CancelledKeyException => {
-            // Some keys within the selectors list are invalid/closed. clear them.
-            val allKeys = selector.keys().iterator()
+          try {
+            selector.select()
+          } catch {
+            case e: CancelledKeyException => {
+              // Some keys within the selectors list are invalid/closed. clear them.
+              val allKeys = selector.keys().iterator()
 
-            while (allKeys.hasNext()) {
-              val key = allKeys.next()
-              try {
-                if (! key.isValid) {
-                  logInfo("Key not valid ? " + key)
-                  throw new CancelledKeyException()
-                }
-              } catch {
-                case e: CancelledKeyException => {
-                  logInfo("key already cancelled ? " + key, e)
-                  triggerForceCloseByException(key, e)
+              while (allKeys.hasNext()) {
+                val key = allKeys.next()
+                try {
+                  if (! key.isValid) {
+                    logInfo("Key not valid ? " + key)
+                    throw new CancelledKeyException()
+                  }
+                } catch {
+                  case e: CancelledKeyException => {
+                    logInfo("key already cancelled ? " + key, e)
+                    triggerForceCloseByException(key, e)
+                  }
                 }
               }
             }
+            0
           }
-          0
-        }
 
         if (selectedKeysCount == 0) {
           logDebug("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
