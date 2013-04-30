@@ -1,10 +1,5 @@
 package spark.storage
 
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
-import java.util.concurrent.atomic.AtomicInteger
-
-import scala.collection.mutable.ArrayBuffer
-
 import spark.serializer.Serializer
 
 
@@ -14,8 +9,6 @@ class ShuffleWriterGroup(val id: Int, val writers: Array[BlockObjectWriter])
 
 private[spark]
 class ShuffleBlockManager(blockManager: BlockManager) {
-
-  val shuffles = new ConcurrentHashMap[Int, Shuffle]
 
   def forShuffle(shuffleId: Int, numBuckets: Int, serializer: Serializer): Shuffle = {
     new Shuffle(shuffleId, numBuckets, serializer)

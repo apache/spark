@@ -296,11 +296,8 @@ class BlockManager(
    * never deletes (recent) items.
    */
   def getLocalFromDisk(blockId: String, serializer: Serializer): Option[Iterator[Any]] = {
-    diskStore.getValues(blockId, serializer) match {
-      case Some(iterator) => Some(iterator)
-      case None =>
-        throw new Exception("Block " + blockId + " not found on disk, though it should be")
-    }
+    diskStore.getValues(blockId, serializer).orElse(
+      sys.error("Block " + blockId + " not found on disk, though it should be"))
   }
 
   /**
