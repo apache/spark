@@ -513,8 +513,9 @@ class BlockManager(
    * This is currently used for writing shuffle files out. Callers should handle error
    * cases.
    */
-  def getDiskBlockWriter(blockId: String, serializer: Serializer): BlockObjectWriter = {
-    val writer = diskStore.getBlockWriter(blockId, serializer)
+  def getDiskBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int)
+    : BlockObjectWriter = {
+    val writer = diskStore.getBlockWriter(blockId, serializer, bufferSize)
     writer.registerCloseEventHandler(() => {
       val myInfo = new BlockInfo(StorageLevel.DISK_ONLY, false)
       blockInfo.put(blockId, myInfo)

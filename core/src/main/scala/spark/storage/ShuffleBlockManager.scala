@@ -25,9 +25,10 @@ class ShuffleBlockManager(blockManager: BlockManager) {
 
     // Get a group of writers for a map task.
     def acquireWriters(mapId: Int): ShuffleWriterGroup = {
+      val bufferSize = System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
       val writers = Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
         val blockId = ShuffleBlockManager.blockId(shuffleId, bucketId, mapId)
-        blockManager.getDiskBlockWriter(blockId, serializer).open()
+        blockManager.getDiskBlockWriter(blockId, serializer, bufferSize).open()
       }
       new ShuffleWriterGroup(mapId, writers)
     }

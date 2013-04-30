@@ -21,7 +21,7 @@ import spark.serializer.{Serializer, SerializationStream}
 private class DiskStore(blockManager: BlockManager, rootDirs: String)
   extends BlockStore(blockManager) {
 
-  class DiskBlockObjectWriter(blockId: String, serializer: Serializer)
+  class DiskBlockObjectWriter(blockId: String, serializer: Serializer, bufferSize: Int)
     extends BlockObjectWriter(blockId) {
 
     private val f: File = createFile(blockId /*, allowAppendExisting */)
@@ -32,7 +32,6 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     private var validLength = 0L
 
     override def open(): DiskBlockObjectWriter = {
-      println("------------------------------------------------- opening " + f)
       repositionableStream = new FastBufferedOutputStream(new FileOutputStream(f))
       bs = blockManager.wrapForCompression(blockId, repositionableStream)
       objOut = serializer.newInstance().serializeStream(bs)
@@ -55,7 +54,8 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     // Return the number of bytes written for this commit.
     override def commit(): Long = {
       bs.flush()
-      repositionableStream.position()
+      validLength = repositionableStream.position()
+      validLength
     }
 
     override def revertPartialWrites() {
@@ -86,8 +86,8 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   addShutdownHook()
 
-  def getBlockWriter(blockId: String, serializer: Serializer): BlockObjectWriter = {
-    new DiskBlockObjectWriter(blockId, serializer)
+  def getBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int): BlockObjectWriter = {
+    new DiskBlockObjectWriter(blockId, serializer, bufferSize)
   }
 
   override def getSize(blockId: String): Long = {
