@@ -86,8 +86,14 @@ private[spark] class ShuffleMapTask(
 
   protected def this() = this(0, null, null, 0, null)
 
-  // data locality is on a per host basis, not hyper specific to container (host:port). Unique on set of hosts.
-  private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.map(loc => Utils.parseHostPort(loc)._1).toSet.toSeq
+  // Data locality is on a per host basis, not hyper specific to container (host:port).
+  // Unique on set of hosts.
+  // TODO(rxin): The above statement seems problematic. Even if partitions are on the same host,
+  // the worker would still need to serialize / deserialize those data when they are in
+  // different jvm processes. Often that is very costly ...
+  @transient
+  private val preferredLocs: Seq[String] =
+    if (locs == null) Nil else locs.map(loc => Utils.parseHostPort(loc)._1).toSet.toSeq
 
   {
     // DEBUG code
@@ -131,31 +137,32 @@ private[spark] class ShuffleMapTask(
 
     val taskContext = new TaskContext(stageId, partition, attemptId)
     metrics = Some(taskContext.taskMetrics)
+
+    val blockManager = SparkEnv.get.blockManager
+    var shuffle: ShuffleBlockManager#Shuffle = null
+    var buckets: ShuffleWriterGroup = null
+
     try {
       // Obtain all the block writers for shuffle blocks.
-      val blockManager = SparkEnv.get.blockManager
-      val buckets = Array.tabulate[BlockObjectWriter](numOutputSplits) { bucketId =>
-        val blockId = "shuffle_" + dep.shuffleId + "_" + partition + "_" + bucketId
-        blockManager.getDiskBlockWriter(blockId, Serializer.get(dep.serializerClass))
-      }
+      val ser = Serializer.get(dep.serializerClass)
+      shuffle = blockManager.shuffleBlockManager.forShuffle(dep.shuffleId, numOutputSplits, ser)
+      buckets = shuffle.acquireWriters(partition)
 
       // Write the map output to its associated buckets.
       for (elem <- rdd.iterator(split, taskContext)) {
         val pair = elem.asInstanceOf[(Any, Any)]
         val bucketId = dep.partitioner.getPartition(pair._1)
-        buckets(bucketId).write(pair)
+        buckets.writers(bucketId).write(pair)
       }
 
-      // Close the bucket writers and get the sizes of each block.
-      val compressedSizes = new Array[Byte](numOutputSplits)
-      var i = 0
+      // Commit the writes. Get the size of each bucket block (total block size).
       var totalBytes = 0L
-      while (i < numOutputSplits) {
-        buckets(i).close()
-        val size = buckets(i).size()
+      val compressedSizes: Array[Byte] = buckets.writers.map { writer: BlockObjectWriter =>
+        writer.commit()
+        writer.close()
+        val size = writer.size()
         totalBytes += size
-        compressedSizes(i) = MapOutputTracker.compressSize(size)
-        i += 1
+        MapOutputTracker.compressSize(size)
       }
 
       // Update shuffle metrics.
@@ -164,7 +171,18 @@ private[spark] class ShuffleMapTask(
       metrics.get.shuffleWriteMetrics = Some(shuffleMetrics)
 
       return new MapStatus(blockManager.blockManagerId, compressedSizes)
+    } catch { case e: Exception =>
+      // If there is an exception from running the task, revert the partial writes
+      // and throw the exception upstream to Spark.
+      if (buckets != null) {
+        buckets.writers.foreach(_.revertPartialWrites())
+      }
+      throw e
     } finally {
+      // Release the writers back to the shuffle block manager.
+      if (shuffle != null && buckets != null) {
+        shuffle.releaseWriters(buckets)
+      }
       // Execute the callbacks on task completion.
       taskContext.executeOnCompleteCallbacks()
     }

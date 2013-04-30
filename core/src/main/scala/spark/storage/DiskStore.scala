@@ -12,7 +12,7 @@ import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import spark.Utils
 import spark.executor.ExecutorExitCode
-import spark.serializer.Serializer
+import spark.serializer.{Serializer, SerializationStream}
 
 
 /**
@@ -21,35 +21,58 @@ import spark.serializer.Serializer
 private class DiskStore(blockManager: BlockManager, rootDirs: String)
   extends BlockStore(blockManager) {
 
-  private val mapMode = MapMode.READ_ONLY
-  private var mapOpenMode = "r"
-
   class DiskBlockObjectWriter(blockId: String, serializer: Serializer)
     extends BlockObjectWriter(blockId) {
 
     private val f: File = createFile(blockId /*, allowAppendExisting */)
-    private val bs: OutputStream = blockManager.wrapForCompression(blockId,
-      new FastBufferedOutputStream(new FileOutputStream(f)))
-    private val objOut = serializer.newInstance().serializeStream(bs)
 
-    private var _size: Long = -1L
+    private var repositionableStream: FastBufferedOutputStream = null
+    private var bs: OutputStream = null
+    private var objOut: SerializationStream = null
+    private var validLength = 0L
 
-    override def write(value: Any) {
-      objOut.writeObject(value)
+    override def open(): DiskBlockObjectWriter = {
+      println("------------------------------------------------- opening " + f)
+      repositionableStream = new FastBufferedOutputStream(new FileOutputStream(f))
+      bs = blockManager.wrapForCompression(blockId, repositionableStream)
+      objOut = serializer.newInstance().serializeStream(bs)
+      this
     }
 
     override def close() {
       objOut.close()
       bs.close()
+      objOut = null
+      bs = null
+      repositionableStream = null
+      // Invoke the close callback handler.
       super.close()
     }
 
-    override def size(): Long = {
-      if (_size < 0) {
-        _size = f.length()
-      }
-      _size
+    override def isOpen: Boolean = objOut != null
+
+    // Flush the partial writes, and set valid length to be the length of the entire file.
+    // Return the number of bytes written for this commit.
+    override def commit(): Long = {
+      bs.flush()
+      repositionableStream.position()
     }
+
+    override def revertPartialWrites() {
+      // Flush the outstanding writes and delete the file.
+      objOut.close()
+      bs.close()
+      objOut = null
+      bs = null
+      repositionableStream = null
+      f.delete()
+    }
+
+    override def write(value: Any) {
+      objOut.writeObject(value)
+    }
+
+    override def size(): Long = validLength
   }
 
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
@@ -90,9 +113,9 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   private def getFileBytes(file: File): ByteBuffer = {
     val length = file.length()
-    val channel = new RandomAccessFile(file, mapOpenMode).getChannel()
+    val channel = new RandomAccessFile(file, "r").getChannel()
     val buffer = try {
-      channel.map(mapMode, 0, length)
+      channel.map(MapMode.READ_ONLY, 0, length)
     } finally {
       channel.close()
     }
@@ -230,12 +253,14 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   }
 
   private def addShutdownHook() {
-    localDirs.foreach(localDir => Utils.registerShutdownDeleteDir(localDir) )
+    localDirs.foreach(localDir => Utils.registerShutdownDeleteDir(localDir))
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark local dirs") {
       override def run() {
         logDebug("Shutdown hook called")
         try {
-          localDirs.foreach(localDir => if (! Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir))
+          localDirs.foreach { localDir =>
+            if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
+          }
         } catch {
           case t: Throwable => logError("Exception while deleting local spark dirs", t)
         }

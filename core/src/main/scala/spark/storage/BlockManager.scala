@@ -88,6 +88,8 @@ class BlockManager(
     }
   }
 
+  val shuffleBlockManager = new ShuffleBlockManager(this)
+
   private val blockInfo = new TimeStampedHashMap[String, BlockInfo]
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
@@ -391,7 +393,7 @@ class BlockManager(
 
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
-    if (blockId.startsWith("shuffle_")) {
+    if (ShuffleBlockManager.isShuffle(blockId)) {
       return diskStore.getBytes(blockId) match {
         case Some(bytes) =>
           Some(bytes)
@@ -508,12 +510,12 @@ class BlockManager(
 
   /**
    * A short circuited method to get a block writer that can write data directly to disk.
-   * This is currently used for writing shuffle files out.
+   * This is currently used for writing shuffle files out. Callers should handle error
+   * cases.
    */
   def getDiskBlockWriter(blockId: String, serializer: Serializer): BlockObjectWriter = {
     val writer = diskStore.getBlockWriter(blockId, serializer)
     writer.registerCloseEventHandler(() => {
-      // TODO(rxin): This doesn't handle error cases.
       val myInfo = new BlockInfo(StorageLevel.DISK_ONLY, false)
       blockInfo.put(blockId, myInfo)
       myInfo.markReady(writer.size())
@@ -872,7 +874,7 @@ class BlockManager(
   }
 
   def shouldCompress(blockId: String): Boolean = {
-    if (blockId.startsWith("shuffle_")) {
+    if (ShuffleBlockManager.isShuffle(blockId)) {
       compressShuffle
     } else if (blockId.startsWith("broadcast_")) {
       compressBroadcast
@@ -887,7 +889,11 @@ class BlockManager(
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: OutputStream): OutputStream = {
-    if (shouldCompress(blockId)) new LZFOutputStream(s) else s
+    if (shouldCompress(blockId)) {
+      (new LZFOutputStream(s)).setFinishBlockOnFlush(true)
+    } else {
+      s
+    }
   }
 
   /**
