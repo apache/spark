@@ -254,7 +254,32 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
           }
         }
 
-        val selectedKeysCount = selector.select()
+        val selectedKeysCount =
+          try {
+            selector.select()
+          } catch {
+            case e: CancelledKeyException => {
+              // Some keys within the selectors list are invalid/closed. clear them.
+              val allKeys = selector.keys().iterator()
+
+              while (allKeys.hasNext()) {
+                val key = allKeys.next()
+                try {
+                  if (! key.isValid) {
+                    logInfo("Key not valid ? " + key)
+                    throw new CancelledKeyException()
+                  }
+                } catch {
+                  case e: CancelledKeyException => {
+                    logInfo("key already cancelled ? " + key, e)
+                    triggerForceCloseByException(key, e)
+                  }
+                }
+              }
+            }
+            0
+          }
+
         if (selectedKeysCount == 0) {
           logDebug("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
         }
@@ -262,31 +287,36 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
           logInfo("Selector thread was interrupted!")
           return
         }
-        
-        val selectedKeys = selector.selectedKeys().iterator()
-        while (selectedKeys.hasNext()) {
-          val key = selectedKeys.next
-          selectedKeys.remove()
-          try {
-            if (key.isValid) {
-              if (key.isAcceptable) {
-                acceptConnection(key)
-              } else
-              if (key.isConnectable) {
-                triggerConnect(key)
-              } else
-              if (key.isReadable) {
-                triggerRead(key)
-              } else
-              if (key.isWritable) {
-                triggerWrite(key)
+
+        if (0 != selectedKeysCount) {
+          val selectedKeys = selector.selectedKeys().iterator()
+          while (selectedKeys.hasNext()) {
+            val key = selectedKeys.next
+            selectedKeys.remove()
+            try {
+              if (key.isValid) {
+                if (key.isAcceptable) {
+                  acceptConnection(key)
+                } else
+                if (key.isConnectable) {
+                  triggerConnect(key)
+                } else
+                if (key.isReadable) {
+                  triggerRead(key)
+                } else
+                if (key.isWritable) {
+                  triggerWrite(key)
+                }
+              } else {
+                logInfo("Key not valid ? " + key)
+                throw new CancelledKeyException()
               }
-            }
-          } catch {
-            // weird, but we saw this happening - even though key.isValid was true, key.isAcceptable would throw CancelledKeyException.
-            case e: CancelledKeyException => {
-              logInfo("key already cancelled ? " + key, e)
-              triggerForceCloseByException(key, e)
+            } catch {
+              // weird, but we saw this happening - even though key.isValid was true, key.isAcceptable would throw CancelledKeyException.
+              case e: CancelledKeyException => {
+                logInfo("key already cancelled ? " + key, e)
+                triggerForceCloseByException(key, e)
+              }
             }
           }
         }

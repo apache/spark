@@ -29,8 +29,6 @@ project/build/target/
 project/plugins/target/
 project/plugins/lib_managed/
 project/plugins/src_managed/
-logs/
-log/
 spark-tests.log
 streaming-tests.log
 dependency-reduced-pom.xml
