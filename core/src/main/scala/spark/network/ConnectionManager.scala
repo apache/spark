@@ -281,6 +281,9 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
               if (key.isWritable) {
                 triggerWrite(key)
               }
+            } else {
+              logInfo("Key not valid ? " + key)
+              throw new CancelledKeyException()
             }
           } catch {
             // weird, but we saw this happening - even though key.isValid was true, key.isAcceptable would throw CancelledKeyException.
