@@ -49,11 +49,6 @@ class ShuffleReadMetrics extends Serializable {
   var localBlocksFetched: Int = _
 
   /**
-   * Total time to read shuffle data
-   */
-  var shuffleReadMillis: Long = _
-
-  /**
    * Total time that is spent blocked waiting for shuffle to fetch data
    */
   var fetchWaitTime: Long = _
