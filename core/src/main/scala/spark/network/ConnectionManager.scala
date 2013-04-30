@@ -232,24 +232,41 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
         while(!keyInterestChangeRequests.isEmpty) {
           val (key, ops) = keyInterestChangeRequests.dequeue
-          val connection = connectionsByKey.getOrElse(key, null)
-          if (connection != null) {
-            val lastOps = key.interestOps()
-            key.interestOps(ops)
 
-            // hot loop - prevent materialization of string if trace not enabled.
-            if (isTraceEnabled()) {
-              def intToOpStr(op: Int): String = {
-                val opStrs = ArrayBuffer[String]()
-                if ((op & SelectionKey.OP_READ) != 0) opStrs += "READ"
-                if ((op & SelectionKey.OP_WRITE) != 0) opStrs += "WRITE"
-                if ((op & SelectionKey.OP_CONNECT) != 0) opStrs += "CONNECT"
-                if ((op & SelectionKey.OP_ACCEPT) != 0) opStrs += "ACCEPT"
-                if (opStrs.size > 0) opStrs.reduceLeft(_ + " | " + _) else " "
+          try {
+            if (key.isValid) {
+              val connection = connectionsByKey.getOrElse(key, null)
+              if (connection != null) {
+                val lastOps = key.interestOps()
+                key.interestOps(ops)
+
+                // hot loop - prevent materialization of string if trace not enabled.
+                if (isTraceEnabled()) {
+                  def intToOpStr(op: Int): String = {
+                    val opStrs = ArrayBuffer[String]()
+                    if ((op & SelectionKey.OP_READ) != 0) opStrs += "READ"
+                    if ((op & SelectionKey.OP_WRITE) != 0) opStrs += "WRITE"
+                    if ((op & SelectionKey.OP_CONNECT) != 0) opStrs += "CONNECT"
+                    if ((op & SelectionKey.OP_ACCEPT) != 0) opStrs += "ACCEPT"
+                    if (opStrs.size > 0) opStrs.reduceLeft(_ + " | " + _) else " "
+                  }
+
+                  logTrace("Changed key for connection to [" + connection.getRemoteConnectionManagerId()  +
+                    "] changed from [" + intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
+                }
               }
-
-              logTrace("Changed key for connection to [" + connection.getRemoteConnectionManagerId()  +
-                "] changed from [" + intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
+            } else {
+              logInfo("Key not valid ? " + key)
+              throw new CancelledKeyException()
+            }
+          } catch {
+            case e: CancelledKeyException => {
+              logInfo("key already cancelled ? " + key, e)
+              triggerForceCloseByException(key, e)
+            }
+            case e: Exception => {
+              logError("Exception processing key " + key, e)
+              triggerForceCloseByException(key, e)
             }
           }
         }
@@ -258,6 +275,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
           try {
             selector.select()
           } catch {
+            // Explicitly only dealing with CancelledKeyException here since other exceptions should be dealt with differently.
             case e: CancelledKeyException => {
               // Some keys within the selectors list are invalid/closed. clear them.
               val allKeys = selector.keys().iterator()
@@ -272,6 +290,10 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
                 } catch {
                   case e: CancelledKeyException => {
                     logInfo("key already cancelled ? " + key, e)
+                    triggerForceCloseByException(key, e)
+                  }
+                  case e: Exception => {
+                    logError("Exception processing key " + key, e)
                     triggerForceCloseByException(key, e)
                   }
                 }
@@ -315,6 +337,10 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
               // weird, but we saw this happening - even though key.isValid was true, key.isAcceptable would throw CancelledKeyException.
               case e: CancelledKeyException => {
                 logInfo("key already cancelled ? " + key, e)
+                triggerForceCloseByException(key, e)
+              }
+              case e: Exception => {
+                logError("Exception processing key " + key, e)
                 triggerForceCloseByException(key, e)
               }
             }
