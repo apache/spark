@@ -264,6 +264,10 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
               logInfo("key already cancelled ? " + key, e)
               triggerForceCloseByException(key, e)
             }
+            case e: Exception => {
+              logError("Exception processing key " + key, e)
+              triggerForceCloseByException(key, e)
+            }
           }
         }
 
@@ -271,6 +275,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
           try {
             selector.select()
           } catch {
+            // Explicitly only dealing with CancelledKeyException here since other exceptions should be dealt with differently.
             case e: CancelledKeyException => {
               // Some keys within the selectors list are invalid/closed. clear them.
               val allKeys = selector.keys().iterator()
@@ -285,6 +290,10 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
                 } catch {
                   case e: CancelledKeyException => {
                     logInfo("key already cancelled ? " + key, e)
+                    triggerForceCloseByException(key, e)
+                  }
+                  case e: Exception => {
+                    logError("Exception processing key " + key, e)
                     triggerForceCloseByException(key, e)
                   }
                 }
@@ -328,6 +337,10 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
               // weird, but we saw this happening - even though key.isValid was true, key.isAcceptable would throw CancelledKeyException.
               case e: CancelledKeyException => {
                 logInfo("key already cancelled ? " + key, e)
+                triggerForceCloseByException(key, e)
+              }
+              case e: Exception => {
+                logError("Exception processing key " + key, e)
                 triggerForceCloseByException(key, e)
               }
             }
