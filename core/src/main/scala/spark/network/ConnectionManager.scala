@@ -188,6 +188,38 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
     } )
   }
 
+  // MUST be called within selector loop - else deadlock.
+  private def triggerForceCloseByException(key: SelectionKey, e: Exception) {
+    try {
+      key.interestOps(0)
+    } catch {
+      // ignore exceptions
+      case e: Exception => logDebug("Ignoring exception", e)
+    }
+
+    val conn = connectionsByKey.getOrElse(key, null)
+    if (conn == null) return
+
+    // Pushing to connect threadpool
+    handleConnectExecutor.execute(new Runnable {
+      override def run() {
+        try {
+          conn.callOnExceptionCallback(e)
+        } catch {
+          // ignore exceptions
+          case e: Exception => logDebug("Ignoring exception", e)
+        }
+        try {
+          conn.close()
+        } catch {
+          // ignore exceptions
+          case e: Exception => logDebug("Ignoring exception", e)
+        }
+      }
+    })
+  }
+
+
   def run() {
     try {
       while(!selectorThread.isInterrupted) {
@@ -235,18 +267,26 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
         while (selectedKeys.hasNext()) {
           val key = selectedKeys.next
           selectedKeys.remove()
-          if (key.isValid) {
-            if (key.isAcceptable) {
-              acceptConnection(key)
-            } else 
-            if (key.isConnectable) {
-              triggerConnect(key)
-            } else
-            if (key.isReadable) {
-              triggerRead(key)
-            } else
-            if (key.isWritable) {
-              triggerWrite(key)
+          try {
+            if (key.isValid) {
+              if (key.isAcceptable) {
+                acceptConnection(key)
+              } else
+              if (key.isConnectable) {
+                triggerConnect(key)
+              } else
+              if (key.isReadable) {
+                triggerRead(key)
+              } else
+              if (key.isWritable) {
+                triggerWrite(key)
+              }
+            }
+          } catch {
+            // weird, but we saw this happening - even though key.isValid was true, key.isAcceptable would throw CancelledKeyException.
+            case e: CancelledKeyException => {
+              logInfo("key already cancelled ? " + key, e)
+              triggerForceCloseByException(key, e)
             }
           }
         }
