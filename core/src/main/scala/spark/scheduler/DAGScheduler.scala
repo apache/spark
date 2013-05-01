@@ -117,7 +117,7 @@ class DAGScheduler(
   private def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
-      val locs = BlockManager.blockIdsToExecutorLocations(blockIds, env)
+      val locs = BlockManager.blockIdsToExecutorLocations(blockIds, env, blockManagerMaster)
       cacheLocs(rdd.id) = blockIds.map(locs.getOrElse(_, Nil))
     }
     cacheLocs(rdd.id)
