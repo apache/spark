@@ -35,7 +35,7 @@ class SizeEstimatorSuite
   var oldOops: String = _
 
   override def beforeAll() {
-    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case 
+    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     oldArch = System.setProperty("os.arch", "amd64")
     oldOops = System.setProperty("spark.test.useCompressedOops", "true")
   }
@@ -46,54 +46,54 @@ class SizeEstimatorSuite
   }
 
   test("simple classes") {
-    expect(16)(SizeEstimator.estimate(new DummyClass1))
-    expect(16)(SizeEstimator.estimate(new DummyClass2))
-    expect(24)(SizeEstimator.estimate(new DummyClass3))
-    expect(24)(SizeEstimator.estimate(new DummyClass4(null)))
-    expect(48)(SizeEstimator.estimate(new DummyClass4(new DummyClass3)))
+    expectResult(16)(SizeEstimator.estimate(new DummyClass1))
+    expectResult(16)(SizeEstimator.estimate(new DummyClass2))
+    expectResult(24)(SizeEstimator.estimate(new DummyClass3))
+    expectResult(24)(SizeEstimator.estimate(new DummyClass4(null)))
+    expectResult(48)(SizeEstimator.estimate(new DummyClass4(new DummyClass3)))
   }
 
   // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
   // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("strings") {
-    expect(40)(SizeEstimator.estimate(DummyString("")))
-    expect(48)(SizeEstimator.estimate(DummyString("a")))
-    expect(48)(SizeEstimator.estimate(DummyString("ab")))
-    expect(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
+    expectResult(40)(SizeEstimator.estimate(DummyString("")))
+    expectResult(48)(SizeEstimator.estimate(DummyString("a")))
+    expectResult(48)(SizeEstimator.estimate(DummyString("ab")))
+    expectResult(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
   }
 
   test("primitive arrays") {
-    expect(32)(SizeEstimator.estimate(new Array[Byte](10)))
-    expect(40)(SizeEstimator.estimate(new Array[Char](10)))
-    expect(40)(SizeEstimator.estimate(new Array[Short](10)))
-    expect(56)(SizeEstimator.estimate(new Array[Int](10)))
-    expect(96)(SizeEstimator.estimate(new Array[Long](10)))
-    expect(56)(SizeEstimator.estimate(new Array[Float](10)))
-    expect(96)(SizeEstimator.estimate(new Array[Double](10)))
-    expect(4016)(SizeEstimator.estimate(new Array[Int](1000)))
-    expect(8016)(SizeEstimator.estimate(new Array[Long](1000)))
+    expectResult(32)(SizeEstimator.estimate(new Array[Byte](10)))
+    expectResult(40)(SizeEstimator.estimate(new Array[Char](10)))
+    expectResult(40)(SizeEstimator.estimate(new Array[Short](10)))
+    expectResult(56)(SizeEstimator.estimate(new Array[Int](10)))
+    expectResult(96)(SizeEstimator.estimate(new Array[Long](10)))
+    expectResult(56)(SizeEstimator.estimate(new Array[Float](10)))
+    expectResult(96)(SizeEstimator.estimate(new Array[Double](10)))
+    expectResult(4016)(SizeEstimator.estimate(new Array[Int](1000)))
+    expectResult(8016)(SizeEstimator.estimate(new Array[Long](1000)))
   }
 
   test("object arrays") {
     // Arrays containing nulls should just have one pointer per element
-    expect(56)(SizeEstimator.estimate(new Array[String](10)))
-    expect(56)(SizeEstimator.estimate(new Array[AnyRef](10)))
+    expectResult(56)(SizeEstimator.estimate(new Array[String](10)))
+    expectResult(56)(SizeEstimator.estimate(new Array[AnyRef](10)))
 
     // For object arrays with non-null elements, each object should take one pointer plus
     // however many bytes that class takes. (Note that Array.fill calls the code in its
     // second parameter separately for each object, so we get distinct objects.)
-    expect(216)(SizeEstimator.estimate(Array.fill(10)(new DummyClass1))) 
-    expect(216)(SizeEstimator.estimate(Array.fill(10)(new DummyClass2))) 
-    expect(296)(SizeEstimator.estimate(Array.fill(10)(new DummyClass3))) 
-    expect(56)(SizeEstimator.estimate(Array(new DummyClass1, new DummyClass2)))
+    expectResult(216)(SizeEstimator.estimate(Array.fill(10)(new DummyClass1)))
+    expectResult(216)(SizeEstimator.estimate(Array.fill(10)(new DummyClass2)))
+    expectResult(296)(SizeEstimator.estimate(Array.fill(10)(new DummyClass3)))
+    expectResult(56)(SizeEstimator.estimate(Array(new DummyClass1, new DummyClass2)))
 
     // Past size 100, our samples 100 elements, but we should still get the right size.
-    expect(28016)(SizeEstimator.estimate(Array.fill(1000)(new DummyClass3)))
+    expectResult(28016)(SizeEstimator.estimate(Array.fill(1000)(new DummyClass3)))
 
     // If an array contains the *same* element many times, we should only count it once.
     val d1 = new DummyClass1
-    expect(72)(SizeEstimator.estimate(Array.fill(10)(d1))) // 10 pointers plus 8-byte object
-    expect(432)(SizeEstimator.estimate(Array.fill(100)(d1))) // 100 pointers plus 8-byte object
+    expectResult(72)(SizeEstimator.estimate(Array.fill(10)(d1))) // 10 pointers plus 8-byte object
+    expectResult(432)(SizeEstimator.estimate(Array.fill(100)(d1))) // 100 pointers plus 8-byte object
 
     // Same thing with huge array containing the same element many times. Note that this won't
     // return exactly 4032 because it can't tell that *all* the elements will equal the first
@@ -111,10 +111,10 @@ class SizeEstimatorSuite
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
-    expect(40)(SizeEstimator.estimate(DummyString("")))
-    expect(48)(SizeEstimator.estimate(DummyString("a")))
-    expect(48)(SizeEstimator.estimate(DummyString("ab")))
-    expect(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
+    expectResult(40)(SizeEstimator.estimate(DummyString("")))
+    expectResult(48)(SizeEstimator.estimate(DummyString("a")))
+    expectResult(48)(SizeEstimator.estimate(DummyString("ab")))
+    expectResult(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
 
     resetOrClear("os.arch", arch)
   }
@@ -128,10 +128,10 @@ class SizeEstimatorSuite
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
-    expect(56)(SizeEstimator.estimate(DummyString("")))
-    expect(64)(SizeEstimator.estimate(DummyString("a")))
-    expect(64)(SizeEstimator.estimate(DummyString("ab")))
-    expect(72)(SizeEstimator.estimate(DummyString("abcdefgh")))
+    expectResult(56)(SizeEstimator.estimate(DummyString("")))
+    expectResult(64)(SizeEstimator.estimate(DummyString("a")))
+    expectResult(64)(SizeEstimator.estimate(DummyString("ab")))
+    expectResult(72)(SizeEstimator.estimate(DummyString("abcdefgh")))
 
     resetOrClear("os.arch", arch)
     resetOrClear("spark.test.useCompressedOops", oops)
