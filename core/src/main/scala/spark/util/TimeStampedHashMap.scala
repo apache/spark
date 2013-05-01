@@ -58,7 +58,7 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() with spark.Logging {
   }
 
   override def filter(p: ((A, B)) => Boolean): Map[A, B] = {
-    JavaConversions.asScalaConcurrentMap(internalMap).map(kv => (kv._1, kv._2._1)).filter(p)
+    JavaConversions.mapAsScalaConcurrentMap(internalMap).map(kv => (kv._1, kv._2._1)).filter(p)
   }
 
   override def empty: Map[A, B] = new TimeStampedHashMap[A, B]()
