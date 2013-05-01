@@ -4,7 +4,7 @@ import java.io.{InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet, Queue}
 import scala.collection.JavaConversions._
 
 import akka.actor.{ActorSystem, Cancellable, Props}
@@ -272,22 +272,11 @@ class BlockManager(
 
 
   /**
-   * Get locations of the block.
-   */
-  def getLocations(blockId: String): Seq[String] = {
-    val startTimeMs = System.currentTimeMillis
-    var managers = master.getLocations(blockId)
-    val locations = managers.map(_.hostPort)
-    logDebug("Got block locations in " + Utils.getUsedTimeMs(startTimeMs))
-    return locations
-  }
-
-  /**
    * Get locations of an array of blocks.
    */
-  def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
+  def getLocationBlockIds(blockIds: Array[String]): Array[Seq[BlockManagerId]] = {
     val startTimeMs = System.currentTimeMillis
-    val locations = master.getLocations(blockIds).map(_.map(_.hostPort).toSeq).toArray
+    val locations = master.getLocations(blockIds).toArray
     logDebug("Got multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
@@ -947,6 +936,32 @@ object BlockManager extends Logging {
       }
     }
   }
+
+  def blockIdsToExecutorLocations(blockIds: Array[String], env: SparkEnv): HashMap[String, List[String]] = {
+    val blockManager = env.blockManager
+    /*val locations = blockIds.map(id => blockManager.getLocations(id))*/
+    val locationBlockIds = blockManager.getLocationBlockIds(blockIds)
+
+    // Convert from block master locations to executor locations (we need that for task scheduling)
+    val executorLocations = new HashMap[String, List[String]]()
+    for (i <- 0 until blockIds.length) {
+      val blockId = blockIds(i)
+      val blockLocations = locationBlockIds(i)
+
+      val executors = new HashSet[String]()
+
+      for (bkLocation <- blockLocations) {
+        val executorHostPort = env.resolveExecutorIdToHostPort(bkLocation.executorId, bkLocation.host)
+        executors += executorHostPort
+        // logInfo("bkLocation = " + bkLocation + ", executorHostPort = " + executorHostPort)
+      }
+
+      executorLocations.put(blockId, executors.toSeq.toList)
+    }
+
+    executorLocations
+  }
+
 }
 
 class BlockFetcherIterator(

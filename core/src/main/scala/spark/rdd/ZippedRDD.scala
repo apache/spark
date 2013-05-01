@@ -49,6 +49,8 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
 
   override def getPreferredLocations(s: Partition): Seq[String] = {
     val (partition1, partition2) = s.asInstanceOf[ZippedPartition[T, U]].partitions
+    // TODO: becomes complicated - intersect on hostPort if available, else fallback to host (removing intersected hostPort's).
+    // Since I am not very sure about this RDD, leaving it to others to comment better !
     rdd1.preferredLocations(partition1).intersect(rdd2.preferredLocations(partition2))
   }
 

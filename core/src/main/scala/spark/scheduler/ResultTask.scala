@@ -71,11 +71,11 @@ private[spark] class ResultTask[T, U](
   }
 
   // data locality is on a per host basis, not hyper specific to container (host:port). Unique on set of hosts.
-  val preferredLocs: Seq[String] = if (locs == null) Nil else locs.map(loc => Utils.parseHostPort(loc)._1).toSet.toSeq
+  private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.toSet.toSeq
 
   {
     // DEBUG code
-    preferredLocs.foreach (host => Utils.checkHost(host, "preferredLocs : " + preferredLocs))
+    preferredLocs.foreach (hostPort => Utils.checkHost(Utils.parseHostPort(hostPort)._1, "preferredLocs : " + preferredLocs))
   }
 
   override def run(attemptId: Long): U = {

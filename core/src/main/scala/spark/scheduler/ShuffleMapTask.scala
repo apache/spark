@@ -85,11 +85,11 @@ private[spark] class ShuffleMapTask(
   protected def this() = this(0, null, null, 0, null)
 
   // data locality is on a per host basis, not hyper specific to container (host:port). Unique on set of hosts.
-  private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.map(loc => Utils.parseHostPort(loc)._1).toSet.toSeq
+  private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.toSet.toSeq
 
   {
     // DEBUG code
-    preferredLocs.foreach (host => Utils.checkHost(host, "preferredLocs : " + preferredLocs))
+    preferredLocs.foreach (hostPort => Utils.checkHost(Utils.parseHostPort(hostPort)._1, "preferredLocs : " + preferredLocs))
   }
 
   var split = if (rdd == null) {
