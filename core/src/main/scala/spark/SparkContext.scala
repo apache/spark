@@ -100,7 +100,7 @@ class SparkContext(
   private[spark] val addedJars = HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
-  private[spark] val persistentRdds: ConcurrentMap[Int, RDD[_]] = new ConcurrentHashMap[Int, RDD[_]]()
+  private[spark] val persistentRdds: ConcurrentMap[Int, RDD[_]] = new ConcurrentHashMap[Int, RDD[_]]
   private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
 
 
@@ -508,34 +508,19 @@ class SparkContext(
    * Return information about what RDDs are cached, if they are in mem or on disk, how much space
    * they take, etc.
    */
-  def getRDDStorageInfo : Array[RDDInfo] = {
-    StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
+  def getRDDStorageInfo(): Array[RDDInfo] = {
+    StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus(), this)
   }
 
-  def getStageInfo: Map[Stage,StageInfo] = {
+  def getStageInfo(): Map[Stage,StageInfo] = {
     dagScheduler.stageToInfos
   }
 
   /**
    * Return information about blocks stored in all of the slaves
    */
-  def getExecutorStorageStatus : Array[StorageStatus] = {
+  def getExecutorStorageStatus(): Array[StorageStatus] = {
     env.blockManager.master.getStorageStatus
-  }
-
-  def removeRDD(id: Int): Unit = {
-    val storageStatusList = getExecutorStorageStatus
-    val groupedRddBlocks = storageStatusList.flatMap(_.blocks).toMap
-    logInfo("RDD to remove: " + id)
-    groupedRddBlocks.foreach(x => {
-      val k = x._1.substring(0,x._1.lastIndexOf('_'))
-      val rdd_id = "rdd_" + id
-      logInfo("RDD to check: " + rdd_id)
-      if(k.equals(rdd_id)) {
-        env.blockManager.master.removeBlock(x._1)
-      }
-    })
-    persistentRdds.remove(id)
   }
 
   /**

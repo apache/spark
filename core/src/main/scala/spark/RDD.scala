@@ -140,6 +140,23 @@ abstract class RDD[T: ClassManifest](
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): RDD[T] = persist()
 
+  /** Mark the RDD as non-persistent, and remove all blocks for it from memory and disk. */
+  def unpersist(): RDD[T] = {
+    logInfo("Removing RDD " + id + " from persistence list")
+    val rddBlockPrefix = "rdd_" + id + "_"
+    // Get the list of blocks in block manager, and remove ones that are part of this RDD.
+    // The runtime complexity is linear to the number of blocks persisted in the cluster.
+    // It could be expensive if the cluster is large and has a lot of blocks persisted.
+    sc.getExecutorStorageStatus().flatMap(_.blocks).foreach { case(blockId, status) =>
+      if (blockId.startsWith(rddBlockPrefix)) {
+        sc.env.blockManager.master.removeBlock(blockId)
+      }
+    }
+    sc.persistentRdds.remove(id)
+    storageLevel = StorageLevel.NONE
+    this
+  }
+
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel = storageLevel
 

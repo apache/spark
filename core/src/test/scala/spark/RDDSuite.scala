@@ -2,6 +2,8 @@ package spark
 
 import scala.collection.mutable.HashMap
 import org.scalatest.FunSuite
+import org.scalatest.concurrent.Timeouts._
+import org.scalatest.time.{Span, Millis}
 import spark.SparkContext._
 import spark.rdd.{CoalescedRDD, CoGroupedRDD, PartitionPruningRDD, ShuffledRDD}
 
@@ -100,11 +102,26 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     assert(rdd.collect().toList === List(1, 2, 3, 4))
   }
 
-  test("remove RDD") {
-	sc = new SparkContext("local", "test")
-	val rdd = sc.makeRDD(Array(1,2,3,4), 2).cache()
-	sc.removeRDD(rdd.id)
-	assert(sc.persistentRdds.empty == true)
+  test("unpersist RDD") {
+    sc = new SparkContext("local", "test")
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
+    rdd.count
+    assert(sc.persistentRdds.isEmpty == false)
+    rdd.unpersist()
+    assert(sc.persistentRdds.isEmpty == true)
+
+    failAfter(Span(3000, Millis)) {
+      try {
+        while (! sc.getRDDStorageInfo.isEmpty) {
+          Thread.sleep(200)
+        }
+      } catch {
+        case e: Exception =>
+          // Do nothing. We might see exceptions because block manager
+          // is racing this thread to remove entries from the driver.
+      }
+    }
+    assert(sc.getRDDStorageInfo.isEmpty == true)
   }
 
   test("caching with failures") {
