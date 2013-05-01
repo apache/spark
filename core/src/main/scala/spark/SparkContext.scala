@@ -746,7 +746,7 @@ class SparkContext(
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
   private[spark] def cleanup(cleanupTime: Long) {
-    // do nothing. this needs to be removed.
+    persistentRdds.clearOldValues(cleanupTime)
   }
 }
 
