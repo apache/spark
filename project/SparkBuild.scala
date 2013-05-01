@@ -36,7 +36,7 @@ object SparkBuild extends Build {
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.spark-project",
     version            := "0.8.0-SNAPSHOT",
-    scalaVersion       := "2.10.0",
+    scalaVersion       := "2.10.1",
     scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation"),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
@@ -50,9 +50,6 @@ object SparkBuild extends Build {
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-
-    // Shared between both core and streaming.
-    resolvers ++= Seq("Akka Repository" at "http://repo.akka.io/releases/"),
 
     // For Sonatype publishing
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
@@ -141,8 +138,8 @@ object SparkBuild extends Build {
         "asm"                 % "asm-all"          % "3.3.1",
         "com.google.protobuf" % "protobuf-java"    % "2.4.1",
         "de.javakaffee"       % "kryo-serializers" % "0.20",
-        "com.typesafe.akka"  %% "akka-remote"      % "2.1.0",
-        "com.typesafe.akka"  %% "akka-slf4j"       % "2.1.0",
+        "com.typesafe.akka"  %% "akka-remote"      % "2.1.2",
+        "com.typesafe.akka"  %% "akka-slf4j"       % "2.1.2",
         "it.unimi.dsi"        % "fastutil"         % "6.4.4",
         "io.spray"            % "spray-can"        % "1.1-M7",
         "io.spray"            % "spray-io"         % "1.1-M7",
@@ -150,9 +147,9 @@ object SparkBuild extends Build {
         "io.spray"           %% "spray-json"       % "1.2.3",
         "colt"                % "colt"             % "1.2.0",
         "org.apache.mesos"    % "mesos"            % "0.9.0-incubating",
-        "org.scala-lang"      % "scala-actors"     % "2.10.0",
-        "org.scala-lang"      % "jline"            % "2.10.0",
-        "org.scala-lang"      % "scala-reflect"    % "2.10.0"
+        "org.scala-lang"      % "scala-actors"     % "2.10.1",
+        "org.scala-lang"      % "jline"            % "2.10.1",
+        "org.scala-lang"      % "scala-reflect"    % "2.10.1"
       ) ++ (if (HADOOP_MAJOR_VERSION == "2")
         Some("org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION) else None).toSeq,
     unmanagedSourceDirectories in Compile <+= baseDirectory{ _ / ("src/hadoop" + HADOOP_MAJOR_VERSION + "/scala") }
@@ -165,7 +162,7 @@ object SparkBuild extends Build {
  def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     // libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-    libraryDependencies ++= Seq("org.scala-lang" % "scala-compiler" % "2.10.0")
+    libraryDependencies ++= Seq("org.scala-lang" % "scala-compiler" % "2.10.1")
   )
 
   def examplesSettings = sharedSettings ++ Seq(
@@ -181,7 +178,7 @@ object SparkBuild extends Build {
       "org.apache.flume"      % "flume-ng-sdk"           % "1.2.0" % "compile",
       "com.github.sgroschupf" % "zkclient"               % "0.1",
       "org.twitter4j"         % "twitter4j-stream"       % "3.0.3",
-      "com.typesafe.akka"     %  "akka-zeromq"           % "2.1-M1"  excludeAll(ExclusionRule(name = "akka-actor"), ExclusionRule(organization = "org.scala-lang"))
+      "com.typesafe.akka"    %%  "akka-zeromq"           % "2.1.2"
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 

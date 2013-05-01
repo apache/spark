@@ -54,18 +54,8 @@
     </dependency>
     <dependency>
       <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-zeromq</artifactId>
-      <version>2.1-M1</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.scala-lang</groupId>
-          <artifactId>scala-library</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.typesafe.akka</groupId>
-          <artifactId>akka-actor</artifactId>
-        </exclusion>
-      </exclusions>
+      <artifactId>akka-zeromq_${scala.version}</artifactId>
+      <version>${akka.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
