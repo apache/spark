@@ -33,8 +33,7 @@ class SparkEnv (
     // To be set only as part of initialization of SparkContext.
     // (executorId, defaultHostPort) => executorHostPort
     // If executorId is NOT found, return defaultHostPort
-    var executorIdToHostPort: (String, String) => String
-  ) {
+    var executorIdToHostPort: Option[(String, String) => String]) {
 
   def stop() {
     httpFileServer.stop()
@@ -52,12 +51,12 @@ class SparkEnv (
 
   def resolveExecutorIdToHostPort(executorId: String, defaultHostPort: String): String = {
     val env = SparkEnv.get
-    if (env.executorIdToHostPort == null) {
+    if (env.executorIdToHostPort.isEmpty) {
       // default to using host, not host port. Relevant to non cluster modes.
       return defaultHostPort
     }
 
-    env.executorIdToHostPort(executorId, defaultHostPort)
+    env.executorIdToHostPort.get(executorId, defaultHostPort)
   }
 }
 
@@ -178,6 +177,6 @@ object SparkEnv extends Logging {
       connectionManager,
       httpFileServer,
       sparkFilesDir,
-      null)
+      None)
   }
 }

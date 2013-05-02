@@ -70,7 +70,6 @@ private[spark] class ResultTask[T, U](
     rdd.partitions(partition)
   }
 
-  // data locality is on a per host basis, not hyper specific to container (host:port). Unique on set of hosts.
   private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.toSet.toSeq
 
   {

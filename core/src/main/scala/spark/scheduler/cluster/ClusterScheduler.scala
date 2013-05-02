@@ -73,7 +73,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   val activeExecutorIds = new HashSet[String]
 
   // TODO: We might want to remove this and merge it with execId datastructures - but later.
-  // Which hosts in the cluster are alive (contains hostPort's) - used for hyper local and local task locality.
+  // Which hosts in the cluster are alive (contains hostPort's) - used for instance local and node local task locality.
   private val hostPortsAlive = new HashSet[String]
   private val hostToAliveHostPorts = new HashMap[String, HashSet[String]]
 
@@ -109,7 +109,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
     // Unfortunately, this means that SparkEnv is indirectly referencing ClusterScheduler
     // Will that be a design violation ?
-    SparkEnv.get.executorIdToHostPort = executorToHostPort
+    SparkEnv.get.executorIdToHostPort = Some(executorToHostPort)
   }
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
@@ -240,7 +240,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       for (manager <- activeTaskSetsQueue.sortBy(m => (m.taskSet.priority, m.taskSet.stageId))) {
 
         // Split offers based on host local, rack local and off-rack tasks.
-        val hyperLocalOffers = new HashMap[String, ArrayBuffer[Int]]()
+        val instanceLocalOffers = new HashMap[String, ArrayBuffer[Int]]()
         val hostLocalOffers = new HashMap[String, ArrayBuffer[Int]]()
         val rackLocalOffers = new HashMap[String, ArrayBuffer[Int]]()
         val otherOffers = new HashMap[String, ArrayBuffer[Int]]()
@@ -250,16 +250,16 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           // DEBUG code
           Utils.checkHostPort(hostPort)
 
-          val numHyperLocalTasks =  math.max(0, math.min(manager.numPendingTasksForHostPort(hostPort), availableCpus(i)))
-          if (numHyperLocalTasks > 0){
-            val list = hyperLocalOffers.getOrElseUpdate(hostPort, new ArrayBuffer[Int])
-            for (j <- 0 until numHyperLocalTasks) list += i
+          val numInstanceLocalTasks =  math.max(0, math.min(manager.numPendingTasksForHostPort(hostPort), availableCpus(i)))
+          if (numInstanceLocalTasks > 0){
+            val list = instanceLocalOffers.getOrElseUpdate(hostPort, new ArrayBuffer[Int])
+            for (j <- 0 until numInstanceLocalTasks) list += i
           }
 
           val host = Utils.parseHostPort(hostPort)._1
           val numHostLocalTasks =  math.max(0,
-            // Remove hyper local tasks (which are also host local btw !) from this
-            math.min(manager.numPendingTasksForHost(hostPort) - numHyperLocalTasks, hostToAvailableCpus(host)))
+            // Remove instance local tasks (which are also host local btw !) from this
+            math.min(manager.numPendingTasksForHost(hostPort) - numInstanceLocalTasks, hostToAvailableCpus(host)))
           if (numHostLocalTasks > 0){
             val list = hostLocalOffers.getOrElseUpdate(host, new ArrayBuffer[Int])
             for (j <- 0 until numHostLocalTasks) list += i
@@ -267,7 +267,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
           val numRackLocalTasks =  math.max(0,
             // Remove host local tasks (which are also rack local btw !) from this
-            math.min(manager.numRackLocalPendingTasksForHost(hostPort) - numHyperLocalTasks - numHostLocalTasks, hostToAvailableCpus(host)))
+            math.min(manager.numRackLocalPendingTasksForHost(hostPort) - numInstanceLocalTasks - numHostLocalTasks, hostToAvailableCpus(host)))
           if (numRackLocalTasks > 0){
             val list = rackLocalOffers.getOrElseUpdate(host, new ArrayBuffer[Int])
             for (j <- 0 until numRackLocalTasks) list += i
@@ -280,19 +280,19 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
         }
 
         val offersPriorityList = new ArrayBuffer[Int](
-          hyperLocalOffers.size + hostLocalOffers.size + rackLocalOffers.size + otherOffers.size)
+          instanceLocalOffers.size + hostLocalOffers.size + rackLocalOffers.size + otherOffers.size)
 
-        // First hyper local, then host local, then rack, then others
+        // First instance local, then host local, then rack, then others
 
-        // numHostLocalOffers contains count of both hyper local and host offers.
+        // numHostLocalOffers contains count of both instance local and host offers.
         val numHostLocalOffers = {
-          val hyperLocalPriorityList = ClusterScheduler.prioritizeContainers(hyperLocalOffers)
-          offersPriorityList ++= hyperLocalPriorityList
+          val instanceLocalPriorityList = ClusterScheduler.prioritizeContainers(instanceLocalOffers)
+          offersPriorityList ++= instanceLocalPriorityList
 
           val hostLocalPriorityList = ClusterScheduler.prioritizeContainers(hostLocalOffers)
           offersPriorityList ++= hostLocalPriorityList
 
-          hyperLocalPriorityList.size + hostLocalPriorityList.size
+          instanceLocalPriorityList.size + hostLocalPriorityList.size
         }
         val numRackLocalOffers = {
           val rackLocalPriorityList = ClusterScheduler.prioritizeContainers(rackLocalOffers)
