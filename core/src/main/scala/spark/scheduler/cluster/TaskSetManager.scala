@@ -13,21 +13,21 @@ import spark.scheduler._
 import spark.TaskState.TaskState
 import java.nio.ByteBuffer
 
-private[spark] object TaskLocality extends Enumeration("INSTANCE_LOCAL", "HOST_LOCAL", "RACK_LOCAL", "ANY") with Logging {
+private[spark] object TaskLocality extends Enumeration("PROCESS_LOCAL", "NODE_LOCAL", "RACK_LOCAL", "ANY") with Logging {
 
-  // instance local is expected to be used ONLY within tasksetmanager for now.
-  val INSTANCE_LOCAL, HOST_LOCAL, RACK_LOCAL, ANY = Value
+  // process local is expected to be used ONLY within tasksetmanager for now.
+  val PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY = Value
 
   type TaskLocality = Value
 
   def isAllowed(constraint: TaskLocality, condition: TaskLocality): Boolean = {
 
     // Must not be the constraint.
-    assert (constraint != TaskLocality.INSTANCE_LOCAL)
+    assert (constraint != TaskLocality.PROCESS_LOCAL)
 
     constraint match {
-      case TaskLocality.HOST_LOCAL => condition == TaskLocality.HOST_LOCAL
-      case TaskLocality.RACK_LOCAL => condition == TaskLocality.HOST_LOCAL || condition == TaskLocality.RACK_LOCAL
+      case TaskLocality.NODE_LOCAL => condition == TaskLocality.NODE_LOCAL
+      case TaskLocality.RACK_LOCAL => condition == TaskLocality.NODE_LOCAL || condition == TaskLocality.RACK_LOCAL
       // For anything else, allow
       case _ => true
     }
@@ -37,15 +37,15 @@ private[spark] object TaskLocality extends Enumeration("INSTANCE_LOCAL", "HOST_L
     // better way to do this ?
     try {
       val retval = TaskLocality.withName(str)
-      // Must not specify INSTANCE_LOCAL !
-      assert (retval != TaskLocality.INSTANCE_LOCAL)
+      // Must not specify PROCESS_LOCAL !
+      assert (retval != TaskLocality.PROCESS_LOCAL)
 
       retval
     } catch {
       case nEx: NoSuchElementException => {
-        logWarning("Invalid task locality specified '" + str + "', defaulting to HOST_LOCAL");
+        logWarning("Invalid task locality specified '" + str + "', defaulting to NODE_LOCAL");
         // default to preserve earlier behavior
-        HOST_LOCAL
+        NODE_LOCAL
       }
     }
   }
@@ -84,7 +84,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
 
-  // List of pending tasks for each node (instance local to container). These collections are actually
+  // List of pending tasks for each node (process local to container). These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
   // ArrayBuffer and removed from the end. This makes it faster to detect
   // tasks that repeatedly fail because whenever a task failed, it is put
@@ -142,12 +142,12 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   }
 
   // Note that it follows the hierarchy.
-  // if we search for HOST_LOCAL, the output will include INSTANCE_LOCAL and
-  // if we search for RACK_LOCAL, it will include INSTANCE_LOCAL & HOST_LOCAL
+  // if we search for NODE_LOCAL, the output will include PROCESS_LOCAL and
+  // if we search for RACK_LOCAL, it will include PROCESS_LOCAL & NODE_LOCAL
   private def findPreferredLocations(_taskPreferredLocations: Seq[String], scheduler: ClusterScheduler,
                                      taskLocality: TaskLocality.TaskLocality): HashSet[String] = {
 
-    if (TaskLocality.INSTANCE_LOCAL == taskLocality) {
+    if (TaskLocality.PROCESS_LOCAL == taskLocality) {
       // straight forward comparison ! Special case it.
       val retval = new HashSet[String]()
       scheduler.synchronized {
@@ -162,7 +162,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     }
 
     val taskPreferredLocations =
-      if (TaskLocality.HOST_LOCAL == taskLocality) {
+      if (TaskLocality.NODE_LOCAL == taskLocality) {
         _taskPreferredLocations
       } else {
         assert (TaskLocality.RACK_LOCAL == taskLocality)
@@ -203,19 +203,19 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   private def addPendingTask(index: Int) {
     // We can infer hostLocalLocations from rackLocalLocations by joining it against tasks(index).preferredLocations (with appropriate
     // hostPort <-> host conversion). But not doing it for simplicity sake. If this becomes a performance issue, modify it.
-    val instanceLocalLocations = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.INSTANCE_LOCAL)
-    val hostLocalLocations = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.HOST_LOCAL)
+    val processLocalLocations = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.PROCESS_LOCAL)
+    val hostLocalLocations = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.NODE_LOCAL)
     val rackLocalLocations = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.RACK_LOCAL)
 
     if (rackLocalLocations.size == 0) {
       // Current impl ensures this.
-      assert (instanceLocalLocations.size == 0)
+      assert (processLocalLocations.size == 0)
       assert (hostLocalLocations.size == 0)
       pendingTasksWithNoPrefs += index
     } else {
 
-      // instance local locality
-      for (hostPort <- instanceLocalLocations) {
+      // process local locality
+      for (hostPort <- processLocalLocations) {
         // DEBUG Code
         Utils.checkHostPort(hostPort)
 
@@ -223,7 +223,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
         hostPortList += index
       }
 
-      // host locality (includes instance local)
+      // host locality (includes process local)
       for (hostPort <- hostLocalLocations) {
         // DEBUG Code
         Utils.checkHostPort(hostPort)
@@ -233,7 +233,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
         hostList += index
       }
 
-      // rack locality (includes instance local and host local)
+      // rack locality (includes process local and host local)
       for (rackLocalHostPort <- rackLocalLocations) {
         // DEBUG Code
         Utils.checkHostPort(rackLocalHostPort)
@@ -247,7 +247,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     allPendingTasks += index
   }
 
-  // Return the pending tasks list for a given host port (instance local), or an empty list if
+  // Return the pending tasks list for a given host port (process local), or an empty list if
   // there is no map entry for that host
   private def getPendingTasksForHostPort(hostPort: String): ArrayBuffer[Int] = {
     // DEBUG Code
@@ -269,7 +269,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     pendingRackLocalTasksForHost.getOrElse(host, ArrayBuffer())
   }
 
-  // Number of pending tasks for a given host Port (which would be instance local)
+  // Number of pending tasks for a given host Port (which would be process local)
   def numPendingTasksForHostPort(hostPort: String): Int = {
     getPendingTasksForHostPort(hostPort).count( index => copiesRunning(index) == 0 && !finished(index) )
   }
@@ -305,13 +305,13 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // task must have a preference for this host/rack/no preferred locations at all.
   private def findSpeculativeTask(hostPort: String, locality: TaskLocality.TaskLocality): Option[Int] = {
 
-    assert (TaskLocality.isAllowed(locality, TaskLocality.HOST_LOCAL))
+    assert (TaskLocality.isAllowed(locality, TaskLocality.NODE_LOCAL))
     speculatableTasks.retain(index => !finished(index)) // Remove finished tasks from set
 
     if (speculatableTasks.size > 0) {
       val localTask = speculatableTasks.find {
           index =>
-            val locations = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.HOST_LOCAL)
+            val locations = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.NODE_LOCAL)
             val attemptLocs = taskAttempts(index).map(_.hostPort)
             (locations.size == 0 || locations.contains(hostPort)) && !attemptLocs.contains(hostPort)
         }
@@ -352,9 +352,9 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // Dequeue a pending task for a given node and return its index.
   // If localOnly is set to false, allow non-local tasks as well.
   private def findTask(hostPort: String, locality: TaskLocality.TaskLocality): Option[Int] = {
-    val instanceLocalTask = findTaskFromList(getPendingTasksForHostPort(hostPort))
-    if (instanceLocalTask != None) {
-      return instanceLocalTask
+    val processLocalTask = findTaskFromList(getPendingTasksForHostPort(hostPort))
+    if (processLocalTask != None) {
+      return processLocalTask
     }
 
     val localTask = findTaskFromList(getPendingTasksForHost(hostPort))
@@ -387,7 +387,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     return findSpeculativeTask(hostPort, locality)
   }
 
-  private def isInstanceLocalLocation(task: Task[_], hostPort: String): Boolean = {
+  private def isProcessLocalLocation(task: Task[_], hostPort: String): Boolean = {
     Utils.checkHostPort(hostPort)
 
     val locs = task.preferredLocations
@@ -433,7 +433,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
       val locality = if (overrideLocality != null) overrideLocality else {
         // expand only if we have waited for more than LOCALITY_WAIT for a host local task ...
         val time = System.currentTimeMillis
-        if (time - lastPreferredLaunchTime < LOCALITY_WAIT) TaskLocality.HOST_LOCAL else TaskLocality.ANY
+        if (time - lastPreferredLaunchTime < LOCALITY_WAIT) TaskLocality.NODE_LOCAL else TaskLocality.ANY
       }
 
       findTask(hostPort, locality) match {
@@ -443,8 +443,8 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
           val taskId = sched.newTaskId()
           // Figure out whether this should count as a preferred launch
           val taskLocality =
-            if (isInstanceLocalLocation(task, hostPort)) TaskLocality.INSTANCE_LOCAL else
-            if (isHostLocalLocation(task, hostPort)) TaskLocality.HOST_LOCAL else
+            if (isProcessLocalLocation(task, hostPort)) TaskLocality.PROCESS_LOCAL else
+            if (isHostLocalLocation(task, hostPort)) TaskLocality.NODE_LOCAL else
             if (isRackLocalLocation(task, hostPort)) TaskLocality.RACK_LOCAL else
               TaskLocality.ANY
           val prefStr = taskLocality.toString
@@ -456,7 +456,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
           val info = new TaskInfo(taskId, index, time, execId, hostPort, taskLocality)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
-          if (TaskLocality.HOST_LOCAL == taskLocality) {
+          if (TaskLocality.NODE_LOCAL == taskLocality) {
             lastPreferredLaunchTime = time
           }
           // Serialize and return the task
@@ -608,11 +608,11 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
 
     // host local tasks - should we push this to rack local or no pref list ? For now, preserving behavior and moving to
     // no prefs list. Note, this was done due to impliations related to 'waiting' for data local tasks, etc.
-    // Note: NOT checking instance local list - since host local list is super set of that. We need to ad to no prefs only if
-    // there is no host local node for the task (not if there is no instance local node for the task)
+    // Note: NOT checking process local list - since host local list is super set of that. We need to ad to no prefs only if
+    // there is no host local node for the task (not if there is no process local node for the task)
     for (index <- getPendingTasksForHost(Utils.parseHostPort(hostPort)._1)) {
       // val newLocs = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.RACK_LOCAL)
-      val newLocs = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.HOST_LOCAL)
+      val newLocs = findPreferredLocations(tasks(index).preferredLocations, sched, TaskLocality.NODE_LOCAL)
       if (newLocs.isEmpty) {
         pendingTasksWithNoPrefs += index
       }
