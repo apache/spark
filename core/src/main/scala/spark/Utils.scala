@@ -335,6 +335,7 @@ private object Utils extends Logging {
     retval
   }
 
+/*
   // Used by DEBUG code : remove when all testing done
   private val ipPattern = Pattern.compile("^[0-9]+(\\.[0-9]+)*$")
   def checkHost(host: String, message: String = "") {
@@ -363,8 +364,8 @@ private object Utils extends Logging {
     // temp code for debug
     System.exit(-1)
   }
+*/
 
-/*
   // Once testing is complete in various modes, replace with this ?
   def checkHost(host: String, message: String = "") {}
   def checkHostPort(hostPort: String, message: String = "") {}
@@ -373,7 +374,6 @@ private object Utils extends Logging {
   def logErrorWithStack(msg: String) {
     try { throw new Exception } catch { case ex: Exception => { logError(msg, ex) } }
   }
-*/
 
   def getUserNameFromEnvironment(): String = {
     SparkHadoopUtil.getUserNameFromEnvironment
