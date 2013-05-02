@@ -15,6 +15,7 @@ import akka.util.duration._
 
 import spark.{Logging, SparkException, Utils}
 
+
 private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {
 
   val AKKA_RETRY_ATTEMPTS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
@@ -85,6 +86,21 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
    */
   def removeBlock(blockId: String) {
     askDriverWithReply(RemoveBlock(blockId))
+  }
+
+  /**
+   * Remove all blocks belonging to the given RDD.
+   */
+  def removeRdd(rddId: Int) {
+    val rddBlockPrefix = "rdd_" + rddId + "_"
+    // Get the list of blocks in block manager, and remove ones that are part of this RDD.
+    // The runtime complexity is linear to the number of blocks persisted in the cluster.
+    // It could be expensive if the cluster is large and has a lot of blocks persisted.
+    getStorageStatus.flatMap(_.blocks).foreach { case(blockId, status) =>
+      if (blockId.startsWith(rddBlockPrefix)) {
+        removeBlock(blockId)
+      }
+    }
   }
 
   /**
