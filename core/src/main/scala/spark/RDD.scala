@@ -107,7 +107,7 @@ abstract class RDD[T: ClassManifest](
   // =======================================================================
 
   /** A unique ID for this RDD (within its SparkContext). */
-  val id = sc.newRddId()
+  val id: Int = sc.newRddId()
 
   /** A friendly name for this RDD */
   var name: String = null
@@ -120,7 +120,8 @@ abstract class RDD[T: ClassManifest](
 
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
-   * it is computed. Can only be called once on each RDD.
+   * it is computed. This can only be used to assign a new storage level if the RDD does not
+   * have a storage level set yet..
    */
   def persist(newLevel: StorageLevel): RDD[T] = {
     // TODO: Handle changes of StorageLevel
@@ -143,15 +144,7 @@ abstract class RDD[T: ClassManifest](
   /** Mark the RDD as non-persistent, and remove all blocks for it from memory and disk. */
   def unpersist(): RDD[T] = {
     logInfo("Removing RDD " + id + " from persistence list")
-    val rddBlockPrefix = "rdd_" + id + "_"
-    // Get the list of blocks in block manager, and remove ones that are part of this RDD.
-    // The runtime complexity is linear to the number of blocks persisted in the cluster.
-    // It could be expensive if the cluster is large and has a lot of blocks persisted.
-    sc.getExecutorStorageStatus().flatMap(_.blocks).foreach { case(blockId, status) =>
-      if (blockId.startsWith(rddBlockPrefix)) {
-        sc.env.blockManager.master.removeBlock(blockId)
-      }
-    }
+    sc.env.blockManager.master.removeRdd(id)
     sc.persistentRdds.remove(id)
     storageLevel = StorageLevel.NONE
     this

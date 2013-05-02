@@ -508,18 +508,18 @@ class SparkContext(
    * Return information about what RDDs are cached, if they are in mem or on disk, how much space
    * they take, etc.
    */
-  def getRDDStorageInfo(): Array[RDDInfo] = {
-    StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus(), this)
+  def getRDDStorageInfo: Array[RDDInfo] = {
+    StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
   }
 
-  def getStageInfo(): Map[Stage,StageInfo] = {
+  def getStageInfo: Map[Stage,StageInfo] = {
     dagScheduler.stageToInfos
   }
 
   /**
    * Return information about blocks stored in all of the slaves
    */
-  def getExecutorStorageStatus(): Array[StorageStatus] = {
+  def getExecutorStorageStatus: Array[StorageStatus] = {
     env.blockManager.master.getStorageStatus
   }
 

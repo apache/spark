@@ -207,6 +207,31 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     }
   }
 
+  test("removing rdd") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000)
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    val a3 = new Array[Byte](400)
+    // Putting a1, a2 and a3 in memory.
+    store.putSingle("rdd_0_0", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle("rdd_0_1", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingle("nonrddblock", a3, StorageLevel.MEMORY_ONLY)
+    master.removeRdd(0)
+
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("rdd_0_0") should be (None)
+      master.getLocations("rdd_0_0") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("rdd_0_1") should be (None)
+      master.getLocations("rdd_0_1") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("nonrddblock") should not be (None)
+      master.getLocations("nonrddblock") should have size (1)
+    }
+  }
+
   test("reregistration on heart beat") {
     val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000)
