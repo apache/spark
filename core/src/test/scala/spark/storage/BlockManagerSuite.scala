@@ -15,6 +15,8 @@ import org.scalatest.time.SpanSugar._
 import spark.JavaSerializer
 import spark.KryoSerializer
 import spark.SizeEstimator
+import spark.Utils
+import spark.util.AkkaUtils
 import spark.util.ByteBufferInputStream
 
 class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
@@ -31,7 +33,11 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   val serializer = new KryoSerializer
 
   before {
-    actorSystem = ActorSystem("test")
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("test", "localhost", 0)
+    this.actorSystem = actorSystem
+    System.setProperty("spark.driver.port", boundPort.toString)
+    System.setProperty("spark.hostPort", "localhost:" + boundPort)
+
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new spark.storage.BlockManagerMasterActor(true))))
 
@@ -46,6 +52,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   after {
+    System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
+
     if (store != null) {
       store.stop()
       store = null
@@ -197,6 +206,31 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       val memStatus = master.getMemoryStatus.head._2
       memStatus._1 should equal (2000L)
       memStatus._2 should equal (2000L)
+    }
+  }
+
+  test("removing rdd") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000)
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    val a3 = new Array[Byte](400)
+    // Putting a1, a2 and a3 in memory.
+    store.putSingle("rdd_0_0", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle("rdd_0_1", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingle("nonrddblock", a3, StorageLevel.MEMORY_ONLY)
+    master.removeRdd(0)
+
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("rdd_0_0") should be (None)
+      master.getLocations("rdd_0_0") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("rdd_0_1") should be (None)
+      master.getLocations("rdd_0_1") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("nonrddblock") should not be (None)
+      master.getLocations("nonrddblock") should have size (1)
     }
   }
 
