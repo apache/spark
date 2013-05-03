@@ -236,8 +236,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
           localDirId = "%s-%04x".format(dateFormat.format(new Date), rand.nextInt(65536))
           localDir = new File(rootDir, "spark-local-" + localDirId)
           if (!localDir.exists) {
-            localDir.mkdirs()
-            foundLocalDir = true
+            foundLocalDir = localDir.mkdirs()
           }
         } catch {
           case e: Exception =>

@@ -188,6 +188,38 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
     } )
   }
 
+  // MUST be called within selector loop - else deadlock.
+  private def triggerForceCloseByException(key: SelectionKey, e: Exception) {
+    try {
+      key.interestOps(0)
+    } catch {
+      // ignore exceptions
+      case e: Exception => logDebug("Ignoring exception", e)
+    }
+
+    val conn = connectionsByKey.getOrElse(key, null)
+    if (conn == null) return
+
+    // Pushing to connect threadpool
+    handleConnectExecutor.execute(new Runnable {
+      override def run() {
+        try {
+          conn.callOnExceptionCallback(e)
+        } catch {
+          // ignore exceptions
+          case e: Exception => logDebug("Ignoring exception", e)
+        }
+        try {
+          conn.close()
+        } catch {
+          // ignore exceptions
+          case e: Exception => logDebug("Ignoring exception", e)
+        }
+      }
+    })
+  }
+
+
   def run() {
     try {
       while(!selectorThread.isInterrupted) {
@@ -200,29 +232,76 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
         while(!keyInterestChangeRequests.isEmpty) {
           val (key, ops) = keyInterestChangeRequests.dequeue
-          val connection = connectionsByKey.getOrElse(key, null)
-          if (connection != null) {
-            val lastOps = key.interestOps()
-            key.interestOps(ops)
 
-            // hot loop - prevent materialization of string if trace not enabled.
-            if (isTraceEnabled()) {
-              def intToOpStr(op: Int): String = {
-                val opStrs = ArrayBuffer[String]()
-                if ((op & SelectionKey.OP_READ) != 0) opStrs += "READ"
-                if ((op & SelectionKey.OP_WRITE) != 0) opStrs += "WRITE"
-                if ((op & SelectionKey.OP_CONNECT) != 0) opStrs += "CONNECT"
-                if ((op & SelectionKey.OP_ACCEPT) != 0) opStrs += "ACCEPT"
-                if (opStrs.size > 0) opStrs.reduceLeft(_ + " | " + _) else " "
+          try {
+            if (key.isValid) {
+              val connection = connectionsByKey.getOrElse(key, null)
+              if (connection != null) {
+                val lastOps = key.interestOps()
+                key.interestOps(ops)
+
+                // hot loop - prevent materialization of string if trace not enabled.
+                if (isTraceEnabled()) {
+                  def intToOpStr(op: Int): String = {
+                    val opStrs = ArrayBuffer[String]()
+                    if ((op & SelectionKey.OP_READ) != 0) opStrs += "READ"
+                    if ((op & SelectionKey.OP_WRITE) != 0) opStrs += "WRITE"
+                    if ((op & SelectionKey.OP_CONNECT) != 0) opStrs += "CONNECT"
+                    if ((op & SelectionKey.OP_ACCEPT) != 0) opStrs += "ACCEPT"
+                    if (opStrs.size > 0) opStrs.reduceLeft(_ + " | " + _) else " "
+                  }
+
+                  logTrace("Changed key for connection to [" + connection.getRemoteConnectionManagerId()  +
+                    "] changed from [" + intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
+                }
               }
-
-              logTrace("Changed key for connection to [" + connection.getRemoteConnectionManagerId()  +
-                "] changed from [" + intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
+            } else {
+              logInfo("Key not valid ? " + key)
+              throw new CancelledKeyException()
+            }
+          } catch {
+            case e: CancelledKeyException => {
+              logInfo("key already cancelled ? " + key, e)
+              triggerForceCloseByException(key, e)
+            }
+            case e: Exception => {
+              logError("Exception processing key " + key, e)
+              triggerForceCloseByException(key, e)
             }
           }
         }
 
-        val selectedKeysCount = selector.select()
+        val selectedKeysCount =
+          try {
+            selector.select()
+          } catch {
+            // Explicitly only dealing with CancelledKeyException here since other exceptions should be dealt with differently.
+            case e: CancelledKeyException => {
+              // Some keys within the selectors list are invalid/closed. clear them.
+              val allKeys = selector.keys().iterator()
+
+              while (allKeys.hasNext()) {
+                val key = allKeys.next()
+                try {
+                  if (! key.isValid) {
+                    logInfo("Key not valid ? " + key)
+                    throw new CancelledKeyException()
+                  }
+                } catch {
+                  case e: CancelledKeyException => {
+                    logInfo("key already cancelled ? " + key, e)
+                    triggerForceCloseByException(key, e)
+                  }
+                  case e: Exception => {
+                    logError("Exception processing key " + key, e)
+                    triggerForceCloseByException(key, e)
+                  }
+                }
+              }
+            }
+            0
+          }
+
         if (selectedKeysCount == 0) {
           logDebug("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
         }
@@ -230,23 +309,40 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
           logInfo("Selector thread was interrupted!")
           return
         }
-        
-        val selectedKeys = selector.selectedKeys().iterator()
-        while (selectedKeys.hasNext()) {
-          val key = selectedKeys.next
-          selectedKeys.remove()
-          if (key.isValid) {
-            if (key.isAcceptable) {
-              acceptConnection(key)
-            } else 
-            if (key.isConnectable) {
-              triggerConnect(key)
-            } else
-            if (key.isReadable) {
-              triggerRead(key)
-            } else
-            if (key.isWritable) {
-              triggerWrite(key)
+
+        if (0 != selectedKeysCount) {
+          val selectedKeys = selector.selectedKeys().iterator()
+          while (selectedKeys.hasNext()) {
+            val key = selectedKeys.next
+            selectedKeys.remove()
+            try {
+              if (key.isValid) {
+                if (key.isAcceptable) {
+                  acceptConnection(key)
+                } else
+                if (key.isConnectable) {
+                  triggerConnect(key)
+                } else
+                if (key.isReadable) {
+                  triggerRead(key)
+                } else
+                if (key.isWritable) {
+                  triggerWrite(key)
+                }
+              } else {
+                logInfo("Key not valid ? " + key)
+                throw new CancelledKeyException()
+              }
+            } catch {
+              // weird, but we saw this happening - even though key.isValid was true, key.isAcceptable would throw CancelledKeyException.
+              case e: CancelledKeyException => {
+                logInfo("key already cancelled ? " + key, e)
+                triggerForceCloseByException(key, e)
+              }
+              case e: Exception => {
+                logError("Exception processing key " + key, e)
+                triggerForceCloseByException(key, e)
+              }
             }
           }
         }
