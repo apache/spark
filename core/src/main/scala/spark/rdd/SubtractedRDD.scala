@@ -11,7 +11,7 @@ import spark.Partition
 import spark.SparkEnv
 import spark.ShuffleDependency
 import spark.OneToOneDependency
-import spark.serializer.Serializer
+
 
 /**
  * An optimized version of cogroup for set difference/subtraction.
@@ -68,7 +68,7 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassM
 
   override def compute(p: Partition, context: TaskContext): Iterator[(K, V)] = {
     val partition = p.asInstanceOf[CoGroupPartition]
-    val serializer = Serializer.get(serializerClass)
+    val serializer = SparkEnv.get.serializerManager.get(serializerClass)
     val map = new JHashMap[K, ArrayBuffer[V]]
     def getSeq(k: K): ArrayBuffer[V] = {
       val seq = map.get(k)

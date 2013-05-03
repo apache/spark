@@ -2,6 +2,7 @@ package spark.storage
 
 import java.io.{File, FileOutputStream, OutputStream, RandomAccessFile}
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.channels.FileChannel.MapMode
 import java.util.{Random, Date}
 import java.text.SimpleDateFormat
@@ -26,14 +27,16 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
     private val f: File = createFile(blockId /*, allowAppendExisting */)
 
-    private var repositionableStream: FastBufferedOutputStream = null
+    // The file channel, used for repositioning / truncating the file.
+    private var channel: FileChannel = null
     private var bs: OutputStream = null
     private var objOut: SerializationStream = null
-    private var validLength = 0L
+    private var lastValidPosition = 0L
 
     override def open(): DiskBlockObjectWriter = {
-      repositionableStream = new FastBufferedOutputStream(new FileOutputStream(f))
-      bs = blockManager.wrapForCompression(blockId, repositionableStream)
+      val fos = new FileOutputStream(f, true)
+      channel = fos.getChannel()
+      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos))
       objOut = serializer.newInstance().serializeStream(bs)
       this
     }
@@ -41,9 +44,9 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     override def close() {
       objOut.close()
       bs.close()
-      objOut = null
+      channel = null
       bs = null
-      repositionableStream = null
+      objOut = null
       // Invoke the close callback handler.
       super.close()
     }
@@ -54,25 +57,23 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     // Return the number of bytes written for this commit.
     override def commit(): Long = {
       bs.flush()
-      validLength = repositionableStream.position()
-      validLength
+      val prevPos = lastValidPosition
+      lastValidPosition = channel.position()
+      lastValidPosition - prevPos
     }
 
     override def revertPartialWrites() {
-      // Flush the outstanding writes and delete the file.
-      objOut.close()
-      bs.close()
-      objOut = null
-      bs = null
-      repositionableStream = null
-      f.delete()
+      // Discard current writes. We do this by flushing the outstanding writes and
+      // truncate the file to the last valid position.
+      bs.flush()
+      channel.truncate(lastValidPosition)
     }
 
     override def write(value: Any) {
       objOut.writeObject(value)
     }
 
-    override def size(): Long = validLength
+    override def size(): Long = lastValidPosition
   }
 
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
@@ -86,7 +87,8 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   addShutdownHook()
 
-  def getBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int): BlockObjectWriter = {
+  def getBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int)
+    : BlockObjectWriter = {
     new DiskBlockObjectWriter(blockId, serializer, bufferSize)
   }
 

@@ -8,7 +8,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import spark.{Aggregator, Logging, Partition, Partitioner, RDD, SparkEnv, TaskContext}
 import spark.{Dependency, OneToOneDependency, ShuffleDependency}
-import spark.serializer.Serializer
 
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
@@ -114,7 +113,7 @@ class CoGroupedRDD[K](
       }
     }
 
-    val ser = Serializer.get(serializerClass)
+    val ser = SparkEnv.get.serializerManager.get(serializerClass)
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
