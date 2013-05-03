@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
  * The Mesos executor for Spark.
  */
 private[spark] class Executor(executorId: String, slaveHostname: String, properties: Seq[(String, String)]) extends Logging {
-  
+
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
@@ -26,6 +26,11 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
   initLogging()
+
+  // No ip or host:port - just hostname
+  Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
+  // must not have port specified.
+  assert (0 == Utils.parseHostPort(slaveHostname)._2)
 
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
   Utils.setCustomHostname(slaveHostname)

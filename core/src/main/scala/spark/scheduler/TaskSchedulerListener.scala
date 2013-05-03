@@ -14,6 +14,9 @@ private[spark] trait TaskSchedulerListener {
   def taskEnded(task: Task[_], reason: TaskEndReason, result: Any, accumUpdates: Map[Long, Any],
                 taskInfo: TaskInfo, taskMetrics: TaskMetrics): Unit
 
+  // A node was added to the cluster.
+  def executorGained(execId: String, hostPort: String): Unit
+
   // A node was lost from the cluster.
   def executorLost(execId: String): Unit
 

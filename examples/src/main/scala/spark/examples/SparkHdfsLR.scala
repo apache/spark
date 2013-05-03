@@ -4,6 +4,8 @@ import java.util.Random
 import scala.math.exp
 import spark.util.Vector
 import spark._
+import spark.deploy.SparkHadoopUtil
+import spark.scheduler.InputFormatInfo
 
 /**
  * Logistic regression based classification.
@@ -32,9 +34,13 @@ object SparkHdfsLR {
       System.err.println("Usage: SparkHdfsLR <master> <file> <iters>")
       System.exit(1)
     }
+    val inputPath = args(1)
+    val conf = SparkHadoopUtil.newConfiguration()
     val sc = new SparkContext(args(0), "SparkHdfsLR",
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
-    val lines = sc.textFile(args(1))
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")), Map(), 
+      InputFormatInfo.computePreferredLocations(
+          Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))))
+    val lines = sc.textFile(inputPath)
     val points = lines.map(parsePoint _).cache()
     val ITERATIONS = args(2).toInt
 

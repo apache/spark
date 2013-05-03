@@ -399,7 +399,7 @@ class RDD(object):
         >>> sc.parallelize(range(10)).saveAsTextFile(tempFile.name)
         >>> from fileinput import input
         >>> from glob import glob
-        >>> ''.join(input(glob(tempFile.name + "/part-0000*")))
+        >>> ''.join(sorted(input(glob(tempFile.name + "/part-0000*"))))
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
         """
         def func(split, iterator):

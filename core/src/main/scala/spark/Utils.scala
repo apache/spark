@@ -1,18 +1,18 @@
 package spark
 
 import java.io._
-import java.net._
+import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address, ServerSocket}
 import java.util.{Locale, Random, UUID}
-import java.util.concurrent.{Executors, ThreadFactory, ThreadPoolExecutor}
-import org.apache.hadoop.conf.Configuration
+import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConversions._
 import scala.io.Source
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import scala.Some
 import spark.serializer.SerializerInstance
+import spark.deploy.SparkHadoopUtil
+import java.util.regex.Pattern
 
 /**
  * Various utility methods used by Spark.
@@ -68,6 +68,41 @@ private object Utils extends Logging {
     return buf
   }
 
+
+  private val shutdownDeletePaths = new collection.mutable.HashSet[String]()
+
+  // Register the path to be deleted via shutdown hook
+  def registerShutdownDeleteDir(file: File) {
+    val absolutePath = file.getAbsolutePath()
+    shutdownDeletePaths.synchronized {
+      shutdownDeletePaths += absolutePath
+    }
+  }
+
+  // Is the path already registered to be deleted via a shutdown hook ?
+  def hasShutdownDeleteDir(file: File): Boolean = {
+    val absolutePath = file.getAbsolutePath()
+    shutdownDeletePaths.synchronized {
+      shutdownDeletePaths.contains(absolutePath)
+    }
+  }
+
+  // Note: if file is child of some registered path, while not equal to it, then return true; else false
+  // This is to ensure that two shutdown hooks do not try to delete each others paths - resulting in IOException
+  // and incomplete cleanup
+  def hasRootAsShutdownDeleteDir(file: File): Boolean = {
+
+    val absolutePath = file.getAbsolutePath()
+
+    val retval = shutdownDeletePaths.synchronized {
+      shutdownDeletePaths.find(path => ! absolutePath.equals(path) && absolutePath.startsWith(path) ).isDefined
+    }
+
+    if (retval) logInfo("path = " + file + ", already present as root for deletion.")
+
+    retval
+  }
+
   /** Create a temporary directory inside the given parent directory */
   def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
     var attempts = 0
@@ -86,10 +121,14 @@ private object Utils extends Logging {
         }
       } catch { case e: IOException => ; }
     }
+
+    registerShutdownDeleteDir(dir)
+
     // Add a shutdown hook to delete the temp dir when the JVM exits
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark temp dir " + dir) {
       override def run() {
-        Utils.deleteRecursively(dir)
+        // Attempt to delete if some patch which is parent of this is not already registered.
+        if (! hasRootAsShutdownDeleteDir(dir)) Utils.deleteRecursively(dir)
       }
     })
     return dir
@@ -168,7 +207,7 @@ private object Utils extends Logging {
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val uri = new URI(url)
-        val conf = new Configuration()
+        val conf = SparkHadoopUtil.newConfiguration()
         val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
@@ -227,8 +266,10 @@ private object Utils extends Logging {
 
   /**
    * Get the local host's IP address in dotted-quad format (e.g. 1.2.3.4).
+   * Note, this is typically not used from within core spark.
    */
   lazy val localIpAddress: String = findLocalIpAddress()
+  lazy val localIpAddressHostname: String = getAddressHostName(localIpAddress)
 
   private def findLocalIpAddress(): String = {
     val defaultIpOverride = System.getenv("SPARK_LOCAL_IP")
@@ -266,6 +307,8 @@ private object Utils extends Logging {
    * hostname it reports to the master.
    */
   def setCustomHostname(hostname: String) {
+    // DEBUG code
+    Utils.checkHost(hostname)
     customHostname = Some(hostname)
   }
 
@@ -273,7 +316,97 @@ private object Utils extends Logging {
    * Get the local machine's hostname.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(InetAddress.getLocalHost.getHostName)
+    customHostname.getOrElse(localIpAddressHostname)
+  }
+
+  def getAddressHostName(address: String): String = {
+    InetAddress.getByName(address).getHostName
+  }
+
+
+
+  def localHostPort(): String = {
+    val retval = System.getProperty("spark.hostPort", null)
+    if (retval == null) {
+      logErrorWithStack("spark.hostPort not set but invoking localHostPort")
+      return localHostName()
+    }
+
+    retval
+  }
+
+  /*
+  // Used by DEBUG code : remove when all testing done
+  private val ipPattern = Pattern.compile("^[0-9]+(\\.[0-9]+)*$")
+  def checkHost(host: String, message: String = "") {
+    // Currently catches only ipv4 pattern, this is just a debugging tool - not rigourous !
+    // if (host.matches("^[0-9]+(\\.[0-9]+)*$")) {
+    if (ipPattern.matcher(host).matches()) {
+      Utils.logErrorWithStack("Unexpected to have host " + host + " which matches IP pattern. Message " + message)
+    }
+    if (Utils.parseHostPort(host)._2 != 0){
+      Utils.logErrorWithStack("Unexpected to have host " + host + " which has port in it. Message " + message)
+    }
+  }
+
+  // Used by DEBUG code : remove when all testing done
+  def checkHostPort(hostPort: String, message: String = "") {
+    val (host, port) = Utils.parseHostPort(hostPort)
+    checkHost(host)
+    if (port <= 0){
+      Utils.logErrorWithStack("Unexpected to have port " + port + " which is not valid in " + hostPort + ". Message " + message)
+    }
+  }
+  */
+
+  // Once testing is complete in various modes, replace with this ?
+  def checkHost(host: String, message: String = "") {}
+  def checkHostPort(hostPort: String, message: String = "") {}
+
+  def getUserNameFromEnvironment(): String = {
+    SparkHadoopUtil.getUserNameFromEnvironment
+  }
+
+  // Used by DEBUG code : remove when all testing done
+  def logErrorWithStack(msg: String) {
+    try { throw new Exception } catch { case ex: Exception => { logError(msg, ex) } }
+    // temp code for debug
+    System.exit(-1)
+  }
+
+  // Typically, this will be of order of number of nodes in cluster
+  // If not, we should change it to LRUCache or something.
+  private val hostPortParseResults = new ConcurrentHashMap[String, (String, Int)]()
+  def parseHostPort(hostPort: String): (String,  Int) = {
+    {
+      // Check cache first.
+      var cached = hostPortParseResults.get(hostPort)
+      if (cached != null) return cached
+    }
+
+    val indx: Int = hostPort.lastIndexOf(':')
+    // This is potentially broken - when dealing with ipv6 addresses for example, sigh ... but then hadoop does not support ipv6 right now.
+    // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
+    if (-1 == indx) {
+      val retval = (hostPort, 0)
+      hostPortParseResults.put(hostPort, retval)
+      return retval
+    }
+
+    val retval = (hostPort.substring(0, indx).trim(), hostPort.substring(indx + 1).trim().toInt)
+    hostPortParseResults.putIfAbsent(hostPort, retval)
+    hostPortParseResults.get(hostPort)
+  }
+
+  def addIfNoPort(hostPort: String,  port: Int): String = {
+    if (port <= 0) throw new IllegalArgumentException("Invalid port specified " + port)
+
+    // This is potentially broken - when dealing with ipv6 addresses for example, sigh ... but then hadoop does not support ipv6 right now.
+    // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
+    val indx: Int = hostPort.lastIndexOf(':')
+    if (-1 != indx) return hostPort
+
+    hostPort + ":" + port
   }
 
   private[spark] val daemonThreadFactory: ThreadFactory =

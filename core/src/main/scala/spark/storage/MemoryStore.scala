@@ -31,7 +31,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel) {
+  override def putBytes(blockId: String, _bytes: ByteBuffer, level: StorageLevel) {
+    // Work on a duplicate - since the original input might be used elsewhere.
+    val bytes = _bytes.duplicate()
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)

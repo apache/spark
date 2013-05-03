@@ -81,6 +81,9 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
 
   test("remote fetch") {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", "localhost", 0)
+    System.setProperty("spark.driver.port", boundPort.toString)    // Will be cleared by LocalSparkContext
+    System.setProperty("spark.hostPort", "localhost:" + boundPort)
+
     val masterTracker = new MapOutputTracker()
     masterTracker.trackerActor = actorSystem.actorOf(
         Props(new MapOutputTrackerActor(masterTracker)), "MapOutputTracker")
