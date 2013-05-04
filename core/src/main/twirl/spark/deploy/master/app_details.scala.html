@@ -9,15 +9,12 @@
         <li><strong>ID:</strong> @app.id</li>
         <li><strong>Description:</strong> @app.desc.name</li>
         <li><strong>User:</strong> @app.desc.user</li>
-        <li><strong>Cores:</strong> 
-          @app.desc.cores 
-          (@app.coresGranted Granted 
-          @if(app.desc.cores == Integer.MAX_VALUE) {
-
+        <li><strong>Cores:</strong>
+          @if(app.desc.maxCores == Integer.MAX_VALUE) {
+            Unlimited (@app.coresGranted granted)
           } else {
-            , @app.coresLeft
+            @app.desc.maxCores (@app.coresGranted granted, @app.coresLeft left)
           }
-          )
         </li>
         <li><strong>Memory per Slave:</strong> @app.desc.memoryPerSlave</li>
         <li><strong>Submit Date:</strong> @app.submitDate</li>
