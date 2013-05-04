@@ -12,6 +12,9 @@ object HBaseTest {
       System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     val conf = HBaseConfiguration.create()
+
+    // Other options for configuring scan behavior are available. More information available at 
+    // http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/mapreduce/TableInputFormat.html
     conf.set(TableInputFormat.INPUT_TABLE, args(1))
 
     // Initialize hBase table if necessary
@@ -22,8 +25,8 @@ object HBaseTest {
     }
 
     val hBaseRDD = new NewHadoopRDD(sc, classOf[TableInputFormat], 
-                        classOf[org.apache.hadoop.hbase.io.ImmutableBytesWritable],
-                        classOf[org.apache.hadoop.hbase.client.Result], conf)
+      classOf[org.apache.hadoop.hbase.io.ImmutableBytesWritable],
+      classOf[org.apache.hadoop.hbase.client.Result], conf)
 
     hBaseRDD.count()
 
