@@ -1,6 +1,6 @@
 package spark.rdd
 
-import spark.{OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
+import spark.{Utils, OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
 import java.io.{ObjectOutputStream, IOException}
 
 private[spark] class ZippedPartitionsPartition(
@@ -38,9 +38,31 @@ abstract class ZippedPartitionsBaseRDD[V: ClassManifest](
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] = {
+    // Note that as number of rdd's increase and/or number of slaves in cluster increase, the computed preferredLocations below
+    // become diminishingly small : so we might need to look at alternate strategies to alleviate this.
+    // If there are no (or very small number of preferred locations), we will end up transferred the blocks to 'any' node in the
+    // cluster - paying with n/w and cache cost.
+    // Maybe pick a node which figures max amount of time ?
+    // Choose node which is hosting 'larger' of some subset of blocks ?
+    // Look at rack locality to ensure chosen host is atleast rack local to both hosting node ?, etc (would be good to defer this if possible)
     val splits = s.asInstanceOf[ZippedPartitionsPartition].partitions
-    val preferredLocations = rdds.zip(splits).map(x => x._1.preferredLocations(x._2))
-    preferredLocations.reduce((x, y) => x.intersect(y))
+    val rddSplitZip = rdds.zip(splits)
+
+    // exact match.
+    val exactMatchPreferredLocations = rddSplitZip.map(x => x._1.preferredLocations(x._2))
+    val exactMatchLocations = exactMatchPreferredLocations.reduce((x, y) => x.intersect(y))
+
+    // Remove exact match and then do host local match.
+    val otherNodePreferredLocations = rddSplitZip.map(x => {
+      x._1.preferredLocations(x._2).map(hostPort => {
+        val host = Utils.parseHostPort(hostPort)._1
+
+        if (exactMatchLocations.contains(host)) null else host
+      }).filter(_ != null)
+    })
+    val otherNodeLocalLocations = otherNodePreferredLocations.reduce((x, y) => x.intersect(y))
+
+    otherNodeLocalLocations ++ exactMatchLocations
   }
 
   override def clearDependencies() {

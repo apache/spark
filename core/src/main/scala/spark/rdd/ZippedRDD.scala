@@ -48,21 +48,27 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] = {
+    // Note that as number of slaves in cluster increase, the computed preferredLocations can become small : so we might need
+    // to look at alternate strategies to alleviate this. (If there are no (or very small number of preferred locations), we
+    // will end up transferred the blocks to 'any' node in the cluster - paying with n/w and cache cost.
+    // Maybe pick one or the other ? (so that atleast one block is local ?).
+    // Choose node which is hosting 'larger' of the blocks ?
+    // Look at rack locality to ensure chosen host is atleast rack local to both hosting node ?, etc (would be good to defer this if possible)
     val (partition1, partition2) = s.asInstanceOf[ZippedPartition[T, U]].partitions
     val pref1 = rdd1.preferredLocations(partition1)
     val pref2 = rdd2.preferredLocations(partition2)
 
-    // both partitions are instance local.
-    val instanceLocalLocations = pref1.intersect(pref2)
+    // exact match - instance local and host local.
+    val exactMatchLocations = pref1.intersect(pref2)
 
-    // remove locations which are already handled via instanceLocalLocations, and intersect where both partitions are node local.
-    val nodeLocalPref1 = pref1.filter(loc => ! instanceLocalLocations.contains(loc)).map(loc => Utils.parseHostPort(loc)._1)
-    val nodeLocalPref2 = pref2.filter(loc => ! instanceLocalLocations.contains(loc)).map(loc => Utils.parseHostPort(loc)._1)
-    val nodeLocalLocations = nodeLocalPref1.intersect(nodeLocalPref2)
+    // remove locations which are already handled via exactMatchLocations, and intersect where both partitions are node local.
+    val otherNodeLocalPref1 = pref1.filter(loc => ! exactMatchLocations.contains(loc)).map(loc => Utils.parseHostPort(loc)._1)
+    val otherNodeLocalPref2 = pref2.filter(loc => ! exactMatchLocations.contains(loc)).map(loc => Utils.parseHostPort(loc)._1)
+    val otherNodeLocalLocations = otherNodeLocalPref1.intersect(otherNodeLocalPref2)
 
 
     // Can have mix of instance local (hostPort) and node local (host) locations as preference !
-    instanceLocalLocations ++ nodeLocalLocations
+    exactMatchLocations ++ otherNodeLocalLocations
   }
 
   override def clearDependencies() {
