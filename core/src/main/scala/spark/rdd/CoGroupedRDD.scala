@@ -54,7 +54,8 @@ private[spark] class CoGroupAggregator
 class CoGroupedRDD[K](
   @transient var rdds: Seq[RDD[(K, _)]],
   part: Partitioner,
-  val mapSideCombine: Boolean = true)
+  val mapSideCombine: Boolean = true,
+  val serializerClass: String = null)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
 
   private val aggr = new CoGroupAggregator
@@ -68,9 +69,9 @@ class CoGroupedRDD[K](
         logInfo("Adding shuffle dependency with " + rdd)
         if (mapSideCombine) {
           val mapSideCombinedRDD = rdd.mapPartitions(aggr.combineValuesByKey(_), true)
-          new ShuffleDependency[Any, ArrayBuffer[Any]](mapSideCombinedRDD, part)
+          new ShuffleDependency[Any, ArrayBuffer[Any]](mapSideCombinedRDD, part, serializerClass)
         } else {
-          new ShuffleDependency[Any, Any](rdd.asInstanceOf[RDD[(Any, Any)]], part)
+          new ShuffleDependency[Any, Any](rdd.asInstanceOf[RDD[(Any, Any)]], part, serializerClass)
         }
       }
     }
@@ -112,6 +113,7 @@ class CoGroupedRDD[K](
       }
     }
 
+    val ser = SparkEnv.get.serializerManager.get(serializerClass)
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
@@ -124,12 +126,12 @@ class CoGroupedRDD[K](
         val fetcher = SparkEnv.get.shuffleFetcher
         if (mapSideCombine) {
           // With map side combine on, for each key, the shuffle fetcher returns a list of values.
-          fetcher.fetch[K, Seq[Any]](shuffleId, split.index, context.taskMetrics).foreach {
+          fetcher.fetch[K, Seq[Any]](shuffleId, split.index, context.taskMetrics, ser).foreach {
             case (key, values) => getSeq(key)(depNum) ++= values
           }
         } else {
           // With map side combine off, for each key the shuffle fetcher returns a single value.
-          fetcher.fetch[K, Any](shuffleId, split.index, context.taskMetrics).foreach {
+          fetcher.fetch[K, Any](shuffleId, split.index, context.taskMetrics, ser).foreach {
             case (key, value) => getSeq(key)(depNum) += value
           }
         }

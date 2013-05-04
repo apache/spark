@@ -25,15 +25,11 @@ import sun.nio.ch.DirectBuffer
 
 
 private[spark]
-case class BlockException(blockId: String, message: String, ex: Exception = null)
-extends Exception(message)
-
-private[spark]
 class BlockManager(
     executorId: String,
     actorSystem: ActorSystem,
     val master: BlockManagerMaster,
-    val serializer: Serializer,
+    val defaultSerializer: Serializer,
     maxMemory: Long)
   extends Logging {
 
@@ -92,10 +88,12 @@ class BlockManager(
     }
   }
 
+  val shuffleBlockManager = new ShuffleBlockManager(this)
+
   private val blockInfo = new TimeStampedHashMap[String, BlockInfo]
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
-  private[storage] val diskStore: BlockStore =
+  private[storage] val diskStore: DiskStore =
     new DiskStore(this, System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
 
   val connectionManager = new ConnectionManager(0)
@@ -293,22 +291,20 @@ class BlockManager(
   }
 
   /**
+   * A short-circuited method to get blocks directly from disk. This is used for getting
+   * shuffle blocks. It is safe to do so without a lock on block info since disk store
+   * never deletes (recent) items.
+   */
+  def getLocalFromDisk(blockId: String, serializer: Serializer): Option[Iterator[Any]] = {
+    diskStore.getValues(blockId, serializer).orElse(
+      sys.error("Block " + blockId + " not found on disk, though it should be"))
+  }
+
+  /**
    * Get block from local block manager.
    */
   def getLocal(blockId: String): Option[Iterator[Any]] = {
     logDebug("Getting local block " + blockId)
-
-    // As an optimization for map output fetches, if the block is for a shuffle, return it
-    // without acquiring a lock; the disk store never deletes (recent) items so this should work
-    if (blockId.startsWith("shuffle_")) {
-      return diskStore.getValues(blockId) match {
-        case Some(iterator) =>
-          Some(iterator)
-        case None =>
-          throw new Exception("Block " + blockId + " not found on disk, though it should be")
-      }
-    }
-
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
@@ -394,7 +390,7 @@ class BlockManager(
 
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
-    if (blockId.startsWith("shuffle_")) {
+    if (ShuffleBlockManager.isShuffle(blockId)) {
       return diskStore.getBytes(blockId) match {
         case Some(bytes) =>
           Some(bytes)
@@ -496,9 +492,10 @@ class BlockManager(
    * fashion as they're received. Expects a size in bytes to be provided for each block fetched,
    * so that we can control the maxMegabytesInFlight for the fetch.
    */
-  def getMultiple(blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])])
+  def getMultiple(
+    blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])], serializer: Serializer)
       : BlockFetcherIterator = {
-    return new BlockFetcherIterator(this, blocksByAddress)
+    return new BlockFetcherIterator(this, blocksByAddress, serializer)
   }
 
   def put(blockId: String, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean)
@@ -506,6 +503,22 @@ class BlockManager(
     val elements = new ArrayBuffer[Any]
     elements ++= values
     put(blockId, elements, level, tellMaster)
+  }
+
+  /**
+   * A short circuited method to get a block writer that can write data directly to disk.
+   * This is currently used for writing shuffle files out. Callers should handle error
+   * cases.
+   */
+  def getDiskBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int)
+    : BlockObjectWriter = {
+    val writer = diskStore.getBlockWriter(blockId, serializer, bufferSize)
+    writer.registerCloseEventHandler(() => {
+      val myInfo = new BlockInfo(StorageLevel.DISK_ONLY, false)
+      blockInfo.put(blockId, myInfo)
+      myInfo.markReady(writer.size())
+    })
+    writer
   }
 
   /**
@@ -606,7 +619,6 @@ class BlockManager(
       }
     }
     logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))
-
 
     // Replicate block if required
     if (level.replication > 1) {
@@ -860,7 +872,7 @@ class BlockManager(
   }
 
   def shouldCompress(blockId: String): Boolean = {
-    if (blockId.startsWith("shuffle_")) {
+    if (ShuffleBlockManager.isShuffle(blockId)) {
       compressShuffle
     } else if (blockId.startsWith("broadcast_")) {
       compressBroadcast
@@ -875,7 +887,11 @@ class BlockManager(
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: OutputStream): OutputStream = {
-    if (shouldCompress(blockId)) new LZFOutputStream(s) else s
+    if (shouldCompress(blockId)) {
+      (new LZFOutputStream(s)).setFinishBlockOnFlush(true)
+    } else {
+      s
+    }
   }
 
   /**
@@ -885,7 +901,10 @@ class BlockManager(
     if (shouldCompress(blockId)) new LZFInputStream(s) else s
   }
 
-  def dataSerialize(blockId: String, values: Iterator[Any]): ByteBuffer = {
+  def dataSerialize(
+      blockId: String,
+      values: Iterator[Any],
+      serializer: Serializer = defaultSerializer): ByteBuffer = {
     val byteStream = new FastByteArrayOutputStream(4096)
     val ser = serializer.newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
@@ -897,7 +916,10 @@ class BlockManager(
    * Deserializes a ByteBuffer into an iterator of values and disposes of it when the end of
    * the iterator is reached.
    */
-  def dataDeserialize(blockId: String, bytes: ByteBuffer): Iterator[Any] = {
+  def dataDeserialize(
+      blockId: String,
+      bytes: ByteBuffer,
+      serializer: Serializer = defaultSerializer): Iterator[Any] = {
     bytes.rewind()
     val stream = wrapForCompression(blockId, new ByteBufferInputStream(bytes, true))
     serializer.newInstance().deserializeStream(stream).asIterator
@@ -951,7 +973,8 @@ object BlockManager extends Logging {
 
 class BlockFetcherIterator(
     private val blockManager: BlockManager,
-    val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])]
+    val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])],
+    serializer: Serializer
 ) extends Iterator[(String, Option[Iterator[Any]])] with Logging with BlockFetchTracker {
 
   import blockManager._
@@ -1014,8 +1037,8 @@ class BlockFetcherIterator(
               "Unexpected message " + blockMessage.getType + " received from " + cmId)
           }
           val blockId = blockMessage.getId
-          results.put(new FetchResult(
-            blockId, sizeMap(blockId), () => dataDeserialize(blockId, blockMessage.getData)))
+          results.put(new FetchResult(blockId, sizeMap(blockId),
+            () => dataDeserialize(blockId, blockMessage.getData, serializer)))
           _remoteBytesRead += req.size
           logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
@@ -1079,7 +1102,7 @@ class BlockFetcherIterator(
   // any memory that might exceed our maxBytesInFlight
   startTime = System.currentTimeMillis
   for (id <- localBlockIds) {
-    getLocal(id) match {
+    getLocalFromDisk(id, serializer) match {
       case Some(iter) => {
         results.put(new FetchResult(id, 0, () => iter)) // Pass 0 as size since it's not in flight
         logDebug("Got local block " + id)
