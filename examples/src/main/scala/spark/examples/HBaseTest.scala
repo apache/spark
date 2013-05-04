@@ -2,7 +2,7 @@ package spark.examples
 
 import spark._
 import spark.rdd.NewHadoopRDD
-import org.apache.hadoop.hbase.{HBaseConfiguration, HTableDescriptor, HColumnDescriptor}
+import org.apache.hadoop.hbase.{HBaseConfiguration, HTableDescriptor}
 import org.apache.hadoop.hbase.client.HBaseAdmin
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 
@@ -14,12 +14,10 @@ object HBaseTest {
     val conf = HBaseConfiguration.create()
     conf.set(TableInputFormat.INPUT_TABLE, args(1))
 
-    // Initialize hBase tables if necessary
+    // Initialize hBase table if necessary
     val admin = new HBaseAdmin(conf)
     if(!admin.isTableAvailable(args(1))) {
-      val colDesc = new HColumnDescriptor(args(2))
       val tableDesc = new HTableDescriptor(args(1))
-      tableDesc.addFamily(colDesc)
       admin.createTable(tableDesc)
     }
 
