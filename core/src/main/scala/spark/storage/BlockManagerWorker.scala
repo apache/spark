@@ -19,7 +19,7 @@ import spark.network._
  */
 private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   initLogging()
-  
+
   blockManager.connectionManager.onReceiveMessage(onBlockMessageReceive)
 
   def onBlockMessageReceive(msg: Message, id: ConnectionManagerId): Option[Message] = {
@@ -51,7 +51,7 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
         logDebug("Received [" + pB + "]")
         putBlock(pB.id, pB.data, pB.level)
         return None
-      } 
+      }
       case BlockMessage.TYPE_GET_BLOCK => {
         val gB = new GetBlock(blockMessage.getId)
         logDebug("Received [" + gB + "]")
@@ -90,28 +90,26 @@ private[spark] object BlockManagerWorker extends Logging {
   private var blockManagerWorker: BlockManagerWorker = null
   private val DATA_TRANSFER_TIME_OUT_MS: Long = 500
   private val REQUEST_RETRY_INTERVAL_MS: Long = 1000
-  
+
   initLogging()
-  
+
   def startBlockManagerWorker(manager: BlockManager) {
     blockManagerWorker = new BlockManagerWorker(manager)
   }
-  
+
   def syncPutBlock(msg: PutBlock, toConnManagerId: ConnectionManagerId): Boolean = {
     val blockManager = blockManagerWorker.blockManager
-    val connectionManager = blockManager.connectionManager 
-    val serializer = blockManager.serializer
+    val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromPutBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val resultMessage = connectionManager.sendMessageReliablySync(
         toConnManagerId, blockMessageArray.toBufferMessage)
     return (resultMessage != None)
   }
-  
+
   def syncGetBlock(msg: GetBlock, toConnManagerId: ConnectionManagerId): ByteBuffer = {
     val blockManager = blockManagerWorker.blockManager
-    val connectionManager = blockManager.connectionManager 
-    val serializer = blockManager.serializer
+    val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromGetBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val responseMessage = connectionManager.sendMessageReliablySync(

@@ -25,10 +25,12 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
  * @param shuffleId the shuffle id
  * @param rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
+ * @param serializerClass class name of the serializer to use
  */
 class ShuffleDependency[K, V](
     @transient rdd: RDD[(K, V)],
-    val partitioner: Partitioner)
+    val partitioner: Partitioner,
+    val serializerClass: String = null)
   extends Dependency(rdd) {
 
   val shuffleId: Int = rdd.context.newShuffleId()

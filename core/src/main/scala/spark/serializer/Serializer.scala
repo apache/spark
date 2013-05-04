@@ -1,9 +1,12 @@
 package spark.serializer
 
-import java.nio.ByteBuffer
 import java.io.{EOFException, InputStream, OutputStream}
+import java.nio.ByteBuffer
+
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
 import spark.util.ByteBufferInputStream
+
 
 /**
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
@@ -13,6 +16,7 @@ import spark.util.ByteBufferInputStream
 trait Serializer {
   def newInstance(): SerializerInstance
 }
+
 
 /**
  * An instance of a serializer, for use by one thread at a time.
@@ -45,6 +49,7 @@ trait SerializerInstance {
   }
 }
 
+
 /**
  * A stream for writing serialized objects.
  */
@@ -60,6 +65,7 @@ trait SerializationStream {
     this
   }
 }
+
 
 /**
  * A stream for reading serialized objects.
