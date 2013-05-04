@@ -633,6 +633,32 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void zipPartitions() {
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6), 2);
+    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("1", "2", "3", "4"), 2);
+    FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer> sizesFn =
+      new FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer>() {
+        @Override
+        public Iterable<Integer> call(Iterator<Integer> i, Iterator<String> s) {
+          int sizeI = 0;
+          int sizeS = 0;
+          while (i.hasNext()) {
+            sizeI += 1;
+            i.next();
+          }
+          while (s.hasNext()) {
+            sizeS += 1;
+            s.next();
+          }
+          return Arrays.asList(sizeI, sizeS);
+        }
+      };
+
+    JavaRDD<Integer> sizes = rdd1.zipPartitions(sizesFn, rdd2);
+    Assert.assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
+  }
+
+  @Test
   public void accumulators() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
 
