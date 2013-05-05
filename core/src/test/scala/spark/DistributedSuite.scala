@@ -276,7 +276,6 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
           // is racing this thread to remove entries from the driver.
       }
     }
-    assert(sc.getRDDStorageInfo.isEmpty === true)
   }
 }
 
