@@ -37,7 +37,7 @@ private[spark] class ApplicationInfo(
     coresGranted -= exec.cores
   }
 
-  def coresLeft: Int = desc.cores - coresGranted
+  def coresLeft: Int = desc.maxCores - coresGranted
 
   private var _retryCount = 0
 
