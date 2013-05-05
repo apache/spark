@@ -103,7 +103,7 @@ def parse_args():
     parser.print_help()
     sys.exit(1)
   (action, cluster_name) = args
-  if opts.identity_file == None and action in ['launch', 'login']:
+  if opts.identity_file == None and action in ['launch', 'login', 'start']:
     print >> stderr, ("ERROR: The -i or --identity-file argument is " +
                       "required for " + action)
     sys.exit(1)
