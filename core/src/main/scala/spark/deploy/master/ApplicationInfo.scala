@@ -11,8 +11,7 @@ private[spark] class ApplicationInfo(
     val desc: ApplicationDescription,
     val submitDate: Date,
     val driver: ActorRef,
-    val appUIHost: String,
-    val appUIPort: Int)
+    val appUiUrl: String)
 {
   var state = ApplicationState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]
@@ -62,8 +61,5 @@ private[spark] class ApplicationInfo(
       System.currentTimeMillis() - startTime
     }
   }
-
-
-  def appUIAddress = "http://" + this.appUIHost + ":" + this.appUIPort
 
 }

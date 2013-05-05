@@ -74,4 +74,6 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
       }
     }
   }
+
+  private[spark] def appUIAddress = "http://" + host + ":" + port
 }
