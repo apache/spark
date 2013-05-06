@@ -275,6 +275,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
         exec.worker.actor ! KillExecutor(exec.application.id, exec.id)
+        exec.state = ExecutorState.KILLED
       }
       app.markFinished(state)
       app.driver ! ApplicationRemoved(state.toString)

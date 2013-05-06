@@ -14,7 +14,6 @@ import com.ning.compress.lzf.LZFOutputStream
 
 import spark._
 import spark.executor.ShuffleWriteMetrics
-import spark.serializer.Serializer
 import spark.storage._
 import spark.util.{TimeStampedHashMap, MetadataCleaner}
 
@@ -139,12 +138,12 @@ private[spark] class ShuffleMapTask(
     metrics = Some(taskContext.taskMetrics)
 
     val blockManager = SparkEnv.get.blockManager
-    var shuffle: ShuffleBlockManager#Shuffle = null
+    var shuffle: ShuffleBlocks = null
     var buckets: ShuffleWriterGroup = null
 
     try {
       // Obtain all the block writers for shuffle blocks.
-      val ser = Serializer.get(dep.serializerClass)
+      val ser = SparkEnv.get.serializerManager.get(dep.serializerClass)
       shuffle = blockManager.shuffleBlockManager.forShuffle(dep.shuffleId, numOutputSplits, ser)
       buckets = shuffle.acquireWriters(partition)
 

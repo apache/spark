@@ -182,6 +182,21 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     JavaPairRDD.fromRDD(rdd.zip(other.rdd)(other.classManifest))(classManifest, other.classManifest)
   }
 
+  /**
+   * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by
+   * applying a function to the zipped partitions. Assumes that all the RDDs have the
+   * *same number of partitions*, but does *not* require them to have the same number
+   * of elements in each partition.
+   */
+  def zipPartitions[U, V](
+      f: FlatMapFunction2[java.util.Iterator[T], java.util.Iterator[U], V],
+      other: JavaRDDLike[U, _]): JavaRDD[V] = {
+    def fn = (x: Iterator[T], y: Iterator[U]) => asScalaIterator(
+      f.apply(asJavaIterator(x), asJavaIterator(y)).iterator())
+    JavaRDD.fromRDD(
+      rdd.zipPartitions(fn, other.rdd)(other.classManifest, f.elementType()))(f.elementType())
+  }
+
   // Actions (launch a job to return a value to the user program)
 
   /**

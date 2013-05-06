@@ -7,7 +7,7 @@ import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
-import spark.serializer.Serializer
+import spark.serializer.{Serializer, SerializerManager}
 import spark.util.AkkaUtils
 
 
@@ -21,6 +21,7 @@ import spark.util.AkkaUtils
 class SparkEnv (
     val executorId: String,
     val actorSystem: ActorSystem,
+    val serializerManager: SerializerManager,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -92,10 +93,12 @@ object SparkEnv extends Logging {
       Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
     }
 
-    val serializer = Serializer.setDefault(
+    val serializerManager = new SerializerManager
+
+    val serializer = serializerManager.setDefault(
       System.getProperty("spark.serializer", "spark.JavaSerializer"))
 
-    val closureSerializer = Serializer.get(
+    val closureSerializer = serializerManager.get(
       System.getProperty("spark.closure.serializer", "spark.JavaSerializer"))
 
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
@@ -155,6 +158,7 @@ object SparkEnv extends Logging {
     new SparkEnv(
       executorId,
       actorSystem,
+      serializerManager,
       serializer,
       closureSerializer,
       cacheManager,

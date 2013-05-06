@@ -2,7 +2,6 @@ package spark.rdd
 
 import spark.{Partitioner, RDD, SparkEnv, ShuffleDependency, Partition, TaskContext}
 import spark.SparkContext._
-import spark.serializer.Serializer
 
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
@@ -32,7 +31,7 @@ class ShuffledRDD[K, V](
 
   override def compute(split: Partition, context: TaskContext): Iterator[(K, V)] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
-    SparkEnv.get.shuffleFetcher.fetch[K, V](
-      shuffledId, split.index, context.taskMetrics, Serializer.get(serializerClass))
+    SparkEnv.get.shuffleFetcher.fetch[K, V](shuffledId, split.index, context.taskMetrics,
+      SparkEnv.get.serializerManager.get(serializerClass))
   }
 }

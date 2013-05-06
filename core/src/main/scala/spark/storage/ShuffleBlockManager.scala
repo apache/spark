@@ -8,26 +8,30 @@ class ShuffleWriterGroup(val id: Int, val writers: Array[BlockObjectWriter])
 
 
 private[spark]
+trait ShuffleBlocks {
+  def acquireWriters(mapId: Int): ShuffleWriterGroup
+  def releaseWriters(group: ShuffleWriterGroup)
+}
+
+
+private[spark]
 class ShuffleBlockManager(blockManager: BlockManager) {
 
-  def forShuffle(shuffleId: Int, numBuckets: Int, serializer: Serializer): Shuffle = {
-    new Shuffle(shuffleId, numBuckets, serializer)
-  }
-
-  class Shuffle(shuffleId: Int, numBuckets: Int, serializer: Serializer) {
-
-    // Get a group of writers for a map task.
-    def acquireWriters(mapId: Int): ShuffleWriterGroup = {
-      val bufferSize = System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
-      val writers = Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
-        val blockId = ShuffleBlockManager.blockId(shuffleId, bucketId, mapId)
-        blockManager.getDiskBlockWriter(blockId, serializer, bufferSize).open()
+  def forShuffle(shuffleId: Int, numBuckets: Int, serializer: Serializer): ShuffleBlocks = {
+    new ShuffleBlocks {
+      // Get a group of writers for a map task.
+      override def acquireWriters(mapId: Int): ShuffleWriterGroup = {
+        val bufferSize = System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
+        val writers = Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
+          val blockId = ShuffleBlockManager.blockId(shuffleId, bucketId, mapId)
+          blockManager.getDiskBlockWriter(blockId, serializer, bufferSize).open()
+        }
+        new ShuffleWriterGroup(mapId, writers)
       }
-      new ShuffleWriterGroup(mapId, writers)
-    }
 
-    def releaseWriters(group: ShuffleWriterGroup) = {
-      // Nothing really to release here.
+      override def releaseWriters(group: ShuffleWriterGroup) = {
+        // Nothing really to release here.
+      }
     }
   }
 }
