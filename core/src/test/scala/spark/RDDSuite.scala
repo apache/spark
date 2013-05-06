@@ -5,7 +5,7 @@ import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.{Span, Millis}
 import spark.SparkContext._
-import spark.rdd.{CoalescedRDD, CoGroupedRDD, PartitionPruningRDD, ShuffledRDD}
+import spark.rdd.{CoalescedRDD, CoGroupedRDD, EmptyRDD, PartitionPruningRDD, ShuffledRDD}
 
 class RDDSuite extends FunSuite with LocalSparkContext {
 
@@ -145,6 +145,18 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     assert(thrown.getMessage.contains("injected failure"))
     shouldFail = false
     assert(rdd.collect().toList === List(1, 2, 3, 4))
+  }
+
+  test("empty RDD") {
+    sc = new SparkContext("local", "test")
+    val empty = new EmptyRDD[Int](sc)
+    assert(empty.count === 0)
+    assert(empty.collect().size === 0)
+
+    val thrown = intercept[UnsupportedOperationException]{
+      empty.reduce(_+_)
+    }
+    assert(thrown.getMessage.contains("empty"))
   }
 
   test("cogrouped RDDs") {
