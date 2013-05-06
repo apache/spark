@@ -1,10 +1,9 @@
 """
 Worker that receives input from Piped RDD.
 """
-import time
-preboot_time = time.time()
 import os
 import sys
+import time
 import traceback
 from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
@@ -17,57 +16,55 @@ from pyspark.serializers import write_with_length, read_with_length, write_int, 
     read_long, write_long, read_int, dump_pickle, load_pickle, read_from_pickle_file
 
 
-# Redirect stdout to stderr so that users must return values from functions.
-old_stdout = os.fdopen(os.dup(1), 'w')
-os.dup2(2, 1)
+def load_obj(infile):
+    return load_pickle(standard_b64decode(infile.readline().strip()))
 
 
-def load_obj():
-    return load_pickle(standard_b64decode(sys.stdin.readline().strip()))
+def report_times(outfile, boot, init, finish):
+    write_int(-3, outfile)
+    write_long(1000 * boot, outfile)
+    write_long(1000 * init, outfile)
+    write_long(1000 * finish, outfile)
 
 
-def report_times(preboot, boot, init, finish):
-    write_int(-3, old_stdout)
-    write_long(1000 * preboot, old_stdout)
-    write_long(1000 * boot, old_stdout)
-    write_long(1000 * init, old_stdout)
-    write_long(1000 * finish, old_stdout)
-
-
-def main():
+def main(infile, outfile):
     boot_time = time.time()
-    split_index = read_int(sys.stdin)
-    spark_files_dir = load_pickle(read_with_length(sys.stdin))
+    split_index = read_int(infile)
+    spark_files_dir = load_pickle(read_with_length(infile))
     SparkFiles._root_directory = spark_files_dir
     SparkFiles._is_running_on_worker = True
     sys.path.append(spark_files_dir)
-    num_broadcast_variables = read_int(sys.stdin)
+    num_broadcast_variables = read_int(infile)
     for _ in range(num_broadcast_variables):
-        bid = read_long(sys.stdin)
-        value = read_with_length(sys.stdin)
+        bid = read_long(infile)
+        value = read_with_length(infile)
         _broadcastRegistry[bid] = Broadcast(bid, load_pickle(value))
-    func = load_obj()
-    bypassSerializer = load_obj()
+    func = load_obj(infile)
+    bypassSerializer = load_obj(infile)
     if bypassSerializer:
         dumps = lambda x: x
     else:
         dumps = dump_pickle
     init_time = time.time()
-    iterator = read_from_pickle_file(sys.stdin)
+    iterator = read_from_pickle_file(infile)
     try:
         for obj in func(split_index, iterator):
-           write_with_length(dumps(obj), old_stdout)
+            write_with_length(dumps(obj), outfile)
     except Exception as e:
-        write_int(-2, old_stdout)
-        write_with_length(traceback.format_exc(), old_stdout)
-        sys.exit(-1)
+        write_int(-2, outfile)
+        write_with_length(traceback.format_exc(), outfile)
+        raise
     finish_time = time.time()
-    report_times(preboot_time, boot_time, init_time, finish_time)
+    report_times(outfile, boot_time, init_time, finish_time)
     # Mark the beginning of the accumulators section of the output
-    write_int(-1, old_stdout)
+    write_int(-1, outfile)
     for aid, accum in _accumulatorRegistry.items():
-        write_with_length(dump_pickle((aid, accum._value)), old_stdout)
+        write_with_length(dump_pickle((aid, accum._value)), outfile)
+    write_int(-1, outfile)
 
 
 if __name__ == '__main__':
-    main()
+    # Redirect stdout to stderr so that users must return values from functions.
+    old_stdout = os.fdopen(os.dup(1), 'w')
+    os.dup2(2, 1)
+    main(sys.stdin, old_stdout)

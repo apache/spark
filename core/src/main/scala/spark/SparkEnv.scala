@@ -1,5 +1,8 @@
 package spark
 
+import collection.mutable
+import serializer.Serializer
+
 import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
@@ -9,6 +12,7 @@ import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
 import spark.util.AkkaUtils
+import spark.api.python.PythonWorker
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -32,6 +36,8 @@ class SparkEnv (
     val sparkFilesDir: String
   ) {
 
+  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorker]()
+
   def stop() {
     httpFileServer.stop()
     mapOutputTracker.stop()
@@ -43,6 +49,12 @@ class SparkEnv (
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
     actorSystem.awaitTermination()
+  }
+
+  def getPythonWorker(pythonExec: String, envVars: Map[String, String]): PythonWorker = {
+    synchronized {
+      pythonWorkers.getOrElseUpdate((pythonExec, envVars), new PythonWorker(pythonExec, envVars))
+    }
   }
 }
 
