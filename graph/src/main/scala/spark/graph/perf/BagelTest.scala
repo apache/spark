@@ -1,9 +1,10 @@
-package spark.graph
+package spark.graph.perf
 
 import spark._
 import spark.SparkContext._
 import spark.bagel.Bagel
 import spark.bagel.examples._
+import spark.graph._
 
 
 object BagelTest {
@@ -41,7 +42,7 @@ object BagelTest {
     }
 
     val sc = new SparkContext(host, "PageRank(" + fname + ")")
-    val g = Graph.textFile(sc, fname, a => 1.0F).withPartitioner(numVPart, numEPart).cache()
+    val g = GraphLoader.textFile(sc, fname, a => 1.0F).withPartitioner(numVPart, numEPart).cache()
     val startTime = System.currentTimeMillis
 
     val numVertices = g.vertices.count()

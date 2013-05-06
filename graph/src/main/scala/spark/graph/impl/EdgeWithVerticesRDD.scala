@@ -1,9 +1,9 @@
-package spark.graph
+package spark.graph.impl
 
 import spark.{Aggregator, HashPartitioner, Partition, RDD, SparkEnv, TaskContext}
 import spark.{Dependency, OneToOneDependency, ShuffleDependency}
 import spark.SparkContext._
-import spark.graph.Graph.EdgePartition
+import spark.graph._
 
 
 private[graph]
