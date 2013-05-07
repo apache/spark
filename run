@@ -2,6 +2,9 @@
 
 SCALA_VERSION=2.9.3
 
+# Enable extended globbing
+shopt -s extglob
+
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 
@@ -126,7 +129,7 @@ if [ -e "$FWDIR/lib_managed" ]; then
 fi
 CLASSPATH+=":$REPL_DIR/lib/*"
 if [ -e repl-bin/target ]; then
-  for jar in `find "repl-bin/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
+  for jar in `find "repl-bin/target" -name 'spark-repl-*-shaded.jar'`; do
     CLASSPATH+=":$jar"
   done
 fi
@@ -138,13 +141,13 @@ export CLASSPATH # Needed for spark-shell
 
 # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
 # to avoid the -sources and -doc packages that are built by publish-local.
-if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
+if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples-"!(*sources|*javadoc) ]; then
   # Use the JAR from the SBT build
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
+  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples-"!(*sources|*javadoc).jar`
 fi
-if [ -e "$EXAMPLES_DIR/target/spark-examples-"*hadoop[12].jar ]; then
+if [ -e "$EXAMPLES_DIR/target/spark-examples-"!(*sources|*javadoc).jar ]; then
   # Use the JAR from the Maven build
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples-"*hadoop[12].jar`
+  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples-"!(*sources|*javadoc).jar`
 fi
 
 # Figure out whether to run our class with java or with the scala launcher.
