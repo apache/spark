@@ -24,9 +24,9 @@ object HBaseTest {
       admin.createTable(tableDesc)
     }
 
-    val hBaseRDD = new NewHadoopRDD(sc, classOf[TableInputFormat], 
+    val hBaseRDD = sc.newAPIHadoopRDD(conf, classOf[TableInputFormat], 
       classOf[org.apache.hadoop.hbase.io.ImmutableBytesWritable],
-      classOf[org.apache.hadoop.hbase.client.Result], conf)
+      classOf[org.apache.hadoop.hbase.client.Result])
 
     hBaseRDD.count()
 
