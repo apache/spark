@@ -14,13 +14,16 @@ import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 import spark.Utils
 import spark.executor.ExecutorExitCode
 import spark.serializer.{Serializer, SerializationStream}
+import spark.Logging
+import spark.network.netty.ShuffleSender
+import spark.network.netty.PathResolver
 
 
 /**
  * Stores BlockManager blocks on disk.
  */
 private class DiskStore(blockManager: BlockManager, rootDirs: String)
-  extends BlockStore(blockManager) {
+  extends BlockStore(blockManager) with Logging {
 
   class DiskBlockObjectWriter(blockId: String, serializer: Serializer, bufferSize: Int)
     extends BlockObjectWriter(blockId) {
@@ -79,18 +82,27 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   val subDirsPerLocalDir = System.getProperty("spark.diskStore.subDirectories", "64").toInt
 
+  var shuffleSender : Thread = null
+  val thisInstance = this
   // Create one local directory for each path mentioned in spark.local.dir; then, inside this
   // directory, create multiple subdirectories that we will hash files into, in order to avoid
   // having really large inodes at the top level.
   val localDirs = createLocalDirs()
   val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
+  val useNetty = System.getProperty("spark.shuffle.use.netty", "false").toBoolean
+
   addShutdownHook()
+
+  if(useNetty){
+    startShuffleBlockSender()
+  }
 
   def getBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int)
     : BlockObjectWriter = {
     new DiskBlockObjectWriter(blockId, serializer, bufferSize)
   }
+
 
   override def getSize(blockId: String): Long = {
     getFile(blockId).length()
@@ -262,10 +274,48 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
           localDirs.foreach { localDir =>
             if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
           }
+          if (useNetty && shuffleSender != null)
+            shuffleSender.stop
         } catch {
           case t: Throwable => logError("Exception while deleting local spark dirs", t)
         }
       }
     })
+  }
+
+  private def startShuffleBlockSender (){
+    try {
+      val port = System.getProperty("spark.shuffle.sender.port", "6653").toInt
+
+      val pResolver = new PathResolver {
+        def getAbsolutePath(blockId:String):String = {
+          if (!blockId.startsWith("shuffle_")) {
+            return null
+          }
+          thisInstance.getFile(blockId).getAbsolutePath()
+        }
+      }
+      shuffleSender = new Thread {
+        override def run() = {
+          val sender = new ShuffleSender(port,pResolver)
+          logInfo("created ShuffleSender binding to port : "+ port)
+          sender.start
+        }
+      }
+      shuffleSender.setDaemon(true)
+      shuffleSender.start
+
+    } catch {
+      case interrupted: InterruptedException =>
+        logInfo("Runner thread for ShuffleBlockSender interrupted")
+
+      case e: Exception => {
+        logError("Error running ShuffleBlockSender ", e)
+        if (shuffleSender != null) {
+          shuffleSender.stop
+          shuffleSender = null
+        }
+      }
+    }
   }
 }
