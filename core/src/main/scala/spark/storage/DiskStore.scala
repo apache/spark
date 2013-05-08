@@ -283,7 +283,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     })
   }
 
-  private def startShuffleBlockSender (){
+  private def startShuffleBlockSender() {
     try {
       val port = System.getProperty("spark.shuffle.sender.port", "6653").toInt
 
@@ -297,7 +297,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       }
       shuffleSender = new Thread {
         override def run() = {
-          val sender = new ShuffleSender(port,pResolver)
+          val sender = new ShuffleSender(port, pResolver)
           logInfo("Created ShuffleSender binding to port : "+ port)
           sender.start
         }
