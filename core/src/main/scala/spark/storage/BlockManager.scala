@@ -23,8 +23,7 @@ import spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStam
 import sun.nio.ch.DirectBuffer
 
 
-private[spark]
-class BlockManager(
+private[spark] class BlockManager(
     executorId: String,
     actorSystem: ActorSystem,
     val master: BlockManagerMaster,
@@ -494,11 +493,16 @@ class BlockManager(
   def getMultiple(
     blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])], serializer: Serializer)
       : BlockFetcherIterator = {
-    if(System.getProperty("spark.shuffle.use.netty", "false").toBoolean){
-      return BlockFetcherIterator("netty",this, blocksByAddress, serializer)
-    } else {
-      return BlockFetcherIterator("", this, blocksByAddress, serializer)
-    }
+
+    val iter =
+      if (System.getProperty("spark.shuffle.use.netty", "false").toBoolean) {
+        new BlockFetcherIterator.NettyBlockFetcherIterator(this, blocksByAddress, serializer)
+      } else {
+        new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer)
+      }
+
+    iter.initialize()
+    iter
   }
 
   def put(blockId: String, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean)
@@ -942,8 +946,8 @@ class BlockManager(
   }
 }
 
-private[spark]
-object BlockManager extends Logging {
+
+private[spark] object BlockManager extends Logging {
 
   val ID_GENERATOR = new IdGenerator
 
