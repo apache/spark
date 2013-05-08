@@ -18,20 +18,7 @@ import akka.dispatch.{Await, Promise, ExecutionContext, Future}
 import akka.util.Duration
 import akka.util.duration._
 
-private[spark] case class ConnectionManagerId(host: String, port: Int) {
-  // DEBUG code
-  Utils.checkHost(host)
-  assert (port > 0)
 
-  def toSocketAddress() = new InetSocketAddress(host, port)
-}
-
-private[spark] object ConnectionManagerId {
-  def fromSocketAddress(socketAddress: InetSocketAddress): ConnectionManagerId = {
-    new ConnectionManagerId(socketAddress.getHostName(), socketAddress.getPort())
-  }
-}
-  
 private[spark] class ConnectionManager(port: Int) extends Logging {
 
   class MessageStatus(
@@ -45,7 +32,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
     def markDone() { completionHandler(this) }
   }
-  
+
   private val selector = SelectorProvider.provider.openSelector()
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
@@ -80,7 +67,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
   serverChannel.configureBlocking(false)
   serverChannel.socket.setReuseAddress(true)
-  serverChannel.socket.setReceiveBufferSize(256 * 1024) 
+  serverChannel.socket.setReceiveBufferSize(256 * 1024)
 
   serverChannel.socket.bind(new InetSocketAddress(port))
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
@@ -351,7 +338,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
       case e: Exception => logError("Error in select loop", e)
     }
   }
-  
+
   def acceptConnection(key: SelectionKey) {
     val serverChannel = key.channel.asInstanceOf[ServerSocketChannel]
 
@@ -463,7 +450,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
 
   def receiveMessage(connection: Connection, message: Message) {
     val connectionManagerId = ConnectionManagerId.fromSocketAddress(message.senderAddress)
-    logDebug("Received [" + message + "] from [" + connectionManagerId + "]") 
+    logDebug("Received [" + message + "] from [" + connectionManagerId + "]")
     val runnable = new Runnable() {
       val creationTime = System.currentTimeMillis
       def run() {
@@ -483,11 +470,11 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
         if (bufferMessage.hasAckId) {
           val sentMessageStatus = messageStatuses.synchronized {
             messageStatuses.get(bufferMessage.ackId) match {
-              case Some(status) => { 
-                messageStatuses -= bufferMessage.ackId 
+              case Some(status) => {
+                messageStatuses -= bufferMessage.ackId
                 status
               }
-              case None => { 
+              case None => {
                 throw new Exception("Could not find reference for received ack message " + message.id)
                 null
               }
@@ -507,7 +494,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
             logDebug("Not calling back as callback is null")
             None
           }
-          
+
           if (ackMessage.isDefined) {
             if (!ackMessage.get.isInstanceOf[BufferMessage]) {
               logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type " + ackMessage.get.getClass())
@@ -517,7 +504,7 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
             }
           }
 
-          sendMessage(connectionManagerId, ackMessage.getOrElse { 
+          sendMessage(connectionManagerId, ackMessage.getOrElse {
             Message.createBufferMessage(bufferMessage.id)
           })
         }
@@ -588,17 +575,17 @@ private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
     val manager = new ConnectionManager(9999)
-    manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => { 
+    manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       println("Received [" + msg + "] from [" + id + "]")
       None
     })
-    
+
     /*testSequentialSending(manager)*/
     /*System.gc()*/
 
     /*testParallelSending(manager)*/
     /*System.gc()*/
-    
+
     /*testParallelDecreasingSending(manager)*/
     /*System.gc()*/
 
@@ -610,9 +597,9 @@ private[spark] object ConnectionManager {
     println("--------------------------")
     println("Sequential Sending")
     println("--------------------------")
-    val size = 10 * 1024 * 1024 
+    val size = 10 * 1024 * 1024
     val count = 10
-    
+
     val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
     buffer.flip
 
@@ -628,7 +615,7 @@ private[spark] object ConnectionManager {
     println("--------------------------")
     println("Parallel Sending")
     println("--------------------------")
-    val size = 10 * 1024 * 1024 
+    val size = 10 * 1024 * 1024
     val count = 10
 
     val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
@@ -643,12 +630,12 @@ private[spark] object ConnectionManager {
       if (!g.isDefined) println("Failed")
     })
     val finishTime = System.currentTimeMillis
-    
+
     val mb = size * count / 1024.0 / 1024.0
     val ms = finishTime - startTime
     val tput = mb * 1000.0 / ms
     println("--------------------------")
-    println("Started at " + startTime + ", finished at " + finishTime) 
+    println("Started at " + startTime + ", finished at " + finishTime)
     println("Sent " + count + " messages of size " + size + " in " + ms + " ms (" + tput + " MB/s)")
     println("--------------------------")
     println()
@@ -658,7 +645,7 @@ private[spark] object ConnectionManager {
     println("--------------------------")
     println("Parallel Decreasing Sending")
     println("--------------------------")
-    val size = 10 * 1024 * 1024 
+    val size = 10 * 1024 * 1024
     val count = 10
     val buffers = Array.tabulate(count)(i => ByteBuffer.allocate(size * (i + 1)).put(Array.tabulate[Byte](size * (i + 1))(x => x.toByte)))
     buffers.foreach(_.flip)
@@ -673,7 +660,7 @@ private[spark] object ConnectionManager {
       if (!g.isDefined) println("Failed")
     })
     val finishTime = System.currentTimeMillis
-    
+
     val ms = finishTime - startTime
     val tput = mb * 1000.0 / ms
     println("--------------------------")
@@ -687,7 +674,7 @@ private[spark] object ConnectionManager {
     println("--------------------------")
     println("Continuous Sending")
     println("--------------------------")
-    val size = 10 * 1024 * 1024 
+    val size = 10 * 1024 * 1024
     val count = 10
 
     val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
