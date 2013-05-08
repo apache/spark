@@ -18,7 +18,8 @@ import scala.collection.mutable.ArrayBuffer
 import SparkContext._
 import storage.{GetBlock, BlockManagerWorker, StorageLevel}
 
-class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter with LocalSparkContext {
+class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
+  with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"
 
