@@ -64,9 +64,9 @@ def parse_args():
       help="Availability zone to launch instances in, or 'all' to spread " +
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
-  parser.add_option("-a", "--ami", default="0.7.0",
-      help="Amazon Machine Image ID to use, or 'latest' to use latest " +
-           "available AMI (default: latest)")
+  parser.add_option("-a", "--ami", default="v0.7.0",
+      help="Amazon Machine Image ID to use, or 'vX.Y.Z' to use version " +
+           "X.Y.Z of Spark (default: v0.7.0)")
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
             "the given local address (for use with login)")
@@ -159,7 +159,7 @@ def is_active(instance):
 # Attempt to resolve an appropriate AMI given the architecture and
 # region of the request.
 def get_spark_ami(opts):
-  version_prefix = opts.ami
+  version = opts.ami
   instance_types = {
     "m1.small":    "pvm",
     "m1.medium":   "pvm",
@@ -186,13 +186,15 @@ def get_spark_ami(opts):
     instance_type = "pvm"
     print >> stderr,\
         "Don't recognize %s, assuming type is pvm" % opts.instance_type
-  if version_prefix != "latest":
+  if version != "v0.7.0":
     print >> stderr, \
-      "Don't know how to resolve AMI for version: %s" % version_prefix
-
+      "Don't know how to resolve AMI for version: %s" % version
+  # TODO(pwendell) Once we have multiple Spark AMI versions, we should let 
+  # people give a version flag here in place of just saying 'latest'.
+  version = version[1:]
   parts = opts.region.split("-")
-  region = "-".join(parts[0], parts[1], parts[2][0]) # strip any avail. zone
-  ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version_prefix, region, instance_type)
+  region = "-".join([parts[0], parts[1], parts[2][0]]) # strip any avail. zone
+  ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version, region, instance_type)
   try:
     ami = urllib2.urlopen(ami_path).read().strip()
     print "Spark AMI: " + ami
@@ -252,8 +254,8 @@ def launch_cluster(conn, opts, cluster_name):
         "group %s, %s or %s" % (master_group.name, slave_group.name, zoo_group.name))
     sys.exit(1)
 
-  # Figure out the latest AMI from our static URL
-  if opts.ami == "latest":
+  # Figure out Spark AMI
+  if opts.ami[0] == "v":
     opts.ami = get_spark_ami(opts)
   print "Launching instances..."
 
