@@ -192,9 +192,7 @@ def get_spark_ami(opts):
   # TODO(pwendell) Once we have multiple Spark AMI versions, we should let 
   # people give a version flag here in place of just saying 'latest'.
   version = version[1:]
-  parts = opts.region.split("-")
-  region = "-".join([parts[0], parts[1], parts[2][0]]) # strip any avail. zone
-  ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version, region, instance_type)
+  ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version, opts.region, instance_type)
   try:
     ami = urllib2.urlopen(ami_path).read().strip()
     print "Spark AMI: " + ami
