@@ -64,7 +64,7 @@ def parse_args():
       help="Availability zone to launch instances in, or 'all' to spread " +
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
-  parser.add_option("-a", "--ami", default="latest",
+  parser.add_option("-a", "--ami", default="0.7.0",
       help="Amazon Machine Image ID to use, or 'latest' to use latest " +
            "available AMI (default: latest)")
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
@@ -190,7 +190,8 @@ def get_spark_ami(opts):
     print >> stderr, \
       "Don't know how to resolve AMI for version: %s" % version_prefix
 
-  region = "-".join(opts.region.split("-")[:2])
+  parts = opts.region.split("-")
+  region = "-".join(parts[0], parts[1], parts[2][0]) # strip any avail. zone
   ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version_prefix, region, instance_type)
   try:
     ami = urllib2.urlopen(ami_path).read().strip()
