@@ -200,11 +200,7 @@ object SparkBuild extends Build {
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
-    resolvers ++= Seq("Apache HBase" at "https://repository.apache.org/content/repositories/releases"),
-    libraryDependencies ++= Seq(
-      "com.twitter" % "algebird-core_2.9.2" % "0.1.11",
-      "org.apache.hbase" % "hbase" % "0.94.6"
-    )
+    libraryDependencies ++= Seq("com.twitter" % "algebird-core_2.9.2" % "0.1.11")
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
