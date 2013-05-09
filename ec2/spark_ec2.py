@@ -189,12 +189,14 @@ def get_spark_ami(opts):
   if version_prefix != "latest":
     print >> stderr, \
       "Don't know how to resolve AMI for version: %s" % version_prefix
-  ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version_prefix, "us-east", instance_type)
+
+  region = "-".join(opts.region.split("-")[:2])
+  ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version_prefix, region, instance_type)
   try:
     ami = urllib2.urlopen(ami_path).read().strip()
     print "Spark AMI: " + ami
   except:
-    print >> stderr, "Could not read " + ami_path
+    print >> stderr, "Could not resolve AMI at: " + ami_path
     sys.exit(1)
 
   return ami
