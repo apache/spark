@@ -33,6 +33,10 @@ private[spark] class PythonWorker(pythonExec: String, envVars: Map[String, Strin
     }
   }
 
+  def stop() {
+    stopDaemon
+  }
+
   private def startDaemon() {
     synchronized {
       // Is it already running?

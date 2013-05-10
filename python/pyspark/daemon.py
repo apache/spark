@@ -12,7 +12,7 @@ try:
 except NotImplementedError:
     POOLSIZE = 4
 
-should_exit = False
+should_exit = multiprocessing.Event()
 
 
 def worker(listen_sock):
@@ -21,14 +21,13 @@ def worker(listen_sock):
 
     # Manager sends SIGHUP to request termination of workers in the pool
     def handle_sighup(signum, frame):
-        global should_exit
-        should_exit = True
+        assert should_exit.is_set()
     signal(SIGHUP, handle_sighup)
 
-    while not should_exit:
+    while not should_exit.is_set():
         # Wait until a client arrives or we have to exit
         sock = None
-        while not should_exit and sock is None:
+        while not should_exit.is_set() and sock is None:
             try:
                 sock, addr = listen_sock.accept()
             except EnvironmentError as err:
@@ -36,8 +35,8 @@ def worker(listen_sock):
                     raise
 
         if sock is not None:
-            # Fork a child to handle the client
-            if os.fork() == 0:
+            # Fork to handle the client
+            if os.fork() != 0:
                 # Leave the worker pool
                 signal(SIGHUP, SIG_DFL)
                 listen_sock.close()
@@ -50,7 +49,7 @@ def worker(listen_sock):
             else:
                 sock.close()
 
-    assert should_exit
+    assert should_exit.is_set()
     os._exit(0)
 
 
@@ -73,9 +72,7 @@ def manager():
     listen_sock.close()
 
     def shutdown():
-        global should_exit
-        os.kill(0, SIGHUP)
-        should_exit = True
+        should_exit.set()
 
     # Gracefully exit on SIGTERM, don't die on SIGHUP
     signal(SIGTERM, lambda signum, frame: shutdown())
@@ -85,8 +82,8 @@ def manager():
     def handle_sigchld(signum, frame):
         try:
             pid, status = os.waitpid(0, os.WNOHANG)
-            if (pid, status) != (0, 0) and not should_exit:
-                raise RuntimeError("pool member crashed: %s, %s" % (pid, status))
+            if status != 0 and not should_exit.is_set():
+                raise RuntimeError("worker crashed: %s, %s" % (pid, status))
         except EnvironmentError as err:
             if err.errno not in (ECHILD, EINTR):
                 raise
@@ -94,15 +91,20 @@ def manager():
 
     # Initialization complete
     sys.stdout.close()
-    while not should_exit:
-        try:
-            # Spark tells us to exit by closing stdin
-            if sys.stdin.read() == '':
-                shutdown()
-        except EnvironmentError as err:
-            if err.errno != EINTR:
-                shutdown()
-                raise
+    try:
+        while not should_exit.is_set():
+            try:
+                # Spark tells us to exit by closing stdin
+                if os.read(0, 512) == '':
+                    shutdown()
+            except EnvironmentError as err:
+                if err.errno != EINTR:
+                    shutdown()
+                    raise
+    finally:
+        should_exit.set()
+        # Send SIGHUP to notify workers of shutdown
+        os.kill(0, SIGHUP)
 
 
 if __name__ == '__main__':
