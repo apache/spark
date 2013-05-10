@@ -451,7 +451,7 @@ abstract class RDD[T: ClassManifest](
    */
   def foreachPartition(f: Iterator[T] => Unit) {
     val cleanF = sc.clean(f)
-    sc.runJob(this, (iter: Iterator[T]) => f(iter))
+    sc.runJob(this, (iter: Iterator[T]) => cleanF(iter))
   }
 
   /**
