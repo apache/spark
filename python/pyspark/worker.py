@@ -30,6 +30,8 @@ def report_times(outfile, boot, init, finish):
 def main(infile, outfile):
     boot_time = time.time()
     split_index = read_int(infile)
+    if split_index == -1:  # for unit tests
+        return
     spark_files_dir = load_pickle(read_with_length(infile))
     SparkFiles._root_directory = spark_files_dir
     SparkFiles._is_running_on_worker = True

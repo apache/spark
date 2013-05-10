@@ -39,6 +39,7 @@ class SparkEnv (
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorker]()
 
   def stop() {
+    pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
     mapOutputTracker.stop()
     shuffleFetcher.stop()
