@@ -4,6 +4,7 @@ import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.Files;
+import kafka.serializer.StringDecoder;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.junit.After;
 import org.junit.Assert;
@@ -1203,8 +1204,7 @@ public class JavaAPISuite implements Serializable {
   public void testKafkaStream() {
     HashMap<String, Integer> topics = Maps.newHashMap();
     JavaDStream test1 = ssc.kafkaStream("localhost:12345", "group", topics);
-    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics);
-    JavaDStream test3 = ssc.kafkaStream("localhost:12345", "group", topics,
+    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics,
       StorageLevel.MEMORY_AND_DISK());
   }
 
