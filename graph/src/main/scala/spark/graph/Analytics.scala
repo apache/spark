@@ -39,7 +39,7 @@ object Analytics extends Logging {
    */
   def pregelPagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
     // Compute the out degree of each vertex
-    val pagerankGraph = graph.updateVertices[Int, (Int, Double)](graph.outDegrees,
+    val pagerankGraph = graph.leftJoinVertices[Int, (Int, Double)](graph.outDegrees,
       (vertex, deg) => (deg.getOrElse(0), 1.0)
     )
     Pregel.iterate[(Int, Double), ED, Double](pagerankGraph)(

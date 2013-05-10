@@ -25,7 +25,7 @@ object Pregel {
     var msgs: RDD[(Vid, A)] = g.vertices.map{ v => (v.id, initialMsg) }
 
     while (i < numIter) {
-      g = g.updateVertices(msgs, runProg).cache()
+      g = g.leftJoinVertices(msgs, runProg).cache()
       msgs = g.aggregateNeighbors(mapF, mergeMsg, EdgeDirection.In)
       i += 1
     }

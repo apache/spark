@@ -90,6 +90,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     newGraph(vertices, edges.map(e => Edge(e.src, e.dst, f(e))))
   }
 
+  override def mapEdgesWithVertices[ED2: ClassManifest](f: EdgeWithVertices[VD, ED] => ED2):
+    Graph[VD, ED2] = {
+    newGraph(vertices, edgesWithVertices.map(e => Edge(e.src.id, e.dst.id, f(e))))
+  }
+
+
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -202,7 +208,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       .combineByKey((v: VD2) => v, reduceFunc, null, vertexPartitioner, false)
   }
 
-  override def updateVertices[U: ClassManifest, VD2: ClassManifest](
+  override def leftJoinVertices[U: ClassManifest, VD2: ClassManifest](
       updates: RDD[(Vid, U)],
       updateF: (Vertex[VD], Option[U]) => VD2)
     : Graph[VD2, ED] = {
@@ -219,7 +225,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     new GraphImpl(newVTable.partitions.size, eTable.partitions.size, null, null, newVTable, eTable)
   }
 
-  override def updateVertices2[U: ClassManifest](
+  override def joinVertices[U: ClassManifest](
       updates: RDD[(Vid, U)],
       updateF: (Vertex[VD], U) => VD)
     : Graph[VD, ED] = {
