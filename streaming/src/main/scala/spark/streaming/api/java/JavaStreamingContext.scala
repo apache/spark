@@ -105,7 +105,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param storageLevel RDD storage level. Defaults to memory-only
    */
   def kafkaStream[T, D <: kafka.serializer.Decoder[_]: Manifest](
-	kafkaParams: JMap[String, String],
+    kafkaParams: JMap[String, String],
     topics: JMap[String, JInt],
     storageLevel: StorageLevel)
   : JavaDStream[T] = {
