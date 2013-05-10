@@ -64,9 +64,9 @@ def parse_args():
       help="Availability zone to launch instances in, or 'all' to spread " +
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
-  parser.add_option("-a", "--ami", default="v0.7.0",
-      help="Amazon Machine Image ID to use, or 'vX.Y.Z' to use version " +
-           "X.Y.Z of Spark (default: v0.7.0)")
+  parser.add_option("-a", "--ami", default="latest",
+      help="Amazon Machine Image ID to use, 'vX.Y.Z' to use version " +
+           "X.Y.Z of Spark, or 'latest' to use latest AMI (default: latest)")
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
             "the given local address (for use with login)")
@@ -186,7 +186,7 @@ def get_spark_ami(opts):
     instance_type = "pvm"
     print >> stderr,\
         "Don't recognize %s, assuming type is pvm" % opts.instance_type
-  if version != "v0.7.0":
+  if version not in ["latest", "v0.7.0"]:
     print >> stderr, \
       "Don't know how to resolve AMI for version: %s" % version
   # TODO(pwendell) Once we have multiple Spark AMI versions, we should let 
