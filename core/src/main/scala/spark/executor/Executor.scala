@@ -1,6 +1,6 @@
 package spark.executor
 
-import java.io.{File, FileOutputStream}
+import java.io.{NotSerializableException, File, FileOutputStream}
 import java.net.{URI, URL, URLClassLoader}
 import java.util.concurrent._
 
@@ -118,7 +118,19 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
 
         case t: Throwable => {
           val reason = ExceptionFailure(t)
-          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+          val serReason =
+            try {
+              ser.serialize(reason)
+            }
+            catch {
+              case e: NotSerializableException => {
+                val message = "Spark caught unserializable exn: " + t.toString
+                val throwable = new Exception(message)
+                throwable.setStackTrace(t.getStackTrace)
+                ser.serialize(new ExceptionFailure(throwable))
+              }
+            }
+          context.statusUpdate(taskId, TaskState.FAILED, serReason)
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may
           // have left some weird state around depending on when the exception was thrown, but on

@@ -16,6 +16,9 @@ import scala.collection.mutable.ArrayBuffer
 import SparkContext._
 import storage.{GetBlock, BlockManagerWorker, StorageLevel}
 
+class NotSerializableClass
+class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
+
 class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"
@@ -23,6 +26,24 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
   after {
     System.clearProperty("spark.reducer.maxMbInFlight")
     System.clearProperty("spark.storage.memoryFraction")
+  }
+
+  test("task throws not serializable exception") {
+    // Ensures that executors do not crash when an exn is not serializable. If executors crash,
+    // this test will hang. Correct behavior is that executors don't crash but fail tasks
+    // and the scheduler throws a SparkException.
+
+    // numSlaves must be less than numPartitions
+    val numSlaves = 3
+    val numPartitions = 10
+
+    sc = new SparkContext("local-cluster[%s,1,512]".format(numSlaves), "test")
+    val data = sc.parallelize(1 to 100, numPartitions).map(x => (x, x)).
+      map(x => throw new NotSerializableExn(new NotSerializableClass))
+    intercept[SparkException] {
+      data.count()
+    }
+    resetSparkContext()
   }
 
   test("local-cluster format") {
