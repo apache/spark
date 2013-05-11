@@ -40,7 +40,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     val numPartitions = 10
 
     sc = new SparkContext("local-cluster[%s,1,512]".format(numSlaves), "test")
-    val data = sc.parallelize(1 to 100, numPartitions).map(x => (x, x)).
+    val data = sc.parallelize(1 to 100, numPartitions).
       map(x => throw new NotSerializableExn(new NotSerializableClass))
     intercept[SparkException] {
       data.count()
