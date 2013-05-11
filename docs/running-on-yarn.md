@@ -30,6 +30,9 @@ If you want to test out the YARN deployment mode, you can use the current Spark 
 
 # Launching Spark on YARN
 
+Ensure that HADOOP_CONF_DIR or YARN_CONF_DIR points to the directory which contains the (client side) configuration files for the hadoop cluster.
+This would be used to connect to the cluster, write to the dfs and submit jobs to the resource manager.
+
 The command to launch the YARN Client is as follows:
 
     SPARK_JAR=<SPARK_YAR_FILE> ./run spark.deploy.yarn.Client \
