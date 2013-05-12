@@ -122,7 +122,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         }
 
         case t: Throwable => {
-          val reason = ExceptionFailure(t.toString, t.getStackTrace)
+          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
           context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may

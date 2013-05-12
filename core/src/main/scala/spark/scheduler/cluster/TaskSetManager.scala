@@ -512,7 +512,8 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
             }
             if (printFull) {
               val locs = ef.stackTrace.map(loc => "\tat %s".format(loc.toString))
-              logInfo("Loss was due to %s\n%s".format(ef.description, locs.mkString("\n")))
+              logInfo("Loss was due to %s\n%s\n%s".format(
+                ef.className, ef.description, locs.mkString("\n")))
             } else {
               logInfo("Loss was due to %s [duplicate %d]".format(ef.description, dupCount))
             }
