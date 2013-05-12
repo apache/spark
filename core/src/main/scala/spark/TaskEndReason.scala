@@ -22,6 +22,7 @@ private[spark] case class FetchFailed(
   extends TaskEndReason
 
 private[spark] case class ExceptionFailure(
+    className: String,
     description: String,
     stackTrace: Array[StackTraceElement])
   extends TaskEndReason
