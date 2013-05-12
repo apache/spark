@@ -493,7 +493,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
             return
 
           case ef: ExceptionFailure =>
-            val key = ef.exception.toString
+            val key = ef.description
             val now = System.currentTimeMillis
             val (printFull, dupCount) = {
               if (recentExceptions.contains(key)) {
@@ -511,10 +511,11 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
               }
             }
             if (printFull) {
-              val locs = ef.exception.getStackTrace.map(loc => "\tat %s".format(loc.toString))
-              logInfo("Loss was due to %s\n%s".format(ef.exception.toString, locs.mkString("\n")))
+              val locs = ef.stackTrace.map(loc => "\tat %s".format(loc.toString))
+              logInfo("Loss was due to %s\n%s\n%s".format(
+                ef.className, ef.description, locs.mkString("\n")))
             } else {
-              logInfo("Loss was due to %s [duplicate %d]".format(ef.exception.toString, dupCount))
+              logInfo("Loss was due to %s [duplicate %d]".format(ef.description, dupCount))
             }
 
           case _ => {}
