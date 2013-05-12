@@ -117,20 +117,8 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         }
 
         case t: Throwable => {
-          val reason = ExceptionFailure(t)
-          val serReason =
-            try {
-              ser.serialize(reason)
-            }
-            catch {
-              case e: NotSerializableException => {
-                val message = "Spark caught unserializable exn: " + t.toString
-                val throwable = new Exception(message)
-                throwable.setStackTrace(t.getStackTrace)
-                ser.serialize(new ExceptionFailure(throwable))
-              }
-            }
-          context.statusUpdate(taskId, TaskState.FAILED, serReason)
+          val reason = ExceptionFailure(t.toString, t.getStackTrace)
+          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may
           // have left some weird state around depending on when the exception was thrown, but on
