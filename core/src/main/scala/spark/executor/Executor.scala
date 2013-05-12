@@ -1,6 +1,6 @@
 package spark.executor
 
-import java.io.{NotSerializableException, File, FileOutputStream}
+import java.io.{File, FileOutputStream}
 import java.net.{URI, URL, URLClassLoader}
 import java.util.concurrent._
 
