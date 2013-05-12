@@ -45,7 +45,5 @@ private[spark] trait TaskSetManager extends Schedulable {
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription]
 
-  def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer)
-
   def error(message: String)
 }

@@ -553,7 +553,7 @@ class DAGScheduler(
         SparkEnv.get.closureSerializer.newInstance().serialize(tasks.head)
       } catch {
         case e: NotSerializableException =>
-          abortStage(stage, e.toString)
+          abortStage(stage, "Task not serializable: " + e.toString)
           running -= stage
           return
       }
@@ -704,6 +704,9 @@ class DAGScheduler(
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
+
+      case TaskResultLost =>
+        // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
       case other =>
         // Unrecognized failure - abort all jobs depending on this stage

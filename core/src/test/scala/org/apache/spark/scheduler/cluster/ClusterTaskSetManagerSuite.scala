@@ -101,7 +101,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     assert(manager.resourceOffer("exec1", "host1", 2, PROCESS_LOCAL) === None)
 
     // Tell it the task has finished
-    manager.statusUpdate(0, TaskState.FINISHED, createTaskResult(0))
+    manager.handleSuccessfulTask(0, createTaskResult(0))
     assert(sched.endedTasks(0) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -125,14 +125,14 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     assert(manager.resourceOffer("exec1", "host1", 1, PROCESS_LOCAL) === None)
 
     // Finish the first two tasks
-    manager.statusUpdate(0, TaskState.FINISHED, createTaskResult(0))
-    manager.statusUpdate(1, TaskState.FINISHED, createTaskResult(1))
+    manager.handleSuccessfulTask(0, createTaskResult(0))
+    manager.handleSuccessfulTask(1, createTaskResult(1))
     assert(sched.endedTasks(0) === Success)
     assert(sched.endedTasks(1) === Success)
     assert(!sched.finishedManagers.contains(manager))
 
     // Finish the last task
-    manager.statusUpdate(2, TaskState.FINISHED, createTaskResult(2))
+    manager.handleSuccessfulTask(2, createTaskResult(2))
     assert(sched.endedTasks(2) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -267,7 +267,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     new TaskSet(tasks, 0, 0, 0, null)
   }
 
-  def createTaskResult(id: Int): ByteBuffer = {
-    ByteBuffer.wrap(Utils.serialize(new TaskResult[Int](id, mutable.Map.empty, new TaskMetrics)))
+  def createTaskResult(id: Int): DirectTaskResult[Int] = {
+    new DirectTaskResult[Int](id, mutable.Map.empty, new TaskMetrics)
   }
 }

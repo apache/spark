@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
  * there are two type of Schedulable entities(Pools and TaskSetManagers)
  */
 private[spark] trait Schedulable {
-  var parent: Schedulable
+  var parent: Pool
   // child queues
   def schedulableQueue: ArrayBuffer[Schedulable]
   def schedulingMode: SchedulingMode
@@ -36,8 +36,6 @@ private[spark] trait Schedulable {
   def stageId: Int
   def name: String
 
-  def increaseRunningTasks(taskNum: Int): Unit
-  def decreaseRunningTasks(taskNum: Int): Unit
   def addSchedulable(schedulable: Schedulable): Unit
   def removeSchedulable(schedulable: Schedulable): Unit
   def getSchedulableByName(name: String): Schedulable
