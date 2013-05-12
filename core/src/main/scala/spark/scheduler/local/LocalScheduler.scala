@@ -103,7 +103,7 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
               // TODO: Do something nicer here to return all the way to the user
               if (!Thread.currentThread().isInterrupted)
                 listener.taskEnded(
-                  task, new ExceptionFailure(t.getMessage, t.getStackTrace), null, null, info, null)
+                  task, new ExceptionFailure(t.toString, t.getStackTrace), null, null, info, null)
             }
           }
         }
