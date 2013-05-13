@@ -38,8 +38,8 @@ private[spark] class PythonRDD[T: ClassManifest](
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
-    val worker = SparkEnv.get.getPythonWorker(pythonExec, envVars.toMap).create
     val env = SparkEnv.get
+    val worker = env.createPythonWorker(pythonExec, envVars.toMap)
 
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + pythonExec) {
