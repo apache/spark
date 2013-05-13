@@ -1,13 +1,13 @@
 package spark.api.python
 
-import java.io.DataInputStream
+import java.io.{DataInputStream, IOException}
 import java.net.{Socket, SocketException, InetAddress}
 
 import scala.collection.JavaConversions._
 
 import spark._
 
-private[spark] class PythonWorker(pythonExec: String, envVars: Map[String, String])
+private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
     extends Logging {
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
@@ -56,14 +56,16 @@ private[spark] class PythonWorker(pythonExec: String, envVars: Map[String, Strin
         // Redirect the stderr to ours
         new Thread("stderr reader for " + pythonExec) {
           override def run() {
-            // FIXME HACK: We copy the stream on the level of bytes to
-            // attempt to dodge encoding problems.
-            val in = daemon.getErrorStream
-            var buf = new Array[Byte](1024)
-            var len = in.read(buf)
-            while (len != -1) {
-              System.err.write(buf, 0, len)
-              len = in.read(buf)
+            scala.util.control.Exception.ignoring(classOf[IOException]) {
+              // FIXME HACK: We copy the stream on the level of bytes to
+              // attempt to dodge encoding problems.
+              val in = daemon.getErrorStream
+              var buf = new Array[Byte](1024)
+              var len = in.read(buf)
+              while (len != -1) {
+                System.err.write(buf, 0, len)
+                len = in.read(buf)
+              }
             }
           }
         }.start()

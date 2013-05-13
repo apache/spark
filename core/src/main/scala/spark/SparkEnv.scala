@@ -12,7 +12,7 @@ import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
 import spark.serializer.{Serializer, SerializerManager}
 import spark.util.AkkaUtils
-import spark.api.python.PythonWorker
+import spark.api.python.PythonWorkerFactory
 
 
 /**
@@ -41,7 +41,7 @@ class SparkEnv (
     // If executorId is NOT found, return defaultHostPort
     var executorIdToHostPort: Option[(String, String) => String]) {
 
-  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorker]()
+  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   def stop() {
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
@@ -57,9 +57,9 @@ class SparkEnv (
     actorSystem.awaitTermination()
   }
 
-  def getPythonWorker(pythonExec: String, envVars: Map[String, String]): PythonWorker = {
+  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
     synchronized {
-      pythonWorkers.getOrElseUpdate((pythonExec, envVars), new PythonWorker(pythonExec, envVars))
+      pythonWorkers.getOrElseUpdate((pythonExec, envVars), new PythonWorkerFactory(pythonExec, envVars)).create
     }
   }
 
