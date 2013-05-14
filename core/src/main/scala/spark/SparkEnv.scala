@@ -31,8 +31,11 @@ class SparkEnv (
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
     val httpFileServer: HttpFileServer,
-    val sparkFilesDir: String
-  ) {
+    val sparkFilesDir: String,
+    // To be set only as part of initialization of SparkContext.
+    // (executorId, defaultHostPort) => executorHostPort
+    // If executorId is NOT found, return defaultHostPort
+    var executorIdToHostPort: Option[(String, String) => String]) {
 
   def stop() {
     httpFileServer.stop()
@@ -45,6 +48,17 @@ class SparkEnv (
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
     actorSystem.awaitTermination()
+  }
+
+
+  def resolveExecutorIdToHostPort(executorId: String, defaultHostPort: String): String = {
+    val env = SparkEnv.get
+    if (env.executorIdToHostPort.isEmpty) {
+      // default to using host, not host port. Relevant to non cluster modes.
+      return defaultHostPort
+    }
+
+    env.executorIdToHostPort.get(executorId, defaultHostPort)
   }
 }
 
@@ -168,7 +182,7 @@ object SparkEnv extends Logging {
       blockManager,
       connectionManager,
       httpFileServer,
-      sparkFilesDir)
+      sparkFilesDir,
+      None)
   }
-
 }

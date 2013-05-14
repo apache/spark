@@ -148,22 +148,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       .getMethod("main", classOf[Array[String]])
     val t = new Thread {
       override def run() {
-        var mainArgs: Array[String] = null
-        var startIndex = 0
-
-        // I am sure there is a better 'scala' way to do this .... but I am just trying to get things to work right now !
-        if (args.userArgs.isEmpty || args.userArgs.get(0) != "yarn-standalone") {
-          // ensure that first param is ALWAYS "yarn-standalone"
-          mainArgs = new Array[String](args.userArgs.size() + 1)
-          mainArgs.update(0, "yarn-standalone")
-          startIndex = 1
-        }
-        else {
-          mainArgs = new Array[String](args.userArgs.size())
-        }
-
-        args.userArgs.copyToArray(mainArgs, startIndex, args.userArgs.size())
-
+        // Copy
+        var mainArgs: Array[String] = new Array[String](args.userArgs.size())
+        args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size())
         mainMethod.invoke(null, mainArgs)
       }
     }
