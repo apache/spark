@@ -12,7 +12,7 @@ import spark.executor.TaskMetrics
 import spark.partial.ApproximateActionListener
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.storage.BlockManagerMaster
+import spark.storage.{BlockManager, BlockManagerMaster}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
 
 /**
@@ -117,9 +117,8 @@ class DAGScheduler(
   private def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
-      cacheLocs(rdd.id) = blockManagerMaster.getLocations(blockIds).map {
-        locations => locations.map(_.hostPort).toList
-      }.toArray
+      val locs = BlockManager.blockIdsToExecutorLocations(blockIds, env, blockManagerMaster)
+      cacheLocs(rdd.id) = blockIds.map(locs.getOrElse(_, Nil))
     }
     cacheLocs(rdd.id)
   }

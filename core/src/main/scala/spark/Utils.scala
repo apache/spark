@@ -335,7 +335,7 @@ private object Utils extends Logging {
     retval
   }
 
-  /*
+/*
   // Used by DEBUG code : remove when all testing done
   private val ipPattern = Pattern.compile("^[0-9]+(\\.[0-9]+)*$")
   def checkHost(host: String, message: String = "") {
@@ -357,21 +357,26 @@ private object Utils extends Logging {
       Utils.logErrorWithStack("Unexpected to have port " + port + " which is not valid in " + hostPort + ". Message " + message)
     }
   }
-  */
-
-  // Once testing is complete in various modes, replace with this ?
-  def checkHost(host: String, message: String = "") {}
-  def checkHostPort(hostPort: String, message: String = "") {}
-
-  def getUserNameFromEnvironment(): String = {
-    SparkHadoopUtil.getUserNameFromEnvironment
-  }
 
   // Used by DEBUG code : remove when all testing done
   def logErrorWithStack(msg: String) {
     try { throw new Exception } catch { case ex: Exception => { logError(msg, ex) } }
     // temp code for debug
     System.exit(-1)
+  }
+*/
+
+  // Once testing is complete in various modes, replace with this ?
+  def checkHost(host: String, message: String = "") {}
+  def checkHostPort(hostPort: String, message: String = "") {}
+
+  // Used by DEBUG code : remove when all testing done
+  def logErrorWithStack(msg: String) {
+    try { throw new Exception } catch { case ex: Exception => { logError(msg, ex) } }
+  }
+
+  def getUserNameFromEnvironment(): String = {
+    SparkHadoopUtil.getUserNameFromEnvironment
   }
 
   // Typically, this will be of order of number of nodes in cluster
