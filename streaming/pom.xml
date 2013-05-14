@@ -9,7 +9,7 @@
   </parent>
 
   <groupId>org.spark-project</groupId>
-  <artifactId>spark-streaming_${scala.version}</artifactId>
+  <artifactId>spark-streaming_2.9.3</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Streaming</name>
   <url>http://spark-project.org/</url>
@@ -96,7 +96,7 @@
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-core_${scala.version}</artifactId>
+          <artifactId>spark-core_2.9.3</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop1</classifier>
         </dependency>
@@ -131,7 +131,7 @@
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-core_${scala.version}</artifactId>
+          <artifactId>spark-core_2.9.3</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
         </dependency>

@@ -76,27 +76,27 @@
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-core_${scala.version}</artifactId>
+          <artifactId>spark-core_2.9.3</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop1</classifier>
         </dependency>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel_${scala.version}</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples_${scala.version}</artifactId>
+          <artifactId>spark-bagel_2.9.3</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop1</classifier>
           <scope>runtime</scope>
         </dependency>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-repl_${scala.version}</artifactId>
+          <artifactId>spark-examples_2.9.3</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop1</classifier>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-repl_2.9.3</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop1</classifier>
           <scope>runtime</scope>
@@ -116,27 +116,27 @@
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-core_${scala.version}</artifactId>
+          <artifactId>spark-core_2.9.3</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
         </dependency>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel_${scala.version}</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples_${scala.version}</artifactId>
+          <artifactId>spark-bagel_2.9.3</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
           <scope>runtime</scope>
         </dependency>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-repl_${scala.version}</artifactId>
+          <artifactId>spark-examples_2.9.3</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop2</classifier>
+          <scope>runtime</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-repl_2.9.3</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
           <scope>runtime</scope>
