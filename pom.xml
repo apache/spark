@@ -256,6 +256,12 @@
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.derby</groupId>
+        <artifactId>derby</artifactId>
+        <version>10.4.2.0</version>
+        <scope>test</scope>
+      </dependency>
 
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -565,7 +571,7 @@
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
         <!-- <yarn.version>0.23.7</yarn.version> -->
-        <yarn.version>2.0.2-alpha</yarn.version> 
+        <yarn.version>2.0.2-alpha</yarn.version>
       </properties>
 
       <repositories>

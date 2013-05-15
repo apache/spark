@@ -85,18 +85,11 @@ private[spark] class ShuffleMapTask(
 
   protected def this() = this(0, null, null, 0, null)
 
-  // Data locality is on a per host basis, not hyper specific to container (host:port).
-  // Unique on set of hosts.
-  // TODO(rxin): The above statement seems problematic. Even if partitions are on the same host,
-  // the worker would still need to serialize / deserialize those data when they are in
-  // different jvm processes. Often that is very costly ...
-  @transient
-  private val preferredLocs: Seq[String] =
-    if (locs == null) Nil else locs.map(loc => Utils.parseHostPort(loc)._1).toSet.toSeq
+  @transient private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.toSet.toSeq
 
   {
     // DEBUG code
-    preferredLocs.foreach (host => Utils.checkHost(host, "preferredLocs : " + preferredLocs))
+    preferredLocs.foreach (hostPort => Utils.checkHost(Utils.parseHostPort(hostPort)._1, "preferredLocs : " + preferredLocs))
   }
 
   var split = if (rdd == null) {

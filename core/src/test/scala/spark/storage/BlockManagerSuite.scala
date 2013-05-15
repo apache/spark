@@ -47,6 +47,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     oldHeartBeat = System.setProperty("spark.storage.disableBlockManagerHeartBeat", "true")
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
+    // Set some value ...
+    System.setProperty("spark.hostPort", spark.Utils.localHostName() + ":" + 1111)
   }
 
   after {

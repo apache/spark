@@ -3,7 +3,7 @@ package spark.storage
 import java.io.{InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet, Queue}
 import scala.collection.JavaConversions._
 
 import akka.actor.{ActorSystem, Cancellable, Props}
@@ -268,22 +268,11 @@ private[spark] class BlockManager(
 
 
   /**
-   * Get locations of the block.
-   */
-  def getLocations(blockId: String): Seq[String] = {
-    val startTimeMs = System.currentTimeMillis
-    var managers = master.getLocations(blockId)
-    val locations = managers.map(_.hostPort)
-    logDebug("Got block locations in " + Utils.getUsedTimeMs(startTimeMs))
-    return locations
-  }
-
-  /**
    * Get locations of an array of blocks.
    */
-  def getLocations(blockIds: Array[String]): Array[Seq[String]] = {
+  def getLocationBlockIds(blockIds: Array[String]): Array[Seq[BlockManagerId]] = {
     val startTimeMs = System.currentTimeMillis
-    val locations = master.getLocations(blockIds).map(_.map(_.hostPort).toSeq).toArray
+    val locations = master.getLocations(blockIds).toArray
     logDebug("Got multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
     return locations
   }
@@ -976,5 +965,45 @@ private[spark] object BlockManager extends Logging {
       }
     }
   }
+
+  def blockIdsToExecutorLocations(blockIds: Array[String], env: SparkEnv, blockManagerMaster: BlockManagerMaster = null): HashMap[String, List[String]] = {
+    // env == null and blockManagerMaster != null is used in tests
+    assert (env != null || blockManagerMaster != null)
+    val locationBlockIds: Seq[Seq[BlockManagerId]] =
+      if (env != null) {
+        val blockManager = env.blockManager
+        blockManager.getLocationBlockIds(blockIds)
+      } else {
+        blockManagerMaster.getLocations(blockIds)
+      }
+
+    // Convert from block master locations to executor locations (we need that for task scheduling)
+    val executorLocations = new HashMap[String, List[String]]()
+    for (i <- 0 until blockIds.length) {
+      val blockId = blockIds(i)
+      val blockLocations = locationBlockIds(i)
+
+      val executors = new HashSet[String]()
+
+      if (env != null) {
+        for (bkLocation <- blockLocations) {
+          val executorHostPort = env.resolveExecutorIdToHostPort(bkLocation.executorId, bkLocation.host)
+          executors += executorHostPort
+          // logInfo("bkLocation = " + bkLocation + ", executorHostPort = " + executorHostPort)
+        }
+      } else {
+        // Typically while testing, etc - revert to simply using host.
+        for (bkLocation <- blockLocations) {
+          executors += bkLocation.host
+          // logInfo("bkLocation = " + bkLocation + ", executorHostPort = " + executorHostPort)
+        }
+      }
+
+      executorLocations.put(blockId, executors.toSeq.toList)
+    }
+
+    executorLocations
+  }
+
 }
 
