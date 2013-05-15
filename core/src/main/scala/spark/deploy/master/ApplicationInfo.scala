@@ -10,7 +10,8 @@ private[spark] class ApplicationInfo(
     val id: String,
     val desc: ApplicationDescription,
     val submitDate: Date,
-    val driver: ActorRef)
+    val driver: ActorRef,
+    val appUiUrl: String)
 {
   var state = ApplicationState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]
@@ -60,4 +61,5 @@ private[spark] class ApplicationInfo(
       System.currentTimeMillis() - startTime
     }
   }
+
 }

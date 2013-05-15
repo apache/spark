@@ -20,19 +20,20 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
 
   implicit val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
+  val host = Utils.localHostName()
+  val port = if (System.getProperty("spark.ui.port") != null) {
+    System.getProperty("spark.ui.port").toInt
+  } else {
+    // TODO: Unfortunately, it's not possible to pass port 0 to spray and figure out which
+    // random port it bound to, so we have to try to find a local one by creating a socket.
+    Utils.findFreePort()
+  }
 
   /** Start a HTTP server to run the Web interface */
   def start() {
     try {
-      val port = if (System.getProperty("spark.ui.port") != null) {
-        System.getProperty("spark.ui.port").toInt
-      } else {
-        // TODO: Unfortunately, it's not possible to pass port 0 to spray and figure out which
-        // random port it bound to, so we have to try to find a local one by creating a socket.
-        Utils.findFreePort()
-      }
       AkkaUtils.startSprayServer(actorSystem, "0.0.0.0", port, handler, "BlockManagerHTTPServer")
-      logInfo("Started BlockManager web UI at http://%s:%d".format(Utils.localHostName(), port))
+      logInfo("Started BlockManager web UI at http://%s:%d".format(host, port))
     } catch {
       case e: Exception =>
         logError("Failed to create BlockManager WebUI", e)
@@ -73,4 +74,6 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
       }
     }
   }
+
+  private[spark] def appUIAddress = "http://" + host + ":" + port
 }
