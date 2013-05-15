@@ -170,6 +170,11 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-core</artifactId>
+        <version>1.0.4</version>
+      </dependency>
+      <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
         <version>7.5.3.v20111011</version>
@@ -269,7 +274,6 @@
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
       </dependency>
-
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
@@ -280,13 +284,11 @@
         <artifactId>jline</artifactId>
         <version>${scala.version}</version>
       </dependency>
-
       <dependency>
         <groupId>log4j</groupId>
         <artifactId>log4j</artifactId>
         <version>${log4j.version}</version>
       </dependency>
-
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.version}</artifactId>
@@ -542,26 +544,13 @@
 
   <profiles>
     <profile>
-      <id>hadoop1</id>
-      <properties>
-        <hadoop.major.version>1</hadoop.major.version>
-      </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-core</artifactId>
-            <version>1.0.4</version>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
-    </profile>
-
-    <profile>
       <id>hadoop2</id>
-      <properties>
-        <hadoop.major.version>2</hadoop.major.version>
-      </properties>
+      <activation>
+        <property>
+          <name>hadoop.version</name>
+          <value>2</value>
+        </property>
+      </activation>
       <dependencyManagement>
         <dependencies>
           <dependency>

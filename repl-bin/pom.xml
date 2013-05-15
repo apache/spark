@@ -9,7 +9,7 @@
   </parent>
 
   <groupId>org.spark-project</groupId>
-  <artifactId>spark-repl-bin_${scala.version}</artifactId>
+  <artifactId>spark-repl-bin_2.9.3</artifactId>
   <packaging>pom</packaging>
   <name>Spark Project REPL binary packaging</name>
   <url>http://spark-project.org/</url>
@@ -67,47 +67,33 @@
     </plugins>
   </build>
 
+  <dependencies>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-core_2.9.3</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-bagel_2.9.3</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-examples_2.9.3</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-repl_2.9.3</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+
   <profiles>
-    <profile>
-      <id>hadoop1</id>
-      <properties>
-        <classifier>hadoop1</classifier>
-      </properties>
-      <dependencies>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-core_2.9.3</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel_2.9.3</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples_2.9.3</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-repl_2.9.3</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
-          <scope>runtime</scope>
-        </dependency>
-      </dependencies>
-    </profile>
     <profile>
       <id>hadoop2</id>
       <properties>

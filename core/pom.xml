@@ -16,6 +16,10 @@
 
   <dependencies>
     <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-core</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
@@ -91,7 +95,6 @@
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.version}</artifactId>
@@ -118,6 +121,7 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
   <build>
     <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
@@ -172,13 +176,11 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
-          <scope>provided</scope>
-        </dependency>
-      </dependencies>
+      <activation>
+        <property>
+          <name>!hadoop.version</name>
+        </property>
+      </activation>
       <build>
         <plugins>
           <plugin>
@@ -193,36 +195,8 @@
                 </goals>
                 <configuration>
                   <sources>
-                    <source>src/main/scala</source>
                     <source>src/hadoop1/scala</source>
                   </sources>
-                </configuration>
-              </execution>
-              <execution>
-                <id>add-scala-test-sources</id>
-                <phase>generate-test-sources</phase>
-                <goals>
-                  <goal>add-test-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/test/scala</source>
-                  </sources>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-jar-plugin</artifactId>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>jar</goal>
-                </goals>
-                <configuration>
-                  <classifier>hadoop1</classifier>
                 </configuration>
               </execution>
             </executions>
@@ -232,18 +206,12 @@
     </profile>
     <profile>
       <id>hadoop2</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-          <scope>provided</scope>
-        </dependency>
-      </dependencies>
+      <activation>
+        <property>
+          <name>hadoop.version</name>
+          <value>2</value>
+        </property>
+      </activation>
       <build>
         <plugins>
           <plugin>
@@ -258,20 +226,7 @@
                 </goals>
                 <configuration>
                   <sources>
-                    <source>src/main/scala</source>
                     <source>src/hadoop2/scala</source>
-                  </sources>
-                </configuration>
-              </execution>
-              <execution>
-                <id>add-scala-test-sources</id>
-                <phase>generate-test-sources</phase>
-                <goals>
-                  <goal>add-test-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/test/scala</source>
                   </sources>
                 </configuration>
               </execution>
