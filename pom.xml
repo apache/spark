@@ -544,6 +544,14 @@
 
   <profiles>
     <profile>
+      <id>hadoop1</id>
+      <activation>
+        <property>
+          <name>!hadoop.version</name>
+        </property>
+      </activation>
+    </profile>
+    <profile>
       <id>hadoop2</id>
       <activation>
         <property>
