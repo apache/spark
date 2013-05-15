@@ -67,6 +67,8 @@ The master URL passed to Spark can be in one of the following formats:
 </td></tr>
 </table>
 
+If no master URL is specified, the spark shell defaults to "local".
+
 For running on YARN, Spark launches an instance of the standalone deploy cluster within YARN; see [running on YARN](running-on-yarn.html) for details.
 
 ### Deploying Code on a Cluster
