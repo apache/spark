@@ -164,27 +164,35 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       // Build a list of tasks to assign to each slave
       val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
       val availableCpus = offers.map(o => o.cores).toArray
-      for (i <- 0 until offers.size) {
-        var launchedTask = true
-        val execId = offers(i).executorId
-        val host = offers(i).hostname
-        while (availableCpus(i) > 0 && launchedTask) {
+      var launchedTask = false
+      val sortedLeafSchedulable = rootPool.getSortedLeafSchedulable()
+      for (schedulable <- sortedLeafSchedulable)
+      {
+        logDebug("parentName:%s,name:%s,runningTasks:%s".format(schedulable.parent.name,schedulable.name,schedulable.runningTasks))
+      }
+      for (schedulable <- sortedLeafSchedulable) {
+        do {
           launchedTask = false
-          rootPool.receiveOffer(execId,host,availableCpus(i)) match {
-          case Some(task) =>
-            tasks(i) += task
-            val tid = task.taskId
-            taskIdToTaskSetId(tid) = task.taskSetId
-            taskSetTaskIds(task.taskSetId) += tid
-            taskIdToExecutorId(tid) = execId
-            activeExecutorIds += execId
-            executorsByHost(host) += execId
-            availableCpus(i) -= 1
-            launchedTask = true
+          for (i <- 0 until offers.size) {
+            var launchedTask = true
+            val execId = offers(i).executorId
+            val host = offers(i).hostname
+            schedulable.slaveOffer(execId,host,availableCpus(i)) match {
+              case Some(task) =>
+                tasks(i) += task
+                val tid = task.taskId
+                taskIdToTaskSetId(tid) = task.taskSetId
+                taskSetTaskIds(task.taskSetId) += tid
+                taskIdToExecutorId(tid) = execId
+                activeExecutorIds += execId
+                executorsByHost(host) += execId
+                availableCpus(i) -= 1
+                launchedTask = true
 
-          case None => {}
-          }
-        }
+              case None => {}
+              }
+            }
+        } while(launchedTask)
       }
       if (tasks.size > 0) {
         hasLaunchedTask = true

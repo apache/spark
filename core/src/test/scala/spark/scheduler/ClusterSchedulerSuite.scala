@@ -6,6 +6,7 @@ import org.scalatest.BeforeAndAfter
 import spark._
 import spark.scheduler._
 import spark.scheduler.cluster._
+import scala.collection.mutable.ArrayBuffer
 
 import java.util.Properties
 
@@ -25,34 +26,34 @@ class DummyTaskSetManager(
   var numTasks = initNumTasks
   var tasksFinished = 0
 
-  def increaseRunningTasks(taskNum: Int) {
+  override def increaseRunningTasks(taskNum: Int) {
     runningTasks += taskNum
     if (parent != null) {
       parent.increaseRunningTasks(taskNum)
     }
   }
 
-  def decreaseRunningTasks(taskNum: Int) {
+  override def decreaseRunningTasks(taskNum: Int) {
     runningTasks -= taskNum
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)
     }
   }
 
-  def addSchedulable(schedulable: Schedulable) {
+  override def addSchedulable(schedulable: Schedulable) {
   } 
   
-  def removeSchedulable(schedulable: Schedulable) {
+  override def removeSchedulable(schedulable: Schedulable) {
   }
   
-  def getSchedulableByName(name: String): Schedulable = {
+  override def getSchedulableByName(name: String): Schedulable = {
     return null
   }
 
-  def executorLost(executorId: String, host: String): Unit = {
+  override def executorLost(executorId: String, host: String): Unit = {
   }
 
-  def receiveOffer(execId: String, host: String, avaiableCpus: Double): Option[TaskDescription] = {
+  override def slaveOffer(execId: String, host: String, avaiableCpus: Double): Option[TaskDescription] = {
     if (tasksFinished + runningTasks < numTasks) {
       increaseRunningTasks(1)
       return Some(new TaskDescription(0, stageId.toString, execId, "task 0:0", null))
@@ -60,8 +61,14 @@ class DummyTaskSetManager(
     return None
   }
 
-  def checkSpeculatableTasks(): Boolean = {
+  override def checkSpeculatableTasks(): Boolean = {
     return true
+  }
+
+  override def getSortedLeafSchedulable(): ArrayBuffer[Schedulable] = {
+    var leafSchedulableQueue = new ArrayBuffer[Schedulable]
+    leafSchedulableQueue += this
+    return leafSchedulableQueue
   }
 
   def taskFinished() {
@@ -80,16 +87,21 @@ class DummyTaskSetManager(
 
 class ClusterSchedulerSuite extends FunSuite with BeforeAndAfter {
   
-  def receiveOffer(rootPool: Pool) : Option[TaskDescription] = {
-    rootPool.receiveOffer("execId_1", "hostname_1", 1)
+  def resourceOffer(rootPool: Pool): Int = {
+    val taskSetQueue = rootPool.getSortedLeafSchedulable()
+    for (taskSet <- taskSetQueue)
+    {
+      taskSet.slaveOffer("execId_1", "hostname_1", 1) match {
+        case Some(task) =>
+          return task.taskSetId.toInt
+        case None => {}
+      }
+    }
+    -1
   }
 
   def checkTaskSetId(rootPool: Pool, expectedTaskSetId: Int) {
-    receiveOffer(rootPool) match {
-      case Some(task) =>
-        assert(task.taskSetId.toInt === expectedTaskSetId)
-      case _ =>
-    }
+    assert(resourceOffer(rootPool) === expectedTaskSetId)
   }
 
   test("FIFO Scheduler Test") {
@@ -105,9 +117,9 @@ class ClusterSchedulerSuite extends FunSuite with BeforeAndAfter {
     schedulableBuilder.addTaskSetManager(taskSetManager2, null)
     
     checkTaskSetId(rootPool, 0)
-    receiveOffer(rootPool)
+    resourceOffer(rootPool)
     checkTaskSetId(rootPool, 1)
-    receiveOffer(rootPool)
+    resourceOffer(rootPool)
     taskSetManager1.abort()
     checkTaskSetId(rootPool, 2)
   }
