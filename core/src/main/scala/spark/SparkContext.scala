@@ -537,8 +537,10 @@ class SparkContext(
    * filesystems), or an HTTP, HTTPS or FTP URI.
    */
   def addJar(path: String) {
-    // weird - debug why this is happening.
-    if (null == path) return
+    if (null == path) {
+      logInfo("null specified as parameter to addJar")
+      return
+    }
     val uri = new URI(path)
     val key = uri.getScheme match {
       case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
