@@ -5,7 +5,7 @@ import spark.util.{RateLimitedOutputStream, IntParam}
 import java.net.ServerSocket
 import spark.{Logging, KryoSerializer}
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
-import io.Source
+import scala.io.Source
 import java.io.IOException
 
 /**
