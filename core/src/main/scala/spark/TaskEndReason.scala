@@ -28,3 +28,5 @@ private[spark] case class ExceptionFailure(
   extends TaskEndReason
 
 private[spark] case class OtherFailure(message: String) extends TaskEndReason
+
+private[spark] case class TaskResultTooBigFailure() extends TaskEndReason

@@ -110,7 +110,8 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         val serializedResult = ser.serialize(result)
         logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
         if (serializedResult.limit >= (akkaFrameSize - 1024)) {
-          throw new SparkException("Result for " + taskId + " exceeded Akka frame size")
+          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskResultTooBigFailure()))
+          return
         }
         context.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
         logInfo("Finished task ID " + taskId)
