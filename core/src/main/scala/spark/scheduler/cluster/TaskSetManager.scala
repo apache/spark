@@ -492,6 +492,12 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
             sched.taskSetFinished(this)
             return
 
+          case taskResultTooBig: TaskResultTooBigFailure =>
+            logInfo("Loss was due to task %s result exceeding Akka frame size;" +
+                    "aborting job".format(tid))
+            abort("Task %s result exceeded Akka frame size".format(tid))
+            return
+
           case ef: ExceptionFailure =>
             val key = ef.exception.toString
             val now = System.currentTimeMillis
