@@ -11,14 +11,32 @@ Ex:  mvn -Phadoop2-yarn clean install
 
 # Building spark core consolidated jar.
 
-Currently, only sbt can buid a consolidated jar which contains the entire spark code - which is required for launching jars on yarn.
-To do this via sbt - though (right now) is a manual process of enabling it in project/SparkBuild.scala.
+We need a consolidated spark core jar (which bundles all the required dependencies) to run Spark jobs on a yarn cluster.
+This can be built either through sbt or via maven.
+
+- Building spark assembled jar via sbt.
+It is a manual process of enabling it in project/SparkBuild.scala.
 Please comment out the
   HADOOP_VERSION, HADOOP_MAJOR_VERSION and HADOOP_YARN
 variables before the line 'For Hadoop 2 YARN support'
 Next, uncomment the subsequent 3 variable declaration lines (for these three variables) which enable hadoop yarn support.
 
-Currnetly, it is a TODO to add support for maven assembly.
+Assembly of the jar Ex:  
+./sbt/sbt clean assembly
+
+The assembled jar would typically be something like :
+./streaming/target/spark-streaming-<VERSION>.jar
+
+
+- Building spark assembled jar via sbt.
+Use the hadoop2-yarn profile and execute the package target.
+
+Something like this. Ex:
+$ mvn -Phadoop2-yarn clean package -DskipTests=true
+
+
+This will build the shaded (consolidated) jar. Typically something like :
+./repl-bin/target/spark-repl-bin-<VERSION>-shaded-hadoop2-yarn.jar
 
 
 # Preparations
@@ -62,6 +80,6 @@ The above starts a YARN Client programs which periodically polls the Application
 # Important Notes
 
 - When your application instantiates a Spark context it must use a special "standalone" master url. This starts the scheduler without forcing it to connect to a cluster. A good way to handle this is to pass "standalone" as an argument to your program, as shown in the example above.
-- YARN does not support requesting container resources based on the number of cores. Thus the numbers of cores given via command line arguments cannot be guaranteed.
+- We do not requesting container resources based on the number of cores. Thus the numbers of cores given via command line arguments cannot be guaranteed.
 - Currently, we have not yet integrated with hadoop security. If --user is present, the hadoop_user specified will be used to run the tasks on the cluster. If unspecified, current user will be used (which should be valid in cluster).
   Once hadoop security support is added, and if hadoop cluster is enabled with security, additional restrictions would apply via delegation tokens passed.
