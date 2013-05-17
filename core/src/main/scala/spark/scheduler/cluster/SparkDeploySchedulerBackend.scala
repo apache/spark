@@ -31,7 +31,8 @@ private[spark] class SparkDeploySchedulerBackend(
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(
       throw new IllegalArgumentException("must supply spark home for spark standalone"))
-    val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome)
+    val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome,
+        sc.ui.appUIAddress)
 
     client = new Client(sc.env.actorSystem, master, appDesc, this)
     client.start()
@@ -57,9 +58,9 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def executorAdded(executorId: String, workerId: String, host: String, cores: Int, memory: Int) {
-    logInfo("Granted executor ID %s on host %s with %d cores, %s RAM".format(
-       executorId, host, cores, Utils.memoryMegabytesToString(memory)))
+  override def executorAdded(executorId: String, workerId: String, hostPort: String, cores: Int, memory: Int) {
+    logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
+       executorId, hostPort, cores, Utils.memoryMegabytesToString(memory)))
   }
 
   override def executorRemoved(executorId: String, message: String, exitStatus: Option[Int]) {

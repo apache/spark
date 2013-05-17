@@ -1,7 +1,7 @@
 package spark.rdd
 
-import scala.collection.mutable.HashMap
 import spark.{RDD, SparkContext, SparkEnv, Partition, TaskContext}
+import spark.storage.BlockManager
 
 private[spark] class BlockRDDPartition(val blockId: String, idx: Int) extends Partition {
   val index = idx
@@ -11,12 +11,7 @@ private[spark]
 class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[String])
   extends RDD[T](sc, Nil) {
 
-  @transient lazy val locations_  = {
-    val blockManager = SparkEnv.get.blockManager
-    /*val locations = blockIds.map(id => blockManager.getLocations(id))*/
-    val locations = blockManager.getLocations(blockIds)
-    HashMap(blockIds.zip(locations):_*)
-  }
+  @transient lazy val locations_ = BlockManager.blockIdsToExecutorLocations(blockIds, SparkEnv.get)
 
   override def getPartitions: Array[Partition] = (0 until blockIds.size).map(i => {
     new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]

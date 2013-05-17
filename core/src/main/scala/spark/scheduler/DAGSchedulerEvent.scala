@@ -35,6 +35,10 @@ private[spark] case class CompletionEvent(
     taskMetrics: TaskMetrics)
   extends DAGSchedulerEvent
 
+private[spark] case class ExecutorGained(execId: String, hostPort: String) extends DAGSchedulerEvent {
+  Utils.checkHostPort(hostPort, "Required hostport")
+}
+
 private[spark] case class ExecutorLost(execId: String) extends DAGSchedulerEvent
 
 private[spark] case class TaskSetFailed(taskSet: TaskSet, reason: String) extends DAGSchedulerEvent

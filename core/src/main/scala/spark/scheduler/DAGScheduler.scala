@@ -13,7 +13,7 @@ import spark.executor.TaskMetrics
 import spark.partial.ApproximateActionListener
 import spark.partial.ApproximateEvaluator
 import spark.partial.PartialResult
-import spark.storage.BlockManagerMaster
+import spark.storage.{BlockManager, BlockManagerMaster}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
 
 /**
@@ -49,6 +49,11 @@ class DAGScheduler(
   // Called by TaskScheduler when an executor fails.
   override def executorLost(execId: String) {
     eventQueue.put(ExecutorLost(execId))
+  }
+
+  // Called by TaskScheduler when a host is added
+  override def executorGained(execId: String, hostPort: String) {
+    eventQueue.put(ExecutorGained(execId, hostPort))
   }
 
   // Called by TaskScheduler to cancel an entire TaskSet due to repeated failures.
@@ -115,9 +120,8 @@ class DAGScheduler(
   private def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
-      cacheLocs(rdd.id) = blockManagerMaster.getLocations(blockIds).map {
-        locations => locations.map(_.ip).toList
-      }.toArray
+      val locs = BlockManager.blockIdsToExecutorLocations(blockIds, env, blockManagerMaster)
+      cacheLocs(rdd.id) = blockIds.map(locs.getOrElse(_, Nil))
     }
     cacheLocs(rdd.id)
   }
@@ -299,6 +303,9 @@ class DAGScheduler(
           resultStageToJob(finalStage) = job
           submitStage(finalStage)
         }
+
+      case ExecutorGained(execId, hostPort) =>
+        handleExecutorGained(execId, hostPort)
 
       case ExecutorLost(execId) =>
         handleExecutorLost(execId)
@@ -636,6 +643,14 @@ class DAGScheduler(
     } else {
       logDebug("Additional executor lost message for " + execId +
                "(generation " + currentGeneration + ")")
+    }
+  }
+  
+  private def handleExecutorGained(execId: String, hostPort: String) {
+    // remove from failedGeneration(execId) ?
+    if (failedGeneration.contains(execId)) {
+      logInfo("Host gained which was in lost list earlier: " + hostPort)
+      failedGeneration -= execId
     }
   }
 

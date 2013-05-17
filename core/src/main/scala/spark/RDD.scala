@@ -31,9 +31,13 @@ import spark.rdd.MapPartitionsRDD
 import spark.rdd.MapPartitionsWithIndexRDD
 import spark.rdd.PipedRDD
 import spark.rdd.SampledRDD
+import spark.rdd.ShuffledRDD
 import spark.rdd.SubtractedRDD
 import spark.rdd.UnionRDD
 import spark.rdd.ZippedRDD
+import spark.rdd.ZippedPartitionsRDD2
+import spark.rdd.ZippedPartitionsRDD3
+import spark.rdd.ZippedPartitionsRDD4
 import spark.storage.StorageLevel
 
 import SparkContext._
@@ -103,7 +107,7 @@ abstract class RDD[T: ClassManifest](
   // =======================================================================
 
   /** A unique ID for this RDD (within its SparkContext). */
-  val id = sc.newRddId()
+  val id: Int = sc.newRddId()
 
   /** A friendly name for this RDD */
   var name: String = null
@@ -116,7 +120,8 @@ abstract class RDD[T: ClassManifest](
 
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
-   * it is computed. Can only be called once on each RDD.
+   * it is computed. This can only be used to assign a new storage level if the RDD does not
+   * have a storage level set yet..
    */
   def persist(newLevel: StorageLevel): RDD[T] = {
     // TODO: Handle changes of StorageLevel
@@ -135,6 +140,15 @@ abstract class RDD[T: ClassManifest](
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): RDD[T] = persist()
+
+  /** Mark the RDD as non-persistent, and remove all blocks for it from memory and disk. */
+  def unpersist(): RDD[T] = {
+    logInfo("Removing RDD " + id + " from persistence list")
+    sc.env.blockManager.master.removeRdd(id)
+    sc.persistentRdds.remove(id)
+    storageLevel = StorageLevel.NONE
+    this
+  }
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel = storageLevel
@@ -237,7 +251,14 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
    */
-  def coalesce(numPartitions: Int): RDD[T] = new CoalescedRDD(this, numPartitions)
+  def coalesce(numPartitions: Int, shuffle: Boolean = false): RDD[T] = {
+    if (shuffle) {
+      // include a shuffle step so that our upstream tasks are still distributed
+      new CoalescedRDD(new ShuffledRDD(map(x => (x, null)), new HashPartitioner(numPartitions)), numPartitions).keys
+    } else {
+      new CoalescedRDD(this, numPartitions)
+    }
+  }
 
   /**
    * Return a sampled subset of this RDD.
@@ -358,11 +379,67 @@ abstract class RDD[T: ClassManifest](
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    */
-  @deprecated("use mapPartitionsWithIndex")
+  @deprecated("use mapPartitionsWithIndex", "0.7.0")
   def mapPartitionsWithSplit[U: ClassManifest](
     f: (Int, Iterator[T]) => Iterator[U],
     preservesPartitioning: Boolean = false): RDD[U] =
     new MapPartitionsWithIndexRDD(this, sc.clean(f), preservesPartitioning)
+
+  /**
+   * Maps f over this RDD, where f takes an additional parameter of type A.  This
+   * additional parameter is produced by constructA, which is called in each
+   * partition with the index of that partition.
+   */
+  def mapWith[A: ClassManifest, U: ClassManifest](constructA: Int => A, preservesPartitioning: Boolean = false)
+    (f:(T, A) => U): RDD[U] = {
+      def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
+        val a = constructA(index)
+        iter.map(t => f(t, a))
+      }
+    new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), preservesPartitioning)
+  }
+
+  /**
+   * FlatMaps f over this RDD, where f takes an additional parameter of type A.  This
+   * additional parameter is produced by constructA, which is called in each
+   * partition with the index of that partition.
+   */
+  def flatMapWith[A: ClassManifest, U: ClassManifest](constructA: Int => A, preservesPartitioning: Boolean = false)
+    (f:(T, A) => Seq[U]): RDD[U] = {
+      def iterF(index: Int, iter: Iterator[T]): Iterator[U] = {
+        val a = constructA(index)
+        iter.flatMap(t => f(t, a))
+      }
+    new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), preservesPartitioning)
+  }
+
+  /**
+   * Applies f to each element of this RDD, where f takes an additional parameter of type A.
+   * This additional parameter is produced by constructA, which is called in each
+   * partition with the index of that partition.
+   */
+  def foreachWith[A: ClassManifest](constructA: Int => A)
+    (f:(T, A) => Unit) {
+      def iterF(index: Int, iter: Iterator[T]): Iterator[T] = {
+        val a = constructA(index)
+        iter.map(t => {f(t, a); t})
+      }
+    (new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), true)).foreach(_ => {})
+  }
+
+  /**
+   * Filters this RDD with p, where p takes an additional parameter of type A.  This
+   * additional parameter is produced by constructA, which is called in each
+   * partition with the index of that partition.
+   */
+  def filterWith[A: ClassManifest](constructA: Int => A)
+    (p:(T, A) => Boolean): RDD[T] = {
+      def iterF(index: Int, iter: Iterator[T]): Iterator[T] = {
+        val a = constructA(index)
+        iter.filter(t => p(t, a))
+      }
+    new MapPartitionsWithIndexRDD(this, sc.clean(iterF _), true)
+  }
 
   /**
    * Zips this RDD with another one, returning key-value pairs with the first element in each RDD,
@@ -372,6 +449,31 @@ abstract class RDD[T: ClassManifest](
    */
   def zip[U: ClassManifest](other: RDD[U]): RDD[(T, U)] = new ZippedRDD(sc, this, other)
 
+  /**
+   * Zip this RDD's partitions with one (or more) RDD(s) and return a new RDD by
+   * applying a function to the zipped partitions. Assumes that all the RDDs have the
+   * *same number of partitions*, but does *not* require them to have the same number
+   * of elements in each partition.
+   */
+  def zipPartitions[B: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B]) => Iterator[V],
+      rdd2: RDD[B]): RDD[V] =
+    new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2)
+
+  def zipPartitions[B: ClassManifest, C: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V],
+      rdd2: RDD[B],
+      rdd3: RDD[C]): RDD[V] =
+    new ZippedPartitionsRDD3(sc, sc.clean(f), this, rdd2, rdd3)
+
+  def zipPartitions[B: ClassManifest, C: ClassManifest, D: ClassManifest, V: ClassManifest](
+      f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
+      rdd2: RDD[B],
+      rdd3: RDD[C],
+      rdd4: RDD[D]): RDD[V] =
+    new ZippedPartitionsRDD4(sc, sc.clean(f), this, rdd2, rdd3, rdd4)
+
+
   // Actions (launch a job to return a value to the user program)
 
   /**
@@ -380,6 +482,14 @@ abstract class RDD[T: ClassManifest](
   def foreach(f: T => Unit) {
     val cleanF = sc.clean(f)
     sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
+  }
+
+  /**
+   * Applies a function f to each partition of this RDD.
+   */
+  def foreachPartition(f: Iterator[T] => Unit) {
+    val cleanF = sc.clean(f)
+    sc.runJob(this, (iter: Iterator[T]) => cleanF(iter))
   }
 
   /**
@@ -404,7 +514,7 @@ abstract class RDD[T: ClassManifest](
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
-   * 
+   *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
@@ -420,7 +530,23 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
    */
-  def subtract(other: RDD[T], p: Partitioner): RDD[T] = new SubtractedRDD[T](this, other, p)
+  def subtract(other: RDD[T], p: Partitioner): RDD[T] = {
+    if (partitioner == Some(p)) {
+      // Our partitioner knows how to handle T (which, since we have a partitioner, is
+      // really (K, V)) so make a new Partitioner that will de-tuple our fake tuples
+      val p2 = new Partitioner() {
+        override def numPartitions = p.numPartitions
+        override def getPartition(k: Any) = p.getPartition(k.asInstanceOf[(Any, _)]._1)
+      }
+      // Unfortunately, since we're making a new p2, we'll get ShuffleDependencies
+      // anyway, and when calling .keys, will not have a partitioner set, even though
+      // the SubtractedRDD will, thanks to p2's de-tupled partitioning, already be
+      // partitioned by the right/real keys (e.g. p).
+      this.map(x => (x, null)).subtractByKey(other.map((_, null)), p2).keys
+    } else {
+      this.map(x => (x, null)).subtractByKey(other.map((_, null)), p).keys
+    }
+  }
 
   /**
    * Reduces the elements of this RDD using the specified commutative and associative binary operator.

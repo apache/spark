@@ -3,7 +3,7 @@ package spark.rdd
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 
@@ -42,6 +42,9 @@ class NewHadoopRDD[K, V](
 
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
+    if (inputFormat.isInstanceOf[Configurable]) {
+      inputFormat.asInstanceOf[Configurable].setConf(conf)
+    }
     val jobContext = newJobContext(conf, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
@@ -54,9 +57,12 @@ class NewHadoopRDD[K, V](
   override def compute(theSplit: Partition, context: TaskContext) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[NewHadoopPartition]
     val conf = confBroadcast.value.value
-    val attemptId = new TaskAttemptID(jobtrackerId, id, true, split.index, 0)
+    val attemptId = newTaskAttemptID(jobtrackerId, id, true, split.index, 0)
     val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
     val format = inputFormatClass.newInstance
+    if (format.isInstanceOf[Configurable]) {
+      format.asInstanceOf[Configurable].setConf(conf)
+    }
     val reader = format.createRecordReader(
       split.serializableHadoopSplit.value, hadoopAttemptContext)
     reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)

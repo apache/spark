@@ -103,7 +103,7 @@ def parse_args():
     parser.print_help()
     sys.exit(1)
   (action, cluster_name) = args
-  if opts.identity_file == None and action in ['launch', 'login']:
+  if opts.identity_file == None and action in ['launch', 'login', 'start']:
     print >> stderr, ("ERROR: The -i or --identity-file argument is " +
                       "required for " + action)
     sys.exit(1)
@@ -540,11 +540,24 @@ def scp(host, opts, local_file, dest_file):
       (opts.identity_file, local_file, opts.user, host, dest_file), shell=True)
 
 
-# Run a command on a host through ssh, throwing an exception if ssh fails
+# Run a command on a host through ssh, retrying up to two times
+# and then throwing an exception if ssh continues to fail.
 def ssh(host, opts, command):
-  subprocess.check_call(
-      "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
-      (opts.identity_file, opts.user, host, command), shell=True)
+  tries = 0
+  while True:
+    try:
+      return subprocess.check_call(
+        "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
+        (opts.identity_file, opts.user, host, command), shell=True)
+    except subprocess.CalledProcessError as e:
+      if (tries > 2):
+        raise e
+      print "Error connecting to host {0}, sleeping 30".format(e)
+      time.sleep(30)
+      tries = tries + 1
+    
+    
+    
 
 
 # Gets a list of zones to launch instances in

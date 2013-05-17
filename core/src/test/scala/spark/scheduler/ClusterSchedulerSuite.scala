@@ -55,10 +55,10 @@ class DummyTaskSetManager(
   override def executorLost(executorId: String, host: String): Unit = {
   }
 
-  override def slaveOffer(execId: String, host: String, avaiableCpus: Double): Option[TaskDescription] = {
+  override def slaveOffer(execId: String, host: String, avaiableCpus: Double, overrideLocality: TaskLocality.TaskLocality = null): Option[TaskDescription] = {
     if (tasksFinished + runningTasks < numTasks) {
       increaseRunningTasks(1)
-      return Some(new TaskDescription(0, stageId.toString, execId, "task 0:0", null))
+      return Some(new TaskDescription(0, execId, "task 0:0", null))
     }
     return None
   }
@@ -113,7 +113,7 @@ class ClusterSchedulerSuite extends FunSuite with BeforeAndAfter {
     {
       taskSet.slaveOffer("execId_1", "hostname_1", 1) match {
         case Some(task) =>
-          return task.taskSetId.toInt
+          return taskSet.stageId
         case None => {}
       }
     }

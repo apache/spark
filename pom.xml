@@ -2,8 +2,8 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.spark-project</groupId>
-  <artifactId>parent</artifactId>
-  <version>0.7.1-SNAPSHOT</version>
+  <artifactId>spark-parent</artifactId>
+  <version>0.8.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark-project.org/</url>
@@ -51,13 +51,14 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
     <java.version>1.5</java.version>
-    <scala.version>2.9.2</scala.version>
+    <scala.version>2.9.3</scala.version>
     <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.0.3</akka.version>
     <spray.version>1.0-M2.1</spray.version>
     <spray.json.version>1.1.1</spray.json.version>
     <slf4j.version>1.6.1</slf4j.version>
     <cdh.version>4.1.2</cdh.version>
+    <log4j.version>1.2.17</log4j.version>
   </properties>
 
   <repositories>
@@ -237,7 +238,7 @@
       </dependency>
       <dependency>
         <groupId>cc.spray</groupId>
-        <artifactId>spray-json_${scala.version}</artifactId>
+        <artifactId>spray-json_2.9.2</artifactId>
         <version>${spray.json.version}</version>
       </dependency>
       <dependency>
@@ -247,13 +248,24 @@
       </dependency>
       <dependency>
         <groupId>com.github.scala-incubator.io</groupId>
-        <artifactId>scala-io-file_${scala.version}</artifactId>
+        <artifactId>scala-io-file_2.9.2</artifactId>
         <version>0.4.1</version>
       </dependency>
       <dependency>
         <groupId>org.apache.mesos</groupId>
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-all</artifactId>
+        <version>4.0.0.Beta2</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.derby</groupId>
+        <artifactId>derby</artifactId>
+        <version>10.4.2.0</version>
+        <scope>test</scope>
       </dependency>
 
       <dependency>
@@ -268,9 +280,15 @@
       </dependency>
 
       <dependency>
+        <groupId>log4j</groupId>
+        <artifactId>log4j</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.version}</artifactId>
-        <version>1.8</version>
+        <version>1.9.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -282,7 +300,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.version}</artifactId>
-        <version>1.9</version>
+        <version>1.10.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -410,8 +428,9 @@
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
-            <filereports>WDF TestSuite.txt</filereports>
+            <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xms64m -Xmx1024m</argLine>
+            <stderr/>
           </configuration>
           <executions>
             <execution>
@@ -505,7 +524,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
       </properties>
@@ -536,6 +554,67 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
             <version>2.0.0-mr1-cdh${cdh.version}</version>
+          </dependency>
+          <!-- Specify Avro version because Kafka also has it as a dependency -->
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>1.7.1.cloudera.2</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-ipc</artifactId>
+            <version>1.7.1.cloudera.2</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
+    </profile>
+
+    <profile>
+      <id>hadoop2-yarn</id>
+      <properties>
+        <hadoop.major.version>2</hadoop.major.version>
+        <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
+        <!-- <yarn.version>0.23.7</yarn.version> -->
+        <yarn.version>2.0.2-alpha</yarn.version>
+      </properties>
+
+      <repositories>
+        <repository>
+          <id>maven-root</id>
+          <name>Maven root repository</name>
+          <url>http://repo1.maven.org/maven2/</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+
+      <dependencyManagement>
+        <dependencies>
+          <!-- TODO: check versions, bringover from yarn branch ! -->
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client</artifactId>
+            <version>${yarn.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-api</artifactId>
+            <version>${yarn.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-common</artifactId>
+            <version>${yarn.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-client</artifactId>
+            <version>${yarn.version}</version>
           </dependency>
           <!-- Specify Avro version because Kafka also has it as a dependency -->
           <dependency>

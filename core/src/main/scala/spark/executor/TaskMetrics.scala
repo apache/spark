@@ -49,14 +49,9 @@ class ShuffleReadMetrics extends Serializable {
   var localBlocksFetched: Int = _
 
   /**
-   * Total time to read shuffle data
+   * Total time that is spent blocked waiting for shuffle to fetch data
    */
-  var shuffleReadMillis: Long = _
-
-  /**
-   * Total time that is spent blocked waiting for shuffle to fetch remote data
-   */
-  var remoteFetchWaitTime: Long = _
+  var fetchWaitTime: Long = _
 
   /**
    * The total amount of time for all the shuffle fetches.  This adds up time from overlapping

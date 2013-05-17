@@ -2,14 +2,10 @@ package org.apache.hadoop.mapred
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.io.Text
 
 import java.text.SimpleDateFormat
 import java.text.NumberFormat
 import java.io.IOException
-import java.net.URI
 import java.util.Date
 
 import spark.Logging
@@ -24,7 +20,7 @@ import spark.SerializableWritable
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
 class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRedUtil with Serializable {
-  
+
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
   
@@ -104,6 +100,12 @@ class HadoopWriter(@transient jobConf: JobConf) extends Logging with HadoopMapRe
     } else {
       logWarning ("No need to commit output of task: " + taID.value)
     }
+  }
+
+  def commitJob() {
+    // always ? Or if cmtr.needsTaskCommit ?
+    val cmtr = getOutputCommitter()
+    cmtr.commitJob(getJobContext())
   }
 
   def cleanup() {

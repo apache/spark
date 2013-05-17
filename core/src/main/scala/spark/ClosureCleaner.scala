@@ -8,12 +8,20 @@ import scala.collection.mutable.Set
 import org.objectweb.asm.{ClassReader, MethodVisitor, Type}
 import org.objectweb.asm.commons.EmptyVisitor
 import org.objectweb.asm.Opcodes._
+import java.io.{InputStream, IOException, ByteArrayOutputStream, ByteArrayInputStream, BufferedInputStream}
 
 private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
   private def getClassReader(cls: Class[_]): ClassReader = {
-    new ClassReader(cls.getResourceAsStream(
-      cls.getName.replaceFirst("^.*\\.", "") + ".class"))
+    // Copy data over, before delegating to ClassReader - else we can run out of open file handles.
+    val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
+    val resourceStream = cls.getResourceAsStream(className)
+    // todo: Fixme - continuing with earlier behavior ...
+    if (resourceStream == null) return new ClassReader(resourceStream)
+
+    val baos = new ByteArrayOutputStream(128)
+    Utils.copyStream(resourceStream, baos, true)
+    new ClassReader(new ByteArrayInputStream(baos.toByteArray))
   }
 
   // Check whether a class represents a Scala closure

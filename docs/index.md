@@ -18,9 +18,11 @@ or you will need to set the `SCALA_HOME` environment variable to point
 to where you've installed Scala. Scala must also be accessible through one
 of these methods on slave nodes on your cluster.
 
-Spark uses [Simple Build Tool](https://github.com/harrah/xsbt/wiki), which is bundled with it. To compile the code, go into the top-level Spark directory and run
+Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
 
     sbt/sbt package
+
+Spark also supports building using Maven. If you would like to build using Maven, see the [instructions for building Spark with Maven](building-with-maven.html).
 
 # Testing the Build
 
@@ -72,6 +74,7 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 **Other documents:**
 
+* [Building Spark With Maven](building-with-maven.html): Build Spark using the Maven build tool
 * [Configuration](configuration.html): customize Spark via its configuration system
 * [Tuning Guide](tuning.html): best practices to optimize performance and memory use
 * [Bagel](bagel-programming-guide.html): an implementation of Google's Pregel on Spark

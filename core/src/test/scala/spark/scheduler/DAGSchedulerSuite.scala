@@ -271,7 +271,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     // have the 2nd attempt pass
     complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
     // we can see both result blocks now
-    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.ip) === Array("hostA", "hostB"))
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) === Array("hostA", "hostB"))
     complete(taskSets(3), Seq((Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
   }
@@ -385,12 +385,12 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(results === Map(0 -> 42))
   }
 
-  /** Assert that the supplied TaskSet has exactly the given preferredLocations. */
+  /** Assert that the supplied TaskSet has exactly the given preferredLocations. Note, converts taskSet's locations to host only. */
   private def assertLocations(taskSet: TaskSet, locations: Seq[Seq[String]]) {
     assert(locations.size === taskSet.tasks.size)
     for ((expectLocs, taskLocs) <-
             taskSet.tasks.map(_.preferredLocations).zip(locations)) {
-      assert(expectLocs === taskLocs)
+      assert(expectLocs.map(loc => spark.Utils.parseHostPort(loc)._1) === taskLocs)
     }
   }
 

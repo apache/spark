@@ -23,4 +23,5 @@ private[spark] trait Schedulable {
   def executorLost(executorId: String, host: String): Unit
   def checkSpeculatableTasks(): Boolean
   def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager]
+  def hasPendingTasks(): Boolean
 }
