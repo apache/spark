@@ -26,18 +26,6 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
-      <artifactId>spark-bagel_2.9.3</artifactId>
-      <version>${project.version}</version>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.spark-project</groupId>
-      <artifactId>spark-examples_2.9.3</artifactId>
-      <version>${project.version}</version>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
