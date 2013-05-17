@@ -25,7 +25,7 @@ Assembly of the jar Ex:
 ./sbt/sbt clean assembly
 
 The assembled jar would typically be something like :
-./streaming/target/spark-streaming-<VERSION>.jar
+./core/target/spark-core-assembly-0.8.0-SNAPSHOT.jar
 
 
 - Building spark assembled jar via sbt.
