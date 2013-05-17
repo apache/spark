@@ -5,7 +5,6 @@ import spark.util.SerializableBuffer
 
 private[spark] class TaskDescription(
     val taskId: Long,
-    val taskSetId: String,
     val executorId: String,
     val name: String,
     _serializedTask: ByteBuffer)

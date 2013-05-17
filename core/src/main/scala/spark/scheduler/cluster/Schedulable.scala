@@ -21,7 +21,6 @@ private[spark] trait Schedulable {
   def removeSchedulable(schedulable: Schedulable): Unit
   def getSchedulableByName(name: String): Schedulable
   def executorLost(executorId: String, host: String): Unit
-  def slaveOffer(execId: String, host: String, avaiableCpus: Double): Option[TaskDescription]
   def checkSpeculatableTasks(): Boolean
-  def getSortedLeafSchedulable(): ArrayBuffer[Schedulable]
+  def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager]
 }

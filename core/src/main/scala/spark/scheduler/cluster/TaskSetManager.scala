@@ -198,7 +198,7 @@ private[spark] class TaskSetManager(
   }
 
   // Respond to an offer of a single slave from the scheduler by finding a task
-  override def slaveOffer(execId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
+  def slaveOffer(execId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
       val time = System.currentTimeMillis
       val localOnly = (time - lastPreferredLaunchTime < LOCALITY_WAIT)
@@ -234,7 +234,7 @@ private[spark] class TaskSetManager(
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
-          return Some(new TaskDescription(taskId, taskSet.id, execId, taskName, serializedTask))
+          return Some(new TaskDescription(taskId, execId, taskName, serializedTask))
         }
         case _ =>
       }
@@ -398,10 +398,10 @@ private[spark] class TaskSetManager(
     //nothing
   }
 
-  override def getSortedLeafSchedulable(): ArrayBuffer[Schedulable] = {
-    var leafSchedulableQueue = new ArrayBuffer[Schedulable]
-    leafSchedulableQueue += this
-    return leafSchedulableQueue
+  override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
+    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
+    sortedTaskSetQueue += this
+    return sortedTaskSetQueue
   }
 
   override def executorLost(execId: String, hostname: String) {

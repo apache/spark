@@ -75,17 +75,13 @@ private[spark] class Pool(
     return shouldRevive
   }
 
-  override def slaveOffer(execId: String, host: String, availableCpus: Double): Option[TaskDescription] = {
-    return None
-  }
-
-  override def getSortedLeafSchedulable(): ArrayBuffer[Schedulable] = {
-    var leafSchedulableQueue = new ArrayBuffer[Schedulable]
+  override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
+    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
     val sortedSchedulableQueue = schedulableQueue.sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
-      leafSchedulableQueue ++= schedulable.getSortedLeafSchedulable()
+      sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue()
     }
-    return leafSchedulableQueue
+    return sortedTaskSetQueue
   }
 
   override def increaseRunningTasks(taskNum: Int) {

@@ -165,24 +165,24 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
       val availableCpus = offers.map(o => o.cores).toArray
       var launchedTask = false
-      val sortedLeafSchedulable = rootPool.getSortedLeafSchedulable()
-      for (schedulable <- sortedLeafSchedulable)
+      val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
+      for (manager <- sortedTaskSetQueue)
       {
-        logDebug("parentName:%s,name:%s,runningTasks:%s".format(schedulable.parent.name,schedulable.name,schedulable.runningTasks))
+        logInfo("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
       }
-      for (schedulable <- sortedLeafSchedulable) {
+      for (manager <- sortedTaskSetQueue) {
         do {
           launchedTask = false
           for (i <- 0 until offers.size) {
             var launchedTask = true
             val execId = offers(i).executorId
             val host = offers(i).hostname
-            schedulable.slaveOffer(execId,host,availableCpus(i)) match {
+            manager.slaveOffer(execId,host,availableCpus(i)) match {
               case Some(task) =>
                 tasks(i) += task
                 val tid = task.taskId
-                taskIdToTaskSetId(tid) = task.taskSetId
-                taskSetTaskIds(task.taskSetId) += tid
+                taskIdToTaskSetId(tid) = manager.taskSet.id
+                taskSetTaskIds(manager.taskSet.id) += tid
                 taskIdToExecutorId(tid) = execId
                 activeExecutorIds += execId
                 executorsByHost(host) += execId
