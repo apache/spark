@@ -186,12 +186,11 @@ def get_spark_ami(opts):
     instance_type = "pvm"
     print >> stderr,\
         "Don't recognize %s, assuming type is pvm" % opts.instance_type
-  if version not in ["latest", "v0.7.0"]:
+  
+  version = version.replace("v", "")
+  if version not in ["latest", "0.7.0"]:
     print >> stderr, \
       "Don't know how to resolve AMI for version: %s" % version
-  # TODO(pwendell) Once we have multiple Spark AMI versions, we should let 
-  # people give a version flag here in place of just saying 'latest'.
-  version = version[1:]
   ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version, opts.region, instance_type)
   try:
     ami = urllib2.urlopen(ami_path).read().strip()
@@ -253,7 +252,7 @@ def launch_cluster(conn, opts, cluster_name):
     sys.exit(1)
 
   # Figure out Spark AMI
-  if opts.ami[0] == "v":
+  if "ami" not in opts.ami:
     opts.ami = get_spark_ami(opts)
   print "Launching instances..."
 
