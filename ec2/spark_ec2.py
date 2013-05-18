@@ -23,6 +23,7 @@ from __future__ import with_statement
 
 import logging
 import os
+import pipes
 import random
 import shutil
 import subprocess
@@ -536,18 +537,41 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
               dest.write(text)
               dest.close()
   # rsync the whole directory over to the master machine
-  command = (("rsync -rv -e 'ssh -o StrictHostKeyChecking=no -i %s' " +
-      "'%s/' '%s@%s:/'") % (opts.identity_file, tmp_dir, opts.user, active_master))
-  subprocess.check_call(command, shell=True)
+  command = [
+      'rsync', '-rv',
+      '-e', stringify_command(ssh_command(opts)),
+      "%s/" % tmp_dir,
+      "%s@%s:/" % (opts.user, active_master)
+    ]
+  subprocess.check_call(command)
   # Remove the temp directory we created above
   shutil.rmtree(tmp_dir)
+
+
+def stringify_command(parts):
+  if isinstance(parts, str):
+    return parts
+  else:
+    return ' '.join(map(pipes.quote, parts))
+
+
+def ssh_args(opts):
+  parts = ['-o', 'StrictHostKeyChecking=no', '-i', opts.identity_file]
+  return parts
+
+
+def ssh_command(opts):
+  return ['ssh'] + ssh_args(opts)
+
+
+def scp_command(opts):
+  return ['scp', '-q'] + ssh_args(opts)
 
 
 # Copy a file to a given host through scp, throwing an exception if scp fails
 def scp(host, opts, local_file, dest_file):
   subprocess.check_call(
-      "scp -q -o StrictHostKeyChecking=no -i %s '%s' '%s@%s:%s'" %
-      (opts.identity_file, local_file, opts.user, host, dest_file), shell=True)
+      scp_command(opts) + [local_file, "%s@%s:%s" % (opts.user, host, dest_file)])
 
 
 # Run a command on a host through ssh, retrying up to two times
@@ -557,8 +581,7 @@ def ssh(host, opts, command):
   while True:
     try:
       return subprocess.check_call(
-        "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
-        (opts.identity_file, opts.user, host, command), shell=True)
+        ssh_command(opts) + ['-t', '%s@%s' % (opts.user, host), stringify_command(command)])
     except subprocess.CalledProcessError as e:
       if (tries > 2):
         raise e
@@ -670,11 +693,11 @@ def main():
         conn, opts, cluster_name)
     master = master_nodes[0].public_dns_name
     print "Logging into master " + master + "..."
-    proxy_opt = ""
+    proxy_opt = []
     if opts.proxy_port != None:
-      proxy_opt = "-D " + opts.proxy_port
-    subprocess.check_call("ssh -o StrictHostKeyChecking=no -i %s %s %s@%s" %
-        (opts.identity_file, proxy_opt, opts.user, master), shell=True)
+      proxy_opt = ['-D', opts.proxy_port]
+    subprocess.check_call(
+        ssh_command(opts) + proxy_opt + ['-t', "%s@%s" % (opts.user, master)])
 
   elif action == "get-master":
     (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
