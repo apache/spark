@@ -142,7 +142,6 @@ object SparkBuild extends Build {
     ),
 
     libraryDependencies ++= Seq(
-      "io.netty" % "netty" % "3.5.3.Final",
       "com.google.guava" % "guava" % "11.0.1",
       "log4j" % "log4j" % "1.2.16",
       "org.slf4j" % "slf4j-api" % slf4jVersion,
