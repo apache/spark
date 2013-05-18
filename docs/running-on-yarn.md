@@ -14,29 +14,31 @@ Ex:  mvn -Phadoop2-yarn clean install
 We need a consolidated spark core jar (which bundles all the required dependencies) to run Spark jobs on a yarn cluster.
 This can be built either through sbt or via maven.
 
-- Building spark assembled jar via sbt.
-It is a manual process of enabling it in project/SparkBuild.scala.
+-   Building spark assembled jar via sbt.
+    It is a manual process of enabling it in project/SparkBuild.scala.
 Please comment out the
   HADOOP_VERSION, HADOOP_MAJOR_VERSION and HADOOP_YARN
 variables before the line 'For Hadoop 2 YARN support'
 Next, uncomment the subsequent 3 variable declaration lines (for these three variables) which enable hadoop yarn support.
 
-Assembly of the jar Ex:  
-./sbt/sbt clean assembly
+Assembly of the jar Ex:
+
+    ./sbt/sbt clean assembly
 
 The assembled jar would typically be something like :
-./core/target/spark-core-assembly-0.8.0-SNAPSHOT.jar
+`./core/target/spark-core-assembly-0.8.0-SNAPSHOT.jar`
 
 
-- Building spark assembled jar via sbt.
-Use the hadoop2-yarn profile and execute the package target.
+-   Building spark assembled jar via Maven.
+    Use the hadoop2-yarn profile and execute the package target.
 
 Something like this. Ex:
-$ mvn -Phadoop2-yarn clean package -DskipTests=true
+
+    mvn -Phadoop2-yarn clean package -DskipTests=true
 
 
 This will build the shaded (consolidated) jar. Typically something like :
-./repl-bin/target/spark-repl-bin-<VERSION>-shaded-hadoop2-yarn.jar
+`./repl-bin/target/spark-repl-bin-<VERSION>-shaded-hadoop2-yarn.jar`
 
 
 # Preparations
