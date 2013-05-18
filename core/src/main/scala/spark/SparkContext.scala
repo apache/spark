@@ -538,16 +538,17 @@ class SparkContext(
    */
   def addJar(path: String) {
     if (null == path) {
-      logInfo("null specified as parameter to addJar")
-      return
+      logWarning("null specified as parameter to addJar",
+        new SparkException("null specified as parameter to addJar"))
+    } else {
+      val uri = new URI(path)
+      val key = uri.getScheme match {
+        case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
+        case _ => path
+      }
+      addedJars(key) = System.currentTimeMillis
+      logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
     }
-    val uri = new URI(path)
-    val key = uri.getScheme match {
-      case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
-      case _ => path
-    }
-    addedJars(key) = System.currentTimeMillis
-    logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
   }
 
   /**
