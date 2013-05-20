@@ -352,7 +352,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
                 executorsByHostPort(hostPort) += execId
                 availableCpus(i) -= 1
                 launchedTask = true
-                
+
               case None => {}
               }
             }
@@ -373,7 +373,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           }
         } while (launchedTask)
       }
-      
+
       if (tasks.size > 0) {
         hasLaunchedTask = true
       }
@@ -522,7 +522,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       hostPortsAlive -= hostPort
       hostToAliveHostPorts.getOrElseUpdate(Utils.parseHostPort(hostPort)._1, new HashSet[String]).remove(hostPort)
     }
-      
+
     val execs = executorsByHostPort.getOrElse(hostPort, new HashSet)
     execs -= executorId
     if (execs.isEmpty) {
