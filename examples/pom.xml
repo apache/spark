@@ -67,6 +67,11 @@
           <artifactId>hadoop-core</artifactId>
           <scope>provided</scope>
         </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase</artifactId>
+          <version>0.94.6</version>
+        </dependency>
       </dependencies>
       <build>
         <plugins>
@@ -104,6 +109,11 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-client</artifactId>
           <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase</artifactId>
+          <version>0.94.6</version>
         </dependency>
       </dependencies>
       <build>
