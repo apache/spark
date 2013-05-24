@@ -272,8 +272,7 @@ object BlockFetcherIterator {
 
       logDebug("Sending request for %d blocks (%s) from %s".format(
         req.blocks.size, Utils.memoryBytesToString(req.size), req.address.host))
-      val cmId = new ConnectionManagerId(
-        req.address.host, System.getProperty("spark.shuffle.sender.port", "6653").toInt)
+      val cmId = new ConnectionManagerId(req.address.host, req.address.nettyPort)
       val cpier = new ShuffleCopier
       cpier.getBlocks(cmId, req.blocks, putResult)
       logDebug("Sent request for remote blocks " + req.blocks + " from " + req.address.host )

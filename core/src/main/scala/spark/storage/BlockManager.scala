@@ -94,11 +94,16 @@ private[spark] class BlockManager(
   private[storage] val diskStore: DiskStore =
     new DiskStore(this, System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
 
+  // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
+  private val useNetty = System.getProperty("spark.shuffle.use.netty", "false").toBoolean
+  private val nettyPortConfig = System.getProperty("spark.shuffle.sender.port", "0").toInt
+  private val nettyPort = if (useNetty) diskStore.startShuffleBlockSender(nettyPortConfig) else 0
+
   val connectionManager = new ConnectionManager(0)
   implicit val futureExecContext = connectionManager.futureExecContext
 
   val blockManagerId = BlockManagerId(
-    executorId, connectionManager.id.host, connectionManager.id.port)
+    executorId, connectionManager.id.host, connectionManager.id.port, nettyPort)
 
   // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
   // for receiving shuffle outputs)
@@ -266,7 +271,6 @@ private[spark] class BlockManager(
     }
   }
 
-
   /**
    * Get locations of an array of blocks.
    */
@@ -274,7 +278,7 @@ private[spark] class BlockManager(
     val startTimeMs = System.currentTimeMillis
     val locations = master.getLocations(blockIds).toArray
     logDebug("Got multiple block location in " + Utils.getUsedTimeMs(startTimeMs))
-    return locations
+    locations
   }
 
   /**
@@ -971,8 +975,7 @@ private[spark] object BlockManager extends Logging {
     assert (env != null || blockManagerMaster != null)
     val locationBlockIds: Seq[Seq[BlockManagerId]] =
       if (env != null) {
-        val blockManager = env.blockManager
-        blockManager.getLocationBlockIds(blockIds)
+        env.blockManager.getLocationBlockIds(blockIds)
       } else {
         blockManagerMaster.getLocations(blockIds)
       }
