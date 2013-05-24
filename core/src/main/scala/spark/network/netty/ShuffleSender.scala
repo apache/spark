@@ -5,23 +5,22 @@ import java.io.File
 import spark.Logging
 
 
-private[spark] class ShuffleSender(val port: Int, val pResolver: PathResolver) extends Logging {
-  val server = new FileServer(pResolver)
+private[spark] class ShuffleSender(portIn: Int, val pResolver: PathResolver) extends Logging {
 
-  Runtime.getRuntime().addShutdownHook(
-    new Thread() {
-      override def run() {
-        server.stop()
-      }
-    }
-  )
+  val server = new FileServer(pResolver, portIn)
+  server.start()
 
-  def start() {
-    server.run(port)
+  def stop() {
+    server.stop()
   }
+
+  def port: Int = server.getPort()
 }
 
 
+/**
+ * An application for testing the shuffle sender as a standalone program.
+ */
 private[spark] object ShuffleSender {
 
   def main(args: Array[String]) {
@@ -50,7 +49,5 @@ private[spark] object ShuffleSender {
       }
     }
     val sender = new ShuffleSender(port, pResovler)
-
-    sender.start()
   }
 }

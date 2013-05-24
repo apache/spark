@@ -82,21 +82,14 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   val subDirsPerLocalDir = System.getProperty("spark.diskStore.subDirectories", "64").toInt
 
-  var shuffleSender : Thread = null
-  val thisInstance = this
+  var shuffleSender : ShuffleSender = null
   // Create one local directory for each path mentioned in spark.local.dir; then, inside this
   // directory, create multiple subdirectories that we will hash files into, in order to avoid
   // having really large inodes at the top level.
   val localDirs = createLocalDirs()
   val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
-  val useNetty = System.getProperty("spark.shuffle.use.netty", "false").toBoolean
-
   addShutdownHook()
-
-  if(useNetty){
-    startShuffleBlockSender()
-  }
 
   def getBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int)
     : BlockObjectWriter = {
@@ -274,8 +267,9 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
           localDirs.foreach { localDir =>
             if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
           }
-          if (useNetty && shuffleSender != null)
+          if (shuffleSender != null) {
             shuffleSender.stop
+          }
         } catch {
           case t: Throwable => logError("Exception while deleting local spark dirs", t)
         }
@@ -283,39 +277,17 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     })
   }
 
-  private def startShuffleBlockSender() {
-    try {
-      val port = System.getProperty("spark.shuffle.sender.port", "6653").toInt
-
-      val pResolver = new PathResolver {
-        override def getAbsolutePath(blockId: String): String = {
-          if (!blockId.startsWith("shuffle_")) {
-            return null
-          }
-          thisInstance.getFile(blockId).getAbsolutePath()
+  private[storage] def startShuffleBlockSender(port: Int): Int = {
+    val pResolver = new PathResolver {
+      override def getAbsolutePath(blockId: String): String = {
+        if (!blockId.startsWith("shuffle_")) {
+          return null
         }
-      }
-      shuffleSender = new Thread {
-        override def run() = {
-          val sender = new ShuffleSender(port, pResolver)
-          logInfo("Created ShuffleSender binding to port : "+ port)
-          sender.start
-        }
-      }
-      shuffleSender.setDaemon(true)
-      shuffleSender.start
-
-    } catch {
-      case interrupted: InterruptedException =>
-        logInfo("Runner thread for ShuffleBlockSender interrupted")
-
-      case e: Exception => {
-        logError("Error running ShuffleBlockSender ", e)
-        if (shuffleSender != null) {
-          shuffleSender.stop
-          shuffleSender = null
-        }
+        DiskStore.this.getFile(blockId).getAbsolutePath()
       }
     }
+    shuffleSender = new ShuffleSender(port, pResolver)
+    logInfo("Created ShuffleSender binding to port : "+ shuffleSender.port)
+    shuffleSender.port
   }
 }
