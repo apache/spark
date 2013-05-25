@@ -487,10 +487,10 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes,
         ["%s:2181/mesos" % i.public_dns_name for i in zoo_nodes])
   elif opts.cluster_type == "mesos":
     zoo_list = "NONE"
-    cluster_url = "%s:5050" % active_master
+    cluster_url = "mesos://%s:5050" % active_master
   elif opts.cluster_type == "standalone":
     zoo_list = "NONE"
-    cluster_url = "%s:7077" % active_master
+    cluster_url = "spark://%s:7077" % active_master
 
   template_vars = {
     "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
