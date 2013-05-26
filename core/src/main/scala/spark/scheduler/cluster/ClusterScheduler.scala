@@ -56,7 +56,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   val TASK_SCHEDULING_AGGRESSION = TaskLocality.parse(System.getProperty("spark.tasks.schedule.aggression", "NODE_LOCAL"))
 
   val activeTaskSets = new HashMap[String, TaskSetManager]
-  var activeTaskSetsQueue = new ArrayBuffer[TaskSetManager]
 
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
@@ -96,12 +95,28 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
+  var schedulableBuilder: SchedulableBuilder = null
+  var rootPool: Pool = null
+
   override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener
   }
 
   def initialize(context: SchedulerBackend) {
     backend = context
+    //default scheduler is FIFO
+    val schedulingMode = System.getProperty("spark.cluster.schedulingmode", "FIFO")
+    //temporarily set rootPool name to empty
+    rootPool = new Pool("", SchedulingMode.withName(schedulingMode), 0, 0)
+    schedulableBuilder = {
+      schedulingMode match {
+        case "FIFO" =>
+          new FIFOSchedulableBuilder(rootPool)
+        case "FAIR" =>
+          new FairSchedulableBuilder(rootPool)
+      }
+    }
+    schedulableBuilder.buildPools()
     // resolve executorId to hostPort mapping.
     def executorToHostPort(executorId: String, defaultHostPort: String): String = {
       executorIdToHostPort.getOrElse(executorId, defaultHostPort)
@@ -111,6 +126,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     // Will that be a design violation ?
     SparkEnv.get.executorIdToHostPort = Some(executorToHostPort)
   }
+
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
@@ -163,7 +179,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     this.synchronized {
       val manager = new TaskSetManager(this, taskSet)
       activeTaskSets(taskSet.id) = manager
-      activeTaskSetsQueue += manager
+      schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
 
       if (hasReceivedTask == false) {
@@ -186,7 +202,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   def taskSetFinished(manager: TaskSetManager) {
     this.synchronized {
       activeTaskSets -= manager.taskSet.id
-      activeTaskSetsQueue -= manager
+      manager.parent.removeSchedulable(manager)
+      logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
       taskIdToTaskSetId --= taskSetTaskIds(manager.taskSet.id)
       taskIdToExecutorId --= taskSetTaskIds(manager.taskSet.id)
       taskSetTaskIds.remove(manager.taskSet.id)
@@ -235,9 +252,12 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
         map
       }
       var launchedTask = false
-
-
-      for (manager <- activeTaskSetsQueue.sortBy(m => (m.taskSet.priority, m.taskSet.stageId))) {
+      val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
+      for (manager <- sortedTaskSetQueue)
+      {
+        logInfo("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
+      }
+      for (manager <- sortedTaskSetQueue) {
 
         // Split offers based on node local, rack local and off-rack tasks.
         val processLocalOffers = new HashMap[String, ArrayBuffer[Int]]()
@@ -332,10 +352,10 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
                 executorsByHostPort(hostPort) += execId
                 availableCpus(i) -= 1
                 launchedTask = true
-                
+
               case None => {}
+              }
             }
-          }
           // Loop once more - when lastLoop = true, then we try to schedule task on all nodes irrespective of
           // data locality (we still go in order of priority : but that would not change anything since
           // if data local tasks had been available, we would have scheduled them already)
@@ -353,7 +373,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           }
         } while (launchedTask)
       }
-      
+
       if (tasks.size > 0) {
         hasLaunchedTask = true
       }
@@ -406,6 +426,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       backend.reviveOffers()
     }
     if (taskFailed) {
+
       // Also revive offers if a task had failed for some reason other than host lost
       backend.reviveOffers()
     }
@@ -452,9 +473,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   def checkSpeculatableTasks() {
     var shouldRevive = false
     synchronized {
-      for (ts <- activeTaskSetsQueue) {
-        shouldRevive |= ts.checkSpeculatableTasks()
-      }
+      shouldRevive = rootPool.checkSpeculatableTasks()
     }
     if (shouldRevive) {
       backend.reviveOffers()
@@ -464,7 +483,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   // Check for pending tasks in all our active jobs.
   def hasPendingTasks(): Boolean = {
     synchronized {
-      activeTaskSetsQueue.exists( _.hasPendingTasks() )
+      rootPool.hasPendingTasks()
     }
   }
 
@@ -503,14 +522,14 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       hostPortsAlive -= hostPort
       hostToAliveHostPorts.getOrElseUpdate(Utils.parseHostPort(hostPort)._1, new HashSet[String]).remove(hostPort)
     }
-      
+
     val execs = executorsByHostPort.getOrElse(hostPort, new HashSet)
     execs -= executorId
     if (execs.isEmpty) {
       executorsByHostPort -= hostPort
     }
     executorIdToHostPort -= executorId
-    activeTaskSetsQueue.foreach(_.executorLost(executorId, hostPort))
+    rootPool.executorLost(executorId, hostPort)
   }
 
   def executorGained(execId: String, hostPort: String) {

@@ -2,6 +2,8 @@ package spark.scheduler
 
 import spark.TaskContext
 
+import java.util.Properties
+
 /**
  * Tracks information about an active job in the DAGScheduler.
  */
@@ -11,7 +13,8 @@ private[spark] class ActiveJob(
     val func: (TaskContext, Iterator[_]) => _,
     val partitions: Array[Int],
     val callSite: String,
-    val listener: JobListener) {
+    val listener: JobListener,
+    val properties: Properties) {
 
   val numPartitions = partitions.length
   val finished = Array.fill[Boolean](numPartitions)(false)

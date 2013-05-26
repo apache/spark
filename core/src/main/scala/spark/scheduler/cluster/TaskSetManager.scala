@@ -54,7 +54,11 @@ private[spark] object TaskLocality extends Enumeration("PROCESS_LOCAL", "NODE_LO
 /**
  * Schedules the tasks within a single TaskSet in the ClusterScheduler.
  */
-private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSet) extends Logging {
+private[spark] class TaskSetManager(
+    sched: ClusterScheduler,
+    val taskSet: TaskSet)
+  extends Schedulable
+  with Logging {
 
   // Maximum time to wait to run a task in a preferred location (in ms)
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
@@ -72,7 +76,6 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   // Serializer for closures and tasks.
   val ser = SparkEnv.get.closureSerializer.newInstance()
 
-  val priority = taskSet.priority
   val tasks = taskSet.tasks
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
@@ -80,6 +83,14 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
   val numFailures = new Array[Int](numTasks)
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksFinished = 0
+
+  var weight = 1
+  var minShare = 0
+  var runningTasks = 0
+  var priority = taskSet.priority
+  var stageId = taskSet.stageId
+  var name = "TaskSet_"+taskSet.stageId.toString
+  var parent:Schedulable = null
 
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
@@ -464,6 +475,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           val timeTaken = System.currentTimeMillis - startTime
+          increaseRunningTasks(1)
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
@@ -498,6 +510,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     }
     val index = info.index
     info.markSuccessful()
+    decreaseRunningTasks(1)
     if (!finished(index)) {
       tasksFinished += 1
       logInfo("Finished TID %s in %d ms (progress: %d/%d)".format(
@@ -526,6 +539,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     }
     val index = info.index
     info.markFailed()
+    decreaseRunningTasks(1)
     if (!finished(index)) {
       logInfo("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
       copiesRunning(index) -= 1
@@ -540,6 +554,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
             finished(index) = true
             tasksFinished += 1
             sched.taskSetFinished(this)
+            decreaseRunningTasks(runningTasks)
             return
 
           case taskResultTooBig: TaskResultTooBigFailure =>
@@ -604,10 +619,44 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     causeOfFailure = message
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.listener.taskSetFailed(taskSet, message)
+    decreaseRunningTasks(runningTasks)
     sched.taskSetFinished(this)
   }
 
-  def executorLost(execId: String, hostPort: String) {
+  override def increaseRunningTasks(taskNum: Int) {
+    runningTasks += taskNum
+    if (parent != null) {
+      parent.increaseRunningTasks(taskNum)
+    }
+  }
+
+  override def decreaseRunningTasks(taskNum: Int) {
+    runningTasks -= taskNum
+    if (parent != null) {
+      parent.decreaseRunningTasks(taskNum)
+    }
+  }
+
+  //TODO: for now we just find Pool not TaskSetManager, we can extend this function in future if needed
+  override def getSchedulableByName(name: String): Schedulable = {
+    return null
+  }
+
+  override def addSchedulable(schedulable:Schedulable) {
+    //nothing
+  }
+
+  override def removeSchedulable(schedulable:Schedulable) {
+    //nothing
+  }
+
+  override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
+    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
+    sortedTaskSetQueue += this
+    return sortedTaskSetQueue
+  }
+
+  override def executorLost(execId: String, hostPort: String) {
     logInfo("Re-queueing tasks for " + execId + " from TaskSet " + taskSet.id)
 
     // If some task has preferred locations only on hostname, and there are no more executors there,
@@ -653,7 +702,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
    * TODO: To make this scale to large jobs, we need to maintain a list of running tasks, so that
    * we don't scan the whole task set. It might also help to make this sorted by launch time.
    */
-  def checkSpeculatableTasks(): Boolean = {
+  override def checkSpeculatableTasks(): Boolean = {
     // Can't speculate if we only have one task, or if all tasks have finished.
     if (numTasks == 1 || tasksFinished == numTasks) {
       return false
@@ -685,7 +734,7 @@ private[spark] class TaskSetManager(sched: ClusterScheduler, val taskSet: TaskSe
     return foundTasks
   }
 
-  def hasPendingTasks(): Boolean = {
+  override def hasPendingTasks(): Boolean = {
     numTasks > 0 && tasksFinished < numTasks
   }
 }
