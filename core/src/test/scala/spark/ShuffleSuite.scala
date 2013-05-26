@@ -326,5 +326,5 @@ object ShuffleSuite {
     x + y
   }
 
-  class NonJavaSerializableClass(val value: Int) extends Serializable
+  class NonJavaSerializableClass(val value: Int)
 }
