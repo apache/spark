@@ -305,9 +305,20 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     assert(c.partitioner.get === p)
   }
 
+  test("shuffle local cluster") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    val a = sc.parallelize(1 to 10, 2)
+    val b = a.map {
+      x => (x, x * 2)
+    }
+    val c = new ShuffledRDD(b, new HashPartitioner(3))
+    assert(c.count === 10)
+  }
+
   test("shuffle serializer") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[1,2,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
       (x, new ShuffleSuite.NonJavaSerializableClass(x * 2))
@@ -317,6 +328,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val c = new ShuffledRDD(b, new HashPartitioner(3), classOf[spark.KryoSerializer].getName)
     assert(c.count === 10)
   }
+
 }
 
 object ShuffleSuite {
