@@ -16,7 +16,7 @@ class DummyTaskSetManager(
     initNumTasks: Int,
     clusterScheduler: ClusterScheduler,
     taskSet: TaskSet)
-  extends TaskSetManager(clusterScheduler,taskSet) {
+  extends ClusterTaskSetManager(clusterScheduler,taskSet) {
 
   parent = null
   weight = 1
