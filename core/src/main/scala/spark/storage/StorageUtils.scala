@@ -51,7 +51,6 @@ object StorageUtils {
 
     // For each RDD, generate an RDDInfo object
     groupedRddBlocks.map { case(rddKey, rddBlocks) =>
-
       // Add up memory and disk sizes
       val memSize = rddBlocks.map(_.memSize).reduce(_ + _)
       val diskSize = rddBlocks.map(_.diskSize).reduce(_ + _)
@@ -59,12 +58,12 @@ object StorageUtils {
       // Find the id of the RDD, e.g. rdd_1 => 1
       val rddId = rddKey.split("_").last.toInt
       // Get the friendly name for the rdd, if available.
-      val rdd = sc.persistentRdds(rddId)
-      val rddName = Option(rdd.name).getOrElse(rddKey)
-      val rddStorageLevel = rdd.getStorageLevel
-
-      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, rdd.partitions.size, memSize, diskSize)
-    }.toArray
+      sc.persistentRdds.get(rddId).map { r =>
+        val rddName = Option(r.name).getOrElse(rddKey)
+        val rddStorageLevel = r.getStorageLevel
+        RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, r.partitions.size, memSize, diskSize)
+      }
+    }.flatMap(x => x).toArray.sortBy(_.id)
   }
 
   /* Removes all BlockStatus object that are not part of a block prefix */ 
