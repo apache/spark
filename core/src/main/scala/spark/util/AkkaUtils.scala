@@ -52,7 +52,7 @@ private[spark] object AkkaUtils {
       """.format(host, port, akkaTimeout, akkaFrameSize, akkaThreads, akkaBatchSize,
         lifecycleEvents, akkaWriteTimeout))
 
-    val actorSystem = ActorSystem(name, akkaConf, getClass.getClassLoader)
+    val actorSystem = ActorSystem(name, akkaConf)
 
     // Figure out the port number we bound to, in case port was passed as 0. This is a bit of a
     // hack because Akka doesn't let you figure out the port through the public API yet.

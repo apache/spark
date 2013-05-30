@@ -516,9 +516,16 @@ private[spark] class TaskSetManager(
       logInfo("Finished TID %s in %d ms (progress: %d/%d)".format(
         tid, info.duration, tasksFinished, numTasks))
       // Deserialize task result and pass it to the scheduler
-      val result = ser.deserialize[TaskResult[_]](serializedData, getClass.getClassLoader)
-      result.metrics.resultSize = serializedData.limit()
-      sched.listener.taskEnded(tasks(index), Success, result.value, result.accumUpdates, info, result.metrics)
+      try {
+        val result = ser.deserialize[TaskResult[_]](serializedData)
+        result.metrics.resultSize = serializedData.limit()
+        sched.listener.taskEnded(tasks(index), Success, result.value, result.accumUpdates, info, result.metrics)
+      } catch {
+        case cnf: ClassNotFoundException =>
+          val loader = Thread.currentThread().getContextClassLoader
+          throw new SparkException("ClassNotFound with classloader: " + loader, cnf)
+        case ex => throw ex
+      }
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true
       if (tasksFinished == numTasks) {
