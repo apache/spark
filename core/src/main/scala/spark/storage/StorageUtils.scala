@@ -64,12 +64,12 @@ object StorageUtils {
       // Find the id of the RDD, e.g. rdd_1 => 1
       val rddId = rddKey.split("_").last.toInt
       // Get the friendly name for the rdd, if available.
-      val rdd = sc.persistentRdds(rddId)
-      val rddName = Option(rdd.name).getOrElse(rddKey)
-      val rddStorageLevel = rdd.getStorageLevel
-
-      RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, rdd.partitions.size, memSize, diskSize)
-    }.toArray
+      sc.persistentRdds.get(rddId).map { r =>
+          val rddName = Option(r.name).getOrElse(rddKey)
+          val rddStorageLevel = r.getStorageLevel
+          RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, r.partitions.size, memSize, diskSize)
+      }
+    }.flatMap(x => x).toArray
 
     scala.util.Sorting.quickSort(rddInfos)
 
