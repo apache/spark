@@ -70,6 +70,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     override def revertPartialWrites() {
       // Discard current writes. We do this by flushing the outstanding writes and
       // truncate the file to the last valid position.
+      objOut.flush()
       bs.flush()
       channel.truncate(lastValidPosition)
     }
