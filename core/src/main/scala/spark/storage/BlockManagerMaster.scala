@@ -84,24 +84,9 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
    * Remove all blocks belonging to the given RDD.
    */
   def removeRdd(rddId: Int, blocking: Boolean) {
-    // The logic to remove an RDD is somewhat complicated:
-    // 1. Send BlockManagerMasterActor a RemoveRdd message.
-    // 2. Upon receiving the RemoveRdd message, BlockManagerMasterActor will forward the message
-    //    to all workers to remove blocks belonging to the RDD, and return a Future for the results.
-    // 3. The Future is sent back here, and on successful completion of the Future, this function
-    //    sends a RemoveRddMetaData message to BlockManagerMasterActor.
-    // 4. Upon receiving the RemoveRddMetaData message, BlockManagerMasterActor will delete the meta
-    //    data for the given RDD.
-    //
-    // The reason we are doing it this way is to reduce the amount of messages the driver sends.
-    // The number of messages that need to be sent is only the number of workers the cluster has,
-    // rather than the number of blocks in the cluster. Note that we can further reduce the number
-    // of messages by tracking for a given RDD, where are its blocks. Then we can send only to the
-    // workers that have the given RDD. But this remains future work.
     val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
-    future onComplete {
-      case Left(throwable) => logError("Failed to remove RDD " + rddId, throwable)
-      case Right(numBlocks) => tell(RemoveRddMetaData(rddId, numBlocks.sum))
+    future onFailure {
+      case e: Throwable => logError("Failed to remove RDD " + rddId, e)
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -156,7 +141,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
         val future = driverActor.ask(message)(timeout)
         val result = Await.result(future, timeout)
         if (result == null) {
-          throw new Exception("BlockManagerMaster returned null")
+          throw new SparkException("BlockManagerMaster returned null")
         }
         return result.asInstanceOf[T]
       } catch {

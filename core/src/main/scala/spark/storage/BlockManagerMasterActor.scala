@@ -79,10 +79,6 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     case RemoveRdd(rddId) =>
       sender ! removeRdd(rddId)
 
-    case RemoveRddMetaData(rddId, numBlocks) =>
-      removeRddMetaData(rddId, numBlocks)
-      sender ! true
-
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
       sender ! true
@@ -110,15 +106,9 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
-    // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
-    // The dispatcher is used as an implicit argument into the Future sequence construction.
-    import context.dispatcher
-    Future.sequence(blockManagerInfo.values.map { bm =>
-      bm.slaveActor.ask(RemoveRdd(rddId))(akkaTimeout).mapTo[Int]
-    }.toSeq)
-  }
+    // First remove the metadata for the given RDD, and then asynchronously remove the blocks
+    // from the slaves.
 
-  private def removeRddMetaData(rddId: Int, numBlocks: Int) {
     val prefix = "rdd_" + rddId + "_"
     // Find all blocks for the given RDD, remove the block from both blockLocations and
     // the blockManagerInfo that is tracking the blocks.
@@ -128,6 +118,14 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId)))
       blockLocations.remove(blockId)
     }
+
+    // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
+    // The dispatcher is used as an implicit argument into the Future sequence construction.
+    import context.dispatcher
+    val removeMsg = RemoveRdd(rddId)
+    Future.sequence(blockManagerInfo.values.map { bm =>
+      bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+    }.toSeq)
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {
