@@ -2,15 +2,16 @@ package spark.storage
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable
 import scala.collection.JavaConversions._
-import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, Cancellable}
-import akka.util.{Duration, Timeout}
+import akka.dispatch.Future
+import akka.pattern.ask
+import akka.util.Duration
 import akka.util.duration._
 
-import spark.{Logging, Utils}
+import spark.{Logging, Utils, SparkException}
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
@@ -21,13 +22,16 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
   // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo =
-    new HashMap[BlockManagerId, BlockManagerMasterActor.BlockManagerInfo]
+    new mutable.HashMap[BlockManagerId, BlockManagerMasterActor.BlockManagerInfo]
 
   // Mapping from executor ID to block manager ID.
-  private val blockManagerIdByExecutor = new HashMap[String, BlockManagerId]
+  private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
 
   // Mapping from block id to the set of block managers that have the block.
-  private val blockLocations = new JHashMap[String, Pair[Int, HashSet[BlockManagerId]]]
+  private val blockLocations = new JHashMap[String, mutable.HashSet[BlockManagerId]]
+
+  val akkaTimeout = Duration.create(
+    System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
 
   initLogging()
 
@@ -50,28 +54,38 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   def receive = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
       register(blockManagerId, maxMemSize, slaveActor)
+      sender ! true
 
     case UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
+      // TODO: Ideally we want to handle all the message replies in receive instead of in the
+      // individual private methods.
       updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
 
     case GetLocations(blockId) =>
-      getLocations(blockId)
+      sender ! getLocations(blockId)
 
     case GetLocationsMultipleBlockIds(blockIds) =>
-      getLocationsMultipleBlockIds(blockIds)
+      sender ! getLocationsMultipleBlockIds(blockIds)
 
     case GetPeers(blockManagerId, size) =>
-      getPeersDeterministic(blockManagerId, size)
-      /*getPeers(blockManagerId, size)*/
+      sender ! getPeers(blockManagerId, size)
 
     case GetMemoryStatus =>
-      getMemoryStatus
+      sender ! memoryStatus
 
     case GetStorageStatus =>
-      getStorageStatus
+      sender ! storageStatus
+
+    case RemoveRdd(rddId) =>
+      sender ! removeRdd(rddId)
+
+    case RemoveRddMetaData(rddId, numBlocks) =>
+      removeRddMetaData(rddId, numBlocks)
+      sender ! true
 
     case RemoveBlock(blockId) =>
-      removeBlock(blockId)
+      removeBlockFromWorkers(blockId)
+      sender ! true
 
     case RemoveExecutor(execId) =>
       removeExecutor(execId)
@@ -81,7 +95,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       logInfo("Stopping BlockManagerMaster")
       sender ! true
       if (timeoutCheckingTask != null) {
-        timeoutCheckingTask.cancel
+        timeoutCheckingTask.cancel()
       }
       context.stop(self)
 
@@ -89,13 +103,34 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       expireDeadHosts()
 
     case HeartBeat(blockManagerId) =>
-      heartBeat(blockManagerId)
+      sender ! heartBeat(blockManagerId)
 
     case other =>
-      logInfo("Got unknown message: " + other)
+      logWarning("Got unknown message: " + other)
   }
 
-  def removeBlockManager(blockManagerId: BlockManagerId) {
+  private def removeRdd(rddId: Int): Future[Seq[Int]] = {
+    // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
+    // The dispatcher is used as an implicit argument into the Future sequence construction.
+    import context.dispatcher
+    Future.sequence(blockManagerInfo.values.map { bm =>
+      bm.slaveActor.ask(RemoveRdd(rddId))(akkaTimeout).mapTo[Int]
+    }.toSeq)
+  }
+
+  private def removeRddMetaData(rddId: Int, numBlocks: Int) {
+    val prefix = "rdd_" + rddId + "_"
+    // Find all blocks for the given RDD, remove the block from both blockLocations and
+    // the blockManagerInfo that is tracking the blocks.
+    val blocks = blockLocations.keySet().filter(_.startsWith(prefix))
+    blocks.foreach { blockId =>
+      val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)
+      bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId)))
+      blockLocations.remove(blockId)
+    }
+  }
+
+  private def removeBlockManager(blockManagerId: BlockManagerId) {
     val info = blockManagerInfo(blockManagerId)
 
     // Remove the block manager from blockManagerIdByExecutor.
@@ -106,7 +141,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
-      val locations = blockLocations.get(blockId)._2
+      val locations = blockLocations.get(blockId)
       locations -= blockManagerId
       if (locations.size == 0) {
         blockLocations.remove(locations)
@@ -114,11 +149,11 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     }
   }
 
-  def expireDeadHosts() {
+  private def expireDeadHosts() {
     logTrace("Checking for hosts with no recent heart beats in BlockManagerMaster.")
     val now = System.currentTimeMillis()
     val minSeenTime = now - slaveTimeout
-    val toRemove = new HashSet[BlockManagerId]
+    val toRemove = new mutable.HashSet[BlockManagerId]
     for (info <- blockManagerInfo.values) {
       if (info.lastSeenMs < minSeenTime) {
         logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: " +
@@ -129,31 +164,26 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     toRemove.foreach(removeBlockManager)
   }
 
-  def removeExecutor(execId: String) {
+  private def removeExecutor(execId: String) {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
-    sender ! true
   }
 
-  def heartBeat(blockManagerId: BlockManagerId) {
+  private def heartBeat(blockManagerId: BlockManagerId): Boolean = {
     if (!blockManagerInfo.contains(blockManagerId)) {
-      if (blockManagerId.executorId == "<driver>" && !isLocal) {
-        sender ! true
-      } else {
-        sender ! false
-      }
+      blockManagerId.executorId == "<driver>" && !isLocal
     } else {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
-      sender ! true
+      true
     }
   }
 
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
-  private def removeBlock(blockId: String) {
-    val block = blockLocations.get(blockId)
-    if (block != null) {
-      block._2.foreach { blockManagerId: BlockManagerId =>
+  private def removeBlockFromWorkers(blockId: String) {
+    val locations = blockLocations.get(blockId)
+    if (locations != null) {
+      locations.foreach { blockManagerId: BlockManagerId =>
         val blockManager = blockManagerInfo.get(blockManagerId)
         if (blockManager.isDefined) {
           // Remove the block from the slave's BlockManager.
@@ -163,23 +193,20 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
         }
       }
     }
-    sender ! true
   }
 
   // Return a map from the block manager id to max memory and remaining memory.
-  private def getMemoryStatus() {
-    val res = blockManagerInfo.map { case(blockManagerId, info) =>
+  private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
+    blockManagerInfo.map { case(blockManagerId, info) =>
       (blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
-    sender ! res
   }
 
-  private def getStorageStatus() {
-    val res = blockManagerInfo.map { case(blockManagerId, info) =>
+  private def storageStatus: Array[StorageStatus] = {
+    blockManagerInfo.map { case(blockManagerId, info) =>
       import collection.JavaConverters._
       StorageStatus(blockManagerId, info.maxMem, info.blocks.asScala.toMap)
-    }
-    sender ! res
+    }.toArray
   }
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
@@ -188,7 +215,8 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     } else if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(manager) =>
-          // A block manager of the same host name already exists
+          // A block manager of the same executor already exists.
+          // This should never happen. Let's just quit.
           logError("Got two different block manager registrations on " + id.executorId)
           System.exit(1)
         case None =>
@@ -197,7 +225,6 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
       blockManagerInfo(id) = new BlockManagerMasterActor.BlockManagerInfo(
         id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
-    sender ! true
   }
 
   private def updateBlockInfo(
@@ -226,12 +253,12 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
     blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
 
-    var locations: HashSet[BlockManagerId] = null
+    var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
-      locations = blockLocations.get(blockId)._2
+      locations = blockLocations.get(blockId)
     } else {
-      locations = new HashSet[BlockManagerId]
-      blockLocations.put(blockId, (storageLevel.replication, locations))
+      locations = new mutable.HashSet[BlockManagerId]
+      blockLocations.put(blockId, locations)
     }
 
     if (storageLevel.isValid) {
@@ -247,70 +274,24 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
     sender ! true
   }
 
-  private def getLocations(blockId: String) {
-    val startTimeMs = System.currentTimeMillis()
-    val tmp = " " + blockId + " "
-    if (blockLocations.containsKey(blockId)) {
-      var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-      res.appendAll(blockLocations.get(blockId)._2)
-      sender ! res.toSeq
-    } else {
-      var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-      sender ! res
-    }
+  private def getLocations(blockId: String): Seq[BlockManagerId] = {
+    if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
-  private def getLocationsMultipleBlockIds(blockIds: Array[String]) {
-    def getLocations(blockId: String): Seq[BlockManagerId] = {
-      val tmp = blockId
-      if (blockLocations.containsKey(blockId)) {
-        var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-        res.appendAll(blockLocations.get(blockId)._2)
-        return res.toSeq
-      } else {
-        var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-        return res.toSeq
-      }
-    }
-
-    var res: ArrayBuffer[Seq[BlockManagerId]] = new ArrayBuffer[Seq[BlockManagerId]]
-    for (blockId <- blockIds) {
-      res.append(getLocations(blockId))
-    }
-    sender ! res.toSeq
+  private def getLocationsMultipleBlockIds(blockIds: Array[String]): Seq[Seq[BlockManagerId]] = {
+    blockIds.map(blockId => getLocations(blockId))
   }
 
-  private def getPeers(blockManagerId: BlockManagerId, size: Int) {
-    var peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
-    var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
-    res.appendAll(peers)
-    res -= blockManagerId
-    val rand = new Random(System.currentTimeMillis())
-    while (res.length > size) {
-      res.remove(rand.nextInt(res.length))
-    }
-    sender ! res.toSeq
-  }
-
-  private def getPeersDeterministic(blockManagerId: BlockManagerId, size: Int) {
-    var peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
-    var res: ArrayBuffer[BlockManagerId] = new ArrayBuffer[BlockManagerId]
+  private def getPeers(blockManagerId: BlockManagerId, size: Int): Seq[BlockManagerId] = {
+    val peers: Array[BlockManagerId] = blockManagerInfo.keySet.toArray
 
     val selfIndex = peers.indexOf(blockManagerId)
     if (selfIndex == -1) {
-      throw new Exception("Self index for " + blockManagerId + " not found")
+      throw new SparkException("Self index for " + blockManagerId + " not found")
     }
 
     // Note that this logic will select the same node multiple times if there aren't enough peers
-    var index = selfIndex
-    while (res.size < size) {
-      index += 1
-      if (index == selfIndex) {
-        throw new Exception("More peer expected than available")
-      }
-      res += peers(index % peers.size)
-    }
-    sender ! res.toSeq
+    Array.tabulate[BlockManagerId](size) { i => peers((selfIndex + i + 1) % peers.length) }.toSeq
   }
 }
 
@@ -381,6 +362,13 @@ object BlockManagerMasterActor {
           logInfo("Removed %s on %s on disk (size: %s)".format(
             blockId, blockManagerId.hostPort, Utils.memoryBytesToString(diskSize)))
         }
+      }
+    }
+
+    def removeBlock(blockId: String) {
+      if (_blocks.containsKey(blockId)) {
+        _remainingMem += _blocks.get(blockId).memSize
+        _blocks.remove(blockId)
       }
     }
 

@@ -16,6 +16,12 @@ sealed trait ToBlockManagerSlave
 private[spark]
 case class RemoveBlock(blockId: String) extends ToBlockManagerSlave
 
+// Remove all blocks belonging to a specific RDD.
+private[spark] case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
+
+// Remove the meta data for a RDD. This is only sent to the master by the master.
+private[spark] case class RemoveRddMetaData(rddId: Int, numBlocks: Int) extends ToBlockManagerMaster
+
 
 //////////////////////////////////////////////////////////////////////////////////
 // Messages from slaves to the master.
