@@ -4,22 +4,26 @@
   <parent>
     <groupId>org.spark-project</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.7.1-SNAPSHOT</version>
+    <version>0.7.3-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.spark-project</groupId>
-  <artifactId>spark-bagel</artifactId>
+  <artifactId>spark-bagel_2.9.3</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Bagel</name>
   <url>http://spark-project.org/</url>
 
   <dependencies>
     <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-core_2.9.3</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.version}</artifactId>
@@ -36,71 +40,17 @@
     <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>
-
-  <profiles>
-    <profile>
-      <id>hadoop1</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-core</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
-          <scope>provided</scope>
-        </dependency>
-      </dependencies>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-jar-plugin</artifactId>
-            <configuration>
-              <classifier>hadoop1</classifier>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>hadoop2</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-core</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
-          <scope>provided</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-          <scope>provided</scope>
-        </dependency>
-      </dependencies>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-jar-plugin</artifactId>
-            <configuration>
-              <classifier>hadoop2</classifier>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

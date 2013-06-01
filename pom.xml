@@ -3,10 +3,16 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.spark-project</groupId>
   <artifactId>spark-parent</artifactId>
-  <version>0.7.1-SNAPSHOT</version>
+  <version>0.7.3-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark-project.org/</url>
+  <description>
+      Spark is a MapReduce-like cluster computing framework designed for
+      low-latency iterative jobs and interactive use from an interpreter.
+      It provides clean, language-integrated APIs in Scala, Java, and Python,
+      with a rich array of parallel operators.
+  </description>
   <licenses>
     <license>
       <name>BSD License</name>
@@ -16,6 +22,7 @@
   </licenses>
   <scm>
     <connection>scm:git:git@github.com:mesos/spark.git</connection>
+    <developerConnection>scm:git:git@github.com:mesos/spark.git</developerConnection>
     <url>scm:git:git@github.com:mesos/spark.git</url>
   </scm>
   <developers>
@@ -36,6 +43,12 @@
   <prerequisites>
     <maven>3.0.0</maven>
   </prerequisites>
+
+  <parent>
+    <groupId>org.sonatype.oss</groupId>
+    <artifactId>oss-parent</artifactId>
+    <version>7</version>
+  </parent>
 
   <modules>
     <module>core</module>
@@ -157,6 +170,11 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-core</artifactId>
+        <version>1.0.4</version>
+      </dependency>
+      <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
         <version>7.5.3.v20111011</version>
@@ -256,7 +274,6 @@
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
       </dependency>
-
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
@@ -267,13 +284,11 @@
         <artifactId>jline</artifactId>
         <version>${scala.version}</version>
       </dependency>
-
       <dependency>
         <groupId>log4j</groupId>
         <artifactId>log4j</artifactId>
         <version>${log4j.version}</version>
       </dependency>
-
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.version}</artifactId>
@@ -431,6 +446,11 @@
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>2.9</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
           <version>2.4</version>
         </plugin>
@@ -459,6 +479,16 @@
               </goals>
             </execution>
           </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-release-plugin</artifactId>
+          <version>2.4.1</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>2.7</version>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -506,31 +536,34 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-release-plugin</artifactId>
+        <configuration>
+          <localCheckout>true</localCheckout>
+          <pushChanges>false</pushChanges>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 
   <profiles>
     <profile>
       <id>hadoop1</id>
-      <properties>
-        <hadoop.major.version>1</hadoop.major.version>
-      </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-core</artifactId>
-            <version>1.0.4</version>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
+      <activation>
+        <property>
+          <name>!hadoop.version</name>
+        </property>
+      </activation>
     </profile>
-
     <profile>
       <id>hadoop2</id>
-      <properties>
-        <hadoop.major.version>2</hadoop.major.version>
-      </properties>
+      <activation>
+        <property>
+          <name>hadoop.version</name>
+          <value>2</value>
+        </property>
+      </activation>
       <dependencyManagement>
         <dependencies>
           <dependency>
@@ -553,6 +586,12 @@
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-ipc</artifactId>
             <version>1.7.1.cloudera.2</version>
+            <exclusions>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+            </exclusions>
           </dependency>
         </dependencies>
       </dependencyManagement>

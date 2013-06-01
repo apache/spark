@@ -4,19 +4,19 @@
   <parent>
     <groupId>org.spark-project</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.7.1-SNAPSHOT</version>
+    <version>0.7.3-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.spark-project</groupId>
-  <artifactId>spark-repl-bin</artifactId>
+  <artifactId>spark-repl-bin_2.9.3</artifactId>
   <packaging>pom</packaging>
   <name>Spark Project REPL binary packaging</name>
   <url>http://spark-project.org/</url>
 
   <properties>
-    <deb.pkg.name>spark-${classifier}</deb.pkg.name>
-    <deb.install.path>/usr/share/spark-${classifier}</deb.install.path>
+    <deb.pkg.name>spark</deb.pkg.name>
+    <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
   </properties>
 
@@ -27,7 +27,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-shaded-${classifier}.jar</outputFile>
+          <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -52,7 +52,7 @@
             </goals>
             <configuration>
               <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>reference.conf</resource>
                 </transformer>
@@ -67,89 +67,33 @@
     </plugins>
   </build>
 
+  <dependencies>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-core_2.9.3</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-repl_2.9.3</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+
   <profiles>
     <profile>
-      <id>hadoop1</id>
-      <properties>
-        <classifier>hadoop1</classifier>
-      </properties>
-      <dependencies>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-core</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-repl</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
-          <scope>runtime</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
       <id>hadoop2</id>
-      <properties>
-        <classifier>hadoop2</classifier>
-      </properties>
+      <activation>
+        <property>
+          <name>hadoop.version</name>
+          <value>2</value>
+        </property>
+      </activation>
       <dependencies>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-core</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-repl</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
-          <scope>runtime</scope>
-        </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-client</artifactId>
-          <scope>runtime</scope>
         </dependency>
       </dependencies>
     </profile>
@@ -189,7 +133,7 @@
                   <compression>gzip</compression>
                   <dataSet>
                     <data>
-                      <src>${project.build.directory}/${project.artifactId}-${project.version}-shaded-${classifier}.jar</src>
+                      <src>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</src>
                       <type>file</type>
                       <mapper>
                         <type>perm</type>
