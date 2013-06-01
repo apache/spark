@@ -201,8 +201,8 @@ object SparkBuild extends Build {
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
-    libraryDependencies ++= Seq("com.twitter" % "algebird-core_2.9.2" % "0.1.11")
-  )
+    libraryDependencies ++= Seq("com.twitter" % "algebird-core_2.9.2" % "0.1.11",
+      "org.apache.cassandra" % "cassandra-all" % "1.2.5" exclude("com.google.guava", "guava") exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru:1.3") exclude("com.ning","compress-lzf") exclude("io.netty","netty") exclude("jline","jline") exclude("log4j","log4j") exclude("org.apache.cassandra.deps", "avro")))
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
 
