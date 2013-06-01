@@ -18,7 +18,8 @@ private[spark] class ShuffleCopier extends Logging {
       resultCollectCallback: (String, Long, ByteBuf) => Unit) {
 
     val handler = new ShuffleCopier.ShuffleClientHandler(resultCollectCallback)
-    val fc = new FileClient(handler)
+    val fc = new FileClient(handler,
+                            System.getProperty("spark.shuffle.netty.connect.timeout", "60000").toInt)
     try {
       fc.init()
       fc.connect(host, port)

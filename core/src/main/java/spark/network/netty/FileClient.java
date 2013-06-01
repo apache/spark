@@ -17,9 +17,11 @@ class FileClient {
   private FileClientHandler handler = null;
   private Channel channel = null;
   private Bootstrap bootstrap = null;
+  private int connectTimeout = 60*1000; // 1 min
 
-  public FileClient(FileClientHandler handler) {
+  public FileClient(FileClientHandler handler, int connectTimeout) {
     this.handler = handler;
+    this.connectTimeout = connectTimeout;
   }
 
   public void init() {
@@ -28,7 +30,7 @@ class FileClient {
       .channel(OioSocketChannel.class)
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.TCP_NODELAY, true)
-      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 0) // Disable connect timeout
+      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout) // Disable connect timeout
       .handler(new FileClientChannelInitializer(handler));
   }
 
