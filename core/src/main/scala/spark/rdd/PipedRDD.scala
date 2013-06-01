@@ -18,14 +18,21 @@ import spark.{RDD, SparkEnv, Partition, TaskContext}
 class PipedRDD[T: ClassManifest](
     prev: RDD[T],
     command: Seq[String],
-    envVars: Map[String, String])
+    envVars: Map[String, String],
+    transform: (T, String => Unit) => Any,
+    arguments: Seq[String]
+    )
   extends RDD[String](prev) {
 
+  def this(prev: RDD[T], command: Seq[String], envVars : Map[String, String]) = this(prev, command, envVars, null, null)
   def this(prev: RDD[T], command: Seq[String]) = this(prev, command, Map())
+  def this(prev: RDD[T], command: Seq[String], transform: (T,String => Unit) => Any, arguments: Seq[String]) = this(prev, command, Map(), transform, arguments)
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
   def this(prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
+  def this(prev: RDD[T], command: String, transform: (T,String => Unit) => Any, arguments: Seq[String]) = this(prev, PipedRDD.tokenize(command), Map(), transform, arguments)
+
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
@@ -52,8 +59,22 @@ class PipedRDD[T: ClassManifest](
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
+
+        // input the arguments firstly
+        if ( arguments != null) {
+          for (elem <- arguments) {
+            out.println(elem)
+          }
+          // ^A \n as the marker of the end of the arguments
+          out.println("\u0001")
+        }
         for (elem <- firstParent[T].iterator(split, context)) {
-          out.println(elem)
+          if (transform != null) {
+            transform(elem, out.println(_))
+          }
+          else {
+            out.println(elem)
+          }
         }
         out.close()
       }

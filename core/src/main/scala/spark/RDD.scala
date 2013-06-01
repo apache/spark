@@ -351,13 +351,31 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
+  def pipe(command: String, transform: (T,String => Unit) => Any, arguments: Seq[String]): RDD[String] = 
+    new PipedRDD(this, command, transform, arguments)
+
+  /**
+   * Return an RDD created by piping elements to a forked external process.
+   */
   def pipe(command: Seq[String]): RDD[String] = new PipedRDD(this, command)
+
+  /**
+   * Return an RDD created by piping elements to a forked external process.
+   */
+  def pipe(command: Seq[String], transform: (T,String => Unit) => Any, arguments: Seq[String]): RDD[String] = 
+    new PipedRDD(this, command, transform, arguments)
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: Seq[String], env: Map[String, String]): RDD[String] =
     new PipedRDD(this, command, env)
+
+  /**
+   * Return an RDD created by piping elements to a forked external process.
+   */
+  def pipe(command: Seq[String], env: Map[String, String], transform: (T,String => Unit) => Any, arguments: Seq[String]): RDD[String] = 
+    new PipedRDD(this, command, env, transform, arguments)
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD.
