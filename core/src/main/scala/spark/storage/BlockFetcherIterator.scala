@@ -265,7 +265,7 @@ object BlockFetcherIterator {
       }).toList
     }
 
-    //keep this to interrupt the threads when necessary
+    // keep this to interrupt the threads when necessary
     private def stopCopiers() {
       for (copier <- copiers) {
         copier.interrupt()
@@ -312,9 +312,10 @@ object BlockFetcherIterator {
       resultsGotten += 1
       val result = results.take()
       // if all the results has been retrieved, shutdown the copiers
-      if (resultsGotten == _totalBlocks && copiers != null) {
-        stopCopiers()
-      }
+      // NO need to stop the copiers if we got all the blocks ?
+      // if (resultsGotten == _totalBlocks && copiers != null) {
+      //   stopCopiers()
+      // }
       (result.blockId, if (result.failed) None else Some(result.deserialize()))
     }
   }

@@ -8,9 +8,12 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.oio.OioSocketChannel;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class FileClient {
 
+  private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
   private FileClientHandler handler = null;
   private Channel channel = null;
   private Bootstrap bootstrap = null;
@@ -25,23 +28,8 @@ class FileClient {
       .channel(OioSocketChannel.class)
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.TCP_NODELAY, true)
+      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 0) // Disable connect timeout
       .handler(new FileClientChannelInitializer(handler));
-  }
-
-  public static final class ChannelCloseListener implements ChannelFutureListener {
-    private FileClient fc = null;
-
-    public ChannelCloseListener(FileClient fc){
-      this.fc = fc;
-    }
-
-    @Override
-    public void operationComplete(ChannelFuture future) {
-      if (fc.bootstrap!=null){
-        fc.bootstrap.shutdown();
-        fc.bootstrap = null;
-      }
-    }
   }
 
   public void connect(String host, int port) {
@@ -58,8 +46,8 @@ class FileClient {
   public void waitForClose() {
     try {
       channel.closeFuture().sync();
-    } catch (InterruptedException e){
-      e.printStackTrace();
+    } catch (InterruptedException e) {
+      LOG.warn("FileClient interrupted", e);
     }
   }
 
