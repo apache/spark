@@ -2,12 +2,16 @@ package spark
 
 import java.io._
 import java.net.URI
+import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.generic.Growable
+import scala.collection.mutable.HashMap
+import scala.collection.JavaConversions._
+import scala.util.DynamicVariable
 import scala.collection.mutable.{ConcurrentMap, HashMap}
 
 import akka.actor.Actor._
@@ -233,6 +237,19 @@ class SparkContext(
 
   private[spark] var checkpointDir: Option[String] = None
 
+  // Thread Local variable that can be used by users to pass information down the stack
+  private val localProperties = new DynamicVariable[Properties](null)
+
+  def initLocalProperties() {
+      localProperties.value = new Properties()
+  }
+
+  def addLocalProperties(key: String, value: String) {
+    if(localProperties.value == null) {
+      localProperties.value = new Properties()
+    }
+    localProperties.value.setProperty(key,value)
+  }
   // Post init
   taskScheduler.postStartHook()
 
@@ -537,13 +554,18 @@ class SparkContext(
    * filesystems), or an HTTP, HTTPS or FTP URI.
    */
   def addJar(path: String) {
-    val uri = new URI(path)
-    val key = uri.getScheme match {
-      case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
-      case _ => path
+    if (null == path) {
+      logWarning("null specified as parameter to addJar",
+        new SparkException("null specified as parameter to addJar"))
+    } else {
+      val uri = new URI(path)
+      val key = uri.getScheme match {
+        case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
+        case _ => path
+      }
+      addedJars(key) = System.currentTimeMillis
+      logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
     }
-    addedJars(key) = System.currentTimeMillis
-    logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
   }
 
   /**
@@ -611,7 +633,7 @@ class SparkContext(
     val callSite = Utils.getSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler)
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler, localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result
@@ -690,12 +712,11 @@ class SparkContext(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
-      timeout: Long
-      ): PartialResult[R] = {
+      timeout: Long): PartialResult[R] = {
     val callSite = Utils.getSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout)
+    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout, localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }

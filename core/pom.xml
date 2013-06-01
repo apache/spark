@@ -73,7 +73,7 @@
     </dependency>
     <dependency>
       <groupId>cc.spray</groupId>
-      <artifactId>spray-json_${scala.version}</artifactId>
+      <artifactId>spray-json_2.9.2</artifactId>
     </dependency>
     <dependency>
       <groupId>org.tomdz.twirl</groupId>
@@ -81,17 +81,26 @@
     </dependency>
     <dependency>
       <groupId>com.github.scala-incubator.io</groupId>
-      <artifactId>scala-io-file_${scala.version}</artifactId>
+      <artifactId>scala-io-file_2.9.2</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.mesos</groupId>
       <artifactId>mesos</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-all</artifactId>
+    </dependency>
+    <dependency>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>org.apache.derby</groupId>
+      <artifactId>derby</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.version}</artifactId>

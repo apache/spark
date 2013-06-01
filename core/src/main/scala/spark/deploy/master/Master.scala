@@ -244,7 +244,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   def addApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    val app = new ApplicationInfo(now, newApplicationId(date), desc, date, driver)
+    val app = new ApplicationInfo(now, newApplicationId(date), desc, date, driver, desc.appUiUrl)
     apps += app
     idToApp(app.id) = app
     actorToApp(driver) = app
@@ -275,6 +275,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
         exec.worker.actor ! KillExecutor(exec.application.id, exec.id)
+        exec.state = ExecutorState.KILLED
       }
       app.markFinished(state)
       app.driver ! ApplicationRemoved(state.toString)

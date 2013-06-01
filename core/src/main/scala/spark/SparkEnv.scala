@@ -3,12 +3,13 @@ package spark
 import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
-import serializer.Serializer
 import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
+import spark.serializer.{Serializer, SerializerManager}
 import spark.util.AkkaUtils
+
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -20,6 +21,7 @@ import spark.util.AkkaUtils
 class SparkEnv (
     val executorId: String,
     val actorSystem: ActorSystem,
+    val serializerManager: SerializerManager,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -29,8 +31,11 @@ class SparkEnv (
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
     val httpFileServer: HttpFileServer,
-    val sparkFilesDir: String
-  ) {
+    val sparkFilesDir: String,
+    // To be set only as part of initialization of SparkContext.
+    // (executorId, defaultHostPort) => executorHostPort
+    // If executorId is NOT found, return defaultHostPort
+    var executorIdToHostPort: Option[(String, String) => String]) {
 
   def stop() {
     httpFileServer.stop()
@@ -43,6 +48,17 @@ class SparkEnv (
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
     actorSystem.awaitTermination()
+  }
+
+
+  def resolveExecutorIdToHostPort(executorId: String, defaultHostPort: String): String = {
+    val env = SparkEnv.get
+    if (env.executorIdToHostPort.isEmpty) {
+      // default to using host, not host port. Relevant to non cluster modes.
+      return defaultHostPort
+    }
+
+    env.executorIdToHostPort.get(executorId, defaultHostPort)
   }
 }
 
@@ -91,8 +107,14 @@ object SparkEnv extends Logging {
       Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
     }
 
-    val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
-    
+    val serializerManager = new SerializerManager
+
+    val serializer = serializerManager.setDefault(
+      System.getProperty("spark.serializer", "spark.JavaSerializer"))
+
+    val closureSerializer = serializerManager.get(
+      System.getProperty("spark.closure.serializer", "spark.JavaSerializer"))
+
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
       if (isDriver) {
         logInfo("Registering " + name)
@@ -115,9 +137,6 @@ object SparkEnv extends Logging {
     val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isDriver)
-
-    val closureSerializer = instantiateClass[Serializer](
-      "spark.closure.serializer", "spark.JavaSerializer")
 
     val cacheManager = new CacheManager(blockManager)
 
@@ -153,6 +172,7 @@ object SparkEnv extends Logging {
     new SparkEnv(
       executorId,
       actorSystem,
+      serializerManager,
       serializer,
       closureSerializer,
       cacheManager,
@@ -162,7 +182,7 @@ object SparkEnv extends Logging {
       blockManager,
       connectionManager,
       httpFileServer,
-      sparkFilesDir)
+      sparkFilesDir,
+      None)
   }
-  
 }

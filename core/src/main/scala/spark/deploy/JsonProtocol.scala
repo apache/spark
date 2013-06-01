@@ -26,7 +26,7 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
       "starttime" -> JsNumber(obj.startTime),
       "id" -> JsString(obj.id),
       "name" -> JsString(obj.desc.name),
-      "cores" -> JsNumber(obj.desc.cores),
+      "cores" -> JsNumber(obj.desc.maxCores),
       "user" -> JsString(obj.desc.user),
       "memoryperslave" -> JsNumber(obj.desc.memoryPerSlave),
       "submitdate" -> JsString(obj.submitDate.toString))
@@ -35,7 +35,7 @@ private[spark] object JsonProtocol extends DefaultJsonProtocol {
   implicit object AppDescriptionJsonFormat extends RootJsonWriter[ApplicationDescription] {
     def write(obj: ApplicationDescription) = JsObject(
       "name" -> JsString(obj.name),
-      "cores" -> JsNumber(obj.cores),
+      "cores" -> JsNumber(obj.maxCores),
       "memoryperslave" -> JsNumber(obj.memoryPerSlave),
       "user" -> JsString(obj.user)
     )

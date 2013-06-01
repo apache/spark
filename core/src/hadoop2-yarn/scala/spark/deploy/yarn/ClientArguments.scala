@@ -92,7 +92,6 @@ class ClientArguments(val args: Array[String]) {
       "  --class CLASS_NAME   Name of your application's main class (required)\n" +
       "  --args ARGS          Arguments to be passed to your application's main class.\n" +
       "                       Mutliple invocations are possible, each will be passed in order.\n" +
-      "                       Note that first argument will ALWAYS be yarn-standalone : will be added if missing.\n" +
       "  --num-workers NUM    Number of workers to start (Default: 2)\n" +
       "  --worker-cores NUM   Number of cores for the workers (Default: 1). This is unsused right now.\n" +
       "  --master-memory MEM  Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)\n" +

@@ -18,13 +18,37 @@ import scala.collection.mutable.ArrayBuffer
 import SparkContext._
 import storage.{GetBlock, BlockManagerWorker, StorageLevel}
 
-class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter with LocalSparkContext {
+
+class NotSerializableClass
+class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
+
+
+class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
+  with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"
 
   after {
     System.clearProperty("spark.reducer.maxMbInFlight")
     System.clearProperty("spark.storage.memoryFraction")
+  }
+
+  test("task throws not serializable exception") {
+    // Ensures that executors do not crash when an exn is not serializable. If executors crash,
+    // this test will hang. Correct behavior is that executors don't crash but fail tasks
+    // and the scheduler throws a SparkException.
+
+    // numSlaves must be less than numPartitions
+    val numSlaves = 3
+    val numPartitions = 10
+
+    sc = new SparkContext("local-cluster[%s,1,512]".format(numSlaves), "test")
+    val data = sc.parallelize(1 to 100, numPartitions).
+      map(x => throw new NotSerializableExn(new NotSerializableClass))
+    intercept[SparkException] {
+      data.count()
+    }
+    resetSparkContext()
   }
 
   test("local-cluster format") {
@@ -198,7 +222,6 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(Seq(true, true), 2)
     assert(data.count === 2) // force executors to start
-    val masterId = SparkEnv.get.blockManager.blockManagerId
     assert(data.map(markNodeIfIdentity).collect.size === 2)
     assert(data.map(failOnMarkedIdentity).collect.size === 2)
   }
@@ -261,9 +284,9 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     val data = sc.parallelize(Seq(true, false, false, false), 4)
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count
-    assert(sc.persistentRdds.isEmpty == false)
+    assert(sc.persistentRdds.isEmpty === false)
     data.unpersist()
-    assert(sc.persistentRdds.isEmpty == true)
+    assert(sc.persistentRdds.isEmpty === true)
 
     failAfter(Span(3000, Millis)) {
       try {
@@ -271,12 +294,24 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
           Thread.sleep(200)
         }
       } catch {
-        case e: Exception =>
+        case _ => { Thread.sleep(10) }
           // Do nothing. We might see exceptions because block manager
           // is racing this thread to remove entries from the driver.
       }
     }
-    assert(sc.getRDDStorageInfo.isEmpty == true)
+  }
+
+  test("job should fail if TaskResult exceeds Akka frame size") {
+    // We must use local-cluster mode since results are returned differently
+    // when running under LocalScheduler:
+    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    val akkaFrameSize =
+      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size").toInt
+    val rdd = sc.parallelize(Seq(1)).map{x => new Array[Byte](akkaFrameSize)}
+    val exception = intercept[SparkException] {
+      rdd.reduce((x, y) => x)
+    }
+    exception.getMessage should endWith("result exceeded Akka frame size")
   }
 }
 

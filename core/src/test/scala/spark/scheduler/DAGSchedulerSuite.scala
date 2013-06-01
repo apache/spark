@@ -44,7 +44,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.generation = mapOutputTracker.getGeneration)
-      taskSets += taskSet 
+      taskSets += taskSet
     }
     override def setListener(listener: TaskSchedulerListener) = {}
     override def defaultParallelism() = 2
@@ -164,7 +164,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       }
     }
   }
-     
+
   /** Sends the rdd to the scheduler for scheduling. */
   private def submit(
       rdd: RDD[_],
@@ -174,7 +174,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       listener: JobListener = listener) {
     runEvent(JobSubmitted(rdd, func, partitions, allowLocal, null, listener))
   }
-  
+
   /** Sends TaskSetFailed to the scheduler. */
   private def failed(taskSet: TaskSet, message: String) {
     runEvent(TaskSetFailed(taskSet, message))
@@ -209,11 +209,11 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     runEvent(JobSubmitted(rdd, jobComputeFunc, Array(0), true, null, listener))
     assert(results === Map(0 -> 42))
   }
-  
+
   test("run trivial job w/ dependency") {
     val baseRdd = makeRdd(1, Nil)
     val finalRdd = makeRdd(1, List(new OneToOneDependency(baseRdd)))
-    submit(finalRdd, Array(0)) 
+    submit(finalRdd, Array(0))
     complete(taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
   }
@@ -250,7 +250,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     complete(taskSets(1), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
   }
-  
+
   test("run trivial shuffle with fetch failure") {
     val shuffleMapRdd = makeRdd(2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
@@ -385,12 +385,12 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(results === Map(0 -> 42))
   }
 
-  /** Assert that the supplied TaskSet has exactly the given preferredLocations. */
+  /** Assert that the supplied TaskSet has exactly the given preferredLocations. Note, converts taskSet's locations to host only. */
   private def assertLocations(taskSet: TaskSet, locations: Seq[Seq[String]]) {
     assert(locations.size === taskSet.tasks.size)
     for ((expectLocs, taskLocs) <-
             taskSet.tasks.map(_.preferredLocations).zip(locations)) {
-      assert(expectLocs === taskLocs)
+      assert(expectLocs.map(loc => spark.Utils.parseHostPort(loc)._1) === taskLocs)
     }
   }
 
@@ -398,6 +398,6 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
    new MapStatus(makeBlockManagerId(host), Array.fill[Byte](reduces)(2))
 
   private def makeBlockManagerId(host: String): BlockManagerId =
-    BlockManagerId("exec-" + host, host, 12345)
+    BlockManagerId("exec-" + host, host, 12345, 0)
 
 }

@@ -52,7 +52,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
     <java.version>1.5</java.version>
-    <scala.version>2.9.2</scala.version>
+    <scala.version>2.9.3</scala.version>
     <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.0.3</akka.version>
     <spray.version>1.0-M2.1</spray.version>
@@ -239,7 +239,7 @@
       </dependency>
       <dependency>
         <groupId>cc.spray</groupId>
-        <artifactId>spray-json_${scala.version}</artifactId>
+        <artifactId>spray-json_2.9.2</artifactId>
         <version>${spray.json.version}</version>
       </dependency>
       <dependency>
@@ -249,13 +249,24 @@
       </dependency>
       <dependency>
         <groupId>com.github.scala-incubator.io</groupId>
-        <artifactId>scala-io-file_${scala.version}</artifactId>
+        <artifactId>scala-io-file_2.9.2</artifactId>
         <version>0.4.1</version>
       </dependency>
       <dependency>
         <groupId>org.apache.mesos</groupId>
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-all</artifactId>
+        <version>4.0.0.Beta2</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.derby</groupId>
+        <artifactId>derby</artifactId>
+        <version>10.4.2.0</version>
+        <scope>test</scope>
       </dependency>
 
       <dependency>
@@ -278,7 +289,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.version}</artifactId>
-        <version>1.8</version>
+        <version>1.9.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -290,7 +301,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.version}</artifactId>
-        <version>1.9</version>
+        <version>1.10.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -514,7 +525,6 @@
   <profiles>
     <profile>
       <id>hadoop1</id>
-
       <properties>
         <hadoop.major.version>1</hadoop.major.version>
       </properties>
@@ -556,6 +566,12 @@
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-ipc</artifactId>
             <version>1.7.1.cloudera.2</version>
+            <exclusions>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+            </exclusions>
           </dependency>
         </dependencies>
       </dependencyManagement>
@@ -567,7 +583,7 @@
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
         <!-- <yarn.version>0.23.7</yarn.version> -->
-        <yarn.version>2.0.2-alpha</yarn.version> 
+        <yarn.version>2.0.2-alpha</yarn.version>
       </properties>
 
       <repositories>

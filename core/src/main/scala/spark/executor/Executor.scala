@@ -72,6 +72,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
   // Initialize Spark environment (using system properties read above)
   val env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
   SparkEnv.set(env)
+  private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
 
   // Start worker thread pool
   val threadPool = new ThreadPoolExecutor(
@@ -113,6 +114,10 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         val result = new TaskResult(value, accumUpdates, task.metrics.getOrElse(null))
         val serializedResult = ser.serialize(result)
         logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
+        if (serializedResult.limit >= (akkaFrameSize - 1024)) {
+          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskResultTooBigFailure()))
+          return
+        }
         context.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
         logInfo("Finished task ID " + taskId)
       } catch {
@@ -122,7 +127,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         }
 
         case t: Throwable => {
-          val reason = ExceptionFailure(t)
+          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
           context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may

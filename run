@@ -22,7 +22,7 @@ fi
 # values for that; it doesn't need a lot
 if [ "$1" = "spark.deploy.master.Master" -o "$1" = "spark.deploy.worker.Worker" ]; then
   SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
-  SPARK_DAEMON_JAVA_OPTS+=" -Dspark.akka.logLifecycleEvents=true"
+  SPARK_DAEMON_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS -Dspark.akka.logLifecycleEvents=true"
   SPARK_JAVA_OPTS=$SPARK_DAEMON_JAVA_OPTS   # Empty by default
 fi
 
@@ -30,19 +30,19 @@ fi
 # Add java opts for master, worker, executor. The opts maybe null
 case "$1" in
   'spark.deploy.master.Master')
-    SPARK_JAVA_OPTS+=" $SPARK_MASTER_OPTS"
+    SPARK_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_MASTER_OPTS"
     ;;
   'spark.deploy.worker.Worker')
-    SPARK_JAVA_OPTS+=" $SPARK_WORKER_OPTS"
+    SPARK_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_WORKER_OPTS"
     ;;
   'spark.executor.StandaloneExecutorBackend')
-    SPARK_JAVA_OPTS+=" $SPARK_EXECUTOR_OPTS"
+    SPARK_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     ;;
   'spark.executor.MesosExecutorBackend')
-    SPARK_JAVA_OPTS+=" $SPARK_EXECUTOR_OPTS"
+    SPARK_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     ;;
   'spark.repl.Main')
-    SPARK_JAVA_OPTS+=" $SPARK_REPL_OPTS"
+    SPARK_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_REPL_OPTS"
     ;;
 esac
 
@@ -85,11 +85,11 @@ export SPARK_MEM
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$SPARK_JAVA_OPTS"
-JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH"
-JAVA_OPTS+=" -Xms$SPARK_MEM -Xmx$SPARK_MEM"
+JAVA_OPTS="$JAVA_OPTS -Djava.library.path=$SPARK_LIBRARY_PATH"
+JAVA_OPTS="$JAVA_OPTS -Xms$SPARK_MEM -Xmx$SPARK_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e $FWDIR/conf/java-opts ] ; then
-  JAVA_OPTS+=" `cat $FWDIR/conf/java-opts`"
+  JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
 fi
 export JAVA_OPTS
 
@@ -103,39 +103,47 @@ STREAMING_DIR="$FWDIR/streaming"
 PYSPARK_DIR="$FWDIR/python"
 
 # Exit if the user hasn't compiled Spark
-if [ ! -e "$REPL_DIR/target" ]; then
-  echo "Failed to find Spark classes in $REPL_DIR/target" >&2
+if [ ! -e "$CORE_DIR/target" ]; then
+  echo "Failed to find Spark classes in $CORE_DIR/target" >&2
   echo "You need to compile Spark before running this program" >&2
+  exit 1
+fi
+
+if [[ "$@" = *repl* && ! -e "$REPL_DIR/target" ]]; then
+  echo "Failed to find Spark classes in $REPL_DIR/target" >&2
+  echo "You need to compile Spark repl module before running this program" >&2
   exit 1
 fi
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH"
-CLASSPATH+=":$FWDIR/conf"
-CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH="$CLASSPATH:$FWDIR/conf"
+CLASSPATH="$CLASSPATH:$CORE_DIR/target/scala-$SCALA_VERSION/classes"
 if [ -n "$SPARK_TESTING" ] ; then
-  CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/test-classes"
-  CLASSPATH+=":$STREAMING_DIR/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$CORE_DIR/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$STREAMING_DIR/target/scala-$SCALA_VERSION/test-classes"
 fi
-CLASSPATH+=":$CORE_DIR/src/main/resources"
-CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
-CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
-CLASSPATH+=":$STREAMING_DIR/target/scala-$SCALA_VERSION/classes"
-CLASSPATH+=":$STREAMING_DIR/lib/org/apache/kafka/kafka/0.7.2-spark/*" # <-- our in-project Kafka Jar
+CLASSPATH="$CLASSPATH:$CORE_DIR/src/main/resources"
+CLASSPATH="$CLASSPATH:$REPL_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH="$CLASSPATH:$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH="$CLASSPATH:$STREAMING_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH="$CLASSPATH:$STREAMING_DIR/lib/org/apache/kafka/kafka/0.7.2-spark/*" # <-- our in-project Kafka Jar
 if [ -e "$FWDIR/lib_managed" ]; then
-  CLASSPATH+=":$FWDIR/lib_managed/jars/*"
-  CLASSPATH+=":$FWDIR/lib_managed/bundles/*"
+  CLASSPATH="$CLASSPATH:$FWDIR/lib_managed/jars/*"
+  CLASSPATH="$CLASSPATH:$FWDIR/lib_managed/bundles/*"
 fi
-CLASSPATH+=":$REPL_DIR/lib/*"
+CLASSPATH="$CLASSPATH:$REPL_DIR/lib/*"
 if [ -e $REPL_BIN_DIR/target ]; then
   for jar in `find "$REPL_BIN_DIR/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
-    CLASSPATH+=":$jar"
+    CLASSPATH="$CLASSPATH:$jar"
   done
 fi
-CLASSPATH+=":$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
-CLASSPATH+=":$GRAPH_DIR/target/scala-$SCALA_VERSION/classes"
+
+CLASSPATH="$CLASSPATH:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH="$CLASSPATH:$GRAPH_DIR/target/scala-$SCALA_VERSION/classes"
+
 for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
-  CLASSPATH+=":$jar"
+  CLASSPATH="$CLASSPATH:$jar"
 done
 
 # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
@@ -149,6 +157,17 @@ if [ -e "$EXAMPLES_DIR/target/spark-examples-"*hadoop[12].jar ]; then
   export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples-"*hadoop[12].jar`
 fi
 
+# Add hadoop conf dir - else FileSystem.*, etc fail !
+# Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
+# the configurtion files.
+if [ "x" != "x$HADOOP_CONF_DIR" ]; then
+  CLASSPATH="$CLASSPATH:$HADOOP_CONF_DIR"
+fi
+if [ "x" != "x$YARN_CONF_DIR" ]; then
+  CLASSPATH="$CLASSPATH:$YARN_CONF_DIR"
+fi
+
+
 # Figure out whether to run our class with java or with the scala launcher.
 # In most cases, we'd prefer to execute our process with java because scala
 # creates a shell script as the parent of its Java process, which makes it
@@ -158,9 +177,9 @@ fi
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
   EXTRA_ARGS=""     # Java options will be passed to scala as JAVA_OPTS
 else
-  CLASSPATH+=":$SCALA_LIBRARY_PATH/scala-library.jar"
-  CLASSPATH+=":$SCALA_LIBRARY_PATH/scala-compiler.jar"
-  CLASSPATH+=":$SCALA_LIBRARY_PATH/jline.jar"
+  CLASSPATH="$CLASSPATH:$SCALA_LIBRARY_PATH/scala-library.jar"
+  CLASSPATH="$CLASSPATH:$SCALA_LIBRARY_PATH/scala-compiler.jar"
+  CLASSPATH="$CLASSPATH:$SCALA_LIBRARY_PATH/jline.jar"
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 fi
