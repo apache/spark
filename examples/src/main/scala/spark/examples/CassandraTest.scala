@@ -60,7 +60,7 @@ object CassandraTest {
       classOf[SortedMap[ByteBuffer, IColumn]])
 
     // Let us first get all the paragraphs from the retrieved rows
-    val paraRdd = casRdd flatMap {
+    val paraRdd = casRdd.flatMap {
       case (key, value) => {
         value.filter(v => ByteBufferUtil.string(v._1).compareTo("para") == 0).map(v => ByteBufferUtil.string(v._2.value()))
       }
@@ -69,8 +69,8 @@ object CassandraTest {
     //Lets get the word count in paras
     val counts = paraRdd.flatMap(p => p.split(" ")).map(word => (word, 1)).reduceByKey(_ + _)
 
-    counts.collect() foreach {
-      case(word, count) => println(word + ":" + count)
+    counts.collect().foreach {
+      case (word, count) => println(word + ":" + count)
     }
   }
 }
