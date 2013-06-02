@@ -101,8 +101,10 @@ private[spark] class LocalScheduler(threads: Int, maxFailures: Int, sc: SparkCon
               submitTask(task, idInJob)
             } else {
               // TODO: Do something nicer here to return all the way to the user
-              if (!Thread.currentThread().isInterrupted)
-                listener.taskEnded(task, new ExceptionFailure(t), null, null, info, null)
+              if (!Thread.currentThread().isInterrupted) {
+                val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
+                listener.taskEnded(task, failure, null, null, info, null)
+              }
             }
           }
         }
