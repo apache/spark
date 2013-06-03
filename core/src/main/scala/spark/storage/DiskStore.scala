@@ -195,7 +195,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   }
 
   private def createFile(blockId: String, allowAppendExisting: Boolean = false): File = {
-    var file = getFile(blockId)
+    val file = getFile(blockId)
     if (!allowAppendExisting && file.exists()) {
       // NOTE(shivaram): Delete the file if it exists. This might happen if a ShuffleMap task
       // was rescheduled on the same machine as the old task ?
