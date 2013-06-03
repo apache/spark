@@ -201,8 +201,6 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       // was rescheduled on the same machine as the old task ?
       logWarning("File for block " + blockId + " already exists on disk: " + file + ". Deleting")
       file.delete()
-      // Reopen the file
-      file = getFile(blockId)
       // throw new Exception("File for block " + blockId + " already exists on disk: " + file)
     }
     file
