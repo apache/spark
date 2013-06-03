@@ -10,6 +10,8 @@ import java.util.SortedMap
 import org.apache.cassandra.db.IColumn
 import org.apache.cassandra.utils.ByteBufferUtil
 import scala.collection.JavaConversions._
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /*
@@ -60,9 +62,9 @@ object CassandraTest {
       classOf[SortedMap[ByteBuffer, IColumn]])
 
     // Let us first get all the paragraphs from the retrieved rows
-    val paraRdd = casRdd.flatMap {
+    val paraRdd = casRdd.map {
       case (key, value) => {
-        value.filter(v => ByteBufferUtil.string(v._1).compareTo("para") == 0).map(v => ByteBufferUtil.string(v._2.value()))
+        ByteBufferUtil.string(value.get(ByteBufferUtil.bytes("para")).value())
       }
     }
 
