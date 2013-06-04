@@ -29,7 +29,7 @@ private[spark] object AkkaUtils {
   def createActorSystem(name: String, host: String, port: Int): (ActorSystem, Int) = {
     val akkaThreads = System.getProperty("spark.akka.threads", "4").toInt
     val akkaBatchSize = System.getProperty("spark.akka.batchSize", "15").toInt
-    val akkaTimeout = System.getProperty("spark.akka.timeout", "20").toInt
+    val akkaTimeout = System.getProperty("spark.akka.timeout", "60").toInt
     val akkaFrameSize = System.getProperty("spark.akka.frameSize", "10").toInt
     val lifecycleEvents = System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean
     val akkaConf = ConfigFactory.parseString("""
