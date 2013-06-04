@@ -1,10 +1,10 @@
 package spark.ml
 
-import spark._
-import spark.SparkContext._
+import spark.{RDD, SparkContext}
 
 import org.apache.commons.math3.distribution.NormalDistribution
 import org.jblas.DoubleMatrix
+
 
 object RidgeRegressionGenerator {
 
@@ -23,30 +23,34 @@ object RidgeRegressionGenerator {
     data
   }
 
-  def saveData(data: RDD[(Double, Array[Double])], dir: String) {
+  private def saveData(data: RDD[(Double, Array[Double])], dir: String) {
     val dataStr = data.map(x => x._1 + "," + x._2.mkString(" "))
     dataStr.saveAsTextFile(dir)
   }
 
   def main(args: Array[String]) {
     if (args.length != 2) {
-      println("Usage: RidgeRegressionGenerator <master> <output_dir>")
+      println("Usage: RidgeRegressionGenerator " +
+        "<master> <output_dir> <num_examples> <num_features> <num_partitions>")
       System.exit(1)
     }
-    org.jblas.util.Random.seed(42)
-    val sc = new SparkContext(args(0), "RidgeRegressionGenerator")
 
-    val nexamples = 1000
-    val nfeatures = 100
+    val sparkMaster: String = args(0)
+    val outputPath: String = args(1)
+    val nexamples: Int = if (args.length > 2) args(2).toInt else 1000
+    val nfeatures: Int = if (args.length > 3) args(3).toInt else 100
+    val parts: Int = if (args.length > 4) args(4).toInt else 2
     val eps = 10
-    val parts = 2
+
+    org.jblas.util.Random.seed(42)
+    val sc = new SparkContext(sparkMaster, "RidgeRegressionGenerator")
 
     // Random values distributed uniformly in [-0.5, 0.5]
     val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
     w.put(0, 0, 10)
     w.put(1, 0, 10)
 
-    val data = sc.parallelize(0 until parts, parts).flatMap { p =>
+    val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until parts, parts).flatMap { p =>
       org.jblas.util.Random.seed(42 + p)
       val examplesInPartition = nexamples / parts
 
@@ -56,15 +60,15 @@ object RidgeRegressionGenerator {
       val rnd = new NormalDistribution(0, eps)
       rnd.reseedRandomGenerator(42 + p)
 
-      val normalValues = (0 until examplesInPartition).map(_ => rnd.sample())
-      val yObs = new DoubleMatrix(examplesInPartition, 1, normalValues:_*).addi(y)
-      
-      (0 until examplesInPartition).map(i => 
+      val normalValues = Array.fill[Double](examplesInPartition)(rnd.sample())
+      val yObs = new DoubleMatrix(normalValues).addi(y)
+
+      Iterator.tabulate(examplesInPartition) { i =>
         (yObs.get(i, 0), X.getRow(i).toArray)
-      )
+      }
     }
 
-    saveData(data, args(1))
-    System.exit(0)
+    saveData(data, outputPath)
+    sc.stop()
   }
 }

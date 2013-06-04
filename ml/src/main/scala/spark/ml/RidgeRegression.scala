@@ -1,9 +1,7 @@
 package spark.ml
 
-import spark._
-import spark.SparkContext._
+import spark.{Logging, RDD, SparkContext}
 
-import org.apache.commons.math3.distribution.NormalDistribution
 import org.jblas.DoubleMatrix
 import org.jblas.Solve
 
@@ -23,39 +21,36 @@ class RidgeRegressionModel(
 
 object RidgeRegression extends Logging {
 
-  def train(data: spark.RDD[(Double, Array[Double])],
-    lambdaLow: Double = 0.0, 
+  def train(data: RDD[(Double, Array[Double])],
+    lambdaLow: Double = 0.0,
     lambdaHigh: Double = 10000.0) = {
 
     data.cache()
-    val nfeatures = data.take(1)(0)._2.length
-    val nexamples = data.count
+    val nfeatures: Int = data.take(1)(0)._2.length
+    val nexamples: Long = data.count()
 
     // Compute XtX - Size of XtX is nfeatures by nfeatures
-    val XtX = data.map {
-      case (y, features) =>
-        val x = new DoubleMatrix(1, features.length, features:_*)
-        x.transpose().mmul(x)
+    val XtX: DoubleMatrix = data.map { case (y, features) =>
+      val x = new DoubleMatrix(1, features.length, features:_*)
+      x.transpose().mmul(x)
     }.reduce(_.add(_))
 
     // Compute Xt*y - Size of Xty is nfeatures by 1
-    val Xty = data.map {
-      case (y, features) => 
-        new DoubleMatrix(features.length, 1, features:_*).mul(y)
+    val Xty: DoubleMatrix = data.map { case (y, features) =>
+      new DoubleMatrix(features.length, 1, features:_*).mul(y)
     }.reduce(_.add(_))
 
     // Define a function to compute the leave one out cross validation error
     // for a single example
-    def crossValidate(lambda: Double) = {
-      // Compute the MLE ridge regression parameter value 
+    def crossValidate(lambda: Double): (Double, Double, DoubleMatrix) = {
+      // Compute the MLE ridge regression parameter value
 
       // Ridge Regression parameter = inv(XtX + \lambda*I) * Xty
       val XtXlambda = DoubleMatrix.eye(nfeatures).muli(lambda).addi(XtX)
       val w = Solve.solveSymmetric(XtXlambda, Xty)
 
-      val invXtX = Solve.solveSymmetric(XtXlambda,
-          DoubleMatrix.eye(nfeatures))
-          
+      val invXtX = Solve.solveSymmetric(XtXlambda, DoubleMatrix.eye(nfeatures))
+
       // compute the leave one out cross validation score
       val cvError = data.map {
         case (y, features) =>
@@ -74,11 +69,12 @@ object RidgeRegression extends Logging {
       val lowValue = crossValidate((mid - low) / 2 + low)
       val highValue = crossValidate((high - mid) / 2 + mid)
       val (newLow, newHigh) = if (lowValue._2 < highValue._2) {
-        (low, mid + (high-low)/4) 
+        (low, mid + (high-low)/4)
       } else {
         (mid - (high-low)/4, high)
       }
       if (newHigh - newLow > 1.0E-7) {
+        // :: is list prepend in Scala.
         lowValue :: highValue :: binSearch(newLow, newHigh)
       } else {
         List(lowValue, highValue)
@@ -88,7 +84,7 @@ object RidgeRegression extends Logging {
     // Actually compute the best lambda
     val lambdas = binSearch(lambdaLow, lambdaHigh).sortBy(_._1)
 
-    // Find the best parameter set
+    // Find the best parameter set by taking the lowest cverror.
     val (lambdaOpt, cverror, wOpt) = lambdas.reduce((a, b) => if (a._2 < b._2) a else b)
 
     logInfo("RidgeRegression: optimal lambda " + lambdaOpt)
