@@ -71,6 +71,7 @@ object BlockFetcherIterator {
     logDebug("Getting " + _totalBlocks + " blocks")
     protected var startTime = System.currentTimeMillis
     protected val localBlockIds = new ArrayBuffer[String]()
+    protected val localNonZeroBlocks = new ArrayBuffer[String]()
     protected val remoteBlockIds = new HashSet[String]()
 
     // A queue to hold our results.
@@ -129,6 +130,8 @@ object BlockFetcherIterator {
       for ((address, blockInfos) <- blocksByAddress) {
         if (address == blockManagerId) {
           localBlockIds ++= blockInfos.map(_._1)
+          localNonZeroBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
+          _totalBlocks -= (localBlockIds.size - localNonZeroBlocks.size)
         } else {
           remoteBlockIds ++= blockInfos.map(_._1)
           // Make our requests at least maxBytesInFlight / 5 in length; the reason to keep them
@@ -172,7 +175,7 @@ object BlockFetcherIterator {
       // Get the local blocks while remote blocks are being fetched. Note that it's okay to do
       // these all at once because they will just memory-map some files, so they won't consume
       // any memory that might exceed our maxBytesInFlight
-      for (id <- localBlockIds) {
+      for (id <- localNonZeroBlocks) {
         getLocalFromDisk(id, serializer) match {
           case Some(iter) => {
             // Pass 0 as size since it's not in flight

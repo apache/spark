@@ -35,21 +35,25 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     private var bs: OutputStream = null
     private var objOut: SerializationStream = null
     private var lastValidPosition = 0L
+    private var initialized = false
 
     override def open(): DiskBlockObjectWriter = {
       val fos = new FileOutputStream(f, true)
       channel = fos.getChannel()
       bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos))
       objOut = serializer.newInstance().serializeStream(bs)
+      initialized = true
       this
     }
 
     override def close() {
-      objOut.close()
-      bs.close()
-      channel = null
-      bs = null
-      objOut = null
+      if (initialized) {
+        objOut.close()
+        bs.close()
+        channel = null
+        bs = null
+        objOut = null
+      }
       // Invoke the close callback handler.
       super.close()
     }
@@ -59,23 +63,33 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     // Flush the partial writes, and set valid length to be the length of the entire file.
     // Return the number of bytes written for this commit.
     override def commit(): Long = {
-      // NOTE: Flush the serializer first and then the compressed/buffered output stream
-      objOut.flush()
-      bs.flush()
-      val prevPos = lastValidPosition
-      lastValidPosition = channel.position()
-      lastValidPosition - prevPos
+      if (initialized) {
+        // NOTE: Flush the serializer first and then the compressed/buffered output stream
+        objOut.flush()
+        bs.flush()
+        val prevPos = lastValidPosition
+        lastValidPosition = channel.position()
+        lastValidPosition - prevPos
+      } else {
+        // lastValidPosition is zero if stream is uninitialized
+        lastValidPosition
+      }
     }
 
     override def revertPartialWrites() {
-      // Discard current writes. We do this by flushing the outstanding writes and
-      // truncate the file to the last valid position.
-      objOut.flush()
-      bs.flush()
-      channel.truncate(lastValidPosition)
+      if (initialized) { 
+        // Discard current writes. We do this by flushing the outstanding writes and
+        // truncate the file to the last valid position.
+        objOut.flush()
+        bs.flush()
+        channel.truncate(lastValidPosition)
+      }
     }
 
     override def write(value: Any) {
+      if (!initialized) {
+        open()
+      }
       objOut.writeObject(value)
     }
 
