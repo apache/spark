@@ -40,7 +40,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     override def open(): DiskBlockObjectWriter = {
       val fos = new FileOutputStream(f, true)
       channel = fos.getChannel()
-      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos))
+      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos, bufferSize))
       objOut = serializer.newInstance().serializeStream(bs)
       initialized = true
       this
