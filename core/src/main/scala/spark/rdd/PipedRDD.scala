@@ -9,29 +9,33 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
 import spark.{RDD, SparkEnv, Partition, TaskContext}
+import spark.broadcast.Broadcast
 
 
 /**
  * An RDD that pipes the contents of each parent partition through an external command
  * (printing them one per line) and returns the output as a collection of strings.
  */
-class PipedRDD[T: ClassManifest](
+class PipedRDD[T: ClassManifest, U <: Seq[String]](
     prev: RDD[T],
     command: Seq[String],
     envVars: Map[String, String],
     transform: (T, String => Unit) => Any,
-    arguments: Seq[String]
+    pipeContext: Broadcast[U],
+    delimiter: String
     )
   extends RDD[String](prev) {
 
-  def this(prev: RDD[T], command: Seq[String], envVars : Map[String, String]) = this(prev, command, envVars, null, null)
-  def this(prev: RDD[T], command: Seq[String]) = this(prev, command, Map())
-  def this(prev: RDD[T], command: Seq[String], transform: (T,String => Unit) => Any, arguments: Seq[String]) = this(prev, command, Map(), transform, arguments)
-
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
-  def this(prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
-  def this(prev: RDD[T], command: String, transform: (T,String => Unit) => Any, arguments: Seq[String]) = this(prev, PipedRDD.tokenize(command), Map(), transform, arguments)
+  def this(
+      prev: RDD[T],
+      command: String,
+      envVars: Map[String, String] = Map(),
+      transform: (T, String => Unit) => Any = null,
+      pipeContext: Broadcast[U] = null,
+      delimiter: String = "\u0001") =
+    this(prev, PipedRDD.tokenize(command), envVars, transform, pipeContext, delimiter)
 
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
@@ -60,19 +64,18 @@ class PipedRDD[T: ClassManifest](
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
 
-        // input the arguments firstly
-        if ( arguments != null) {
-          for (elem <- arguments) {
+        // input the pipeContext firstly
+        if ( pipeContext != null) {
+          for (elem <- pipeContext.value) {
             out.println(elem)
           }
-          // ^A \n as the marker of the end of the arguments
-          out.println("\u0001")
+          // delimiter\n as the marker of the end of the pipeContext
+          out.println(delimiter)
         }
         for (elem <- firstParent[T].iterator(split, context)) {
           if (transform != null) {
             transform(elem, out.println(_))
-          }
-          else {
+          } else {
             out.println(elem)
           }
         }

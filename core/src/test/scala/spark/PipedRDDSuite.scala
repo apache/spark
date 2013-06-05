@@ -23,7 +23,8 @@ class PipedRDDSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
 
-    val piped = nums.pipe(Seq("cat"), (i:Int, f: String=> Unit) => f(i + "_"), Array("0"))
+    val piped = nums.pipe(Seq("cat"), Map[String, String](), 
+      (i:Int, f: String=> Unit) => f(i + "_"), sc.broadcast(List("0")))
 
     val c = piped.collect()
 
@@ -38,7 +39,9 @@ class PipedRDDSuite extends FunSuite with LocalSparkContext {
     assert(c(7) === "4_")
 
     val nums1 = sc.makeRDD(Array("a\t1", "b\t2", "a\t3", "b\t4"), 2)
-    val d = nums1.groupBy(str=>str.split("\t")(0)).pipe(Seq("cat"), (i:Tuple2[String, Seq[String]], f: String=> Unit) => {for (e <- i._2){ f(e + "_")}}, Array("0")).collect()
+    val d = nums1.groupBy(str=>str.split("\t")(0)).
+      pipe(Seq("cat"), Map[String, String](), (i:Tuple2[String, Seq[String]], f: String=> Unit) => 
+      {for (e <- i._2){ f(e + "_")}}, sc.broadcast(List("0"))).collect()
     assert(d.size === 8)
     assert(d(0) === "0")
     assert(d(1) === "\u0001")
