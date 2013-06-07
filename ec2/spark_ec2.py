@@ -36,7 +36,7 @@ from boto import ec2
 
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/pwendell/spark-ec2/ec2-updates/ami-list"
-
+LATEST_SPARK_VERSION = "0.7.2"
 
 # Configure and parse our command-line arguments
 def parse_args():
@@ -67,6 +67,8 @@ def parse_args():
   parser.add_option("-a", "--ami", default="latest",
       help="Amazon Machine Image ID to use, 'vX.Y.Z' to use version " +
            "X.Y.Z of Spark, or 'latest' to use latest AMI (default: latest)")
+  parser.add_option("-v", "--spark-version", default="latest",
+      help="Version of Spark to use (X.Y.Z or 'latest' to use most recent)")
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
             "the given local address (for use with login)")
@@ -156,6 +158,16 @@ def wait_for_instances(conn, instances):
 def is_active(instance):
   return (instance.state in ['pending', 'running', 'stopping', 'stopped'])
 
+# Return correct versions of Spark and Shark, given the supplied spark version
+def get_spark_shark_version(opts):
+  spark_shark_map = ["0.7.2", "0.7.0"]
+  version = opts.spark_version.replace("v", "")
+  if version not in ["latest", "0.7.2"]:
+    print >> stderr, "Don't know about spark version: %s" % version
+  if version == "latest":
+    version = LATEST_SPARK_VERSION
+  return (version, spark_shark_map[version])
+
 # Attempt to resolve an appropriate AMI given the architecture and
 # region of the request.
 def get_spark_ami(opts):
@@ -187,11 +199,7 @@ def get_spark_ami(opts):
     print >> stderr,\
         "Don't recognize %s, assuming type is pvm" % opts.instance_type
   
-  version = version.replace("v", "")
-  if version not in ["latest", "0.7.0"]:
-    print >> stderr, \
-      "Don't know how to resolve AMI for version: %s" % version
-  ami_path = "%s/%s/%s/%s" % (AMI_PREFIX, version, opts.region, instance_type)
+  ami_path = "%s/%s/%s" % (AMI_PREFIX, opts.region, instance_type)
   try:
     ami = urllib2.urlopen(ami_path).read().strip()
     print "Spark AMI: " + ami
@@ -452,8 +460,9 @@ def setup_standalone_cluster(master, slave_nodes, opts):
   ssh(master, opts, "/root/spark/bin/start-all.sh")
   
 def setup_spark_cluster(master, opts):
+  (spark_v, shark_v) = get_spark_shark_version(opts)
   ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
-  ssh(master, opts, "spark-ec2/setup.sh")
+  ssh(master, opts, "spark-ec2/setup.sh %s %s" % (spark_v, shark_v)))
   if opts.cluster_type == "mesos":
     print "Mesos cluster started at http://%s:8080" % master
   elif opts.cluster_type == "standalone":
