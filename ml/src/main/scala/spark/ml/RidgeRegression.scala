@@ -65,23 +65,16 @@ object RidgeRegression extends Logging {
       val invXtX = Solve.solveSymmetric(XtXlambda, DoubleMatrix.eye(nfeatures))
 
       // compute the generalized cross validation score
-      // TODO: Is there a way to calculate this using one pass on the data ?
-      val H_ii_mean = data.map {
-        case (y, features) =>
-          val x = new DoubleMatrix(features.length, 1, features:_*)
-          val H_ii = x.transpose().mmul(invXtX).mmul(x).get(0)
-          H_ii
-      }.reduce(_ + _) / nexamples
-
-      val gcv = data.map {
+      val cverror = data.map {
         case (y, features) =>
           val x = new DoubleMatrix(features.length, 1, features:_*)
           val yhat = w.transpose().mmul(x).get(0)
-          val residual = (y - yhat) / (1.0 - H_ii_mean)
+          val H_ii = x.transpose().mmul(invXtX).mmul(x).get(0)
+          val residual = (y - yhat) / (1.0 - H_ii)
           residual * residual
       }.reduce(_ + _) / nexamples
 
-      (lambda, gcv, w)
+      (lambda, cverror, w)
     }
 
     // Binary search for the best assignment to lambda.
@@ -115,7 +108,7 @@ object RidgeRegression extends Logging {
     logInfo("RidgeRegression: optimal lambda " + normModel.lambdaOpt)
     logInfo("RidgeRegression: optimal weights " + normModel.wOpt)
     logInfo("RidgeRegression: optimal intercept " + normModel.bOpt)
-    logInfo("RidgeRegression: optimal GCV " + cverror)
+    logInfo("RidgeRegression: cross-validation error " + cverror)
 
     normModel
   }
