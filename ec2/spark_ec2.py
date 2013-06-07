@@ -422,10 +422,11 @@ def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_k
     ssh(master, opts, 'chmod 600 ~/.ssh/id_rsa')
 
   if opts.cluster_type == "mesos":
-    modules = ['ephemeral-hdfs', 'persistent-hdfs', 'mapreduce', 'mesos']
+    modules = ['spark', 'shark', 'ephemeral-hdfs', 'persistent-hdfs', 
+               'mapreduce', 'mesos']
   elif opts.cluster_type == "standalone":
-    modules = ['ephemeral-hdfs', 'persistent-hdfs', 'mapreduce', 
-               'spark-standalone']
+    modules = ['spark', 'shark', 'ephemeral-hdfs', 'persistent-hdfs', 
+               'mapreduce', 'spark-standalone']
 
   if opts.ganglia:
     modules.append('ganglia')
