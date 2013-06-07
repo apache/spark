@@ -160,7 +160,7 @@ def is_active(instance):
 
 # Return correct versions of Spark and Shark, given the supplied spark version
 def get_spark_shark_version(opts):
-  spark_shark_map = ["0.7.2", "0.7.0"]
+  spark_shark_map = {"0.7.2": "0.7.0"}
   version = opts.spark_version.replace("v", "")
   if version not in ["latest", "0.7.2"]:
     print >> stderr, "Don't know about spark version: %s" % version
@@ -463,7 +463,7 @@ def setup_standalone_cluster(master, slave_nodes, opts):
 def setup_spark_cluster(master, opts):
   (spark_v, shark_v) = get_spark_shark_version(opts)
   ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
-  ssh(master, opts, "spark-ec2/setup.sh %s %s" % (spark_v, shark_v)))
+  ssh(master, opts, "spark-ec2/setup.sh %s %s" % (spark_v, shark_v))
   if opts.cluster_type == "mesos":
     print "Mesos cluster started at http://%s:8080" % master
   elif opts.cluster_type == "standalone":
