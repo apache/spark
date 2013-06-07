@@ -157,12 +157,13 @@ def wait_for_instances(conn, instances):
 def is_active(instance):
   return (instance.state in ['pending', 'running', 'stopping', 'stopped'])
 
-# Return correct versions of Spark and Shark, given the supplied spark version
+# Return correct versions of Spark and Shark, given the supplied Spark version
 def get_spark_shark_version(opts):
   spark_shark_map = {"0.7.2": "0.7.0"}
   version = opts.spark_version.replace("v", "")
   if version not in ["latest", "0.7.2"]:
-    print >> stderr, "Don't know about spark version: %s" % version
+    print >> stderr, "Don't know about Spark version: %s" % version
+    sys.exit(1)
   if version == "latest":
     version = LATEST_SPARK_VERSION
   return (version, spark_shark_map[version])
@@ -433,6 +434,8 @@ def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_k
   if not opts.old_scripts:
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
+    # TODO: Before being merged this should be replaced with the correct repo,
+    #       and likely a new branch (to allow backwards compatibility).
     ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/pwendell/spark-ec2.git -b ec2-updates")
 
   print "Deploying files to master..."
