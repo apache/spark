@@ -65,8 +65,7 @@ def parse_args():
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
   parser.add_option("-a", "--ami", default="latest",
-      help="Amazon Machine Image ID to use, 'vX.Y.Z' to use version " +
-           "X.Y.Z of Spark, or 'latest' to use latest AMI (default: latest)")
+      help="Amazon Machine Image ID to use (default: latest)")
   parser.add_option("-v", "--spark-version", default="latest",
       help="Version of Spark to use (X.Y.Z or 'latest' to use most recent)")
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
