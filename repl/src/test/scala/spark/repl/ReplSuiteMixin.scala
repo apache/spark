@@ -14,16 +14,6 @@ import spark.deploy.master.Master
 import spark.deploy.worker.Worker
 
 trait ReplSuiteMixin {
-  val localIp = "127.0.1.2"
-  val port = "7089"
-  val sparkUrl = s"spark://$localIp:$port"
-
-  def setupStandaloneCluster() {
-    future { Master.main(Array("-i", localIp, "-p", port, "--webui-port", "0")) }
-    Thread.sleep(2000)
-    future { Worker.main(Array(sparkUrl, "--webui-port", "0")) }
-  }
-
   def runInterpreter(master: String, input: String): String = {
     val in = new BufferedReader(new StringReader(input + "\n"))
     val out = new StringWriter()
@@ -42,10 +32,11 @@ trait ReplSuiteMixin {
     spark.repl.Main.interp = interp
     val separator = System.getProperty("path.separator")
     interp.process(Array("-classpath", paths.mkString(separator)))
-    if (interp != null)
-      interp.closeInterpreter();
+    if (interp != null) {
+      interp.closeInterpreter()
+    }
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.master.port")
+    System.clearProperty("spark.driver.port")
     return out.toString
   }
 

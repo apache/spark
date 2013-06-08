@@ -7,7 +7,7 @@ import org.scalatest.FunSuite
 import com.google.common.io.Files
 
 class StandaloneClusterReplSuite extends FunSuite with ReplSuiteMixin {
-  setupStandaloneCluster
+  val sparkUrl = "local-cluster[1,1,512]"
 
   test("simple collect") {
     val output = runInterpreter(sparkUrl, """
@@ -98,6 +98,4 @@ class StandaloneClusterReplSuite extends FunSuite with ReplSuiteMixin {
     assertContains("res0: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
   }
-
-
 }
