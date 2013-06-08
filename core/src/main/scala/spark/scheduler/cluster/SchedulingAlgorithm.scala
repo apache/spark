@@ -53,13 +53,12 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
     }
 
     if (compare < 0) {
-      res = true
+      return true
     } else if (compare > 0) {
-      res = false
+      return false
     } else {
       return s1.name < s2.name
     }
-    return res
   }
 }
 
