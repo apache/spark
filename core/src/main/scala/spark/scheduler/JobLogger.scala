@@ -48,21 +48,19 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     override def run() {
       while (true) {
         val event = eventQueue.take
-        if (event != null) {
-          logDebug("Got event of type " + event.getClass.getName)
-          event match {
-            case JobLoggerOnJobStart(job, info) =>
-              processJobStartEvent(job, info)
-            case JobLoggerOnStageSubmitted(stage, info) =>
-              processStageSubmittedEvent(stage, info)
-            case JobLoggerOnStageCompleted(stageCompleted) =>
-              processStageCompletedEvent(stageCompleted)
-            case JobLoggerOnJobEnd(job, event) =>
-              processJobEndEvent(job, event)
-            case JobLoggerOnTaskEnd(event) =>
-              processTaskEndEvent(event)
-            case _ =>
-          }
+        logDebug("Got event of type " + event.getClass.getName)
+        event match {
+          case JobLoggerOnJobStart(job, info) =>
+            processJobStartEvent(job, info)
+          case JobLoggerOnStageSubmitted(stage, info) =>
+            processStageSubmittedEvent(stage, info)
+          case JobLoggerOnStageCompleted(stageCompleted) =>
+            processStageCompletedEvent(stageCompleted)
+          case JobLoggerOnJobEnd(job, event) =>
+            processJobEndEvent(job, event)
+          case JobLoggerOnTaskEnd(event) =>
+            processTaskEndEvent(event)
+          case _ =>
         }
       }
     }
