@@ -55,21 +55,21 @@ object StorageUtils {
     }.mapValues(_.values.toArray)
 
     // For each RDD, generate an RDDInfo object
-    val rddInfos = groupedRddBlocks.map { case(rddKey, rddBlocks) =>
-
+    val rddInfos = groupedRddBlocks.map { case (rddKey, rddBlocks) =>
       // Add up memory and disk sizes
       val memSize = rddBlocks.map(_.memSize).reduce(_ + _)
       val diskSize = rddBlocks.map(_.diskSize).reduce(_ + _)
 
       // Find the id of the RDD, e.g. rdd_1 => 1
       val rddId = rddKey.split("_").last.toInt
-      // Get the friendly name for the rdd, if available.
+
+      // Get the friendly name and storage level for the RDD, if available
       sc.persistentRdds.get(rddId).map { r =>
-          val rddName = Option(r.name).getOrElse(rddKey)
-          val rddStorageLevel = r.getStorageLevel
-          RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, r.partitions.size, memSize, diskSize)
+        val rddName = Option(r.name).getOrElse(rddKey)
+        val rddStorageLevel = r.getStorageLevel
+        RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, r.partitions.size, memSize, diskSize)
       }
-    }.flatMap(x => x).toArray
+    }.flatten.toArray
 
     scala.util.Sorting.quickSort(rddInfos)
 
