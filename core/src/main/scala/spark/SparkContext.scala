@@ -48,7 +48,6 @@ import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.{BlockManagerUI, StorageStatus, StorageUtils, RDDInfo}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
-import spark.scheduler.JobLogger
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -510,7 +509,7 @@ class SparkContext(
   def addSparkListener(listener: SparkListener) {
     dagScheduler.sparkListeners += listener
   }
-  addSparkListener(new JobLogger)
+
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
    * memory available for caching.
