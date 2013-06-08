@@ -528,7 +528,7 @@ private object Utils extends Logging {
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getSparkCallSite: String = {
+  def getCallSiteInfo = {
     val trace = Thread.currentThread.getStackTrace().filter( el =>
       (!el.getMethodName.contains("getStackTrace")))
 
@@ -540,6 +540,7 @@ private object Utils extends Logging {
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
     var finished = false
+    var firstUserClass = "<unknown>"
 
     for (el <- trace) {
       if (!finished) {
@@ -554,13 +555,18 @@ private object Utils extends Logging {
         else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
+          firstUserClass = el.getClassName
           finished = true
         }
       }
     }
-    "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
+    (lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
   }
 
+  def formatSparkCallSite = {
+    val callSiteInfo = getCallSiteInfo
+    "%s at %s:%s".format(callSiteInfo._1, callSiteInfo._2, callSiteInfo._3)
+  }
   /**
    * Try to find a free port to bind to on the local host. This should ideally never be needed,
    * except that, unfortunately, some of the networking libraries we currently rely on (e.g. Spray)

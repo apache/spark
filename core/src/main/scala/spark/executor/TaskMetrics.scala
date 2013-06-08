@@ -2,6 +2,11 @@ package spark.executor
 
 class TaskMetrics extends Serializable {
   /**
+   * host's name the task runs on 
+   */
+  var hostname: String = _
+
+  /**
    * Time taken on the executor to deserialize this task
    */
   var executorDeserializeTime: Int = _
@@ -34,9 +39,14 @@ object TaskMetrics {
 
 class ShuffleReadMetrics extends Serializable {
   /**
+   * Time when shuffle finishs
+   */
+  var shuffleFinishTime: Long = _
+
+  /**
    * Total number of blocks fetched in a shuffle (remote or local)
    */
-  var totalBlocksFetched : Int = _
+  var totalBlocksFetched: Int = _
 
   /**
    * Number of remote blocks fetched in a shuffle

@@ -1,27 +1,54 @@
 package spark.scheduler
 
+import java.util.Properties
 import spark.scheduler.cluster.TaskInfo
 import spark.util.Distribution
-import spark.{Utils, Logging}
+import spark.{Utils, Logging, SparkContext, TaskEndReason}
 import spark.executor.TaskMetrics
 
 trait SparkListener {
   /**
    * called when a stage is completed, with information on the completed stage
    */
-  def onStageCompleted(stageCompleted: StageCompleted)
+  def onStageCompleted(stageCompleted: StageCompleted) { }
+  
+  /**
+   * called when a stage is submitted
+   */
+  def onStageSubmitted(stage: Stage, info: String = "") { }
+
+  /**
+   * called when a task ends
+   */
+  def onTaskEnd(event: CompletionEvent) { }
+
+  /**
+   * called when a job starts
+   */
+  def onJobStart(job: ActiveJob, properties: Properties = null) { }
+  
+  /**
+   * called when a job ends
+   */
+  def onJobEnd(job: ActiveJob, event: SparkListenerEvents) { }
+  
 }
 
 sealed trait SparkListenerEvents
 
 case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 
+case object SparkListenerJobSuccess extends SparkListenerEvents
+
+case class SparkListenerJobFailed(failedStage: Stage) extends SparkListenerEvents
+
+case class SparkListenerJobCancelled(reason: String) extends SparkListenerEvents
 
 /**
  * Simple SparkListener that logs a few summary statistics when each stage completes
  */
 class StatsReportListener extends SparkListener with Logging {
-  def onStageCompleted(stageCompleted: StageCompleted) {
+  override def onStageCompleted(stageCompleted: StageCompleted) {
     import spark.scheduler.StatsReportListener._
     implicit val sc = stageCompleted
     this.logInfo("Finished stage: " + stageCompleted.stageInfo)
