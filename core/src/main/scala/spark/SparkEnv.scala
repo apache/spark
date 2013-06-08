@@ -42,7 +42,8 @@ class SparkEnv (
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
-    actorSystem.awaitTermination()
+    // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
+    //actorSystem.awaitTermination()
   }
 }
 
