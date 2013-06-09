@@ -50,7 +50,6 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(compressedFile.length < normalFile.length)
   }
 
-
   test("SequenceFiles") {
     sc = new SparkContext("local", "test")
     val tempDir = Files.createTempDir()
@@ -83,7 +82,6 @@ class FileSuite extends FunSuite with LocalSparkContext {
 
     assert(compressedFile.length < normalFile.length)
   }
-
 
   test("SequenceFile with writable key") {
     sc = new SparkContext("local", "test")
