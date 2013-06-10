@@ -12,4 +12,4 @@ if [ "$SPARK_PUBLIC_DNS" = "" ]; then
     fi
 fi
 
-"$bin"/spark-daemon.sh start spark.deploy.worker.Worker "$@"
+"$bin"/spark-daemon.sh start spark.deploy.worker.Worker 1 "$@"
