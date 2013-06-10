@@ -652,7 +652,6 @@ public class JavaAPISuite implements Serializable {
     }).saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class,
         DefaultCodec.class);
 
-    System.out.println(outputDir);
     JavaPairRDD<IntWritable, Text> output = sc.hadoopFile(outputDir,
         SequenceFileInputFormat.class, IntWritable.class, Text.class);
 
