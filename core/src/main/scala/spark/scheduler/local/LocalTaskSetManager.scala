@@ -91,7 +91,6 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     if (availableCpus > 0 && numFinished < numTasks) {
       findTask() match {
         case Some(index) =>
-          logInfo(taskSet.tasks(index).toString)
           val taskId = sched.attemptId.getAndIncrement()
           val task = taskSet.tasks(index)
           val info = new TaskInfo(taskId, index, System.currentTimeMillis(), "local", "local:1", TaskLocality.NODE_LOCAL)

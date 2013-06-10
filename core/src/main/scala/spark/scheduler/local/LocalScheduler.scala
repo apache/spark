@@ -34,8 +34,7 @@ private[spark] class LocalActor(localScheduler: LocalScheduler, var freeCores: I
   }
 
   def launchTask(tasks : Seq[TaskDescription]) {
-    for (task <- tasks)
-    {
+    for (task <- tasks) {
       freeCores -= 1
       localScheduler.threadPool.submit(new Runnable {
         def run() {
@@ -85,8 +84,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     }
     schedulableBuilder.buildPools()
 
-    localActor = env.actorSystem.actorOf(
-      Props(new LocalActor(this, threads)), "Test")
+    localActor = env.actorSystem.actorOf(Props(new LocalActor(this, threads)), "Test")
   }
 
   override def setListener(listener: TaskSchedulerListener) {
@@ -109,7 +107,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       val tasks = new ArrayBuffer[TaskDescription](freeCores)
       val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
       for (manager <- sortedTaskSetQueue) {
-        logInfo("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
+        logDebug("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
       }
 
       var launchTask = false
