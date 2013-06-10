@@ -615,15 +615,12 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     conf.setOutputValueClass(valueClass)
     // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
     conf.set("mapred.output.format.class", outputFormatClass.getName)
-    codec match {
-      case Some(c) => {
-        conf.setCompressMapOutput(true)
-        conf.set("mapred.output.compress", "true")
-        conf.setMapOutputCompressorClass(c)
-        conf.set("mapred.output.compression.codec", c.getCanonicalName)
-        conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
-      }
-      case _ =>
+    for (c <- codec) {
+      conf.setCompressMapOutput(true)
+      conf.set("mapred.output.compress", "true")
+      conf.setMapOutputCompressorClass(c)
+      conf.set("mapred.output.compression.codec", c.getCanonicalName)
+      conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
     }
     conf.setOutputCommitter(classOf[FileOutputCommitter])
     FileOutputFormat.setOutputPath(conf, HadoopWriter.createPathFromString(path, conf))
