@@ -8,28 +8,8 @@ import org.jblas.DoubleMatrix
 
 object RidgeRegressionGenerator {
 
-  // Helper methods to load and save data used for RidgeRegression
-  // Data format:
-  // <l>, <f1> <f2> ...
-  // where <f1>, <f2> are feature values in Double and 
-  //       <l> is the corresponding label as Double
-  def loadData(sc: SparkContext, dir: String) = {
-    val data = sc.textFile(dir).map{ line => 
-      val parts = line.split(",")
-      val label = parts(0).toDouble
-      val features = parts(1).trim().split(" ").map(_.toDouble)
-      (label, features)
-    }
-    data
-  }
-
-  private def saveData(data: RDD[(Double, Array[Double])], dir: String) {
-    val dataStr = data.map(x => x._1 + "," + x._2.mkString(" "))
-    dataStr.saveAsTextFile(dir)
-  }
-
   def main(args: Array[String]) {
-    if (args.length != 2) {
+    if (args.length != 5) {
       println("Usage: RidgeRegressionGenerator " +
         "<master> <output_dir> <num_examples> <num_features> <num_partitions>")
       System.exit(1)
@@ -68,7 +48,7 @@ object RidgeRegressionGenerator {
       }
     }
 
-    saveData(data, outputPath)
+    MLUtils.saveData(data, outputPath)
     sc.stop()
   }
 }

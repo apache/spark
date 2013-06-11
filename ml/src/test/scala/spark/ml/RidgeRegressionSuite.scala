@@ -29,10 +29,10 @@ class RidgeRegressionSuite extends FunSuite {
     val testRDD = sc.parallelize(testData, 2)
     val model = RidgeRegression.train(testRDD, 0, 10)
 
-    assert(model.bOpt >= 2.9 && model.bOpt <= 3.1)
-    assert(model.wOpt.length === 2)
-    assert(model.wOpt.get(0) >= 0.9 && model.wOpt.get(0) <= 1.1)
-    assert(model.wOpt.get(1) >= 0.9 && model.wOpt.get(1) <= 1.1)
+    assert(model.intercept >= 2.9 && model.intercept <= 3.1)
+    assert(model.weights.length === 2)
+    assert(model.weights.get(0) >= 0.9 && model.weights.get(0) <= 1.1)
+    assert(model.weights.get(1) >= 0.9 && model.weights.get(1) <= 1.1)
 
     sc.stop()
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
