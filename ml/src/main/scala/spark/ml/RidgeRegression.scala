@@ -10,13 +10,16 @@ import org.jblas.Solve
  * Ridge Regression from Joseph Gonzalez's implementation in MLBase
  */
 class RidgeRegressionModel(
-  weights: DoubleMatrix,
-  intercept: Double,
-  val lambdaOpt: Double,
-  val lambdas: List[(Double, Double, DoubleMatrix)]) extends RegressionModel(weights, intercept) {
+    weights: DoubleMatrix,
+    intercept: Double,
+    val lambdaOpt: Double,
+    val lambdas: List[(Double, Double, DoubleMatrix)])
+  extends RegressionModel(weights, intercept) {
 
-  override def predict(test_data: spark.RDD[Array[Double]]) = {
-    test_data.map(x => (new DoubleMatrix(1, x.length, x:_*).mmul(this.weights)).get(0) + this.intercept)
+  override def predict(test_data: RDD[Array[Double]]) = {
+    test_data.map { x =>
+      (new DoubleMatrix(1, x.length, x:_*).mmul(this.weights)).get(0) + this.intercept
+    }
   }
 }
 
@@ -24,9 +27,9 @@ class RidgeRegressionData(data: RDD[(Double, Array[Double])]) extends Regression
   override def normalizeData() = {
     data.map { case(y, features) =>
       val yNormalized = y - yMean
-      val featuresNormalized = (0 until nfeatures).map(
-        column => (features(column) - xColMean(column)) / xColSd(column)
-      ).toArray
+      val featuresNormalized = Array.tabulate(nfeatures) { column =>
+        (features(column) - xColMean(column)) / xColSd(column)
+      }.toArray
       (yNormalized, featuresNormalized)
     }
   }
@@ -43,12 +46,9 @@ class RidgeRegressionData(data: RDD[(Double, Array[Double])]) extends Regression
   }
 }
 
-object RidgeRegression extends Logging {
+class RidgeRegression(lambdaLow: Double, lambdaHigh: Double) extends Regression with Logging {
 
-  def train(inputData: RDD[(Double, Array[Double])],
-    lambdaLow: Double = 0.0,
-    lambdaHigh: Double = 10000.0) = {
-
+  def train(inputData: RDD[(Double, Array[Double])]): RegressionModel = {
     inputData.cache()
     val ridgeData = new RidgeRegressionData(inputData)
     val data = ridgeData.normalizeData()
@@ -125,6 +125,22 @@ object RidgeRegression extends Logging {
 
     normModel
   }
+}
+
+/**
+ * Helper classes to build a RidgeRegression object.
+ */
+object RidgeRegression {
+
+  /**
+   * Build a RidgeRegression object with default arguments as:
+   *
+   * @param lowLambda as 0.0
+   * @param hiLambda as 100.0
+   */
+  def builder() = {
+    new RidgeRegressionBuilder(0.0, 100.0)
+  }
 
   def main(args: Array[String]) {
     if (args.length != 2) {
@@ -133,7 +149,36 @@ object RidgeRegression extends Logging {
     }
     val sc = new SparkContext(args(0), "RidgeRegression")
     val data = MLUtils.loadData(sc, args(1))
-    val model = train(data, 0, 1000)
+    val ridgeReg = RidgeRegression.builder()
+                                  .setLowLambda(0)
+                                  .setHighLambda(1000)
+                                  .build()
+
+    val model = ridgeReg.train(data)
     sc.stop()
+  }
+}
+
+class RidgeRegressionBuilder(lowLambda: Double, hiLambda: Double) {
+
+  /**
+   * Set the lower bound on binary search for lambda's. Default is 0.
+   */
+  def setLowLambda(low: Double) = {
+    new RidgeRegressionBuilder(low, this.hiLambda)
+  }
+
+  /**
+   * Set the upper bound on binary search for lambda's. Default is 100.0.
+   */
+  def setHighLambda(hi: Double) = {
+    new RidgeRegressionBuilder(this.lowLambda, hi)
+  }
+
+  /**
+   * Build a RidgeRegression object. 
+   */
+  def build() = {
+    new RidgeRegression(lowLambda, hiLambda)
   }
 }

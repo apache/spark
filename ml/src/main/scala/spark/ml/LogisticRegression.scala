@@ -1,7 +1,6 @@
 package spark.ml
 
 import spark.{Logging, RDD, SparkContext}
-import spark.SparkContext._
 
 import org.jblas.DoubleMatrix
 
@@ -14,9 +13,9 @@ class LogisticRegressionModel(
   val losses: Array[Double]) extends RegressionModel(weights, intercept) {
 
   override def predict(test_data: spark.RDD[Array[Double]]) = {
-    test_data.map { x => 
-      val margin = (new DoubleMatrix(1, x.length, x:_*).mmul(this.weights)).get(0) + this.intercept
-      1.0/(1.0 + math.exp(margin * -1))
+    test_data.map { x =>
+      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(this.weights).get(0) + this.intercept
+      1.0/ (1.0 + math.exp(margin * -1))
     }
   }
 }
@@ -25,9 +24,9 @@ class LogisticRegressionData(data: RDD[(Double, Array[Double])]) extends Regress
   override def normalizeData() = {
     // Shift only the features for LogisticRegression
     data.map { case(y, features) =>
-      val featuresNormalized = (0 until nfeatures).map(
-        column => (features(column) - xColMean(column)) / xColSd(column)
-      ).toArray
+      val featuresNormalized = Array.tabulate(nfeatures) { column =>
+        (features(column) - xColMean(column)) / xColSd(column)
+      }
       (y, featuresNormalized)
     }
   }
@@ -44,24 +43,40 @@ class LogisticRegressionData(data: RDD[(Double, Array[Double])]) extends Regress
   }
 }
 
-object LogisticRegression extends Logging {
-  val STEP_SIZE = 1.0
-  val MINI_BATCH_FRACTION = 1.0
+class LogisticRegression(stepSize: Double, miniBatchFraction: Double, numIters: Int)
+  extends Regression with Logging {
 
-  def train(input: RDD[(Double, Array[Double])], numIters: Int) = {
+  override def train(input: RDD[(Double, Array[Double])]): RegressionModel = {
     input.cache()
 
     val lrData = new LogisticRegressionData(input)
     val data = lrData.normalizeData()
     val (weights, losses) = GradientDescent.runMiniBatchSGD(
-        data, new LogisticGradient(), new SimpleUpdater(), STEP_SIZE, numIters, MINI_BATCH_FRACTION)
-  
+      data, new LogisticGradient(), new SimpleUpdater(), stepSize, numIters, numIters)
+
     val computedModel = new LogisticRegressionModel(weights, 0, losses)
     val model = lrData.scaleModel(computedModel)
     logInfo("Final model weights " + model.weights)
     logInfo("Final model intercept " + model.intercept)
-    logInfo("Last 10 losses " + model.losses.takeRight(10).mkString(","))
+    logInfo("Last 10 losses " + model.losses.takeRight(10).mkString(", "))
     model
+  }
+}
+
+/**
+ * Helper classes to build a LogisticRegression object.
+ */
+object LogisticRegression {
+
+  /**
+   * Build a logistic regression object with default arguments:
+   *
+   * @param stepSize as 1.0
+   * @param miniBatchFraction as 1.0
+   * @param numIters as 100
+   */
+  def builder() = {
+    new LogisticRegressionBuilder(1.0, 1.0, 100)
   }
 
   def main(args: Array[String]) {
@@ -71,7 +86,42 @@ object LogisticRegression extends Logging {
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
     val data = MLUtils.loadData(sc, args(1))
-    val model = train(data, args(2).toInt)
+    val lr = LogisticRegression.builder()
+                               .setStepSize(2.0)
+                               .setNumIterations(args(2).toInt)
+                               .build()
+    val model = lr.train(data)
     sc.stop()
+  }
+}
+
+class LogisticRegressionBuilder(stepSize: Double, miniBatchFraction: Double, numIters: Int) {
+
+  /**
+   * Set the step size per-iteration of SGD. Default 1.0.
+   */
+  def setStepSize(step: Double) = {
+    new LogisticRegressionBuilder(step, this.miniBatchFraction, this.numIters)
+  }
+
+  /**
+   * Set fraction of data to be used for each SGD iteration. Default 1.0.
+   */
+  def setMiniBatchFraction(fraction: Double) = {
+    new LogisticRegressionBuilder(this.stepSize, fraction, this.numIters)
+  }
+
+  /**
+   * Set the number of iterations for SGD. Default 100.
+   */
+  def setNumIterations(iters: Int) = {
+    new LogisticRegressionBuilder(this.stepSize, this.miniBatchFraction, iters)
+  }
+
+  /**
+   * Build a Logistic regression object.
+   */
+  def build() = {
+    new LogisticRegression(stepSize, miniBatchFraction, numIters)
   }
 }
