@@ -35,21 +35,25 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     private var bs: OutputStream = null
     private var objOut: SerializationStream = null
     private var lastValidPosition = 0L
+    private var initialized = false
 
     override def open(): DiskBlockObjectWriter = {
       val fos = new FileOutputStream(f, true)
       channel = fos.getChannel()
-      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos))
+      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos, bufferSize))
       objOut = serializer.newInstance().serializeStream(bs)
+      initialized = true
       this
     }
 
     override def close() {
-      objOut.close()
-      bs.close()
-      channel = null
-      bs = null
-      objOut = null
+      if (initialized) {
+        objOut.close()
+        bs.close()
+        channel = null
+        bs = null
+        objOut = null
+      }
       // Invoke the close callback handler.
       super.close()
     }
@@ -59,23 +63,33 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     // Flush the partial writes, and set valid length to be the length of the entire file.
     // Return the number of bytes written for this commit.
     override def commit(): Long = {
-      // NOTE: Flush the serializer first and then the compressed/buffered output stream
-      objOut.flush()
-      bs.flush()
-      val prevPos = lastValidPosition
-      lastValidPosition = channel.position()
-      lastValidPosition - prevPos
+      if (initialized) {
+        // NOTE: Flush the serializer first and then the compressed/buffered output stream
+        objOut.flush()
+        bs.flush()
+        val prevPos = lastValidPosition
+        lastValidPosition = channel.position()
+        lastValidPosition - prevPos
+      } else {
+        // lastValidPosition is zero if stream is uninitialized
+        lastValidPosition
+      }
     }
 
     override def revertPartialWrites() {
-      // Discard current writes. We do this by flushing the outstanding writes and
-      // truncate the file to the last valid position.
-      objOut.flush()
-      bs.flush()
-      channel.truncate(lastValidPosition)
+      if (initialized) { 
+        // Discard current writes. We do this by flushing the outstanding writes and
+        // truncate the file to the last valid position.
+        objOut.flush()
+        bs.flush()
+        channel.truncate(lastValidPosition)
+      }
     }
 
     override def write(value: Any) {
+      if (!initialized) {
+        open()
+      }
       objOut.writeObject(value)
     }
 
@@ -197,7 +211,11 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   private def createFile(blockId: String, allowAppendExisting: Boolean = false): File = {
     val file = getFile(blockId)
     if (!allowAppendExisting && file.exists()) {
-      throw new Exception("File for block " + blockId + " already exists on disk: " + file)
+      // NOTE(shivaram): Delete the file if it exists. This might happen if a ShuffleMap task
+      // was rescheduled on the same machine as the old task ?
+      logWarning("File for block " + blockId + " already exists on disk: " + file + ". Deleting")
+      file.delete()
+      // throw new Exception("File for block " + blockId + " already exists on disk: " + file)
     }
     file
   }
