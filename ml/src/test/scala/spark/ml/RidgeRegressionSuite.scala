@@ -27,7 +27,12 @@ class RidgeRegressionSuite extends FunSuite {
     val testData = (0 until 20).map(i => (y(i), xMat(i))).toArray
 
     val testRDD = sc.parallelize(testData, 2)
-    val model = RidgeRegression.train(testRDD, 0, 10)
+    val ridgeReg = RidgeRegression.builder()
+                                  .setLowLambda(0)
+                                  .setHighLambda(10)
+                                  .build()
+
+    val model = ridgeReg.train(testRDD)
 
     assert(model.intercept >= 2.9 && model.intercept <= 3.1)
     assert(model.weights.length === 2)
