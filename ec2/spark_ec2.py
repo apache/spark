@@ -36,7 +36,6 @@ from boto import ec2
 
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/pwendell/spark-ec2/ec2-updates/ami-list"
-LATEST_SPARK_VERSION = "0.7.2"
 
 # Configure and parse our command-line arguments
 def parse_args():
@@ -66,8 +65,18 @@ def parse_args():
            "between zones applies)")
   parser.add_option("-a", "--ami", default="latest",
       help="Amazon Machine Image ID to use (default: latest)")
-  parser.add_option("-v", "--spark-version", default="latest",
-      help="Version of Spark to use (X.Y.Z or 'latest' to use most recent)")
+
+  parser.add_option("-v", "--spark-version", default="0.7.2",
+      help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
+  parser.add_option("--spark-git-repo", 
+      default="https://github.com/mesos/spark", 
+      help="Github repo from which to checkout supplied commit hash")
+  parser.add_option("--shark-version",
+      help="Git hash of shark version. Used only if spark hash is also given.")
+  parser.add_option("--shark-git-repo", 
+      default="https://github.com/amplab/shark", 
+      help="Github repo from which to checkout supplied commit hash")
+
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
             "the given local address (for use with login)")
@@ -161,11 +170,9 @@ def is_active(instance):
 def get_spark_shark_version(opts):
   spark_shark_map = {"0.7.2": "0.7.0"}
   version = opts.spark_version.replace("v", "")
-  if version not in ["latest", "0.7.2"]:
+  if version not in ["0.7.2"]:
     print >> stderr, "Don't know about Spark version: %s" % version
     sys.exit(1)
-  if version == "latest":
-    version = LATEST_SPARK_VERSION
   return (version, spark_shark_map[version])
 
 # Attempt to resolve an appropriate AMI given the architecture and
@@ -456,9 +463,8 @@ def setup_standalone_cluster(master, slave_nodes, opts):
   ssh(master, opts, "/root/spark/bin/start-all.sh")
   
 def setup_spark_cluster(master, opts):
-  (spark_v, shark_v) = get_spark_shark_version(opts)
   ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
-  ssh(master, opts, "spark-ec2/setup.sh %s %s" % (spark_v, shark_v))
+  ssh(master, opts, "spark-ec2/setup.sh")
   if opts.cluster_type == "mesos":
     print "Mesos cluster started at http://%s:8080" % master
   elif opts.cluster_type == "standalone":
@@ -541,6 +547,12 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes,
     zoo_list = "NONE"
     cluster_url = "%s:7077" % active_master
 
+  if "." in opts.spark_version:
+    (spark_v, shark_v) = get_spark_shark_version(opts)
+  else:
+    spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
+    shark_v = "%s|%s" % (opts.shark_git_repo, opts.shark_version)
+
   template_vars = {
     "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
     "active_master": active_master,
@@ -551,7 +563,9 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes,
     "mapred_local_dirs": mapred_local_dirs,
     "spark_local_dirs": spark_local_dirs,
     "swap": str(opts.swap),
-    "modules": '\n'.join(modules)
+    "modules": '\n'.join(modules),
+    "spark_version": spark_v,
+    "shark_version": shark_v
   }
 
   # Create a temp directory in which we will place all the files to be
