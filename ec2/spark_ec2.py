@@ -431,25 +431,18 @@ def setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, deploy_ssh_k
   if opts.ganglia:
     modules.append('ganglia')
 
-  if not opts.old_scripts:
-    # NOTE: We should clone the repository before running deploy_files to
-    # prevent ec2-variables.sh from being overwritten
-    # TODO: Before being merged this should be replaced with the correct repo,
-    #       and likely a new branch (to allow backwards compatibility).
-    ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/pwendell/spark-ec2.git -b ec2-updates")
+  # NOTE: We should clone the repository before running deploy_files to
+  # prevent ec2-variables.sh from being overwritten
+  # TODO: Before being merged this should be replaced with the correct repo,
+  #       and likely a new branch (to allow backwards compatibility).
+  ssh(master, opts, "rm -rf spark-ec2 && git clone https://github.com/pwendell/spark-ec2.git -b ec2-updates")
 
   print "Deploying files to master..."
   deploy_files(conn, "deploy.generic", opts, master_nodes, slave_nodes,
           zoo_nodes, modules)
 
   print "Running setup on master..."
-  if opts.old_scripts:
-    if opts.cluster_type == "mesos":
-      setup_mesos_cluster(master, opts)
-    elif opts.cluster_type == "standalone":
-      setup_standalone_cluster(master, slave_nodes, opts)
-  else:
-    setup_spark_cluster(master, opts)
+  setup_spark_cluster(master, opts)
   print "Done!"
 
 def setup_mesos_cluster(master, opts):
