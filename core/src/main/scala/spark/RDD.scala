@@ -35,6 +35,7 @@ import spark.rdd.ZippedPartitionsRDD2
 import spark.rdd.ZippedPartitionsRDD3
 import spark.rdd.ZippedPartitionsRDD4
 import spark.storage.StorageLevel
+import spark.util.BoundedPriorityQueue
 
 import SparkContext._
 
@@ -720,6 +721,29 @@ abstract class RDD[T: ClassManifest](
   def first(): T = take(1) match {
     case Array(t) => t
     case _ => throw new UnsupportedOperationException("empty collection")
+  }
+
+  /**
+   * Returns the top K elements from this RDD as defined by
+   * the specified implicit Ordering[T].
+   * @param num the number of top elements to return
+   * @param ord the implicit ordering for T
+   * @return an array of top elements
+   */
+  def top(num: Int)(implicit ord: Ordering[T]): Array[T] = {
+    val topK = mapPartitions { items =>
+      val queue = new BoundedPriorityQueue[T](num)
+      queue ++= items
+      Iterator(queue)
+    }.reduce { (queue1, queue2) =>
+      queue1 ++= queue2
+      queue1
+    }
+
+    val builder = Array.newBuilder[T]
+    builder.sizeHint(topK.size)
+    builder ++= topK
+    builder.result()
   }
 
   /**
