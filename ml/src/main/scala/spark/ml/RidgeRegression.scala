@@ -27,7 +27,7 @@ class RidgeRegressionModel(
   }
 }
 
-class RidgeRegression(private var lambdaLow: Double, private var lambdaHigh: Double)
+class RidgeRegression private (var lambdaLow: Double, var lambdaHigh: Double)
   extends Logging {
 
   def this() = this(0.0, 100.0)

@@ -27,8 +27,8 @@ class LogisticRegressionModel(
   }
 }
 
-class LogisticRegression(private var stepSize: Double, private var miniBatchFraction: Double,
-    private var numIters: Int)
+class LogisticRegression private (var stepSize: Double, var miniBatchFraction: Double,
+    var numIters: Int)
   extends Logging {
 
   /**
