@@ -53,14 +53,10 @@ abstract class ZippedPartitionsBaseRDD[V: ClassManifest](
     val exactMatchLocations = exactMatchPreferredLocations.reduce((x, y) => x.intersect(y))
 
     // Remove exact match and then do host local match.
-    val otherNodePreferredLocations = rddSplitZip.map(x => {
-      x._1.preferredLocations(x._2).map(hostPort => {
-        val host = Utils.parseHostPort(hostPort)._1
-
-        if (exactMatchLocations.contains(host)) null else host
-      }).filter(_ != null)
-    })
-    val otherNodeLocalLocations = otherNodePreferredLocations.reduce((x, y) => x.intersect(y))
+    val exactMatchHosts = exactMatchLocations.map(Utils.parseHostPort(_)._1)
+    val matchPreferredHosts = exactMatchPreferredLocations.map(locs => locs.map(Utils.parseHostPort(_)._1))
+      .reduce((x, y) => x.intersect(y))
+    val otherNodeLocalLocations = matchPreferredHosts.filter { s => !exactMatchHosts.contains(s) }
 
     otherNodeLocalLocations ++ exactMatchLocations
   }
