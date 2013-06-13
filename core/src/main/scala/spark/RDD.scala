@@ -734,7 +734,7 @@ abstract class RDD[T: ClassManifest](
     val topK = mapPartitions { items =>
       val queue = new BoundedPriorityQueue[T](num)
       queue ++= items
-      Iterator(queue)
+      Iterator.single(queue)
     }.reduce { (queue1, queue2) =>
       queue1 ++= queue2
       queue1
