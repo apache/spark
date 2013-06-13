@@ -322,11 +322,7 @@ object BlockFetcherIterator {
     override def next(): (String, Option[Iterator[Any]]) = {
       resultsGotten += 1
       val result = results.take()
-      // if all the results has been retrieved, shutdown the copiers
-      // NO need to stop the copiers if we got all the blocks ?
-      // if (resultsGotten == _numBlocksToFetch && copiers != null) {
-      //   stopCopiers()
-      // }
+      // If all the results has been retrieved, copiers will exit automatically
       (result.blockId, if (result.failed) None else Some(result.deserialize()))
     }
   }

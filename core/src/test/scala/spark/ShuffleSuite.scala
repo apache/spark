@@ -376,8 +376,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val a = sc.parallelize(1 to 4, NUM_BLOCKS)
     val b = a.map(x => (x, x*2))
 
-    // NOTE: The default Java serializer doesn't create zero-sized blocks.
-    //       So, use Kryo
+    // NOTE: The default Java serializer should create zero-sized blocks
     val c = new ShuffledRDD(b, new HashPartitioner(10))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId

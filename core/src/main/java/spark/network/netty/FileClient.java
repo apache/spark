@@ -30,7 +30,7 @@ class FileClient {
       .channel(OioSocketChannel.class)
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.TCP_NODELAY, true)
-      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout) // Disable connect timeout
+      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout)
       .handler(new FileClientChannelInitializer(handler));
   }
 

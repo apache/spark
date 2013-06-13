@@ -18,8 +18,9 @@ private[spark] class ShuffleCopier extends Logging {
       resultCollectCallback: (String, Long, ByteBuf) => Unit) {
 
     val handler = new ShuffleCopier.ShuffleClientHandler(resultCollectCallback)
-    val fc = new FileClient(handler,
-                            System.getProperty("spark.shuffle.netty.connect.timeout", "60000").toInt)
+    val connectTimeout = System.getProperty("spark.shuffle.netty.connect.timeout", "60000").toInt
+    val fc = new FileClient(handler, connectTimeout)
+
     try {
       fc.init()
       fc.connect(host, port)
@@ -29,8 +30,7 @@ private[spark] class ShuffleCopier extends Logging {
     } catch {
       // Handle any socket-related exceptions in FileClient
       case e: Exception => {
-        logError("Shuffle copy of block " + blockId + " from " + host + ":" + port + 
-          " failed", e)
+        logError("Shuffle copy of block " + blockId + " from " + host + ":" + port + " failed", e)
         handler.handleError(blockId)
       }
     }

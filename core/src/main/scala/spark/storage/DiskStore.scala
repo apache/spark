@@ -212,10 +212,9 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     val file = getFile(blockId)
     if (!allowAppendExisting && file.exists()) {
       // NOTE(shivaram): Delete the file if it exists. This might happen if a ShuffleMap task
-      // was rescheduled on the same machine as the old task ?
+      // was rescheduled on the same machine as the old task.
       logWarning("File for block " + blockId + " already exists on disk: " + file + ". Deleting")
       file.delete()
-      // throw new Exception("File for block " + blockId + " already exists on disk: " + file)
     }
     file
   }
