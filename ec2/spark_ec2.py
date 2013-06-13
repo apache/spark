@@ -63,8 +63,8 @@ def parse_args():
       help="Availability zone to launch instances in, or 'all' to spread " +
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
-  parser.add_option("-a", "--ami", default="latest",
-      help="Amazon Machine Image ID to use (default: latest)")
+  parser.add_option("-a", "--ami",
+      help="Amazon Machine Image ID to use")
 
   parser.add_option("-v", "--spark-version", default="0.7.2",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
@@ -180,7 +180,6 @@ def get_spark_shark_version(opts):
 # Attempt to resolve an appropriate AMI given the architecture and
 # region of the request.
 def get_spark_ami(opts):
-  version = opts.ami
   instance_types = {
     "m1.small":    "pvm",
     "m1.medium":   "pvm",
@@ -269,7 +268,7 @@ def launch_cluster(conn, opts, cluster_name):
     sys.exit(1)
 
   # Figure out Spark AMI
-  if "ami" not in opts.ami:
+  if opts.ami is None:
     opts.ami = get_spark_ami(opts)
   print "Launching instances..."
 
