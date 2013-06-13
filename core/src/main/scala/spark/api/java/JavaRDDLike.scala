@@ -4,6 +4,7 @@ import java.util.{List => JList}
 import scala.Tuple2
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.io.compress.CompressionCodec
 import spark.{SparkContext, Partition, RDD, TaskContext}
 import spark.api.java.JavaPairRDD._
 import spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
@@ -309,6 +310,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String) = rdd.saveAsTextFile(path)
+
+
+  /**
+   * Save this RDD as a compressed text file, using string representations of elements.
+   */
+  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]) =
+    rdd.saveAsTextFile(path, codec)
 
   /**
    * Save this RDD as a SequenceFile of serialized objects.

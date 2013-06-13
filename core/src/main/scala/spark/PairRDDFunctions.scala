@@ -10,6 +10,8 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.compress.CompressionCodec
+import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.mapred.FileOutputCommitter
 import org.apache.hadoop.mapred.FileOutputFormat
 import org.apache.hadoop.mapred.HadoopWriter
@@ -516,6 +518,16 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   }
 
   /**
+   * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
+   * supporting the key and value types K and V in this RDD. Compress the result with the
+   * supplied codec.
+   */
+  def saveAsHadoopFile[F <: OutputFormat[K, V]](
+      path: String, codec: Class[_ <: CompressionCodec]) (implicit fm: ClassManifest[F]) {
+    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]], codec)
+  }
+
+  /**
    * Output the RDD to any Hadoop-supported file system, using a new Hadoop API `OutputFormat`
    * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
    */
@@ -576,6 +588,20 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
+   * supporting the key and value types K and V in this RDD. Compress with the supplied codec.
+   */
+  def saveAsHadoopFile(
+      path: String,
+      keyClass: Class[_],
+      valueClass: Class[_],
+      outputFormatClass: Class[_ <: OutputFormat[_, _]],
+      codec: Class[_ <: CompressionCodec]) {
+    saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass,
+      new JobConf(self.context.hadoopConfiguration), Some(codec))
+  }
+
+  /**
+   * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
    */
   def saveAsHadoopFile(
@@ -583,11 +609,19 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf(self.context.hadoopConfiguration)) {
+      conf: JobConf = new JobConf(self.context.hadoopConfiguration),
+      codec: Option[Class[_ <: CompressionCodec]] = None) {
     conf.setOutputKeyClass(keyClass)
     conf.setOutputValueClass(valueClass)
     // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
     conf.set("mapred.output.format.class", outputFormatClass.getName)
+    for (c <- codec) {
+      conf.setCompressMapOutput(true)
+      conf.set("mapred.output.compress", "true")
+      conf.setMapOutputCompressorClass(c)
+      conf.set("mapred.output.compression.codec", c.getCanonicalName)
+      conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
+    }
     conf.setOutputCommitter(classOf[FileOutputCommitter])
     FileOutputFormat.setOutputPath(conf, HadoopWriter.createPathFromString(path, conf))
     saveAsHadoopDataset(conf)
