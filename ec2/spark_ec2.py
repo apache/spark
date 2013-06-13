@@ -76,6 +76,8 @@ def parse_args():
   parser.add_option("--shark-git-repo", 
       default="https://github.com/amplab/shark", 
       help="Github repo from which to checkout supplied commit hash")
+  parser.add_option("--hadoop-major-version", default="2",
+      help="Major version of Hadoop (default: 2)")
 
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
@@ -565,7 +567,8 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, zoo_nodes,
     "swap": str(opts.swap),
     "modules": '\n'.join(modules),
     "spark_version": spark_v,
-    "shark_version": shark_v
+    "shark_version": shark_v,
+    "hadoop_major_version": opts.hadoop_major_version
   }
 
   # Create a temp directory in which we will place all the files to be
