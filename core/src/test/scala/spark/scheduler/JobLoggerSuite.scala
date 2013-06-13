@@ -40,7 +40,7 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val shuffleMapStage = new Stage(1, parentRdd, Some(shuffleDep), Nil, jobID) 
     val rootStage = new Stage(0, rootRdd, None, List(shuffleMapStage), jobID)
     
-    joblogger.onStageSubmitted(rootStage)
+    joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStage, 4))
     joblogger.getEventQueue.size should be (1)
     joblogger.getRddNameTest(parentRdd) should be (parentRdd.getClass.getName)
     parentRdd.setName("MyRDD")
@@ -86,11 +86,11 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
       var onJobStartCount = 0
       var onStageCompletedCount = 0
       var onStageSubmittedCount = 0
-      override def onTaskEnd(event: CompletionEvent)  = onTaskEndCount += 1
-      override def onJobEnd(job: ActiveJob, event: SparkListenerEvents) = onJobEndCount += 1
-      override def onJobStart(job: ActiveJob, properties: Properties) = onJobStartCount += 1
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd)  = onTaskEndCount += 1
+      override def onJobEnd(jobEnd: SparkListenerEvents) = onJobEndCount += 1
+      override def onJobStart(jobStart: SparkListenerJobStart) = onJobStartCount += 1
       override def onStageCompleted(stageCompleted: StageCompleted) = onStageCompletedCount += 1
-      override def onStageSubmitted(stage: Stage, info: String = "") = onStageSubmittedCount += 1
+      override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = onStageSubmittedCount += 1
     }
     sc.addSparkListener(joblogger)
     val rdd = sc.parallelize(1 to 1e2.toInt, 4).map{ i => (i % 12, 2 * i) }

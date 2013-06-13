@@ -6,6 +6,24 @@ import spark.util.Distribution
 import spark.{Utils, Logging, SparkContext, TaskEndReason}
 import spark.executor.TaskMetrics
 
+
+sealed trait SparkListenerEvents
+
+case class SparkListenerStageSubmitted(stage: Stage, taskSize: Int) extends SparkListenerEvents
+
+case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
+
+case class SparkListenerTaskEnd(event: CompletionEvent) extends SparkListenerEvents
+
+case class SparkListenerJobStart(job: ActiveJob, properties: Properties = null) 
+     extends SparkListenerEvents
+     
+case class SparkListenerJobSuccess(job: ActiveJob) extends SparkListenerEvents
+
+case class SparkListenerJobFailed(job: ActiveJob, failedStage: Stage) extends SparkListenerEvents
+
+case class SparkListenerJobCancelled(job: ActiveJob, reason: String) extends SparkListenerEvents
+
 trait SparkListener {
   /**
    * called when a stage is completed, with information on the completed stage
@@ -15,34 +33,24 @@ trait SparkListener {
   /**
    * called when a stage is submitted
    */
-  def onStageSubmitted(stage: Stage, info: String = "") { }
-
+  def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
+  
   /**
    * called when a task ends
    */
-  def onTaskEnd(event: CompletionEvent) { }
+  def onTaskEnd(taskEnd: SparkListenerTaskEnd) { }
 
   /**
    * called when a job starts
    */
-  def onJobStart(job: ActiveJob, properties: Properties = null) { }
+  def onJobStart(jobStart: SparkListenerJobStart) { }
   
   /**
    * called when a job ends
    */
-  def onJobEnd(job: ActiveJob, event: SparkListenerEvents) { }
+  def onJobEnd(jobEnd: SparkListenerEvents) { }
   
 }
-
-sealed trait SparkListenerEvents
-
-case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
-
-case object SparkListenerJobSuccess extends SparkListenerEvents
-
-case class SparkListenerJobFailed(failedStage: Stage) extends SparkListenerEvents
-
-case class SparkListenerJobCancelled(reason: String) extends SparkListenerEvents
 
 /**
  * Simple SparkListener that logs a few summary statistics when each stage completes

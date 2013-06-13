@@ -15,13 +15,6 @@ import spark.scheduler.cluster.TaskInfo
 // used to record runtime information for each job, including RDD graph 
 // tasks' start/stop shuffle information and information from outside
 
-sealed trait JobLoggerEvent
-case class JobLoggerOnJobStart(job: ActiveJob, properties: Properties) extends JobLoggerEvent
-case class JobLoggerOnStageSubmitted(stage: Stage, info: String) extends JobLoggerEvent
-case class JobLoggerOnStageCompleted(stageCompleted: StageCompleted) extends JobLoggerEvent
-case class JobLoggerOnJobEnd(job: ActiveJob, event: SparkListenerEvents) extends JobLoggerEvent
-case class JobLoggerOnTaskEnd(event: CompletionEvent) extends JobLoggerEvent
-
 class JobLogger(val logDirName: String) extends SparkListener with Logging {
   private val logDir =  
     if (System.getenv("SPARK_LOG_DIR") != null)  
@@ -32,7 +25,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   private val stageIDToJobID = new HashMap[Int, Int]
   private val jobIDToStages = new HashMap[Int, ListBuffer[Stage]]
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-  private val eventQueue = new LinkedBlockingQueue[JobLoggerEvent]
+  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvents]
   
   createLogDir()
   def this() = this(String.valueOf(System.currentTimeMillis()))
@@ -50,15 +43,19 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
         val event = eventQueue.take
         logDebug("Got event of type " + event.getClass.getName)
         event match {
-          case JobLoggerOnJobStart(job, info) =>
-            processJobStartEvent(job, info)
-          case JobLoggerOnStageSubmitted(stage, info) =>
-            processStageSubmittedEvent(stage, info)
-          case JobLoggerOnStageCompleted(stageCompleted) =>
-            processStageCompletedEvent(stageCompleted)
-          case JobLoggerOnJobEnd(job, event) =>
-            processJobEndEvent(job, event)
-          case JobLoggerOnTaskEnd(event) =>
+          case SparkListenerJobStart(job, properties) =>
+            processJobStartEvent(job, properties)
+          case SparkListenerStageSubmitted(stage, taskSize) =>
+            processStageSubmittedEvent(stage, taskSize)
+          case StageCompleted(stageInfo) =>
+            processStageCompletedEvent(stageInfo)
+          case SparkListenerJobSuccess(job) =>
+            processJobEndEvent(job)
+          case SparkListenerJobFailed(job, failedStage) =>
+            processJobEndEvent(job, failedStage)
+          case SparkListenerJobCancelled(job, reason) =>
+            processJobEndEvent(job, reason)
+          case SparkListenerTaskEnd(event) =>
             processTaskEndEvent(event)
           case _ =>
         }
@@ -225,26 +222,26 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     stageLogInfo(stageID, status + info + executorRunTime + readMetrics + writeMetrics)
   }
   
-  override def onStageSubmitted(stage: Stage, info: String = "") {
-    eventQueue.put(JobLoggerOnStageSubmitted(stage, info))
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
+    eventQueue.put(stageSubmitted)
   }
 
-  protected def processStageSubmittedEvent(stage: Stage, info: String) {
-    stageLogInfo(stage.id, "STAGE_ID=" + stage.id + " STATUS=SUBMITTED " + info)
+  protected def processStageSubmittedEvent(stage: Stage, taskSize: Int) {
+    stageLogInfo(stage.id, "STAGE_ID=" + stage.id + " STATUS=SUBMITTED" + " TASK_SIZE=" + taskSize)
   }
   
   override def onStageCompleted(stageCompleted: StageCompleted) {
-    eventQueue.put(JobLoggerOnStageCompleted(stageCompleted))
+    eventQueue.put(stageCompleted)
   }
 
-  protected def processStageCompletedEvent(stageCompleted: StageCompleted) {
-    stageLogInfo(stageCompleted.stageInfo.stage.id, "STAGE_ID=" + 
-                 stageCompleted.stageInfo.stage.id + " STATUS=COMPLETED")
+  protected def processStageCompletedEvent(stageInfo: StageInfo) {
+    stageLogInfo(stageInfo.stage.id, "STAGE_ID=" + 
+                 stageInfo.stage.id + " STATUS=COMPLETED")
     
   }
   
-  override def onTaskEnd(event: CompletionEvent) {
-    eventQueue.put(JobLoggerOnTaskEnd(event))
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+    eventQueue.put(taskEnd)
   }
 
   protected def processTaskEndEvent(event: CompletionEvent) {
@@ -273,24 +270,26 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     }
   }
   
-  override def onJobEnd(job: ActiveJob, event: SparkListenerEvents) {
-    eventQueue.put(JobLoggerOnJobEnd(job, event))
+  override def onJobEnd(jobEnd: SparkListenerEvents) {
+    eventQueue.put(jobEnd)
   }
 
-  protected def processJobEndEvent(job: ActiveJob, event: SparkListenerEvents) {
-    var info = "JOB_ID=" + job.runId + " STATUS="
-    var validEvent = true
-    event match {
-      case SparkListenerJobSuccess => info += "SUCCESS"
-      case SparkListenerJobFailed(failedStage) => 
-        info += "FAILED REASON=STAGE_FAILED FAILED_STAGE_ID=" + failedStage.id
-      case SparkListenerJobCancelled(reason) => info += "CANCELLED REASON=" + reason
-      case _ => validEvent = false
-    }
-    if (validEvent) {
-      jobLogInfo(job.runId, info)
-      closeLogWriter(job.runId)
-    }
+  protected def processJobEndEvent(job: ActiveJob) {
+    val info = "JOB_ID=" + job.runId + " STATUS=SUCCESS"
+    jobLogInfo(job.runId, info)
+    closeLogWriter(job.runId)
+  }
+  
+  protected def processJobEndEvent(job: ActiveJob, failedStage: Stage) {
+    val info = "JOB_ID=" + job.runId + " STATUS=FAILED REASON=STAGE_FAILED FAILED_STAGE_ID=" 
+               + failedStage.id
+    jobLogInfo(job.runId, info)
+    closeLogWriter(job.runId)
+  }
+  protected def processJobEndEvent(job: ActiveJob, reason: String) {
+    var info = "JOB_ID=" + job.runId + " STATUS=CANCELLED REASON=" + reason
+    jobLogInfo(job.runId, info)
+    closeLogWriter(job.runId)
   }
   
   protected def recordJobProperties(jobID: Int, properties: Properties) {
@@ -300,8 +299,8 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     }
   }
 
-  override def onJobStart(job: ActiveJob, properties: Properties = null) {
-    eventQueue.put(JobLoggerOnJobStart(job, properties))
+  override def onJobStart(jobStart: SparkListenerJobStart) {
+    eventQueue.put(jobStart)
   }
  
   protected def processJobStartEvent(job: ActiveJob, properties: Properties) {
