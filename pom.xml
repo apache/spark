@@ -60,7 +60,7 @@
     <cdh.version>4.1.2</cdh.version>
     <log4j.version>1.2.17</log4j.version>
 
-    <PermGen>0m</PermGen>
+    <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
   </properties>
 
@@ -395,10 +395,8 @@
             <jvmArgs>
               <jvmArg>-Xms64m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
-              <jvmArg>-XX:PermSize</jvmArg>
-              <jvmArg>${PermGen}</jvmArg>
-              <jvmArg>-XX:MaxPermSize</jvmArg>
-              <jvmArg>${MaxPermGen}</jvmArg>
+              <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
+              <jvmArg>-XX:MaxPermSize=${MaxPermGen}</jvmArg>
             </jvmArgs>
             <javacArgs>
               <javacArg>-source</javacArg>
