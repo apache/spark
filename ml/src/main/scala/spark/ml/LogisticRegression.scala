@@ -8,9 +8,9 @@ import org.jblas.DoubleMatrix
  * Logistic Regression using Stochastic Gradient Descent.
  */
 class LogisticRegressionModel(
-  weights: DoubleMatrix,
-  intercept: Double,
-  val losses: Array[Double]) extends RegressionModel(weights, intercept) {
+  val weights: DoubleMatrix,
+  val intercept: Double,
+  val losses: Array[Double]) extends RegressionModel {
 
   override def predict(test_data: spark.RDD[Array[Double]]) = {
     test_data.map { x =>
@@ -20,31 +20,8 @@ class LogisticRegressionModel(
   }
 }
 
-class LogisticRegressionData(data: RDD[(Double, Array[Double])]) extends RegressionData(data) {
-  override def normalizeData() = {
-    // Shift only the features for LogisticRegression
-    data.map { case(y, features) =>
-      val featuresNormalized = Array.tabulate(nfeatures) { column =>
-        (features(column) - xColMean(column)) / xColSd(column)
-      }
-      (y, featuresNormalized)
-    }
-  }
-
-  override def scaleModel(m: RegressionModel) = {
-    val model = m.asInstanceOf[LogisticRegressionModel]
-    val colSdMat = new DoubleMatrix(xColSd.length, 1, xColSd:_*)
-    val colMeanMat = new DoubleMatrix(xColMean.length, 1, xColMean:_*)
-
-    val weights = model.weights.div(colSdMat)
-    val intercept = -1.0 * model.weights.transpose().mmul(colMeanMat.div(colSdMat)).get(0)
-
-    new LogisticRegressionModel(weights, intercept, model.losses)
-  }
-}
-
 class LogisticRegression(var stepSize: Double, var miniBatchFraction: Double, var numIters: Int)
-  extends Regression with Logging {
+  extends Logging {
 
   /**
    * Construct a LogisticRegression object with default parameters
@@ -75,17 +52,27 @@ class LogisticRegression(var stepSize: Double, var miniBatchFraction: Double, va
     this
   }
 
+  def train(input: RDD[(Double, Array[Double])]): LogisticRegressionModel = {
+    val nfeatures: Int = input.take(1)(0)._2.length
+    val nexamples: Long = input.count()
 
-  override def train(input: RDD[(Double, Array[Double])]): RegressionModel = {
-    input.cache()
+    val (yMean, xColMean, xColSd) = MLUtils.computeStats(input, nfeatures, nexamples)
 
-    val lrData = new LogisticRegressionData(input)
-    val data = lrData.normalizeData()
+    // Shift only the features for LogisticRegression
+    val data = input.map { case(y, features) =>
+      val featuresMat = new DoubleMatrix(nfeatures, 1, features:_*)
+      val featuresNormalized = featuresMat.sub(xColMean).divi(xColSd)
+      (y, featuresNormalized.toArray)
+    }
+
     val (weights, losses) = GradientDescent.runMiniBatchSGD(
-      data, new LogisticGradient(), new SimpleUpdater(), stepSize, numIters, numIters)
+      data, new LogisticGradient(), new SimpleUpdater(), stepSize, numIters, miniBatchFraction)
 
-    val computedModel = new LogisticRegressionModel(weights, 0, losses)
-    val model = lrData.scaleModel(computedModel)
+    val weightsScaled = weights.div(xColSd)
+    val intercept = -1.0 * weights.transpose().mmul(xColMean.div(xColSd)).get(0)
+
+    val model = new LogisticRegressionModel(weightsScaled, intercept, losses)
+
     logInfo("Final model weights " + model.weights)
     logInfo("Final model intercept " + model.intercept)
     logInfo("Last 10 losses " + model.losses.takeRight(10).mkString(", "))
@@ -99,15 +86,14 @@ class LogisticRegression(var stepSize: Double, var miniBatchFraction: Double, va
 object LogisticRegression {
 
   def main(args: Array[String]) {
-    if (args.length != 3) {
-      println("Usage: LogisticRegression <master> <input_dir> <niters>")
+    if (args.length != 4) {
+      println("Usage: LogisticRegression <master> <input_dir> <step_size> <niters>")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
     val data = MLUtils.loadData(sc, args(1))
-    val lr = new LogisticRegression()
-                               .setStepSize(2.0)
-                               .setNumIterations(args(2).toInt)
+    val lr = new LogisticRegression().setStepSize(args(2).toDouble)
+                                     .setNumIterations(args(3).toInt)
     val model = lr.train(data)
     sc.stop()
   }

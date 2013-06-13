@@ -1,6 +1,9 @@
 package spark.ml
 
 import spark.{RDD, SparkContext}
+import spark.SparkContext._
+
+import org.jblas.DoubleMatrix
 
 /**
  * Helper methods to load and save data
@@ -30,4 +33,47 @@ object MLUtils {
     dataStr.saveAsTextFile(dir)
   }
 
+  /**
+   * Utility function to compute mean and standard deviation on a given dataset.
+   *
+   * @param data - input data set whose statistics are computed
+   * @param nfeatures - number of features
+   * @param nexamples - number of examples in input dataset
+   *
+   * @return (yMean, xColMean, xColSd) - Tuple consisting of
+   *     yMean - mean of the labels
+   *     xColMean - Row vector with mean for every column (or feature) of the input data
+   *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
+   */
+  def computeStats(data: RDD[(Double, Array[Double])], nfeatures: Int, nexamples: Long):
+      (Double, DoubleMatrix, DoubleMatrix) = {
+    val yMean: Double = data.map { case (y, features) => y }.reduce(_ + _) / nexamples
+
+    // NOTE: We shuffle X by column here to compute column sum and sum of squares.
+    val xColSumSq: RDD[(Int, (Double, Double))] = data.flatMap { case(y, features) =>
+      val nCols = features.length
+      // Traverse over every column and emit (col, value, value^2)
+      Iterator.tabulate(nCols) { i =>
+        (i, (features(i), features(i)*features(i)))
+      }
+    }.reduceByKey { case(x1, x2) =>
+      (x1._1 + x2._1, x1._2 + x2._2)
+    }
+    val xColSumsMap = xColSumSq.collectAsMap()
+
+    val xColMean = DoubleMatrix.zeros(nfeatures, 1)
+    val xColSd = DoubleMatrix.zeros(nfeatures, 1)
+
+    // Compute mean and unbiased variance using column sums
+    var col = 0
+    while (col < nfeatures) {
+      xColMean.put(col, xColSumsMap(col)._1 / nexamples)
+      val variance =
+        (xColSumsMap(col)._2 - (math.pow(xColSumsMap(col)._1, 2) / nexamples)) / (nexamples)
+      xColSd.put(col, math.sqrt(variance))
+      col += 1
+    }
+
+    (yMean, xColMean, xColSd)
+  }
 }

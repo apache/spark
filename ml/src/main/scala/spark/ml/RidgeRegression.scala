@@ -10,11 +10,11 @@ import org.jblas.Solve
  * Ridge Regression from Joseph Gonzalez's implementation in MLBase
  */
 class RidgeRegressionModel(
-    weights: DoubleMatrix,
-    intercept: Double,
+    val weights: DoubleMatrix,
+    val intercept: Double,
     val lambdaOpt: Double,
     val lambdas: List[(Double, Double, DoubleMatrix)])
-  extends RegressionModel(weights, intercept) {
+  extends RegressionModel {
 
   override def predict(test_data: RDD[Array[Double]]) = {
     test_data.map { x =>
@@ -23,31 +23,8 @@ class RidgeRegressionModel(
   }
 }
 
-class RidgeRegressionData(data: RDD[(Double, Array[Double])]) extends RegressionData(data) {
-  override def normalizeData() = {
-    data.map { case(y, features) =>
-      val yNormalized = y - yMean
-      val featuresNormalized = Array.tabulate(nfeatures) { column =>
-        (features(column) - xColMean(column)) / xColSd(column)
-      }.toArray
-      (yNormalized, featuresNormalized)
-    }
-  }
-
-  override def scaleModel(m: RegressionModel) = {
-    val model = m.asInstanceOf[RidgeRegressionModel]
-    val colSdMat = new DoubleMatrix(xColSd.length, 1, xColSd:_*)
-    val colMeanMat = new DoubleMatrix(xColMean.length, 1, xColMean:_*)
-
-    val weights = model.weights.div(colSdMat)
-    val intercept = yMean - model.weights.transpose().mmul(colMeanMat.div(colSdMat)).get(0)
-
-    new RidgeRegressionModel(weights, intercept, model.lambdaOpt, model.lambdas)
-  }
-}
-
 class RidgeRegression(var lambdaLow: Double, var lambdaHigh: Double) 
-  extends Regression with Logging {
+  extends Logging {
 
   def this() = this(0.0, 100.0)
 
@@ -67,23 +44,29 @@ class RidgeRegression(var lambdaLow: Double, var lambdaHigh: Double)
     this
   }
 
-  def train(inputData: RDD[(Double, Array[Double])]): RegressionModel = {
-    inputData.cache()
-    val ridgeData = new RidgeRegressionData(inputData)
-    val data = ridgeData.normalizeData()
-    val nfeatures: Int = ridgeData.nfeatures
-    val nexamples: Long = ridgeData.nexamples
+  def train(input: RDD[(Double, Array[Double])]): RidgeRegressionModel = {
+    val nfeatures: Int = input.take(1)(0)._2.length
+    val nexamples: Long = input.count()
+
+    val (yMean, xColMean, xColSd) = MLUtils.computeStats(input, nfeatures, nexamples)
+
+    val data = input.map { case(y, features) =>
+      val yNormalized = y - yMean
+      val featuresMat = new DoubleMatrix(nfeatures, 1, features:_*)
+      val featuresNormalized = featuresMat.sub(xColMean).divi(xColSd)
+      (yNormalized, featuresNormalized.toArray)
+    }
 
     // Compute XtX - Size of XtX is nfeatures by nfeatures
     val XtX: DoubleMatrix = data.map { case (y, features) =>
       val x = new DoubleMatrix(1, features.length, features:_*)
       x.transpose().mmul(x)
-    }.reduce(_.add(_))
+    }.reduce(_.addi(_))
 
     // Compute Xt*y - Size of Xty is nfeatures by 1
     val Xty: DoubleMatrix = data.map { case (y, features) =>
       new DoubleMatrix(features.length, 1, features:_*).mul(y)
-    }.reduce(_.add(_))
+    }.reduce(_.addi(_))
 
     // Define a function to compute the leave one out cross validation error
     // for a single example
@@ -134,15 +117,16 @@ class RidgeRegression(var lambdaLow: Double, var lambdaHigh: Double)
     val (lambdaOpt, cverror, weights) = lambdas.reduce((a, b) => if (a._2 < b._2) a else b)
 
     // Return the model which contains the solution
-    val trainModel = new RidgeRegressionModel(weights, 0.0, lambdaOpt, lambdas)
-    val normModel = ridgeData.scaleModel(trainModel)
+    val weightsScaled = weights.div(xColSd)
+    val intercept = yMean - (weights.transpose().mmul(xColMean.div(xColSd)).get(0))
+    val model = new RidgeRegressionModel(weightsScaled, intercept, lambdaOpt, lambdas)
 
-    logInfo("RidgeRegression: optimal lambda " + normModel.lambdaOpt)
-    logInfo("RidgeRegression: optimal weights " + normModel.weights)
-    logInfo("RidgeRegression: optimal intercept " + normModel.intercept)
+    logInfo("RidgeRegression: optimal lambda " + model.lambdaOpt)
+    logInfo("RidgeRegression: optimal weights " + model.weights)
+    logInfo("RidgeRegression: optimal intercept " + model.intercept)
     logInfo("RidgeRegression: cross-validation error " + cverror)
 
-    normModel
+    model
   }
 }
 
