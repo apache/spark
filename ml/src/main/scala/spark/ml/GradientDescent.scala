@@ -12,6 +12,7 @@ object GradientDescent {
 
   /**
    * Run gradient descent in parallel using mini batches.
+   * Based on Matlab code written by John Duchi.
    *
    * @param data - Input data for SGD. RDD of form (label, [feature values]).
    * @param gradient - Gradient object that will be used to compute the gradient.

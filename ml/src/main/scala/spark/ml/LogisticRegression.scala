@@ -6,6 +6,7 @@ import org.jblas.DoubleMatrix
 
 /**
  * Logistic Regression using Stochastic Gradient Descent.
+ * Based on Matlab code written by John Duchi.
  */
 class LogisticRegressionModel(
   val weights: DoubleMatrix,
@@ -80,9 +81,6 @@ class LogisticRegression(var stepSize: Double, var miniBatchFraction: Double, va
   }
 }
 
-/**
- * Helper classes to build a LogisticRegression object.
- */
 object LogisticRegression {
 
   def main(args: Array[String]) {
