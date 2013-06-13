@@ -43,8 +43,38 @@ class LogisticRegressionData(data: RDD[(Double, Array[Double])]) extends Regress
   }
 }
 
-class LogisticRegression(stepSize: Double, miniBatchFraction: Double, numIters: Int)
+class LogisticRegression(var stepSize: Double, var miniBatchFraction: Double, var numIters: Int)
   extends Regression with Logging {
+
+  /**
+   * Construct a LogisticRegression object with default parameters
+   */
+  def this() = this(1.0, 1.0, 100)
+
+  /**
+   * Set the step size per-iteration of SGD. Default 1.0.
+   */
+  def setStepSize(step: Double) = {
+    this.stepSize = step
+    this
+  }
+
+  /**
+   * Set fraction of data to be used for each SGD iteration. Default 1.0.
+   */
+  def setMiniBatchFraction(fraction: Double) = {
+    this.miniBatchFraction = fraction
+    this
+  }
+
+  /**
+   * Set the number of iterations for SGD. Default 100.
+   */
+  def setNumIterations(iters: Int) = {
+    this.numIters = iters
+    this
+  }
+
 
   override def train(input: RDD[(Double, Array[Double])]): RegressionModel = {
     input.cache()
@@ -68,17 +98,6 @@ class LogisticRegression(stepSize: Double, miniBatchFraction: Double, numIters: 
  */
 object LogisticRegression {
 
-  /**
-   * Build a logistic regression object with default arguments:
-   *
-   * @param stepSize as 1.0
-   * @param miniBatchFraction as 1.0
-   * @param numIters as 100
-   */
-  def builder() = {
-    new LogisticRegressionBuilder(1.0, 1.0, 100)
-  }
-
   def main(args: Array[String]) {
     if (args.length != 3) {
       println("Usage: LogisticRegression <master> <input_dir> <niters>")
@@ -86,42 +105,10 @@ object LogisticRegression {
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
     val data = MLUtils.loadData(sc, args(1))
-    val lr = LogisticRegression.builder()
+    val lr = new LogisticRegression()
                                .setStepSize(2.0)
                                .setNumIterations(args(2).toInt)
-                               .build()
     val model = lr.train(data)
     sc.stop()
-  }
-}
-
-class LogisticRegressionBuilder(stepSize: Double, miniBatchFraction: Double, numIters: Int) {
-
-  /**
-   * Set the step size per-iteration of SGD. Default 1.0.
-   */
-  def setStepSize(step: Double) = {
-    new LogisticRegressionBuilder(step, this.miniBatchFraction, this.numIters)
-  }
-
-  /**
-   * Set fraction of data to be used for each SGD iteration. Default 1.0.
-   */
-  def setMiniBatchFraction(fraction: Double) = {
-    new LogisticRegressionBuilder(this.stepSize, fraction, this.numIters)
-  }
-
-  /**
-   * Set the number of iterations for SGD. Default 100.
-   */
-  def setNumIterations(iters: Int) = {
-    new LogisticRegressionBuilder(this.stepSize, this.miniBatchFraction, iters)
-  }
-
-  /**
-   * Build a Logistic regression object.
-   */
-  def build() = {
-    new LogisticRegression(stepSize, miniBatchFraction, numIters)
   }
 }

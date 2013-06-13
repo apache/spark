@@ -46,7 +46,26 @@ class RidgeRegressionData(data: RDD[(Double, Array[Double])]) extends Regression
   }
 }
 
-class RidgeRegression(lambdaLow: Double, lambdaHigh: Double) extends Regression with Logging {
+class RidgeRegression(var lambdaLow: Double, var lambdaHigh: Double) 
+  extends Regression with Logging {
+
+  def this() = this(0.0, 100.0)
+
+  /**
+   * Set the lower bound on binary search for lambda's. Default is 0.
+   */
+  def setLowLambda(low: Double) = {
+    this.lambdaLow = low
+    this
+  }
+
+  /**
+   * Set the upper bound on binary search for lambda's. Default is 100.0.
+   */
+  def setHighLambda(hi: Double) = {
+    this.lambdaHigh = hi
+    this
+  }
 
   def train(inputData: RDD[(Double, Array[Double])]): RegressionModel = {
     inputData.cache()
@@ -127,20 +146,7 @@ class RidgeRegression(lambdaLow: Double, lambdaHigh: Double) extends Regression 
   }
 }
 
-/**
- * Helper classes to build a RidgeRegression object.
- */
 object RidgeRegression {
-
-  /**
-   * Build a RidgeRegression object with default arguments as:
-   *
-   * @param lowLambda as 0.0
-   * @param hiLambda as 100.0
-   */
-  def builder() = {
-    new RidgeRegressionBuilder(0.0, 100.0)
-  }
 
   def main(args: Array[String]) {
     if (args.length != 2) {
@@ -149,36 +155,10 @@ object RidgeRegression {
     }
     val sc = new SparkContext(args(0), "RidgeRegression")
     val data = MLUtils.loadData(sc, args(1))
-    val ridgeReg = RidgeRegression.builder()
-                                  .setLowLambda(0)
-                                  .setHighLambda(1000)
-                                  .build()
+    val ridgeReg = new RidgeRegression().setLowLambda(0)
+                                        .setHighLambda(1000)
 
     val model = ridgeReg.train(data)
     sc.stop()
-  }
-}
-
-class RidgeRegressionBuilder(lowLambda: Double, hiLambda: Double) {
-
-  /**
-   * Set the lower bound on binary search for lambda's. Default is 0.
-   */
-  def setLowLambda(low: Double) = {
-    new RidgeRegressionBuilder(low, this.hiLambda)
-  }
-
-  /**
-   * Set the upper bound on binary search for lambda's. Default is 100.0.
-   */
-  def setHighLambda(hi: Double) = {
-    new RidgeRegressionBuilder(this.lowLambda, hi)
-  }
-
-  /**
-   * Build a RidgeRegression object. 
-   */
-  def build() = {
-    new RidgeRegression(lowLambda, hiLambda)
   }
 }

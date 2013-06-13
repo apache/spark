@@ -27,10 +27,8 @@ class RidgeRegressionSuite extends FunSuite {
     val testData = (0 until 20).map(i => (y(i), xMat(i))).toArray
 
     val testRDD = sc.parallelize(testData, 2)
-    val ridgeReg = RidgeRegression.builder()
-                                  .setLowLambda(0)
-                                  .setHighLambda(10)
-                                  .build()
+    val ridgeReg = new RidgeRegression().setLowLambda(0)
+                                        .setHighLambda(10)
 
     val model = ridgeReg.train(testRDD)
 
