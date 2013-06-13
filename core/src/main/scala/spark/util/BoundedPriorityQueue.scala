@@ -8,7 +8,7 @@ import scala.collection.generic.Growable
  * add/offer methods such that only the top K elements are retained. The top
  * K elements are defined by an implicit Ordering[A].
  */
-class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A], mf: ClassManifest[A])
+class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
   extends JPriorityQueue[A](maxSize, ord) with Growable[A] {
 
   override def offer(a: A): Boolean  = {
