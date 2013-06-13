@@ -13,15 +13,22 @@ class LogisticRegressionModel(
   val intercept: Double,
   val losses: Array[Double]) extends RegressionModel {
 
-  override def predict(test_data: spark.RDD[Array[Double]]) = {
-    test_data.map { x =>
+  override def predict(testData: spark.RDD[Array[Double]]) = {
+    testData.map { x =>
       val margin = new DoubleMatrix(1, x.length, x:_*).mmul(this.weights).get(0) + this.intercept
       1.0/ (1.0 + math.exp(margin * -1))
     }
   }
+
+  override def predict(testData: Array[Double]): Double = {
+    val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
+    val margin = dataMat.mmul(this.weights).get(0) + this.intercept
+    1.0/ (1.0 + math.exp(margin * -1))
+  }
 }
 
-class LogisticRegression(var stepSize: Double, var miniBatchFraction: Double, var numIters: Int)
+class LogisticRegression(private var stepSize: Double, private var miniBatchFraction: Double,
+    private var numIters: Int)
   extends Logging {
 
   /**

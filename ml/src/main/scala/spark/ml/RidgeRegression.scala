@@ -16,14 +16,18 @@ class RidgeRegressionModel(
     val lambdas: List[(Double, Double, DoubleMatrix)])
   extends RegressionModel {
 
-  override def predict(test_data: RDD[Array[Double]]) = {
-    test_data.map { x =>
+  override def predict(testData: RDD[Array[Double]]): RDD[Double] = {
+    testData.map { x =>
       (new DoubleMatrix(1, x.length, x:_*).mmul(this.weights)).get(0) + this.intercept
     }
   }
+
+  override def predict(testData: Array[Double]): Double = {
+    (new DoubleMatrix(1, testData.length, testData:_*).mmul(this.weights)).get(0) + this.intercept
+  }
 }
 
-class RidgeRegression(var lambdaLow: Double, var lambdaHigh: Double) 
+class RidgeRegression(private var lambdaLow: Double, private var lambdaHigh: Double)
   extends Logging {
 
   def this() = this(0.0, 100.0)
