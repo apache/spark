@@ -61,23 +61,16 @@ class LogisticRegression private (var stepSize: Double, var miniBatchFraction: D
   }
 
   def train(input: RDD[(Double, Array[Double])]): LogisticRegressionModel = {
-    val nfeatures: Int = input.take(1)(0)._2.length
-    val nexamples: Long = input.count()
-
-    val (yMean, xColMean, xColSd) = MLUtils.computeStats(input, nfeatures, nexamples)
-
-    // Shift only the features for LogisticRegression
-    val data = input.map { case(y, features) =>
-      val featuresMat = new DoubleMatrix(nfeatures, 1, features:_*)
-      val featuresNormalized = featuresMat.sub(xColMean).divi(xColSd)
-      (y, featuresNormalized.toArray)
+    // Add a extra variable consisting of all 1.0's for the intercept.
+    val data = input.map { case (y, features) =>
+      (y, Array(1.0, features:_*))
     }
 
     val (weights, losses) = GradientDescent.runMiniBatchSGD(
       data, new LogisticGradient(), new SimpleUpdater(), stepSize, numIters, miniBatchFraction)
 
-    val weightsScaled = weights.div(xColSd)
-    val intercept = -1.0 * weights.transpose().mmul(xColMean.div(xColSd)).get(0)
+    val weightsScaled = weights.getRange(1, weights.length)
+    val intercept = weights.get(0)
 
     val model = new LogisticRegressionModel(weightsScaled, intercept, losses)
 
