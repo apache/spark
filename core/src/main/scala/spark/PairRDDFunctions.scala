@@ -19,7 +19,7 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputFormat
 
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, Job => NewAPIHadoopJob, HadoopMapReduceUtil, TaskAttemptID, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, Job => NewAPIHadoopJob, HadoopMapReduceUtil}
 
 import spark.partial.BoundedDouble
 import spark.partial.PartialResult
@@ -187,11 +187,13 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Seq[V])] = {
+    // groupByKey shouldn't use map side combine because map side combine does not
+    // reduce the amount of data shuffled and requires all map side data be inserted
+    // into a hash table, leading to more objects in the old gen.
     def createCombiner(v: V) = ArrayBuffer(v)
     def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
-    def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
     val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, mergeCombiners _, partitioner)
+      createCombiner _, mergeValue _, null, partitioner, mapSideCombine=false)
     bufs.asInstanceOf[RDD[(K, Seq[V])]]
   }
 
