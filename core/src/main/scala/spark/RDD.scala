@@ -731,19 +731,14 @@ abstract class RDD[T: ClassManifest](
    * @return an array of top elements
    */
   def top(num: Int)(implicit ord: Ordering[T]): Array[T] = {
-    val topK = mapPartitions { items =>
+    mapPartitions { items =>
       val queue = new BoundedPriorityQueue[T](num)
       queue ++= items
       Iterator.single(queue)
     }.reduce { (queue1, queue2) =>
       queue1 ++= queue2
       queue1
-    }
-
-    val builder = Array.newBuilder[T]
-    builder.sizeHint(topK.size)
-    builder ++= topK
-    builder.result()
+    }.toArray
   }
 
   /**
