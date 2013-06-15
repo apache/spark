@@ -21,6 +21,7 @@ object SparkPi {
       if (x*x + y*y < 1) 1 else 0
     }.reduce(_ + _)
     println("Pi is roughly " + 4.0 * count / n)
-    System.exit(0)
+    //System.exit(0)
+    spark.stop()
   }
 }
