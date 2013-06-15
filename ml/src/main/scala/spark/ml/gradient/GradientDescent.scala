@@ -1,4 +1,4 @@
-package spark.ml
+package spark.ml.gradient
 
 import spark.{Logging, RDD, SparkContext}
 import spark.SparkContext._

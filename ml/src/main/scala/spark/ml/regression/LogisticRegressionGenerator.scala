@@ -1,6 +1,7 @@
-package spark.ml
+package spark.ml.regression
 
 import spark.{RDD, SparkContext}
+import spark.ml.util.MLUtils
 
 import org.apache.commons.math3.distribution.NormalDistribution
 import org.jblas.DoubleMatrix

@@ -1,6 +1,8 @@
-package spark.ml
+package spark.ml.regression
 
 import spark.{Logging, RDD, SparkContext}
+import spark.ml.gradient._
+import spark.ml.util.MLUtils
 
 import org.jblas.DoubleMatrix
 

@@ -1,4 +1,4 @@
-package spark.ml
+package spark.ml.util
 
 import spark.{RDD, SparkContext}
 import spark.SparkContext._
