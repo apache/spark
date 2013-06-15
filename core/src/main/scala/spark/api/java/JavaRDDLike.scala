@@ -1,6 +1,6 @@
 package spark.api.java
 
-import java.util.{List => JList}
+import java.util.{List => JList, Comparator}
 import scala.Tuple2
 import scala.collection.JavaConversions._
 
@@ -358,5 +358,30 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString(): String = {
     rdd.toDebugString
+  }
+
+  /**
+   * Returns the top K elements from this RDD as defined by
+   * the specified Comparator[T].
+   * @param num the number of top elements to return
+   * @param comp the comparator that defines the order
+   * @return an array of top elements
+   */
+  def top(num: Int, comp: Comparator[T]): JList[T] = {
+    import scala.collection.JavaConversions._
+    val topElems = rdd.top(num)(Ordering.comparatorToOrdering(comp))
+    val arr: java.util.Collection[T] = topElems.toSeq
+    new java.util.ArrayList(arr)
+  }
+
+  /**
+   * Returns the top K elements from this RDD using the
+   * natural ordering for T.
+   * @param num the number of top elements to return
+   * @return an array of top elements
+   */
+  def top(num: Int): JList[T] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[T]]
+    top(num, comp)
   }
 }
