@@ -315,6 +315,28 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void zeroLengthPartitions() {
+    // Create RDD with some consecutive empty partitions (including the "first" one)
+    JavaDoubleRDD rdd = sc
+        .parallelizeDoubles(Arrays.asList(-1.0, -1.0, -1.0, -1.0, 2.0, 4.0, -1.0, -1.0), 8)
+        .filter(new Function<Double, Boolean>() {
+          @Override
+          public Boolean call(Double x) {
+            return x > 0.0;
+          }
+        });
+    
+    // Run the partitions, including the consecutive empty ones, through StatCounter
+    StatCounter stats = rdd.stats();
+    Assert.assertEquals(6.0, stats.sum(), 0.01);
+    Assert.assertEquals(6.0/2, rdd.mean(), 0.01);
+    Assert.assertEquals(1.0, rdd.variance(), 0.01);
+    Assert.assertEquals(1.0, rdd.stdev(), 0.01);
+    
+    // Add other tests here for classes that should be able to handle empty partitions correctly
+  }
+
+  @Test
   public void map() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     JavaDoubleRDD doubles = rdd.map(new DoubleFunction<Integer>() {

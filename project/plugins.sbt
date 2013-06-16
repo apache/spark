@@ -16,3 +16,5 @@ addSbtPlugin("io.spray" %% "sbt-twirl" % "0.6.1")
 //resolvers += Resolver.url("sbt-plugin-releases", new URL("http://scalasbt.artifactoryonline.com/scalasbt/sbt-plugin-releases/"))(Resolver.ivyStylePatterns)
 
 //addSbtPlugin("com.jsuereth" % "xsbt-gpg-plugin" % "0.6")
+
+libraryDependencies += "com.novocode" % "junit-interface" % "0.10-M4" % "test"
