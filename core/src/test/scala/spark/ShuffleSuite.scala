@@ -305,9 +305,32 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     assert(c.partitioner.get === p)
   }
 
+  test("shuffle non-zero block size") {
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    val NUM_BLOCKS = 3
+
+    val a = sc.parallelize(1 to 10, 2)
+    val b = a.map { x =>
+      (x, new ShuffleSuite.NonJavaSerializableClass(x * 2))
+    }
+    // If the Kryo serializer is not used correctly, the shuffle would fail because the
+    // default Java serializer cannot handle the non serializable class.
+    val c = new ShuffledRDD(b, new HashPartitioner(NUM_BLOCKS),
+      classOf[spark.KryoSerializer].getName)
+    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
+
+    assert(c.count === 10)
+
+    // All blocks must have non-zero size
+    (0 until NUM_BLOCKS).foreach { id =>
+      val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
+      assert(statuses.forall(s => s._2 > 0))
+    }
+  }
+
   test("shuffle serializer") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[1,2,512]", "test")
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
       (x, new ShuffleSuite.NonJavaSerializableClass(x * 2))
@@ -317,6 +340,33 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     val c = new ShuffledRDD(b, new HashPartitioner(3), classOf[spark.KryoSerializer].getName)
     assert(c.count === 10)
   }
+
+  test("zero sized blocks") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+
+    // 10 partitions from 4 keys
+    val NUM_BLOCKS = 10
+    val a = sc.parallelize(1 to 4, NUM_BLOCKS)
+    val b = a.map(x => (x, x*2))
+
+    // NOTE: The default Java serializer doesn't create zero-sized blocks.
+    //       So, use Kryo
+    val c = new ShuffledRDD(b, new HashPartitioner(10), classOf[spark.KryoSerializer].getName)
+
+    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
+    assert(c.count === 4)
+
+    val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
+      val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
+      statuses.map(x => x._2)
+    }
+    val nonEmptyBlocks = blockSizes.filter(x => x > 0)
+
+    // We should have at most 4 non-zero sized partitions
+    assert(nonEmptyBlocks.size <= 4)
+  }
+
 }
 
 object ShuffleSuite {

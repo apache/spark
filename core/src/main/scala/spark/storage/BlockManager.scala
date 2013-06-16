@@ -3,8 +3,7 @@ package spark.storage
 import java.io.{InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
-import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet, Queue}
-import scala.collection.JavaConversions._
+import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet}
 
 import akka.actor.{ActorSystem, Cancellable, Props}
 import akka.dispatch.{Await, Future}
@@ -15,7 +14,7 @@ import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
-import spark.{Logging, SizeEstimator, SparkEnv, SparkException, Utils}
+import spark.{Logging, SparkEnv, SparkException, Utils}
 import spark.network._
 import spark.serializer.Serializer
 import spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStampedHashMap}
@@ -95,9 +94,11 @@ private[spark] class BlockManager(
     new DiskStore(this, System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
 
   // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
-  private val useNetty = System.getProperty("spark.shuffle.use.netty", "false").toBoolean
-  private val nettyPortConfig = System.getProperty("spark.shuffle.sender.port", "0").toInt
-  private val nettyPort = if (useNetty) diskStore.startShuffleBlockSender(nettyPortConfig) else 0
+  private val nettyPort: Int = {
+    val useNetty = System.getProperty("spark.shuffle.use.netty", "false").toBoolean
+    val nettyPortConfig = System.getProperty("spark.shuffle.sender.port", "0").toInt
+    if (useNetty) diskStore.startShuffleBlockSender(nettyPortConfig) else 0
+  }
 
   val connectionManager = new ConnectionManager(0)
   implicit val futureExecContext = connectionManager.futureExecContext
@@ -825,9 +826,23 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Remove all blocks belonging to the given RDD.
+   * @return The number of blocks removed.
+   */
+  def removeRdd(rddId: Int): Int = {
+    // TODO: Instead of doing a linear scan on the blockInfo map, create another map that maps
+    // from RDD.id to blocks.
+    logInfo("Removing RDD " + rddId)
+    val rddPrefix = "rdd_" + rddId + "_"
+    val blocksToRemove = blockInfo.filter(_._1.startsWith(rddPrefix)).map(_._1)
+    blocksToRemove.foreach(blockId => removeBlock(blockId, false))
+    blocksToRemove.size
+  }
+
+  /**
    * Remove a block from both memory and disk.
    */
-  def removeBlock(blockId: String) {
+  def removeBlock(blockId: String, tellMaster: Boolean = true) {
     logInfo("Removing block " + blockId)
     val info = blockInfo.get(blockId).orNull
     if (info != null) info.synchronized {
@@ -839,7 +854,7 @@ private[spark] class BlockManager(
           "the disk or memory store")
       }
       blockInfo.remove(blockId)
-      if (info.tellMaster) {
+      if (tellMaster && info.tellMaster) {
         reportBlockStatus(blockId, info)
       }
     } else {
@@ -950,7 +965,7 @@ private[spark] object BlockManager extends Logging {
   }
 
   def getHeartBeatFrequencyFromSystemProperties: Long =
-    System.getProperty("spark.storage.blockManagerHeartBeatMs", "5000").toLong
+    System.getProperty("spark.storage.blockManagerTimeoutIntervalMs", "60000").toLong / 4
 
   def getDisableHeartBeatsForTesting: Boolean =
     System.getProperty("spark.test.disableBlockManagerHeartBeat", "false").toBoolean

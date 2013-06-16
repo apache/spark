@@ -2,13 +2,7 @@ package spark.storage
 
 import java.nio.ByteBuffer
 
-import scala.actors._
-import scala.actors.Actor._
-import scala.actors.remote._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.util.Random
-
-import spark.{Logging, Utils, SparkEnv}
+import spark.{Logging, Utils}
 import spark.network._
 
 /**
@@ -88,8 +82,6 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
 
 private[spark] object BlockManagerWorker extends Logging {
   private var blockManagerWorker: BlockManagerWorker = null
-  private val DATA_TRANSFER_TIME_OUT_MS: Long = 500
-  private val REQUEST_RETRY_INTERVAL_MS: Long = 1000
 
   initLogging()
 

@@ -37,29 +37,33 @@ class FileServer {
         .childHandler(new FileServerChannelInitializer(pResolver));
     // Start the server.
     channelFuture = bootstrap.bind(addr);
-    this.port = addr.getPort();
+    try {
+      // Get the address we bound to.
+      InetSocketAddress boundAddress =
+        ((InetSocketAddress) channelFuture.sync().channel().localAddress());
+      this.port = boundAddress.getPort();
+    } catch (InterruptedException ie) {
+      this.port = 0;
+    }
   }
 
   /**
    * Start the file server asynchronously in a new thread.
    */
   public void start() {
-    try {
-      blockingThread = new Thread() {
-        public void run() {
-          try {
-            Channel channel = channelFuture.sync().channel();
-            channel.closeFuture().sync();
-          } catch (InterruptedException e) {
-            LOG.error("File server start got interrupted", e);
-          }
+    blockingThread = new Thread() {
+      public void run() {
+        try {
+          channelFuture.channel().closeFuture().sync();
+          LOG.info("FileServer exiting");
+        } catch (InterruptedException e) {
+          LOG.error("File server start got interrupted", e);
         }
-      };
-      blockingThread.setDaemon(true);
-      blockingThread.start();
-    } finally {
-      bootstrap.shutdown();
-    }
+        // NOTE: bootstrap is shutdown in stop()
+      }
+    };
+    blockingThread.setDaemon(true);
+    blockingThread.start();
   }
 
   public int getPort() {
@@ -67,17 +71,16 @@ class FileServer {
   }
 
   public void stop() {
-    if (blockingThread != null) {
-      blockingThread.stop();
-      blockingThread = null;
-    }
+    // Close the bound channel.
     if (channelFuture != null) {
-      channelFuture.channel().closeFuture();
+      channelFuture.channel().close();
       channelFuture = null;
     }
+    // Shutdown bootstrap.
     if (bootstrap != null) {
       bootstrap.shutdown();
       bootstrap = null;
     }
+    // TODO: Shutdown all accepted channels as well ?
   }
 }

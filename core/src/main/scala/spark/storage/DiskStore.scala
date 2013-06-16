@@ -59,6 +59,8 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     // Flush the partial writes, and set valid length to be the length of the entire file.
     // Return the number of bytes written for this commit.
     override def commit(): Long = {
+      // NOTE: Flush the serializer first and then the compressed/buffered output stream
+      objOut.flush()
       bs.flush()
       val prevPos = lastValidPosition
       lastValidPosition = channel.position()
@@ -68,6 +70,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     override def revertPartialWrites() {
       // Discard current writes. We do this by flushing the outstanding writes and
       // truncate the file to the last valid position.
+      objOut.flush()
       bs.flush()
       channel.truncate(lastValidPosition)
     }
