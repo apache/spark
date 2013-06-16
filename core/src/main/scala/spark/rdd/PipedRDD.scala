@@ -16,14 +16,12 @@ import spark.broadcast.Broadcast
  * An RDD that pipes the contents of each parent partition through an external command
  * (printing them one per line) and returns the output as a collection of strings.
  */
-class PipedRDD[T: ClassManifest, U <: Seq[String]](
+class PipedRDD[T: ClassManifest](
     prev: RDD[T],
     command: Seq[String],
     envVars: Map[String, String],
-    transform: (T, String => Unit) => Any,
-    pipeContext: Broadcast[U],
-    delimiter: String
-    )
+    printPipeContext: (String => Unit) => Unit,
+    printRDDElement: (T, String => Unit) => Unit)
   extends RDD[String](prev) {
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
@@ -32,10 +30,9 @@ class PipedRDD[T: ClassManifest, U <: Seq[String]](
       prev: RDD[T],
       command: String,
       envVars: Map[String, String] = Map(),
-      transform: (T, String => Unit) => Any = null,
-      pipeContext: Broadcast[U] = null,
-      delimiter: String = "\u0001") =
-    this(prev, PipedRDD.tokenize(command), envVars, transform, pipeContext, delimiter)
+      printPipeContext: (String => Unit) => Unit = null,
+      printRDDElement: (T, String => Unit) => Unit = null) =
+    this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement)
 
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
@@ -64,17 +61,13 @@ class PipedRDD[T: ClassManifest, U <: Seq[String]](
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
 
-        // input the pipeContext firstly
-        if ( pipeContext != null) {
-          for (elem <- pipeContext.value) {
-            out.println(elem)
-          }
-          // delimiter\n as the marker of the end of the pipeContext
-          out.println(delimiter)
+        // input the pipe context firstly
+        if ( printPipeContext != null) {
+          printPipeContext(out.println(_))
         }
         for (elem <- firstParent[T].iterator(split, context)) {
-          if (transform != null) {
-            transform(elem, out.println(_))
+          if (printRDDElement != null) {
+            printRDDElement(elem, out.println(_))
           } else {
             out.println(elem)
           }

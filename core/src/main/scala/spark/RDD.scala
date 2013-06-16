@@ -355,27 +355,6 @@ abstract class RDD[T: ClassManifest](
   def pipe(command: String, env: Map[String, String]): RDD[String] = 
     new PipedRDD(this, command, env)
 
-  /**
-   * Return an RDD created by piping elements to a forked external process.
-   * How each record in RDD is outputed to the process can be controled by providing a
-   * function trasnform(T, outputFunction: String => Unit). transform() will be called with
-   * the currnet record in RDD as the 1st parameter, and the function to output the record to
-   * the external process (like out.println()) as the 2nd parameter.
-   * Here's an example on how to pipe the RDD data of groupBy() in a streaming way,
-   * instead of constructing a huge String to concat all the records:
-   * def tranform(record:(String, Seq[String]), f:String=>Unit) = for (e <- record._2){f(e)}
-   * pipeContext can be used to transfer additional context data to the external process
-   * besides the RDD. pipeContext is a broadcast Seq[String], each line would be piped to
-   * external process with "^A" as the delimiter in the end of context data. Delimiter can also 
-   * be customized by the last parameter delimiter.
-   */
-  def pipe[U<: Seq[String]](
-      command: String, 
-      env: Map[String, String],
-      transform: (T,String => Unit) => Any,
-      pipeContext: Broadcast[U],
-      delimiter: String): RDD[String] = 
-    new PipedRDD(this, command, env, transform, pipeContext, delimiter)
 
   /**
    * Return an RDD created by piping elements to a forked external process.
@@ -391,54 +370,12 @@ abstract class RDD[T: ClassManifest](
    * external process with "^A" as the delimiter in the end of context data. Delimiter can also 
    * be customized by the last parameter delimiter.
    */
-  def pipe[U<: Seq[String]](
-      command: String, 
-      transform: (T,String => Unit) => Any,
-      pipeContext: Broadcast[U]): RDD[String] = 
-    new PipedRDD(this, command, Map[String, String](), transform, pipeContext, "\u0001")
-
-  /**
-   * Return an RDD created by piping elements to a forked external process.
-   * How each record in RDD is outputed to the process can be controled by providing a
-   * function trasnform(T, outputFunction: String => Unit). transform() will be called with
-   * the currnet record in RDD as the 1st parameter, and the function to output the record to
-   * the external process (like out.println()) as the 2nd parameter.
-   * Here's an example on how to pipe the RDD data of groupBy() in a streaming way,
-   * instead of constructing a huge String to concat all the records:
-   * def tranform(record:(String, Seq[String]), f:String=>Unit) = for (e <- record._2){f(e)}
-   * pipeContext can be used to transfer additional context data to the external process
-   * besides the RDD. pipeContext is a broadcast Seq[String], each line would be piped to
-   * external process with "^A" as the delimiter in the end of context data. Delimiter can also 
-   * be customized by the last parameter delimiter.
-   */
-  def pipe[U<: Seq[String]](
-      command: String, 
-      env: Map[String, String],
-      transform: (T,String => Unit) => Any,
-      pipeContext: Broadcast[U]): RDD[String] = 
-    new PipedRDD(this, command, env, transform, pipeContext, "\u0001")
-
-  /**
-   * Return an RDD created by piping elements to a forked external process.
-   * How each record in RDD is outputed to the process can be controled by providing a
-   * function trasnform(T, outputFunction: String => Unit). transform() will be called with
-   * the currnet record in RDD as the 1st parameter, and the function to output the record to
-   * the external process (like out.println()) as the 2nd parameter.
-   * Here's an example on how to pipe the RDD data of groupBy() in a streaming way,
-   * instead of constructing a huge String to concat all the records:
-   * def tranform(record:(String, Seq[String]), f:String=>Unit) = for (e <- record._2){f(e)}
-   * pipeContext can be used to transfer additional context data to the external process
-   * besides the RDD. pipeContext is a broadcast Seq[String], each line would be piped to
-   * external process with "^A" as the delimiter in the end of context data. Delimiter can also 
-   * be customized by the last parameter delimiter.
-   */
-  def pipe[U<: Seq[String]](
+  def pipe(
       command: Seq[String], 
       env: Map[String, String] = Map(), 
-      transform: (T,String => Unit) => Any = null, 
-      pipeContext: Broadcast[U] = null,
-      delimiter: String = "\u0001"): RDD[String] = 
-    new PipedRDD(this, command, env, transform, pipeContext, delimiter)
+      printPipeContext: (String => Unit) => Unit = null,
+      printRDDElement: (T, String => Unit) => Unit = null): RDD[String] = 
+    new PipedRDD(this, command, env, if (printPipeContext ne null) sc.clean(printPipeContext) else null, printRDDElement)
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD.

@@ -22,9 +22,12 @@ class PipedRDDSuite extends FunSuite with LocalSparkContext {
   test("advanced pipe") {
     sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+    val bl = sc.broadcast(List("0"))
 
-    val piped = nums.pipe(Seq("cat"), Map[String, String](), 
-      (i:Int, f: String=> Unit) => f(i + "_"), sc.broadcast(List("0")))
+    val piped = nums.pipe(Seq("cat"), 
+      Map[String, String](), 
+      (f: String => Unit) => {bl.value.map(f(_));f("\u0001")},
+      (i:Int, f: String=> Unit) => f(i + "_"))
 
     val c = piped.collect()
 
@@ -40,8 +43,10 @@ class PipedRDDSuite extends FunSuite with LocalSparkContext {
 
     val nums1 = sc.makeRDD(Array("a\t1", "b\t2", "a\t3", "b\t4"), 2)
     val d = nums1.groupBy(str=>str.split("\t")(0)).
-      pipe(Seq("cat"), Map[String, String](), (i:Tuple2[String, Seq[String]], f: String=> Unit) => 
-      {for (e <- i._2){ f(e + "_")}}, sc.broadcast(List("0"))).collect()
+      pipe(Seq("cat"), 
+           Map[String, String](), 
+           (f: String => Unit) => {bl.value.map(f(_));f("\u0001")},
+           (i:Tuple2[String, Seq[String]], f: String=> Unit) => {for (e <- i._2){ f(e + "_")}}).collect()
     assert(d.size === 8)
     assert(d(0) === "0")
     assert(d(1) === "\u0001")
