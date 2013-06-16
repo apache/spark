@@ -4,7 +4,7 @@ import org.scalatest.FunSuite
 import scala.collection.mutable.ArrayBuffer
 import SparkContext._
 import spark.util.StatCounter
-import scala.math._
+import scala.math.abs
 
 class PartitioningSuite extends FunSuite with LocalSparkContext {
   
