@@ -25,23 +25,16 @@ private[spark]
 class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef, sc: SparkContext)
   extends Directives with Logging {
 
-  val STATIC_RESOURCE_DIR = "spark/deploy/static"
-
   implicit val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
   val host = Utils.localHostName()
-  val port = if (System.getProperty("spark.ui.port") != null) {
-    System.getProperty("spark.ui.port").toInt
-  } else {
-    // TODO: Unfortunately, it's not possible to pass port 0 to spray and figure out which
-    // random port it bound to, so we have to try to find a local one by creating a socket.
-    Utils.findFreePort()
-  }
+  val port = Option(System.getProperty("spark.ui.port"))
+    .getOrElse(BlockManagerUI.DEFAULT_PORT).toInt
 
   /** Start a HTTP server to run the Web interface */
   def start() {
     try {
-      WebUI.startJettyServer("0.0.0.0", port, handlers)
-      logInfo("Started BlockManager web UI at http://%s:%d".format(host, port))
+      val (server, boundPort) = WebUI.startJettyServer("0.0.0.0", port, handlers)
+      logInfo("Started BlockManager web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to create BlockManager WebUI", e)
@@ -50,7 +43,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
   }
 
   val handlers = Array[(String, Handler)](
-    ("/static", createStaticHandler(STATIC_RESOURCE_DIR)),
+    ("/static", createStaticHandler(BlockManagerUI.STATIC_RESOURCE_DIR)),
     ("/rdd", (request: HttpServletRequest) => rddPage(request)),
     ("*", (request: HttpServletRequest) => indexPage)
   )
@@ -208,4 +201,9 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
     WebUI.makePage(content, "Spark Storage")
   }
   private[spark] def appUIAddress = "http://" + host + ":" + port
+}
+
+object BlockManagerUI {
+  val STATIC_RESOURCE_DIR = "spark/deploy/static"
+  val DEFAULT_PORT = "33000"
 }
