@@ -63,27 +63,4 @@ private[spark] object AkkaUtils {
     val boundPort = provider.asInstanceOf[RemoteActorRefProvider].transport.address.port.get
     return (actorSystem, boundPort)
   }
-
-  /**
-   * Creates a Spray HTTP server bound to a given IP and port with a given Spray Route object to
-   * handle requests. Returns the bound port or throws a SparkException on failure.
-   * TODO: Not changing ip to host here - is it required ?
-   */
-  def startJettyServer(ip: String, port: Int, handlers: Array[(String, Handler)]) = {
-    val handlersToRegister = handlers.map { case(path, handler) =>
-      if (path == "*") {
-        handler
-      } else {
-        val contextHandler = new ContextHandler(path)
-        contextHandler.setHandler(handler)
-        contextHandler.asInstanceOf[org.eclipse.jetty.server.Handler]
-      }
-    }
-
-    val handlerList = new HandlerList
-    handlerList.setHandlers(handlersToRegister)
-    val server = new Server(port)
-    server.setHandler(handlerList)
-    server.start()
-  }
 }
