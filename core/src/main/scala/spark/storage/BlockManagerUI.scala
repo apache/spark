@@ -129,16 +129,18 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
             </tr>
           </thead>
           <tbody>
-            {for(status <- storageStatusList) {
-            <tr>
-              <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
-              <td>
-                {Utils.memoryBytesToString(status.memUsed(prefix))}
-                ({Utils.memoryBytesToString(status.memRemaining)} Total Available)
-              </td>
-              <td>{Utils.memoryBytesToString(status.diskUsed(prefix))}</td>
-            </tr>
-            }}
+            {filteredStorageStatusList.map {
+              status =>
+              <tr>
+                <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
+                <td>
+                  {Utils.memoryBytesToString(status.memUsed(prefix))}
+                  ({Utils.memoryBytesToString(status.memRemaining)} Total Available)
+                </td>
+                <td>{Utils.memoryBytesToString(status.diskUsed(prefix))}</td>
+              </tr>
+            }
+          }
           </tbody>
         </table>
         </div>
