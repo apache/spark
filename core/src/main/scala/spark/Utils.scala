@@ -116,7 +116,7 @@ private object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory under (" + root + ") after " +
+        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
           maxAttempts + " attempts!")
       }
       try {
