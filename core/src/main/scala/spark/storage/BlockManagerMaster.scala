@@ -1,19 +1,11 @@
 package spark.storage
 
-import java.io._
-import java.util.{HashMap => JHashMap}
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.util.Random
-
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.dispatch.Await
+import akka.actor.ActorRef
+import akka.dispatch.{Await, Future}
 import akka.pattern.ask
-import akka.util.{Duration, Timeout}
-import akka.util.duration._
+import akka.util.Duration
 
-import spark.{Logging, SparkException, Utils}
+import spark.{Logging, SparkException}
 
 
 private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {
@@ -91,15 +83,13 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
   /**
    * Remove all blocks belonging to the given RDD.
    */
-  def removeRdd(rddId: Int) {
-    val rddBlockPrefix = "rdd_" + rddId + "_"
-    // Get the list of blocks in block manager, and remove ones that are part of this RDD.
-    // The runtime complexity is linear to the number of blocks persisted in the cluster.
-    // It could be expensive if the cluster is large and has a lot of blocks persisted.
-    getStorageStatus.flatMap(_.blocks).foreach { case(blockId, status) =>
-      if (blockId.startsWith(rddBlockPrefix)) {
-        removeBlock(blockId)
-      }
+  def removeRdd(rddId: Int, blocking: Boolean) {
+    val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
+    future onFailure {
+      case e: Throwable => logError("Failed to remove RDD " + rddId, e)
+    }
+    if (blocking) {
+      Await.result(future, timeout)
     }
   }
 
@@ -114,7 +104,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
   }
 
   def getStorageStatus: Array[StorageStatus] = {
-    askDriverWithReply[ArrayBuffer[StorageStatus]](GetStorageStatus).toArray
+    askDriverWithReply[Array[StorageStatus]](GetStorageStatus)
   }
 
   /** Stop the driver actor, called only on the Spark driver node */
@@ -151,7 +141,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
         val future = driverActor.ask(message)(timeout)
         val result = Await.result(future, timeout)
         if (result == null) {
-          throw new Exception("BlockManagerMaster returned null")
+          throw new SparkException("BlockManagerMaster returned null")
         }
         return result.asInstanceOf[T]
       } catch {
