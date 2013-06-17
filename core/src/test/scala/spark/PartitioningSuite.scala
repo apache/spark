@@ -1,10 +1,10 @@
 package spark
 
 import org.scalatest.FunSuite
-
 import scala.collection.mutable.ArrayBuffer
-
 import SparkContext._
+import spark.util.StatCounter
+import scala.math.abs
 
 class PartitioningSuite extends FunSuite with LocalSparkContext {
   
@@ -119,5 +119,22 @@ class PartitioningSuite extends FunSuite with LocalSparkContext {
     assert(intercept[SparkException]{ arrPairs.cogroup(arrPairs) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("array"))
+  }
+  
+  test("Zero-length partitions should be correctly handled") {
+    // Create RDD with some consecutive empty partitions (including the "first" one)
+    sc = new SparkContext("local", "test")
+    val rdd: RDD[Double] = sc
+        .parallelize(Array(-1.0, -1.0, -1.0, -1.0, 2.0, 4.0, -1.0, -1.0), 8)
+        .filter(_ >= 0.0)
+    
+    // Run the partitions, including the consecutive empty ones, through StatCounter
+    val stats: StatCounter = rdd.stats();
+    assert(abs(6.0 - stats.sum) < 0.01);
+    assert(abs(6.0/2 - rdd.mean) < 0.01);
+    assert(abs(1.0 - rdd.variance) < 0.01);
+    assert(abs(1.0 - rdd.stdev) < 0.01);
+    
+    // Add other tests here for classes that should be able to handle empty partitions correctly
   }
 }
