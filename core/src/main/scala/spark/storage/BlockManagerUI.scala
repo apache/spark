@@ -49,16 +49,10 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
     }
   }
 
-  val staticHandler = new ResourceHandler
-  println("RESOURCE: ")
-  val resource = getClass.getClassLoader.getResource(STATIC_RESOURCE_DIR)
-  staticHandler.setResourceBase(resource.toString)
-
-
   val handlers = Array[(String, Handler)](
-    ("/static", staticHandler),
+    ("/static", createStaticHandler(STATIC_RESOURCE_DIR)),
     ("/rdd", (request: HttpServletRequest) => rddPage(request)),
-    ("*", (request: HttpServletRequest) => WebUI.makePage(indexPage, "Spark Storage"))
+    ("*", (request: HttpServletRequest) => indexPage)
   )
 
   def rddPage(request: HttpServletRequest): Seq[Node] = {
@@ -112,16 +106,17 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
               </tr>
             </thead>
             <tbody>
-              {storageStatusList.flatMap(_.blocks).toArray.sortWith(_._1 < _._1).map { case (k,v) =>
-              <tr>
-                <td>{k}</td>
-                <td>
-                  {v.storageLevel.description}
-                </td>
-                <td>{Utils.memoryBytesToString(v.memSize)}</td>
-                <td>{Utils.memoryBytesToString(v.diskSize)}</td>
-              </tr>
-              }
+              {filteredStorageStatusList.flatMap(_.blocks).toArray.sortWith(_._1 < _._1).map {
+              case (k,v) =>
+                <tr>
+                  <td>{k}</td>
+                  <td>
+                    {v.storageLevel.description}
+                  </td>
+                  <td>{Utils.memoryBytesToString(v.memSize)}</td>
+                  <td>{Utils.memoryBytesToString(v.diskSize)}</td>
+                </tr>
+                }
               }
             </tbody>
           </table>
@@ -168,46 +163,49 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
       .reduceOption(_+_).getOrElse(0L)
     val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
 
-    <div class="row">
-      <div class="span12">
-        <ul class="unstyled">
-          <li><strong>Memory:</strong>
-            {Utils.memoryBytesToString(maxMem - remainingMem)} Used
-            ({Utils.memoryBytesToString(remainingMem)} Available) </li>
-          <li><strong>Disk:</strong> {Utils.memoryBytesToString(diskSpaceUsed)} Used </li>
-        </ul>
+    val content =
+      <div class="row">
+        <div class="span12">
+          <ul class="unstyled">
+            <li><strong>Memory:</strong>
+              {Utils.memoryBytesToString(maxMem - remainingMem)} Used
+              ({Utils.memoryBytesToString(remainingMem)} Available) </li>
+            <li><strong>Disk:</strong> {Utils.memoryBytesToString(diskSpaceUsed)} Used </li>
+          </ul>
+        </div>
       </div>
-    </div>
-    <hr/>
-      <table class="table table-bordered table-striped table-condensed sortable">
-        <thead>
-          <tr>
-            <th>RDD Name</th>
-            <th>Storage Level</th>
-            <th>Cached Partitions</th>
-            <th>Fraction Partitions Cached</th>
-            <th>Size in Memory</th>
-            <th>Size on Disk</th>
-          </tr>
-        </thead>
-        <tbody>
-          {for (rdd <- rdds) yield
-          <tr>
-            <td>
-              <a href={"/rdd?id=%s".format(rdd.id)}>
-                {rdd.name}
-              </a>
-            </td>
-            <td>{rdd.storageLevel.description}
-            </td>
-            <td>{rdd.numCachedPartitions}</td>
-            <td>{rdd.numCachedPartitions / rdd.numPartitions.toDouble}</td>
-            <td>{Utils.memoryBytesToString(rdd.memSize)}</td>
-            <td>{Utils.memoryBytesToString(rdd.diskSize)}</td>
-          </tr>
-          }
-        </tbody>
-      </table>
+      <hr/>
+        <table class="table table-bordered table-striped table-condensed sortable">
+          <thead>
+            <tr>
+              <th>RDD Name</th>
+              <th>Storage Level</th>
+              <th>Cached Partitions</th>
+              <th>Fraction Partitions Cached</th>
+              <th>Size in Memory</th>
+              <th>Size on Disk</th>
+            </tr>
+          </thead>
+          <tbody>
+            {for (rdd <- rdds) yield
+            <tr>
+              <td>
+                <a href={"/rdd?id=%s".format(rdd.id)}>
+                  {rdd.name}
+                </a>
+              </td>
+              <td>{rdd.storageLevel.description}
+              </td>
+              <td>{rdd.numCachedPartitions}</td>
+              <td>{rdd.numCachedPartitions / rdd.numPartitions.toDouble}</td>
+              <td>{Utils.memoryBytesToString(rdd.memSize)}</td>
+              <td>{Utils.memoryBytesToString(rdd.diskSize)}</td>
+            </tr>
+            }
+          </tbody>
+        </table>;
+
+    WebUI.makePage(content, "Spark Storage")
   }
   private[spark] def appUIAddress = "http://" + host + ":" + port
 }
