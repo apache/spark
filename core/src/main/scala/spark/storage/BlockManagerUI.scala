@@ -8,6 +8,12 @@ import cc.spray.Directives
 import spark.{Logging, SparkContext}
 import spark.util.AkkaUtils
 import spark.Utils
+import spark.util.WebUI
+import org.eclipse.jetty.server.handler.{HandlerList, ContextHandler, ResourceHandler}
+import org.eclipse.jetty.server.Handler
+import xml.Elem
+import xml.Node
+import java.net.URLClassLoader
 
 
 /**
@@ -32,7 +38,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
   /** Start a HTTP server to run the Web interface */
   def start() {
     try {
-      AkkaUtils.startSprayServer(actorSystem, "0.0.0.0", port, handler, "BlockManagerHTTPServer")
+      AkkaUtils.startJettyServer("0.0.0.0", port, handlers)
       logInfo("Started BlockManager web UI at http://%s:%d".format(host, port))
     } catch {
       case e: Exception =>
@@ -41,6 +47,40 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
     }
   }
 
+  val staticHandler = new ResourceHandler
+  println("RESOURCE: ")
+  val resource = getClass.getClassLoader.getResource(STATIC_RESOURCE_DIR)
+  staticHandler.setResourceBase(resource.toString)
+
+
+  val handlers = Array[(String, Handler)](
+    ("/static", staticHandler),
+    ("*", WebUI.makeHandler(WebUI.makePage(indexContent, "Spark Storage")))
+  )
+
+  def indexContent: Seq[Node] = {
+    val storageStatusList = sc.getExecutorStorageStatus
+    // Calculate macro-level statistics
+    val maxMem = storageStatusList.map(_.maxMem).reduce(_+_)
+    val remainingMem = storageStatusList.map(_.memRemaining).reduce(_+_)
+    val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize))
+      .reduceOption(_+_).getOrElse(0L)
+    val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
+
+    <div class="row">
+      <div class="span12">
+        <ul class="unstyled">
+          <li><strong>Memory:</strong>
+            {Utils.memoryBytesToString(maxMem - remainingMem)} Used
+            ({Utils.memoryBytesToString(remainingMem)} Available) </li>
+          <li><strong>Disk:</strong> {Utils.memoryBytesToString(diskSpaceUsed)} Used </li>
+        </ul>
+      </div>
+    </div>
+      <hr/>
+  }
+
+  /*
   val handler = {
     get {
       path("") {
@@ -73,7 +113,6 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
         getFromResourceDirectory(STATIC_RESOURCE_DIR)
       }
     }
-  }
-
+    */
   private[spark] def appUIAddress = "http://" + host + ":" + port
 }

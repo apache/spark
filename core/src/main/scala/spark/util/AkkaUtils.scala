@@ -13,6 +13,9 @@ import cc.spray.io.pipelines.MessageHandlerDispatch.SingletonHandler
 import akka.dispatch.Await
 import spark.{Utils, SparkException}
 import java.util.concurrent.TimeoutException
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.server.handler.{HandlerList, ContextHandler}
 
 /**
  * Various utility classes for working with Akka.
@@ -66,26 +69,21 @@ private[spark] object AkkaUtils {
    * handle requests. Returns the bound port or throws a SparkException on failure.
    * TODO: Not changing ip to host here - is it required ?
    */
-  def startSprayServer(actorSystem: ActorSystem, ip: String, port: Int, route: Route,
-      name: String = "HttpServer"): ActorRef = {
-    val ioWorker = new IoWorker(actorSystem).start()
-    val httpService = actorSystem.actorOf(Props(new HttpService(route)))
-    val rootService = actorSystem.actorOf(Props(new SprayCanRootService(httpService)))
-    val server = actorSystem.actorOf(
-      Props(new HttpServer(ioWorker, SingletonHandler(rootService))), name = name)
-    actorSystem.registerOnTermination { ioWorker.stop() }
-    val timeout = 3.seconds
-    val future = server.ask(HttpServer.Bind(ip, port))(timeout)
-    try {
-      Await.result(future, timeout) match {
-        case bound: HttpServer.Bound =>
-          return server
-        case other: Any =>
-          throw new SparkException("Failed to bind web UI to port " + port + ": " + other)
+  def startJettyServer(ip: String, port: Int, handlers: Array[(String, Handler)]) = {
+    val handlersToRegister = handlers.map { case(path, handler) =>
+      if (path == "*") {
+        handler
+      } else {
+        val contextHandler = new ContextHandler(path)
+        contextHandler.setHandler(handler)
+        contextHandler.asInstanceOf[org.eclipse.jetty.server.Handler]
       }
-    } catch {
-      case e: TimeoutException =>
-        throw new SparkException("Failed to bind web UI to port " + port)
     }
+
+    val handlerList = new HandlerList
+    handlerList.setHandlers(handlersToRegister)
+    val server = new Server(port)
+    server.setHandler(handlerList)
+    server.start()
   }
 }

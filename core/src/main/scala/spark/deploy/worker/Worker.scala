@@ -89,6 +89,7 @@ private[spark] class Worker(
 
   def startWebUi() {
     val webUi = new WorkerWebUI(context.system, self, workDir)
+    /*
     try {
       AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
     } catch {
@@ -96,6 +97,7 @@ private[spark] class Worker(
         logError("Failed to create web UI", e)
         System.exit(1)
     }
+    */
   }
 
   override def receive = {
