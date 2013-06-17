@@ -14,6 +14,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 
+import spark.broadcast.Broadcast
 import spark.Partitioner._
 import spark.partial.BoundedDouble
 import spark.partial.CountEvaluator
@@ -354,13 +355,36 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
-  def pipe(command: Seq[String]): RDD[String] = new PipedRDD(this, command)
+  def pipe(command: String, env: Map[String, String]): RDD[String] = 
+    new PipedRDD(this, command, env)
+
 
   /**
    * Return an RDD created by piping elements to a forked external process.
+   * The print behavior can be customized by providing two functions.
+   *
+   * @param command command to run in forked process.
+   * @param env environment variables to set.
+   * @param printPipeContext Before piping elements, this function is called as an oppotunity
+   *                         to pipe context data. Print line function (like out.println) will be 
+   *                         passed as printPipeContext's parameter.
+   * @param printPipeContext Use this function to customize how to pipe elements. This function 
+   *                         will be called with each RDD element as the 1st parameter, and the 
+   *                         print line function (like out.println()) as the 2nd parameter.
+   *                         An example of pipe the RDD data of groupBy() in a streaming way,
+   *                         instead of constructing a huge String to concat all the elements:
+   *                         def printRDDElement(record:(String, Seq[String]), f:String=>Unit) = 
+   *                           for (e <- record._2){f(e)}
+   * @return the result RDD
    */
-  def pipe(command: Seq[String], env: Map[String, String]): RDD[String] =
-    new PipedRDD(this, command, env)
+  def pipe(
+      command: Seq[String], 
+      env: Map[String, String] = Map(), 
+      printPipeContext: (String => Unit) => Unit = null,
+      printRDDElement: (T, String => Unit) => Unit = null): RDD[String] = 
+    new PipedRDD(this, command, env, 
+      if (printPipeContext ne null) sc.clean(printPipeContext) else null, 
+      if (printRDDElement ne null) sc.clean(printRDDElement) else null)
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD.

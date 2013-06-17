@@ -9,6 +9,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
 import spark.{RDD, SparkEnv, Partition, TaskContext}
+import spark.broadcast.Broadcast
 
 
 /**
@@ -18,14 +19,21 @@ import spark.{RDD, SparkEnv, Partition, TaskContext}
 class PipedRDD[T: ClassManifest](
     prev: RDD[T],
     command: Seq[String],
-    envVars: Map[String, String])
+    envVars: Map[String, String],
+    printPipeContext: (String => Unit) => Unit,
+    printRDDElement: (T, String => Unit) => Unit)
   extends RDD[String](prev) {
-
-  def this(prev: RDD[T], command: Seq[String]) = this(prev, command, Map())
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
-  def this(prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
+  def this(
+      prev: RDD[T],
+      command: String,
+      envVars: Map[String, String] = Map(),
+      printPipeContext: (String => Unit) => Unit = null,
+      printRDDElement: (T, String => Unit) => Unit = null) =
+    this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement)
+
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
@@ -52,8 +60,17 @@ class PipedRDD[T: ClassManifest](
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
+
+        // input the pipe context firstly
+        if ( printPipeContext != null) {
+          printPipeContext(out.println(_))
+        }
         for (elem <- firstParent[T].iterator(split, context)) {
-          out.println(elem)
+          if (printRDDElement != null) {
+            printRDDElement(elem, out.println(_))
+          } else {
+            out.println(elem)
+          }
         }
         out.close()
       }
