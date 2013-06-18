@@ -1,23 +1,22 @@
 package spark.util
 
-import xml.Elem
 import xml.Node
-import util.parsing.json.{JSONFormat, JSONObject}
 import org.eclipse.jetty.server.{Server, Request, Handler}
 import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
-import org.eclipse.jetty.util.component.LifeCycle.Listener
 import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHandler, AbstractHandler}
 import util.Try
 import util.Success
 import util.Failure
 import spark.Logging
 import annotation.tailrec
+import net.liftweb.json.JsonAST.JValue
+import net.liftweb.json._
 
 object WebUI extends Logging {
   type Responder[T] = HttpServletRequest => T
 
-  implicit def jsonResponderToHandler(responder: Responder[JSONObject]): Handler =
-    createHandler(responder, "text/json")
+  implicit def jsonResponderToHandler(responder: Responder[JValue]): Handler =
+    createHandler(responder, "text/json", (in: JValue) => pretty(render(in)))
 
   implicit def htmlResponderToHandler(responder: Responder[Seq[Node]]): Handler =
     createHandler(responder, "text/html")
@@ -25,7 +24,8 @@ object WebUI extends Logging {
   implicit def textResponderToHandler(responder: Responder[String]): Handler =
     createHandler(responder, "text/plain")
 
-  def createHandler[T <% AnyRef](responder: Responder[T], contentType: String): Handler = {
+  def createHandler[T <% AnyRef](responder: Responder[T], contentType: String,
+                                 extractFn: T => String = (in: Any) => in.toString): Handler = {
     new AbstractHandler {
       def handle(target: String,
                  baseRequest: Request,

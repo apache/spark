@@ -3,18 +3,12 @@ package spark.storage
 import akka.actor.{ActorRef, ActorSystem}
 import akka.util.Duration
 import akka.util.duration._
-import cc.spray.typeconversion.TwirlSupport._
-import cc.spray.Directives
 import spark.{Logging, SparkContext}
-import spark.util.AkkaUtils
 import spark.Utils
 import spark.util.WebUI
-import org.eclipse.jetty.server.handler.{HandlerList, ContextHandler, ResourceHandler}
 import org.eclipse.jetty.server.Handler
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
-import xml.Elem
+import javax.servlet.http.HttpServletRequest
 import xml.Node
-import java.net.URLClassLoader
 import spark.util.WebUI._
 
 
@@ -23,7 +17,7 @@ import spark.util.WebUI._
  */
 private[spark]
 class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef, sc: SparkContext)
-  extends Directives with Logging {
+  extends Logging {
 
   implicit val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
   val host = Utils.localHostName()
@@ -55,7 +49,6 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
     val filteredStorageStatusList = StorageUtils.
       filterStorageStatusByPrefix(storageStatusList, prefix)
     val rddInfo = StorageUtils.rddInfoFromStorageStatus(filteredStorageStatusList, sc).head
-    spark.storage.html.rdd.render(rddInfo, filteredStorageStatusList)
 
     val content =
       <div class="row">

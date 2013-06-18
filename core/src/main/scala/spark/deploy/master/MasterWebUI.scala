@@ -55,9 +55,9 @@ class MasterWebUI(master: ActorRef) extends Logging {
       <div class="row">
         <div class="span12">
           <ul class="unstyled">
-            <li><strong>ID:</strong> app.id</li>
-            <li><strong>Description:</strong> app.desc.name</li>
-            <li><strong>User:</strong> app.desc.user</li>
+            <li><strong>ID:</strong> {app.id}</li>
+            <li><strong>Description:</strong> {app.desc.name}</li>
+            <li><strong>User:</strong> {app.desc.user}</li>
             <li><strong>Cores:</strong>
               {
                 if (app.desc.maxCores == Integer.MAX_VALUE) {

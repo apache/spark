@@ -1,21 +1,10 @@
 package spark.util
 
-import akka.actor.{ActorRef, Props, ActorSystemImpl, ActorSystem}
+import akka.actor.{ActorSystemImpl, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import akka.util.duration._
-import akka.pattern.ask
 import akka.remote.RemoteActorRefProvider
-import cc.spray.Route
-import cc.spray.io.IoWorker
-import cc.spray.{SprayCanRootService, HttpService}
-import cc.spray.can.server.HttpServer
-import cc.spray.io.pipelines.MessageHandlerDispatch.SingletonHandler
-import akka.dispatch.Await
-import spark.{Utils, SparkException}
-import java.util.concurrent.TimeoutException
-import org.eclipse.jetty.server.Server
-import org.eclipse.jetty.server.Handler
-import org.eclipse.jetty.server.handler.{HandlerList, ContextHandler}
+
 
 /**
  * Various utility classes for working with Akka.

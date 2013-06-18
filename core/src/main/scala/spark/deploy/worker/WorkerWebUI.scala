@@ -1,16 +1,12 @@
 package spark.deploy.worker
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorRef
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.{Duration, Timeout}
 import akka.util.duration._
-import cc.spray.Directives
-import cc.spray.typeconversion.TwirlSupport._
-import cc.spray.http.MediaTypes
 
 import spark.deploy.{WorkerState, RequestWorkerState}
-import spark.deploy.JsonProtocol._
 import java.io.File
 import spark.util.{WebUI => UtilsWebUI}
 import spark.{Utils, Logging}
