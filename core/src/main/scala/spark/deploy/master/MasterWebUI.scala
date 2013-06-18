@@ -1,27 +1,19 @@
 package spark.deploy.master
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{ActorRef}
 import akka.dispatch.Await
 import akka.pattern.ask
-import akka.util.{Duration, Timeout}
+import akka.util.{Duration}
 import akka.util.duration._
-import cc.spray.Directives
-import cc.spray.directives._
-import cc.spray.typeconversion.TwirlSupport._
-import cc.spray.http.MediaTypes
-import cc.spray.typeconversion.SprayJsonSupport._
 import scala.xml.Node
 import spark.{Logging, Utils}
 import spark.util.{WebUI => UtilsWebUI}
 
 import spark.deploy._
-import spark.deploy.JsonProtocol._
-import concurrent.Future
 import org.eclipse.jetty.server.Handler
 import spark.util.WebUI._
 import spark.deploy.MasterState
 import javax.servlet.http.HttpServletRequest
-import java.util.concurrent.TimeUnit
 
 /**
  * Web UI server for the standalone master.
@@ -47,9 +39,11 @@ class MasterWebUI(master: ActorRef) extends Logging {
 
   val handlers = Array[(String, Handler)](
     ("/static", createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)),
+    ("/app", (request: HttpServletRequest) => appDetail(request)),
     ("*", (request: HttpServletRequest) => index)
   )
 
+  /** Executor details for a particular application */
   def appDetail(request: HttpServletRequest): Seq[Node] = {
     val appId = request.getParameter("appId")
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
@@ -65,37 +59,73 @@ class MasterWebUI(master: ActorRef) extends Logging {
             <li><strong>Description:</strong> app.desc.name</li>
             <li><strong>User:</strong> app.desc.user</li>
             <li><strong>Cores:</strong>
-              {if(app.desc.maxCores == Integer.MAX_VALUE) {
-                "Unlimited %s granted".format(app.coresGranted)
-              } else {
-               "%s (%s granted, %s left)".format(
-                app.desc.maxCores,
-                app.coresGranted,
-                app.coresLeft)    }
-            }
-    }
-    </li>
-    <li><strong>Memory per Slave:</strong> @app.desc.memoryPerSlave</li>
-      <li><strong>Submit Date:</strong> @app.submitDate</li>
-      <li><strong>State:</strong> @app.state</li>
-      <li><strong><a href={app.appUiUrl}>Application Detail UI</a></strong></li>
-    </ul>
-    </div>
-    </div>
+              {
+                if (app.desc.maxCores == Integer.MAX_VALUE) {
+                  "Unlimited %s granted".format(app.coresGranted)
+                } else {
+                  "%s (%s granted, %s left)".format(
+                  app.desc.maxCores, app.coresGranted, app.coresLeft)
+               }
+             }
+            </li>
+            <li><strong>Memory per Slave:</strong> {app.desc.memoryPerSlave}</li>
+            <li><strong>Submit Date:</strong> {app.submitDate}</li>
+            <li><strong>State:</strong> {app.state}</li>
+            <li><strong><a href={app.appUiUrl}>Application Detail UI</a></strong></li>
+          </ul>
+        </div>
+      </div>
 
       <hr/>
 
-    <!-- Executors -->
+      <!-- Executors -->
       <div class="row">
         <div class="span12">
           <h3> Executor Summary </h3>
           <br/>
-          @executors_table(app.executors.values.toList)      <!-- TODO - convert this -->
+          {executorsTable(app.executors.values.toList)}
         </div>
       </div>
-
+      UtilsWebUI.makePage(content, "Application Info: " + app.desc.name)
   }
 
+  def executorsTable(executors: Seq[ExecutorInfo]): Seq[Node] = {
+    <table class="table table-bordered table-striped table-condensed">
+      <thead>
+        <tr>
+          <th>ExecutorID</th>
+          <th>Worker</th>
+          <th>Cores</th>
+          <th>Memory</th>
+          <th>State</th>
+          <th>Logs</th>
+        </tr>
+      </thead>
+      <tbody>
+        {executors.map(executorRow)}
+    </tbody>
+    </table>
+  }
+
+  def executorRow(executor: ExecutorInfo): Seq[Node] = {
+    <tr>
+      <td>{executor.id}</td>
+      <td>
+        <a href={executor.worker.webUiAddress}>{executor.worker.id}</a>
+      </td>
+      <td>{executor.cores}</td>
+      <td>{executor.memory}</td>
+      <td>{executor.state}</td>
+      <td>
+        <a href={"%s/log?appId=%s&executorId=%s&logType=stdout"
+            .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
+        <a href={"%s/log?appId=%s&executorId=%s&logType=stderr"
+          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
+      </td>
+    </tr>
+  }
+
+  /** Index view listing applications and executors */
   def index: Seq[Node] = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
     val state = Await.result(stateFuture, 3 seconds)
@@ -108,9 +138,12 @@ class MasterWebUI(master: ActorRef) extends Logging {
             <li><strong>Workers:</strong>{state.workers.size}</li>
             <li><strong>Cores:</strong> {state.workers.map(_.cores).sum}Total,
               {state.workers.map(_.coresUsed).sum} Used</li>
-            <li><strong>Memory:</strong> {Utils.memoryMegabytesToString(state.workers.map(_.memory).sum)} Total,
+            <li><strong>Memory:</strong>
+              {Utils.memoryMegabytesToString(state.workers.map(_.memory).sum)} Total,
               {Utils.memoryMegabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
-            <li><strong>Applications:</strong> {state.activeApps.size} Running, {state.completedApps.size} Completed </li>
+            <li><strong>Applications:</strong>
+              {state.activeApps.size} Running,
+              {state.completedApps.size} Completed </li>
           </ul>
         </div>
       </div>
@@ -157,17 +190,18 @@ class MasterWebUI(master: ActorRef) extends Logging {
         </tr>
       </thead>
       <tbody>
-        {workers.map{ worker =>
-          <tr>
-            <td>
-              <a href={worker.webUiAddress}>{worker.id}</a>
-            </td>
-            <td>{worker.host}:{worker.port}</td>
-            <td>{worker.state}</td>
-            <td>{worker.cores} ({worker.coresUsed} Used)</td>
-            <td>{Utils.memoryMegabytesToString(worker.memory)}
-              ({Utils.memoryMegabytesToString(worker.memoryUsed)} Used)</td>
-          </tr>
+        {
+          workers.map{ worker =>
+            <tr>
+              <td>
+                <a href={worker.webUiAddress}>{worker.id}</a>
+              </td>
+              <td>{worker.host}:{worker.port}</td>
+              <td>{worker.state}</td>
+              <td>{worker.cores} ({worker.coresUsed} Used)</td>
+              <td>{Utils.memoryMegabytesToString(worker.memory)}
+                ({Utils.memoryMegabytesToString(worker.memoryUsed)} Used)</td>
+            </tr>
           }
         }
     </tbody>
@@ -189,76 +223,27 @@ class MasterWebUI(master: ActorRef) extends Logging {
         </tr>
       </thead>
       <tbody>
-        {apps.map{app =>
-        <tr>
-          <td>
-            <a href={"app?appId=" + app.id}>{app.id}</a>
-          </td>
-          <td>{app.desc.name}</td>
-          <td>
-            {app.coresGranted}
-          </td>
-          <td>{Utils.memoryMegabytesToString(app.desc.memoryPerSlave)}</td>
-          <td>{WebUI.formatDate(app.submitDate)}</td>
-          <td>{app.desc.user}</td>
-          <td>{app.state.toString}</td>
-          <td>{WebUI.formatDuration(app.duration)}</td>
-        </tr>
+        {
+          apps.map{ app =>
+            <tr>
+              <td>
+                <a href={"app?appId=" + app.id}>{app.id}</a>
+              </td>
+              <td>{app.desc.name}</td>
+              <td>
+                {app.coresGranted}
+              </td>
+              <td>{Utils.memoryMegabytesToString(app.desc.memoryPerSlave)}</td>
+              <td>{WebUI.formatDate(app.submitDate)}</td>
+              <td>{app.desc.user}</td>
+              <td>{app.state.toString}</td>
+              <td>{WebUI.formatDuration(app.duration)}</td>
+            </tr>
+          }
         }
-      }
     </tbody>
     </table>
   }
-
-  /*
-  val handler = {
-    get {
-      (path("") & parameters('format ?)) {
-        case Some(js) if js.equalsIgnoreCase("json") =>
-          val future = master ? RequestMasterState
-          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-            ctx.complete(future.mapTo[MasterState])
-          }
-        case _ =>
-          completeWith {
-            val future = master ? RequestMasterState
-            future.map {
-              masterState => spark.deploy.master.html.index.render(masterState.asInstanceOf[MasterState])
-            }
-          }
-      } ~
-      path("app") {
-        parameters("appId", 'format ?) {
-          case (appId, Some(js)) if (js.equalsIgnoreCase("json")) =>
-            val future = master ? RequestMasterState
-            val appInfo = for (masterState <- future.mapTo[MasterState]) yield {
-              masterState.activeApps.find(_.id == appId).getOrElse({
-                masterState.completedApps.find(_.id == appId).getOrElse(null)
-              })
-            }
-            respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-              ctx.complete(appInfo.mapTo[ApplicationInfo])
-            }
-          case (appId, _) =>
-            completeWith {
-              val future = master ? RequestMasterState
-              future.map { state =>
-                val masterState = state.asInstanceOf[MasterState]
-                val app = masterState.activeApps.find(_.id == appId).getOrElse({
-                  masterState.completedApps.find(_.id == appId).getOrElse(null)
-                })
-                spark.deploy.master.html.app_details.render(app)
-              }
-            }
-        }
-      } ~
-      pathPrefix("static") {
-        getFromResourceDirectory(STATIC_RESOURCE_DIR)
-      } ~
-      getFromResourceDirectory(RESOURCE_DIR)
-    }
-  }
-  */
 }
 
 object MasterWebUI {
