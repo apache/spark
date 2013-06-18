@@ -40,7 +40,6 @@ object WebUI extends Logging {
     }
   }
 
-  /** Create and return a staticHandler if resourceBase can be located */
   def createStaticHandler(resourceBase: String): ResourceHandler = {
     val staticHandler = new ResourceHandler
     Option(getClass.getClassLoader.getResource(resourceBase)) match {
@@ -49,19 +48,6 @@ object WebUI extends Logging {
         staticHandler
     }
   }
-
-  /*
-  /** Create and return a staticHandler if resourceBase can be located */
-  def createStaticHandler(resourceBase: String): Option[ResourceHandler] = {
-    val staticHandler = new ResourceHandler
-    Option(getClass.getClassLoader.getResource(resourceBase)) match {
-      case Some(res) =>
-        staticHandler.setResourceBase (res.toString)
-        Some(staticHandler)
-      case None => None
-    }
-  }
-  */
 
   def startJettyServer(ip: String, port: Int, handlers: Array[(String, Handler)]): (Server, Int) = {
     val handlersToRegister = handlers.map { case(path, handler) =>
