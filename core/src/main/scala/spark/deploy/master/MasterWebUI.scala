@@ -78,7 +78,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
     <li><strong>Memory per Slave:</strong> @app.desc.memoryPerSlave</li>
       <li><strong>Submit Date:</strong> @app.submitDate</li>
       <li><strong>State:</strong> @app.state</li>
-      <li><strong><a href="@app.appUiUrl">Application Detail UI</a></strong></li>
+      <li><strong><a href={app.appUiUrl}>Application Detail UI</a></strong></li>
     </ul>
     </div>
     </div>
@@ -90,7 +90,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
         <div class="span12">
           <h3> Executor Summary </h3>
           <br/>
-          @executors_table(app.executors.values.toList)
+          @executors_table(app.executors.values.toList)      <!-- TODO - convert this -->
         </div>
       </div>
 
