@@ -6,16 +6,16 @@ import akka.pattern.ask
 import akka.util.{Duration, Timeout}
 import akka.util.duration._
 
-import spark.deploy.{WorkerState, RequestWorkerState}
+import spark.deploy.{JsonProtocol, WorkerState, RequestWorkerState}
 import java.io.File
 import spark.util.{WebUI => UtilsWebUI}
 import spark.{Utils, Logging}
 import org.eclipse.jetty.server.Handler
 import spark.util.WebUI._
-import spark.deploy.WorkerState
 import scala.io.Source
 import javax.servlet.http.HttpServletRequest
 import xml.Node
+import net.liftweb.json.JsonAST.JValue
 
 /**
  * Web UI server for the standalone worker.
@@ -31,6 +31,7 @@ class WorkerWebUI(worker: ActorRef, workDir: File) extends Logging {
   val handlers = Array[(String, Handler)](
     ("/static", createStaticHandler(WorkerWebUI.STATIC_RESOURCE_DIR)),
     ("/log", (request: HttpServletRequest) => log(request)),
+    ("/json", (request: HttpServletRequest) => indexJson),
     ("*", (request: HttpServletRequest) => index)
   )
 
@@ -43,6 +44,12 @@ class WorkerWebUI(worker: ActorRef, workDir: File) extends Logging {
         logError("Failed to create Worker WebUI", e)
         System.exit(1)
     }
+  }
+
+  def indexJson(): JValue = {
+    val stateFuture = (worker ? RequestWorkerState)(timeout).mapTo[WorkerState]
+    val workerState = Await.result(stateFuture, 3 seconds)
+    JsonProtocol.writeWorkerState(workerState)
   }
 
   def index(): Seq[Node] = {

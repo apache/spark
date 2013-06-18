@@ -34,9 +34,8 @@ object WebUI extends Logging {
         response.setContentType("%s;charset=utf-8".format(contentType))
         response.setStatus(HttpServletResponse.SC_OK)
         baseRequest.setHandled(true)
-        response.getWriter().println(
-          responder(request).toString
-        )
+        val result = responder(request)
+        response.getWriter().println(extractFn(result))
       }
     }
   }

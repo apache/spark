@@ -14,6 +14,7 @@ import org.eclipse.jetty.server.Handler
 import spark.util.WebUI._
 import spark.deploy.MasterState
 import javax.servlet.http.HttpServletRequest
+import net.liftweb.json.JsonAST.JValue
 
 /**
  * Web UI server for the standalone master.
@@ -39,9 +40,21 @@ class MasterWebUI(master: ActorRef) extends Logging {
 
   val handlers = Array[(String, Handler)](
     ("/static", createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)),
+    ("/app/json", (request: HttpServletRequest) => appDetailJson(request)),
     ("/app", (request: HttpServletRequest) => appDetail(request)),
     ("*", (request: HttpServletRequest) => index)
   )
+
+  /** Executor details for a particular application */
+  def appDetailJson(request: HttpServletRequest): JValue = {
+    val appId = request.getParameter("appId")
+    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
+    val state = Await.result(stateFuture, 3 seconds)
+    val app = state.activeApps.find(_.id == appId).getOrElse({
+      state.completedApps.find(_.id == appId).getOrElse(null)
+    })
+    JsonProtocol.writeApplicationInfo(app)
+  }
 
   /** Executor details for a particular application */
   def appDetail(request: HttpServletRequest): Seq[Node] = {
