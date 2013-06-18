@@ -54,8 +54,6 @@
     <scala.version>2.9.3</scala.version>
     <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.0.3</akka.version>
-    <spray.version>1.0-M2.1</spray.version>
-    <spray.json.version>1.1.1</spray.json.version>
     <slf4j.version>1.6.1</slf4j.version>
     <cdh.version>4.1.2</cdh.version>
     <log4j.version>1.2.17</log4j.version>
@@ -91,17 +89,6 @@
       <id>akka-repo</id>
       <name>Akka Repository</name>
       <url>http://repo.akka.io/releases/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>spray-repo</id>
-      <name>Spray Repository</name>
-      <url>http://repo.spray.cc/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -230,26 +217,6 @@
         <version>1.2.0</version>
       </dependency>
       <dependency>
-        <groupId>cc.spray</groupId>
-        <artifactId>spray-can</artifactId>
-        <version>${spray.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>cc.spray</groupId>
-        <artifactId>spray-server</artifactId>
-        <version>${spray.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>cc.spray</groupId>
-        <artifactId>spray-json_2.9.2</artifactId>
-        <version>${spray.json.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.tomdz.twirl</groupId>
-        <artifactId>twirl-api</artifactId>
-        <version>1.0.2</version>
-      </dependency>
-      <dependency>
         <groupId>com.github.scala-incubator.io</groupId>
         <artifactId>scala-io-file_2.9.2</artifactId>
         <version>0.4.1</version>
@@ -270,7 +237,11 @@
         <version>10.4.2.0</version>
         <scope>test</scope>
       </dependency>
-
+      <dependency>
+        <groupId>net.liftweb</groupId>
+        <artifactId>lift-json_2.9.2</artifactId>
+        <version>2.5</version>
+      </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
@@ -345,18 +316,6 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
           <version>1.7</version>
-        </plugin>
-        <plugin>
-          <groupId>org.tomdz.twirl</groupId>
-          <artifactId>twirl-maven-plugin</artifactId>
-          <version>1.0.1</version>
-          <executions>
-            <execution>
-              <goals>
-                <goal>generate</goal>
-              </goals>
-            </execution>
-          </executions>
         </plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
