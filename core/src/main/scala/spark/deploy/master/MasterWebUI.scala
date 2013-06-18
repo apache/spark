@@ -78,14 +78,13 @@ class MasterWebUI(master: ActorRef) extends Logging {
 
       <hr/>
 
-      <!-- Executors -->
-      <div class="row">
+      <div class="row"> <!-- Executors -->
         <div class="span12">
           <h3> Executor Summary </h3>
           <br/>
           {executorsTable(app.executors.values.toList)}
         </div>
-      </div>
+      </div>;
       UtilsWebUI.makePage(content, "Application Info: " + app.desc.name)
   }
 
