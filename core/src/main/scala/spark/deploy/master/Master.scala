@@ -56,16 +56,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   }
 
   def startWebUi() {
-    val webUi = new MasterWebUI(context.system, self)
-    /*
-    try {
-      AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
-    } catch {
-      case e: Exception =>
-        logError("Failed to create web UI", e)
-        System.exit(1)
-    }
-    */
+    val webUi = new MasterWebUI(self)
+    webUi.start()
   }
 
   override def receive = {
