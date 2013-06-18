@@ -16,13 +16,14 @@ import annotation.tailrec
 object WebUI extends Logging {
   type Responder[T] = HttpServletRequest => T
 
-  implicit def jsonResponderToHandler(responder: Responder[JSONObject]): Handler = {
+  implicit def jsonResponderToHandler(responder: Responder[JSONObject]): Handler =
     createHandler(responder, "text/json")
-  }
 
-  implicit def htmlResponderToHandler(responder: Responder[Seq[Node]]): Handler = {
+  implicit def htmlResponderToHandler(responder: Responder[Seq[Node]]): Handler =
     createHandler(responder, "text/html")
-  }
+
+  implicit def textResponderToHandler(responder: Responder[String]): Handler =
+    createHandler(responder, "text/plain")
 
   def createHandler[T <% AnyRef](responder: Responder[T], contentType: String): Handler = {
     new AbstractHandler {
@@ -40,12 +41,28 @@ object WebUI extends Logging {
     }
   }
 
+  /** Create and return a staticHandler if resourceBase can be located */
   def createStaticHandler(resourceBase: String): ResourceHandler = {
     val staticHandler = new ResourceHandler
-    val resource = getClass.getClassLoader.getResource(resourceBase)
-    staticHandler.setResourceBase(resource.toString)
-    staticHandler
+    Option(getClass.getClassLoader.getResource(resourceBase)) match {
+      case Some(res) =>
+        staticHandler.setResourceBase (res.toString)
+        staticHandler
+    }
   }
+
+  /*
+  /** Create and return a staticHandler if resourceBase can be located */
+  def createStaticHandler(resourceBase: String): Option[ResourceHandler] = {
+    val staticHandler = new ResourceHandler
+    Option(getClass.getClassLoader.getResource(resourceBase)) match {
+      case Some(res) =>
+        staticHandler.setResourceBase (res.toString)
+        Some(staticHandler)
+      case None => None
+    }
+  }
+  */
 
   def startJettyServer(ip: String, port: Int, handlers: Array[(String, Handler)]): (Server, Int) = {
     val handlersToRegister = handlers.map { case(path, handler) =>

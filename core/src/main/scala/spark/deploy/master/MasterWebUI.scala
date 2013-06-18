@@ -20,10 +20,10 @@ import javax.servlet.http.HttpServletRequest
  */
 private[spark]
 class MasterWebUI(master: ActorRef) extends Logging {
-
-  implicit val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
+  implicit val timeout = Duration.create(
+    System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
   val host = Utils.localHostName()
-  val port = Option(System.getProperty("spark.ui.port"))
+  val port = Option(System.getProperty("master.ui.port"))
     .getOrElse(MasterWebUI.DEFAULT_PORT).toInt
 
   def start() {
@@ -82,13 +82,13 @@ class MasterWebUI(master: ActorRef) extends Logging {
         <div class="span12">
           <h3> Executor Summary </h3>
           <br/>
-          {executorsTable(app.executors.values.toList)}
+          {executorTable(app.executors.values.toList)}
         </div>
       </div>;
       UtilsWebUI.makePage(content, "Application Info: " + app.desc.name)
   }
 
-  def executorsTable(executors: Seq[ExecutorInfo]): Seq[Node] = {
+  def executorTable(executors: Seq[ExecutorInfo]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed">
       <thead>
         <tr>
@@ -119,7 +119,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
         <a href={"%s/log?appId=%s&executorId=%s&logType=stdout"
             .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
         <a href={"%s/log?appId=%s&executorId=%s&logType=stderr"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
+          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
       </td>
     </tr>
   }
@@ -135,7 +135,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
           <ul class="unstyled">
             <li><strong>URL:</strong>{state.uri}</li>
             <li><strong>Workers:</strong>{state.workers.size}</li>
-            <li><strong>Cores:</strong> {state.workers.map(_.cores).sum}Total,
+            <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
               {state.workers.map(_.coresUsed).sum} Used</li>
             <li><strong>Memory:</strong>
               {Utils.memoryMegabytesToString(state.workers.map(_.memory).sum)} Total,
@@ -247,5 +247,5 @@ class MasterWebUI(master: ActorRef) extends Logging {
 
 object MasterWebUI {
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
-  val DEFAULT_PORT = "34000"
+  val DEFAULT_PORT = "8080"
 }
