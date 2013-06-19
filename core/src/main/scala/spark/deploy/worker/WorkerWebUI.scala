@@ -12,8 +12,8 @@ import org.eclipse.jetty.server.Handler
 import scala.io.Source
 import spark.{Utils, Logging}
 import spark.deploy.{JsonProtocol, WorkerState, RequestWorkerState}
-import spark.util.{WebUI => UtilsWebUI}
-import spark.util.WebUI._
+import spark.ui.{WebUI => UtilsWebUI}
+import spark.ui.WebUI._
 import xml.Node
 
 /**
@@ -55,6 +55,7 @@ class WorkerWebUI(worker: ActorRef, workDir: File) extends Logging {
     val stateFuture = (worker ? RequestWorkerState)(timeout).mapTo[WorkerState]
     val workerState = Await.result(stateFuture, 3 seconds)
     val content =
+      <hr />
       <div class="row"> <!-- Worker Details -->
         <div class="span12">
           <ul class="unstyled">
@@ -88,7 +89,7 @@ class WorkerWebUI(worker: ActorRef, workDir: File) extends Logging {
         </div>
       </div>;
 
-    UtilsWebUI.makePage(content, "Spark Worker on %s:%s".format(workerState.host, workerState.port))
+    UtilsWebUI.sparkPage(content, "Spark Worker on %s:%s".format(workerState.host, workerState.port))
   }
 
   def executorTable(executors: Seq[ExecutorRunner]): Seq[Node] = {
@@ -139,42 +140,9 @@ class WorkerWebUI(worker: ActorRef, workDir: File) extends Logging {
     source.close()
     lines
   }
-
-  /*
-  val handler = {
-    get {
-      (path("") & parameters('format ?)) {
-        case Some(js) if js.equalsIgnoreCase("json") => {
-          val future = worker ? RequestWorkerState
-          respondWithMediaType(MediaTypes.`application/json`) { ctx =>
-            ctx.complete(future.mapTo[WorkerState])
-          }
-        }
-        case _ =>
-          completeWith{
-            val future = worker ? RequestWorkerState
-            future.map { workerState =>
-              spark.deploy.worker.html.index(workerState.asInstanceOf[WorkerState])
-            }
-          }
-      } ~
-      path("log") {
-        parameters("appId", "executorId", "logType") { (appId, executorId, logType) =>
-          respondWithMediaType(cc.spray.http.MediaTypes.`text/plain`) {
-            getFromFileName(workDir.getPath() + "/" + appId + "/" + executorId + "/" + logType)
-          }
-        }
-      } ~
-      pathPrefix("static") {
-        getFromResourceDirectory(STATIC_RESOURCE_DIR)
-      } ~
-      getFromResourceDirectory(RESOURCE_DIR)
-    }
-  }
-  */
 }
 
 object WorkerWebUI {
-  val STATIC_RESOURCE_DIR = "spark/deploy/static"
+  val STATIC_RESOURCE_DIR = "spark/webui/static"
   val DEFAULT_PORT="8081"
 }

@@ -10,10 +10,11 @@ import net.liftweb.json.JsonAST.JValue
 import org.eclipse.jetty.server.Handler
 import scala.xml.Node
 import spark.{Logging, Utils}
-import spark.util.WebUI
-import spark.util.WebUI._
+import spark.ui.WebUI
+import WebUI._
 import spark.deploy._
 import spark.deploy.MasterState
+import spark.ui.WebUI
 
 /**
  * Web UI server for the standalone master.
@@ -64,6 +65,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
     val content =
+      <hr />
       <div class="row">
         <div class="span12">
           <ul class="unstyled">
@@ -97,7 +99,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
           {executorTable(app.executors.values.toList)}
         </div>
       </div>;
-      WebUI.makePage(content, "Application Info: " + app.desc.name)
+      WebUI.sparkPage(content, "Application Info: " + app.desc.name)
   }
 
   def executorTable(executors: Seq[ExecutorInfo]): Seq[Node] = {
@@ -142,6 +144,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
     val state = Await.result(stateFuture, 3 seconds)
 
     val content =
+      <hr />
       <div class="row">
         <div class="span12">
           <ul class="unstyled">
@@ -186,7 +189,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
           {appTable(state.completedApps.sortBy(_.endTime).reverse)}
         </div>
       </div>;
-    WebUI.makePage(content, "Spark Master: " + state.uri)
+    WebUI.sparkPage(content, "Spark Master: " + state.uri)
   }
 
   def workerTable(workers: Seq[spark.deploy.master.WorkerInfo]) = {
@@ -258,6 +261,6 @@ class MasterWebUI(master: ActorRef) extends Logging {
 }
 
 object MasterWebUI {
-  val STATIC_RESOURCE_DIR = "spark/deploy/static"
+  val STATIC_RESOURCE_DIR = "spark/webui/static"
   val DEFAULT_PORT = "8080"
 }

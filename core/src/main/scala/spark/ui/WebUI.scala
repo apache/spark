@@ -1,4 +1,4 @@
-package spark.util
+package spark.ui
 
 import annotation.tailrec
 import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
@@ -8,6 +8,10 @@ import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHa
 import spark.Logging
 import util.{Try, Success, Failure}
 import xml.Node
+
+abstract class UIComponent {
+  def getHandlers(): Seq[(String, Handler)]
+}
 
 object WebUI extends Logging {
   type Responder[T] = HttpServletRequest => T
@@ -41,24 +45,27 @@ object WebUI extends Logging {
     val staticHandler = new ResourceHandler
     Option(getClass.getClassLoader.getResource(resourceBase)) match {
       case Some(res) =>
-        staticHandler.setResourceBase (res.toString)
-        staticHandler
+        staticHandler.setResourceBase(res.toString)
+      case None =>
+        logError("Could not find resource path for Web UI: " + resourceBase)
     }
+    staticHandler
   }
 
-  def startJettyServer(ip: String, port: Int, handlers: Array[(String, Handler)]): (Server, Int) = {
+  def startJettyServer(ip: String, port: Int, handlers: Seq[(String, Handler)]): (Server, Int) = {
     val handlersToRegister = handlers.map { case(path, handler) =>
       if (path == "*") {
         handler
       } else {
         val contextHandler = new ContextHandler(path)
+        println("Adding handler for path: " + path)
         contextHandler.setHandler(handler)
         contextHandler.asInstanceOf[org.eclipse.jetty.server.Handler]
       }
     }
 
     val handlerList = new HandlerList
-    handlerList.setHandlers(handlersToRegister)
+    handlerList.setHandlers(handlersToRegister.toArray)
 
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
@@ -71,11 +78,19 @@ object WebUI extends Logging {
           connect((currentPort + 1) % 65536)
       }
     }
-
     connect(port)
   }
 
-  def makePage(content: => Seq[Node], title: String): Seq[Node] = {
+  /** Page with Spark logo, title, and Spark UI headers */
+  def headerSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
+    val newContent =
+      <h2><a href="/storage">Storage</a> | <a href="/jobs">Jobs</a> </h2><hl/>;
+
+    sparkPage(newContent ++ content, title)
+  }
+
+  /** Page with Spark logo and title */
+  def sparkPage(content: => Seq[Node], title: String): Seq[Node] = {
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
@@ -98,7 +113,6 @@ object WebUI extends Logging {
               </h1>
             </div>
           </div>
-          <hr />
           {content}
         </div>
       </body>

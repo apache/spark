@@ -1,4 +1,4 @@
-package spark.storage
+package spark.ui
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.util.Duration
@@ -6,38 +6,23 @@ import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.server.Handler
 import spark.{Logging, SparkContext}
 import spark.Utils
-import spark.util.WebUI._
-import spark.util.WebUI
+import WebUI._
 import xml.Node
+import spark.storage.StorageUtils
 
 /**
  * Web UI server for the BlockManager inside each SparkContext.
  */
 private[spark]
-class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef, sc: SparkContext)
-  extends Logging {
+class BlockManagerUI(sc: SparkContext)
+    extends UIComponent with Logging  {
+  implicit val timeout = Duration.create(
+    System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
 
-  implicit val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
-  val host = Utils.localHostName()
-  val port = Option(System.getProperty("spark.ui.port"))
-    .getOrElse(BlockManagerUI.DEFAULT_PORT).toInt
 
-  /** Start a HTTP server to run the Web interface */
-  def start() {
-    try {
-      val (server, boundPort) = WebUI.startJettyServer("0.0.0.0", port, handlers)
-      logInfo("Started BlockManager web UI at http://%s:%d".format(host, boundPort))
-    } catch {
-      case e: Exception =>
-        logError("Failed to create BlockManager WebUI", e)
-        System.exit(1)
-    }
-  }
-
-  val handlers = Array[(String, Handler)](
-    ("/static", createStaticHandler(BlockManagerUI.STATIC_RESOURCE_DIR)),
-    ("/rdd", (request: HttpServletRequest) => rddPage(request)),
-    ("*", (request: HttpServletRequest) => indexPage)
+  def getHandlers = Seq[(String, Handler)](
+    ("/storage/rdd", (request: HttpServletRequest) => rddPage(request)),
+    ("/storage", (request: HttpServletRequest) => indexPage)
   )
 
   def rddPage(request: HttpServletRequest): Seq[Node] = {
@@ -137,7 +122,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
         </div>
       </div>;
 
-    WebUI.makePage(content, "RDD Info: " + id)
+    WebUI.headerSparkPage(content, "RDD Info: " + id)
   }
 
   def indexPage: Seq[Node] = {
@@ -176,7 +161,7 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
             {for (rdd <- rdds) yield
             <tr>
               <td>
-                <a href={"/rdd?id=%s".format(rdd.id)}>
+                <a href={"/storage/rdd?id=%s".format(rdd.id)}>
                   {rdd.name}
                 </a>
               </td>
@@ -191,12 +176,6 @@ class BlockManagerUI(val actorSystem: ActorSystem, blockManagerMaster: ActorRef,
           </tbody>
         </table>;
 
-    WebUI.makePage(content, "Spark Storage")
+    WebUI.headerSparkPage(content, "Spark Storage ")
   }
-  private[spark] def appUIAddress = "http://" + host + ":" + port
-}
-
-object BlockManagerUI {
-  val STATIC_RESOURCE_DIR = "spark/deploy/static"
-  val DEFAULT_PORT = "33000"
 }

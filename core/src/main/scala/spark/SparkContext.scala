@@ -46,8 +46,9 @@ import spark.scheduler.{DAGScheduler, ResultTask, ShuffleMapTask, SparkListener,
 import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, ClusterScheduler}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import spark.storage.{BlockManagerUI, StorageStatus, StorageUtils, RDDInfo}
+import spark.storage.{StorageStatus, StorageUtils, RDDInfo}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
+import ui.{SparkUI, BlockManagerUI}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -93,9 +94,8 @@ class SparkContext(
     isLocal)
   SparkEnv.set(env)
 
-  // Start the BlockManager UI
-  private[spark] val ui = new BlockManagerUI(
-    env.actorSystem, env.blockManager.master.driverActor, this)
+  // Start the Spark UI
+  private[spark] val ui = new SparkUI(this)
   ui.start()
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
