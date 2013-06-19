@@ -86,6 +86,9 @@ object WebUI extends Logging {
         <link rel="stylesheet" href="/static/bootstrap-responsive.min.css" type="text/css" />
         <script src="/static/sorttable.js"></script>
         <title>{title}</title>
+        <style type="text/css">
+          table.sortable thead {{ cursor: pointer; }}
+        </style>
       </head>
       <body>
         <div class="container">
@@ -98,9 +101,10 @@ object WebUI extends Logging {
               </h1>
             </div>
           </div>
-        {content}
-      </div>
-    </body>
-  </html>
+          <hr />
+          {content}
+        </div>
+      </body>
+    </html>
   }
 }
