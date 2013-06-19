@@ -116,8 +116,8 @@ private object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory after " + maxAttempts +
-            " attempts!")
+        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+          maxAttempts + " attempts!")
       }
       try {
         dir = new File(root, "spark-" + UUID.randomUUID.toString)

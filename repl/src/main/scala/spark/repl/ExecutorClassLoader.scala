@@ -8,7 +8,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.objectweb.asm._
-import org.objectweb.asm.commons.EmptyVisitor
 import org.objectweb.asm.Opcodes._
 
 
@@ -83,7 +82,7 @@ extends ClassLoader(parent) {
 }
 
 class ConstructorCleaner(className: String, cv: ClassVisitor)
-extends ClassAdapter(cv) {
+extends ClassVisitor(ASM4, cv) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     val mv = cv.visitMethod(access, name, desc, sig, exceptions)

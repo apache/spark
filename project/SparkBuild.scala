@@ -148,7 +148,7 @@ object SparkBuild extends Build {
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
       "commons-daemon" % "commons-daemon" % "1.0.10",
       "com.ning" % "compress-lzf" % "0.8.4",
-      "asm" % "asm-all" % "3.3.1",
+      "org.ow2.asm" % "asm" % "4.0",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.22",
       "com.typesafe.akka" % "akka-actor" % "2.0.3" excludeAll(excludeNetty),
@@ -201,7 +201,21 @@ object SparkBuild extends Build {
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
-    libraryDependencies ++= Seq("com.twitter" % "algebird-core_2.9.2" % "0.1.11")
+    resolvers ++= Seq("Apache HBase" at "https://repository.apache.org/content/repositories/releases"),
+    libraryDependencies ++= Seq(
+      "com.twitter" % "algebird-core_2.9.2" % "0.1.11",
+
+      "org.apache.hbase" % "hbase" % "0.94.6" excludeAll(excludeNetty),
+
+      "org.apache.cassandra" % "cassandra-all" % "1.2.5"
+        exclude("com.google.guava", "guava")
+        exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru")
+        exclude("com.ning","compress-lzf")
+        exclude("io.netty", "netty")
+        exclude("jline","jline")
+        exclude("log4j","log4j")
+        exclude("org.apache.cassandra.deps", "avro")
+    )
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")

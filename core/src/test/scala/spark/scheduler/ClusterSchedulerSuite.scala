@@ -16,7 +16,7 @@ class DummyTaskSetManager(
     initNumTasks: Int,
     clusterScheduler: ClusterScheduler,
     taskSet: TaskSet)
-  extends TaskSetManager(clusterScheduler,taskSet) {
+  extends ClusterTaskSetManager(clusterScheduler,taskSet) {
 
   parent = null
   weight = 1
@@ -88,7 +88,7 @@ class DummyTask(stageId: Int) extends Task[Int](stageId)
   }
 }
 
-class ClusterSchedulerSuite extends FunSuite with LocalSparkContext {
+class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging {
 
   def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: ClusterScheduler, taskSet: TaskSet): DummyTaskSetManager = {
     new DummyTaskSetManager(priority, stage, numTasks, cs , taskSet)
@@ -96,8 +96,11 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext {
 
   def resourceOffer(rootPool: Pool): Int = {
     val taskSetQueue = rootPool.getSortedTaskSetQueue()
-    for (taskSet <- taskSetQueue)
-    {
+    /* Just for Test*/
+    for (manager <- taskSetQueue) {
+       logInfo("parentName:%s, parent running tasks:%d, name:%s,runningTasks:%d".format(manager.parent.name, manager.parent.runningTasks, manager.name, manager.runningTasks))
+    }
+    for (taskSet <- taskSetQueue) {
       taskSet.slaveOffer("execId_1", "hostname_1", 1) match {
         case Some(task) =>
           return taskSet.stageId

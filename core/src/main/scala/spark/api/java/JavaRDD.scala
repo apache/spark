@@ -86,7 +86,6 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
-
 }
 
 object JavaRDD {
