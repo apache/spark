@@ -368,13 +368,13 @@ abstract class RDD[T: ClassManifest](
    * @param printPipeContext Before piping elements, this function is called as an oppotunity
    *                         to pipe context data. Print line function (like out.println) will be 
    *                         passed as printPipeContext's parameter.
-   * @param printPipeContext Use this function to customize how to pipe elements. This function 
-   *                         will be called with each RDD element as the 1st parameter, and the 
-   *                         print line function (like out.println()) as the 2nd parameter.
-   *                         An example of pipe the RDD data of groupBy() in a streaming way,
-   *                         instead of constructing a huge String to concat all the elements:
-   *                         def printRDDElement(record:(String, Seq[String]), f:String=>Unit) = 
-   *                           for (e <- record._2){f(e)}
+   * @param printRDDElement Use this function to customize how to pipe elements. This function 
+   *                        will be called with each RDD element as the 1st parameter, and the 
+   *                        print line function (like out.println()) as the 2nd parameter.
+   *                        An example of pipe the RDD data of groupBy() in a streaming way,
+   *                        instead of constructing a huge String to concat all the elements:
+   *                        def printRDDElement(record:(String, Seq[String]), f:String=>Unit) = 
+   *                          for (e <- record._2){f(e)}
    * @return the result RDD
    */
   def pipe(

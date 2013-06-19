@@ -62,7 +62,7 @@ class PipedRDD[T: ClassManifest](
         val out = new PrintWriter(proc.getOutputStream)
 
         // input the pipe context firstly
-        if ( printPipeContext != null) {
+        if (printPipeContext != null) {
           printPipeContext(out.println(_))
         }
         for (elem <- firstParent[T].iterator(split, context)) {
