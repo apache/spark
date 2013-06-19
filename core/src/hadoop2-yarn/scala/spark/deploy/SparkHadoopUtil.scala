@@ -27,18 +27,7 @@ object SparkHadoopUtil {
   }
 
   def runAsUser(func: (Product) => Unit, args: Product, user: String) {
-
-    // println("running as user " + jobUserName)
-
-    UserGroupInformation.setConfiguration(yarnConf)
-    val appMasterUgi: UserGroupInformation = UserGroupInformation.createRemoteUser(user)
-    appMasterUgi.doAs(new PrivilegedExceptionAction[AnyRef] {
-      def run: AnyRef = {
-        func(args)
-        // no return value ...
-        null
-      }
-    })
+    func(args)
   }
 
   // Note that all params which start with SPARK are propagated all the way through, so if in yarn mode, this MUST be set to true.

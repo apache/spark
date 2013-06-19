@@ -3,6 +3,7 @@ package spark.scheduler
 import spark.Logging
 import scala.collection.immutable.Set
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.conf.Configuration
@@ -70,6 +71,10 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   // This method does not expect failures, since validate has already passed ...
   private def prefLocsFromMapreduceInputFormat(): Set[SplitInfo] = {
     val conf = new JobConf(configuration)
+    // make sure to propogate any credentials from the current user to the jobConf
+    // for Hadoop security
+    val jobCreds = conf.getCredentials();
+    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
     FileInputFormat.setInputPaths(conf, path)
 
     val instance: org.apache.hadoop.mapreduce.InputFormat[_, _] =
@@ -89,6 +94,10 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   // This method does not expect failures, since validate has already passed ...
   private def prefLocsFromMapredInputFormat(): Set[SplitInfo] = {
     val jobConf = new JobConf(configuration)
+    // make sure to propogate any credentials from the current user to the jobConf
+    // for Hadoop security
+    val jobCreds = jobConf.getCredentials();
+    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
     FileInputFormat.setInputPaths(jobConf, path)
 
     val instance: org.apache.hadoop.mapred.InputFormat[_, _] =

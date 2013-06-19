@@ -14,6 +14,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.mapred.OutputFormat
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.conf.Configuration
 
 class PairDStreamFunctions[K: ClassManifest, V: ClassManifest](self: DStream[(K,V)])
@@ -470,7 +471,11 @@ extends Serializable {
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       conf: JobConf = new JobConf
-    ) {
+    ) {  
+    // make sure to propogate any credentials from the current user to the jobConf    
+    // for Hadoop security
+    val jobCreds = conf.getCredentials();
+    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)

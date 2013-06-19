@@ -1,9 +1,12 @@
 package spark.deploy.yarn
 
 import java.net.URI
+import java.nio.ByteBuffer
+import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
@@ -11,7 +14,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
-import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records}
+import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records, ProtoUtils}
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 
 import scala.collection.JavaConversions._
@@ -76,7 +79,13 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
 */
 
     ctx.setUser(UserGroupInformation.getCurrentUser().getShortUserName())
-    val commands = List[String]("java " +
+
+    val credentials = UserGroupInformation.getCurrentUser().getCredentials()
+    val dob = new DataOutputBuffer()
+    credentials.writeTokenStorageToStream(dob)
+    ctx.setContainerTokens(ByteBuffer.wrap(dob.getData()))
+
+    val commands = List[String](Environment.JAVA_HOME.$() + "/bin/java " +
       " -server " +
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
       // Not killing the task leaves various aspects of the worker and (to some extent) the jvm in an inconsistent state.
@@ -145,6 +154,8 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     val env = new HashMap[String, String]()
     // should we add this ?
     Apps.addToEnvironment(env, Environment.USER.name, Utils.getUserNameFromEnvironment())
+    // set this so that UGI set to correct user in unsecure mode
+    Apps.addToEnvironment(env, "HADOOP_USER_NAME", Utils.getUserNameFromEnvironment())
 
     // If log4j present, ensure ours overrides all others
     if (System.getenv("SPARK_YARN_LOG4J_PATH") != null) {
@@ -165,7 +176,23 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     val cmHostPortStr = container.getNodeId().getHost() + ":" + container.getNodeId().getPort()
     val cmAddress = NetUtils.createSocketAddr(cmHostPortStr)
     logInfo("Connecting to ContainerManager at " + cmHostPortStr)
-    return rpc.getProxy(classOf[ContainerManager], cmAddress, conf).asInstanceOf[ContainerManager]
+
+    // use doAs and remoteUser here so we can add the container token and not 
+    // pollute the current users credentials with all of the individual container tokens
+    val user = UserGroupInformation.createRemoteUser(container.getId().toString());
+    val containerToken = container.getContainerToken();
+    if (containerToken != null) {
+      user.addToken(ProtoUtils.convertFromProtoFormat(containerToken, cmAddress))
+    }
+
+    val proxy = user
+        .doAs(new PrivilegedExceptionAction[ContainerManager] {
+          def run: ContainerManager = {
+            return rpc.getProxy(classOf[ContainerManager],
+                cmAddress, conf).asInstanceOf[ContainerManager]
+          }
+        });
+    return proxy;
   }
   
 }
