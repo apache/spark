@@ -190,9 +190,9 @@
         <version>0.8.4</version>
       </dependency>
       <dependency>
-        <groupId>asm</groupId>
-        <artifactId>asm-all</artifactId>
-        <version>3.3.1</version>
+        <groupId>org.ow2.asm</groupId>
+        <artifactId>asm</artifactId>
+        <version>4.0</version>
       </dependency>
       <dependency>
         <groupId>com.google.protobuf</groupId>
