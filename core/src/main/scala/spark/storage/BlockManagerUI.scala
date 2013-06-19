@@ -2,15 +2,13 @@ package spark.storage
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.util.Duration
-import akka.util.duration._
+import javax.servlet.http.HttpServletRequest
+import org.eclipse.jetty.server.Handler
 import spark.{Logging, SparkContext}
 import spark.Utils
-import spark.util.WebUI
-import org.eclipse.jetty.server.Handler
-import javax.servlet.http.HttpServletRequest
-import xml.Node
 import spark.util.WebUI._
-
+import spark.util.WebUI
+import xml.Node
 
 /**
  * Web UI server for the BlockManager inside each SparkContext.

@@ -1,20 +1,19 @@
 package spark.deploy.master
 
-import akka.actor.{ActorRef}
+import akka.actor.ActorRef
 import akka.dispatch.Await
 import akka.pattern.ask
-import akka.util.{Duration}
+import akka.util.Duration
 import akka.util.duration._
-import scala.xml.Node
-import spark.{Logging, Utils}
-import spark.util.{WebUI => UtilsWebUI}
-
-import spark.deploy._
-import org.eclipse.jetty.server.Handler
-import spark.util.WebUI._
-import spark.deploy.MasterState
 import javax.servlet.http.HttpServletRequest
 import net.liftweb.json.JsonAST.JValue
+import org.eclipse.jetty.server.Handler
+import scala.xml.Node
+import spark.{Logging, Utils}
+import spark.util.WebUI
+import spark.util.WebUI._
+import spark.deploy._
+import spark.deploy.MasterState
 
 /**
  * Web UI server for the standalone master.
@@ -29,7 +28,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
 
   def start() {
     try {
-      val (server, boundPort) = UtilsWebUI.startJettyServer("0.0.0.0", port, handlers)
+      val (server, boundPort) = WebUI.startJettyServer("0.0.0.0", port, handlers)
       logInfo("Started Master web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
@@ -98,7 +97,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
           {executorTable(app.executors.values.toList)}
         </div>
       </div>;
-      UtilsWebUI.makePage(content, "Application Info: " + app.desc.name)
+      WebUI.makePage(content, "Application Info: " + app.desc.name)
   }
 
   def executorTable(executors: Seq[ExecutorInfo]): Seq[Node] = {
@@ -187,7 +186,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
           {appTable(state.completedApps.sortBy(_.endTime).reverse)}
         </div>
       </div>;
-    UtilsWebUI.makePage(content, "Spark Master: " + state.uri)
+    WebUI.makePage(content, "Spark Master: " + state.uri)
   }
 
   def workerTable(workers: Seq[spark.deploy.master.WorkerInfo]) = {
@@ -246,10 +245,10 @@ class MasterWebUI(master: ActorRef) extends Logging {
                 {app.coresGranted}
               </td>
               <td>{Utils.memoryMegabytesToString(app.desc.memoryPerSlave)}</td>
-              <td>{WebUI.formatDate(app.submitDate)}</td>
+              <td>{DeployWebUI.formatDate(app.submitDate)}</td>
               <td>{app.desc.user}</td>
               <td>{app.state.toString}</td>
-              <td>{WebUI.formatDuration(app.duration)}</td>
+              <td>{DeployWebUI.formatDuration(app.duration)}</td>
             </tr>
           }
         }

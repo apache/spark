@@ -5,17 +5,16 @@ import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.{Duration, Timeout}
 import akka.util.duration._
-
-import spark.deploy.{JsonProtocol, WorkerState, RequestWorkerState}
 import java.io.File
-import spark.util.{WebUI => UtilsWebUI}
-import spark.{Utils, Logging}
-import org.eclipse.jetty.server.Handler
-import spark.util.WebUI._
-import scala.io.Source
 import javax.servlet.http.HttpServletRequest
-import xml.Node
 import net.liftweb.json.JsonAST.JValue
+import org.eclipse.jetty.server.Handler
+import scala.io.Source
+import spark.{Utils, Logging}
+import spark.deploy.{JsonProtocol, WorkerState, RequestWorkerState}
+import spark.util.{WebUI => UtilsWebUI}
+import spark.util.WebUI._
+import xml.Node
 
 /**
  * Web UI server for the standalone worker.

@@ -1,16 +1,13 @@
 package spark.util
 
-import xml.Node
-import org.eclipse.jetty.server.{Server, Request, Handler}
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
-import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHandler, AbstractHandler}
-import util.Try
-import util.Success
-import util.Failure
-import spark.Logging
 import annotation.tailrec
-import net.liftweb.json.JsonAST.JValue
+import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
 import net.liftweb.json._
+import org.eclipse.jetty.server.{Server, Request, Handler}
+import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHandler, AbstractHandler}
+import spark.Logging
+import util.{Try, Success, Failure}
+import xml.Node
 
 object WebUI extends Logging {
   type Responder[T] = HttpServletRequest => T
