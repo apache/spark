@@ -48,7 +48,7 @@ import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.{StorageStatus, StorageUtils, RDDInfo}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
-import ui.{SparkUI, BlockManagerUI}
+import ui.{SparkUI}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark

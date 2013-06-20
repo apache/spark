@@ -1,8 +1,10 @@
 package spark.ui
 
+import jobs.JobProgressUI
 import spark.{Logging, SparkContext, Utils}
 import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.server.Handler
+import storage.BlockManagerUI
 import WebUI._
 
 private[spark] class SparkUI(sc: SparkContext) extends Logging {

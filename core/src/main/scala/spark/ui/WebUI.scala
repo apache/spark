@@ -13,6 +13,10 @@ abstract class UIComponent {
   def getHandlers(): Seq[(String, Handler)]
 }
 
+abstract class View[T] {
+  def render(request: HttpServletRequest): T
+}
+
 object WebUI extends Logging {
   // CORE WEB UI COMPONENTS
   type Responder[T] = HttpServletRequest => T
@@ -82,6 +86,7 @@ object WebUI extends Logging {
   }
 
   // HELPER FUNCTIONS AND SHORTCUTS
+
   /** Page with Spark logo, title, and Spark UI headers */
   def headerSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
     val newContent =
@@ -123,7 +128,7 @@ object WebUI extends Logging {
   /** Shortcut for making a table derived from a sequence of objects. */
   def listingTable[T](headers: Seq[String], makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable">
-    <thead>{headers.map(h => "<th>%s</th>".format(h))}</thead>
+    <thead>{headers.map(h => <th>{h}</th>)}</thead>
       <tbody>
         {rows.map(r => makeRow(r))}
       </tbody>
