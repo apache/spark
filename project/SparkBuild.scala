@@ -125,12 +125,13 @@ object SparkBuild extends Build {
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
-  )
+  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings
 
-  val slf4jVersion = "1.6.1"
+  val slf4jVersion = "1.7.2"
 
   val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
+  val excludeAsm = ExclusionRule(organization = "asm")
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
@@ -201,11 +202,10 @@ object SparkBuild extends Build {
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
-    resolvers ++= Seq("Apache HBase" at "https://repository.apache.org/content/repositories/releases"),
     libraryDependencies ++= Seq(
       "com.twitter" % "algebird-core_2.9.2" % "0.1.11",
 
-      "org.apache.hbase" % "hbase" % "0.94.6" excludeAll(excludeNetty),
+      "org.apache.hbase" % "hbase" % "0.94.6" excludeAll(excludeNetty, excludeAsm),
 
       "org.apache.cassandra" % "cassandra-all" % "1.2.5"
         exclude("com.google.guava", "guava")
@@ -224,7 +224,7 @@ object SparkBuild extends Build {
     name := "spark-streaming",
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty),
-      "com.github.sgroschupf" % "zkclient" % "0.1",
+      "com.github.sgroschupf" % "zkclient" % "0.1" excludeAll(excludeNetty),
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-zeromq" % "2.0.3" excludeAll(excludeNetty)
     )
