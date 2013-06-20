@@ -39,6 +39,11 @@ class JobProgressUI(sc: SparkContext) extends UIComponent {
 
   def stagePage(request: HttpServletRequest): Seq[Node] = {
     val stageId = request.getParameter("id").toInt
+
+    val taskHeaders = Seq("Task ID", "Service Time (ms)", "Locality Level", "Worker", "Launch Time")
+    val tasks = listener.stageToTaskInfos(stageId)
+    val taskTable = listingTable(taskHeaders, taskRow, tasks)
+
     val content =
       <h2>Percentile Metrics</h2>
         <table class="table table-bordered table-striped table-condensed sortable">
@@ -53,27 +58,13 @@ class JobProgressUI(sc: SparkContext) extends UIComponent {
             {listener.stageToTaskInfos(stageId).map{ case(i, m) => taskRow(i, m) }}
           </tbody>
         </table>
-      <h2>Tasks</h2>
-        <table class="table table-bordered table-striped table-condensed sortable">
-          <thead>
-            <tr>
-              <th>Task ID</th>
-              <th>Service Time (ms)</th>
-              <th>Locality level</th>
-              <th>Worker</th>
-              <th>Launch Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {listener.stageToTaskInfos(stageId).map{ case(i, m) => taskRow(i, m) }}
-          </tbody>
-        </table>;
+      <h2>Tasks</h2> ++ {taskTable};
+
     WebUI.headerSparkPage(content, "Stage Details: %s".format(stageId))
   }
 
-
-
-  def taskRow(info: TaskInfo, metrics: TaskMetrics): Seq[Node] = {
+  def taskRow(taskData: (TaskInfo, TaskMetrics)): Seq[Node] = {
+    val (info, metrics) = taskData
     <tr>
       <td>{info.taskId}</td>
       <td>{metrics.executorRunTime}</td>
@@ -84,37 +75,16 @@ class JobProgressUI(sc: SparkContext) extends UIComponent {
   }
 
   def indexPage: Seq[Node] = {
+    val stageHeaders = Seq("Stage ID", "Origin", "Submitted", "Duration", "Tasks: Complete/Total")
+    val activeStages = listener.activeStages.toSeq
+    val completedStages = listener.completedStages.toSeq
+
+    val activeStageTable = listingTable(stageHeaders, stageRow, activeStages)
+    val completedStageTable = listingTable(stageHeaders, stageRow, completedStages)
+
     val content =
-      <h2>Active Stages</h2>
-      <table class="table table-bordered table-striped table-condensed sortable">
-        <thead>
-          <tr>
-            <th>Stage ID</th>
-            <th>Origin</th>
-            <th>Submitted</th>
-            <th>Duration</th>
-            <th>Tasks: Complete/Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {listener.activeStages.map(stageRow)}
-        </tbody>
-      </table>
-      <h2>Completed Stages</h2>
-        <table class="table table-bordered table-striped table-condensed sortable">
-          <thead>
-            <tr>
-              <th>Stage ID</th>
-              <th>Origin</th>
-              <th>Submitted</th>
-              <th>Duration</th>
-              <th>Tasks: Complete/Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {listener.completedStages.map(stageRow)}
-          </tbody>
-        </table>;
+      <h2>Active Stages</h2> ++ {activeStageTable}
+      <h2>Completed Stages</h2> ++ {completedStageTable}
 
     WebUI.headerSparkPage(content, "Spark Stages")
   }
@@ -139,7 +109,7 @@ class JobProgressUI(sc: SparkContext) extends UIComponent {
       <td>{listener.stageToTasksComplete.getOrElse(s.id, 0)} / {s.numPartitions}
           {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
             case f if f > 0 => "(%s failed)".format(f)
-            case _ =>
+              case _ =>
           }}
       </td>
     </tr>
@@ -179,4 +149,3 @@ private[spark] class JobProgressListener extends SparkListener {
 
   override def onJobEnd(jobEnd: SparkListenerEvents) { }
 }
-
