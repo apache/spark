@@ -14,7 +14,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
     ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
     ("*", (request: HttpServletRequest) => WebUI.headerSparkPage(<h1>Test</h1>, "Test page"))
   )
-  val components = Seq(new BlockManagerUI(sc))
+  val components = Seq(new BlockManagerUI(sc), new JobProgressUI(sc))
 
   def start() {
     /** Start an HTTP server to run the Web interface */

@@ -503,6 +503,7 @@ class DAGScheduler(
         case _ => "Unkown"
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.origin, serviceTime))
+      stage.completionTime = Some(System.currentTimeMillis)
       val stageComp = StageCompleted(stageToInfos(stage))
       sparkListeners.foreach{_.onStageCompleted(stageComp)}
       running -= stage

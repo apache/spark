@@ -94,10 +94,6 @@ class SparkContext(
     isLocal)
   SparkEnv.set(env)
 
-  // Start the Spark UI
-  private[spark] val ui = new SparkUI(this)
-  ui.start()
-
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
@@ -214,6 +210,10 @@ class SparkContext(
 
   @volatile private var dagScheduler = new DAGScheduler(taskScheduler)
   dagScheduler.start()
+
+  // Start the Spark UI
+  private[spark] val ui = new SparkUI(this)
+  ui.start()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {

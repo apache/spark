@@ -58,7 +58,6 @@ object WebUI extends Logging {
         handler
       } else {
         val contextHandler = new ContextHandler(path)
-        println("Adding handler for path: " + path)
         contextHandler.setHandler(handler)
         contextHandler.asInstanceOf[org.eclipse.jetty.server.Handler]
       }
@@ -84,7 +83,7 @@ object WebUI extends Logging {
   /** Page with Spark logo, title, and Spark UI headers */
   def headerSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
     val newContent =
-      <h2><a href="/storage">Storage</a> | <a href="/jobs">Jobs</a> </h2><hl/>;
+      <h2><a href="/storage">Storage</a> | <a href="/stages">Jobs</a> </h2><hl/>;
 
     sparkPage(newContent ++ content, title)
   }
