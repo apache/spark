@@ -116,12 +116,12 @@ private[spark] class PythonRDD[T: ClassManifest](
               // We've finished the data section of the output, but we can still
               // read some accumulator updates; let's do that, breaking when we
               // get a negative length record.
-              var len2 = stream.readInt
+              var len2 = stream.readInt()
               while (len2 >= 0) {
                 val update = new Array[Byte](len2)
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
-                len2 = stream.readInt
+                len2 = stream.readInt()
               }
               new Array[Byte](0)
           }

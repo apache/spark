@@ -16,7 +16,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   def create(): Socket = {
     synchronized {
       // Start the daemon if it hasn't been started
-      startDaemon
+      startDaemon()
 
       // Attempt to connect, restart and retry once if it fails
       try {
@@ -24,8 +24,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       } catch {
         case exc: SocketException => {
           logWarning("Python daemon unexpectedly quit, attempting to restart")
-          stopDaemon
-          startDaemon
+          stopDaemon()
+          startDaemon()
           new Socket(daemonHost, daemonPort)
         }
         case e => throw e
@@ -34,7 +34,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   def stop() {
-    stopDaemon
+    stopDaemon()
   }
 
   private def startDaemon() {
@@ -51,7 +51,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars)
         daemon = pb.start()
-        daemonPort = new DataInputStream(daemon.getInputStream).readInt
+        daemonPort = new DataInputStream(daemon.getInputStream).readInt()
 
         // Redirect the stderr to ours
         new Thread("stderr reader for " + pythonExec) {
@@ -71,7 +71,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         }.start()
       } catch {
         case e => {
-          stopDaemon
+          stopDaemon()
           throw e
         }
       }
@@ -85,7 +85,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     synchronized {
       // Request shutdown of existing daemon by sending SIGTERM
       if (daemon != null) {
-        daemon.destroy
+        daemon.destroy()
       }
 
       daemon = null
