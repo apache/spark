@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import twitter4j.Status
+import twitter4j.auth.{Authorization, BasicAuthorization}
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -372,8 +373,20 @@ class StreamingContext private (
       password: String,
       filters: Seq[String] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+    ): DStream[Status] = twitterStream(new BasicAuthorization(username, password), filters, storageLevel)
+
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param twitterAuth Twitter4J authentication
+   * @param filters Set of filter strings to get only those tweets that match them
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def twitterStream(
+      twitterAuth: Authorization,
+      filters: Seq[String] = Nil,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[Status] = {
-    val inputStream = new TwitterInputDStream(this, username, password, filters, storageLevel)
+    val inputStream = new TwitterInputDStream(this, twitterAuth, filters, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }

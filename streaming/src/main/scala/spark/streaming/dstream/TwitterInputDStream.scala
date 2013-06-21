@@ -6,6 +6,7 @@ import storage.StorageLevel
 
 import twitter4j._
 import twitter4j.auth.BasicAuthorization
+import twitter4j.auth.Authorization
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
@@ -16,21 +17,19 @@ import twitter4j.auth.BasicAuthorization
 private[streaming]
 class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
-    username: String,
-    password: String,
+    twitterAuth: Authorization,
     filters: Seq[String],
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[Status](ssc_)  {
-
+  
   override def getReceiver(): NetworkReceiver[Status] = {
-    new TwitterReceiver(username, password, filters, storageLevel)
+    new TwitterReceiver(twitterAuth, filters, storageLevel)
   }
 }
 
 private[streaming]
 class TwitterReceiver(
-    username: String,
-    password: String,
+    twitterAuth: Authorization,
     filters: Seq[String],
     storageLevel: StorageLevel
   ) extends NetworkReceiver[Status] {
@@ -40,8 +39,7 @@ class TwitterReceiver(
 
   protected override def onStart() {
     blockGenerator.start()
-    twitterStream = new TwitterStreamFactory()
-      .getInstance(new BasicAuthorization(username, password))
+    twitterStream = new TwitterStreamFactory().getInstance(twitterAuth)
     twitterStream.addListener(new StatusListener {
       def onStatus(status: Status) = {
         blockGenerator += status
