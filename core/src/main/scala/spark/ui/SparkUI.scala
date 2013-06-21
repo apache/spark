@@ -22,7 +22,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   )
   val storage = new BlockManagerUI(sc)
   val jobs = new JobProgressUI(sc)
-  val allHandlers = handlers ++ storage.getHandlers ++ jobs.getHandlers
+  val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ handlers
 
   def start() {
     /** Start an HTTP server to run the Web interface */

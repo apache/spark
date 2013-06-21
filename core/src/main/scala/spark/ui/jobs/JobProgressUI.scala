@@ -33,11 +33,16 @@ private[spark] class JobProgressUI(sc: SparkContext) {
 }
 
 private[spark] class JobProgressListener extends SparkListener {
+  // TODO(pwendell) Currently does not handle entirely failed stages
+
+  // How many stages to remember
+  val RETAINED_STAGES = 1000
+
   val activeStages = HashSet[Stage]()
   val stageToTasksComplete = HashMap[Int, Int]()
   val stageToTasksFailed = HashMap[Int, Int]()
   val stageToTaskInfos = HashMap[Int, ArrayBuffer[(TaskInfo, TaskMetrics)]]()
-  val completedStages = ListBuffer[Stage]() // Todo (pwendell): Evict these over time
+  val completedStages = ListBuffer[Stage]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) { }
 
@@ -45,6 +50,18 @@ private[spark] class JobProgressListener extends SparkListener {
     val stage = stageCompleted.stageInfo.stage
     activeStages -= stage
     stage +=: completedStages
+    if (completedStages.size > RETAINED_STAGES) purgeStages()
+  }
+
+  /** Remove and garbage collect old stages */
+  def purgeStages() {
+    val toRemove = RETAINED_STAGES / 10
+    completedStages.takeRight(toRemove).foreach( s => {
+      stageToTasksComplete.remove(s.id)
+      stageToTasksFailed.remove(s.id)
+      stageToTaskInfos.remove(s.id)
+    })
+    completedStages.trimEnd(toRemove)
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) =
@@ -64,4 +81,22 @@ private[spark] class JobProgressListener extends SparkListener {
   }
 
   override def onJobEnd(jobEnd: SparkListenerEvents) { }
+
+  /** Is this stage's input from a shuffle read. */
+  def hasShuffleRead(stageID: Int): Boolean = {
+    // This is written in a slightly complicated way to avoid having to scan all tasks
+    for (s <- stageToTaskInfos.get(stageID).getOrElse(Seq())) {
+      if (s._2 != null) return s._2.shuffleReadMetrics.isDefined
+    }
+    return false // No tasks have finished for this stage
+  }
+
+  /** Is this stage's output to a shuffle write. */
+  def hasShuffleWrite(stageID: Int): Boolean = {
+    // This is written in a slightly complicated way to avoid having to scan all tasks
+    for (s <- stageToTaskInfos.get(stageID).getOrElse(Seq())) {
+      if (s._2 != null) return s._2.shuffleWriteMetrics.isDefined
+    }
+    return false // No tasks have finished for this stage
+  }
 }

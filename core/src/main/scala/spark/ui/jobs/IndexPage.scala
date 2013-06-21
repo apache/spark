@@ -19,7 +19,8 @@ class IndexPage(parent: JobProgressUI) {
   val dateFmt = parent.dateFmt
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stageHeaders = Seq("Stage ID", "Origin", "Submitted", "Duration", "Tasks: Complete/Total")
+    val stageHeaders = Seq("Stage ID", "Origin", "Submitted", "Duration", "Tasks: Complete/Total",
+                           "Shuffle Activity")
     val activeStages = listener.activeStages.toSeq
     val completedStages = listener.completedStages.toSeq
 
@@ -44,6 +45,14 @@ class IndexPage(parent: JobProgressUI) {
       case Some(t) => dateFmt.format(new Date(t))
       case None => "Unknown"
     }
+    val (read, write) = (listener.hasShuffleRead(s.id), listener.hasShuffleWrite(s.id))
+    val shuffleString = (read, write) match {
+      case (true, true) => "Read/Write"
+      case (true, false) => "Read"
+      case (false, true) => "Write"
+      case _ => "None"
+    }
+
     <tr>
       <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.id}</a></td>
       <td>{s.origin}</td>
@@ -56,6 +65,7 @@ class IndexPage(parent: JobProgressUI) {
         case _ =>
       }}
       </td>
+      <td>{shuffleString}</td>
     </tr>
   }
 }

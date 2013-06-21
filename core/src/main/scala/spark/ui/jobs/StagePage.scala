@@ -4,8 +4,6 @@ import java.util.Date
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.ListBuffer
-
 import spark.ui.UIUtils._
 import spark.util.Distribution
 import spark.scheduler.cluster.TaskInfo
@@ -22,13 +20,13 @@ class StagePage(parent: JobProgressUI) {
     val stageId = request.getParameter("id").toInt
     val tasks = listener.stageToTaskInfos(stageId)
 
-    val hasShuffleRead = tasks.head._2.shuffleReadMetrics.isDefined
-    val hasShuffleWrite = tasks.head._2.shuffleWriteMetrics.isDefined
+    val shuffleRead = listener.hasShuffleRead(stageId)
+    val shuffleWrite = listener.hasShuffleWrite(stageId)
 
-    val taskHeaders =
-      ListBuffer("Task ID", "Service Time (ms)", "Locality Level", "Worker", "Launch Time")
-    if (hasShuffleRead) { taskHeaders += "Shuffle Read (bytes)" }
-    if (hasShuffleWrite) { taskHeaders += "Shuffle Write (bytes)" }
+    val taskHeaders: Seq[String] =
+      Seq("Task ID", "Service Time (ms)", "Locality Level", "Worker", "Launch Time") ++
+        {if (shuffleRead) Seq("Shuffle Read (bytes)")  else Nil} ++
+        {if (shuffleWrite) Seq("Shuffle Write (bytes)") else Nil}
 
     val taskTable = listingTable(taskHeaders, taskRow, tasks)
 
@@ -46,8 +44,8 @@ class StagePage(parent: JobProgressUI) {
 
 
     val listings: Seq[Seq[String]] = Seq(serviceQuantiles,
-      if (hasShuffleRead) shuffleReadQuantiles else Nil,
-      if (hasShuffleWrite) shuffleWriteQuantiles else Nil)
+      if (shuffleRead) shuffleReadQuantiles else Nil,
+      if (shuffleWrite) shuffleWriteQuantiles else Nil)
 
     val quantileHeaders = Seq("Metric", "Min", "25%", "50%", "75%", "Max")
     val quantileTable = listingTable(quantileHeaders, quantileRow, listings)
@@ -72,6 +70,4 @@ class StagePage(parent: JobProgressUI) {
       {metrics.shuffleWriteMetrics.map{m => <td>{m.shuffleBytesWritten}</td>}.getOrElse("") }
     </tr>
   }
-
-
 }
