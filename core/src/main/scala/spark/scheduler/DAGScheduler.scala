@@ -289,7 +289,6 @@ class DAGScheduler(
         val finalStage = newStage(finalRDD, None, runId)
         val job = new ActiveJob(runId, finalStage, func, partitions, callSite, listener, properties)
         clearCacheLocs()
-        sparkListeners.foreach(_.onJobStart(SparkListenerJobStart(job, properties)))
         logInfo("Got job " + job.runId + " (" + callSite + ") with " + partitions.length +
                 " output partitions (allowLocal=" + allowLocal + ")")
         logInfo("Final stage: " + finalStage + " (" + finalStage.origin + ")")
@@ -299,6 +298,7 @@ class DAGScheduler(
           // Compute very short actions like first() or take() with no parent stages locally.
           runLocally(job)
         } else {
+          sparkListeners.foreach(_.onJobStart(SparkListenerJobStart(job, properties)))
           idToActiveJob(runId) = job
           activeJobs += job
           resultStageToJob(finalStage) = job
