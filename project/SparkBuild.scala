@@ -224,8 +224,7 @@ object SparkBuild extends Build {
   def mlSettings = sharedSettings ++ Seq(
     name := "spark-ml",
     libraryDependencies ++= Seq(
-      "org.jblas" % "jblas" % "1.2.3",
-      "org.apache.commons" % "commons-math3" % "3.2"
+      "org.jblas" % "jblas" % "1.2.3"
     )
   )
 

@@ -1,22 +1,23 @@
 package spark.ml.regression
 
+import scala.util.Random
+
+import org.scalatest.FunSuite
+
 import spark.SparkContext
 import spark.SparkContext._
 import spark.Logging
 
-import org.apache.commons.math3.distribution.NormalDistribution
-import org.scalatest.FunSuite
 
 class LogisticRegressionSuite extends FunSuite with Logging {
 
   // Test if we can correctly learn A, B where Y = logistic(A + B*X)
   test("logistic regression") {
     val nPoints = 10000
-    val rnd = new NormalDistribution(0, 1)
-    rnd.reseedRandomGenerator(42)
+    val rnd = new Random(42)
 
     val sc = new SparkContext("local", "test")
-    val x1 = Array.fill[Double](nPoints)(rnd.sample())
+    val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
     val A = 2.0
     val B = -1.5

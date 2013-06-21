@@ -1,10 +1,11 @@
 package spark.ml.regression
 
+import scala.util.Random
+
+import org.jblas.DoubleMatrix
+
 import spark.{RDD, SparkContext}
 import spark.ml.util.MLUtils
-
-import org.apache.commons.math3.distribution.NormalDistribution
-import org.jblas.DoubleMatrix
 
 
 object RidgeRegressionGenerator {
@@ -38,10 +39,9 @@ object RidgeRegressionGenerator {
       val X = DoubleMatrix.rand(examplesInPartition, nfeatures)
       val y = X.mmul(w)
 
-      val rnd = new NormalDistribution(0, eps)
-      rnd.reseedRandomGenerator(42 + p)
+      val rnd = new Random(42 + p)
 
-      val normalValues = Array.fill[Double](examplesInPartition)(rnd.sample())
+      val normalValues = Array.fill[Double](examplesInPartition)(rnd.nextGaussian() * eps)
       val yObs = new DoubleMatrix(normalValues).addi(y)
 
       Iterator.tabulate(examplesInPartition) { i =>

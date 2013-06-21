@@ -1,25 +1,25 @@
 package spark.ml.regression
 
+import scala.util.Random
+
+import org.scalatest.FunSuite
+
 import spark.SparkContext
 import spark.SparkContext._
 
-import org.apache.commons.math3.distribution.NormalDistribution
-import org.scalatest.FunSuite
 
 class RidgeRegressionSuite extends FunSuite {
 
   // Test if we can correctly learn Y = 3 + X1 + X2 when
   // X1 and X2 are collinear.
   test("multi-collinear variables") {
-    val rnd = new NormalDistribution(0, 1)
-    rnd.reseedRandomGenerator(43)
+    val rnd = new Random(43)
     val sc = new SparkContext("local", "test")
-    val x1 = Array.fill[Double](20)(rnd.sample())  
+    val x1 = Array.fill[Double](20)(rnd.nextGaussian())
 
     // Pick a mean close to mean of x1
-    val rnd1 = new NormalDistribution(0.1, 0.01)
-    rnd1.reseedRandomGenerator(42)
-    val x2 = Array.fill[Double](20)(rnd1.sample())
+    val rnd1 = new Random(42) //new NormalDistribution(0.1, 0.01)
+    val x2 = Array.fill[Double](20)(0.1 + rnd1.nextGaussian() * 0.01)
 
     val xMat = (0 until 20).map(i => Array(x1(i), x2(i))).toArray
 

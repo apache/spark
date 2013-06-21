@@ -1,10 +1,11 @@
 package spark.ml.regression
 
+import scala.util.Random
+
+import org.jblas.DoubleMatrix
+
 import spark.{RDD, SparkContext}
 import spark.ml.util.MLUtils
-
-import org.apache.commons.math3.distribution.NormalDistribution
-import org.jblas.DoubleMatrix
 
 object LogisticRegressionGenerator {
 
@@ -25,12 +26,11 @@ object LogisticRegressionGenerator {
     val sc = new SparkContext(sparkMaster, "LogisticRegressionGenerator")
 
     val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until nexamples, parts).map { idx =>
-      val rnd = new NormalDistribution(0, 1)
-      rnd.reseedRandomGenerator(42 + idx)
+      val rnd = new Random(42 + idx)
 
       val y = if (idx % 2 == 0) 0 else 1
       val x = Array.fill[Double](nfeatures) {
-        rnd.sample() + (y * eps)
+        rnd.nextGaussian() + (y * eps)
       }
       (y, x)
     }
