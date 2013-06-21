@@ -522,13 +522,14 @@ private object Utils extends Logging {
     execute(command, new File("."))
   }
 
-
+  class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String, 
+                      val firstUserLine: Int, val firstUserClass: String)
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getCallSiteInfo = {
+  def getCallSiteInfo: CallSiteInfo = {
     val trace = Thread.currentThread.getStackTrace().filter( el =>
       (!el.getMethodName.contains("getStackTrace")))
 
@@ -560,12 +561,13 @@ private object Utils extends Logging {
         }
       }
     }
-    (lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
+    new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
   }
 
   def formatSparkCallSite = {
     val callSiteInfo = getCallSiteInfo
-    "%s at %s:%s".format(callSiteInfo._1, callSiteInfo._2, callSiteInfo._3)
+    "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
+                         callSiteInfo.firstUserLine)
   }
   /**
    * Try to find a free port to bind to on the local host. This should ideally never be needed,

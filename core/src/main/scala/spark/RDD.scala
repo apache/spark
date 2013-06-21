@@ -114,10 +114,10 @@ abstract class RDD[T: ClassManifest](
     this
   }
 
-  /**User-defined generator of this RDD*/
-  var generator = Utils.getCallSiteInfo._4
+  /** User-defined generator of this RDD*/
+  var generator = Utils.getCallSiteInfo.firstUserClass
   
-  /**reset generator*/
+  /** Reset generator*/
   def setGenerator(_generator: String) = {
     generator = _generator
   }

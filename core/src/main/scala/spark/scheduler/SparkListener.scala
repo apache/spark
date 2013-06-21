@@ -3,9 +3,8 @@ package spark.scheduler
 import java.util.Properties
 import spark.scheduler.cluster.TaskInfo
 import spark.util.Distribution
-import spark.{Utils, Logging, SparkContext, TaskEndReason}
+import spark.{Logging, SparkContext, TaskEndReason, Utils}
 import spark.executor.TaskMetrics
-
 
 sealed trait SparkListenerEvents
 
@@ -13,42 +12,40 @@ case class SparkListenerStageSubmitted(stage: Stage, taskSize: Int) extends Spar
 
 case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 
-case class SparkListenerTaskEnd(event: CompletionEvent) extends SparkListenerEvents
+case class SparkListenerTaskEnd(task: Task[_], reason: TaskEndReason, taskInfo: TaskInfo,
+     taskMetrics: TaskMetrics) extends SparkListenerEvents
 
 case class SparkListenerJobStart(job: ActiveJob, properties: Properties = null) 
      extends SparkListenerEvents
-     
-case class SparkListenerJobSuccess(job: ActiveJob) extends SparkListenerEvents
 
-case class SparkListenerJobFailed(job: ActiveJob, failedStage: Stage) extends SparkListenerEvents
-
-case class SparkListenerJobCancelled(job: ActiveJob, reason: String) extends SparkListenerEvents
+case class SparkListenerJobEnd(job: ActiveJob, jobResult: JobResult) 
+     extends SparkListenerEvents
 
 trait SparkListener {
   /**
-   * called when a stage is completed, with information on the completed stage
+   * Called when a stage is completed, with information on the completed stage
    */
   def onStageCompleted(stageCompleted: StageCompleted) { }
   
   /**
-   * called when a stage is submitted
+   * Called when a stage is submitted
    */
   def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
   
   /**
-   * called when a task ends
+   * Called when a task ends
    */
   def onTaskEnd(taskEnd: SparkListenerTaskEnd) { }
 
   /**
-   * called when a job starts
+   * Called when a job starts
    */
   def onJobStart(jobStart: SparkListenerJobStart) { }
   
   /**
-   * called when a job ends
+   * Called when a job ends
    */
-  def onJobEnd(jobEnd: SparkListenerEvents) { }
+  def onJobEnd(jobEnd: SparkListenerJobEnd) { }
   
 }
 

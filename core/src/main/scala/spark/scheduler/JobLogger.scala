@@ -12,7 +12,7 @@ import spark._
 import spark.executor.TaskMetrics
 import spark.scheduler.cluster.TaskInfo
 
-// used to record runtime information for each job, including RDD graph 
+// Used to record runtime information for each job, including RDD graph 
 // tasks' start/stop shuffle information and information from outside
 
 class JobLogger(val logDirName: String) extends SparkListener with Logging {
@@ -49,21 +49,17 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
             processStageSubmittedEvent(stage, taskSize)
           case StageCompleted(stageInfo) =>
             processStageCompletedEvent(stageInfo)
-          case SparkListenerJobSuccess(job) =>
-            processJobEndEvent(job)
-          case SparkListenerJobFailed(job, failedStage) =>
-            processJobEndEvent(job, failedStage)
-          case SparkListenerJobCancelled(job, reason) =>
-            processJobEndEvent(job, reason)
-          case SparkListenerTaskEnd(event) =>
-            processTaskEndEvent(event)
+          case SparkListenerJobEnd(job, result) =>
+            processJobEndEvent(job, result)
+          case SparkListenerTaskEnd(task, reason, taskInfo, taskMetrics) =>
+            processTaskEndEvent(task, reason, taskInfo, taskMetrics)
           case _ =>
         }
       }
     }
   }.start()
 
-  //create a folder for log files, the folder's name is the creation time of the jobLogger
+  // Create a folder for log files, the folder's name is the creation time of the jobLogger
   protected def createLogDir() {
     val dir = new File(logDir + "/" + logDirName + "/")
     if (dir.exists()) {
@@ -244,54 +240,50 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     eventQueue.put(taskEnd)
   }
 
-  protected def processTaskEndEvent(event: CompletionEvent) {
+  protected def processTaskEndEvent(task: Task[_], reason: TaskEndReason, 
+      taskInfo: TaskInfo, taskMetrics: TaskMetrics) {
     var taskStatus = ""
-    event.task match {
+    task match {
       case resultTask: ResultTask[_, _] => taskStatus = "TASK_TYPE=RESULT_TASK"
       case shuffleMapTask: ShuffleMapTask => taskStatus = "TASK_TYPE=SHUFFLE_MAP_TASK"
     }
-    event.reason match {
+    reason match {
       case Success => taskStatus += " STATUS=SUCCESS"
-        recordTaskMetrics(event.task.stageId, taskStatus, event.taskInfo, event.taskMetrics)
+        recordTaskMetrics(task.stageId, taskStatus, taskInfo, taskMetrics)
       case Resubmitted => 
-        taskStatus += " STATUS=RESUBMITTED TID=" + event.taskInfo.taskId + 
-                      " STAGE_ID=" + event.task.stageId
-        stageLogInfo(event.task.stageId, taskStatus)
+        taskStatus += " STATUS=RESUBMITTED TID=" + taskInfo.taskId + 
+                      " STAGE_ID=" + task.stageId
+        stageLogInfo(task.stageId, taskStatus)
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) => 
-        taskStatus += " STATUS=FETCHFAILED TID=" + event.taskInfo.taskId + " STAGE_ID=" + 
-                      event.task.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" + 
+        taskStatus += " STATUS=FETCHFAILED TID=" + taskInfo.taskId + " STAGE_ID=" + 
+                      task.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" + 
                       mapId + " REDUCE_ID=" + reduceId
-        stageLogInfo(event.task.stageId, taskStatus)
+        stageLogInfo(task.stageId, taskStatus)
       case OtherFailure(message) => 
-        taskStatus += " STATUS=FAILURE TID=" + event.taskInfo.taskId + 
-                      " STAGE_ID=" + event.task.stageId + " INFO=" + message
-        stageLogInfo(event.task.stageId, taskStatus)
+        taskStatus += " STATUS=FAILURE TID=" + taskInfo.taskId + 
+                      " STAGE_ID=" + task.stageId + " INFO=" + message
+        stageLogInfo(task.stageId, taskStatus)
       case _ =>
     }
   }
   
-  override def onJobEnd(jobEnd: SparkListenerEvents) {
+  override def onJobEnd(jobEnd: SparkListenerJobEnd) {
     eventQueue.put(jobEnd)
   }
 
-  protected def processJobEndEvent(job: ActiveJob) {
-    val info = "JOB_ID=" + job.runId + " STATUS=SUCCESS"
-    jobLogInfo(job.runId, info)
+  protected def processJobEndEvent(job: ActiveJob, reason: JobResult) {
+    var info = "JOB_ID=" + job.runId
+    reason match {
+      case JobSucceeded => info += " STATUS=SUCCESS"
+      case JobFailed(exception) =>
+        info += " STATUS=FAILED REASON="
+        exception.getMessage.split("\\s+").foreach(info += _ + "_")
+      case _ =>
+    }
+    jobLogInfo(job.runId, info.substring(0, info.length - 1).toUpperCase)
     closeLogWriter(job.runId)
   }
-  
-  protected def processJobEndEvent(job: ActiveJob, failedStage: Stage) {
-    val info = "JOB_ID=" + job.runId + " STATUS=FAILED REASON=STAGE_FAILED FAILED_STAGE_ID=" 
-               + failedStage.id
-    jobLogInfo(job.runId, info)
-    closeLogWriter(job.runId)
-  }
-  protected def processJobEndEvent(job: ActiveJob, reason: String) {
-    var info = "JOB_ID=" + job.runId + " STATUS=CANCELLED REASON=" + reason
-    jobLogInfo(job.runId, info)
-    closeLogWriter(job.runId)
-  }
-  
+
   protected def recordJobProperties(jobID: Int, properties: Properties) {
     if(properties != null) {
       val annotation = properties.getProperty("spark.job.annotation", "")

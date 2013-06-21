@@ -2,7 +2,7 @@ package spark.executor
 
 class TaskMetrics extends Serializable {
   /**
-   * host's name the task runs on 
+   * Host's name the task runs on 
    */
   var hostname: String = _
 
