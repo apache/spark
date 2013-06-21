@@ -522,8 +522,8 @@ private object Utils extends Logging {
     execute(command, new File("."))
   }
 
-  class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String, 
-                      val firstUserLine: Int, val firstUserClass: String)
+  private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String, 
+                                    val firstUserLine: Int, val firstUserClass: String)
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
