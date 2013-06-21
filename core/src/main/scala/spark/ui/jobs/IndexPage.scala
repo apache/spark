@@ -10,6 +10,7 @@ import scala.Some
 
 import spark.scheduler.Stage
 import spark.ui.UIUtils._
+import spark.storage.StorageLevel
 
 import xml.{NodeSeq, Node}
 
@@ -20,7 +21,7 @@ class IndexPage(parent: JobProgressUI) {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val stageHeaders = Seq("Stage ID", "Origin", "Submitted", "Duration", "Tasks: Complete/Total",
-                           "Shuffle Activity")
+                           "Shuffle Activity", "RDDs")
     val activeStages = listener.activeStages.toSeq
     val completedStages = listener.completedStages.toSeq
 
@@ -46,7 +47,7 @@ class IndexPage(parent: JobProgressUI) {
       case None => "Unknown"
     }
     val (read, write) = (listener.hasShuffleRead(s.id), listener.hasShuffleWrite(s.id))
-    val shuffleString = (read, write) match {
+    val shuffleInfo = (read, write) match {
       case (true, true) => "Read/Write"
       case (true, false) => "Read"
       case (false, true) => "Write"
@@ -65,7 +66,13 @@ class IndexPage(parent: JobProgressUI) {
         case _ =>
       }}
       </td>
-      <td>{shuffleString}</td>
+      <td>{shuffleInfo}</td>
+      <td>{if (s.rdd.getStorageLevel != StorageLevel.NONE) {
+             <a href={"/storage/rdd?id=%s".format(s.rdd.id)}>
+               {Option(s.rdd.name).getOrElse(s.rdd.id)}
+             </a>
+          }}
+      </td>
     </tr>
   }
 }
