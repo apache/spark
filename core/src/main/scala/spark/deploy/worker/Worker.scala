@@ -14,6 +14,7 @@ import spark.deploy.LaunchExecutor
 import spark.deploy.RegisterWorkerFailed
 import spark.deploy.master.Master
 import java.io.File
+import ui.WorkerWebUI
 
 private[spark] class Worker(
     host: String,

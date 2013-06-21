@@ -13,6 +13,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import spark.deploy._
 import spark.{Logging, SparkException, Utils}
 import spark.util.AkkaUtils
+import ui.MasterWebUI
 
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
