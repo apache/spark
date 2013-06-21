@@ -55,7 +55,7 @@ def main(infile, outfile):
     except Exception as e:
         write_int(-2, outfile)
         write_with_length(traceback.format_exc(), outfile)
-        raise
+        sys.exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     # Mark the beginning of the accumulators section of the output
