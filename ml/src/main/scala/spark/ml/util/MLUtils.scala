@@ -76,4 +76,19 @@ object MLUtils {
 
     (yMean, xColMean, xColSd)
   }
+
+  /**
+   * Return the squared Euclidean distance between two vectors.
+   */
+  def squaredDistance(v1: Array[Double], v2: Array[Double]): Double = {
+    if (v1.length != v2.length) {
+      throw new IllegalArgumentException("Vector sizes don't match")
+    }
+    var i = 0
+    var sum = 0.0
+    while (i < v1.length) {
+      sum += (v1(i) - v2(i)) * (v1(i) - v2(i))
+    }
+    sum
+  }
 }
