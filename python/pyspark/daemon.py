@@ -21,6 +21,15 @@ def should_exit():
     return exit_flag.value
 
 
+def compute_real_exit_code(exit_code):
+  # SystemExit's code can be integer or string, but os._exit only accepts integers
+  import numbers
+  if isinstance(exit_code, numbers.Integral):
+    return exit_code
+  else:
+    return 1
+
+
 def worker(listen_sock):
     # Redirect stdout to stderr
     os.dup2(2, 1)
@@ -65,10 +74,15 @@ def worker(listen_sock):
                 listen_sock.close()
                 # Handle the client then exit
                 sockfile = sock.makefile()
-                worker_main(sockfile, sockfile)
-                sockfile.close()
-                sock.close()
-                os._exit(0)
+                exit_code = 0
+                try:
+                  worker_main(sockfile, sockfile)
+                except SystemExit as exc:
+                  exit_code = exc.code
+                finally:
+                  sockfile.close()
+                  sock.close()
+                  os._exit(compute_real_exit_code(exit_code))
             else:
                 sock.close()
 
