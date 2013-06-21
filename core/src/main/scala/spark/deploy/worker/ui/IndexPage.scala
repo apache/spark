@@ -8,12 +8,12 @@ import javax.servlet.http.HttpServletRequest
 
 import net.liftweb.json.JsonAST.JValue
 
+import scala.xml.Node
+
 import spark.deploy.{RequestWorkerState, JsonProtocol, WorkerState}
 import spark.deploy.worker.ExecutorRunner
 import spark.Utils
 import spark.ui.UIUtils
-
-import xml.Node
 
 class IndexPage(parent: WorkerWebUI) {
   val worker = parent.worker

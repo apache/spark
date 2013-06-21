@@ -2,12 +2,12 @@ package spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.xml.Node
+
 import spark.storage.{StorageStatus, StorageUtils}
 import spark.ui.UIUtils._
 import spark.Utils
 import spark.storage.BlockManagerMasterActor.BlockStatus
-
-import xml.Node
 
 /** Page showing storage details for a given RDD */
 class RDDPage(parent: BlockManagerUI) {

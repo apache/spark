@@ -10,10 +10,9 @@ import org.eclipse.jetty.server.{Server, Request, Handler}
 import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHandler, AbstractHandler}
 
 import scala.util.{Try, Success, Failure}
+import scala.xml.Node
 
 import spark.Logging
-
-import xml.Node
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
 private[spark] object JettyUtils extends Logging {

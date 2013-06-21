@@ -2,11 +2,11 @@ package spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.xml.Node
+
 import spark.storage.{RDDInfo, StorageUtils}
 import spark.Utils
 import spark.ui.UIUtils._
-
-import xml.Node
 
 /** Page showing list of RDD's currently stored in the cluster */
 class IndexPage(parent: BlockManagerUI) {

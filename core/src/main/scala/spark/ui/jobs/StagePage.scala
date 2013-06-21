@@ -4,12 +4,12 @@ import java.util.Date
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.xml.Node
+
 import spark.ui.UIUtils._
 import spark.util.Distribution
 import spark.scheduler.cluster.TaskInfo
 import spark.executor.TaskMetrics
-
-import xml.Node
 
 /** Page showing statistics and task list for a given stage */
 class StagePage(parent: JobProgressUI) {

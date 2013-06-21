@@ -7,12 +7,11 @@ import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.Some
+import scala.xml.{NodeSeq, Node}
 
 import spark.scheduler.Stage
 import spark.ui.UIUtils._
 import spark.storage.StorageLevel
-
-import xml.{NodeSeq, Node}
 
 /** Page showing list of all ongoing and recently finished stages */
 class IndexPage(parent: JobProgressUI) {
