@@ -4,6 +4,7 @@ import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.util.Random
 
 import spark.{HashPartitioner, Partitioner, SparkContext, RDD}
+import spark.storage.StorageLevel
 import spark.SparkContext._
 
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
@@ -52,26 +53,26 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
 
   /** 
    * Set the number of blocks to parallelize the computation into; pass -1 for an auto-configured
-   * number of blocks.
+   * number of blocks. Default: -1.
    */
   def setBlocks(numBlocks: Int): ALS = {
     this.numBlocks = numBlocks
     this
   }
 
-  /** Set the rank of the feature matrices computed (number of features). */
+  /** Set the rank of the feature matrices computed (number of features). Default: 10. */
   def setRank(rank: Int): ALS = {
     this.rank = rank
     this
   }
 
-  /** Set the total number of iterations */
+  /** Set the number of iterations to run. Default: 10. */
   def setIterations(iterations: Int): ALS = {
     this.iterations = iterations
     this
   }
 
-  /** Set the regularization parameter, lambda */
+  /** Set the regularization parameter, lambda. Default: 0.01. */
   def setLambda(lambda: Double): ALS = {
     this.lambda = lambda
     this
@@ -168,7 +169,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
       val ratings = elements.map(_._2).toArray
       Iterator((blockId, (makeInLinkBlock(numBlocks, ratings), makeOutLinkBlock(numBlocks, ratings))))
     }, true)
-    links.persist()
+    links.persist(StorageLevel.MEMORY_AND_DISK)
     (links.mapValues(_._1), links.mapValues(_._2))
   }
 
