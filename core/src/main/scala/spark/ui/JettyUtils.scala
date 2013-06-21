@@ -15,7 +15,9 @@ import spark.Logging
 
 import xml.Node
 
-private[spark] object JettyUI extends Logging {
+
+/** Utilities for launching a web server using Jetty's HTTP Server class */
+private[spark] object JettyUtils extends Logging {
   // Base type for a function that returns something based on an HTTP request. Allows for
   // implicit conversion from many types of functions to jetty Handlers.
   type Responder[T] = HttpServletRequest => T

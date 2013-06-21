@@ -1,11 +1,13 @@
 package spark.ui.storage
 
 import akka.util.Duration
+
 import javax.servlet.http.HttpServletRequest
+
 import org.eclipse.jetty.server.Handler
+
 import spark.{Logging, SparkContext}
-import spark.ui.JettyUI._
-import spark.ui.{UIComponent}
+import spark.ui.JettyUtils._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[spark]

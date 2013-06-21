@@ -9,7 +9,7 @@ import org.eclipse.jetty.server.Handler
 import scala.Seq
 import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
 
-import spark.ui.JettyUI._
+import spark.ui.JettyUtils._
 import spark.SparkContext
 import spark.scheduler._
 import spark.scheduler.cluster.TaskInfo

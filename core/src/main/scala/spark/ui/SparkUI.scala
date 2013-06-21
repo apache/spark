@@ -8,7 +8,7 @@ import spark.{Logging, SparkContext, Utils}
 import spark.ui.storage.BlockManagerUI
 import spark.ui.jobs.JobProgressUI
 import spark.ui.UIUtils._
-import spark.ui.JettyUI._
+import spark.ui.JettyUtils._
 
 /** Top level user interface for Spark */
 private[spark] class SparkUI(sc: SparkContext) extends Logging {
@@ -27,12 +27,12 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   def start() {
     /** Start an HTTP server to run the Web interface */
     try {
-      val (server, usedPort) = JettyUI.startJettyServer("0.0.0.0", port, allHandlers)
+      val (server, usedPort) = JettyUtils.startJettyServer("0.0.0.0", port, allHandlers)
       logInfo("Started Spark Web UI at http://%s:%d".format(host, usedPort))
       boundPort = Some(usedPort)
     } catch {
     case e: Exception =>
-      logError("Failed to create Spark JettyUI", e)
+      logError("Failed to create Spark JettyUtils", e)
       System.exit(1)
     }
   }

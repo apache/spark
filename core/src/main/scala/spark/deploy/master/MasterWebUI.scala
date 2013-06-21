@@ -10,11 +10,11 @@ import net.liftweb.json.JsonAST.JValue
 import org.eclipse.jetty.server.Handler
 import scala.xml.Node
 import spark.{Logging, Utils}
-import spark.ui.JettyUI
-import JettyUI._
+import spark.ui.JettyUtils
+import JettyUtils._
 import spark.deploy._
 import spark.deploy.MasterState
-import spark.ui.JettyUI
+import spark.ui.JettyUtils
 
 /**
  * Web UI server for the standalone master.
@@ -29,11 +29,11 @@ class MasterWebUI(master: ActorRef) extends Logging {
 
   def start() {
     try {
-      val (server, boundPort) = JettyUI.startJettyServer("0.0.0.0", port, handlers)
+      val (server, boundPort) = JettyUtils.startJettyServer("0.0.0.0", port, handlers)
       logInfo("Started Master web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
-        logError("Failed to create Master JettyUI", e)
+        logError("Failed to create Master JettyUtils", e)
         System.exit(1)
     }
   }
@@ -99,7 +99,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
           {executorTable(app.executors.values.toList)}
         </div>
       </div>;
-      JettyUI.sparkPage(content, "Application Info: " + app.desc.name)
+      JettyUtils.sparkPage(content, "Application Info: " + app.desc.name)
   }
 
   def executorTable(executors: Seq[ExecutorInfo]): Seq[Node] = {
@@ -189,7 +189,7 @@ class MasterWebUI(master: ActorRef) extends Logging {
           {appTable(state.completedApps.sortBy(_.endTime).reverse)}
         </div>
       </div>;
-    JettyUI.sparkPage(content, "Spark Master: " + state.uri)
+    JettyUtils.sparkPage(content, "Spark Master: " + state.uri)
   }
 
   def workerTable(workers: Seq[spark.deploy.master.WorkerInfo]) = {
