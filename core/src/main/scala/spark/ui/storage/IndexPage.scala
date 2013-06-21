@@ -2,12 +2,12 @@ package spark.ui.storage
 
 import xml.Node
 import spark.storage.{RDDInfo, StorageUtils}
-import spark.ui.WebUI._
 import spark.Utils
-import spark.ui.{View, WebUI}
+import spark.ui.UIUtils._
 import javax.servlet.http.HttpServletRequest
 
-class IndexPage(parent: BlockManagerUI) extends View[Seq[Node]] {
+/** Page showing list of RDD's currently stored in the cluster */
+class IndexPage(parent: BlockManagerUI) {
   val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -40,7 +40,7 @@ class IndexPage(parent: BlockManagerUI) extends View[Seq[Node]] {
         </div>
       </div> ++ {rddTable};
 
-    WebUI.headerSparkPage(content, "Spark Storage ")
+    headerSparkPage(content, "Spark Storage ")
   }
 
   def rddRow(rdd: RDDInfo): Seq[Node] = {

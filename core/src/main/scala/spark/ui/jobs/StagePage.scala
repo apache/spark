@@ -1,17 +1,20 @@
 package spark.ui.jobs
 
+import java.util.Date
+
 import javax.servlet.http.HttpServletRequest
-import xml.Node
-import spark.ui.WebUI._
-import spark.ui.WebUI
-import spark.ui.View
+
+import scala.collection.mutable.ListBuffer
+
+import spark.ui.UIUtils._
 import spark.util.Distribution
 import spark.scheduler.cluster.TaskInfo
 import spark.executor.TaskMetrics
-import java.util.Date
-import scala.collection.mutable.ListBuffer
 
-class StagePage(parent: JobProgressUI) extends View[Seq[Node]] {
+import xml.Node
+
+/** Page showing statistics and task list for a given stage */
+class StagePage(parent: JobProgressUI) {
   val listener = parent.listener
   val dateFmt = parent.dateFmt
 
@@ -52,7 +55,7 @@ class StagePage(parent: JobProgressUI) extends View[Seq[Node]] {
     val content =
       <h2>Summary Metrics</h2> ++ quantileTable ++ <h2>Tasks</h2> ++ taskTable;
 
-    WebUI.headerSparkPage(content, "Stage Details: %s".format(stageId))
+    headerSparkPage(content, "Stage Details: %s".format(stageId))
   }
 
   def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>

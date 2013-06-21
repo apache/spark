@@ -1,16 +1,16 @@
 package spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
-import xml.Node
+
 import spark.storage.{StorageStatus, StorageUtils}
-import spark.ui.WebUI._
+import spark.ui.UIUtils._
 import spark.Utils
-import spark.ui.WebUI
-import spark.ui.View
 import spark.storage.BlockManagerMasterActor.BlockStatus
 
+import xml.Node
 
-class RDDPage(parent: BlockManagerUI) extends View[Seq[Node]] {
+/** Page showing storage details for a given RDD */
+class RDDPage(parent: BlockManagerUI) {
   val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -65,7 +65,7 @@ class RDDPage(parent: BlockManagerUI) extends View[Seq[Node]] {
         </div>
           <hr/> ++ {workerTable};
 
-    WebUI.headerSparkPage(content, "RDD Info: " + id)
+    headerSparkPage(content, "RDD Info: " + id)
   }
 
   def blockRow(blk: (String, BlockStatus)): Seq[Node] = {

@@ -12,8 +12,8 @@ import org.eclipse.jetty.server.Handler
 import scala.io.Source
 import spark.{Utils, Logging}
 import spark.deploy.{JsonProtocol, WorkerState, RequestWorkerState}
-import spark.ui.{WebUI => UtilsWebUI}
-import spark.ui.WebUI._
+import spark.ui.{JettyUI => UtilsWebUI}
+import spark.ui.JettyUI._
 import xml.Node
 
 /**
@@ -40,7 +40,7 @@ class WorkerWebUI(worker: ActorRef, workDir: File) extends Logging {
       logInfo("Started Worker web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
-        logError("Failed to create Worker WebUI", e)
+        logError("Failed to create Worker JettyUI", e)
         System.exit(1)
     }
   }

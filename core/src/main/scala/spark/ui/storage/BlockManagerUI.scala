@@ -4,15 +4,12 @@ import akka.util.Duration
 import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.server.Handler
 import spark.{Logging, SparkContext}
-import spark.ui.WebUI._
+import spark.ui.JettyUI._
 import spark.ui.{UIComponent}
 
-/**
- * Web UI server for the BlockManager inside each SparkContext.
- */
+/** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[spark]
-class BlockManagerUI(val sc: SparkContext)
-    extends UIComponent with Logging  {
+class BlockManagerUI(val sc: SparkContext) extends Logging {
   implicit val timeout = Duration.create(
     System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
 

@@ -1,45 +1,30 @@
 package spark.ui.jobs
 
-import spark.{Utils, SparkContext}
-import spark.scheduler._
-import spark.scheduler.SparkListenerTaskEnd
-import spark.scheduler.StageCompleted
-import spark.scheduler.SparkListenerStageSubmitted
-import org.eclipse.jetty.server.Handler
-import javax.servlet.http.HttpServletRequest
-import xml.Node
-import collection.mutable._
-import spark.Success
-import akka.util.Duration
 import java.text.SimpleDateFormat
-import java.util.Date
-import spark.scheduler.cluster.TaskInfo
-import collection.mutable
-import org.hsqldb.lib.HashMappedList
-import spark.executor.TaskMetrics
-import spark.scheduler.SparkListenerTaskEnd
-import scala.Some
-import spark.scheduler.SparkListenerStageSubmitted
-import scala.Seq
-import spark.scheduler.StageCompleted
-import spark.scheduler.SparkListenerJobStart
-import spark.ui.{WebUI, UIComponent}
-import spark.ui.WebUI._
-import spark.scheduler.SparkListenerTaskEnd
-import scala.Some
-import spark.scheduler.SparkListenerStageSubmitted
-import spark.scheduler.StageCompleted
-import spark.scheduler.SparkListenerJobStart
 
-private[spark]
-class JobProgressUI(sc: SparkContext) extends UIComponent {
+import javax.servlet.http.HttpServletRequest
+
+import org.eclipse.jetty.server.Handler
+
+import scala.Seq
+import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
+
+import spark.ui.JettyUI._
+import spark.SparkContext
+import spark.scheduler._
+import spark.scheduler.cluster.TaskInfo
+import spark.executor.TaskMetrics
+import spark.Success
+
+/** Web UI showing progress status of all jobs in the given SparkContext. */
+private[spark] class JobProgressUI(sc: SparkContext) {
   val listener = new JobProgressListener
   val dateFmt = new SimpleDateFormat("EEE, MMM d yyyy HH:mm:ss")
 
   sc.addSparkListener(listener)
 
-  val indexPage = new IndexPage(this)
-  val stagePage = new StagePage(this)
+  private val indexPage = new IndexPage(this)
+  private val stagePage = new StagePage(this)
 
   def getHandlers = Seq[(String, Handler)](
     ("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),
