@@ -4,7 +4,6 @@ import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.util.Random
 
 import spark.{HashPartitioner, Partitioner, SparkContext, RDD}
-import spark.storage.StorageLevel
 import spark.SparkContext._
 
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
