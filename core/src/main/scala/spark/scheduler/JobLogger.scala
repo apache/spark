@@ -70,7 +70,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     }
   }
   
-  // create a log file for one job, the file name is the jobID
+  // Create a log file for one job, the file name is the jobID
   protected def createLogWriter(jobID: Int) {
     try{
       val fileWriter = new PrintWriter(logDir + "/" + logDirName + "/" + jobID)
@@ -80,7 +80,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
       }
   }
   
-  // close log file for one job, and clean the stage relationship in stageIDToJobID 
+  // Close log file, and clean the stage relationship in stageIDToJobID 
   protected def closeLogWriter(jobID: Int) = 
     jobIDToPrintWriter.get(jobID).foreach { fileWriter => 
       fileWriter.close()
@@ -91,7 +91,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
       jobIDToStages -= jobID
     }
   
-  // write log information to log file, withTime parameter controls whether to recored 
+  // Write log information to log file, withTime parameter controls whether to recored 
   // time stamp for the information
   protected def jobLogInfo(jobID: Int, info: String, withTime: Boolean = true) {
     var writeInfo = info
@@ -145,7 +145,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     }
   }
   
-  // generate indents and convert to String
+  // Generate indents and convert to String
   protected def indentString(indent: Int) = {
     val sb = new StringBuilder()
     for (i <- 1 to indent) {
@@ -190,7 +190,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
       jobLogInfo(jobID, indentString(indent) + stageInfo + " JOB_ID=" + stage.priority, false)
   }
   
-  // record task metrics into job log files
+  // Record task metrics into job log files
   protected def recordTaskMetrics(stageID: Int, status: String, 
                                 taskInfo: TaskInfo, taskMetrics: TaskMetrics) {
     val info = " TID=" + taskInfo.taskId + " STAGE_ID=" + stageID + 

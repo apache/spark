@@ -324,8 +324,7 @@ class DAGScheduler(
         for (job <- activeJobs) {
           val error = new SparkException("Job cancelled because SparkContext was shut down")
           job.listener.jobFailed(error)
-          sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, 
-                                 JobFailed(error))))
+          sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
         }
         return true
     }
@@ -671,9 +670,9 @@ class DAGScheduler(
       val job = resultStageToJob(resultStage)
       val error = new SparkException("Job failed: " + reason)
       job.listener.jobFailed(error)
+      sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
       activeJobs -= job
       resultStageToJob -= resultStage
-      sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
     }
     if (dependentStages.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
