@@ -12,13 +12,15 @@ import spark.ui.JettyUtils._
 
 /** Top level user interface for Spark */
 private[spark] class SparkUI(sc: SparkContext) extends Logging {
+  // TODO(pwendell): It would be nice to add a view that prints out environment information
+
   val host = Utils.localHostName()
   val port = Option(System.getProperty("spark.ui.port")).getOrElse(SparkUI.DEFAULT_PORT).toInt
   var boundPort: Option[Int] = None
 
   val handlers = Seq[(String, Handler)](
     ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
-    ("*", (request: HttpServletRequest) => headerSparkPage(<h1>Test</h1>, sc, "Test page"))
+    ("/", createRedirectHandler("/stages"))
   )
   val storage = new BlockManagerUI(sc)
   val jobs = new JobProgressUI(sc)

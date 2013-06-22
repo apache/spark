@@ -41,7 +41,21 @@ private[spark] object JettyUtils extends Logging {
         response.setStatus(HttpServletResponse.SC_OK)
         baseRequest.setHandled(true)
         val result = responder(request)
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
         response.getWriter().println(extractFn(result))
+      }
+    }
+  }
+
+  def createRedirectHandler(newPath: String): Handler = {
+    new AbstractHandler {
+      def handle(target: String,
+                 baseRequest: Request,
+                 request: HttpServletRequest,
+                 response: HttpServletResponse) {
+        response.setStatus(302)
+        response.setHeader("Location", baseRequest.getRootURL + newPath)
+        baseRequest.setHandled(true)
       }
     }
   }
@@ -66,13 +80,9 @@ private[spark] object JettyUtils extends Logging {
    */
   def startJettyServer(ip: String, port: Int, handlers: Seq[(String, Handler)]): (Server, Int) = {
     val handlersToRegister = handlers.map { case(path, handler) =>
-      if (path == "*") {
-        handler
-      } else {
-        val contextHandler = new ContextHandler(path)
-        contextHandler.setHandler(handler)
-        contextHandler.asInstanceOf[org.eclipse.jetty.server.Handler]
-      }
+      val contextHandler = new ContextHandler(path)
+      contextHandler.setHandler(handler)
+      contextHandler.asInstanceOf[org.eclipse.jetty.server.Handler]
     }
 
     val handlerList = new HandlerList
@@ -99,13 +109,21 @@ object UIUtils {
   /** Returns a page containing the supplied content and the spark web ui headers */
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String): Seq[Node] = {
     val newContent =
-      <div class="row">
-        <div class="span12">
+      <div class="row" style="padding-top: 5px;">
+        <div class="span2">
+          <div style="padding-left: 10px">
+            <ul class="unstyled">
+              <li><a href="/storage">Storage</a></li>
+              <li><a href="/jobs">Jobs</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="span10">
           <ul class="unstyled">
             <li><strong>Master:</strong> {sc.master}</li>
             <li><strong>Application:</strong> {sc.appName}</li>
+            <li><strong>Executors:</strong> {sc.getExecutorStorageStatus.size} </li>
           </ul>
-          <h3><a href="/storage">Storage</a> | <a href="/stages">Jobs</a> </h3>
         </div>
       </div>
       <hr/>;
@@ -128,10 +146,11 @@ object UIUtils {
       <body>
         <div class="container">
           <div class="row">
-            <div class="span12">
+            <div class="span2">
               <img src="/static/spark_logo.png" />
-              <h1 style="vertical-align: bottom; margin-bottom: 10px;
-                         margin-left: 30px; display: inline-block;">
+            </div>
+            <div class="span10">
+              <h1 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
               {title}
               </h1>
             </div>
