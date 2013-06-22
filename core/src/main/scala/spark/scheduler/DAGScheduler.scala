@@ -298,6 +298,7 @@ class DAGScheduler(
           // Compute very short actions like first() or take() with no parent stages locally.
           runLocally(job)
         } else {
+          sparkListeners.foreach(_.onJobStart(SparkListenerJobStart(job, properties)))
           idToActiveJob(runId) = job
           activeJobs += job
           resultStageToJob(finalStage) = job
@@ -311,6 +312,8 @@ class DAGScheduler(
         handleExecutorLost(execId)
 
       case completion: CompletionEvent =>
+        sparkListeners.foreach(_.onTaskEnd(SparkListenerTaskEnd(completion.task, 
+                               completion.reason, completion.taskInfo, completion.taskMetrics)))
         handleTaskCompletion(completion)
 
       case TaskSetFailed(taskSet, reason) =>
@@ -321,6 +324,7 @@ class DAGScheduler(
         for (job <- activeJobs) {
           val error = new SparkException("Job cancelled because SparkContext was shut down")
           job.listener.jobFailed(error)
+          sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
         }
         return true
     }
@@ -468,6 +472,7 @@ class DAGScheduler(
       }
     }
     if (tasks.size > 0) {
+      sparkListeners.foreach(_.onStageSubmitted(SparkListenerStageSubmitted(stage, tasks.size)))
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
       logDebug("New pending tasks: " + myPending)
@@ -522,6 +527,7 @@ class DAGScheduler(
                     activeJobs -= job
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
+                    sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobSucceeded)))
                   }
                   job.listener.taskSucceeded(rt.outputId, event.result)
                 }
@@ -662,7 +668,9 @@ class DAGScheduler(
     val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
-      job.listener.jobFailed(new SparkException("Job failed: " + reason))
+      val error = new SparkException("Job failed: " + reason)
+      job.listener.jobFailed(error)
+      sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
       activeJobs -= job
       resultStageToJob -= resultStage
     }

@@ -1,27 +1,59 @@
 package spark.scheduler
 
+import java.util.Properties
 import spark.scheduler.cluster.TaskInfo
 import spark.util.Distribution
-import spark.{Utils, Logging}
+import spark.{Logging, SparkContext, TaskEndReason, Utils}
 import spark.executor.TaskMetrics
-
-trait SparkListener {
-  /**
-   * called when a stage is completed, with information on the completed stage
-   */
-  def onStageCompleted(stageCompleted: StageCompleted)
-}
 
 sealed trait SparkListenerEvents
 
+case class SparkListenerStageSubmitted(stage: Stage, taskSize: Int) extends SparkListenerEvents
+
 case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 
+case class SparkListenerTaskEnd(task: Task[_], reason: TaskEndReason, taskInfo: TaskInfo,
+     taskMetrics: TaskMetrics) extends SparkListenerEvents
+
+case class SparkListenerJobStart(job: ActiveJob, properties: Properties = null) 
+     extends SparkListenerEvents
+
+case class SparkListenerJobEnd(job: ActiveJob, jobResult: JobResult) 
+     extends SparkListenerEvents
+
+trait SparkListener {
+  /**
+   * Called when a stage is completed, with information on the completed stage
+   */
+  def onStageCompleted(stageCompleted: StageCompleted) { }
+  
+  /**
+   * Called when a stage is submitted
+   */
+  def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
+  
+  /**
+   * Called when a task ends
+   */
+  def onTaskEnd(taskEnd: SparkListenerTaskEnd) { }
+
+  /**
+   * Called when a job starts
+   */
+  def onJobStart(jobStart: SparkListenerJobStart) { }
+  
+  /**
+   * Called when a job ends
+   */
+  def onJobEnd(jobEnd: SparkListenerJobEnd) { }
+  
+}
 
 /**
  * Simple SparkListener that logs a few summary statistics when each stage completes
  */
 class StatsReportListener extends SparkListener with Logging {
-  def onStageCompleted(stageCompleted: StageCompleted) {
+  override def onStageCompleted(stageCompleted: StageCompleted) {
     import spark.scheduler.StatsReportListener._
     implicit val sc = stageCompleted
     this.logInfo("Finished stage: " + stageCompleted.stageInfo)

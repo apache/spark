@@ -117,6 +117,14 @@ abstract class RDD[T: ClassManifest](
     this
   }
 
+  /** User-defined generator of this RDD*/
+  var generator = Utils.getCallSiteInfo.firstUserClass
+  
+  /** Reset generator*/
+  def setGenerator(_generator: String) = {
+    generator = _generator
+  }
+
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. This can only be used to assign a new storage level if the RDD does not
@@ -840,7 +848,7 @@ abstract class RDD[T: ClassManifest](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** Record user function generating this RDD. */
-  private[spark] val origin = Utils.getSparkCallSite
+  private[spark] val origin = Utils.formatSparkCallSite
 
   private[spark] def elementClassManifest: ClassManifest[T] = classManifest[T]
 
