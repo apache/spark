@@ -1,11 +1,14 @@
 package spark.ml.clustering
 
+import spark.RDD
+import spark.SparkContext._
 import spark.ml.util.MLUtils
+
 
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-class KMeansModel(val clusterCenters: Array[Array[Double]]) {
+class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable {
   /** Total number of clusters. */
   def k: Int = clusterCenters.length
 
@@ -21,5 +24,13 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) {
       }
     }
     bestIndex
+  }
+
+  /**
+   * Return the K-means cost (sum of squared distances of points to their nearest center) for this
+   * model on the given data.
+   */
+  def computeCost(data: RDD[Array[Double]]): Double = {
+    data.map(p => KMeans.pointCost(clusterCenters, p)).sum
   }
 }

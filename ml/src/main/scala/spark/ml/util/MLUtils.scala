@@ -88,6 +88,7 @@ object MLUtils {
     var sum = 0.0
     while (i < v1.length) {
       sum += (v1(i) - v2(i)) * (v1(i) - v2(i))
+      i += 1
     }
     sum
   }
