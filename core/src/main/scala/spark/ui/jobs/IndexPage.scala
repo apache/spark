@@ -20,15 +20,18 @@ class IndexPage(parent: JobProgressUI) {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val stageHeaders = Seq("Stage ID", "Origin", "Submitted", "Duration", "Tasks: Complete/Total",
-                           "Shuffle Activity", "RDDs")
+                           "Shuffle Activity", "Stored RDD")
     val activeStages = listener.activeStages.toSeq
-    val completedStages = listener.completedStages.toSeq
+    val completedStages = listener.completedStages.reverse.toSeq
+    val failedStages = listener.failedStages.reverse.toSeq
 
-    val activeStageTable: NodeSeq = listingTable(stageHeaders, stageRow, activeStages)
-    val completedStageTable = listingTable(stageHeaders, stageRow, completedStages)
+    val activeStageTable: NodeSeq = listingTable(stageHeaders, stageRow(), activeStages)
+    val completedStageTable = listingTable(stageHeaders, stageRow(), completedStages)
+    val failedStageTable: NodeSeq = listingTable(stageHeaders, stageRow(false), failedStages)
 
     val content = <h2>Active Stages</h2> ++ activeStageTable ++
-                  <h2>Completed Stages</h2>  ++ completedStageTable
+                  <h2>Completed Stages</h2>  ++ completedStageTable ++
+                  <h2>Failed Stages</h2>  ++ failedStageTable
 
     headerSparkPage(content, parent.sc, "Spark Stages")
   }
@@ -40,7 +43,7 @@ class IndexPage(parent: JobProgressUI) {
     }
   }
 
-  def stageRow(s: Stage): Seq[Node] = {
+  def stageRow(showLink: Boolean = true)(s: Stage): Seq[Node] = {
     val submissionTime = s.submissionTime match {
       case Some(t) => dateFmt.format(new Date(t))
       case None => "Unknown"
@@ -54,7 +57,8 @@ class IndexPage(parent: JobProgressUI) {
     }
 
     <tr>
-      <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.id}</a></td>
+      {if (showLink) {<td><a href={"/stages/stage?id=%s".format(s.id)}>{s.id}</a></td>}
+       else {<td>{s.id}</td>}}
       <td>{s.origin}</td>
       <td>{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,

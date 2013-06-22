@@ -56,14 +56,19 @@ class RDDPage(parent: BlockManagerUI) {
           </ul>
         </div>
       </div>
-          <hr/>
-        <div class="row">
-          <div class="span12">
-            <h3> RDD Summary </h3>
-            <br/> {blockTable}
-          </div>
+      <hr/>
+      <div class="row">
+        <div class="span12">
+          {workerTable}
         </div>
-          <hr/> ++ {workerTable};
+      </div>
+      <hr/>
+      <div class="row">
+        <div class="span12">
+          <h3> RDD Summary </h3>
+          {blockTable}
+        </div>
+      </div>;
 
     headerSparkPage(content, parent.sc, "RDD Info: " + rddInfo.name)
   }

@@ -33,35 +33,37 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
 }
 
 private[spark] class JobProgressListener extends SparkListener {
-  // TODO(pwendell) Currently does not handle entirely failed stages
-
   // How many stages to remember
   val RETAINED_STAGES = 1000
 
   val activeStages = HashSet[Stage]()
+  val completedStages = ListBuffer[Stage]()
+  val failedStages = ListBuffer[Stage]()
+
   val stageToTasksComplete = HashMap[Int, Int]()
   val stageToTasksFailed = HashMap[Int, Int]()
   val stageToTaskInfos = HashMap[Int, ArrayBuffer[(TaskInfo, TaskMetrics)]]()
-  val completedStages = ListBuffer[Stage]()
 
-  override def onJobStart(jobStart: SparkListenerJobStart) { }
+  override def onJobStart(jobStart: SparkListenerJobStart) {}
 
   override def onStageCompleted(stageCompleted: StageCompleted) = {
     val stage = stageCompleted.stageInfo.stage
     activeStages -= stage
-    stage +=: completedStages
-    if (completedStages.size > RETAINED_STAGES) purgeStages()
+    completedStages += stage
+    trimIfNecessary(completedStages)
   }
 
-  /** Remove and garbage collect old stages */
-  def purgeStages() {
-    val toRemove = RETAINED_STAGES / 10
-    completedStages.takeRight(toRemove).foreach( s => {
-      stageToTasksComplete.remove(s.id)
-      stageToTasksFailed.remove(s.id)
-      stageToTaskInfos.remove(s.id)
-    })
-    completedStages.trimEnd(toRemove)
+  /** If stages is too large, remove and garbage collect old stages */
+  def trimIfNecessary(stages: ListBuffer[Stage]) {
+    if (stages.size > RETAINED_STAGES) {
+      val toRemove = RETAINED_STAGES / 10
+      stages.takeRight(toRemove).foreach( s => {
+        stageToTasksComplete.remove(s.id)
+        stageToTasksFailed.remove(s.id)
+        stageToTaskInfos.remove(s.id)
+      })
+      stages.trimEnd(toRemove)
+    }
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) =
@@ -80,7 +82,16 @@ private[spark] class JobProgressListener extends SparkListener {
     stageToTaskInfos(sid) = taskList
   }
 
-  override def onJobEnd(jobEnd: SparkListenerEvents) { }
+  override def onJobEnd(jobEnd: SparkListenerEvents) {
+    jobEnd match {
+      case failed: SparkListenerJobFailed =>
+        val stage = failed.failedStage
+        activeStages -= stage
+        failedStages += stage
+        trimIfNecessary(failedStages)
+      case _ =>
+    }
+  }
 
   /** Is this stage's input from a shuffle read. */
   def hasShuffleRead(stageID: Int): Boolean = {
