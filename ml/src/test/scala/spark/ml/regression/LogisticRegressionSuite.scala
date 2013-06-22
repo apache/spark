@@ -40,8 +40,8 @@ class LogisticRegressionSuite extends FunSuite with Logging {
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegression().setStepSize(1.0)
-                                     .setNumIterations(1000)
+    val lr = new LogisticRegression().setStepSize(5.0)
+                                     .setNumIterations(20)
 
     val model = lr.train(testRDD)
 
