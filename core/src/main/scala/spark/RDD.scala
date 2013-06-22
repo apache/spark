@@ -105,6 +105,9 @@ abstract class RDD[T: ClassManifest](
   // Methods and fields available on all RDDs
   // =======================================================================
 
+  /** The SparkContext that created this RDD. */
+  def sparkContext: SparkContext = sc
+
   /** A unique ID for this RDD (within its SparkContext). */
   val id: Int = sc.newRddId()
 
