@@ -6,9 +6,10 @@ import spark.SparkContext._
 import org.jblas._
 
 class MatrixFactorizationModel(
-  val rank: Int,
-  val userFeatures: RDD[(Int, Array[Double])],
-  val productFeatures: RDD[(Int, Array[Double])])
+    val rank: Int,
+    val userFeatures: RDD[(Int, Array[Double])],
+    val productFeatures: RDD[(Int, Array[Double])])
+  extends Serializable
 {
   /** Predict the rating of one user for one product. */
   def predict(user: Int, product: Int): Double = {

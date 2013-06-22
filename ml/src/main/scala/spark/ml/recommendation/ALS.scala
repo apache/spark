@@ -365,7 +365,7 @@ object ALS {
 
   def main(args: Array[String]) {
     if (args.length != 5) {
-      println("Usage: ALS <master> <ratings_file> <rank> <num_iters> <output_dir>")
+      println("Usage: ALS <master> <ratings_file> <rank> <iterations> <output_dir>")
       System.exit(1)
     }
     val (master, ratingsFile, rank, iters, outputDir) =
