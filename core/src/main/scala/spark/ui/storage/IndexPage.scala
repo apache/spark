@@ -42,7 +42,7 @@ class IndexPage(parent: BlockManagerUI) {
         </div>
       </div> ++ {rddTable};
 
-    headerSparkPage(content, "Spark Storage ")
+    headerSparkPage(content, parent.sc, "Spark Storage ")
   }
 
   def rddRow(rdd: RDDInfo): Seq[Node] = {

@@ -17,7 +17,7 @@ import spark.executor.TaskMetrics
 import spark.Success
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[spark] class JobProgressUI(sc: SparkContext) {
+private[spark] class JobProgressUI(val sc: SparkContext) {
   val listener = new JobProgressListener
   val dateFmt = new SimpleDateFormat("EEE, MMM d yyyy HH:mm:ss")
 

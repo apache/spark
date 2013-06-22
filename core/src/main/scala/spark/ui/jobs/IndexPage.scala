@@ -30,7 +30,7 @@ class IndexPage(parent: JobProgressUI) {
     val content = <h2>Active Stages</h2> ++ activeStageTable ++
                   <h2>Completed Stages</h2>  ++ completedStageTable
 
-    headerSparkPage(content, "Spark Stages")
+    headerSparkPage(content, parent.sc, "Spark Stages")
   }
 
   def getElapsedTime(submitted: Option[Long], completed: Long): String = {

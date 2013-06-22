@@ -12,7 +12,7 @@ import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHa
 import scala.util.{Try, Success, Failure}
 import scala.xml.Node
 
-import spark.Logging
+import spark.{Utils, SparkContext, Logging}
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
 private[spark] object JettyUtils extends Logging {
@@ -97,9 +97,18 @@ private[spark] object JettyUtils extends Logging {
 object UIUtils {
 
   /** Returns a page containing the supplied content and the spark web ui headers */
-  def headerSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
+  def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String): Seq[Node] = {
     val newContent =
-      <h2><a href="/storage">Storage</a> | <a href="/stages">Jobs</a> </h2><hl/>;
+      <div class="row">
+        <div class="span12">
+          <ul class="unstyled">
+            <li><strong>Master:</strong> {sc.master}</li>
+            <li><strong>Application:</strong> {sc.appName}</li>
+          </ul>
+          <h3><a href="/storage">Storage</a> | <a href="/stages">Jobs</a> </h3>
+        </div>
+      </div>
+      <hr/>;
     sparkPage(newContent ++ content, title)
   }
 

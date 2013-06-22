@@ -65,7 +65,7 @@ class RDDPage(parent: BlockManagerUI) {
         </div>
           <hr/> ++ {workerTable};
 
-    headerSparkPage(content, "RDD Info: " + rddInfo.name)
+    headerSparkPage(content, parent.sc, "RDD Info: " + rddInfo.name)
   }
 
   def blockRow(blk: (String, BlockStatus)): Seq[Node] = {

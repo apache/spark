@@ -18,7 +18,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 
   val handlers = Seq[(String, Handler)](
     ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
-    ("*", (request: HttpServletRequest) => headerSparkPage(<h1>Test</h1>, "Test page"))
+    ("*", (request: HttpServletRequest) => headerSparkPage(<h1>Test</h1>, sc, "Test page"))
   )
   val storage = new BlockManagerUI(sc)
   val jobs = new JobProgressUI(sc)

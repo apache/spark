@@ -53,7 +53,7 @@ class StagePage(parent: JobProgressUI) {
     val content =
       <h2>Summary Metrics</h2> ++ quantileTable ++ <h2>Tasks</h2> ++ taskTable;
 
-    headerSparkPage(content, "Stage Details: %s".format(stageId))
+    headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId))
   }
 
   def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
