@@ -9,7 +9,14 @@ abstract class FileClientHandler extends ChannelInboundByteHandlerAdapter {
 
   private FileHeader currentHeader = null;
 
+  private volatile boolean handlerCalled = false;
+
+  public boolean isComplete() {
+    return handlerCalled;
+  }
+
   public abstract void handle(ChannelHandlerContext ctx, ByteBuf in, FileHeader header);
+  public abstract void handleError(String blockId);
 
   @Override
   public ByteBuf newInboundBuffer(ChannelHandlerContext ctx) {
@@ -26,6 +33,7 @@ abstract class FileClientHandler extends ChannelInboundByteHandlerAdapter {
     // get file
     if(in.readableBytes() >= currentHeader.fileLen()) {
       handle(ctx, in, currentHeader);
+      handlerCalled = true;
       currentHeader = null;
       ctx.close();
     }
