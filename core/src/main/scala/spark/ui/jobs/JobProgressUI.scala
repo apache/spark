@@ -70,25 +70,28 @@ private[spark] class JobProgressListener extends SparkListener {
     activeStages += stageSubmitted.stage
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-    val sid = taskEnd.event.task.stageId
-    taskEnd.event.reason match {
+    val sid = taskEnd.task.stageId
+    taskEnd.reason match {
       case Success =>
         stageToTasksComplete(sid) = stageToTasksComplete.getOrElse(sid, 0) + 1
       case _ =>
         stageToTasksFailed(sid) = stageToTasksFailed.getOrElse(sid, 0) + 1
     }
     val taskList = stageToTaskInfos.getOrElse(sid, ArrayBuffer[(TaskInfo, TaskMetrics)]())
-    taskList += ((taskEnd.event.taskInfo, taskEnd.event.taskMetrics))
+    taskList += ((taskEnd.taskInfo, taskEnd.taskMetrics))
     stageToTaskInfos(sid) = taskList
   }
 
-  override def onJobEnd(jobEnd: SparkListenerEvents) {
+  override def onJobEnd(jobEnd: SparkListenerJobEnd) {
     jobEnd match {
-      case failed: SparkListenerJobFailed =>
-        val stage = failed.failedStage
-        activeStages -= stage
-        failedStages += stage
-        trimIfNecessary(failedStages)
+      case end: SparkListenerJobEnd =>
+        end.jobResult match {
+          case JobFailed(ex, Some(stage)) =>
+            activeStages -= stage
+            failedStages += stage
+            trimIfNecessary(failedStages)
+          case _ =>
+        }
       case _ =>
     }
   }

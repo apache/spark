@@ -256,7 +256,7 @@ class DAGScheduler(
     eventQueue.put(toSubmit)
     waiter.awaitResult() match {
       case JobSucceeded => {}
-      case JobFailed(exception: Exception) =>
+      case JobFailed(exception: Exception, _) =>
         logInfo("Failed to run " + callSite)
         throw exception
     }
@@ -324,7 +324,7 @@ class DAGScheduler(
         for (job <- activeJobs) {
           val error = new SparkException("Job cancelled because SparkContext was shut down")
           job.listener.jobFailed(error)
-          sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
+          sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error, None))))
         }
         return true
     }
@@ -671,7 +671,7 @@ class DAGScheduler(
       val job = resultStageToJob(resultStage)
       val error = new SparkException("Job failed: " + reason)
       job.listener.jobFailed(error)
-      sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
+      sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error, Some(failedStage)))))
       activeJobs -= job
       resultStageToJob -= resultStage
     }

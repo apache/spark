@@ -35,7 +35,7 @@ private[spark] class JobWaiter[T](totalTasks: Int, resultHandler: (Int, T) => Un
         throw new UnsupportedOperationException("jobFailed() called on a finished JobWaiter")
       }
       jobFinished = true
-      jobResult = JobFailed(exception)
+      jobResult = JobFailed(exception, None)
       this.notifyAll()
     }
   }

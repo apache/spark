@@ -275,7 +275,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     var info = "JOB_ID=" + job.runId
     reason match {
       case JobSucceeded => info += " STATUS=SUCCESS"
-      case JobFailed(exception) =>
+      case JobFailed(exception, _) =>
         info += " STATUS=FAILED REASON="
         exception.getMessage.split("\\s+").foreach(info += _ + "_")
       case _ =>
