@@ -1,4 +1,4 @@
-package spark.ml.als
+package spark.ml.recommendation
 
 import scala.util.Random
 

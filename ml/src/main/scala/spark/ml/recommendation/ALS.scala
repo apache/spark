@@ -1,4 +1,4 @@
-package spark.ml.als
+package spark.ml.recommendation
 
 import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.util.Random
@@ -15,7 +15,7 @@ import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
  * of the elements within this block, and the list of destination blocks that each user or
  * product will need to send its feature vector to.
  */
-private[als] case class OutLinkBlock(
+private[recommendation] case class OutLinkBlock(
   elementIds: Array[Int], shouldSend: Array[BitSet])
 
 
@@ -29,7 +29,7 @@ private[als] case class OutLinkBlock(
  * block), as well as the corresponding rating for each one. We can thus use this information when
  * we get product block b's message to update the corresponding users.
  */
-private[als] case class InLinkBlock(
+private[recommendation] case class InLinkBlock(
   elementIds: Array[Int], ratingsForBlock: Array[Array[(Array[Int], Array[Double])]])
 
 
@@ -51,7 +51,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
 {
   def this() = this(-1, 10, 10, 0.01)
 
-  /** 
+  /**
    * Set the number of blocks to parallelize the computation into; pass -1 for an auto-configured
    * number of blocks. Default: -1.
    */
@@ -198,7 +198,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
       lambda: Double)
     : RDD[(Int, Array[Array[Double]])] =
   {
-    val numBlocks = products.partitions.size 
+    val numBlocks = products.partitions.size
     productOutLinks.join(products).flatMap { case (bid, (outLinkBlock, factors)) =>
         val toSend = Array.fill(numBlocks)(new ArrayBuffer[Array[Double]])
         for (p <- 0 until outLinkBlock.elementIds.length; userBlock <- 0 until numBlocks) {
@@ -224,7 +224,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     val blockFactors = messages.sortBy(_._1).map(_._2).toArray // Array[Array[Double]]
     val numBlocks = blockFactors.length
     val numUsers = inLinkBlock.elementIds.length
-    
+
     // We'll sum up the XtXes using vectors that represent only the lower-triangular part, since
     // the matrices are symmetric
     val triangleSize = rank * (rank + 1) / 2
@@ -321,7 +321,7 @@ object ALS {
       ratings: RDD[(Int, Int, Double)],
       rank: Int,
       iterations: Int,
-      lambda: Double, 
+      lambda: Double,
       blocks: Int)
     : MatrixFactorizationModel =
   {
