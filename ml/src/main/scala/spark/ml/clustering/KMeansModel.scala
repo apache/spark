@@ -14,16 +14,7 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
 
   /** Return the cluster index that a given point belongs to. */
   def predict(point: Array[Double]): Int = {
-    var bestDist = Double.PositiveInfinity
-    var bestIndex = -1
-    for (i <- 0 until k) {
-      val dist = MLUtils.squaredDistance(clusterCenters(i), point)
-      if (dist < bestDist) {
-        bestDist = dist
-        bestIndex = i
-      }
-    }
-    bestIndex
+    KMeans.findClosest(clusterCenters, point)._1
   }
 
   /**

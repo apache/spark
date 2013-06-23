@@ -226,7 +226,7 @@ class KMeans private (
     }.reduceByKey(_ + _).collectAsMap()
     val finalCenters = (0 until runs).map { r =>
       val myCenters = centers(r).toArray
-      val myWeights = (0 until myCenters.length).map(i => weightMap((r, i))).toArray
+      val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), 0.0)).toArray
       LocalKMeans.kMeansPlusPlus(r, myCenters, myWeights, k, 30)
     }
 
