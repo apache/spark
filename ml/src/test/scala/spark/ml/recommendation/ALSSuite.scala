@@ -2,16 +2,22 @@ package spark.ml.recommendation
 
 import scala.util.Random
 
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
 import spark.SparkContext._
-import spark.Logging
 
 import org.jblas._
 
 
-class ALSSuite extends FunSuite with Logging {
+class ALSSuite extends FunSuite with BeforeAndAfterAll {
+  val sc = new SparkContext("local", "test")
+
+  override def afterAll() {
+    sc.stop()
+    System.clearProperty("spark.driver.port")
+  }
 
   test("rank-1 matrices") {
     testALS(10, 20, 1, 5, 0.5, 0.1)
@@ -49,8 +55,6 @@ class ALSSuite extends FunSuite with Logging {
         yield (u, p, trueRatings.get(u, p))
     }
 
-    val sc = new SparkContext("local", "test")
-
     val model = ALS.train(sc.parallelize(sampledRatings), features, iterations)
 
     val predictedU = new DoubleMatrix(users, features)
@@ -71,10 +75,6 @@ class ALSSuite extends FunSuite with Logging {
           u, p, correct, prediction, trueRatings, predictedRatings, predictedU, predictedP))
       }
     }
-
-    sc.stop()
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
   }
 }
 

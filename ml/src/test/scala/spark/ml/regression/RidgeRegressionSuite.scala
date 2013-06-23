@@ -2,19 +2,25 @@ package spark.ml.regression
 
 import scala.util.Random
 
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
 import spark.SparkContext._
 
 
-class RidgeRegressionSuite extends FunSuite {
+class RidgeRegressionSuite extends FunSuite with BeforeAndAfterAll {
+  val sc = new SparkContext("local", "test")
+
+  override def afterAll() {
+    sc.stop()
+    System.clearProperty("spark.driver.port")
+  }
 
   // Test if we can correctly learn Y = 3 + X1 + X2 when
   // X1 and X2 are collinear.
   test("multi-collinear variables") {
     val rnd = new Random(43)
-    val sc = new SparkContext("local", "test")
     val x1 = Array.fill[Double](20)(rnd.nextGaussian())
 
     // Pick a mean close to mean of x1
@@ -37,9 +43,5 @@ class RidgeRegressionSuite extends FunSuite {
     assert(model.weights.length === 2)
     assert(model.weights.get(0) >= 0.9 && model.weights.get(0) <= 1.1)
     assert(model.weights.get(1) >= 0.9 && model.weights.get(1) <= 1.1)
-
-    sc.stop()
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
   }
 }
