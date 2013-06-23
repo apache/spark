@@ -20,11 +20,11 @@ class ALSSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("rank-1 matrices") {
-    testALS(10, 20, 1, 5, 0.5, 0.1)
+    testALS(10, 20, 1, 15, 0.7, 0.3)
   }
 
   test("rank-2 matrices") {
-    testALS(20, 30, 2, 10, 0.7, 0.3)
+    testALS(20, 30, 2, 15, 0.7, 0.3)
   }
 
   /**

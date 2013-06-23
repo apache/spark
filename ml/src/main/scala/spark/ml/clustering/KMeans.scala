@@ -179,7 +179,7 @@ class KMeans private (
    */
   private def initRandom(data: RDD[Array[Double]]): Array[ClusterCenters] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
-    val sample = data.takeSample(true, runs * k, 1)
+    val sample = data.takeSample(true, runs * k, new Random().nextInt())
     Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k))
   }
 
@@ -194,7 +194,8 @@ class KMeans private (
    */
   private def initKMeansParallel(data: RDD[Array[Double]]): Array[ClusterCenters] = {
     // Initialize each run's center to a random point
-    val sample = data.takeSample(true, runs, 1)
+    val seed = new Random().nextInt()
+    val sample = data.takeSample(true, runs, seed)
     val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r)))
 
     // On each step, sample 2 * k points on average for each run with probability proportional
@@ -205,7 +206,7 @@ class KMeans private (
         for (r <- 0 until runs) yield (r, KMeans.pointCost(centerArrays(r), point))
       }.reduceByKey(_ + _).collectAsMap()
       val chosen = data.mapPartitionsWithIndex { (index, points) =>
-        val rand = new Random((step << 16) ^ index)
+        val rand = new Random(seed ^ (step << 16) ^ index)
         for {
           p <- points
           r <- 0 until runs
