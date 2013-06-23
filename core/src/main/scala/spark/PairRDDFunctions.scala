@@ -1,5 +1,6 @@
 package spark
 
+import java.nio.ByteBuffer
 import java.util.{Date, HashMap => JHashMap}
 import java.text.SimpleDateFormat
 
@@ -64,8 +65,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
         throw new SparkException("Default partitioner cannot partition array keys.")
       }
     }
-    val aggregator =
-      new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
+    val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (self.partitioner == Some(partitioner)) {
       self.mapPartitions(aggregator.combineValuesByKey(_), true)
     } else if (mapSideCombine) {
@@ -97,7 +97,16 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    * list concatenation, 0 for addition, or 1 for multiplication.).
    */
   def foldByKey(zeroValue: V, partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = {
-    combineByKey[V]({v: V => func(zeroValue, v)}, func, func, partitioner)
+    // Serialize the zero value to a byte array so that we can get a new clone of it on each key
+    val zeroBuffer = SparkEnv.get.closureSerializer.newInstance().serialize(zeroValue)
+    val zeroArray = new Array[Byte](zeroBuffer.limit)
+    zeroBuffer.get(zeroArray)
+
+    // When deserializing, use a lazy val to create just one instance of the serializer per task
+    lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
+    def createZero() = cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
+
+    combineByKey[V]((v: V) => func(createZero(), v), func, func, partitioner)
   }
 
   /**

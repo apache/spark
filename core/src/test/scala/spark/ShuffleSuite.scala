@@ -392,6 +392,28 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     assert(nonEmptyBlocks.size <= 4)
   }
 
+  test("foldByKey") {
+    sc = new SparkContext("local", "test")
+    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
+    val sums = pairs.foldByKey(0)(_+_).collect()
+    assert(sums.toSet === Set((1, 7), (2, 1)))
+  }
+
+  test("foldByKey with mutable result type") {
+    sc = new SparkContext("local", "test")
+    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
+    val bufs = pairs.mapValues(v => ArrayBuffer(v)).cache()
+    // Fold the values using in-place mutation
+    val sums = bufs.foldByKey(new ArrayBuffer[Int])(_ ++= _).collect()
+    assert(sums.toSet === Set((1, ArrayBuffer(1, 2, 3, 1)), (2, ArrayBuffer(1))))
+    // Check that the mutable objects in the original RDD were not changed
+    assert(bufs.collect().toSet === Set(
+      (1, ArrayBuffer(1)),
+      (1, ArrayBuffer(2)),
+      (1, ArrayBuffer(3)),
+      (1, ArrayBuffer(1)),
+      (2, ArrayBuffer(1))))
+  }
 }
 
 object ShuffleSuite {
