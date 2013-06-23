@@ -838,7 +838,9 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
         if (prop != null) prop else "local"
       }
     }
-    val jars = Option(System.getenv("ADD_JARS")).map(_.split(',')).getOrElse(new Array[String](0))
+    val jars = Option(System.getenv("ADD_JARS")).map(_.split(','))
+                                                .getOrElse(new Array[String](0))
+                                                .map(new java.io.File(_).getAbsolutePath)
     sparkContext = new SparkContext(master, "Spark shell", System.getenv("SPARK_HOME"), jars)
     sparkContext
   }
