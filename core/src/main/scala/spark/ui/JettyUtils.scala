@@ -47,6 +47,7 @@ private[spark] object JettyUtils extends Logging {
     }
   }
 
+  /** Creates a handler that always redirects the user to a given path */
   def createRedirectHandler(newPath: String): Handler = {
     new AbstractHandler {
       def handle(target: String,
@@ -151,7 +152,7 @@ object UIUtils {
             </div>
             <div class="span10">
               <h1 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
-              {title}
+                {title}
               </h1>
             </div>
           </div>
