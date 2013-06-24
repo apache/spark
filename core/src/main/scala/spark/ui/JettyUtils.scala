@@ -95,7 +95,7 @@ private[spark] object JettyUtils extends Logging {
       val server = new Server(currentPort)
       server.setHandler(handlerList)
       Try { server.start() } match {
-        case s: Success[_] => (server, currentPort)
+        case s: Success[_] => (server, server.getConnectors.head.getLocalPort)
         case f: Failure[_] =>
           server.stop()
           logInfo("Failed to create UI at port, %s. Trying again.".format(currentPort))

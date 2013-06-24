@@ -45,7 +45,7 @@ private[spark] class Worker(
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
-  val webUi = new WorkerWebUI(self, workDir)
+  val webUi = new WorkerWebUI(self, workDir, Some(webUiPort))
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -77,14 +77,14 @@ private[spark] class Worker(
     sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    connectToMaster()
     webUi.start()
+    connectToMaster()
   }
 
   def connectToMaster() {
     logInfo("Connecting to master " + masterUrl)
     master = context.actorFor(Master.toAkkaUrl(masterUrl))
-    master ! RegisterWorker(workerId, host, port, cores, memory, webUiPort, publicAddress)
+    master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort.get, publicAddress)
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     context.watch(master) // Doesn't work with remote actors, but useful for testing
   }

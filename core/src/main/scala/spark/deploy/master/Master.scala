@@ -71,7 +71,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       } else {
         addWorker(id, host, workerPort, cores, memory, worker_webUiPort, publicAddress)
         context.watch(sender)  // This doesn't work with remote actors but helps for testing
-        sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUiPort)
+        sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUi.boundPort)
         schedule()
       }
     }
