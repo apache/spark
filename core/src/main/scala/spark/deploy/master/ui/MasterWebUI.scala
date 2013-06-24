@@ -5,7 +5,7 @@ import akka.util.Duration
 
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.server.{Handler, Server}
 
 import spark.{Logging, Utils}
 import spark.ui.JettyUtils
@@ -21,13 +21,15 @@ class MasterWebUI(val master: ActorRef) extends Logging {
   val host = Utils.localHostName()
   val port = Option(System.getProperty("master.ui.port"))
     .getOrElse(MasterWebUI.DEFAULT_PORT).toInt
+  var server: Option[Server] = None
 
   val applicationPage = new ApplicationPage(this)
   val indexPage = new IndexPage(this)
 
   def start() {
     try {
-      val (server, boundPort) = JettyUtils.startJettyServer("0.0.0.0", port, handlers)
+      val (srv, boundPort) = JettyUtils.startJettyServer("0.0.0.0", port, handlers)
+      server = Some(srv)
       logInfo("Started Master web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
@@ -42,6 +44,10 @@ class MasterWebUI(val master: ActorRef) extends Logging {
     ("/app", (request: HttpServletRequest) => applicationPage.render(request)),
     ("*", (request: HttpServletRequest) => indexPage.render(request))
   )
+
+  def stop() {
+    server.foreach(_.stop())
+  }
 }
 
 object MasterWebUI {

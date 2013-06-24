@@ -36,6 +36,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   var firstApp: Option[ApplicationInfo] = None
 
+  val webUi = new MasterWebUI(self)
+
   Utils.checkHost(host, "Expected hostname")
 
   val masterPublicAddress = {
@@ -52,13 +54,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     logInfo("Starting Spark master at spark://" + host + ":" + port)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-    startWebUi()
+    webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
   }
 
-  def startWebUi() {
-    val webUi = new MasterWebUI(self)
-    webUi.start()
+  override def postStop() {
+    webUi.stop()
   }
 
   override def receive = {

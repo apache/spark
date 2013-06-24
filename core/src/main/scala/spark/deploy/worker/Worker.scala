@@ -45,6 +45,7 @@ private[spark] class Worker(
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
+  val webUi = new WorkerWebUI(self, workDir)
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -77,7 +78,7 @@ private[spark] class Worker(
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     connectToMaster()
-    startWebUi()
+    webUi.start()
   }
 
   def connectToMaster() {
@@ -86,11 +87,6 @@ private[spark] class Worker(
     master ! RegisterWorker(workerId, host, port, cores, memory, webUiPort, publicAddress)
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     context.watch(master) // Doesn't work with remote actors, but useful for testing
-  }
-
-  def startWebUi() {
-    val webUi = new WorkerWebUI(self, workDir)
-    webUi.start()
   }
 
   override def receive = {
@@ -163,6 +159,7 @@ private[spark] class Worker(
 
   override def postStop() {
     executors.values.foreach(_.kill())
+    webUi.stop()
   }
 }
 

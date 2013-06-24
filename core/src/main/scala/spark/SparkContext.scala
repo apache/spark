@@ -578,6 +578,7 @@ class SparkContext(
 
   /** Shut down the SparkContext. */
   def stop() {
+    ui.stop()
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler

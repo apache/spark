@@ -2,7 +2,7 @@ package spark.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.server.{Handler, Server}
 
 import spark.{Logging, SparkContext, Utils}
 import spark.ui.storage.BlockManagerUI
@@ -17,6 +17,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   val host = Utils.localHostName()
   val port = Option(System.getProperty("spark.ui.port")).getOrElse(SparkUI.DEFAULT_PORT).toInt
   var boundPort: Option[Int] = None
+  var server: Option[Server] = None
 
   val handlers = Seq[(String, Handler)](
     ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
@@ -26,11 +27,12 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   val jobs = new JobProgressUI(sc)
   val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ handlers
 
+  /** Bind the HTTP server which backs this web interface */
   def bind() {
-    /** Start an HTTP server to run the Web interface */
     try {
-      val (server, usedPort) = JettyUtils.startJettyServer("0.0.0.0", port, allHandlers)
+      val (srv, usedPort) = JettyUtils.startJettyServer("0.0.0.0", port, allHandlers)
       logInfo("Started Spark Web UI at http://%s:%d".format(host, usedPort))
+      server = Some(srv)
       boundPort = Some(usedPort)
     } catch {
     case e: Exception =>
@@ -38,6 +40,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
       System.exit(1)
     }
   }
+
   /** Initialize all components of the server */
   def start() {
     // NOTE: This is decoupled from bind() because of the following dependency cycle:
@@ -45,6 +48,10 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
     //  This server must register all handlers, including JobProgressUI, before binding
     //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
     jobs.start()
+  }
+
+  def stop() {
+    server.foreach(_.stop())
   }
 
   private[spark] def appUIAddress = "http://" + host + ":" + boundPort.getOrElse("-1")

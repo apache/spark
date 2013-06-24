@@ -12,7 +12,8 @@ import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHa
 import scala.util.{Try, Success, Failure}
 import scala.xml.Node
 
-import spark.{Utils, SparkContext, Logging}
+import spark.{SparkContext, Logging}
+import org.eclipse.jetty.util.log.Log
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
 private[spark] object JettyUtils extends Logging {
@@ -91,12 +92,14 @@ private[spark] object JettyUtils extends Logging {
 
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
-      val server = new Server(port)
+      val server = new Server(currentPort)
       server.setHandler(handlerList)
       Try { server.start() } match {
         case s: Success[_] => (server, currentPort)
         case f: Failure[_] =>
+          server.stop()
           logInfo("Failed to create UI at port, %s. Trying again.".format(currentPort))
+          logInfo("Error was: " + f.toString)
           connect((currentPort + 1) % 65536)
       }
     }

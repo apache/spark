@@ -7,7 +7,7 @@ import java.io.File
 
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.server.{Handler, Server}
 
 import scala.io.Source
 
@@ -25,6 +25,7 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File) extends Logging {
   val host = Utils.localHostName()
   val port = Option(System.getProperty("wroker.ui.port"))
     .getOrElse(WorkerWebUI.DEFAULT_PORT).toInt
+  var server: Option[Server] = None
 
   val indexPage = new IndexPage(this)
 
@@ -37,7 +38,8 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File) extends Logging {
 
   def start() {
     try {
-      val (server, boundPort) = JettyUtils.startJettyServer("0.0.0.0", port, handlers)
+      val (srv, boundPort) = JettyUtils.startJettyServer("0.0.0.0", port, handlers)
+      server = Some(srv)
       logInfo("Started Worker web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
@@ -55,6 +57,10 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File) extends Logging {
     val lines = source.mkString
     source.close()
     lines
+  }
+
+  def stop() {
+    server.foreach(_.stop())
   }
 }
 
