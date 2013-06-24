@@ -18,10 +18,15 @@ import spark.Success
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[spark] class JobProgressUI(val sc: SparkContext) {
-  val listener = new JobProgressListener
+  private var _listener: Option[JobProgressListener] = None
+  def listener = _listener.get
+
   val dateFmt = new SimpleDateFormat("EEE, MMM d yyyy HH:mm:ss")
 
-  sc.addSparkListener(listener)
+  def start() {
+    _listener = Some(new JobProgressListener)
+    sc.addSparkListener(listener)
+  }
 
   private val indexPage = new IndexPage(this)
   private val stagePage = new StagePage(this)

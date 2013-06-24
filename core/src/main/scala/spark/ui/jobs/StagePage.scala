@@ -13,7 +13,7 @@ import spark.executor.TaskMetrics
 
 /** Page showing statistics and task list for a given stage */
 class StagePage(parent: JobProgressUI) {
-  val listener = parent.listener
+  def listener = parent.listener
   val dateFmt = parent.dateFmt
 
   def render(request: HttpServletRequest): Seq[Node] = {

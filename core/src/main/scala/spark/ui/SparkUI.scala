@@ -26,7 +26,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   val jobs = new JobProgressUI(sc)
   val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ handlers
 
-  def start() {
+  def bind() {
     /** Start an HTTP server to run the Web interface */
     try {
       val (server, usedPort) = JettyUtils.startJettyServer("0.0.0.0", port, allHandlers)
@@ -37,6 +37,14 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
       logError("Failed to create Spark JettyUtils", e)
       System.exit(1)
     }
+  }
+  /** Initialize all components of the server */
+  def start() {
+    // NOTE: This is decoupled from bind() because of the following dependency cycle:
+    //  DAGScheduler() requires that the port of this server is known
+    //  This server must register all handlers, including JobProgressUI, before binding
+    //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
+    jobs.start()
   }
 
   private[spark] def appUIAddress = "http://" + host + ":" + boundPort.getOrElse("-1")

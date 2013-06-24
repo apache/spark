@@ -102,6 +102,9 @@ class SparkContext(
   private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]
   private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
 
+  // Initalize the Spark UI
+  private[spark] val ui = new SparkUI(this)
+  ui.bind()
 
   // Add each JAR given through the constructor
   if (jars != null) {
@@ -211,8 +214,6 @@ class SparkContext(
   @volatile private var dagScheduler = new DAGScheduler(taskScheduler)
   dagScheduler.start()
 
-  // Start the Spark UI
-  private[spark] val ui = new SparkUI(this)
   ui.start()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */

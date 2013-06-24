@@ -15,7 +15,7 @@ import spark.storage.StorageLevel
 
 /** Page showing list of all ongoing and recently finished stages */
 class IndexPage(parent: JobProgressUI) {
-  val listener = parent.listener
+  def listener = parent.listener
   val dateFmt = parent.dateFmt
 
   def render(request: HttpServletRequest): Seq[Node] = {
