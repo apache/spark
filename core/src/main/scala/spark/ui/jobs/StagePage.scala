@@ -8,6 +8,7 @@ import scala.xml.Node
 
 import spark.ui.UIUtils._
 import spark.util.Distribution
+import spark.Utils
 import spark.scheduler.cluster.TaskInfo
 import spark.executor.TaskMetrics
 
@@ -24,24 +25,30 @@ class StagePage(parent: JobProgressUI) {
     val shuffleWrite = listener.hasShuffleWrite(stageId)
 
     val taskHeaders: Seq[String] =
-      Seq("Task ID", "Service Time (ms)", "Locality Level", "Worker", "Launch Time") ++
-        {if (shuffleRead) Seq("Shuffle Read (bytes)")  else Nil} ++
-        {if (shuffleWrite) Seq("Shuffle Write (bytes)") else Nil}
+      Seq("Task ID", "Service Time", "Locality Level", "Worker", "Launch Time") ++
+        {if (shuffleRead) Seq("Shuffle Read")  else Nil} ++
+        {if (shuffleWrite) Seq("Shuffle Write") else Nil}
 
     val taskTable = listingTable(taskHeaders, taskRow, tasks)
 
-    // TODO(pwendell): Consider factoring this more nicely with the functions in SparkListener
     val serviceTimes = tasks.map{case (info, metrics) => metrics.executorRunTime.toDouble}
-    val serviceQuantiles = "Service Time" +: Distribution(serviceTimes).get.getQuantiles().map(_.toString)
+    val serviceQuantiles = "Service Time" +: Distribution(serviceTimes).get.getQuantiles().map(
+      ms => parent.formatDuration(ms.toLong))
 
-    val shuffleReadSizes = tasks.map{
-      case(info, metrics) => metrics.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble}
-    val shuffleReadQuantiles = "Shuffle Read" +: Distribution(shuffleReadSizes).get.getQuantiles().map(_.toString)
+    def getQuantileCols(data: Seq[Double]) =
+      Distribution(data).get.getQuantiles().map(d => Utils.memoryBytesToString(d.toLong))
 
-    val shuffleWriteSizes = tasks.map{
-      case(info, metrics) => metrics.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble}
-    val shuffleWriteQuantiles = "Shuffle Write" +: Distribution(shuffleWriteSizes).get.getQuantiles().map(_.toString)
+    val shuffleReadSizes = tasks.map {
+      case(info, metrics) =>
+        metrics.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
+    }
+    val shuffleReadQuantiles = "Shuffle Read (Remote)" +: getQuantileCols(shuffleReadSizes)
 
+    val shuffleWriteSizes = tasks.map {
+      case(info, metrics) =>
+        metrics.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
+    }
+    val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
     val listings: Seq[Seq[String]] = Seq(serviceQuantiles,
       if (shuffleRead) shuffleReadQuantiles else Nil,
@@ -62,12 +69,14 @@ class StagePage(parent: JobProgressUI) {
     val (info, metrics) = taskData
     <tr>
       <td>{info.taskId}</td>
-      <td>{metrics.executorRunTime}</td>
+      <td>{parent.formatDuration(metrics.executorRunTime)}</td>
       <td>{info.taskLocality}</td>
       <td>{info.hostPort}</td>
       <td>{dateFmt.format(new Date(info.launchTime))}</td>
-      {metrics.shuffleReadMetrics.map{m => <td>{m.remoteBytesRead}</td>}.getOrElse("") }
-      {metrics.shuffleWriteMetrics.map{m => <td>{m.shuffleBytesWritten}</td>}.getOrElse("") }
+      {metrics.shuffleReadMetrics.map{m =>
+        <td>{Utils.memoryBytesToString(m.remoteBytesRead)}</td>}.getOrElse("") }
+      {metrics.shuffleWriteMetrics.map{m =>
+        <td>{Utils.memoryBytesToString(m.shuffleBytesWritten)}</td>}.getOrElse("") }
     </tr>
   }
 }

@@ -1,5 +1,7 @@
 package spark.ui.jobs
 
+import akka.util.Duration
+
 import java.text.SimpleDateFormat
 
 import javax.servlet.http.HttpServletRequest
@@ -20,16 +22,17 @@ import spark.Success
 private[spark] class JobProgressUI(val sc: SparkContext) {
   private var _listener: Option[JobProgressListener] = None
   def listener = _listener.get
-
   val dateFmt = new SimpleDateFormat("EEE, MMM d yyyy HH:mm:ss")
+
+  private val indexPage = new IndexPage(this)
+  private val stagePage = new StagePage(this)
 
   def start() {
     _listener = Some(new JobProgressListener)
     sc.addSparkListener(listener)
   }
 
-  private val indexPage = new IndexPage(this)
-  private val stagePage = new StagePage(this)
+  def formatDuration(ms: Long) = Duration(ms, "milliseconds").printHMS
 
   def getHandlers = Seq[(String, Handler)](
     ("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),

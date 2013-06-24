@@ -38,7 +38,7 @@ class IndexPage(parent: JobProgressUI) {
 
   def getElapsedTime(submitted: Option[Long], completed: Long): String = {
     submitted match {
-      case Some(t) => Duration(completed - t, "milliseconds").printHMS
+      case Some(t) => parent.formatDuration(completed - t)
       case _ => "Unknown"
     }
   }
@@ -53,7 +53,7 @@ class IndexPage(parent: JobProgressUI) {
       case (true, true) => "Read/Write"
       case (true, false) => "Read"
       case (false, true) => "Write"
-      case _ => "None"
+      case _ => ""
     }
 
     <tr>
