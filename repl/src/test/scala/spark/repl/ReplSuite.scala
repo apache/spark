@@ -28,8 +28,9 @@ class ReplSuite extends FunSuite {
     val separator = System.getProperty("path.separator")
     interp.process(Array("-classpath", paths.mkString(separator)))
     spark.repl.Main.interp = null
-    if (interp.sparkContext != null)
+    if (interp.sparkContext != null) {
       interp.sparkContext.stop()
+    }
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port")
     System.clearProperty("spark.hostPort")
@@ -37,12 +38,12 @@ class ReplSuite extends FunSuite {
   }
 
   def assertContains(message: String, output: String) {
-    assert(output contains message,
+    assert(output.contains(message),
            "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
   def assertDoesNotContain(message: String, output: String) {
-    assert(!(output contains message),
+    assert(!output.contains(message),
            "Interpreter output contained '" + message + "':\n" + output)
   }
 
