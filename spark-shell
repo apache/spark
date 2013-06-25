@@ -1,5 +1,32 @@
 #!/bin/bash --posix
+#
+# Shell script for starting the Spark Shell REPL
+# Options:
+#    -m            Set MASTER to spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT
+#    -c <cores>    Set the number of cores for REPL to use
+#
 FWDIR="`dirname $0`"
+
+for o in "$@"; do
+  if [ "$1" = "-m" -o "$1" = "--master" ]; then
+    shift
+    if [ -e "$FWDIR/conf/spark-env.sh" ]; then
+      . "$FWDIR/conf/spark-env.sh"
+    fi
+    if [ -z "$MASTER" ]; then
+      MASTER="spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}"
+    fi
+    export MASTER
+  fi
+
+  if [ "$1" = "-c" -o "$1" = "--cores" ]; then
+    shift
+    if [ -n "$1" ]; then
+      OPTIONS="-Dspark.cores.max=$1"
+      shift
+    fi
+  fi
+done
 
 # Copy restore-TTY-on-exit functions from Scala script so spark-shell exits properly even in
 # binary distribution of Spark where Scala is not installed
@@ -29,7 +56,7 @@ if [[ ! $? ]]; then
   saved_stty=""
 fi
 
-$FWDIR/run spark.repl.Main "$@"
+$FWDIR/run $OPTIONS spark.repl.Main "$@"
 
 # record the exit status lest it be overwritten:
 # then reenable echo and propagate the code.
