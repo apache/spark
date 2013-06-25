@@ -15,7 +15,7 @@ import spark.ui.JettyUtils._
  * Web UI server for the standalone master.
  */
 private[spark]
-class MasterWebUI(val master: ActorRef, requestedPort: Option[Int]) extends Logging {
+class MasterWebUI(val master: ActorRef, requestedPort: Option[Int] = None) extends Logging {
   implicit val timeout = Duration.create(
     System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
   val host = Utils.localHostName()
@@ -33,7 +33,7 @@ class MasterWebUI(val master: ActorRef, requestedPort: Option[Int]) extends Logg
       val (srv, bPort) = JettyUtils.startJettyServer("0.0.0.0", port, handlers)
       server = Some(srv)
       boundPort = Some(bPort)
-      logInfo("Started Master web UI at http://%s:%d".format(host, boundPort))
+      logInfo("Started Master web UI at http://%s:%d".format(host, boundPort.get))
     } catch {
       case e: Exception =>
         logError("Failed to create Master JettyUtils", e)

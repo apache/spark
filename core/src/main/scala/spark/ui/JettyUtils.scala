@@ -62,7 +62,7 @@ private[spark] object JettyUtils extends Logging {
     }
   }
 
-  /** Creates a handler for serving files from a static directory. */
+  /** Creates a handler for serving files from a static directory */
   def createStaticHandler(resourceBase: String): ResourceHandler = {
     val staticHandler = new ResourceHandler
     Option(getClass.getClassLoader.getResource(resourceBase)) match {
