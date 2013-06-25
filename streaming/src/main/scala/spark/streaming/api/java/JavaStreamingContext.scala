@@ -4,23 +4,18 @@ import spark.streaming._
 import receivers.{ActorReceiver, ReceiverSupervisorStrategy}
 import spark.streaming.dstream._
 import spark.storage.StorageLevel
-
 import spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import spark.api.java.{JavaSparkContext, JavaRDD}
-
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-
 import twitter4j.Status
-
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
 import akka.zeromq.Subscribe
-
 import scala.collection.JavaConversions._
-
 import java.lang.{Long => JLong, Integer => JInt}
 import java.io.InputStream
 import java.util.{Map => JMap}
+import twitter4j.auth.Authorization
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -315,46 +310,78 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param username Twitter username
-   * @param password Twitter password
+   * @param twitterAuth Twitter4J Authorization
    * @param filters Set of filter strings to get only those tweets that match them
    * @param storageLevel Storage level to use for storing the received objects
    */
   def twitterStream(
-      username: String,
-      password: String,
+      twitterAuth: Authorization,
       filters: Array[String],
       storageLevel: StorageLevel
     ): JavaDStream[Status] = {
-    ssc.twitterStream(username, password, filters, storageLevel)
+    ssc.twitterStream(Some(twitterAuth), filters, storageLevel)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using 
+   * java.util.Preferences to store OAuth token. OAuth key and secret should
+   * be provided using system properties twitter4j.oauth.consumerKey and 
+   * twitter4j.oauth.consumerSecret
+   * @param filters Set of filter strings to get only those tweets that match them
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def twitterStream(
+      filters: Array[String],
+      storageLevel: StorageLevel
+    ): JavaDStream[Status] = {
+    ssc.twitterStream(None, filters, storageLevel)
   }
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param username Twitter username
-   * @param password Twitter password
+   * @param twitterAuth Twitter4J Authorization
    * @param filters Set of filter strings to get only those tweets that match them
    */
   def twitterStream(
-      username: String,
-      password: String,
+      twitterAuth: Authorization,
       filters: Array[String]
     ): JavaDStream[Status] = {
-    ssc.twitterStream(username, password, filters)
+    ssc.twitterStream(Some(twitterAuth), filters)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using 
+   * java.util.Preferences to store OAuth token. OAuth key and secret should
+   * be provided using system properties twitter4j.oauth.consumerKey and 
+   * twitter4j.oauth.consumerSecret
+   * @param filters Set of filter strings to get only those tweets that match them
+   */
+  def twitterStream(
+      filters: Array[String]
+    ): JavaDStream[Status] = {
+    ssc.twitterStream(None, filters)
   }
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param username Twitter username
-   * @param password Twitter password
+   * @param twitterAuth Twitter4J Authorization
    */
   def twitterStream(
-      username: String,
-      password: String
+      twitterAuth: Authorization
     ): JavaDStream[Status] = {
-    ssc.twitterStream(username, password)
+    ssc.twitterStream(Some(twitterAuth))
   }
 
+  /**
+   * Create a input stream that returns tweets received from Twitter using 
+   * java.util.Preferences to store OAuth token. OAuth key and secret should
+   * be provided using system properties twitter4j.oauth.consumerKey and 
+   * twitter4j.oauth.consumerSecret
+   */
+  def twitterStream(): JavaDStream[Status] = {
+    ssc.twitterStream()
+  }
+  
   /**
    * Create an input stream with any arbitrary user implemented actor receiver.
    * @param props Props object defining creation of the actor

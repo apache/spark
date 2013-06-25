@@ -45,7 +45,7 @@ object TwitterAlgebirdCMS {
 
     val ssc = new StreamingContext(master, "TwitterAlgebirdCMS", Seconds(10),
       System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
-    val stream = ssc.twitterStream(username, password, filters, StorageLevel.MEMORY_ONLY_SER)
+    val stream = ssc.twitterStream(None, filters, StorageLevel.MEMORY_ONLY_SER)
 
     val users = stream.map(status => status.getUser.getId)
 

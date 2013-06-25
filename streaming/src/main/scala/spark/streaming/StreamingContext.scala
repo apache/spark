@@ -368,7 +368,7 @@ class StreamingContext private (
    * @param storageLevel Storage level to use for storing the received objects
    */
   def twitterStream(
-      twitterAuth: Authorization,
+      twitterAuth: Option[Authorization] = None,
       filters: Seq[String] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[Status] = {
