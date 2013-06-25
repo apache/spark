@@ -77,9 +77,35 @@ private[spark] class ExecutorRunner(
 
   def buildCommandSeq(): Seq[String] = {
     val command = appDesc.command
-    val script = if (System.getProperty("os.name").startsWith("Windows")) "run.cmd" else "run"
-    val runScript = new File(sparkHome, script).getCanonicalPath
-    Seq(runScript, command.mainClass) ++ (command.arguments ++ Seq(appId)).map(substituteVariables)
+    val runner = if (System.getenv("JAVA_HOME") == null) {
+      "java"
+    } else {
+      System.getenv("JAVA_HOME") + "/bin/java"
+    }
+    // SPARK-698: do not call the run.cmd script, as process.destroy()
+    // fails to kill a process tree on Windows
+    Seq(runner) ++ buildJavaOpts() ++ Seq(command.mainClass) ++
+      command.arguments.map(substituteVariables)
+  }
+  
+  /*
+   * Attention: this must always be aligned with the environment variables in the run scripts and the
+   * way the JAVA_OPTS are assembled there.
+   */
+  def buildJavaOpts(): Seq[String] = {
+    val _javaLibPath = if (System.getenv("SPARK_LIBRARY_PATH") == null) {
+      ""
+    } else {
+      "-Djava.library.path=" + System.getenv("SPARK_LIBRARY_PATH")
+    }
+    
+    Seq("-cp", 
+        System.getenv("CLASSPATH"), 
+        System.getenv("SPARK_JAVA_OPTS"), 
+        _javaLibPath,
+        "-Xms" + memory.toString + "M",
+        "-Xmx" + memory.toString + "M")
+    .filter(_ != null)
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
@@ -115,7 +141,6 @@ private[spark] class ExecutorRunner(
       for ((key, value) <- appDesc.command.environment) {
         env.put(key, value)
       }
-      env.put("SPARK_MEM", memory.toString + "m")
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
       env.put("SPARK_LAUNCH_WITH_SCALA", "0")
