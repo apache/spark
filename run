@@ -64,8 +64,6 @@ export JAVA_OPTS
 # Check if this is a binary distribution or source distribution
 # and build up the classpath appropriately
 if [ -f "$FWDIR/RELEASE" ]; then
-  echo "This is a binary distribution"
-
   if [ `command -v java` ]; then
     RUNNER="java"
   else
@@ -81,7 +79,6 @@ if [ -f "$FWDIR/RELEASE" ]; then
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 else
-  echo "This is a source distribution"
   . "$FWDIR/set-dev-classpath.sh"
 fi
 
