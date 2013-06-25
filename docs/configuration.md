@@ -253,6 +253,13 @@ Apart from these, the following properties are also available, and may be useful
     applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
   </td>
 </tr>
+<tr>
+  <td>spark.streaming.blockInterval</td>
+  <td>200</td>
+  <td>
+    Duration (milliseconds) of how long to batch new objects coming from network receivers.
+  </td>
+</tr>
 
 </table>
 
