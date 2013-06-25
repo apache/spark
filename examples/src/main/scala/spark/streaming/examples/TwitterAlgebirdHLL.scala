@@ -21,16 +21,15 @@ import spark.streaming.dstream.TwitterInputDStream
  */
 object TwitterAlgebirdHLL {
   def main(args: Array[String]) {
-    if (args.length < 3) {
-      System.err.println("Usage: TwitterAlgebirdHLL <master> <twitter_username> <twitter_password>" +
+    if (args.length < 1) {
+      System.err.println("Usage: TwitterAlgebirdHLL <master>" +
         " [filter1] [filter2] ... [filter n]")
       System.exit(1)
     }
 
     /** Bit size parameter for HyperLogLog, trades off accuracy vs size */
     val BIT_SIZE = 12
-    val Array(master, username, password) = args.slice(0, 3)
-    val filters = args.slice(3, args.length)
+    val (master, filters) = (args.head, args.tail)
 
     val ssc = new StreamingContext(master, "TwitterAlgebirdHLL", Seconds(5),
       System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
