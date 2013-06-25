@@ -4,6 +4,7 @@ import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.Files;
+import kafka.serializer.StringDecoder;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.junit.After;
 import org.junit.Assert;
@@ -23,7 +24,6 @@ import spark.streaming.api.java.JavaPairDStream;
 import spark.streaming.api.java.JavaStreamingContext;
 import spark.streaming.JavaTestUtils;
 import spark.streaming.JavaCheckpointTestUtils;
-import spark.streaming.dstream.KafkaPartitionKey;
 import spark.streaming.InputStreamsSuite;
 
 import java.io.*;
@@ -1203,10 +1203,14 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testKafkaStream() {
     HashMap<String, Integer> topics = Maps.newHashMap();
-    HashMap<KafkaPartitionKey, Long> offsets = Maps.newHashMap();
     JavaDStream test1 = ssc.kafkaStream("localhost:12345", "group", topics);
-    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics, offsets);
-    JavaDStream test3 = ssc.kafkaStream("localhost:12345", "group", topics, offsets,
+    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics,
+      StorageLevel.MEMORY_AND_DISK());
+
+    HashMap<String, String> kafkaParams = Maps.newHashMap();
+    kafkaParams.put("zk.connect","localhost:12345");
+    kafkaParams.put("groupid","consumer-group");
+    JavaDStream test3 = ssc.kafkaStream(String.class, StringDecoder.class, kafkaParams, topics,
       StorageLevel.MEMORY_AND_DISK());
   }
 

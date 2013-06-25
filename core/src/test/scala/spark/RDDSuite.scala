@@ -317,4 +317,23 @@ class RDDSuite extends FunSuite with LocalSparkContext {
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
   }
+
+  test("top with predefined ordering") {
+    sc = new SparkContext("local", "test")
+    val nums = Array.range(1, 100000)
+    val ints = sc.makeRDD(scala.util.Random.shuffle(nums), 2)
+    val topK = ints.top(5)
+    assert(topK.size === 5)
+    assert(topK.sorted === nums.sorted.takeRight(5))
+  }
+
+  test("top with custom ordering") {
+    sc = new SparkContext("local", "test")
+    val words = Vector("a", "b", "c", "d")
+    implicit val ord = implicitly[Ordering[String]].reverse
+    val rdd = sc.makeRDD(words, 2)
+    val topK = rdd.top(2)
+    assert(topK.size === 2)
+    assert(topK.sorted === Array("b", "a"))
+  }
 }

@@ -367,6 +367,53 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     assert(nonEmptyBlocks.size <= 4)
   }
 
+  test("zero sized blocks without kryo") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+
+    // 10 partitions from 4 keys
+    val NUM_BLOCKS = 10
+    val a = sc.parallelize(1 to 4, NUM_BLOCKS)
+    val b = a.map(x => (x, x*2))
+
+    // NOTE: The default Java serializer should create zero-sized blocks
+    val c = new ShuffledRDD(b, new HashPartitioner(10))
+
+    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
+    assert(c.count === 4)
+
+    val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
+      val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, id)
+      statuses.map(x => x._2)
+    }
+    val nonEmptyBlocks = blockSizes.filter(x => x > 0)
+
+    // We should have at most 4 non-zero sized partitions
+    assert(nonEmptyBlocks.size <= 4)
+  }
+
+  test("foldByKey") {
+    sc = new SparkContext("local", "test")
+    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
+    val sums = pairs.foldByKey(0)(_+_).collect()
+    assert(sums.toSet === Set((1, 7), (2, 1)))
+  }
+
+  test("foldByKey with mutable result type") {
+    sc = new SparkContext("local", "test")
+    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (1, 1), (2, 1)))
+    val bufs = pairs.mapValues(v => ArrayBuffer(v)).cache()
+    // Fold the values using in-place mutation
+    val sums = bufs.foldByKey(new ArrayBuffer[Int])(_ ++= _).collect()
+    assert(sums.toSet === Set((1, ArrayBuffer(1, 2, 3, 1)), (2, ArrayBuffer(1))))
+    // Check that the mutable objects in the original RDD were not changed
+    assert(bufs.collect().toSet === Set(
+      (1, ArrayBuffer(1)),
+      (1, ArrayBuffer(2)),
+      (1, ArrayBuffer(3)),
+      (1, ArrayBuffer(1)),
+      (2, ArrayBuffer(1))))
+  }
 }
 
 object ShuffleSuite {

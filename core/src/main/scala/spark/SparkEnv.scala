@@ -1,5 +1,8 @@
 package spark
 
+import collection.mutable
+import serializer.Serializer
+
 import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
@@ -9,6 +12,7 @@ import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
 import spark.serializer.{Serializer, SerializerManager}
 import spark.util.AkkaUtils
+import spark.api.python.PythonWorkerFactory
 
 
 /**
@@ -37,7 +41,10 @@ class SparkEnv (
     // If executorId is NOT found, return defaultHostPort
     var executorIdToHostPort: Option[(String, String) => String]) {
 
+  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
+
   def stop() {
+    pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
     mapOutputTracker.stop()
     shuffleFetcher.stop()
@@ -50,6 +57,11 @@ class SparkEnv (
     actorSystem.awaitTermination()
   }
 
+  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
+    synchronized {
+      pythonWorkers.getOrElseUpdate((pythonExec, envVars), new PythonWorkerFactory(pythonExec, envVars)).create()
+    }
+  }
 
   def resolveExecutorIdToHostPort(executorId: String, defaultHostPort: String): String = {
     val env = SparkEnv.get

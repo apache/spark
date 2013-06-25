@@ -116,8 +116,8 @@ private object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory after " + maxAttempts +
-            " attempts!")
+        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+          maxAttempts + " attempts!")
       }
       try {
         dir = new File(root, "spark-" + UUID.randomUUID.toString)
@@ -522,13 +522,14 @@ private object Utils extends Logging {
     execute(command, new File("."))
   }
 
-
+  private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String, 
+                                    val firstUserLine: Int, val firstUserClass: String)
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getSparkCallSite: String = {
+  def getCallSiteInfo: CallSiteInfo = {
     val trace = Thread.currentThread.getStackTrace().filter( el =>
       (!el.getMethodName.contains("getStackTrace")))
 
@@ -540,6 +541,7 @@ private object Utils extends Logging {
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
     var finished = false
+    var firstUserClass = "<unknown>"
 
     for (el <- trace) {
       if (!finished) {
@@ -554,13 +556,19 @@ private object Utils extends Logging {
         else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
+          firstUserClass = el.getClassName
           finished = true
         }
       }
     }
-    "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
+    new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
   }
 
+  def formatSparkCallSite = {
+    val callSiteInfo = getCallSiteInfo
+    "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
+                         callSiteInfo.firstUserLine)
+  }
   /**
    * Try to find a free port to bind to on the local host. This should ideally never be needed,
    * except that, unfortunately, some of the networking libraries we currently rely on (e.g. Spray)
