@@ -40,7 +40,7 @@ private[spark] class ExecutorRunner(
     workerThread.start()
 
     // Shutdown hook that kills actors on shutdown.
-    shutdownHook = new Thread() { 
+    shutdownHook = new Thread() {
       override def run() {
         if (process != null) {
           logInfo("Shutdown hook killing child process.")
@@ -87,25 +87,43 @@ private[spark] class ExecutorRunner(
     Seq(runner) ++ buildJavaOpts() ++ Seq(command.mainClass) ++
       command.arguments.map(substituteVariables)
   }
-  
-  /*
-   * Attention: this must always be aligned with the environment variables in the run scripts and the
-   * way the JAVA_OPTS are assembled there.
+
+  /**
+   * Attention: this must always be aligned with the environment variables in the run scripts and
+   * the way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(): Seq[String] = {
-    val _javaLibPath = if (System.getenv("SPARK_LIBRARY_PATH") == null) {
-      ""
+    val libraryOpts = if (System.getenv("SPARK_LIBRARY_PATH") == null) {
+      Nil
     } else {
-      "-Djava.library.path=" + System.getenv("SPARK_LIBRARY_PATH")
+      List("-Djava.library.path=" + System.getenv("SPARK_LIBRARY_PATH"))
     }
-    
-    Seq("-cp", 
-        System.getenv("CLASSPATH"), 
-        System.getenv("SPARK_JAVA_OPTS"), 
-        _javaLibPath,
-        "-Xms" + memory.toString + "M",
-        "-Xmx" + memory.toString + "M")
-    .filter(_ != null)
+
+    val userOpts = if (System.getenv("SPARK_JAVA_OPTS") == null) {
+      Nil
+    } else {
+      Utils.splitCommandString(System.getenv("SPARK_JAVA_OPTS"))
+    }
+
+    val memoryOpts = Seq("-Xms" + memory + "M", "-Xmx" + memory + "M")
+
+    var classPath = System.getenv("CLASSPATH")
+    if (System.getenv("SPARK_LAUNCH_WITH_SCALA") == "1") {
+      // Add the Scala library JARs to the classpath; this is needed when the ExecutorRunner
+      // was launched with "scala" as the runner (e.g. in spark-shell in local-cluster mode)
+      // and the Scala libraries won't be in the CLASSPATH environment variable by defalt.
+      if (System.getenv("SCALA_LIBRARY_PATH") == null && System.getenv("SCALA_HOME") == null) {
+        logError("Cloud not launch executors: neither SCALA_LIBRARY_PATH nor SCALA_HOME are set")
+        System.exit(1)
+      }
+      val scalaLib = Option(System.getenv("SCALA_LIBRARY_PATH")).getOrElse(
+        System.getenv("SCALA_HOME") + "/lib")
+      classPath += ":" + scalaLib + "/scala-library.jar" +
+                   ":" + scalaLib + "/scala-compiler.jar" +
+                   ":" + scalaLib + "/jline.jar"
+    }
+
+    Seq("-cp", classPath) ++ libraryOpts ++ userOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
@@ -136,6 +154,7 @@ private[spark] class ExecutorRunner(
 
       // Launch the process
       val command = buildCommandSeq()
+      println("COMMAND: " + command.mkString(" "))
       val builder = new ProcessBuilder(command: _*).directory(executorDir)
       val env = builder.environment()
       for ((key, value) <- appDesc.command.environment) {
