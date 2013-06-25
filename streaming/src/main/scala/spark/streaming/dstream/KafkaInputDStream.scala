@@ -9,7 +9,7 @@ import java.util.concurrent.Executors
 
 import kafka.consumer._
 import kafka.message.{Message, MessageSet, MessageAndMetadata}
-import kafka.serializer.StringDecoder
+import kafka.serializer.Decoder
 import kafka.utils.{Utils, ZKGroupTopicDirs}
 import kafka.utils.ZkUtils._
 import kafka.utils.ZKStringSerializer
@@ -28,7 +28,7 @@ import scala.collection.JavaConversions._
  * @param storageLevel RDD storage level.
  */
 private[streaming]
-class KafkaInputDStream[T: ClassManifest](
+class KafkaInputDStream[T: ClassManifest, D <: Decoder[_]: Manifest](
     @transient ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
@@ -37,15 +37,17 @@ class KafkaInputDStream[T: ClassManifest](
 
 
   def getReceiver(): NetworkReceiver[T] = {
-    new KafkaReceiver(kafkaParams, topics, storageLevel)
+    new KafkaReceiver[T, D](kafkaParams, topics, storageLevel)
         .asInstanceOf[NetworkReceiver[T]]
   }
 }
 
 private[streaming]
-class KafkaReceiver(kafkaParams: Map[String, String],
+class KafkaReceiver[T: ClassManifest, D <: Decoder[_]: Manifest](
+  kafkaParams: Map[String, String],
   topics: Map[String, Int],
-  storageLevel: StorageLevel) extends NetworkReceiver[Any] {
+  storageLevel: StorageLevel
+  ) extends NetworkReceiver[Any] {
 
   // Handles pushing data into the BlockManager
   lazy protected val blockGenerator = new BlockGenerator(storageLevel)
@@ -82,7 +84,8 @@ class KafkaReceiver(kafkaParams: Map[String, String],
     }
 
     // Create Threads for each Topic/Message Stream we are listening
-    val topicMessageStreams = consumerConnector.createMessageStreams(topics, new StringDecoder())
+    val decoder = manifest[D].erasure.newInstance.asInstanceOf[Decoder[T]]
+    val topicMessageStreams = consumerConnector.createMessageStreams(topics, decoder)
 
     // Start the messages handler for each partition
     topicMessageStreams.values.foreach { streams =>
@@ -91,7 +94,7 @@ class KafkaReceiver(kafkaParams: Map[String, String],
   }
 
   // Handles Kafka Messages
-  private class MessageHandler(stream: KafkaStream[String]) extends Runnable {
+  private class MessageHandler[T: ClassManifest](stream: KafkaStream[T]) extends Runnable {
     def run() {
       logInfo("Starting MessageHandler.")
       for (msgAndMetadata <- stream) {
