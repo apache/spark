@@ -75,7 +75,8 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   : JavaDStream[String] = {
     implicit val cmt: ClassManifest[String] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[String]]
-    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*), StorageLevel.MEMORY_ONLY_SER_2)
+    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
+      StorageLevel.MEMORY_ONLY_SER_2)
   }
 
   /**
@@ -83,8 +84,9 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *               in its own thread.
    * @param storageLevel RDD storage level. Defaults to memory-only
-   * in its own thread.
+   *
    */
   def kafkaStream(
     zkQuorum: String,
@@ -94,14 +96,16 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   : JavaDStream[String] = {
     implicit val cmt: ClassManifest[String] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[String]]
-    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
+      storageLevel)
   }
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
    * @param typeClass Type of RDD
    * @param decoderClass Type of kafka decoder
-   * @param kafkaParams Map of kafka configuration paramaters. See: http://kafka.apache.org/configuration.html
+   * @param kafkaParams Map of kafka configuration paramaters.
+   *                    See: http://kafka.apache.org/configuration.html
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
    * @param storageLevel RDD storage level. Defaults to memory-only
@@ -113,7 +117,8 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     topics: JMap[String, JInt],
     storageLevel: StorageLevel)
   : JavaDStream[T] = {
-    implicit val cmt: ClassManifest[T] = implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    implicit val cmt: ClassManifest[T] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
     implicit val cmd: Manifest[D] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[D]]
     ssc.kafkaStream[T, D](
       kafkaParams.toMap,
