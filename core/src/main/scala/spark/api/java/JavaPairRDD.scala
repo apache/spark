@@ -6,6 +6,7 @@ import java.util.Comparator
 import scala.Tuple2
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
@@ -19,6 +20,7 @@ import spark.OrderedRDDFunctions
 import spark.storage.StorageLevel
 import spark.HashPartitioner
 import spark.Partitioner
+import spark.Partitioner._
 import spark.RDD
 import spark.SparkContext.rddToPairRDDFunctions
 
@@ -65,7 +67,13 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
    */
-  def coalesce(numPartitions: Int): JavaPairRDD[K, V] = new JavaPairRDD[K, V](rdd.coalesce(numPartitions))
+  def coalesce(numPartitions: Int): JavaPairRDD[K, V] = fromRDD(rdd.coalesce(numPartitions))
+
+  /**
+   * Return a new RDD that is reduced into `numPartitions` partitions.
+   */
+  def coalesce(numPartitions: Int, shuffle: Boolean): JavaPairRDD[K, V] =
+    fromRDD(rdd.coalesce(numPartitions, shuffle))
 
   /**
    * Return a sampled subset of this RDD.
@@ -160,6 +168,30 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     rdd.countByKeyApprox(timeout, confidence).map(mapAsJavaMap)
 
   /**
+   * Merge the values for each key using an associative function and a neutral "zero value" which may
+   * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
+   * list concatenation, 0 for addition, or 1 for multiplication.).
+   */
+  def foldByKey(zeroValue: V, partitioner: Partitioner, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
+    fromRDD(rdd.foldByKey(zeroValue, partitioner)(func))
+
+  /**
+   * Merge the values for each key using an associative function and a neutral "zero value" which may
+   * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
+   * list concatenation, 0 for addition, or 1 for multiplication.).
+   */
+  def foldByKey(zeroValue: V, numPartitions: Int, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
+    fromRDD(rdd.foldByKey(zeroValue, numPartitions)(func))
+
+  /**
+   * Merge the values for each key using an associative function and a neutral "zero value" which may
+   * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
+   * list concatenation, 0 for addition, or 1 for multiplication.).
+   */
+  def foldByKey(zeroValue: V, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
+    fromRDD(rdd.foldByKey(zeroValue)(func))
+
+  /**
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
@@ -241,30 +273,30 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     fromRDD(rdd.rightOuterJoin(other, partitioner))
 
   /** 
-   * Simplified version of combineByKey that hash-partitions the resulting RDD using the default
-   * parallelism level.
+   * Simplified version of combineByKey that hash-partitions the resulting RDD using the existing
+   * partitioner/parallelism level.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
     mergeValue: JFunction2[C, V, C],
     mergeCombiners: JFunction2[C, C, C]): JavaPairRDD[K, C] = {
     implicit val cm: ClassManifest[C] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[C]]
-    fromRDD(combineByKey(createCombiner, mergeValue, mergeCombiners))
+    fromRDD(combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(rdd)))
   }
 
   /**
    * Merge the values for each key using an associative reduce function. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with the default parallelism level.
+   * "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
+   * parallelism level.
    */
   def reduceByKey(func: JFunction2[V, V, V]): JavaPairRDD[K, V] = {
-    val partitioner = rdd.defaultPartitioner(rdd)
-    fromRDD(reduceByKey(partitioner, func))
+    fromRDD(reduceByKey(defaultPartitioner(rdd), func))
   }
 
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
-   * resulting RDD with the default parallelism level.
+   * resulting RDD with the existing partitioner/parallelism level.
    */
   def groupByKey(): JavaPairRDD[K, JList[V]] =
     fromRDD(groupByResultToJava(rdd.groupByKey()))
@@ -289,7 +321,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
    * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
-   * using the default level of parallelism.
+   * using the existing partitioner/parallelism level.
    */
   def leftOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, Option[W])] =
     fromRDD(rdd.leftOuterJoin(other))
@@ -307,7 +339,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
    * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
-   * RDD using the default parallelism level.
+   * RDD using the existing partitioner/parallelism level.
    */
   def rightOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (Option[V], W)] =
     fromRDD(rdd.rightOuterJoin(other))
@@ -426,6 +458,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     valueClass: Class[_],
     outputFormatClass: Class[F]) {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass)
+  }
+
+  /** Output the RDD to any Hadoop-supported file system, compressing with the supplied codec. */
+  def saveAsHadoopFile[F <: OutputFormat[_, _]](
+    path: String,
+    keyClass: Class[_],
+    valueClass: Class[_],
+    outputFormatClass: Class[F],
+    codec: Class[_ <: CompressionCodec]) {
+    rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, codec)
   }
 
   /** Output the RDD to any Hadoop-supported file system. */

@@ -115,6 +115,7 @@ private[spark] object BlockMessageArray {
     val newBuffer = ByteBuffer.allocate(totalSize)
     newBuffer.clear()
     bufferMessage.buffers.foreach(buffer => {
+      assert (0 == buffer.position())
       newBuffer.put(buffer)
       buffer.rewind()
     })

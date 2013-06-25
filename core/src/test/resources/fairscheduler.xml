@@ -1,0 +1,14 @@
+<allocations>
+<pool name="1">
+    <minShare>2</minShare>
+    <weight>1</weight>
+    <schedulingMode>FIFO</schedulingMode>
+</pool>
+<pool name="2">
+    <minShare>3</minShare>
+    <weight>1</weight>
+    <schedulingMode>FIFO</schedulingMode>
+</pool>
+<pool name="3">
+</pool>
+</allocations>

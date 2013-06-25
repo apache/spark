@@ -15,7 +15,8 @@ object QueueStream {
     }
     
     // Create the context
-    val ssc = new StreamingContext(args(0), "QueueStream", Seconds(1))
+    val ssc = new StreamingContext(args(0), "QueueStream", Seconds(1),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     // Create the queue through which RDDs can be pushed to 
     // a QueueInputDStream
@@ -30,7 +31,7 @@ object QueueStream {
     
     // Create and push some RDDs into
     for (i <- 1 to 30) {
-      rddQueue += ssc.sc.makeRDD(1 to 1000, 10)
+      rddQueue += ssc.sparkContext.makeRDD(1 to 1000, 10)
       Thread.sleep(1000)
     }
     ssc.stop()

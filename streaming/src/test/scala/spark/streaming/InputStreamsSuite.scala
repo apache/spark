@@ -29,27 +29,30 @@ import java.nio.charset.Charset
 import com.google.common.io.Files
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
-    
-  System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
 
   val testPort = 9999
 
   override def checkpointDir = "checkpoint"
 
+  before {
+    System.setProperty("spark.streaming.clock", "spark.streaming.util.ManualClock")
+  }
+
   after {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
   }
 
 
   test("socket input stream") {
     // Start the server
-    val testServer = new TestServer(testPort)
+    val testServer = new TestServer()
     testServer.start()
 
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(master, framework, batchDuration)
-    val networkStream = ssc.socketTextStream("localhost", testPort, StorageLevel.MEMORY_AND_DISK)
+    val networkStream = ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String  ]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
@@ -94,7 +97,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   test("flume input stream") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(master, framework, batchDuration)
-    val flumeStream = ssc.flumeStream("localhost", 33333, StorageLevel.MEMORY_AND_DISK)
+    val flumeStream = ssc.flumeStream("localhost", testPort, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
@@ -104,7 +107,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
     Thread.sleep(1000)
-    val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", 33333));
+    val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", testPort));
     val client = SpecificRequestor.getClient(
       classOf[AvroSourceProtocol], transceiver);
 
@@ -193,8 +196,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
   test("actor input stream") {
     // Start the server
-    val port = testPort
-    val testServer = new TestServer(port)
+    val testServer = new TestServer()
+    val port = testServer.port
     testServer.start()
 
     // Set up the streaming context and input streams
@@ -255,11 +258,11 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
 
 /** This is server to test the network input stream */
-class TestServer(port: Int) extends Logging {
+class TestServer() extends Logging {
 
   val queue = new ArrayBlockingQueue[String](100)
 
-  val serverSocket = new ServerSocket(port)
+  val serverSocket = new ServerSocket(0)
 
   val servingThread = new Thread() {
     override def run() {
@@ -301,11 +304,13 @@ class TestServer(port: Int) extends Logging {
   def send(msg: String) { queue.add(msg) }
 
   def stop() { servingThread.interrupt() }
+
+  def port = serverSocket.getLocalPort
 }
 
 object TestServer {
   def main(args: Array[String]) {
-    val s = new TestServer(9999)
+    val s = new TestServer()
     s.start()
     while(true) {
       Thread.sleep(1000)

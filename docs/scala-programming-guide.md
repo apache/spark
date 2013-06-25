@@ -38,15 +38,21 @@ The first thing a Spark program must do is to create a `SparkContext` object, wh
 This is done through the following constructor:
 
 {% highlight scala %}
-new SparkContext(master, jobName, [sparkHome], [jars])
+new SparkContext(master, appName, [sparkHome], [jars])
 {% endhighlight %}
 
-The `master` parameter is a string specifying a [Mesos](running-on-mesos.html) cluster to connect to, or a special "local" string to run in local mode, as described below. `jobName` is a name for your job, which will be shown in the Mesos web UI when running on a cluster. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
+The `master` parameter is a string specifying a [Spark or Mesos cluster URL](#master-urls) to connect to, or a special "local" string to run in local mode, as described below. `appName` is a name for your application, which will be shown in the cluster web UI. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
 
-In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable. For example, to run on four cores, use
+In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable, and you can add JARs to the classpath with the `ADD_JARS` variable. For example, to run `spark-shell` on four cores, use
 
 {% highlight bash %}
 $ MASTER=local[4] ./spark-shell
+{% endhighlight %}
+
+Or, to also add `code.jar` to its classpath, use:
+
+{% highlight bash %}
+$ MASTER=local[4] ADD_JARS=code.jar ./spark-shell
 {% endhighlight %}
 
 ### Master URLs
@@ -67,6 +73,8 @@ The master URL passed to Spark can be in one of the following formats:
 </td></tr>
 </table>
 
+If no master URL is specified, the spark shell defaults to "local".
+
 For running on YARN, Spark launches an instance of the standalone deploy cluster within YARN; see [running on YARN](running-on-yarn.html) for details.
 
 ### Deploying Code on a Cluster
@@ -76,7 +84,7 @@ If you want to run your job on a cluster, you will need to specify the two optio
 * `sparkHome`: The path at which Spark is installed on your worker machines (it should be the same on all of them).
 * `jars`: A list of JAR files on the local machine containing your job's code and any dependencies, which Spark will deploy to all the worker nodes. You'll need to package your job into a set of JARs using your build system. For example, if you're using SBT, the [sbt-assembly](https://github.com/sbt/sbt-assembly) plugin is a good way to make a single JAR with your code and dependencies.
 
-If you run `spark-shell` on a cluster, any classes you define in the shell will automatically be distributed.
+If you run `spark-shell` on a cluster, you can add JARs to it by specifying the `ADD_JARS` environment variable before you launch it.  This variable should contain a comma-separated list of JARs. For example, `ADD_JARS=a.jar,b.jar ./spark-shell` will launch a shell with `a.jar` and `b.jar` on its classpath. In addition, any new classes you define in the shell will automatically be distributed.
 
 
 # Resilient Distributed Datasets (RDDs)

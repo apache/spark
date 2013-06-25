@@ -134,6 +134,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.ui.port</td>
+  <td>(random)</td>
+  <td>
+    Port for your application's dashboard, which shows memory usage of each RDD.
+  </td>
+</tr>
+<tr>
   <td>spark.shuffle.compress</td>
   <td>true</td>
   <td>

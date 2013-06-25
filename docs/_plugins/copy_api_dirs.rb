@@ -1,7 +1,8 @@
 require 'fileutils'
 include FileUtils
 
-if ENV['SKIP_SCALADOC'] != '1'
+if ENV['SKIP_API'] != '1'
+  # Build Scaladoc for Java/Scala
   projects = ["core", "examples", "repl", "bagel", "streaming"]
 
   puts "Moving to project root and building scaladoc."
@@ -17,7 +18,7 @@ if ENV['SKIP_SCALADOC'] != '1'
   # Copy over the scaladoc from each project into the docs directory.
   # This directory will be copied over to _site when `jekyll` command is run.
   projects.each do |project_name|
-    source = "../" + project_name + "/target/scala-2.9.2/api"
+    source = "../" + project_name + "/target/scala-2.9.3/api"
     dest = "api/" + project_name
 
     puts "echo making directory " + dest
@@ -27,9 +28,8 @@ if ENV['SKIP_SCALADOC'] != '1'
     puts "cp -r " + source + "/. " + dest
     cp_r(source + "/.", dest)
   end
-end
 
-if ENV['SKIP_EPYDOC'] != '1'
+  # Build Epydoc for Python
   puts "Moving to python directory and building epydoc."
   cd("../python")
   puts `epydoc --config epydoc.conf`

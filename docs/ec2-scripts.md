@@ -45,9 +45,9 @@ identify machines belonging to each cluster in the Amazon EC2 Console.
     key pair, `<num-slaves>` is the number of slave nodes to launch (try
     1 at first), and `<cluster-name>` is the name to give to your
     cluster.
--   After everything launches, check that Mesos is up and sees all the
-    slaves by going to the Mesos Web UI link printed at the end of the
-    script (`http://<master-hostname>:8080`).
+-   After everything launches, check that the cluster scheduler is up and sees
+    all the slaves by going to its web UI, which will be printed at the end of
+    the script (typically `http://<master-hostname>:8080`).
 
 You can also run `./spark-ec2 --help` to see more usage options. The
 following options are worth pointing out:
@@ -68,6 +68,9 @@ available.
 -    `--ebs-vol-size=GB` will attach an EBS volume with a given amount
      of space to each node so that you can have a persistent HDFS cluster
      on your nodes across cluster restarts (see below).
+-    `--spot-price=PRICE` will launch the worker nodes as
+     [Spot Instances](http://aws.amazon.com/ec2/spot-instances/),
+     bidding for the given maximum price (in dollars).
 -    If one of your launches fails due to e.g. not having the right
 permissions on your private key file, you can run `launch` with the
 `--resume` option to restart the setup process on an existing cluster.
@@ -80,7 +83,7 @@ permissions on your private key file, you can run `launch` with the
     above. (This is just for convenience; you could also use
     the EC2 console.)
 -   To deploy code or data within your cluster, you can log in and use the
-    provided script `~/mesos-ec2/copy-dir`, which,
+    provided script `~/spark-ec2/copy-dir`, which,
     given a directory path, RSYNCs it to the same location on all the slaves.
 -   If your job needs to access large datasets, the fastest way to do
     that is to load them from Amazon S3 or an Amazon EBS device into an
@@ -106,7 +109,7 @@ You can edit `/root/spark/conf/spark-env.sh` on each machine to set Spark config
 as JVM options and, most crucially, the amount of memory to use per machine (`SPARK_MEM`).
 This file needs to be copied to **every machine** to reflect the change. The easiest way to do this
 is to use a script we provide called `copy-dir`. First edit your `spark-env.sh` file on the master, 
-then run `~/mesos-ec2/copy-dir /root/spark/conf` to RSYNC it to all the workers.
+then run `~/spark-ec2/copy-dir /root/spark/conf` to RSYNC it to all the workers.
 
 The [configuration guide](configuration.html) describes the available configuration options.
 
@@ -152,10 +155,10 @@ If you have a patch or suggestion for one of these limitations, feel free to
 
 # Using a Newer Spark Version
 
-The Spark EC2 machine images may not come with the latest version of Spark. To use a newer version, you can run `git pull` to pull in `/root/spark` to pull in the latest version of Spark from `git`, and build it using `sbt/sbt compile`. You will also need to copy it to all the other nodes in the cluster using `~/mesos-ec2/copy-dir /root/spark`.
+The Spark EC2 machine images may not come with the latest version of Spark. To use a newer version, you can run `git pull` to pull in `/root/spark` to pull in the latest version of Spark from `git`, and build it using `sbt/sbt compile`. You will also need to copy it to all the other nodes in the cluster using `~/spark-ec2/copy-dir /root/spark`.
 
 # Accessing Data in S3
 
-Spark's file interface allows it to process data in Amazon S3 using the same URI formats that are supported for Hadoop. You can specify a path in S3 as input through a URI of the form `s3n://<id>:<secret>@<bucket>/path`, where `<id>` is your Amazon access key ID and `<secret>` is your Amazon secret access key. Note that you should escape any `/` characters in the secret key as `%2F`. Full instructions can be found on the [Hadoop S3 page](http://wiki.apache.org/hadoop/AmazonS3).
+Spark's file interface allows it to process data in Amazon S3 using the same URI formats that are supported for Hadoop. You can specify a path in S3 as input through a URI of the form `s3n://<bucket>/path`. You will also need to set your Amazon security credentials, either by setting the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` before your program or through `SparkContext.hadoopConfiguration`. Full instructions on S3 access using the Hadoop input libraries can be found on the [Hadoop S3 page](http://wiki.apache.org/hadoop/AmazonS3).
 
 In addition to using a single input file, you can also use a directory of files as input by simply giving the path to the directory.

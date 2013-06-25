@@ -6,7 +6,7 @@ import akka.zeromq.Subscribe
 
 import spark.streaming.dstream._
 
-import spark.{RDD, Logging, SparkEnv, SparkContext}
+import spark._
 import spark.streaming.receivers.ActorReceiver
 import spark.streaming.receivers.ReceiverSupervisorStrategy
 import spark.streaming.receivers.ZeroMQReceiver
@@ -14,18 +14,18 @@ import spark.storage.StorageLevel
 import spark.util.MetadataCleaner
 import spark.streaming.receivers.ActorReceiver
 
-
 import scala.collection.mutable.Queue
+import scala.collection.Map
 
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.UUID
 
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
-import java.util.UUID
 import twitter4j.Status
 
 
@@ -45,7 +45,9 @@ class StreamingContext private (
    * @param sparkContext Existing SparkContext
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
-  def this(sparkContext: SparkContext, batchDuration: Duration) = this(sparkContext, null, batchDuration)
+  def this(sparkContext: SparkContext, batchDuration: Duration) = {
+    this(sparkContext, null, batchDuration)
+  }
 
   /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
@@ -53,8 +55,17 @@ class StreamingContext private (
    * @param appName A name for your job, to display on the cluster web UI
    * @param batchDuration The time interval at which streaming data will be divided into batches
    */
-  def this(master: String, appName: String, batchDuration: Duration) =
-    this(StreamingContext.createNewSparkContext(master, appName), null, batchDuration)
+  def this(
+      master: String,
+      appName: String,
+      batchDuration: Duration,
+      sparkHome: String = null,
+      jars: Seq[String] = Nil,
+      environment: Map[String, String] = Map()) = {
+    this(StreamingContext.createNewSparkContext(master, appName, sparkHome, jars, environment),
+         null, batchDuration)
+  }
+
 
   /**
    * Re-create a StreamingContext from a checkpoint file.
@@ -66,15 +77,20 @@ class StreamingContext private (
   initLogging()
 
   if (sc_ == null && cp_ == null) {
-    throw new Exception("Streaming Context cannot be initilalized with " +
+    throw new Exception("Spark Streaming cannot be initialized with " +
       "both SparkContext and checkpoint as null")
+  }
+
+  if (MetadataCleaner.getDelaySeconds < 0) {
+    throw new SparkException("Spark Streaming cannot be used without setting spark.cleaner.ttl; "
+      + "set this property before creating a SparkContext (use SPARK_JAVA_OPTS for the shell)")
   }
 
   protected[streaming] val isCheckpointPresent = (cp_ != null)
 
   protected[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
-      new SparkContext(cp_.master, cp_.framework, cp_.sparkHome, cp_.jars)
+      new SparkContext(cp_.master, cp_.framework, cp_.sparkHome, cp_.jars, cp_.environment)
     } else {
       sc_
     }
@@ -497,14 +513,18 @@ object StreamingContext {
     new PairDStreamFunctions[K, V](stream)
   }
 
-  protected[streaming] def createNewSparkContext(master: String, appName: String): SparkContext = {
-
+  protected[streaming] def createNewSparkContext(
+      master: String,
+      appName: String,
+      sparkHome: String,
+      jars: Seq[String],
+      environment: Map[String, String]): SparkContext = {
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second interval.
     if (MetadataCleaner.getDelaySeconds < 0) {
       MetadataCleaner.setDelaySeconds(3600)
     }
-    new SparkContext(master, appName)
+    new SparkContext(master, appName, sparkHome, jars, environment)
   }
 
   protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {

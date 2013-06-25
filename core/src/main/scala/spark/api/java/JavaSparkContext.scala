@@ -31,8 +31,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param sparkHome The SPARK_HOME directory on the slave nodes
-   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
-   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   * @param jarFile JAR file to send to the cluster. This can be a path on the local file system
+   *                or an HDFS, HTTP, HTTPS, or FTP URL.
    */
   def this(master: String, appName: String, sparkHome: String, jarFile: String) =
     this(new SparkContext(master, appName, sparkHome, Seq(jarFile)))

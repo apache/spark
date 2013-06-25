@@ -200,7 +200,7 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
       ____              __  
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 0.7.0
+   /___/ .__/\_,_/_/ /_/\_\   version 0.8.0
       /_/                  
 """)
     import Properties._
@@ -822,7 +822,7 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
         spark.repl.Main.interp.out.println("Spark context available as sc.");
         spark.repl.Main.interp.out.flush();
         """)
-      command("import spark.SparkContext._");
+      command("import spark.SparkContext._")
     }
     echo("Type in expressions to have them evaluated.")
     echo("Type :help for more information.")
@@ -838,7 +838,10 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
         if (prop != null) prop else "local"
       }
     }
-    sparkContext = new SparkContext(master, "Spark shell")
+    val jars = Option(System.getenv("ADD_JARS")).map(_.split(','))
+                                                .getOrElse(new Array[String](0))
+                                                .map(new java.io.File(_).getAbsolutePath)
+    sparkContext = new SparkContext(master, "Spark shell", System.getenv("SPARK_HOME"), jars)
     sparkContext
   }
 
@@ -849,6 +852,10 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
 
     printWelcome()
     echo("Initializing interpreter...")
+
+    // Add JARS specified in Spark's ADD_JARS variable to classpath
+    val jars = Option(System.getenv("ADD_JARS")).map(_.split(',')).getOrElse(new Array[String](0))
+    jars.foreach(settings.classpath.append(_))
 
     this.settings = settings
     createInterpreter()

@@ -1,9 +1,12 @@
 package spark.serializer
 
-import java.nio.ByteBuffer
 import java.io.{EOFException, InputStream, OutputStream}
+import java.nio.ByteBuffer
+
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
 import spark.util.ByteBufferInputStream
+
 
 /**
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
@@ -13,6 +16,7 @@ import spark.util.ByteBufferInputStream
 trait Serializer {
   def newInstance(): SerializerInstance
 }
+
 
 /**
  * An instance of a serializer, for use by one thread at a time.
@@ -45,6 +49,7 @@ trait SerializerInstance {
   }
 }
 
+
 /**
  * A stream for writing serialized objects.
  */
@@ -61,6 +66,7 @@ trait SerializationStream {
   }
 }
 
+
 /**
  * A stream for reading serialized objects.
  */
@@ -72,40 +78,18 @@ trait DeserializationStream {
    * Read the elements of this stream through an iterator. This can only be called once, as
    * reading each element will consume data from the input source.
    */
-  def asIterator: Iterator[Any] = new Iterator[Any] {
-    var gotNext = false
-    var finished = false
-    var nextValue: Any = null
-
-    private def getNext() {
+  def asIterator: Iterator[Any] = new spark.util.NextIterator[Any] {
+    override protected def getNext() = {
       try {
-        nextValue = readObject[Any]()
+        readObject[Any]()
       } catch {
         case eof: EOFException =>
           finished = true
       }
-      gotNext = true
     }
 
-    override def hasNext: Boolean = {
-      if (!gotNext) {
-        getNext()
-      }
-      if (finished) {
-        close()
-      }
-      !finished
-    }
-
-    override def next(): Any = {
-      if (!gotNext) {
-        getNext()
-      }
-      if (finished) {
-        throw new NoSuchElementException("End of stream")
-      }
-      gotNext = false
-      nextValue
+    override protected def close() {
+      DeserializationStream.this.close()
     }
   }
 }

@@ -3,6 +3,7 @@ package spark.deploy.client
 import spark.deploy._
 import akka.actor._
 import akka.pattern.ask
+import akka.util.Duration
 import akka.util.duration._
 import akka.pattern.AskTimeoutException
 import spark.{SparkException, Logging}
@@ -54,10 +55,15 @@ private[spark] class Client(
         appId = appId_
         listener.connected(appId)
 
-      case ExecutorAdded(id: Int, workerId: String, host: String, cores: Int, memory: Int) =>
+      case ApplicationRemoved(message) =>
+        logError("Master removed our application: %s; stopping client".format(message))
+        markDisconnected()
+        context.stop(self)
+
+      case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
         val fullId = appId + "/" + id
-        logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, host, cores))
-        listener.executorAdded(fullId, workerId, host, cores, memory)
+        logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort, cores))
+        listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
       case ExecutorUpdated(id, state, message, exitStatus) =>
         val fullId = appId + "/" + id
@@ -107,7 +113,7 @@ private[spark] class Client(
   def stop() {
     if (actor != null) {
       try {
-        val timeout = 5.seconds
+        val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
         val future = actor.ask(StopClient)(timeout)
         Await.result(future, timeout)
       } catch {

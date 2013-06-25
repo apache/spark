@@ -16,6 +16,9 @@ sealed trait ToBlockManagerSlave
 private[spark]
 case class RemoveBlock(blockId: String) extends ToBlockManagerSlave
 
+// Remove all blocks belonging to a specific RDD.
+private[spark] case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
+
 
 //////////////////////////////////////////////////////////////////////////////////
 // Messages from slaves to the master.
@@ -49,16 +52,16 @@ class UpdateBlockInfo(
     blockManagerId.writeExternal(out)
     out.writeUTF(blockId)
     storageLevel.writeExternal(out)
-    out.writeInt(memSize.toInt)
-    out.writeInt(diskSize.toInt)
+    out.writeLong(memSize)
+    out.writeLong(diskSize)
   }
 
   override def readExternal(in: ObjectInput) {
     blockManagerId = BlockManagerId(in)
     blockId = in.readUTF()
     storageLevel = StorageLevel(in)
-    memSize = in.readInt()
-    diskSize = in.readInt()
+    memSize = in.readLong()
+    diskSize = in.readLong()
   }
 }
 

@@ -30,7 +30,8 @@ object FlumeEventCount {
 
     val batchInterval = Milliseconds(2000)
     // Create the context and set the batch size
-    val ssc = new StreamingContext(master, "FlumeEventCount", batchInterval)
+    val ssc = new StreamingContext(master, "FlumeEventCount", batchInterval,
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     // Create a flume stream
     val stream = ssc.flumeStream(host,port,StorageLevel.MEMORY_ONLY)

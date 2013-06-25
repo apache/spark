@@ -15,6 +15,7 @@ import kafka.utils.ZkUtils._
 import kafka.utils.ZKStringSerializer
 import org.I0Itec.zkclient._
 
+import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 

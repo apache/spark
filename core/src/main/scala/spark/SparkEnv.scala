@@ -1,15 +1,19 @@
 package spark
 
-import akka.actor.ActorSystem
-import akka.actor.ActorSystemImpl
+import collection.mutable
+import serializer.Serializer
+
+import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
-import serializer.Serializer
 import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
+import spark.serializer.{Serializer, SerializerManager}
 import spark.util.AkkaUtils
+import spark.api.python.PythonWorkerFactory
+
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -21,6 +25,7 @@ import spark.util.AkkaUtils
 class SparkEnv (
     val executorId: String,
     val actorSystem: ActorSystem,
+    val serializerManager: SerializerManager,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -30,10 +35,16 @@ class SparkEnv (
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
     val httpFileServer: HttpFileServer,
-    val sparkFilesDir: String
-  ) {
+    val sparkFilesDir: String,
+    // To be set only as part of initialization of SparkContext.
+    // (executorId, defaultHostPort) => executorHostPort
+    // If executorId is NOT found, return defaultHostPort
+    var executorIdToHostPort: Option[(String, String) => String]) {
+
+  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   def stop() {
+    pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
     mapOutputTracker.stop()
     shuffleFetcher.stop()
@@ -44,6 +55,22 @@ class SparkEnv (
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
     actorSystem.awaitTermination()
+  }
+
+  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
+    synchronized {
+      pythonWorkers.getOrElseUpdate((pythonExec, envVars), new PythonWorkerFactory(pythonExec, envVars)).create()
+    }
+  }
+
+  def resolveExecutorIdToHostPort(executorId: String, defaultHostPort: String): String = {
+    val env = SparkEnv.get
+    if (env.executorIdToHostPort.isEmpty) {
+      // default to using host, not host port. Relevant to non cluster modes.
+      return defaultHostPort
+    }
+
+    env.executorIdToHostPort.get(executorId, defaultHostPort)
   }
 }
 
@@ -73,6 +100,16 @@ object SparkEnv extends Logging {
       System.setProperty("spark.driver.port", boundPort.toString)
     }
 
+    // set only if unset until now.
+    if (System.getProperty("spark.hostPort", null) == null) {
+      if (!isDriver){
+        // unexpected
+        Utils.logErrorWithStack("Unexpected NOT to have spark.hostPort set")
+      }
+      Utils.checkHost(hostname)
+      System.setProperty("spark.hostPort", hostname + ":" + boundPort)
+    }
+
     val classLoader = Thread.currentThread.getContextClassLoader
 
     // Create an instance of the class named by the given Java system property, or by
@@ -82,24 +119,45 @@ object SparkEnv extends Logging {
       Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
     }
 
-    val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
+    val serializerManager = new SerializerManager
 
-    val driverIp: String = System.getProperty("spark.driver.host", "localhost")
-    val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
-    val blockManagerMaster = new BlockManagerMaster(
-      actorSystem, isDriver, isLocal, driverIp, driverPort)
+    val serializer = serializerManager.setDefault(
+      System.getProperty("spark.serializer", "spark.JavaSerializer"))
+
+    val closureSerializer = serializerManager.get(
+      System.getProperty("spark.closure.serializer", "spark.JavaSerializer"))
+
+    def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
+      if (isDriver) {
+        logInfo("Registering " + name)
+        actorSystem.actorOf(Props(newActor), name = name)
+      } else {
+        val driverHost: String = System.getProperty("spark.driver.host", "localhost")
+        val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
+        Utils.checkHost(driverHost, "Expected hostname")
+        val url = "akka://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
+        logInfo("Connecting to " + name + ": " + url)
+        actorSystem.actorFor(url)
+      }
+    }
+
+    val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
+      "BlockManagerMaster",
+      new spark.storage.BlockManagerMasterActor(isLocal)))
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, serializer)
 
     val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isDriver)
 
-    val closureSerializer = instantiateClass[Serializer](
-      "spark.closure.serializer", "spark.JavaSerializer")
-
     val cacheManager = new CacheManager(blockManager)
 
-    val mapOutputTracker = new MapOutputTracker(actorSystem, isDriver)
+    // Have to assign trackerActor after initialization as MapOutputTrackerActor
+    // requires the MapOutputTracker itself
+    val mapOutputTracker = new MapOutputTracker()
+    mapOutputTracker.trackerActor = registerOrLookup(
+      "MapOutputTracker",
+      new MapOutputTrackerActor(mapOutputTracker))
 
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "spark.BlockStoreShuffleFetcher")
@@ -126,6 +184,7 @@ object SparkEnv extends Logging {
     new SparkEnv(
       executorId,
       actorSystem,
+      serializerManager,
       serializer,
       closureSerializer,
       cacheManager,
@@ -135,6 +194,7 @@ object SparkEnv extends Logging {
       blockManager,
       connectionManager,
       httpFileServer,
-      sparkFilesDir)
+      sparkFilesDir,
+      None)
   }
 }

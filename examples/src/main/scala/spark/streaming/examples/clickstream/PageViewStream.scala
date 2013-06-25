@@ -24,7 +24,8 @@ object PageViewStream {
     val port = args(2).toInt
 
     // Create the context
-    val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1))
+    val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1),
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
     // Create a NetworkInputDStream on target host:port and convert each line to a PageView
     val pageViews = ssc.socketTextStream(host, port)
@@ -60,7 +61,7 @@ object PageViewStream {
                                    .map("Unique active users: " + _)
 
     // An external dataset we want to join to this stream
-    val userList = ssc.sc.parallelize(
+    val userList = ssc.sparkContext.parallelize(
        Map(1 -> "Patrick Wendell", 2->"Reynold Xin", 3->"Matei Zaharia").toSeq)
 
     metric match {

@@ -1,6 +1,6 @@
 package spark.rdd
 
-import spark.{OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
+import spark.{Utils, OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
 import java.io.{ObjectOutputStream, IOException}
 
 
@@ -10,17 +10,17 @@ private[spark] class ZippedPartition[T: ClassManifest, U: ClassManifest](
     @transient rdd2: RDD[U]
   ) extends Partition {
 
-  var split1 = rdd1.partitions(idx)
-  var split2 = rdd1.partitions(idx)
+  var partition1 = rdd1.partitions(idx)
+  var partition2 = rdd2.partitions(idx)
   override val index: Int = idx
 
-  def splits = (split1, split2)
+  def partitions = (partition1, partition2)
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
-    // Update the reference to parent split at the time of task serialization
-    split1 = rdd1.partitions(idx)
-    split2 = rdd2.partitions(idx)
+    // Update the reference to parent partition at the time of task serialization
+    partition1 = rdd1.partitions(idx)
+    partition2 = rdd2.partitions(idx)
     oos.defaultWriteObject()
   }
 }
@@ -43,13 +43,32 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
   }
 
   override def compute(s: Partition, context: TaskContext): Iterator[(T, U)] = {
-    val (split1, split2) = s.asInstanceOf[ZippedPartition[T, U]].splits
-    rdd1.iterator(split1, context).zip(rdd2.iterator(split2, context))
+    val (partition1, partition2) = s.asInstanceOf[ZippedPartition[T, U]].partitions
+    rdd1.iterator(partition1, context).zip(rdd2.iterator(partition2, context))
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] = {
-    val (split1, split2) = s.asInstanceOf[ZippedPartition[T, U]].splits
-    rdd1.preferredLocations(split1).intersect(rdd2.preferredLocations(split2))
+    // Note that as number of slaves in cluster increase, the computed preferredLocations can become small : so we might need
+    // to look at alternate strategies to alleviate this. (If there are no (or very small number of preferred locations), we
+    // will end up transferred the blocks to 'any' node in the cluster - paying with n/w and cache cost.
+    // Maybe pick one or the other ? (so that atleast one block is local ?).
+    // Choose node which is hosting 'larger' of the blocks ?
+    // Look at rack locality to ensure chosen host is atleast rack local to both hosting node ?, etc (would be good to defer this if possible)
+    val (partition1, partition2) = s.asInstanceOf[ZippedPartition[T, U]].partitions
+    val pref1 = rdd1.preferredLocations(partition1)
+    val pref2 = rdd2.preferredLocations(partition2)
+
+    // exact match - instance local and host local.
+    val exactMatchLocations = pref1.intersect(pref2)
+
+    // remove locations which are already handled via exactMatchLocations, and intersect where both partitions are node local.
+    val otherNodeLocalPref1 = pref1.filter(loc => ! exactMatchLocations.contains(loc)).map(loc => Utils.parseHostPort(loc)._1)
+    val otherNodeLocalPref2 = pref2.filter(loc => ! exactMatchLocations.contains(loc)).map(loc => Utils.parseHostPort(loc)._1)
+    val otherNodeLocalLocations = otherNodeLocalPref1.intersect(otherNodeLocalPref2)
+
+
+    // Can have mix of instance local (hostPort) and node local (host) locations as preference !
+    exactMatchLocations ++ otherNodeLocalLocations
   }
 
   override def clearDependencies() {

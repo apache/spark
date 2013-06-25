@@ -17,6 +17,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val framework = ssc.sc.appName
   val sparkHome = ssc.sc.sparkHome
   val jars = ssc.sc.jars
+  val environment = ssc.sc.environment
   val graph = ssc.graph
   val checkpointDir = ssc.checkpointDir
   val checkpointDuration = ssc.checkpointDuration
@@ -37,10 +38,19 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
 private[streaming]
 class CheckpointWriter(checkpointDir: String) extends Logging {
   val file = new Path(checkpointDir, "graph")
+  // The file to which we actually write - and then "move" to file.
+  private val writeFile = new Path(file.getParent, file.getName + ".next")
+  private val bakFile = new Path(file.getParent, file.getName + ".bk")
+
+  private var stopped = false
+
   val conf = new Configuration()
   var fs = file.getFileSystem(conf)
   val maxAttempts = 3
   val executor = Executors.newFixedThreadPool(1)
+
+  // Removed code which validates whether there is only one CheckpointWriter per path 'file' since 
+  // I did not notice any errors - reintroduce it ?
 
   class CheckpointWriteHandler(checkpointTime: Time, bytes: Array[Byte]) extends Runnable {
     def run() {
@@ -50,15 +60,17 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
         attempts += 1
         try {
           logDebug("Saving checkpoint for time " + checkpointTime + " to file '" + file + "'")
-          if (fs.exists(file)) {
-            val bkFile = new Path(file.getParent, file.getName + ".bk")
-            FileUtil.copy(fs, file, fs, bkFile, true, true, conf)
-            logDebug("Moved existing checkpoint file to " + bkFile)
-          }
-          val fos = fs.create(file)
+          // This is inherently thread unsafe .. so alleviating it by writing to '.new' and then doing moves : which should be pretty fast.
+          val fos = fs.create(writeFile)
           fos.write(bytes)
           fos.close()
-          fos.close()
+          if (fs.exists(file) && fs.rename(file, bakFile)) {
+            logDebug("Moved existing checkpoint file to " + bakFile)
+          }
+          // paranoia
+          fs.delete(file, false)
+          fs.rename(writeFile, file)
+
           val finishTime = System.currentTimeMillis();
           logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + file +
             "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " milliseconds")
@@ -83,7 +95,15 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
   }
 
   def stop() {
+    synchronized {
+      if (stopped) return ;
+      stopped = true
+    }
     executor.shutdown()
+    val startTime = System.currentTimeMillis()
+    val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
+    val endTime = System.currentTimeMillis()
+    logInfo("CheckpointWriter executor terminated ? " + terminated + ", waited for " + (endTime - startTime) + " ms.")
   }
 }
 

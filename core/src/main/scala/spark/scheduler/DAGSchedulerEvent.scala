@@ -1,8 +1,12 @@
 package spark.scheduler
 
+import java.util.Properties
+
+import spark.scheduler.cluster.TaskInfo
 import scala.collection.mutable.Map
 
 import spark._
+import spark.executor.TaskMetrics
 
 /**
  * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue
@@ -18,15 +22,22 @@ private[spark] case class JobSubmitted(
     partitions: Array[Int],
     allowLocal: Boolean,
     callSite: String,
-    listener: JobListener)
+    listener: JobListener,
+    properties: Properties = null)
   extends DAGSchedulerEvent
 
 private[spark] case class CompletionEvent(
     task: Task[_],
     reason: TaskEndReason,
     result: Any,
-    accumUpdates: Map[Long, Any])
+    accumUpdates: Map[Long, Any],
+    taskInfo: TaskInfo,
+    taskMetrics: TaskMetrics)
   extends DAGSchedulerEvent
+
+private[spark] case class ExecutorGained(execId: String, hostPort: String) extends DAGSchedulerEvent {
+  Utils.checkHostPort(hostPort, "Required hostport")
+}
 
 private[spark] case class ExecutorLost(execId: String) extends DAGSchedulerEvent
 

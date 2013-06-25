@@ -123,11 +123,7 @@ object StorageLevel {
   val storageLevelCache = new java.util.concurrent.ConcurrentHashMap[StorageLevel, StorageLevel]()
 
   private[spark] def getCachedStorageLevel(level: StorageLevel): StorageLevel = {
-    if (storageLevelCache.containsKey(level)) {
-      storageLevelCache.get(level)
-    } else {
-      storageLevelCache.put(level, level)
-      level
-    }
+    storageLevelCache.putIfAbsent(level, level)
+    storageLevelCache.get(level)
   }
 }

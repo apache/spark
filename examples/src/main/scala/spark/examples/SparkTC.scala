@@ -9,7 +9,6 @@ import scala.collection.mutable
  * Transitive closure on a graph.
  */
 object SparkTC {
-
   val numEdges = 200
   val numVertices = 100
   val rand = new Random(42)
@@ -29,7 +28,8 @@ object SparkTC {
       System.err.println("Usage: SparkTC <master> [<slices>]")
       System.exit(1)
     }
-    val spark = new SparkContext(args(0), "SparkTC")
+    val spark = new SparkContext(args(0), "SparkTC",
+      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
     val slices = if (args.length > 1) args(1).toInt else 2
     var tc = spark.parallelize(generateGraph, slices).cache()
 

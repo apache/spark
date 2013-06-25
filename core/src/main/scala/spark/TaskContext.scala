@@ -1,9 +1,14 @@
 package spark
 
+import executor.TaskMetrics
 import scala.collection.mutable.ArrayBuffer
 
-
-class TaskContext(val stageId: Int, val splitId: Int, val attemptId: Long) extends Serializable {
+class TaskContext(
+  val stageId: Int,
+  val splitId: Int,
+  val attemptId: Long,
+  val taskMetrics: TaskMetrics = TaskMetrics.empty()
+) extends Serializable {
 
   @transient val onCompleteCallbacks = new ArrayBuffer[() => Unit]
 

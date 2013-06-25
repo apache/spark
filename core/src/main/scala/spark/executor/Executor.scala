@@ -16,66 +16,68 @@ import java.nio.ByteBuffer
 /**
  * The Mesos executor for Spark.
  */
-private[spark] class Executor extends Logging {
-  var urlClassLoader : ExecutorURLClassLoader = null
-  var threadPool: ExecutorService = null
-  var env: SparkEnv = null
+private[spark] class Executor(executorId: String, slaveHostname: String, properties: Seq[(String, String)]) extends Logging {
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
-  val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
-  val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
+  private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
+  private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
-  val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
+  private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
   initLogging()
 
-  def initialize(executorId: String, slaveHostname: String, properties: Seq[(String, String)]) {
-    // Make sure the local hostname we report matches the cluster scheduler's name for this host
-    Utils.setCustomHostname(slaveHostname)
+  // No ip or host:port - just hostname
+  Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
+  // must not have port specified.
+  assert (0 == Utils.parseHostPort(slaveHostname)._2)
 
-    // Set spark.* system properties from executor arg
-    for ((key, value) <- properties) {
-      System.setProperty(key, value)
-    }
+  // Make sure the local hostname we report matches the cluster scheduler's name for this host
+  Utils.setCustomHostname(slaveHostname)
 
-    // Create our ClassLoader and set it on this thread
-    urlClassLoader = createClassLoader()
-    Thread.currentThread.setContextClassLoader(urlClassLoader)
+  // Set spark.* system properties from executor arg
+  for ((key, value) <- properties) {
+    System.setProperty(key, value)
+  }
 
-    // Make any thread terminations due to uncaught exceptions kill the entire
-    // executor process to avoid surprising stalls.
-    Thread.setDefaultUncaughtExceptionHandler(
-      new Thread.UncaughtExceptionHandler {
-        override def uncaughtException(thread: Thread, exception: Throwable) {
-          try {
-            logError("Uncaught exception in thread " + thread, exception)
-            
-            // We may have been called from a shutdown hook. If so, we must not call System.exit().
-            // (If we do, we will deadlock.)
-            if (!Utils.inShutdown()) {
-              if (exception.isInstanceOf[OutOfMemoryError]) {
-                System.exit(ExecutorExitCode.OOM)
-              } else {
-                System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
-              }
+  // Create our ClassLoader and set it on this thread
+  private val urlClassLoader = createClassLoader()
+  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+  Thread.currentThread.setContextClassLoader(replClassLoader)
+
+  // Make any thread terminations due to uncaught exceptions kill the entire
+  // executor process to avoid surprising stalls.
+  Thread.setDefaultUncaughtExceptionHandler(
+    new Thread.UncaughtExceptionHandler {
+      override def uncaughtException(thread: Thread, exception: Throwable) {
+        try {
+          logError("Uncaught exception in thread " + thread, exception)
+          
+          // We may have been called from a shutdown hook. If so, we must not call System.exit().
+          // (If we do, we will deadlock.)
+          if (!Utils.inShutdown()) {
+            if (exception.isInstanceOf[OutOfMemoryError]) {
+              System.exit(ExecutorExitCode.OOM)
+            } else {
+              System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
             }
-          } catch {
-            case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
-            case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
           }
+        } catch {
+          case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
+          case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
         }
       }
-    )
+    }
+  )
 
-    // Initialize Spark environment (using system properties read above)
-    env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
-    SparkEnv.set(env)
+  // Initialize Spark environment (using system properties read above)
+  val env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
+  SparkEnv.set(env)
+  private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
 
-    // Start worker thread pool
-    threadPool = new ThreadPoolExecutor(
-      1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
-  }
+  // Start worker thread pool
+  val threadPool = new ThreadPoolExecutor(
+    1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable])
 
   def launchTask(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer) {
     threadPool.execute(new TaskRunner(context, taskId, serializedTask))
@@ -85,8 +87,9 @@ private[spark] class Executor extends Logging {
     extends Runnable {
 
     override def run() {
+      val startTime = System.currentTimeMillis()
       SparkEnv.set(env)
-      Thread.currentThread.setContextClassLoader(urlClassLoader)
+      Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo("Running task ID " + taskId)
       context.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
@@ -98,11 +101,25 @@ private[spark] class Executor extends Logging {
         val task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
         logInfo("Its generation is " + task.generation)
         env.mapOutputTracker.updateGeneration(task.generation)
+        val taskStart = System.currentTimeMillis()
         val value = task.run(taskId.toInt)
+        val taskFinish = System.currentTimeMillis()
+        task.metrics.foreach{ m =>
+          m.hostname = Utils.localHostName
+          m.executorDeserializeTime = (taskStart - startTime).toInt
+          m.executorRunTime = (taskFinish - taskStart).toInt
+        }
+        //TODO I'd also like to track the time it takes to serialize the task results, but that is huge headache, b/c
+        // we need to serialize the task metrics first.  If TaskMetrics had a custom serialized format, we could
+        // just change the relevants bytes in the byte buffer
         val accumUpdates = Accumulators.values
-        val result = new TaskResult(value, accumUpdates)
+        val result = new TaskResult(value, accumUpdates, task.metrics.getOrElse(null))
         val serializedResult = ser.serialize(result)
         logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
+        if (serializedResult.limit >= (akkaFrameSize - 1024)) {
+          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskResultTooBigFailure()))
+          return
+        }
         context.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
         logInfo("Finished task ID " + taskId)
       } catch {
@@ -112,7 +129,7 @@ private[spark] class Executor extends Logging {
         }
 
         case t: Throwable => {
-          val reason = ExceptionFailure(t)
+          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
           context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may
@@ -137,26 +154,31 @@ private[spark] class Executor extends Logging {
     val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
-    loader = new URLClassLoader(urls, loader)
+    new ExecutorURLClassLoader(urls, loader)
+  }
 
-    // If the REPL is in use, add another ClassLoader that will read
-    // new classes defined by the REPL as the user types code
+  /**
+   * If the REPL is in use, add another ClassLoader that will read
+   * new classes defined by the REPL as the user types code
+   */
+  private def addReplClassLoaderIfNeeded(parent: ClassLoader): ClassLoader = {
     val classUri = System.getProperty("spark.repl.class.uri")
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
-      loader = {
-        try {
-          val klass = Class.forName("spark.repl.ExecutorClassLoader")
-            .asInstanceOf[Class[_ <: ClassLoader]]
-          val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader])
-          constructor.newInstance(classUri, loader)
-        } catch {
-          case _: ClassNotFoundException => loader
-        }
+      try {
+        val klass = Class.forName("spark.repl.ExecutorClassLoader")
+          .asInstanceOf[Class[_ <: ClassLoader]]
+        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader])
+        return constructor.newInstance(classUri, parent)
+      } catch {
+        case _: ClassNotFoundException =>
+          logError("Could not find spark.repl.ExecutorClassLoader on classpath!")
+          System.exit(1)
+          null
       }
+    } else {
+      return parent
     }
-
-    return new ExecutorURLClassLoader(Array(), loader)
   }
 
   /**

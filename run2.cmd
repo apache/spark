@@ -1,6 +1,6 @@
 @echo off
 
-set SCALA_VERSION=2.9.2
+set SCALA_VERSION=2.9.3
 
 rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0
@@ -21,6 +21,7 @@ set RUNNING_DAEMON=0
 if "%1"=="spark.deploy.master.Master" set RUNNING_DAEMON=1
 if "%1"=="spark.deploy.worker.Worker" set RUNNING_DAEMON=1
 if "x%SPARK_DAEMON_MEMORY%" == "x" set SPARK_DAEMON_MEMORY=512m
+set SPARK_DAEMON_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% -Dspark.akka.logLifecycleEvents=true
 if "%RUNNING_DAEMON%"=="1" set SPARK_MEM=%SPARK_DAEMON_MEMORY%
 if "%RUNNING_DAEMON%"=="1" set SPARK_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS%
 
@@ -61,6 +62,29 @@ set CLASSPATH=%CLASSPATH%;%FWDIR%lib_managed\bundles\*
 set CLASSPATH=%CLASSPATH%;%FWDIR%repl\lib\*
 set CLASSPATH=%CLASSPATH%;%FWDIR%python\lib\*
 set CLASSPATH=%CLASSPATH%;%BAGEL_DIR%\target\scala-%SCALA_VERSION%\classes
+
+rem Add hadoop conf dir - else FileSystem.*, etc fail
+rem Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
+rem the configurtion files.
+if "x%HADOOP_CONF_DIR%"=="x" goto no_hadoop_conf_dir
+  set CLASSPATH=%CLASSPATH%;%HADOOP_CONF_DIR%
+:no_hadoop_conf_dir
+
+if "x%YARN_CONF_DIR%"=="x" goto no_yarn_conf_dir
+  set CLASSPATH=%CLASSPATH%;%YARN_CONF_DIR%
+:no_yarn_conf_dir
+
+
+
+rem Figure out the JAR file that our examples were packaged into.
+rem First search in the build path from SBT:
+for %%d in ("examples/target/scala-%SCALA_VERSION%/spark-examples*.jar") do (
+  set SPARK_EXAMPLES_JAR=examples/target/scala-%SCALA_VERSION%/%%d
+)
+rem Then search in the build path from Maven:
+for %%d in ("examples/target/spark-examples*hadoop*.jar") do (
+  set SPARK_EXAMPLES_JAR=examples/target/%%d
+)
 
 rem Figure out whether to run our class with java or with the scala launcher.
 rem In most cases, we'd prefer to execute our process with java because scala

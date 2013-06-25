@@ -58,6 +58,12 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
   def coalesce(numPartitions: Int): JavaDoubleRDD = fromRDD(srdd.coalesce(numPartitions))
 
   /**
+   * Return a new RDD that is reduced into `numPartitions` partitions.
+   */
+  def coalesce(numPartitions: Int, shuffle: Boolean): JavaDoubleRDD =
+    fromRDD(srdd.coalesce(numPartitions, shuffle))
+
+  /**
    * Return an RDD with the elements from `this` that are not in `other`.
    * 
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
