@@ -33,51 +33,21 @@ if not "x%SCALA_HOME%"=="x" goto scala_exists
   goto exit
 :scala_exists
 
-rem If the user specifies a Mesos JAR, put it before our included one on the classpath
-set MESOS_CLASSPATH=
-if not "x%MESOS_JAR%"=="x" set MESOS_CLASSPATH=%MESOS_JAR%
-
 rem Figure out how much memory to use per executor and set it as an environment
 rem variable so that our process sees it and can report it to Mesos
 if "x%SPARK_MEM%"=="x" set SPARK_MEM=512m
 
 rem Set JAVA_OPTS to be able to load native libraries and to set heap size
 set JAVA_OPTS=%OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%SPARK_MEM% -Xmx%SPARK_MEM%
-rem Load extra JAVA_OPTS from conf/java-opts, if it exists
-if exist "%FWDIR%conf\java-opts.cmd" call "%FWDIR%conf\java-opts.cmd"
 rem Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
 
 set CORE_DIR=%FWDIR%core
-set REPL_DIR=%FWDIR%repl
 set EXAMPLES_DIR=%FWDIR%examples
-set BAGEL_DIR=%FWDIR%bagel
-set STREAMING_DIR=%FWDIR%streaming
-set PYSPARK_DIR=%FWDIR%python
+set REPL_DIR=%FWDIR%repl
 
-rem Build up classpath
-set CLASSPATH=%SPARK_CLASSPATH%;%MESOS_CLASSPATH%;%FWDIR%conf;%CORE_DIR%\target\scala-%SCALA_VERSION%\classes
-set CLASSPATH=%CLASSPATH%;%CORE_DIR%\target\scala-%SCALA_VERSION%\test-classes;%CORE_DIR%\src\main\resources
-set CLASSPATH=%CLASSPATH%;%STREAMING_DIR%\target\scala-%SCALA_VERSION%\classes;%STREAMING_DIR%\target\scala-%SCALA_VERSION%\test-classes
-set CLASSPATH=%CLASSPATH%;%STREAMING_DIR%\lib\org\apache\kafka\kafka\0.7.2-spark\*
-set CLASSPATH=%CLASSPATH%;%REPL_DIR%\target\scala-%SCALA_VERSION%\classes;%EXAMPLES_DIR%\target\scala-%SCALA_VERSION%\classes
-set CLASSPATH=%CLASSPATH%;%FWDIR%lib_managed\jars\*
-set CLASSPATH=%CLASSPATH%;%FWDIR%lib_managed\bundles\*
-set CLASSPATH=%CLASSPATH%;%FWDIR%repl\lib\*
-set CLASSPATH=%CLASSPATH%;%FWDIR%python\lib\*
-set CLASSPATH=%CLASSPATH%;%BAGEL_DIR%\target\scala-%SCALA_VERSION%\classes
-
-rem Add hadoop conf dir - else FileSystem.*, etc fail
-rem Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
-rem the configurtion files.
-if "x%HADOOP_CONF_DIR%"=="x" goto no_hadoop_conf_dir
-  set CLASSPATH=%CLASSPATH%;%HADOOP_CONF_DIR%
-:no_hadoop_conf_dir
-
-if "x%YARN_CONF_DIR%"=="x" goto no_yarn_conf_dir
-  set CLASSPATH=%CLASSPATH%;%YARN_CONF_DIR%
-:no_yarn_conf_dir
-
-
+rem Compute classpath using external script
+set DONT_PRINT_CLASSPATH=1
+call "%FWDIR%bin\compute-classpath.cmd"
 
 rem Figure out the JAR file that our examples were packaged into.
 rem First search in the build path from SBT:

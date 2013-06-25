@@ -522,6 +522,37 @@ private object Utils extends Logging {
     execute(command, new File("."))
   }
 
+  /**
+   * Execute a command and get its output, throwing an exception if it yields a code other than 0.
+   */
+  def executeAndGetOutput(command: Seq[String], workingDir: File = new File(".")): String = {
+    val process = new ProcessBuilder(command: _*)
+        .directory(workingDir)
+        .start()
+    new Thread("read stderr for " + command(0)) {
+      override def run() {
+        for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
+          System.err.println(line)
+        }
+      }
+    }.start()
+    val output = new StringBuffer
+    val stdoutThread = new Thread("read stdout for " + command(0)) {
+      override def run() {
+        for (line <- Source.fromInputStream(process.getInputStream).getLines) {
+          output.append(line)
+        }
+      }
+    }
+    stdoutThread.start()
+    val exitCode = process.waitFor()
+    stdoutThread.join()   // Wait for it to finish reading output
+    if (exitCode != 0) {
+      throw new SparkException("Process " + command + " exited with code " + exitCode)
+    }
+    output.toString
+  }
+
   private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
                                     val firstUserLine: Int, val firstUserClass: String)
   /**
