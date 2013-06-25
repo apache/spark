@@ -74,10 +74,15 @@ if [ -e "$FWDIR/lib_managed" ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/lib_managed/bundles/*"
 fi
 CLASSPATH="$CLASSPATH:$REPL_DIR/lib/*"
+
+# Add the shaded JAR for Maven builds
 if [ -e $REPL_BIN_DIR/target ]; then
   for jar in `find "$REPL_BIN_DIR/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
     CLASSPATH="$CLASSPATH:$jar"
   done
+  # The shaded JAR doesn't contain examples, so include those separately
+  EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
+  CLASSPATH+=":$EXAMPLES_JAR"
 fi
 CLASSPATH="$CLASSPATH:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
 for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
@@ -90,10 +95,11 @@ if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ];
   # Use the JAR from the SBT build
   export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
 fi
-if [ -e "$EXAMPLES_DIR/target/spark-examples-"*hadoop[12].jar ]; then
+if [ -e "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar ]; then
   # Use the JAR from the Maven build
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples-"*hadoop[12].jar`
+  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
 fi
+
 
 # Figure out whether to run our class with java or with the scala launcher.
 # In most cases, we'd prefer to execute our process with java because scala
