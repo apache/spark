@@ -93,9 +93,9 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("count") {
     testOperation(
-      Seq(1 to 1, 1 to 2, 1 to 3, 1 to 4),
+      Seq(Seq(), 1 to 1, 1 to 2, 1 to 3, 1 to 4),
       (s: DStream[Int]) => s.count(),
-      Seq(Seq(1L), Seq(2L), Seq(3L), Seq(4L))
+      Seq(Seq(0L), Seq(1L), Seq(2L), Seq(3L), Seq(4L))
     )
   }
 
