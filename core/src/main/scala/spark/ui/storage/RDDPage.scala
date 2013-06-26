@@ -10,7 +10,7 @@ import spark.Utils
 import spark.storage.BlockManagerMasterActor.BlockStatus
 
 /** Page showing storage details for a given RDD */
-class RDDPage(parent: BlockManagerUI) {
+private[spark] class RDDPage(parent: BlockManagerUI) {
   val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
