@@ -59,5 +59,5 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 
 private[spark] object SparkUI {
   val DEFAULT_PORT = "33000"
-  val STATIC_RESOURCE_DIR = "spark/webui/static"
+  val STATIC_RESOURCE_DIR = "spark/ui/static"
 }

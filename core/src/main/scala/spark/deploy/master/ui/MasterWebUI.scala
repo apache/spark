@@ -54,6 +54,6 @@ class MasterWebUI(val master: ActorRef, requestedPort: Option[Int] = None) exten
 }
 
 private[spark] object MasterWebUI {
-  val STATIC_RESOURCE_DIR = "spark/webui/static"
+  val STATIC_RESOURCE_DIR = "spark/ui/static"
   val DEFAULT_PORT = "8080"
 }
