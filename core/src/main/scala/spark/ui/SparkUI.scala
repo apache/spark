@@ -57,7 +57,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   private[spark] def appUIAddress = "http://" + host + ":" + boundPort.getOrElse("-1")
 }
 
-object SparkUI {
+private[spark] object SparkUI {
   val DEFAULT_PORT = "33000"
   val STATIC_RESOURCE_DIR = "spark/webui/static"
 }

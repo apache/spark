@@ -5,7 +5,7 @@ import org.eclipse.jetty.server.Server
 import util.{Try, Success, Failure}
 import java.net.ServerSocket
 
-class UISuite extends FunSuite {
+private[spark] class UISuite extends FunSuite {
   test("jetty port increases under contention") {
     val startPort = 33333
     val server = new Server(startPort)

@@ -14,7 +14,7 @@ import spark.ui.UIUtils._
 import spark.storage.StorageLevel
 
 /** Page showing list of all ongoing and recently finished stages */
-class IndexPage(parent: JobProgressUI) {
+private[spark] class IndexPage(parent: JobProgressUI) {
   def listener = parent.listener
   val dateFmt = parent.dateFmt
 

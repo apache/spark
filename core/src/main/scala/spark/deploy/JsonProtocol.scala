@@ -4,7 +4,7 @@ import master.{ApplicationInfo, WorkerInfo}
 import net.liftweb.json.JsonDSL._
 import worker.ExecutorRunner
 
-object JsonProtocol {
+private[spark] object JsonProtocol {
  def writeWorkerInfo(obj: WorkerInfo) = {
    ("id" -> obj.id) ~
    ("host" -> obj.host) ~

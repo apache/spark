@@ -15,7 +15,7 @@ import spark.deploy.worker.ExecutorRunner
 import spark.Utils
 import spark.ui.UIUtils
 
-class IndexPage(parent: WorkerWebUI) {
+private[spark] class IndexPage(parent: WorkerWebUI) {
   val worker = parent.worker
   val timeout = parent.timeout
 

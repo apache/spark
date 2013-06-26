@@ -13,7 +13,7 @@ import spark.scheduler.cluster.TaskInfo
 import spark.executor.TaskMetrics
 
 /** Page showing statistics and task list for a given stage */
-class StagePage(parent: JobProgressUI) {
+private[spark] class StagePage(parent: JobProgressUI) {
   def listener = parent.listener
   val dateFmt = parent.dateFmt
 

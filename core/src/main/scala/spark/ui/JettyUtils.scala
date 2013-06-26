@@ -108,7 +108,7 @@ private[spark] object JettyUtils extends Logging {
 }
 
 /** Utility functions for generating XML pages with spark content. */
-object UIUtils {
+private[spark] object UIUtils {
 
   /** Returns a page containing the supplied content and the spark web ui headers */
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String): Seq[Node] = {

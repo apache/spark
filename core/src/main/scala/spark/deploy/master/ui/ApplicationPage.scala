@@ -14,7 +14,7 @@ import spark.deploy.{RequestMasterState, JsonProtocol, MasterState}
 import spark.deploy.master.ExecutorInfo
 import spark.ui.UIUtils
 
-class ApplicationPage(parent: MasterWebUI) {
+private[spark] class ApplicationPage(parent: MasterWebUI) {
   val master = parent.master
   implicit val timeout = parent.timeout
 

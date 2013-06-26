@@ -10,8 +10,7 @@ import spark.{Logging, SparkContext}
 import spark.ui.JettyUtils._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[spark]
-class BlockManagerUI(val sc: SparkContext) extends Logging {
+private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
   implicit val timeout = Duration.create(
     System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
 

@@ -9,7 +9,7 @@ import spark.Utils
 import spark.ui.UIUtils._
 
 /** Page showing list of RDD's currently stored in the cluster */
-class IndexPage(parent: BlockManagerUI) {
+private[spark] class IndexPage(parent: BlockManagerUI) {
   val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {

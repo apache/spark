@@ -68,7 +68,7 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
   }
 }
 
-object WorkerWebUI {
+private[spark] object WorkerWebUI {
   val STATIC_RESOURCE_DIR = "spark/webui/static"
   val DEFAULT_PORT="8081"
 }

@@ -13,7 +13,7 @@ import spark.Utils
 import spark.ui.UIUtils
 import spark.deploy.master.{ApplicationInfo, WorkerInfo}
 
-class IndexPage(parent: MasterWebUI) {
+private[spark] class IndexPage(parent: MasterWebUI) {
   val master = parent.master
   implicit val timeout = parent.timeout
 
