@@ -90,7 +90,9 @@ private[spark] class ExecutorRunner(
    * the way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(): Seq[String] = {
-    val libraryOpts = Option(getenv("SPARK_LIBRARY_PATH")).map(p => List("-Djava.library.path=" + p)).getOrElse(Nil)
+    val libraryOpts = Option(getenv("SPARK_LIBRARY_PATH"))
+      .map(p => List("-Djava.library.path=" + p))
+      .getOrElse(Nil)
     val userOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq("-Xms" + memory + "M", "-Xmx" + memory + "M")
 
