@@ -20,7 +20,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
-    val state = Await.result(stateFuture, 3 seconds)
+    val state = Await.result(stateFuture, 30 seconds)
 
     val workerHeaders = Seq("Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)

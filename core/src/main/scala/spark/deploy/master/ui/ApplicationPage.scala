@@ -22,7 +22,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
   def renderJson(request: HttpServletRequest): JValue = {
     val appId = request.getParameter("appId")
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
-    val state = Await.result(stateFuture, 3 seconds)
+    val state = Await.result(stateFuture, 30 seconds)
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
@@ -33,7 +33,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
   def render(request: HttpServletRequest): Seq[Node] = {
     val appId = request.getParameter("appId")
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
-    val state = Await.result(stateFuture, 3 seconds)
+    val state = Await.result(stateFuture, 30 seconds)
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
