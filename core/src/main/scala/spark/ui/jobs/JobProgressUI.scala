@@ -42,7 +42,7 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
 
 private[spark] class JobProgressListener extends SparkListener {
   // How many stages to remember
-  val RETAINED_STAGES = 1000
+  val RETAINED_STAGES = System.getProperty("spark.ui.retained_stages", "1000").toInt
 
   val activeStages = HashSet[Stage]()
   val completedStages = ListBuffer[Stage]()
