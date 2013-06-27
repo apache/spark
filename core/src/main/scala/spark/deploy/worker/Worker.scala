@@ -41,7 +41,7 @@ private[spark] class Worker(
     memory: Int,
     masterUrl: String,
     workDirPath: String = null)
-  extends Actor with Logging {
+  extends Actor with Logging with WorkerInstrumentation {
 
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
@@ -97,6 +97,9 @@ private[spark] class Worker(
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
     webUi.start()
     connectToMaster()
+    startWebUi()
+
+    initialize(this)
   }
 
   def connectToMaster() {
@@ -155,10 +158,10 @@ private[spark] class Worker(
 
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       masterDisconnected()
-      
+
     case RequestWorkerState => {
       sender ! WorkerState(host, port, workerId, executors.values.toList,
-        finishedExecutors.values.toList, masterUrl, cores, memory, 
+        finishedExecutors.values.toList, masterUrl, cores, memory,
         coresUsed, memoryUsed, masterWebUiUrl)
     }
   }
@@ -178,6 +181,8 @@ private[spark] class Worker(
   override def postStop() {
     executors.values.foreach(_.kill())
     webUi.stop()
+
+    uninitialize()
   }
 }
 

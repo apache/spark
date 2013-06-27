@@ -33,7 +33,8 @@ import spark.util.AkkaUtils
 import ui.MasterWebUI
 
 
-private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
+private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor 
+with Logging with MasterInstrumentation {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
 
@@ -73,6 +74,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
+    
+    initialize(this)
   }
 
   override def postStop() {
@@ -315,6 +318,10 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         worker.id, WORKER_TIMEOUT))
       removeWorker(worker)
     }
+  }
+  
+  override def postStop() {
+    uninitialize()
   }
 }
 
