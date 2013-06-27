@@ -6,7 +6,7 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{CsvReporter, MetricRegistry}
 
-import spark.metrics.AbstractInstrumentation
+import spark.metrics.MetricsSystem
 
 class CsvSink(val property: Properties, val registry: MetricRegistry) extends Sink {
   val pollPeriod = Option(property.getProperty(CsvSink.CSV_KEY_PERIOD)) match {
@@ -15,8 +15,8 @@ class CsvSink(val property: Properties, val registry: MetricRegistry) extends Si
   }
   
   val pollUnit = Option(property.getProperty(CsvSink.CSV_KEY_UNIT)) match {
-    case Some(s) => AbstractInstrumentation.timeUnits(s)
-    case None => AbstractInstrumentation.timeUnits(CsvSink.CSV_DEFAULT_UNIT)
+    case Some(s) => MetricsSystem.timeUnits(s)
+    case None => MetricsSystem.timeUnits(CsvSink.CSV_DEFAULT_UNIT)
   }
   
   val pollDir = Option(property.getProperty(CsvSink.CSV_KEY_DIR)) match {
@@ -26,7 +26,7 @@ class CsvSink(val property: Properties, val registry: MetricRegistry) extends Si
   
   var reporter: CsvReporter = _
   
-  override def registerSink() {
+  override def start() {
     reporter = CsvReporter.forRegistry(registry)
       .formatFor(Locale.US)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
@@ -36,7 +36,7 @@ class CsvSink(val property: Properties, val registry: MetricRegistry) extends Si
     reporter.start(pollPeriod, pollUnit)  
   }
   
-  override def unregisterSink() {
+  override def stop() {
     reporter.stop()
   }
 }

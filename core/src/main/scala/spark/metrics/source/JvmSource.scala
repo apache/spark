@@ -1,17 +1,23 @@
 package spark.metrics.source
 
-import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.jvm.{MemoryUsageGaugeSet, GarbageCollectorMetricSet}
+import java.util.{Map, HashMap => JHashMap}
 
-class JvmSource(registry: MetricRegistry) extends Source {
-  // Initialize memory usage gauge for jvm
-  val memUsageMetricSet = new MemoryUsageGaugeSet
-  
-  // Initialize garbage collection usage gauge for jvm
-  val gcMetricSet = new GarbageCollectorMetricSet
-  
-  override def registerSource() {
-    registry.registerAll(memUsageMetricSet)
-    registry.registerAll(gcMetricSet)
+import com.codahale.metrics.Metric
+import com.codahale.metrics.jvm.{GarbageCollectorMetricSet, MemoryUsageGaugeSet}
+
+class JvmSource extends Source {
+  override def sourceName = "jvm"
+    
+  override def getMetrics(): Map[String, Metric] = {
+    val gauges = new JHashMap[String, Metric]
+    
+    import scala.collection.JavaConversions._
+    val gcMetricSet = new GarbageCollectorMetricSet
+    gcMetricSet.getMetrics.foreach(kv => gauges.put(kv._1, kv._2))
+    
+    val memGaugeSet = new MemoryUsageGaugeSet
+    memGaugeSet.getMetrics.foreach(kv => gauges.put(kv._1, kv._2))
+    		
+    gauges
   }
 }

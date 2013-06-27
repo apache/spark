@@ -23,6 +23,7 @@ import akka.util.duration._
 import spark.{Logging, Utils}
 import spark.util.AkkaUtils
 import spark.deploy._
+import spark.metrics.MetricsSystem
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -41,7 +42,7 @@ private[spark] class Worker(
     memory: Int,
     masterUrl: String,
     workDirPath: String = null)
-  extends Actor with Logging with WorkerInstrumentation {
+  extends Actor with Logging {
 
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
@@ -66,6 +67,8 @@ private[spark] class Worker(
 
   var coresUsed = 0
   var memoryUsed = 0
+
+  val workerInstrumentation = new WorkerInstrumentation(this)
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
@@ -99,7 +102,8 @@ private[spark] class Worker(
     connectToMaster()
     startWebUi()
 
-    initialize(this)
+    Worker.metricsSystem.registerSource(workerInstrumentation)
+    Worker.metricsSystem.start()
   }
 
   def connectToMaster() {
@@ -182,11 +186,13 @@ private[spark] class Worker(
     executors.values.foreach(_.kill())
     webUi.stop()
 
-    uninitialize()
+    Worker.metricsSystem.stop()
   }
 }
 
 private[spark] object Worker {
+  private val metricsSystem = MetricsSystem.createMetricsSystem("worker")
+
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,

@@ -29,12 +29,12 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import spark.deploy._
 import spark.{Logging, SparkException, Utils}
+import spark.metrics.MetricsSystem
 import spark.util.AkkaUtils
 import ui.MasterWebUI
 
 
-private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor 
-with Logging with MasterInstrumentation {
+private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
 
@@ -57,6 +57,8 @@ with Logging with MasterInstrumentation {
   val webUi = new MasterWebUI(self, webUiPort)
 
   Utils.checkHost(host, "Expected hostname")
+  
+  val masterInstrumentation = new MasterInstrumentation(this)
 
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
@@ -75,7 +77,7 @@ with Logging with MasterInstrumentation {
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
     
-    initialize(this)
+    Master.metricsSystem.registerSource(masterInstrumentation)
   }
 
   override def postStop() {
@@ -319,21 +321,22 @@ with Logging with MasterInstrumentation {
       removeWorker(worker)
     }
   }
-  
-  override def postStop() {
-    uninitialize()
-  }
 }
 
 private[spark] object Master {
   private val systemName = "sparkMaster"
   private val actorName = "Master"
   private val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
+  
+  private val metricsSystem = MetricsSystem.createMetricsSystem("master")
 
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort)
+    
+    metricsSystem.start()
     actorSystem.awaitTermination()
+    metricsSystem.stop()
   }
 
   /** Returns an `akka://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */

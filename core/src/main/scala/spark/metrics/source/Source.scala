@@ -1,5 +1,7 @@
 package spark.metrics.source
 
-trait Source {
-  def registerSource: Unit
+import com.codahale.metrics.MetricSet
+
+trait Source extends MetricSet {
+  def sourceName: String
 }

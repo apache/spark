@@ -1,7 +1,7 @@
 package spark.metrics.sink
 
 trait Sink {
-  def registerSink: Unit
+  def start: Unit
   
-  def unregisterSink: Unit
+  def stop: Unit
 }

@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{ConsoleReporter, MetricRegistry}
 
-import spark.metrics.AbstractInstrumentation
+import spark.metrics.MetricsSystem
 
 class ConsoleSink(val property: Properties, val registry: MetricRegistry) extends Sink {
   val pollPeriod = Option(property.getProperty(ConsoleSink.CONSOLE_KEY_PERIOD)) match {
@@ -14,13 +14,13 @@ class ConsoleSink(val property: Properties, val registry: MetricRegistry) extend
   }
   
   val pollUnit = Option(property.getProperty(ConsoleSink.CONSOLE_KEY_UNIT)) match {
-    case Some(s) => AbstractInstrumentation.timeUnits(s)
-    case None => AbstractInstrumentation.timeUnits(ConsoleSink.CONSOLE_DEFAULT_UNIT)
+    case Some(s) => MetricsSystem.timeUnits(s)
+    case None => MetricsSystem.timeUnits(ConsoleSink.CONSOLE_DEFAULT_UNIT)
   }
   
   var reporter: ConsoleReporter = _
   
-  override def registerSink() {
+  override def start() {
     reporter = ConsoleReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
@@ -29,7 +29,7 @@ class ConsoleSink(val property: Properties, val registry: MetricRegistry) extend
     reporter.start(pollPeriod, pollUnit)  
   }
   
-  override def unregisterSink() {
+  override def stop() {
     reporter.stop()
   }
 }
