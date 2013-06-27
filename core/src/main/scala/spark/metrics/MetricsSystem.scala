@@ -5,6 +5,7 @@ import scala.collection.mutable
 import com.codahale.metrics.{JmxReporter, MetricSet, MetricRegistry}
 
 import java.util.Properties
+//import java.util._
 import java.util.concurrent.TimeUnit
 
 import spark.Logging
@@ -19,10 +20,13 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
   
   val sinks = new mutable.ArrayBuffer[Sink]
   val sources = new mutable.ArrayBuffer[Source]
+  var registry = new MetricRegistry()
+  
+  registerSources()
+  registerSinks()
   
   def start() {
-    registerSources()
-    registerSinks()
+    sinks.foreach(_.start)
   }
    
   def stop() {
@@ -31,20 +35,20 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
   
   def registerSource(source: Source) {
     sources += source
-    MetricsSystem.registry.registerAll(source.asInstanceOf[MetricSet])
+    registry.register(source.sourceName,source.metricRegistry)
   }
   
   def registerSources() {
     val instConfig = metricsConfig.getInstance(instance)
     val sourceConfigs = MetricsConfig.subProperties(instConfig, MetricsSystem.SOURCE_REGEX)
-    
+ 
     // Register all the sources related to instance
     sourceConfigs.foreach { kv =>
       val classPath = kv._2.getProperty("class")
       try {
         val source = Class.forName(classPath).newInstance()
         sources += source.asInstanceOf[Source]
-        MetricsSystem.registry.registerAll(source.asInstanceOf[MetricSet])
+        registerSource(source.asInstanceOf[Source])
       } catch {
         case e: Exception => logError("source class " + classPath + " cannot be instantialized", e)
       }
@@ -56,7 +60,7 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
     val sinkConfigs = MetricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
     
     // Register JMX sink as a default sink
-    sinks += new JmxSink(MetricsSystem.registry)
+    sinks += new JmxSink(registry)
     
     // Register other sinks according to conf
     sinkConfigs.foreach { kv =>
@@ -68,19 +72,16 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
       }
       try {
         val sink = Class.forName(classPath).getConstructor(classOf[Properties], classOf[MetricRegistry])
-          .newInstance(kv._2, MetricsSystem.registry)
+          .newInstance(kv._2, registry)
         sinks += sink.asInstanceOf[Sink]
       } catch {
         case e: Exception => logError("sink class " + classPath + " cannot be instantialized", e)
       }
     }
-    sinks.foreach(_.start)
   }
 }
 
 private[spark] object MetricsSystem {
-  val registry = new MetricRegistry()
-  
   val DEFAULT_SINKS = Map(
       "console" -> "spark.metrics.sink.ConsoleSink",
       "csv" -> "spark.metrics.sink.CsvSink")

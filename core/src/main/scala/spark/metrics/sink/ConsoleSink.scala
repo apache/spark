@@ -18,14 +18,13 @@ class ConsoleSink(val property: Properties, val registry: MetricRegistry) extend
     case None => MetricsSystem.timeUnits(ConsoleSink.CONSOLE_DEFAULT_UNIT)
   }
   
-  var reporter: ConsoleReporter = _
-  
-  override def start() {
-    reporter = ConsoleReporter.forRegistry(registry)
+  var reporter: ConsoleReporter = ConsoleReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
       .build()
-      
+
+  
+  override def start() {
     reporter.start(pollPeriod, pollUnit)  
   }
   

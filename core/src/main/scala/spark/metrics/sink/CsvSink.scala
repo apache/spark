@@ -24,15 +24,14 @@ class CsvSink(val property: Properties, val registry: MetricRegistry) extends Si
     case None => CsvSink.CSV_DEFAULT_DIR
   }
   
-  var reporter: CsvReporter = _
-  
-  override def start() {
-    reporter = CsvReporter.forRegistry(registry)
+  var reporter: CsvReporter = CsvReporter.forRegistry(registry)
       .formatFor(Locale.US)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
       .build(new File(pollDir))
-      
+
+  
+  override def start() {
     reporter.start(pollPeriod, pollUnit)  
   }
   
