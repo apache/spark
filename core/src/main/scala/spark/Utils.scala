@@ -486,6 +486,26 @@ private object Utils extends Logging {
   }
 
   /**
+   * Returns a human-readable string representing a duration such as "35ms"
+   */
+  def msDurationToString(ms: Long): String = {
+    val second = 1000
+    val minute = 60 * second
+    val hour = 60 * minute
+
+    ms match {
+      case t if t < second =>
+        "%dms".format(t)
+      case t if t < minute =>
+        "%d.%03ds".format(t / second, t % second)
+      case t if t < hour =>
+        "%d:%02d".format(t / minute, (t % minute) / second)
+      case t =>
+        "%d:%02d:%02d".format(t / hour, t % hour / minute, (t % hour) % minute / second)
+    }
+  }
+
+  /**
    * Convert a memory quantity in megabytes to a human-readable string such as "4.0 MB".
    */
   def memoryMegabytesToString(megabytes: Long): String = {

@@ -17,6 +17,7 @@ import spark.scheduler._
 import spark.scheduler.cluster.TaskInfo
 import spark.executor.TaskMetrics
 import spark.Success
+import spark.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[spark] class JobProgressUI(val sc: SparkContext) {
@@ -32,7 +33,7 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
     sc.addSparkListener(listener)
   }
 
-  def formatDuration(ms: Long) = Duration(ms, "milliseconds").printHMS
+  def formatDuration(ms: Long) = Utils.msDurationToString(ms)
 
   def getHandlers = Seq[(String, Handler)](
     ("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),

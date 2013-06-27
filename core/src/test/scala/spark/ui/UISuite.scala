@@ -2,10 +2,11 @@ package spark.ui
 
 import org.scalatest.FunSuite
 import org.eclipse.jetty.server.Server
-import util.{Try, Success, Failure}
 import java.net.ServerSocket
+import scala.util.{Failure, Success, Try}
+import spark.Utils
 
-private[spark] class UISuite extends FunSuite {
+class UISuite extends FunSuite {
   test("jetty port increases under contention") {
     val startPort = 33333
     val server = new Server(startPort)
@@ -23,7 +24,23 @@ private[spark] class UISuite extends FunSuite {
     assert(boundPort != 0)
     Try {new ServerSocket(boundPort)} match {
       case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
-      case Failure(e) =>
+      case Failure  (e) =>
     }
+  }
+
+  test("string formatting of time durations") {
+    val second = 1000
+    val minute = second * 60
+    val hour = minute * 60
+    def str = Utils.msDurationToString(_)
+
+    assert(str(123) === "123ms")
+    assert(str(second) === "1.000s")
+    assert(str(second + 452) === "1.452s")
+    assert(str(hour) === "1:00:00")
+    assert(str(minute) === "1:00")
+    assert(str(minute + 4 * second + 34) === "1:04")
+    assert(str(10 * hour + minute + 4 * second) === "10:01:04")
+    assert(str(10 * hour + 59 * minute + 59 * second + 999) === "10:59:59")
   }
 }

@@ -19,20 +19,30 @@ private[spark] class StagePage(parent: JobProgressUI) {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val stageId = request.getParameter("id").toInt
+
+    if (!listener.stageToTaskInfos.contains(stageId)) {
+      val content =
+        <div>
+          <h2>Summary Metrics</h2> No tasks have finished yet
+          <h2>Tasks</h2> No tasks have finished yet
+        </div>
+      return headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId))
+    }
+
     val tasks = listener.stageToTaskInfos(stageId)
 
     val shuffleRead = listener.hasShuffleRead(stageId)
     val shuffleWrite = listener.hasShuffleWrite(stageId)
 
     val taskHeaders: Seq[String] =
-      Seq("Task ID", "Service Time", "Locality Level", "Worker", "Launch Time") ++
+      Seq("Task ID", "Duration", "Locality Level", "Worker", "Launch Time") ++
         {if (shuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (shuffleWrite) Seq("Shuffle Write") else Nil}
 
     val taskTable = listingTable(taskHeaders, taskRow, tasks)
 
     val serviceTimes = tasks.map{case (info, metrics) => metrics.executorRunTime.toDouble}
-    val serviceQuantiles = "Service Time" +: Distribution(serviceTimes).get.getQuantiles().map(
+    val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles().map(
       ms => parent.formatDuration(ms.toLong))
 
     def getQuantileCols(data: Seq[Double]) =

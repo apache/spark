@@ -26,7 +26,7 @@ private[spark] object JettyUtils extends Logging {
     createHandler(responder, "text/json", (in: JValue) => pretty(render(in)))
 
   implicit def htmlResponderToHandler(responder: Responder[Seq[Node]]): Handler =
-    createHandler(responder, "text/html")
+    createHandler(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)
 
   implicit def textResponderToHandler(responder: Responder[String]): Handler =
     createHandler(responder, "text/plain")

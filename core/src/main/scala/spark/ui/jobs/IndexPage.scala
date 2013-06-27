@@ -19,8 +19,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
   val dateFmt = parent.dateFmt
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stageHeaders = Seq("Stage ID", "Origin", "Submitted", "Duration", "Tasks: Complete/Total",
-                           "Shuffle Activity", "Stored RDD")
+    val stageHeaders = Seq("Stage ID", "Origin", "Submitted", "Duration", "Progress",
+                           "Tasks: Complete/Total", "Shuffle Activity", "Stored RDD")
     val activeStages = listener.activeStages.toSeq
     val completedStages = listener.completedStages.reverse.toSeq
     val failedStages = listener.failedStages.reverse.toSeq
@@ -43,6 +43,20 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     }
   }
 
+  def makeSlider(completed: Int, total: Int): Seq[Node] = {
+    val width=130
+    val height=15
+    val completeWidth = (completed.toDouble / total) * width
+
+    <svg width={width.toString} height={height.toString}>
+      <rect width={width.toString} height={height.toString}
+            fill="white" stroke="black" stroke-width="1" />
+      <rect width={completeWidth.toString} height={height.toString}
+            fill="rgb(206,206,247)" stroke="black" stroke-width="1" />
+    </svg>
+  }
+
+
   def stageRow(showLink: Boolean = true)(s: Stage): Seq[Node] = {
     val submissionTime = s.submissionTime match {
       case Some(t) => dateFmt.format(new Date(t))
@@ -55,6 +69,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       case (false, true) => "Write"
       case _ => ""
     }
+    val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
+    val totalTasks = s.numPartitions
 
     <tr>
       {if (showLink) {<td><a href={"/stages/stage?id=%s".format(s.id)}>{s.id}</a></td>}
@@ -63,7 +79,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       <td>{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
-      <td>{listener.stageToTasksComplete.getOrElse(s.id, 0)} / {s.numPartitions}
+      <td>{makeSlider(completedTasks, totalTasks)}</td>
+      <td>{completedTasks} / {totalTasks}
         {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
         case f if f > 0 => "(%s failed)".format(f)
         case _ =>
