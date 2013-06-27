@@ -153,10 +153,10 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
       val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(bytes)
       updateDependencies(taskFiles, taskJars)   // Download any files added with addFile
-      val deserStart = System.currentTimeMillis()
+      val taskStart = System.currentTimeMillis()
       val deserializedTask = ser.deserialize[Task[_]](
         taskBytes, Thread.currentThread.getContextClassLoader)
-      val deserTime = System.currentTimeMillis() - deserStart
+      val deserTime = System.currentTimeMillis() - taskStart
 
       // Run it
       val result: Any = deserializedTask.run(taskId)
@@ -170,8 +170,9 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       val resultToReturn = ser.deserialize[Any](serResult)
       val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
         ser.serialize(Accumulators.values))
+      val serviceTime = System.currentTimeMillis() - taskStart
       logInfo("Finished " + taskId)
-      deserializedTask.metrics.get.executorRunTime = deserTime.toInt//info.duration.toInt  //close enough
+      deserializedTask.metrics.get.executorRunTime = serviceTime.toInt
       deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
 
       val taskResult = new TaskResult(result, accumUpdates, deserializedTask.metrics.getOrElse(null))
