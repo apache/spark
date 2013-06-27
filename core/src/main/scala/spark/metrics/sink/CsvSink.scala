@@ -46,8 +46,8 @@ object CsvSink {
   val CSV_KEY_UNIT = "unit"
   val CSV_KEY_DIR = "directory"
     
-  val CSV_DEFAULT_PERIOD = "1"
-  val CSV_DEFAULT_UNIT = "minute"
+  val CSV_DEFAULT_PERIOD = "10"
+  val CSV_DEFAULT_UNIT = "second"
   val CSV_DEFAULT_DIR = "/tmp/"
 }
 

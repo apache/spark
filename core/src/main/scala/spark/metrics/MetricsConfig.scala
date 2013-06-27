@@ -6,7 +6,7 @@ import java.io.FileInputStream
 import scala.collection.mutable
 import scala.util.matching.Regex
 
-class MetricsConfig(val configFile: String) {
+private [spark] class MetricsConfig(val configFile: String) {
   val properties = new Properties()
   var fis: FileInputStream = _
   
@@ -36,7 +36,7 @@ class MetricsConfig(val configFile: String) {
 }
 
 object MetricsConfig {
-  val DEFAULT_CONFIG_FILE = "/home/jerryshao/project/sotc_cloud-spark/conf/metrics.properties"
+  val DEFAULT_CONFIG_FILE = "conf/metrics.properties"
   val DEFAULT_PREFIX = "*"
   val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
   
@@ -45,9 +45,11 @@ object MetricsConfig {
     
     import scala.collection.JavaConversions._
     prop.foreach { kv => 
-      val regex(a, b) = kv._1
-      subProperties.getOrElseUpdate(a, new Properties).setProperty(b, kv._2)
-      println(">>>>>subProperties added  " + a + " " + b + " " + kv._2)
+      if (regex.findPrefixOf(kv._1) != None) {
+        val regex(prefix, suffix) = kv._1
+        subProperties.getOrElseUpdate(prefix, new Properties).setProperty(suffix, kv._2)
+        println(">>>>>subProperties added  " + prefix + " " + suffix + " " + kv._2)
+      }
     }
     
     subProperties

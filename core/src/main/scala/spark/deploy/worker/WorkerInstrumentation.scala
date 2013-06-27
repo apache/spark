@@ -15,6 +15,9 @@ private[spark] trait WorkerInstrumentation extends AbstractInstrumentation {
   def initialize(worker: Worker) {
     workerInst = Some(worker)
     
+    // Register all the sources
+    registerSources()
+    
     // Register and start all the sinks
     registerSinks()
   }
@@ -36,7 +39,7 @@ private[spark] trait WorkerInstrumentation extends AbstractInstrumentation {
   })
   
   // Gauge for memory used of this worker
-  metricRegistry.register(MetricRegistry.name(classOf[Worker], "mem_used", "Mbytes"), 
+  metricRegistry.register(MetricRegistry.name(classOf[Worker], "mem_used", "MBytes"), 
     new Gauge[Int] {
       override def getValue: Int = workerInst.map(_.memoryUsed).getOrElse(0)
   })

@@ -15,12 +15,15 @@ private[spark] trait MasterInstrumentation extends AbstractInstrumentation {
   def initialize(master: Master) {
     masterInst = Some(master)
     
+    // Register all the sources
+    registerSources()
+    
     // Register and start all the sinks
-    registerSinks
+    registerSinks()
   }
   
   def uninitialize() {
-    unregisterSinks
+    unregisterSinks()
   }
   
   // Gauge for worker numbers in cluster
