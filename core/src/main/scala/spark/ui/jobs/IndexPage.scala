@@ -11,6 +11,7 @@ import scala.xml.{NodeSeq, Node}
 
 import spark.scheduler.Stage
 import spark.ui.UIUtils._
+import spark.ui.Page._
 import spark.storage.StorageLevel
 
 /** Page showing list of all ongoing and recently finished stages */
@@ -33,7 +34,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
                   <h2>Completed Stages</h2>  ++ completedStageTable ++
                   <h2>Failed Stages</h2>  ++ failedStageTable
 
-    headerSparkPage(content, parent.sc, "Spark Stages")
+    headerSparkPage(content, parent.sc, "Spark Stages", Jobs)
   }
 
   def getElapsedTime(submitted: Option[Long], completed: Long): String = {

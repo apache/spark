@@ -79,7 +79,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
             {completedAppsTable}
           </div>
         </div>;
-    UIUtils.sparkPage(content, "Spark Master: " + state.uri)
+    UIUtils.basicSparkPage(content, "Spark Master: " + state.uri)
   }
 
   def workerRow(worker: WorkerInfo): Seq[Node] = {

@@ -70,7 +70,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
           </div>
         </div>;
 
-    UIUtils.sparkPage(content, "Spark Worker on %s:%s".format(workerState.host, workerState.port))
+    UIUtils.basicSparkPage(content, "Spark Worker on %s:%s".format(workerState.host, workerState.port))
   }
 
   def executorRow(executor: ExecutorRunner): Seq[Node] = {

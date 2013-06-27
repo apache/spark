@@ -7,6 +7,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import spark.ui.UIUtils._
+import spark.ui.Page._
 import spark.util.Distribution
 import spark.Utils
 import spark.scheduler.cluster.TaskInfo
@@ -26,7 +27,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
           <h2>Summary Metrics</h2> No tasks have finished yet
           <h2>Tasks</h2> No tasks have finished yet
         </div>
-      return headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId))
+      return headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
     }
 
     val tasks = listener.stageToTaskInfos(stageId)
@@ -70,7 +71,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val content =
       <h2>Summary Metrics</h2> ++ quantileTable ++ <h2>Tasks</h2> ++ taskTable;
 
-    headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId))
+    headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
   }
 
   def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>

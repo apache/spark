@@ -7,6 +7,7 @@ import scala.xml.Node
 import spark.storage.{RDDInfo, StorageUtils}
 import spark.Utils
 import spark.ui.UIUtils._
+import spark.ui.Page._
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[spark] class IndexPage(parent: BlockManagerUI) {
@@ -42,7 +43,7 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
         </div>
       </div> ++ {rddTable};
 
-    headerSparkPage(content, parent.sc, "Spark Storage ")
+    headerSparkPage(content, parent.sc, "Spark Storage ", Storage)
   }
 
   def rddRow(rdd: RDDInfo): Seq[Node] = {

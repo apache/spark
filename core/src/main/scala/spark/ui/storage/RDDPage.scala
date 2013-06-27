@@ -8,6 +8,7 @@ import spark.storage.{StorageStatus, StorageUtils}
 import spark.ui.UIUtils._
 import spark.Utils
 import spark.storage.BlockManagerMasterActor.BlockStatus
+import spark.ui.Page._
 
 /** Page showing storage details for a given RDD */
 private[spark] class RDDPage(parent: BlockManagerUI) {
@@ -70,7 +71,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
         </div>
       </div>;
 
-    headerSparkPage(content, parent.sc, "RDD Info: " + rddInfo.name)
+    headerSparkPage(content, parent.sc, "RDD Info: " + rddInfo.name, Jobs)
   }
 
   def blockRow(blk: (String, BlockStatus)): Seq[Node] = {

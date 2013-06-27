@@ -1,0 +1,41 @@
+.navbar .brand {
+  height: 50px;
+  width: 110px;
+  margin-left: 1px;
+  padding: 0;
+}
+
+.version {
+  line-height: 30px;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
+}
+
+.navbar-inner {
+  padding-top: 2px;
+  height: 50px;
+}
+
+.navbar-inner .nav {
+  margin-top: 5px;
+  font-size: 15px;
+}
+
+
+#infolist {
+  margin-left: 400px;
+  margin-top: 14px;
+}
+
+#infolist li {
+  display: inline;
+  list-style-type: none;
+  list-style-position: outside;
+  padding-right: 20px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}

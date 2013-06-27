@@ -107,35 +107,76 @@ private[spark] object JettyUtils extends Logging {
   }
 }
 
+object Page extends Enumeration { val Storage, Jobs = Value }
+
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils {
+  import Page._
 
-  /** Returns a page containing the supplied content and the spark web ui headers */
-  def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String): Seq[Node] = {
-    val newContent =
-      <div class="row" style="padding-top: 5px;">
-        <div class="span2">
-          <div style="padding-left: 10px">
-            <ul class="unstyled">
-              <li><a href="/storage">Storage</a></li>
-              <li><a href="/jobs">Jobs</a></li>
-            </ul>
+  /** Returns a spark page with correctly formatted headers */
+  def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
+  : Seq[Node] = {
+    val storage = page match {
+      case Storage => <li class="active"><a href="/storage">Storage</a></li>
+      case _ => <li><a href="/storage">Storage</a></li>
+    }
+    val jobs = page match {
+      case Jobs => <li class="active"><a href="/stages">Jobs</a></li>
+      case _ => <li><a href="/stages">Jobs</a></li>
+    }
+
+    <html>
+      <head>
+        <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+        <link rel="stylesheet" href="/static/bootstrap.min.css" type="text/css" />
+        <link rel="stylesheet" href="/static/webui.css" type="text/css" />
+      <link rel="stylesheet" href="/static/bootstrap-responsive.min.css" type="text/css" />
+        <script src="/static/sorttable.js"></script>
+        <title>{title}</title>
+        <style type="text/css">
+          table.sortable thead {{ cursor: pointer; }}
+        </style>
+      </head>
+      <body>
+        <div class="container">
+
+          <div class="row">
+            <div class="span12">
+              <div class="navbar">
+                <div class="navbar-inner">
+                  <div class="container">
+                    <div class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></div>
+                    <ul class="nav">
+                      {storage}
+                      {jobs}
+                      </ul>
+                    <ul id="infolist">
+                      <li>Master: <strong>{sc.master}</strong></li>
+                      <li>Application: <strong>{sc.appName}</strong></li>
+                      <li>Executors: <strong>{sc.getExecutorStorageStatus.size}</strong></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+
+          <div class="row" style="padding-top: 5px;">
+            <div class="span12">
+              <h1 style="vertical-align: bottom; display: inline-block;">
+                {title}
+              </h1>
+            </div>
+          </div>
+          <hr/>
+          {content}
         </div>
-        <div class="span10">
-          <ul class="unstyled">
-            <li><strong>Master:</strong> {sc.master}</li>
-            <li><strong>Application:</strong> {sc.appName}</li>
-            <li><strong>Executors:</strong> {sc.getExecutorStorageStatus.size} </li>
-          </ul>
-        </div>
-      </div>
-      <hr/>;
-    sparkPage(newContent ++ content, title)
+      </body>
+    </html>
   }
 
-  /** Returns a page containing the supplied content and the spark css, js, and logo. */
-  def sparkPage(content: => Seq[Node], title: String): Seq[Node] = {
+  /** Returns a page with the spark css/js and a simple format. Used for scheduler UI. */
+  def basicSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />

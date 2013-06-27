@@ -77,7 +77,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
             {executorTable}
           </div>
         </div>;
-    UIUtils.sparkPage(content, "Application Info: " + app.desc.name)
+    UIUtils.basicSparkPage(content, "Application Info: " + app.desc.name)
   }
 
   def executorRow(executor: ExecutorInfo): Seq[Node] = {
