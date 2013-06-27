@@ -48,6 +48,7 @@ set REPL_DIR=%FWDIR%repl
 rem Compute classpath using external script
 set DONT_PRINT_CLASSPATH=1
 call "%FWDIR%bin\compute-classpath.cmd"
+set DONT_PRINT_CLASSPATH=0
 
 rem Figure out the JAR file that our examples were packaged into.
 rem First search in the build path from SBT:

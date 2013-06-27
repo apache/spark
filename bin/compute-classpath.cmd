@@ -6,7 +6,7 @@ rem script and the ExecutorRunner in standalone cluster mode.
 set SCALA_VERSION=2.9.3
 
 rem Figure out where the Spark framework is installed
-set FWDIR=%~dp0\..
+set FWDIR=%~dp0..\
 
 rem Load environment variables from conf\spark-env.cmd, if it exists
 if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
@@ -45,7 +45,7 @@ rem Add Scala standard library
 set CLASSPATH=%CLASSPATH%;%SCALA_HOME%\lib\scala-library.jar;%SCALA_HOME%\lib\scala-compiler.jar;%SCALA_HOME%\lib\jline.jar
 
 rem A bit of a hack to allow calling this script within run2.cmd without seeing output
-if "x%DONT_PRINT_CLASSPATH%"=="x1" goto exit
+if "%DONT_PRINT_CLASSPATH%"=="1" goto exit
 
 echo %CLASSPATH%
 
