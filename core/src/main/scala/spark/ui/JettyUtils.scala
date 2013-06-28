@@ -14,6 +14,7 @@ import scala.xml.Node
 
 import spark.{SparkContext, Logging}
 import org.eclipse.jetty.util.log.Log
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
 private[spark] object JettyUtils extends Logging {
@@ -93,9 +94,15 @@ private[spark] object JettyUtils extends Logging {
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
       val server = new Server(currentPort)
+      val pool = new QueuedThreadPool
+      pool.setDaemon(true)
+      server.setThreadPool(pool)
       server.setHandler(handlerList)
+
       Try { server.start() } match {
-        case s: Success[_] => (server, server.getConnectors.head.getLocalPort)
+        case s: Success[_] =>
+          sys.addShutdownHook(server.stop()) // Be kind, un-bind
+          (server, server.getConnectors.head.getLocalPort)
         case f: Failure[_] =>
           server.stop()
           logInfo("Failed to create UI at port, %s. Trying again.".format(currentPort))
@@ -103,6 +110,8 @@ private[spark] object JettyUtils extends Logging {
           connect((currentPort + 1) % 65536)
       }
     }
+
+
     connect(port)
   }
 }
