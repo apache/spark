@@ -160,8 +160,8 @@ private[spark] object UIUtils {
                       {jobs}
                       </ul>
                     <ul id="infolist">
-                      <li>Master: <strong>{sc.master}</strong></li>
                       <li>Application: <strong>{sc.appName}</strong></li>
+                      <li>Master: <strong>{sc.master}</strong></li>
                       <li>Executors: <strong>{sc.getExecutorStorageStatus.size}</strong></li>
                     </ul>
                   </div>

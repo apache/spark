@@ -23,7 +23,7 @@ import spark.Utils
 private[spark] class JobProgressUI(val sc: SparkContext) {
   private var _listener: Option[JobProgressListener] = None
   def listener = _listener.get
-  val dateFmt = new SimpleDateFormat("EEE, MMM d yyyy HH:mm:ss")
+  val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
   private val indexPage = new IndexPage(this)
   private val stagePage = new StagePage(this)

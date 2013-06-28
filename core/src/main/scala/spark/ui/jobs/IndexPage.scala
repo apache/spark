@@ -1,7 +1,5 @@
 package spark.ui.jobs
 
-import akka.util.Duration
-
 import java.util.Date
 
 import javax.servlet.http.HttpServletRequest
@@ -26,9 +24,9 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val completedStages = listener.completedStages.reverse.toSeq
     val failedStages = listener.failedStages.reverse.toSeq
 
-    val activeStageTable: NodeSeq = listingTable(stageHeaders, stageRow(), activeStages)
-    val completedStageTable = listingTable(stageHeaders, stageRow(), completedStages)
-    val failedStageTable: NodeSeq = listingTable(stageHeaders, stageRow(false), failedStages)
+    val activeStageTable: NodeSeq = listingTable(stageHeaders, stageRow, activeStages)
+    val completedStageTable = listingTable(stageHeaders, stageRow, completedStages)
+    val failedStageTable: NodeSeq = listingTable(stageHeaders, stageRow, failedStages)
 
     val content = <h2>Active Stages</h2> ++ activeStageTable ++
                   <h2>Completed Stages</h2>  ++ completedStageTable ++
@@ -44,7 +42,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     }
   }
 
-  def makeSlider(completed: Int, total: Int): Seq[Node] = {
+  def makeProgressBar(completed: Int, total: Int): Seq[Node] = {
     val width=130
     val height=15
     val completeWidth = (completed.toDouble / total) * width
@@ -53,12 +51,12 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       <rect width={width.toString} height={height.toString}
             fill="white" stroke="black" stroke-width="1" />
       <rect width={completeWidth.toString} height={height.toString}
-            fill="rgb(206,206,247)" stroke="black" stroke-width="1" />
+            fill="rgb(51,51,51)" stroke="black" stroke-width="1" />
     </svg>
   }
 
 
-  def stageRow(showLink: Boolean = true)(s: Stage): Seq[Node] = {
+  def stageRow(s: Stage): Seq[Node] = {
     val submissionTime = s.submissionTime match {
       case Some(t) => dateFmt.format(new Date(t))
       case None => "Unknown"
@@ -74,13 +72,12 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val totalTasks = s.numPartitions
 
     <tr>
-      {if (showLink) {<td><a href={"/stages/stage?id=%s".format(s.id)}>{s.id}</a></td>}
-       else {<td>{s.id}</td>}}
-      <td>{s.origin}</td>
+      <td>{s.id}</td>
+      <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.origin}</a></td>
       <td>{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
-      <td>{makeSlider(completedTasks, totalTasks)}</td>
+      <td>{makeProgressBar(completedTasks, totalTasks)}</td>
       <td>{completedTasks} / {totalTasks}
         {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
         case f if f > 0 => "(%s failed)".format(f)
