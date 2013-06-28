@@ -67,14 +67,15 @@ if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
     fi
   fi
 else
-  if [ `command -v java` ]; then
-    RUNNER="java"
+  if [ -n "${JAVA_HOME}" ]; then
+    RUNNER="${JAVA_HOME}/bin/java"
   else
-    if [ -z "$JAVA_HOME" ]; then
+    if [ `command -v java` ]; then
+      RUNNER="java"
+    else
       echo "JAVA_HOME is not set" >&2
       exit 1
     fi
-    RUNNER="${JAVA_HOME}/bin/java"
   fi
   if [ -z "$SCALA_LIBRARY_PATH" ]; then
     if [ -z "$SCALA_HOME" ]; then
