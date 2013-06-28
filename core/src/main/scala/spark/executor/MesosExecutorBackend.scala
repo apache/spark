@@ -24,6 +24,7 @@ import spark.TaskState.TaskState
 import com.google.protobuf.ByteString
 import spark.{Utils, Logging}
 import spark.TaskState
+import spark.metrics.MetricsSystem
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
@@ -32,6 +33,9 @@ private[spark] class MesosExecutorBackend
 
   var executor: Executor = null
   var driver: ExecutorDriver = null
+  
+  val executorInstrumentation = new ExecutorInstrumentation(Option(executor))
+  MesosExecutorBackend.metricsSystem.start()
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
     val mesosTaskId = TaskID.newBuilder().setValue(taskId.toString).build()
@@ -79,13 +83,17 @@ private[spark] class MesosExecutorBackend
 
   override def frameworkMessage(d: ExecutorDriver, data: Array[Byte]) {}
 
-  override def shutdown(d: ExecutorDriver) {}
+  override def shutdown(d: ExecutorDriver) {
+    MesosExecutorBackend.metricsSystem.stop()
+  }
 }
 
 /**
  * Entry point for Mesos executor.
  */
 private[spark] object MesosExecutorBackend {
+  private val metricsSystem = MetricsSystem.createMetricsSystem("executor")
+  
   def main(args: Array[String]) {
     MesosNativeLibrary.load()
     // Create a new Executor and start it running
