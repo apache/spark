@@ -5,7 +5,6 @@ import scala.collection.mutable
 import com.codahale.metrics.{JmxReporter, MetricSet, MetricRegistry}
 
 import java.util.Properties
-//import java.util._
 import java.util.concurrent.TimeUnit
 
 import spark.Logging
@@ -20,7 +19,7 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
   
   val sinks = new mutable.ArrayBuffer[Sink]
   val sources = new mutable.ArrayBuffer[Source]
-  var registry = new MetricRegistry()
+  val registry = new MetricRegistry()
   
   registerSources()
   registerSinks()
@@ -35,7 +34,7 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
   
   def registerSource(source: Source) {
     sources += source
-    registry.register(source.sourceName,source.metricRegistry)
+    registry.register(source.sourceName, source.metricRegistry)
   }
   
   def registerSources() {

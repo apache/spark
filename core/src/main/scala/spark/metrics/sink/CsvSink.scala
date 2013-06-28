@@ -30,7 +30,6 @@ class CsvSink(val property: Properties, val registry: MetricRegistry) extends Si
       .convertRatesTo(TimeUnit.SECONDS)
       .build(new File(pollDir))
 
-  
   override def start() {
     reporter.start(pollPeriod, pollUnit)  
   }

@@ -1,19 +1,12 @@
 package spark.deploy.master
 
-import java.util.{Map, HashMap => JHashMap} 
-
-import com.codahale.metrics.{Gauge, Metric}
-
-import com.codahale.metrics.{JmxReporter, MetricSet, MetricRegistry}
+import com.codahale.metrics.{Gauge,MetricRegistry}
 
 import spark.metrics.source.Source
-import spark.Logging
 
 private[spark] class MasterInstrumentation(val master: Master) extends Source {
-  val className = classOf[Master].getName()
-  val instrumentationName = "master"
   val metricRegistry = new MetricRegistry()    
-  val sourceName = instrumentationName
+  val sourceName = "master"
 
   metricRegistry.register(MetricRegistry.name("workers","number"), 
        new Gauge[Int] {

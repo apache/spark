@@ -23,7 +23,6 @@ class ConsoleSink(val property: Properties, val registry: MetricRegistry) extend
       .convertRatesTo(TimeUnit.SECONDS)
       .build()
 
-  
   override def start() {
     reporter.start(pollPeriod, pollUnit)  
   }
