@@ -1,10 +1,10 @@
 package spark.metrics.sink
 
+import com.codahale.metrics.{CsvReporter, MetricRegistry}
+
 import java.io.File
 import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
-
-import com.codahale.metrics.{CsvReporter, MetricRegistry}
 
 import spark.metrics.MetricsSystem
 
@@ -24,7 +24,7 @@ class CsvSink(val property: Properties, val registry: MetricRegistry) extends Si
     case None => CsvSink.CSV_DEFAULT_DIR
   }
   
-  var reporter: CsvReporter = CsvReporter.forRegistry(registry)
+  val reporter: CsvReporter = CsvReporter.forRegistry(registry)
       .formatFor(Locale.US)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)

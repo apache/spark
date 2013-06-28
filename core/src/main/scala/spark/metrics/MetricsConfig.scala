@@ -1,20 +1,25 @@
 package spark.metrics
 
 import java.util.Properties
-import java.io.FileInputStream
+import java.io.{File, FileInputStream}
 
 import scala.collection.mutable
 import scala.util.matching.Regex
 
 private [spark] class MetricsConfig(val configFile: String) {
   val properties = new Properties()
-  var fis: FileInputStream = _
+  // Add default properties in case there's no properties file
+  MetricsConfig.setDefaultProperties(properties)
   
-  try {
-    fis = new FileInputStream(configFile)
-    properties.load(fis)
-  } finally {
-    fis.close()
+  val confFile = new File(configFile)
+  if (confFile.exists()) {
+	var fis: FileInputStream = null
+    try {
+      fis = new FileInputStream(configFile)
+      properties.load(fis)
+    } finally {
+      fis.close()
+    }
   }
   
   val propertyCategories = MetricsConfig.subProperties(properties, MetricsConfig.INSTANCE_REGEX)
@@ -35,10 +40,14 @@ private [spark] class MetricsConfig(val configFile: String) {
   }
 }
 
-object MetricsConfig {
-  val DEFAULT_CONFIG_FILE = "conf/metrics.properties"
+private[spark] object MetricsConfig {
   val DEFAULT_PREFIX = "*"
   val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
+  
+  def setDefaultProperties(prop: Properties) {
+    prop.setProperty("*.sink.jmx.enabled", "default")
+    prop.setProperty("*.source.jvm.class", "spark.metrics.source.JvmSource")
+  }
   
   def subProperties(prop: Properties, regex: Regex) = {
     val subProperties = new mutable.HashMap[String, Properties]
@@ -48,7 +57,6 @@ object MetricsConfig {
       if (regex.findPrefixOf(kv._1) != None) {
         val regex(prefix, suffix) = kv._1
         subProperties.getOrElseUpdate(prefix, new Properties).setProperty(suffix, kv._2)
-        println(">>>>>subProperties added  " + prefix + " " + suffix + " " + kv._2)
       }
     }
     

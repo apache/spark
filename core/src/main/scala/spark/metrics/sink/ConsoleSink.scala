@@ -1,9 +1,9 @@
 package spark.metrics.sink
 
+import com.codahale.metrics.{ConsoleReporter, MetricRegistry}
+
 import java.util.Properties
 import java.util.concurrent.TimeUnit
-
-import com.codahale.metrics.{ConsoleReporter, MetricRegistry}
 
 import spark.metrics.MetricsSystem
 
@@ -18,7 +18,7 @@ class ConsoleSink(val property: Properties, val registry: MetricRegistry) extend
     case None => MetricsSystem.timeUnits(ConsoleSink.CONSOLE_DEFAULT_UNIT)
   }
   
-  var reporter: ConsoleReporter = ConsoleReporter.forRegistry(registry)
+  val reporter: ConsoleReporter = ConsoleReporter.forRegistry(registry)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .convertRatesTo(TimeUnit.SECONDS)
       .build()

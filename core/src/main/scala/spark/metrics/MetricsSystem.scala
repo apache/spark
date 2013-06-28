@@ -14,7 +14,7 @@ import spark.metrics.source._
 private[spark] class MetricsSystem private (val instance: String) extends Logging {
   initLogging()
   
-  val confFile = System.getProperty("spark.metrics.conf.file", MetricsConfig.DEFAULT_CONFIG_FILE)
+  val confFile = System.getProperty("spark.metrics.conf.file", "unsupported")
   val metricsConfig = new MetricsConfig(confFile)
   
   val sinks = new mutable.ArrayBuffer[Sink]
@@ -58,9 +58,6 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
     val instConfig = metricsConfig.getInstance(instance)
     val sinkConfigs = MetricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
     
-    // Register JMX sink as a default sink
-    sinks += new JmxSink(registry)
-    
     // Register other sinks according to conf
     sinkConfigs.foreach { kv =>
       val classPath = if (MetricsSystem.DEFAULT_SINKS.contains(kv._1)) {
@@ -81,9 +78,7 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
 }
 
 private[spark] object MetricsSystem {
-  val DEFAULT_SINKS = Map(
-      "console" -> "spark.metrics.sink.ConsoleSink",
-      "csv" -> "spark.metrics.sink.CsvSink")
+  val DEFAULT_SINKS = Map("jmx" -> "spark.metrics.sink.JmxSink")
       
   val SINK_REGEX = "^sink\\.(.+)\\.(.+)".r
   val SOURCE_REGEX = "^source\\.(.+)\\.(.+)".r
