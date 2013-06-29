@@ -39,3 +39,11 @@
   padding-top: 10px;
   padding-bottom: 10px;
 }
+
+.progress-cell {
+  width: 134px;
+  border-right: 0;
+  padding: 0;
+  padding-top: 7px;
+  padding-left: 4px;
+}

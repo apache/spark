@@ -24,9 +24,27 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val completedStages = listener.completedStages.reverse.toSeq
     val failedStages = listener.failedStages.reverse.toSeq
 
-    val activeStageTable: NodeSeq = listingTable(stageHeaders, stageRow, activeStages)
-    val completedStageTable = listingTable(stageHeaders, stageRow, completedStages)
-    val failedStageTable: NodeSeq = listingTable(stageHeaders, stageRow, failedStages)
+    /** Special table which merges two header cells. */
+    def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
+      <table class="table table-bordered table-striped table-condensed sortable">
+        <thead>
+          <th>Stage Id</th>
+          <th>Origin</th>
+          <th>Submitted</th>
+          <td>Duration</td>
+          <td colspan="2">Tasks: Complete/Total</td>
+          <td>Shuffle Activity</td>
+          <td>Stored RDD</td>
+        </thead>
+        <tbody>
+          {rows.map(r => makeRow(r))}
+        </tbody>
+      </table>
+    }
+
+    val activeStageTable: NodeSeq = stageTable(stageRow, activeStages)
+    val completedStageTable = stageTable(stageRow, completedStages)
+    val failedStageTable: NodeSeq = stageTable(stageRow, failedStages)
 
     val content = <h2>Active Stages</h2> ++ activeStageTable ++
                   <h2>Completed Stages</h2>  ++ completedStageTable ++
@@ -77,8 +95,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       <td>{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
-      <td>{makeProgressBar(completedTasks, totalTasks)}</td>
-      <td>{completedTasks} / {totalTasks}
+      <td class="progress-cell">{makeProgressBar(completedTasks, totalTasks)}</td>
+      <td style="border-left: 0; text-align: center;">{completedTasks} / {totalTasks}
         {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
         case f if f > 0 => "(%s failed)".format(f)
         case _ =>
