@@ -41,7 +41,6 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val rootStage = new Stage(0, rootRdd, None, List(shuffleMapStage), jobID)
     
     joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStage, 4))
-    joblogger.getEventQueue.size should be (1)
     joblogger.getRddNameTest(parentRdd) should be (parentRdd.getClass.getName)
     parentRdd.setName("MyRDD")
     joblogger.getRddNameTest(parentRdd) should be ("MyRDD")

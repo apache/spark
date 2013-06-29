@@ -3,10 +3,9 @@ package spark
 import org.scalatest.FunSuite
 import SparkContext._
 
-class PipedRDDSuite extends FunSuite with LocalSparkContext {
-  
+class PipedRDDSuite extends FunSuite with SharedSparkContext {
+
   test("basic pipe") {
-    sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
 
     val piped = nums.pipe(Seq("cat"))
@@ -20,12 +19,11 @@ class PipedRDDSuite extends FunSuite with LocalSparkContext {
   }
 
   test("advanced pipe") {
-    sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val bl = sc.broadcast(List("0"))
 
-    val piped = nums.pipe(Seq("cat"), 
-      Map[String, String](), 
+    val piped = nums.pipe(Seq("cat"),
+      Map[String, String](),
       (f: String => Unit) => {bl.value.map(f(_));f("\u0001")},
       (i:Int, f: String=> Unit) => f(i + "_"))
 
@@ -43,8 +41,8 @@ class PipedRDDSuite extends FunSuite with LocalSparkContext {
 
     val nums1 = sc.makeRDD(Array("a\t1", "b\t2", "a\t3", "b\t4"), 2)
     val d = nums1.groupBy(str=>str.split("\t")(0)).
-      pipe(Seq("cat"), 
-           Map[String, String](), 
+      pipe(Seq("cat"),
+           Map[String, String](),
            (f: String => Unit) => {bl.value.map(f(_));f("\u0001")},
            (i:Tuple2[String, Seq[String]], f: String=> Unit) => {for (e <- i._2){ f(e + "_")}}).collect()
     assert(d.size === 8)
@@ -59,7 +57,6 @@ class PipedRDDSuite extends FunSuite with LocalSparkContext {
   }
 
   test("pipe with env variable") {
-    sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val piped = nums.pipe(Seq("printenv", "MY_TEST_ENV"), Map("MY_TEST_ENV" -> "LALALA"))
     val c = piped.collect()
@@ -69,7 +66,6 @@ class PipedRDDSuite extends FunSuite with LocalSparkContext {
   }
 
   test("pipe with non-zero exit status") {
-    sc = new SparkContext("local", "test")
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val piped = nums.pipe("cat nonexistent_file")
     intercept[SparkException] {

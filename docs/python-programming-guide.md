@@ -27,14 +27,14 @@ Short functions can be passed to RDD methods using Python's [`lambda`](http://ww
 
 {% highlight python %}
 logData = sc.textFile(logFile).cache()
-errors = logData.filter(lambda s: 'ERROR' in s.split())
+errors = logData.filter(lambda line: "ERROR" in line)
 {% endhighlight %}
 
 You can also pass functions that are defined using the `def` keyword; this is useful for more complicated functions that cannot be expressed using `lambda`:
 
 {% highlight python %}
 def is_error(line):
-    return 'ERROR' in line.split()
+    return "ERROR" in line
 errors = logData.filter(is_error)
 {% endhighlight %}
 
@@ -43,8 +43,7 @@ Functions can access objects in enclosing scopes, although modifications to thos
 {% highlight python %}
 error_keywords = ["Exception", "Error"]
 def is_error(line):
-     words = line.split()
-     return any(keyword in words for keyword in error_keywords)
+    return any(keyword in line for keyword in error_keywords)
 errors = logData.filter(is_error)
 {% endhighlight %}
 
