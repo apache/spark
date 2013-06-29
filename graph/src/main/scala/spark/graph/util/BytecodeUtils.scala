@@ -4,8 +4,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.HashSet
 
-import org.objectweb.asm.{ClassReader, MethodVisitor}
-import org.objectweb.asm.commons.EmptyVisitor
+import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
 import org.objectweb.asm.Opcodes._
 
 import spark.Utils
@@ -45,7 +44,7 @@ private[graph] object BytecodeUtils {
       val finder = new MethodInvocationFinder(c.getName, m)
       getClassReader(c).accept(finder, 0)
       for (classMethod <- finder.methodsInvoked) {
-        println(classMethod)
+        //println(classMethod)
         if (classMethod._1 == targetClass && classMethod._2 == targetMethod) {
           return true
         } else if (!seen.contains(classMethod)) {
@@ -89,14 +88,15 @@ private[graph] object BytecodeUtils {
    * Foo.test(). Interface invocations are not returned as part of the result set because we cannot
    * determine the actual metod invoked by inspecting the bytecode.
    */
-  private class MethodInvocationFinder(className: String, methodName: String) extends EmptyVisitor {
+  private class MethodInvocationFinder(className: String, methodName: String)
+    extends ClassVisitor(ASM4) {
 
     val methodsInvoked = new HashSet[(Class[_], String)]
 
     override def visitMethod(access: Int, name: String, desc: String,
                              sig: String, exceptions: Array[String]): MethodVisitor = {
       if (name == methodName) {
-        new EmptyVisitor {
+        new MethodVisitor(ASM4) {
           override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
             if (op == INVOKEVIRTUAL || op == INVOKESPECIAL || op == INVOKESTATIC) {
               if (!skipClass(owner)) {
