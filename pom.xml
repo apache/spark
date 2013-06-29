@@ -61,7 +61,7 @@
     <cdh.version>4.1.2</cdh.version>
     <log4j.version>1.2.17</log4j.version>
 
-    <PermGen>0m</PermGen>
+    <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
   </properties>
 
@@ -191,9 +191,9 @@
         <version>0.8.4</version>
       </dependency>
       <dependency>
-        <groupId>asm</groupId>
-        <artifactId>asm-all</artifactId>
-        <version>3.3.1</version>
+        <groupId>org.ow2.asm</groupId>
+        <artifactId>asm</artifactId>
+        <version>4.0</version>
       </dependency>
       <dependency>
         <groupId>com.google.protobuf</groupId>
@@ -396,10 +396,8 @@
             <jvmArgs>
               <jvmArg>-Xms64m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
-              <jvmArg>-XX:PermSize</jvmArg>
-              <jvmArg>${PermGen}</jvmArg>
-              <jvmArg>-XX:MaxPermSize</jvmArg>
-              <jvmArg>${MaxPermGen}</jvmArg>
+              <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
+              <jvmArg>-XX:MaxPermSize=${MaxPermGen}</jvmArg>
             </jvmArgs>
             <javacArgs>
               <javacArg>-source</javacArg>

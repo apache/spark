@@ -34,6 +34,41 @@
       <artifactId>scalacheck_${scala.version}</artifactId>
       <scope>test</scope>
     </dependency>
+      <dependency>
+        <groupId>org.apache.cassandra</groupId>
+        <artifactId>cassandra-all</artifactId>
+        <version>1.2.5</version>
+        <exclusions>
+            <exclusion>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+            </exclusion>
+            <exclusion>
+                <groupId>com.googlecode.concurrentlinkedhashmap</groupId>
+                <artifactId>concurrentlinkedhashmap-lru</artifactId>
+            </exclusion>
+            <exclusion>
+                <groupId>com.ning</groupId>
+                <artifactId>compress-lzf</artifactId>
+            </exclusion>
+            <exclusion>
+                <groupId>io.netty</groupId>
+                <artifactId>netty</artifactId>
+            </exclusion>
+            <exclusion>
+                <groupId>jline</groupId>
+                <artifactId>jline</artifactId>
+            </exclusion>
+            <exclusion>
+                <groupId>log4j</groupId>
+                <artifactId>log4j</artifactId>
+            </exclusion>
+            <exclusion>
+                <groupId>org.apache.cassandra.deps</groupId>
+                <artifactId>avro</artifactId>
+            </exclusion>
+        </exclusions>
+      </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
@@ -66,6 +101,11 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
           <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase</artifactId>
+          <version>0.94.6</version>
         </dependency>
       </dependencies>
       <build>
@@ -104,6 +144,11 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-client</artifactId>
           <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase</artifactId>
+          <version>0.94.6</version>
         </dependency>
       </dependencies>
       <build>
