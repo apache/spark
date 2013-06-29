@@ -307,7 +307,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param twitterAuth Twitter4J Authorization
+   * @param twitterAuth Twitter4J Authorization object
    * @param filters Set of filter strings to get only those tweets that match them
    * @param storageLevel Storage level to use for storing the received objects
    */
@@ -320,10 +320,9 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Create a input stream that returns tweets received from Twitter using 
-   * java.util.Preferences to store OAuth token. OAuth key and secret should
-   * be provided using system properties twitter4j.oauth.consumerKey and 
-   * twitter4j.oauth.consumerSecret
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
    * @param filters Set of filter strings to get only those tweets that match them
    * @param storageLevel Storage level to use for storing the received objects
    */
@@ -347,10 +346,9 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Create a input stream that returns tweets received from Twitter using 
-   * java.util.Preferences to store OAuth token. OAuth key and secret should
-   * be provided using system properties twitter4j.oauth.consumerKey and 
-   * twitter4j.oauth.consumerSecret
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
    * @param filters Set of filter strings to get only those tweets that match them
    */
   def twitterStream(
@@ -370,10 +368,9 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Create a input stream that returns tweets received from Twitter using 
-   * java.util.Preferences to store OAuth token. OAuth key and secret should
-   * be provided using system properties twitter4j.oauth.consumerKey and 
-   * twitter4j.oauth.consumerSecret
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
    */
   def twitterStream(): JavaDStream[Status] = {
     ssc.twitterStream()

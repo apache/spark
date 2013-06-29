@@ -1267,7 +1267,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testTwitterStream() {
     String[] filters = new String[] { "good", "bad", "ugly" };
-    JavaDStream test = ssc.twitterStream("username", "password", filters, StorageLevel.MEMORY_ONLY());
+    JavaDStream test = ssc.twitterStream(filters, StorageLevel.MEMORY_ONLY());
   }
 
   @Test

@@ -381,7 +381,9 @@ class StreamingContext private (
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param twitterAuth Twitter4J authentication
+   * @param twitterAuth Twitter4J authentication, or None to use Twitter4J's default OAuth
+   *        authorization; this uses the system properties twitter4j.oauth.consumerKey,
+   *        .consumerSecret, .accessToken and .accessTokenSecret.
    * @param filters Set of filter strings to get only those tweets that match them
    * @param storageLevel Storage level to use for storing the received objects
    */
