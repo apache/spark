@@ -618,8 +618,11 @@ class DAGScheduler(
           handleExecutorLost(bmAddress.executorId, Some(task.generation))
         }
 
+      case ExceptionFailure(className, description, stackTrace) =>
+        // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
+
       case other =>
-        // Non-fetch failure -- probably a bug in user code; abort all jobs depending on this stage
+        // Unrecognized failure - abort all jobs depending on this stage
         abortStage(idToStage(task.stageId), task + " failed: " + other)
     }
   }
@@ -667,6 +670,7 @@ class DAGScheduler(
    */
   private def abortStage(failedStage: Stage, reason: String) {
     val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
+    failedStage.completionTime = Some(System.currentTimeMillis())
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
       val error = new SparkException("Job failed: " + reason)

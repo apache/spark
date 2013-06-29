@@ -12,12 +12,11 @@ import scala.Seq
 import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
 
 import spark.ui.JettyUtils._
-import spark.SparkContext
+import spark.{ExceptionFailure, SparkContext, Success, Utils}
 import spark.scheduler._
 import spark.scheduler.cluster.TaskInfo
 import spark.executor.TaskMetrics
-import spark.Success
-import spark.Utils
+import collection.mutable
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[spark] class JobProgressUI(val sc: SparkContext) {
@@ -51,7 +50,8 @@ private[spark] class JobProgressListener extends SparkListener {
 
   val stageToTasksComplete = HashMap[Int, Int]()
   val stageToTasksFailed = HashMap[Int, Int]()
-  val stageToTaskInfos = HashMap[Int, ArrayBuffer[(TaskInfo, TaskMetrics)]]()
+  val stageToTaskInfos =
+    HashMap[Int, ArrayBuffer[(TaskInfo, TaskMetrics, Option[ExceptionFailure])]]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
@@ -67,8 +67,6 @@ private[spark] class JobProgressListener extends SparkListener {
     if (stages.size > RETAINED_STAGES) {
       val toRemove = RETAINED_STAGES / 10
       stages.takeRight(toRemove).foreach( s => {
-        stageToTasksComplete.remove(s.id)
-        stageToTasksFailed.remove(s.id)
         stageToTaskInfos.remove(s.id)
       })
       stages.trimEnd(toRemove)
@@ -80,14 +78,18 @@ private[spark] class JobProgressListener extends SparkListener {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val sid = taskEnd.task.stageId
-    taskEnd.reason match {
-      case Success =>
-        stageToTasksComplete(sid) = stageToTasksComplete.getOrElse(sid, 0) + 1
-      case _ =>
-        stageToTasksFailed(sid) = stageToTasksFailed.getOrElse(sid, 0) + 1
-    }
-    val taskList = stageToTaskInfos.getOrElse(sid, ArrayBuffer[(TaskInfo, TaskMetrics)]())
-    taskList += ((taskEnd.taskInfo, taskEnd.taskMetrics))
+    val failureInfo: Option[ExceptionFailure] =
+      taskEnd.reason match {
+        case e: ExceptionFailure =>
+          stageToTasksFailed(sid) = stageToTasksFailed.getOrElse(sid, 0) + 1
+          Some(e)
+        case _ =>
+          stageToTasksComplete(sid) = stageToTasksComplete.getOrElse(sid, 0) + 1
+          None
+      }
+    val taskList = stageToTaskInfos.getOrElse(
+      sid, ArrayBuffer[(TaskInfo, TaskMetrics, Option[ExceptionFailure])]())
+    taskList += ((taskEnd.taskInfo, taskEnd.taskMetrics, failureInfo))
     stageToTaskInfos(sid) = taskList
   }
 
