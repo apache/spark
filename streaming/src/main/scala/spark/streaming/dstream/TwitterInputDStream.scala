@@ -3,34 +3,59 @@ package spark.streaming.dstream
 import spark._
 import spark.streaming._
 import storage.StorageLevel
-
 import twitter4j._
 import twitter4j.auth.BasicAuthorization
+import twitter4j.auth.Authorization
+import java.util.prefs.Preferences
+import twitter4j.conf.PropertyConfiguration
+import twitter4j.auth.OAuthAuthorization
+import twitter4j.auth.AccessToken
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
 * @constructor create a new Twitter stream using the supplied username and password to authenticate.
 * An optional set of string filters can be used to restrict the set of tweets. The Twitter API is
 * such that this may return a sampled subset of all tweets during each interval.
+* 
+* Includes a simple implementation of OAuth using consumer key and secret provided using system 
+* properties twitter4j.oauth.consumerKey and twitter4j.oauth.consumerSecret
 */
 private[streaming]
 class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
-    username: String,
-    password: String,
+    twitterAuth: Option[Authorization],
     filters: Seq[String],
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[Status](ssc_)  {
-
+  
+  lazy val createOAuthAuthorization: Authorization = {
+    val userRoot = Preferences.userRoot();
+    val token = Option(userRoot.get(PropertyConfiguration.OAUTH_ACCESS_TOKEN, null))
+    val tokenSecret = Option(userRoot.get(PropertyConfiguration.OAUTH_ACCESS_TOKEN_SECRET, null))
+    val oAuth = new OAuthAuthorization(new PropertyConfiguration(System.getProperties()))
+    if (token.isEmpty || tokenSecret.isEmpty) {
+      val requestToken = oAuth.getOAuthRequestToken()
+	  println("Authorize application using URL: "+requestToken.getAuthorizationURL())
+	  println("Enter PIN: ")
+      val pin = Console.readLine
+      val accessToken = if (pin.length() > 0) oAuth.getOAuthAccessToken(requestToken, pin) else oAuth.getOAuthAccessToken()
+      userRoot.put(PropertyConfiguration.OAUTH_ACCESS_TOKEN, accessToken.getToken())
+      userRoot.put(PropertyConfiguration.OAUTH_ACCESS_TOKEN_SECRET, accessToken.getTokenSecret())
+      userRoot.flush()
+    } else {
+      oAuth.setOAuthAccessToken(new AccessToken(token.get, tokenSecret.get));
+    }
+    oAuth
+  }
+  
   override def getReceiver(): NetworkReceiver[Status] = {
-    new TwitterReceiver(username, password, filters, storageLevel)
+    new TwitterReceiver(if (twitterAuth.isEmpty) createOAuthAuthorization else twitterAuth.get, filters, storageLevel)
   }
 }
 
 private[streaming]
 class TwitterReceiver(
-    username: String,
-    password: String,
+    twitterAuth: Authorization,
     filters: Seq[String],
     storageLevel: StorageLevel
   ) extends NetworkReceiver[Status] {
@@ -40,8 +65,7 @@ class TwitterReceiver(
 
   protected override def onStart() {
     blockGenerator.start()
-    twitterStream = new TwitterStreamFactory()
-      .getInstance(new BasicAuthorization(username, password))
+    twitterStream = new TwitterStreamFactory().getInstance(twitterAuth)
     twitterStream.addListener(new StatusListener {
       def onStatus(status: Status) = {
         blockGenerator += status

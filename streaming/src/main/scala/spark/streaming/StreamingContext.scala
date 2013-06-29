@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import twitter4j.Status
+import twitter4j.auth.Authorization
 
 
 /**
@@ -380,18 +381,16 @@ class StreamingContext private (
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param username Twitter username
-   * @param password Twitter password
+   * @param twitterAuth Twitter4J authentication
    * @param filters Set of filter strings to get only those tweets that match them
    * @param storageLevel Storage level to use for storing the received objects
    */
   def twitterStream(
-      username: String,
-      password: String,
+      twitterAuth: Option[Authorization] = None,
       filters: Seq[String] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[Status] = {
-    val inputStream = new TwitterInputDStream(this, username, password, filters, storageLevel)
+    val inputStream = new TwitterInputDStream(this, twitterAuth, filters, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }

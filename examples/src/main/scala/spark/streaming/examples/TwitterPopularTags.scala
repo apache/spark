@@ -12,18 +12,17 @@ import spark.SparkContext._
  */
 object TwitterPopularTags {
   def main(args: Array[String]) {
-    if (args.length < 3) {
-      System.err.println("Usage: TwitterPopularTags <master> <twitter_username> <twitter_password>" +
+    if (args.length < 1) {
+      System.err.println("Usage: TwitterPopularTags <master>" +
         " [filter1] [filter2] ... [filter n]")
       System.exit(1)
     }
 
-    val Array(master, username, password) = args.slice(0, 3)
-    val filters = args.slice(3, args.length)
+    val (master, filters) = (args.head, args.tail)
 
     val ssc = new StreamingContext(master, "TwitterPopularTags", Seconds(2),
       System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
-    val stream = ssc.twitterStream(username, password, filters)
+    val stream = ssc.twitterStream(None, filters)
 
     val hashTags = stream.flatMap(status => status.getText.split(" ").filter(_.startsWith("#")))
 
