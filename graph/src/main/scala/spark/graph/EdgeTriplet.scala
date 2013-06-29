@@ -1,8 +1,8 @@
 package spark.graph
 
 
-class EdgeWithVertices[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD,
-                       @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] {
+class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD,
+                  @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] {
   var src: Vertex[VD] = _
   var dst: Vertex[VD] = _
   var data: ED = _

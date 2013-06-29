@@ -1,6 +1,10 @@
 package spark.graph
 
-
+/**
+ * A graph vertex consists of a vertex id and attribute.
+ *
+ * @tparam VD the type of the vertex attribute.
+ */
 case class Vertex[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD] (
   var id: Vid = 0,
   var data: VD = nullValue[VD]) {
