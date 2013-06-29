@@ -20,6 +20,8 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   /**
    * Get the vertices and their data.
    *
+   * @return An RDD containing the vertices in this graph
+   *
    * @see Vertex for the vertex type.
    *
    * @todo should vertices return tuples instead of vertex objects?
@@ -30,19 +32,22 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * Get the Edges and their data as an RDD.  The entries in the RDD contain
    * just the source id and target id along with the edge data.
    *
+   * @return An RDD containing the edges in this graph
    *
    * @see Edge for the edge type.
    * @see edgesWithVertices to get an RDD which contains all the edges along
    * with their vertex data.
    *
    * @todo Should edges return 3 tuples instead of Edge objects?  In this case
-   * we could rename EdgeWithVertices to Edge?
+   * we could rename EdgeTriplet to Edge?
    */
   def edges(): RDD[Edge[ED]]
 
   /**
    * Get the edges with the vertex data associated with the adjacent pair of
    * vertices.
+   *
+   * @return An RDD containing edge triplets.
    *
    * @example This operation might be used to evaluate a graph coloring where
    * we would like to check that both vertices are a different color.
@@ -56,7 +61,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @see edges() If only the edge data and adjacent vertex ids are required.
    *
    */
-  def edgesWithVertices(): RDD[EdgeWithVertices[VD, ED]]
+  def triplets(): RDD[EdgeTriplet[VD, ED]]
 
   /**
    * Return a graph that is cached when first created. This is used to pin a
@@ -133,8 +138,8 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def mapEdgesWithVertices[ED2: ClassManifest](
-    map: EdgeWithVertices[VD, ED] => ED2): Graph[VD, ED2]
+  def mapTriplets[ED2: ClassManifest](
+    map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 
 
   /**
@@ -183,7 +188,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    */
   def aggregateNeighbors[VD2: ClassManifest](
-      mapFunc: (Vid, EdgeWithVertices[VD, ED]) => Option[VD2],
+      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[VD2],
       mergeFunc: (VD2, VD2) => VD2,
       direction: EdgeDirection)
     : RDD[(Vid, VD2)]
@@ -232,7 +237,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    */
   def aggregateNeighbors[VD2: ClassManifest](
-      mapFunc: (Vid, EdgeWithVertices[VD, ED]) => Option[VD2],
+      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[VD2],
       reduceFunc: (VD2, VD2) => VD2,
       default: VD2, // Should this be a function or a value?
       direction: EdgeDirection)

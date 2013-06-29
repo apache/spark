@@ -78,8 +78,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
   /** Return a RDD that brings edges with its source and destination vertices together. */
-  override def edgesWithVertices: RDD[EdgeWithVertices[VD, ED]] = {
-    (new EdgeWithVerticesRDD(vTableReplicated, eTable)).mapPartitions { part => part.next._2 }
+  override def triplets: RDD[EdgeTriplet[VD, ED]] = {
+    (new EdgeTripletRDD(vTableReplicated, eTable)).mapPartitions { part => part.next._2 }
   }
 
   override def mapVertices[VD2: ClassManifest](f: Vertex[VD] => VD2): Graph[VD2, ED] = {
@@ -90,9 +90,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     newGraph(vertices, edges.map(e => Edge(e.src, e.dst, f(e))))
   }
 
-  override def mapEdgesWithVertices[ED2: ClassManifest](f: EdgeWithVertices[VD, ED] => ED2):
+  override def mapTriplets[ED2: ClassManifest](f: EdgeTriplet[VD, ED] => ED2):
     Graph[VD, ED2] = {
-    newGraph(vertices, edgesWithVertices.map(e => Edge(e.src.id, e.dst.id, f(e))))
+    newGraph(vertices, triplets.map(e => Edge(e.src.id, e.dst.id, f(e))))
   }
 
 
@@ -101,7 +101,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
   override def aggregateNeighbors[VD2: ClassManifest](
-      mapFunc: (Vid, EdgeWithVertices[VD, ED]) => Option[VD2],
+      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[VD2],
       reduceFunc: (VD2, VD2) => VD2,
       default: VD2,
       gatherDirection: EdgeDirection)
@@ -114,13 +114,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         part.map { v => (v._1, MutableTuple2(v._2, Option.empty[VD2])) }
       }, preservesPartitioning = true)
 
-    (new EdgeWithVerticesRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable))
+    (new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable))
       .mapPartitions { part =>
         val (vmap, edges) = part.next()
-        val edgeSansAcc = new EdgeWithVertices[VD, ED]()
+        val edgeSansAcc = new EdgeTriplet[VD, ED]()
         edgeSansAcc.src = new Vertex[VD]
         edgeSansAcc.dst = new Vertex[VD]
-        edges.foreach { e: EdgeWithVertices[MutableTuple2[VD, Option[VD2]], ED] =>
+        edges.foreach { e: EdgeTriplet[MutableTuple2[VD, Option[VD2]], ED] =>
           edgeSansAcc.data = e.data
           edgeSansAcc.src.data = e.src.data._1
           edgeSansAcc.dst.data = e.dst.data._1
@@ -158,7 +158,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
    * As a consequence, the resulting table may be much smaller than the set of vertices.
    */
   override def aggregateNeighbors[VD2: ClassManifest](
-    mapFunc: (Vid, EdgeWithVertices[VD, ED]) => Option[VD2],
+    mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[VD2],
     reduceFunc: (VD2, VD2) => VD2,
     gatherDirection: EdgeDirection): RDD[(Vid, VD2)] = {
 
@@ -169,13 +169,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         part.map { v => (v._1, MutableTuple2(v._2, Option.empty[VD2])) }
       }, preservesPartitioning = true)
 
-    (new EdgeWithVerticesRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable))
+    (new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable))
       .mapPartitions { part =>
         val (vmap, edges) = part.next()
-        val edgeSansAcc = new EdgeWithVertices[VD, ED]()
+        val edgeSansAcc = new EdgeTriplet[VD, ED]()
         edgeSansAcc.src = new Vertex[VD]
         edgeSansAcc.dst = new Vertex[VD]
-        edges.foreach { e: EdgeWithVertices[MutableTuple2[VD, Option[VD2]], ED] =>
+        edges.foreach { e: EdgeTriplet[MutableTuple2[VD, Option[VD2]], ED] =>
           edgeSansAcc.data = e.data
           edgeSansAcc.src.data = e.src.data._1
           edgeSansAcc.dst.data = e.dst.data._1

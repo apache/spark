@@ -7,7 +7,7 @@ import spark.graph._
 
 
 private[graph]
-class EdgeWithVerticesPartition(idx: Int, val vPart: Partition, val ePart: Partition)
+class EdgeTripletPartition(idx: Int, val vPart: Partition, val ePart: Partition)
   extends Partition {
   override val index: Int = idx
   override def hashCode(): Int = idx
@@ -18,10 +18,10 @@ class EdgeWithVerticesPartition(idx: Int, val vPart: Partition, val ePart: Parti
  * A RDD that brings together edge data with its associated vertex data.
  */
 private[graph]
-class EdgeWithVerticesRDD[VD: ClassManifest, ED: ClassManifest](
+class EdgeTripletRDD[VD: ClassManifest, ED: ClassManifest](
     vTableReplicated: RDD[(Vid, VD)],
     eTable: RDD[(Pid, EdgePartition[ED])])
-  extends RDD[(VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]])](eTable.context, Nil) {
+  extends RDD[(VertexHashMap[VD], Iterator[EdgeTriplet[VD, ED]])](eTable.context, Nil) {
 
   println(vTableReplicated.partitioner.get.numPartitions)
   println(eTable.partitioner.get.numPartitions)
@@ -33,18 +33,18 @@ class EdgeWithVerticesRDD[VD: ClassManifest, ED: ClassManifest](
   }
 
   override def getPartitions = Array.tabulate[Partition](eTable.partitions.size) {
-    i => new EdgeWithVerticesPartition(i, eTable.partitions(i), vTableReplicated.partitions(i))
+    i => new EdgeTripletPartition(i, eTable.partitions(i), vTableReplicated.partitions(i))
   }
 
   override val partitioner = eTable.partitioner
 
   override def getPreferredLocations(s: Partition) =
-    eTable.preferredLocations(s.asInstanceOf[EdgeWithVerticesPartition].ePart)
+    eTable.preferredLocations(s.asInstanceOf[EdgeTripletPartition].ePart)
 
   override def compute(s: Partition, context: TaskContext)
-    : Iterator[(VertexHashMap[VD], Iterator[EdgeWithVertices[VD, ED]])] = {
+    : Iterator[(VertexHashMap[VD], Iterator[EdgeTriplet[VD, ED]])] = {
 
-    val split = s.asInstanceOf[EdgeWithVerticesPartition]
+    val split = s.asInstanceOf[EdgeTripletPartition]
 
     // Fetch the vertices and put them in a hashmap.
     // TODO: use primitive hashmaps for primitive VD types.
@@ -55,9 +55,9 @@ class EdgeWithVerticesRDD[VD: ClassManifest, ED: ClassManifest](
       .asInstanceOf[(Pid, EdgePartition[ED])]
 
     // Return an iterator that looks up the hash map to find matching vertices for each edge.
-    val iter = new Iterator[EdgeWithVertices[VD, ED]] {
+    val iter = new Iterator[EdgeTriplet[VD, ED]] {
       private var pos = 0
-      private val e = new EdgeWithVertices[VD, ED]
+      private val e = new EdgeTriplet[VD, ED]
       e.src = new Vertex[VD]
       e.dst = new Vertex[VD]
 
