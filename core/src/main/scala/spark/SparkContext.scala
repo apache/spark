@@ -115,13 +115,14 @@ class SparkContext(
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
   // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner
-  for (key <- Seq("SPARK_MEM", "SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS",
-      "SPARK_TESTING")) {
+  for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS", "SPARK_TESTING")) {
     val value = System.getenv(key)
     if (value != null) {
       executorEnvs(key) = value
     }
   }
+  // Since memory can be set with a system property too, use that
+  executorEnvs("SPARK_MEM") = SparkContext.executorMemoryRequested + "m"
   if (environment != null) {
     executorEnvs ++= environment
   }
@@ -156,14 +157,12 @@ class SparkContext(
         scheduler
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        // Check to make sure SPARK_MEM <= memoryPerSlave. Otherwise Spark will just hang.
+        // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
         val memoryPerSlaveInt = memoryPerSlave.toInt
-        val sparkMemEnv = System.getenv("SPARK_MEM")
-        val sparkMemEnvInt = if (sparkMemEnv != null) Utils.memoryStringToMb(sparkMemEnv) else 512
-        if (sparkMemEnvInt > memoryPerSlaveInt) {
+        if (SparkContext.executorMemoryRequested > memoryPerSlaveInt) {
           throw new SparkException(
-            "Slave memory (%d MB) cannot be smaller than SPARK_MEM (%d MB)".format(
-              memoryPerSlaveInt, sparkMemEnvInt))
+            "Asked to launch cluster with %d MB RAM / worker but requested %d MB/worker".format(
+              memoryPerSlaveInt, SparkContext.executorMemoryRequested))
         }
 
         val scheduler = new ClusterScheduler(this)
@@ -881,6 +880,15 @@ object SparkContext {
 
   /** Find the JAR that contains the class of a particular object */
   def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
+
+  /** Get the amount of memory per executor requested through system properties or SPARK_MEM */
+  private[spark] val executorMemoryRequested = {
+    // TODO: Might need to add some extra memory for the non-heap parts of the JVM
+    Option(System.getProperty("spark.executor.memory"))
+      .orElse(Option(System.getenv("SPARK_MEM")))
+      .map(Utils.memoryStringToMb)
+      .getOrElse(512)
+  }
 }
 
 

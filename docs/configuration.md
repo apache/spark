@@ -25,23 +25,25 @@ Inside `spark-env.sh`, you *must* set at least the following two variables:
 * `SCALA_HOME`, to point to your Scala installation.
 * `MESOS_NATIVE_LIBRARY`, if you are [running on a Mesos cluster](running-on-mesos.html).
 
-In addition, there are four other variables that control execution. These can be set *either in `spark-env.sh`
-or in each job's driver program*, because they will automatically be propagated to workers from the driver.
-For a multi-user environment, we recommend setting the in the driver program instead of `spark-env.sh`, so
-that different user jobs can use different amounts of memory, JVM options, etc.
+In addition, there are four other variables that control execution. These should be set *in the environment that
+launches the job's driver program* instead of `spark-env.sh`, because they will be automatically propagated to
+workers. Setting these per-job instead of in `spark-env.sh` ensures that different jobs can have different settings
+for these variables.
 
-* `SPARK_MEM`, to set the amount of memory used per node (this should be in the same format as the 
-   JVM's -Xmx option, e.g. `300m` or `1g`)
 * `SPARK_JAVA_OPTS`, to add JVM options. This includes any system properties that you'd like to pass with `-D`.
 * `SPARK_CLASSPATH`, to add elements to Spark's classpath.
 * `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
+* `SPARK_MEM`, to set the amount of memory used per node. This should be in the same format as the 
+   JVM's -Xmx option, e.g. `300m` or `1g`. Note that this option will soon be deprecated in favor of
+   the `spark.executor.memory` system property, so we recommend using that in new code.
 
-Note that if you do set these in `spark-env.sh`, they will override the values set by user programs, which
-is undesirable; you can choose to have `spark-env.sh` set them only if the user program hasn't, as follows:
+Beware that if you do set these variables in `spark-env.sh`, they will override the values set by user programs,
+which is undesirable; if you prefer, you can choose to have `spark-env.sh` set them only if the user program
+hasn't, as follows:
 
 {% highlight bash %}
-if [ -z "$SPARK_MEM" ] ; then
-  SPARK_MEM="1g"
+if [ -z "$SPARK_JAVA_OPTS" ] ; then
+  SPARK_JAVA_OPTS="-verbose:gc"
 fi
 {% endhighlight %}
 
@@ -55,10 +57,17 @@ val sc = new SparkContext(...)
 {% endhighlight %}
 
 Most of the configurable system properties control internal settings that have reasonable default values. However,
-there are at least four properties that you will commonly want to control:
+there are at least five properties that you will commonly want to control:
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.executor.memory</td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. `512m`, `2g`).
+  </td>
+</tr>
 <tr>
   <td>spark.serializer</td>
   <td>spark.JavaSerializer</td>
