@@ -134,8 +134,41 @@ class RidgeRegression private (var lambdaLow: Double, var lambdaHigh: Double)
     model
   }
 }
-
+/**
+ * Top-level methods for calling Ridge Regression.
+ */
 object RidgeRegression {
+
+  /**
+   * Train a ridge regression model given an RDD of (response, features) pairs. 
+   * We use the closed form solution to compute the cross-validation score for 
+   * a given lambda. The optimal lambda is computed by performing binary search
+   * between the provided bounds of lambda.
+   *
+   * @param input RDD of (response, array of features) pairs.
+   * @param lambdaLow lower bound used in binary search for lambda
+   * @param lambdaHigh upper bound used in binary search for lambda
+   */
+  def train(
+      input: RDD[(Double, Array[Double])],
+      lambdaLow: Double,
+      lambdaHigh: Double)
+    : RidgeRegressionModel =
+  {
+    new RidgeRegression(lambdaLow, lambdaHigh).train(input)
+  }
+
+  /**
+   * Train a ridge regression model given an RDD of (response, features) pairs. 
+   * We use the closed form solution to compute the cross-validation score for 
+   * a given lambda. The optimal lambda is computed by performing binary search
+   * between lambda values of 0 and 100.
+   *
+   * @param input RDD of (response, array of features) pairs.
+   */
+  def train(input: RDD[(Double, Array[Double])]) : RidgeRegressionModel = {
+    train(input, 0.0, 100.0)
+  }
 
   def main(args: Array[String]) {
     if (args.length != 2) {
@@ -144,10 +177,7 @@ object RidgeRegression {
     }
     val sc = new SparkContext(args(0), "RidgeRegression")
     val data = MLUtils.loadData(sc, args(1))
-    val ridgeReg = new RidgeRegression().setLowLambda(0)
-                                        .setHighLambda(1000)
-
-    val model = ridgeReg.train(data)
+    val model = RidgeRegression.train(data, 0, 1000)
     sc.stop()
   }
 }
