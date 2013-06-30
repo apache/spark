@@ -1,4 +1,4 @@
-package spark.ml.gradient
+package spark.ml.optimization
 
 import org.jblas.DoubleMatrix
 

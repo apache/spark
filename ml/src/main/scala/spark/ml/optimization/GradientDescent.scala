@@ -1,4 +1,4 @@
-package spark.ml.gradient
+package spark.ml.optimization
 
 import spark.{Logging, RDD, SparkContext}
 import spark.SparkContext._
