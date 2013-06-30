@@ -6,12 +6,12 @@ import spark.SparkContext
 
 
 class GraphSuite extends FunSuite with LocalSparkContext {
-//
+
 //  test("graph partitioner") {
 //    sc = new SparkContext("local", "test")
 //    val vertices = sc.parallelize(Seq(Vertex(1, "one"), Vertex(2, "two")))
 //    val edges = sc.parallelize(Seq(Edge(1, 2, "onlyedge")))
-//    var g = new Graph(vertices, edges)
+//    var g = Graph(vertices, edges)
 //
 //    g = g.withPartitioner(4, 7)
 //    assert(g.numVertexPartitions === 4)

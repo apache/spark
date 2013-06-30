@@ -326,5 +326,27 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
 object Graph {
 
+  import spark.graph.impl._
+  import spark.SparkContext._
+
+  def apply(rawEdges: RDD[(Int,Int)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
+    // Reduce to unique edges
+    val edges =
+      if(uniqueEdges) rawEdges.map{ case (s,t) => ((s,t),1) }.reduceByKey( _ + _ )
+        .map{ case ((s,t), cnt) => Edge(s,t,cnt) }
+      else rawEdges.map{ case (s,t) => Edge(s,t,1) }
+    // Determine unique vertices
+    val vertices = edges.flatMap{ case Edge(s, t, cnt) => Array((s,1), (t,1)) }.reduceByKey( _ + _ )
+      .map{ case (id, deg) => Vertex(id, deg) }
+    // Return graph
+    new GraphImpl(vertices, edges)
+  }
+
+  def apply[VD: ClassManifest, ED: ClassManifest](vertices: RDD[Vertex[VD]], edges: RDD[Edge[ED]]): Graph[VD, ED] = {
+    new GraphImpl(vertices, edges)
+
+  }
+
+
   implicit def graphToGraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) = g.ops
 }
