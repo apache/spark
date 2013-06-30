@@ -18,6 +18,7 @@ REPL_DIR="$FWDIR/repl"
 REPL_BIN_DIR="$FWDIR/repl-bin"
 EXAMPLES_DIR="$FWDIR/examples"
 BAGEL_DIR="$FWDIR/bagel"
+GRAPH_DIR="$FWDIR/graph"
 STREAMING_DIR="$FWDIR/streaming"
 PYSPARK_DIR="$FWDIR/python"
 
@@ -49,6 +50,7 @@ if [ -e $REPL_BIN_DIR/target ]; then
   CLASSPATH+=":$EXAMPLES_JAR"
 fi
 CLASSPATH="$CLASSPATH:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
+CLASSPATH="$CLASSPATH:$GRAPH_DIR/target/scala-$SCALA_VERSION/classes"
 for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
   CLASSPATH="$CLASSPATH:$jar"
 done
