@@ -1,19 +1,20 @@
 package spark.graph
 
-import scala.collection.JavaConversions._
 import spark.RDD
 
 
 object Pregel {
 
   def iterate[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](graph: Graph[VD, ED])(
-    vprog: ( Vertex[VD], A) => VD,
-    sendMsg: (Vid, EdgeTriplet[VD, ED]) => Option[A],
-    mergeMsg: (A, A) => A,
-    initialMsg: A,
-    numIter: Int) : Graph[VD, ED] = {
+      vprog: (Vertex[VD], A) => VD,
+      sendMsg: (Vid, EdgeTriplet[VD, ED]) => Option[A],
+      mergeMsg: (A, A) => A,
+      initialMsg: A,
+      numIter: Int)
+    : Graph[VD, ED] = {
 
-    var g = graph.cache
+    var g = graph
+    //var g = graph.cache()
     var i = 0
 
     def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertex(vid).id, edge)

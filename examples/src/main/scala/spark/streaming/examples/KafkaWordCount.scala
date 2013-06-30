@@ -37,7 +37,7 @@ object KafkaWordCount {
     ssc.checkpoint("checkpoint")
 
     val topicpMap = topics.split(",").map((_,numThreads.toInt)).toMap
-    val lines = ssc.kafkaStream[String](zkQuorum, group, topicpMap)
+    val lines = ssc.kafkaStream(zkQuorum, group, topicpMap)
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1l)).reduceByKeyAndWindow(add _, subtract _, Minutes(10), Seconds(2), 2)
     wordCounts.print()

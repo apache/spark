@@ -32,8 +32,8 @@
       <artifactId>compress-lzf</artifactId>
     </dependency>
     <dependency>
-      <groupId>asm</groupId>
-      <artifactId>asm-all</artifactId>
+      <groupId>org.ow2.asm</groupId>
+      <artifactId>asm</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>

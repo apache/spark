@@ -177,7 +177,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val manager = new TaskSetManager(this, taskSet)
+      val manager = new ClusterTaskSetManager(this, taskSet)
       activeTaskSets(taskSet.id) = manager
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()

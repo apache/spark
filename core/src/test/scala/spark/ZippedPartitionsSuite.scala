@@ -17,9 +17,8 @@ object ZippedPartitionsSuite {
   }
 }
 
-class ZippedPartitionsSuite extends FunSuite with LocalSparkContext {
+class ZippedPartitionsSuite extends FunSuite with SharedSparkContext {
   test("print sizes") {
-    sc = new SparkContext("local", "test")
     val data1 = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val data2 = sc.makeRDD(Array("1", "2", "3", "4", "5", "6"), 2)
     val data3 = sc.makeRDD(Array(1.0, 2.0), 2)

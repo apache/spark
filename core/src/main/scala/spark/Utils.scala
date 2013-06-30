@@ -116,8 +116,8 @@ private object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException("Failed to create a temp directory after " + maxAttempts +
-            " attempts!")
+        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+          maxAttempts + " attempts!")
       }
       try {
         dir = new File(root, "spark-" + UUID.randomUUID.toString)
@@ -522,13 +522,45 @@ private object Utils extends Logging {
     execute(command, new File("."))
   }
 
+  /**
+   * Execute a command and get its output, throwing an exception if it yields a code other than 0.
+   */
+  def executeAndGetOutput(command: Seq[String], workingDir: File = new File(".")): String = {
+    val process = new ProcessBuilder(command: _*)
+        .directory(workingDir)
+        .start()
+    new Thread("read stderr for " + command(0)) {
+      override def run() {
+        for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
+          System.err.println(line)
+        }
+      }
+    }.start()
+    val output = new StringBuffer
+    val stdoutThread = new Thread("read stdout for " + command(0)) {
+      override def run() {
+        for (line <- Source.fromInputStream(process.getInputStream).getLines) {
+          output.append(line)
+        }
+      }
+    }
+    stdoutThread.start()
+    val exitCode = process.waitFor()
+    stdoutThread.join()   // Wait for it to finish reading output
+    if (exitCode != 0) {
+      throw new SparkException("Process " + command + " exited with code " + exitCode)
+    }
+    output.toString
+  }
 
+  private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
+                                    val firstUserLine: Int, val firstUserClass: String)
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
    * This is used, for example, to tell users where in their code each RDD got created.
    */
-  def getSparkCallSite: String = {
+  def getCallSiteInfo: CallSiteInfo = {
     val trace = Thread.currentThread.getStackTrace().filter( el =>
       (!el.getMethodName.contains("getStackTrace")))
 
@@ -540,6 +572,7 @@ private object Utils extends Logging {
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
     var finished = false
+    var firstUserClass = "<unknown>"
 
     for (el <- trace) {
       if (!finished) {
@@ -554,13 +587,19 @@ private object Utils extends Logging {
         else {
           firstUserLine = el.getLineNumber
           firstUserFile = el.getFileName
+          firstUserClass = el.getClassName
           finished = true
         }
       }
     }
-    "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
+    new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
   }
 
+  def formatSparkCallSite = {
+    val callSiteInfo = getCallSiteInfo
+    "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
+                         callSiteInfo.firstUserLine)
+  }
   /**
    * Try to find a free port to bind to on the local host. This should ideally never be needed,
    * except that, unfortunately, some of the networking libraries we currently rely on (e.g. Spray)
@@ -601,5 +640,68 @@ private object Utils extends Logging {
       case ise: IllegalStateException => return true
     }
     return false
+  }
+
+  def isSpace(c: Char): Boolean = {
+    " \t\r\n".indexOf(c) != -1
+  }
+
+  /**
+   * Split a string of potentially quoted arguments from the command line the way that a shell
+   * would do it to determine arguments to a command. For example, if the string is 'a "b c" d',
+   * then it would be parsed as three arguments: 'a', 'b c' and 'd'.
+   */
+  def splitCommandString(s: String): Seq[String] = {
+    val buf = new ArrayBuffer[String]
+    var inWord = false
+    var inSingleQuote = false
+    var inDoubleQuote = false
+    var curWord = new StringBuilder
+    def endWord() {
+      buf += curWord.toString
+      curWord.clear()
+    }
+    var i = 0
+    while (i < s.length) {
+      var nextChar = s.charAt(i)
+      if (inDoubleQuote) {
+        if (nextChar == '"') {
+          inDoubleQuote = false
+        } else if (nextChar == '\\') {
+          if (i < s.length - 1) {
+            // Append the next character directly, because only " and \ may be escaped in
+            // double quotes after the shell's own expansion
+            curWord.append(s.charAt(i + 1))
+            i += 1
+          }
+        } else {
+          curWord.append(nextChar)
+        }
+      } else if (inSingleQuote) {
+        if (nextChar == '\'') {
+          inSingleQuote = false
+        } else {
+          curWord.append(nextChar)
+        }
+        // Backslashes are not treated specially in single quotes
+      } else if (nextChar == '"') {
+        inWord = true
+        inDoubleQuote = true
+      } else if (nextChar == '\'') {
+        inWord = true
+        inSingleQuote = true
+      } else if (!isSpace(nextChar)) {
+        curWord.append(nextChar)
+        inWord = true
+      } else if (inWord && isSpace(nextChar)) {
+        endWord()
+        inWord = false
+      }
+      i += 1
+    }
+    if (inWord || inDoubleQuote || inSingleQuote) {
+      endWord()
+    }
+    return buf
   }
 }

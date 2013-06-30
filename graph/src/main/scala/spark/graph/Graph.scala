@@ -26,7 +26,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    * @todo should vertices return tuples instead of vertex objects?
    */
-  def vertices(): RDD[Vertex[VD]]
+  def vertices: RDD[Vertex[VD]]
 
   /**
    * Get the Edges and their data as an RDD.  The entries in the RDD contain
@@ -41,7 +41,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @todo Should edges return 3 tuples instead of Edge objects?  In this case
    * we could rename EdgeTriplet to Edge?
    */
-  def edges(): RDD[Edge[ED]]
+  def edges: RDD[Edge[ED]]
 
   /**
    * Get the edges with the vertex data associated with the adjacent pair of
@@ -61,7 +61,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @see edges() If only the edge data and adjacent vertex ids are required.
    *
    */
-  def triplets(): RDD[EdgeTriplet[VD, ED]]
+  def triplets: RDD[EdgeTriplet[VD, ED]]
 
   /**
    * Return a graph that is cached when first created. This is used to pin a
@@ -209,7 +209,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @param mapFunc the function applied to each edge adjacent to each vertex.
    * The mapFunc can optionally return None in which case it does not
    * contribute to the final sum.
-   * @param mergeFunc the function used to merge the results of each map
+   * @param reduceFunc the function used to merge the results of each map
    * operation.
    * @param default the default value to use for each vertex if it has no
    * neighbors or the map function repeatedly evaluates to none
@@ -252,7 +252,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    * @tparam U the type of entry in the table of updates
    * @tparam VD2 the new vertex value type
-   * @param tlb the table to join with the vertices in the graph.  The table
+   * @param table the table to join with the vertices in the graph.  The table
    * should contain at most one entry for each vertex.
    * @param mapFunc the function used to compute the new vertex values.  The
    * map function is invoked for all vertices, even those that do not have a
@@ -287,7 +287,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * map function is skipped and the old value is used.
    *
    * @tparam U the type of entry in the table of updates
-   * @param tlb the table to join with the vertices in the graph.  The table
+   * @param table the table to join with the vertices in the graph.  The table
    * should contain at most one entry for each vertex.
    * @param mapFunc the function used to compute the new vertex values.  The
    * map function is invoked only for vertices with a corresponding entry in

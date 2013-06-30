@@ -11,8 +11,8 @@ import spark.graph._
  * A partition of edges in 3 large columnar arrays.
  */
 private[graph]
-class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest]
-{
+class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest] {
+
   val srcIds: IntArrayList = new IntArrayList
   val dstIds: IntArrayList = new IntArrayList
   // TODO: Specialize data.
@@ -33,7 +33,7 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
   def size: Int = srcIds.size
 
   def iterator = new Iterator[Edge[ED]] {
-    private var edge = new Edge[ED]
+    private val edge = new Edge[ED]
     private var pos = 0
 
     override def hasNext: Boolean = pos < EdgePartition.this.size

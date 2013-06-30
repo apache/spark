@@ -5,8 +5,7 @@ import java.lang.reflect.Field
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
-import org.objectweb.asm.{ClassReader, MethodVisitor, Type}
-import org.objectweb.asm.commons.EmptyVisitor
+import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.objectweb.asm.Opcodes._
 import java.io.{InputStream, IOException, ByteArrayOutputStream, ByteArrayInputStream, BufferedInputStream}
 
@@ -162,10 +161,10 @@ private[spark] object ClosureCleaner extends Logging {
   }
 }
 
-private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends EmptyVisitor {
+private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    return new EmptyVisitor {
+    return new MethodVisitor(ASM4) {
       override def visitFieldInsn(op: Int, owner: String, name: String, desc: String) {
         if (op == GETFIELD) {
           for (cl <- output.keys if cl.getName == owner.replace('/', '.')) {
@@ -188,7 +187,7 @@ private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]]) exten
   }
 }
 
-private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends EmptyVisitor {
+private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM4) {
   var myName: String = null
   
   override def visit(version: Int, access: Int, name: String, sig: String,
@@ -198,7 +197,7 @@ private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends EmptyVisi
   
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    return new EmptyVisitor {
+    return new MethodVisitor(ASM4) {
       override def visitMethodInsn(op: Int, owner: String, name: String,
           desc: String) {
         val argTypes = Type.getArgumentTypes(desc)

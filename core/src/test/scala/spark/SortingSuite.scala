@@ -5,16 +5,14 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.ShouldMatchers
 import SparkContext._
 
-class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers with Logging {
-  
+class SortingSuite extends FunSuite with SharedSparkContext with ShouldMatchers with Logging {
+
   test("sortByKey") {
-    sc = new SparkContext("local", "test")
     val pairs = sc.parallelize(Array((1, 0), (2, 0), (0, 0), (3, 0)), 2)
-    assert(pairs.sortByKey().collect() === Array((0,0), (1,0), (2,0), (3,0)))      
+    assert(pairs.sortByKey().collect() === Array((0,0), (1,0), (2,0), (3,0)))
   }
 
   test("large array") {
-    sc = new SparkContext("local", "test")
     val rand = new scala.util.Random()
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr, 2)
@@ -24,7 +22,6 @@ class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers w
   }
 
   test("large array with one split") {
-    sc = new SparkContext("local", "test")
     val rand = new scala.util.Random()
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr, 2)
@@ -32,9 +29,8 @@ class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers w
     assert(sorted.partitions.size === 1)
     assert(sorted.collect() === pairArr.sortBy(_._1))
   }
-  
+
   test("large array with many partitions") {
-    sc = new SparkContext("local", "test")
     val rand = new scala.util.Random()
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr, 2)
@@ -42,9 +38,8 @@ class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers w
     assert(sorted.partitions.size === 20)
     assert(sorted.collect() === pairArr.sortBy(_._1))
   }
-  
+
   test("sort descending") {
-    sc = new SparkContext("local", "test")
     val rand = new scala.util.Random()
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr, 2)
@@ -52,15 +47,13 @@ class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers w
   }
 
   test("sort descending with one split") {
-    sc = new SparkContext("local", "test")
     val rand = new scala.util.Random()
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr, 1)
     assert(pairs.sortByKey(false, 1).collect() === pairArr.sortWith((x, y) => x._1 > y._1))
   }
-  
+
   test("sort descending with many partitions") {
-    sc = new SparkContext("local", "test")
     val rand = new scala.util.Random()
     val pairArr = Array.fill(1000) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr, 2)
@@ -68,7 +61,6 @@ class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers w
   }
 
   test("more partitions than elements") {
-    sc = new SparkContext("local", "test")
     val rand = new scala.util.Random()
     val pairArr = Array.fill(10) { (rand.nextInt(), rand.nextInt()) }
     val pairs = sc.parallelize(pairArr, 30)
@@ -76,14 +68,12 @@ class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers w
   }
 
   test("empty RDD") {
-    sc = new SparkContext("local", "test")
     val pairArr = new Array[(Int, Int)](0)
     val pairs = sc.parallelize(pairArr, 2)
     assert(pairs.sortByKey().collect() === pairArr.sortBy(_._1))
   }
 
   test("partition balancing") {
-    sc = new SparkContext("local", "test")
     val pairArr = (1 to 1000).map(x => (x, x)).toArray
     val sorted = sc.parallelize(pairArr, 4).sortByKey()
     assert(sorted.collect() === pairArr.sortBy(_._1))
@@ -99,7 +89,6 @@ class SortingSuite extends FunSuite with LocalSparkContext with ShouldMatchers w
   }
 
   test("partition balancing for descending sort") {
-    sc = new SparkContext("local", "test")
     val pairArr = (1 to 1000).map(x => (x, x)).toArray
     val sorted = sc.parallelize(pairArr, 4).sortByKey(false)
     assert(sorted.collect() === pairArr.sortBy(_._1).reverse)
