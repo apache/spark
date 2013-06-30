@@ -26,7 +26,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    * @todo should vertices return tuples instead of vertex objects?
    */
-  def vertices(): RDD[Vertex[VD]]
+  def vertices: RDD[Vertex[VD]]
 
   /**
    * Get the Edges and their data as an RDD.  The entries in the RDD contain
@@ -41,7 +41,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @todo Should edges return 3 tuples instead of Edge objects?  In this case
    * we could rename EdgeTriplet to Edge?
    */
-  def edges(): RDD[Edge[ED]]
+  def edges: RDD[Edge[ED]]
 
   /**
    * Get the edges with the vertex data associated with the adjacent pair of
@@ -61,7 +61,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @see edges() If only the edge data and adjacent vertex ids are required.
    *
    */
-  def triplets(): RDD[EdgeTriplet[VD, ED]]
+  def triplets: RDD[EdgeTriplet[VD, ED]]
 
   /**
    * Return a graph that is cached when first created. This is used to pin a

@@ -14,11 +14,11 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) {
   }
 
   lazy val outDegrees: RDD[(Vid, Int)] = {
-    g.aggregateNeighbors((vid,edge) => Some(1), _+_, EdgeDirection.Out)
+    g.aggregateNeighbors((vid, edge) => Some(1), _+_, EdgeDirection.Out)
   }
 
   lazy val degrees: RDD[(Vid, Int)] = {
-    g.aggregateNeighbors((vid,edge) => Some(1), _+_, EdgeDirection.Both)
+    g.aggregateNeighbors((vid, edge) => Some(1), _+_, EdgeDirection.Both)
   }
 
   def collectNeighborIds(edgeDirection: EdgeDirection) : RDD[(Vid, Array[Vid])] = {

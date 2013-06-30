@@ -7,6 +7,10 @@ import spark.SparkContext._
 
 object Analytics extends Logging {
 
+  def main(args: Array[String]) {
+    //pregelPagerank()
+  }
+
   // /**
   //  * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
   //  */

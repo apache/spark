@@ -2,11 +2,7 @@ package spark.graph.impl
 
 import scala.collection.JavaConversions._
 
-import spark.ClosureCleaner
-import spark.HashPartitioner
-import spark.Partitioner
-import spark.RDD
-import spark.SparkContext
+import spark.{ClosureCleaner, HashPartitioner, RDD}
 import spark.SparkContext._
 
 import spark.graph._
@@ -31,7 +27,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   def withPartitioner(numVertexPartitions: Int, numEdgePartitions: Int): Graph[VD, ED] = {
     if (_cached) {
-      (new GraphImpl(numVertexPartitions, numEdgePartitions, null, null, _rawVTable, _rawETable))
+      new GraphImpl(numVertexPartitions, numEdgePartitions, null, null, _rawVTable, _rawETable)
         .cache()
     } else {
       new GraphImpl(numVertexPartitions, numEdgePartitions, _rawVertices, _rawEdges, null, null)
@@ -73,13 +69,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     if (!_cached && _rawEdges != null) {
       _rawEdges
     } else {
-      eTable.mapPartitions { iter => iter.next._2.iterator }
+      eTable.mapPartitions { iter => iter.next()._2.iterator }
     }
   }
 
   /** Return a RDD that brings edges with its source and destination vertices together. */
   override def triplets: RDD[EdgeTriplet[VD, ED]] = {
-    (new EdgeTripletRDD(vTableReplicated, eTable)).mapPartitions { part => part.next._2 }
+    new EdgeTripletRDD(vTableReplicated, eTable).mapPartitions { part => part.next()._2 }
   }
 
   override def mapVertices[VD2: ClassManifest](f: Vertex[VD] => VD2): Graph[VD2, ED] = {
