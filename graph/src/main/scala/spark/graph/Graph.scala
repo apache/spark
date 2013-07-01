@@ -141,6 +141,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def mapTriplets[ED2: ClassManifest](
     map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 
+  def correctEdges(): Graph[VD, ED]
 
   /**
    * Construct a new graph with all the edges reversed.  If this graph contains

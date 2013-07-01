@@ -91,6 +91,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     newGraph(vertices, triplets.map(e => Edge(e.src.id, e.dst.id, f(e))))
   }
 
+  override def correctEdges(): Graph[VD, ED] = {
+    val sc = vertices.context
+    val vset = sc.broadcast(vertices.map(_.id).collect().toSet)
+    val newEdges = edges.filter(e => vset.value.contains(e.src) && vset.value.contains(e.dst))
+    Graph(vertices, newEdges)
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
