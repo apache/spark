@@ -495,13 +495,13 @@ private object Utils extends Logging {
 
     ms match {
       case t if t < second =>
-        "%dms".format(t)
+        "%d ms".format(t)
       case t if t < minute =>
-        "%d.%03ds".format(t / second, t % second)
+        "%.1f s".format(t.toFloat / second)
       case t if t < hour =>
-        "%d:%02d".format(t / minute, (t % minute) / second)
+        "%.1f m".format(t.toFloat / minute)
       case t =>
-        "%d:%02d:%02d".format(t / hour, t % hour / minute, (t % hour) % minute / second)
+        "%.2f h".format(t.toFloat / hour)
     }
   }
 

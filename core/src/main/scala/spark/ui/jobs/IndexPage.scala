@@ -18,8 +18,6 @@ private[spark] class IndexPage(parent: JobProgressUI) {
   val dateFmt = parent.dateFmt
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stageHeaders = Seq("Stage ID", "Origin", "Submitted", "Duration", "Progress",
-                           "Tasks: Complete/Total", "Shuffle Activity", "Stored RDD")
     val activeStages = listener.activeStages.toSeq
     val completedStages = listener.completedStages.reverse.toSeq
     val failedStages = listener.failedStages.reverse.toSeq
@@ -67,9 +65,9 @@ private[spark] class IndexPage(parent: JobProgressUI) {
 
     <svg width={width.toString} height={height.toString}>
       <rect width={width.toString} height={height.toString}
-            fill="white" stroke="black" stroke-width="1" />
+            fill="white" stroke="rgb(51,51,51)" stroke-width="1" />
       <rect width={completeWidth.toString} height={height.toString}
-            fill="rgb(51,51,51)" stroke="black" stroke-width="1" />
+            fill="rgb(0,136,204)" stroke="black" stroke-width="1" />
     </svg>
   }
 

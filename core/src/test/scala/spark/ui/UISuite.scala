@@ -34,13 +34,13 @@ class UISuite extends FunSuite {
     val hour = minute * 60
     def str = Utils.msDurationToString(_)
 
-    assert(str(123) === "123ms")
-    assert(str(second) === "1.000s")
-    assert(str(second + 452) === "1.452s")
-    assert(str(hour) === "1:00:00")
-    assert(str(minute) === "1:00")
-    assert(str(minute + 4 * second + 34) === "1:04")
-    assert(str(10 * hour + minute + 4 * second) === "10:01:04")
-    assert(str(10 * hour + 59 * minute + 59 * second + 999) === "10:59:59")
+    assert(str(123) === "123 ms")
+    assert(str(second) === "1.0 s")
+    assert(str(second + 462) === "1.5 s")
+    assert(str(hour) === "1.00 h")
+    assert(str(minute) === "1.0 m")
+    assert(str(minute + 4 * second + 34) === "1.1 m")
+    assert(str(10 * hour + minute + 4 * second) === "10.02 h")
+    assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11.00 h")
   }
 }
