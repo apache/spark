@@ -51,7 +51,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars)
         daemon = pb.start()
-        daemonPort = new DataInputStream(daemon.getInputStream).readInt()
 
         // Redirect the stderr to ours
         new Thread("stderr reader for " + pythonExec) {
@@ -60,6 +59,25 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
               // FIXME HACK: We copy the stream on the level of bytes to
               // attempt to dodge encoding problems.
               val in = daemon.getErrorStream
+              var buf = new Array[Byte](1024)
+              var len = in.read(buf)
+              while (len != -1) {
+                System.err.write(buf, 0, len)
+                len = in.read(buf)
+              }
+            }
+          }
+        }.start()
+
+        val in = new DataInputStream(daemon.getInputStream)
+        daemonPort = in.readInt()
+
+        // Redirect further stdout output to our stderr
+        new Thread("stdout reader for " + pythonExec) {
+          override def run() {
+            scala.util.control.Exception.ignoring(classOf[IOException]) {
+              // FIXME HACK: We copy the stream on the level of bytes to
+              // attempt to dodge encoding problems.
               var buf = new Array[Byte](1024)
               var len = in.read(buf)
               while (len != -1) {

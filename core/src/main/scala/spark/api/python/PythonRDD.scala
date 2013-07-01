@@ -22,6 +22,8 @@ private[spark] class PythonRDD[T: ClassManifest](
     accumulator: Accumulator[JList[Array[Byte]]])
   extends RDD[Array[Byte]](parent) {
 
+  val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
   def this(parent: RDD[T], command: String, envVars: JMap[String, String],
@@ -45,7 +47,7 @@ private[spark] class PythonRDD[T: ClassManifest](
     new Thread("stdin writer for " + pythonExec) {
       override def run() {
         SparkEnv.set(env)
-        val stream = new BufferedOutputStream(worker.getOutputStream)
+        val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
         val printOut = new PrintWriter(stream)
         // Partition index
@@ -76,7 +78,7 @@ private[spark] class PythonRDD[T: ClassManifest](
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream))
+    val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
     return new Iterator[Array[Byte]] {
       def next(): Array[Byte] = {
         val obj = _nextObj
@@ -276,6 +278,8 @@ class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
   extends AccumulatorParam[JList[Array[Byte]]] {
 
   Utils.checkHost(serverHost, "Expected hostname")
+
+  val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
   
   override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
 
@@ -289,7 +293,7 @@ class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
       // This happens on the master, where we pass the updates to Python through a socket
       val socket = new Socket(serverHost, serverPort)
       val in = socket.getInputStream
-      val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream))
+      val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
       out.writeInt(val2.size)
       for (array <- val2) {
         out.writeInt(array.length)
