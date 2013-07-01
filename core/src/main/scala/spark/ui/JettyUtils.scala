@@ -69,7 +69,7 @@ private[spark] object JettyUtils extends Logging {
       case Some(res) =>
         staticHandler.setResourceBase(res.toString)
       case None =>
-        logError("Could not find resource path for Web UI: " + resourceBase)
+        throw new Exception("Could not find resource path for Web UI: " + resourceBase)
     }
     staticHandler
   }
