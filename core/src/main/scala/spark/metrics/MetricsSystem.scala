@@ -1,15 +1,15 @@
 package spark.metrics
 
-import scala.collection.mutable
-
 import com.codahale.metrics.{JmxReporter, MetricSet, MetricRegistry}
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
+
 import spark.Logging
-import spark.metrics.sink._
-import spark.metrics.source._
+import spark.metrics.sink.Sink
+import spark.metrics.source.Source
 
 private[spark] class MetricsSystem private (val instance: String) extends Logging {
   initLogging()
@@ -46,7 +46,6 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
       val classPath = kv._2.getProperty("class")
       try {
         val source = Class.forName(classPath).newInstance()
-        sources += source.asInstanceOf[Source]
         registerSource(source.asInstanceOf[Source])
       } catch {
         case e: Exception => logError("source class " + classPath + " cannot be instantialized", e)
@@ -58,7 +57,6 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
     val instConfig = metricsConfig.getInstance(instance)
     val sinkConfigs = MetricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
     
-    // Register other sinks according to conf
     sinkConfigs.foreach { kv =>
       val classPath = if (MetricsSystem.DEFAULT_SINKS.contains(kv._1)) {
         MetricsSystem.DEFAULT_SINKS(kv._1)
