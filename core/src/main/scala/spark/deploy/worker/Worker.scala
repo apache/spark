@@ -45,7 +45,7 @@ private[spark] class Worker(
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
-  val webUi = new WorkerWebUI(self, workDir, Some(webUiPort))
+  var webUi: WorkerWebUI = null
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -77,6 +77,7 @@ private[spark] class Worker(
     sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
+    webUi = new WorkerWebUI(self, workDir, Some(webUiPort))
     webUi.start()
     connectToMaster()
   }
