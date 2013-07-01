@@ -51,7 +51,7 @@ object Analytics extends Logging {
       (me_id, edge) => Some(edge.src.data._2 / edge.src.data._1), // gather
       (a: Double, b: Double) => a + b, // merge
       1.0,
-      numIter).mapVertices{ case Vertex(id, (outDeg, r)) => Vertex(id, r) }
+      numIter).mapVertices{ case Vertex(id, (outDeg, r)) => r }
   }
 
 //   /**

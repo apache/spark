@@ -252,6 +252,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    * @tparam U the type of entry in the table of updates
    * @tparam VD2 the new vertex value type
+   *
    * @param table the table to join with the vertices in the graph.  The table
    * should contain at most one entry for each vertex.
    * @param mapFunc the function used to compute the new vertex values.  The
@@ -329,24 +330,26 @@ object Graph {
   import spark.graph.impl._
   import spark.SparkContext._
 
-  def apply(rawEdges: RDD[(Int,Int)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
-    // Reduce to unique edges
-    val edges =
-      if(uniqueEdges) rawEdges.map{ case (s,t) => ((s,t),1) }.reduceByKey( _ + _ )
-        .map{ case ((s,t), cnt) => Edge(s,t,cnt) }
-      else rawEdges.map{ case (s,t) => Edge(s,t,1) }
+  def apply(rawEdges: RDD[(Int, Int)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
+    // Reduce to unique edges.
+    val edges: RDD[Edge[Int]] =
+      if (uniqueEdges) {
+        rawEdges.map((_, 1)).reduceByKey(_ + _).map { case ((s, t), cnt) => Edge(s, t, cnt) }
+      } else {
+        rawEdges.map { case (s, t) => Edge(s, t, 1) }
+      }
     // Determine unique vertices
-    val vertices = edges.flatMap{ case Edge(s, t, cnt) => Array((s,1), (t,1)) }.reduceByKey( _ + _ )
+    val vertices: RDD[Vertex[Int]] = edges.flatMap{ case Edge(s, t, cnt) => Array((s, 1), (t, 1)) }
+      .reduceByKey(_ + _)
       .map{ case (id, deg) => Vertex(id, deg) }
     // Return graph
     new GraphImpl(vertices, edges)
   }
 
-  def apply[VD: ClassManifest, ED: ClassManifest](vertices: RDD[Vertex[VD]], edges: RDD[Edge[ED]]): Graph[VD, ED] = {
+  def apply[VD: ClassManifest, ED: ClassManifest](
+      vertices: RDD[Vertex[VD]], edges: RDD[Edge[ED]]): Graph[VD, ED] = {
     new GraphImpl(vertices, edges)
-
   }
-
 
   implicit def graphToGraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) = g.ops
 }
