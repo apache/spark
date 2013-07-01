@@ -22,7 +22,9 @@ the copy executable.
 
 Inside `spark-env.sh`, you *must* set at least the following two variables:
 
-* `SCALA_HOME`, to point to your Scala installation.
+* `SCALA_HOME`, to point to your Scala installation, or `SCALA_LIBRARY_PATH` to point to the directory for Scala
+  library JARs (if you install Scala as a Debian or RPM package, there is no `SCALA_HOME`, but these libraries
+  are in a separate path, typically /usr/share/java; look for `scala-library.jar`).
 * `MESOS_NATIVE_LIBRARY`, if you are [running on a Mesos cluster](running-on-mesos.html).
 
 In addition, there are four other variables that control execution. These should be set *in the environment that
