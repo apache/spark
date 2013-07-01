@@ -102,7 +102,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
       {Option(metrics).flatMap{m => m.shuffleWriteMetrics}.map{s =>
         <td>{Utils.memoryBytesToString(s.shuffleBytesWritten)}</td>}.getOrElse("")}
       <td>{exception.map(e =>
-             <span>{e.className}<br/>{fmtStackTrace(e.stackTrace)}</span>).getOrElse("")}</td>
+        <span>
+          {e.className} ({e.description})<br/>
+          {fmtStackTrace(e.stackTrace)}
+        </span>).getOrElse("")}
+      </td>
     </tr>
   }
 }

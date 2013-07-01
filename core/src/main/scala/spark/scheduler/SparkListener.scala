@@ -68,6 +68,7 @@ class StatsReportListener extends SparkListener with Logging {
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     //runtime breakdown
+
     val runtimePcts = stageCompleted.stageInfo.taskInfos.map{
       case (info, metrics) => RuntimePercentage(info.duration, metrics)
     }
