@@ -110,7 +110,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         part.map { v => (v._1, MutableTuple2(v._2, Option.empty[VD2])) }
       }, preservesPartitioning = true)
 
-    (new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable))
+    new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable)
       .mapPartitions { part =>
         val (vmap, edges) = part.next()
         val edgeSansAcc = new EdgeTriplet[VD, ED]()
@@ -187,7 +187,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
               }
           }
           if (gatherDirection == EdgeDirection.Out || gatherDirection == EdgeDirection.Both) {
-            e.dst.data._2 =
+            e.src.data._2 =
               if (e.src.data._2.isEmpty) {
                 mapFunc(edgeSansAcc.src.id, edgeSansAcc)
               } else {
