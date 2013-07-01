@@ -11,24 +11,7 @@ class MetricsConfigSuite extends FunSuite with BeforeAndAfter {
   var filePath: String = _
   
   before {
-    val prop = new Properties()
-    
-    prop.setProperty("*.sink.console.period", "10")
-    prop.setProperty("*.sink.console.unit", "second")
-    prop.setProperty("*.source.jvm.class", "spark.metrics.source.JvmSource")
-    prop.setProperty("master.sink.console.period", "20")
-    prop.setProperty("master.sink.console.unit", "minute")
-    
-    val dir = new File("/tmp")
-    filePath = if (dir.isDirectory() && dir.exists() && dir.canWrite()) {
-      "/tmp/test_metrics.properties" 
-    } else {
-      "./test_metrics.properties"
-    }
-    
-    val os = new FileOutputStream(new File(filePath))    
-    prop.store(os, "for test")
-    os.close()
+    filePath = getClass.getClassLoader.getResource("test_metrics_config.properties").getFile()
   }
 
   test("MetricsConfig with default properties") {
@@ -81,12 +64,5 @@ class MetricsConfigSuite extends FunSuite with BeforeAndAfter {
     
     val jmxProps = sinkProps("jmx")
     assert(jmxProps.size() === 1)
-  }
-  
-  after {
-    val file = new File(filePath)
-    if (file.exists()) {
-      file.delete()
-    }
-  }
+  } 
 }
