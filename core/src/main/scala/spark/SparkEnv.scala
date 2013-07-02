@@ -54,7 +54,6 @@ class SparkEnv (
     val connectionManager: ConnectionManager,
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
-    val metricsSystem: MetricsSystem,
     // To be set only as part of initialization of SparkContext.
     // (executorId, defaultHostPort) => executorHostPort
     // If executorId is NOT found, return defaultHostPort
@@ -186,8 +185,6 @@ object SparkEnv extends Logging {
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
 
-    val metricsSystem = MetricsSystem.createMetricsSystem("driver")
-    metricsSystem.start()
 
     // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
     // this is a temporary directory; in distributed mode, this is the executor's current working
@@ -218,7 +215,6 @@ object SparkEnv extends Logging {
       connectionManager,
       httpFileServer,
       sparkFilesDir,
-      metricsSystem,
       None)
   }
 }
