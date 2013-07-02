@@ -24,7 +24,6 @@ import spark.util.AkkaUtils
 import akka.actor.{ActorRef, Actor, Props, Terminated}
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import java.util.concurrent.{TimeUnit, ThreadPoolExecutor, SynchronousQueue}
-import spark.metrics.MetricsSystem
 import spark.scheduler.cluster._
 import spark.scheduler.cluster.RegisteredExecutor
 import spark.scheduler.cluster.LaunchTask
@@ -46,8 +45,6 @@ private[spark] class StandaloneExecutorBackend(
 
   var executor: Executor = null
   var driver: ActorRef = null
-  
-  val executorInstrumentation = new ExecutorInstrumentation(Option(executor))
 
   override def preStart() {
     logInfo("Connecting to driver: " + driverUrl)
@@ -55,9 +52,6 @@ private[spark] class StandaloneExecutorBackend(
     driver ! RegisterExecutor(executorId, hostPort, cores)
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     context.watch(driver) // Doesn't work with remote actors, but useful for testing
-    
-    StandaloneExecutorBackend.metricsSystem.registerSource(executorInstrumentation)
-    StandaloneExecutorBackend.metricsSystem.start()
   }
 
   override def receive = {
@@ -87,15 +81,9 @@ private[spark] class StandaloneExecutorBackend(
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
     driver ! StatusUpdate(executorId, taskId, state, data)
   }
-  
-  override def postStop() {
-    StandaloneExecutorBackend.metricsSystem.stop()
-  }
 }
 
 private[spark] object StandaloneExecutorBackend {
-  private val metricsSystem = MetricsSystem.createMetricsSystem("executor")
-  
   def run(driverUrl: String, executorId: String, hostname: String, cores: Int) {
     SparkHadoopUtil.runAsUser(run0, Tuple4[Any, Any, Any, Any] (driverUrl, executorId, hostname, cores))
   }

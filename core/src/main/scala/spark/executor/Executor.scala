@@ -86,10 +86,14 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
       }
     }
   )
+  
+  val executorInstrumentation = new ExecutorInstrumentation(this)
 
   // Initialize Spark environment (using system properties read above)
   val env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
-  SparkEnv.set(env)
+  SparkEnv.set(env) 
+  env.metricsSystem.registerSource(executorInstrumentation)
+  
   private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
 
   // Start worker thread pool
