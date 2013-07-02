@@ -3,13 +3,11 @@ package spark.deploy.worker.ui
 import akka.actor.ActorRef
 import akka.util.{Duration, Timeout}
 
-import java.io.File
+import java.io.{FileInputStream, File}
 
 import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.{Handler, Server}
-
-import scala.io.Source
 
 import spark.{Utils, Logging}
 import spark.ui.JettyUtils
@@ -56,11 +54,15 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
+
+    val maxBytes = 1024 * 1024 // Guard against OOM
+    val defaultBytes = 100 * 1024
+    val numBytes = Option(request.getParameter("numBytes"))
+      .flatMap(s => Some(s.toInt)).getOrElse(defaultBytes)
+
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
-    val source = Source.fromFile(path)
-    val lines = source.mkString
-    source.close()
-    lines
+    val pre = "==== Last %s bytes of %s/%s/%s ====\n".format(numBytes, appId, executorId, logType)
+    pre + Utils.lastNBytes(path, math.min(numBytes, maxBytes))
   }
 
   def stop() {

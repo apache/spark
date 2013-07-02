@@ -603,6 +603,20 @@ private object Utils extends Logging {
     portBound
   }
 
+  /** Return a string containing the last `n` bytes of a file. */
+  def lastNBytes(path: String, n: Int): String = {
+    val file = new File(path)
+    val length = file.length()
+    val buff = new Array[Byte](math.min(n, length.toInt))
+    val skip = math.max(0, length - n)
+    val stream = new FileInputStream(file)
+
+    stream.skip(skip)
+    stream.read(buff)
+    stream.close()
+    Source.fromBytes(buff).mkString
+  }
+
   /**
    * Clone an object using a Spark serializer.
    */
