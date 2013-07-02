@@ -31,7 +31,6 @@ import spark.network.ConnectionManager
 import spark.serializer.{Serializer, SerializerManager}
 import spark.util.AkkaUtils
 import spark.api.python.PythonWorkerFactory
-import spark.metrics._
 
 
 /**
