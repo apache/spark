@@ -60,7 +60,6 @@
     <module>examples</module>
     <module>streaming</module>
     <module>repl</module>
-    <module>repl-bin</module>
   </modules>
 
   <properties>
@@ -617,6 +616,26 @@
           </dependency>
         </dependencies>
       </dependencyManagement>
+    </profile>
+    <profile>
+      <id>assembly</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <modules>
+        <module>assembly</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>expensive-modules</id>
+      <activation>
+        <property>
+          <name>!noExpensive</name>
+        </property>
+      </activation>
+      <modules>
+        <module>repl-bin</module>
+      </modules>
     </profile>
   </profiles>
 </project>
