@@ -4,7 +4,7 @@ import com.codahale.metrics.{Gauge,MetricRegistry}
 
 import spark.metrics.source.Source
 
-private[spark] class MasterInstrumentation(val master: Master) extends Source {
+private[spark] class MasterSource(val master: Master) extends Source {
   val metricRegistry = new MetricRegistry()
   val sourceName = "master"
 

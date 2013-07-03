@@ -68,7 +68,7 @@ private[spark] class Worker(
   var coresUsed = 0
   var memoryUsed = 0
 
-  val workerInstrumentation = new WorkerInstrumentation(this)
+  val workerSource = new WorkerSource(this)
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
@@ -102,7 +102,7 @@ private[spark] class Worker(
     connectToMaster()
     startWebUi()
 
-    Worker.metricsSystem.registerSource(workerInstrumentation)
+    Worker.metricsSystem.registerSource(workerSource)
     Worker.metricsSystem.start()
   }
 

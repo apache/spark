@@ -4,7 +4,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import spark.metrics.source.Source
 
-private[spark] class WorkerInstrumentation(val worker: Worker) extends Source {
+private[spark] class WorkerSource(val worker: Worker) extends Source {
   val sourceName = "worker"
   val metricRegistry = new MetricRegistry()
 

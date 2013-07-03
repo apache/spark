@@ -4,7 +4,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import spark.metrics.source.Source
 
-class ExecutorInstrumentation(val executor: Executor) extends Source {
+class ExecutorSource(val executor: Executor) extends Source {
   val metricRegistry = new MetricRegistry()
   val sourceName = "executor"
 

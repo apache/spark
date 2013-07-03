@@ -33,7 +33,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
     assert(sources.length === 1)
     assert(sinks.length === 2)
 
-    val source = new spark.deploy.master.MasterInstrumentation(null)
+    val source = new spark.deploy.master.MasterSource(null)
     metricsSystem.registerSource(source)
     assert(sources.length === 2)
   }

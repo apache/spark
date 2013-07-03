@@ -58,7 +58,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   Utils.checkHost(host, "Expected hostname")
 
-  val masterInstrumentation = new MasterInstrumentation(this)
+  val masterSource = new MasterSource(this)
 
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
@@ -77,7 +77,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
 
-    Master.metricsSystem.registerSource(masterInstrumentation)
+    Master.metricsSystem.registerSource(masterSource)
     Master.metricsSystem.start()
   }
 
