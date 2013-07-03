@@ -472,10 +472,6 @@ extends Serializable {
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       conf: JobConf = new JobConf
     ) {  
-    // make sure to propogate any credentials from the current user to the jobConf    
-    // for Hadoop security
-    val jobCreds = conf.getCredentials();
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)

@@ -45,7 +45,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
-    appContext.setUser(args.amUser)
+    appContext.setUser(UserGroupInformation.getCurrentUser().getShortUserName())
 
     submitApp(appContext)
     
@@ -141,9 +141,6 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     val log4jConfLocalRes = localResources.getOrElse("log4j.properties", null)
 
     val env = new HashMap[String, String]()
-    Apps.addToEnvironment(env, Environment.USER.name, args.amUser)
-    // set this so that UGI set to correct user in unsecure mode
-    Apps.addToEnvironment(env, "HADOOP_USER_NAME", args.amUser)
 
     // If log4j present, ensure ours overrides all others
     if (log4jConfLocalRes != null) Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
@@ -170,6 +167,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       env("SPARK_YARN_LOG4J_TIMESTAMP") =  log4jConfLocalRes.getTimestamp().toString()
       env("SPARK_YARN_LOG4J_SIZE") =  log4jConfLocalRes.getSize().toString()
     }
+
 
     // Add each SPARK-* key to the environment
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
@@ -224,7 +222,13 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     }
 
     // Command for the ApplicationMaster
-    val commands = List[String](Environment.JAVA_HOME.$() + "/bin/java " +
+    var javaCommand = "java";
+    val javaHome = System.getenv("JAVA_HOME")
+    if (javaHome != null && !javaHome.isEmpty()) {
+      javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
+    }
+
+    val commands = List[String](javaCommand + 
       " -server " +
       JAVA_OPTS +
       " spark.deploy.yarn.ApplicationMaster" +

@@ -1,5 +1,6 @@
 package spark.deploy
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapred.JobConf
 
 
 /**
@@ -20,4 +21,7 @@ object SparkHadoopUtil {
 
   // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
   def newConfiguration(): Configuration = new Configuration()
+
+  // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
+  def addCredentials(conf: JobConf) {}
 }

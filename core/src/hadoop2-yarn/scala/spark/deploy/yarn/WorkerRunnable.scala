@@ -85,7 +85,13 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     credentials.writeTokenStorageToStream(dob)
     ctx.setContainerTokens(ByteBuffer.wrap(dob.getData()))
 
-    val commands = List[String](Environment.JAVA_HOME.$() + "/bin/java " +
+    var javaCommand = "java";
+    val javaHome = System.getenv("JAVA_HOME")
+    if (javaHome != null && !javaHome.isEmpty()) {
+      javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
+    }
+
+    val commands = List[String](javaCommand +
       " -server " +
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
       // Not killing the task leaves various aspects of the worker and (to some extent) the jvm in an inconsistent state.
@@ -152,10 +158,6 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
   
   def prepareEnvironment: HashMap[String, String] = {
     val env = new HashMap[String, String]()
-    // should we add this ?
-    Apps.addToEnvironment(env, Environment.USER.name, Utils.getUserNameFromEnvironment())
-    // set this so that UGI set to correct user in unsecure mode
-    Apps.addToEnvironment(env, "HADOOP_USER_NAME", Utils.getUserNameFromEnvironment())
 
     // If log4j present, ensure ours overrides all others
     if (System.getenv("SPARK_YARN_LOG4J_PATH") != null) {

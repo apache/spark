@@ -295,10 +295,6 @@ class SparkContext(
       valueClass: Class[V],
       minSplits: Int = defaultMinSplits
       ): RDD[(K, V)] = {
-    // make sure to propogate any credentials from the current user to the jobConf 
-    // for Hadoop security
-    val jobCreds = conf.getCredentials();
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
   }
 
@@ -311,10 +307,6 @@ class SparkContext(
       minSplits: Int = defaultMinSplits
       ) : RDD[(K, V)] = {
     val conf = new JobConf(hadoopConfiguration)
-    // make sure to propogate any credentials from the current user to the jobConf 
-    // for Hadoop security
-    val jobCreds = conf.getCredentials();
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
     FileInputFormat.setInputPaths(conf, path)
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
   }

@@ -9,6 +9,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.conf.Configuration
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.collection.JavaConversions._
+import spark.deploy.SparkHadoopUtil
 
 
 /**
@@ -71,10 +72,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   // This method does not expect failures, since validate has already passed ...
   private def prefLocsFromMapreduceInputFormat(): Set[SplitInfo] = {
     val conf = new JobConf(configuration)
-    // make sure to propogate any credentials from the current user to the jobConf
-    // for Hadoop security
-    val jobCreds = conf.getCredentials();
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+    SparkHadoopUtil.addCredentials(conf);
     FileInputFormat.setInputPaths(conf, path)
 
     val instance: org.apache.hadoop.mapreduce.InputFormat[_, _] =
@@ -94,10 +92,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   // This method does not expect failures, since validate has already passed ...
   private def prefLocsFromMapredInputFormat(): Set[SplitInfo] = {
     val jobConf = new JobConf(configuration)
-    // make sure to propogate any credentials from the current user to the jobConf
-    // for Hadoop security
-    val jobCreds = jobConf.getCredentials();
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+    SparkHadoopUtil.addCredentials(jobConf);
     FileInputFormat.setInputPaths(jobConf, path)
 
     val instance: org.apache.hadoop.mapred.InputFormat[_, _] =

@@ -614,10 +614,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       conf: JobConf = new JobConf(self.context.hadoopConfiguration),
       codec: Option[Class[_ <: CompressionCodec]] = None) {
-    // make sure to propogate any credentials from the current user to the jobConf
-    // for Hadoop security
-    val jobCreds = conf.getCredentials();
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
     conf.setOutputKeyClass(keyClass)
     conf.setOutputValueClass(valueClass)
     // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
