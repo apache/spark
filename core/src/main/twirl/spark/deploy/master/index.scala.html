@@ -2,7 +2,7 @@
 @import spark.deploy.master._
 @import spark.Utils
 
-@spark.common.html.layout(title = "Spark Master on " + state.host) {
+@spark.common.html.layout(title = "Spark Master on " + state.host + ":" + state.port) {
 
   <!-- Cluster Details -->
   <div class="row">

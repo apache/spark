@@ -3,6 +3,7 @@ package spark.deploy.worker
 import akka.actor.{ActorRef, ActorContext}
 import scala.concurrent.Await
 import akka.pattern.ask
+
 import akka.util.Timeout
 import scala.concurrent.duration._
 import spray.routing.Directives
@@ -25,7 +26,7 @@ class WorkerWebUI(worker: ActorRef, workDir: File)(implicit val context: ActorCo
   val RESOURCE_DIR        = "spark/deploy/worker/webui"
   val STATIC_RESOURCE_DIR = "spark/deploy/static"
 
-  implicit val timeout = Timeout(10 seconds)
+  implicit val timeout = Timeout(Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds"))
 
   val handler = {
     get {

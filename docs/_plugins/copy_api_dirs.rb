@@ -18,7 +18,7 @@ if ENV['SKIP_API'] != '1'
   # Copy over the scaladoc from each project into the docs directory.
   # This directory will be copied over to _site when `jekyll` command is run.
   projects.each do |project_name|
-    source = "../" + project_name + "/target/scala-2.9.2/api"
+    source = "../" + project_name + "/target/scala-2.9.3/api"
     dest = "api/" + project_name
 
     puts "echo making directory " + dest

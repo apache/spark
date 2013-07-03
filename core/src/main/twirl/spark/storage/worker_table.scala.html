@@ -12,7 +12,7 @@
   <tbody>
     @for(status <- workersStatusList) {
       <tr>
-        <td>@(status.blockManagerId.ip + ":" + status.blockManagerId.port)</td>
+        <td>@(status.blockManagerId.host + ":" + status.blockManagerId.port)</td>
         <td>
           @(Utils.memoryBytesToString(status.memUsed(prefix)))
           (@(Utils.memoryBytesToString(status.memRemaining)) Total Available)

@@ -1,5 +1,7 @@
 package spark.scheduler
 
+import java.util.Properties
+
 import spark.scheduler.cluster.TaskInfo
 import scala.collection.mutable.Map
 
@@ -20,7 +22,8 @@ private[spark] case class JobSubmitted(
     partitions: Array[Int],
     allowLocal: Boolean,
     callSite: String,
-    listener: JobListener)
+    listener: JobListener,
+    properties: Properties = null)
   extends DAGSchedulerEvent
 
 private[spark] case class CompletionEvent(
@@ -31,6 +34,10 @@ private[spark] case class CompletionEvent(
     taskInfo: TaskInfo,
     taskMetrics: TaskMetrics)
   extends DAGSchedulerEvent
+
+private[spark] case class ExecutorGained(execId: String, hostPort: String) extends DAGSchedulerEvent {
+  Utils.checkHostPort(hostPort, "Required hostport")
+}
 
 private[spark] case class ExecutorLost(execId: String) extends DAGSchedulerEvent
 

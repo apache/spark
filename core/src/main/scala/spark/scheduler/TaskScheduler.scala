@@ -10,6 +10,10 @@ package spark.scheduler
 private[spark] trait TaskScheduler {
   def start(): Unit
 
+  // Invoked after system has successfully initialized (typically in spark context).
+  // Yarn uses this to bootstrap allocation of resources based on preferred locations, wait for slave registerations, etc.
+  def postStartHook() { }
+
   // Disconnect from the cluster.
   def stop(): Unit
 

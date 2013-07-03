@@ -3,8 +3,10 @@
 # This file contains environment variables required to run Spark. Copy it as
 # spark-env.sh and edit that to configure Spark for your site. At a minimum,
 # the following two variables should be set:
-# - MESOS_NATIVE_LIBRARY, to point to your Mesos native library (libmesos.so)
-# - SCALA_HOME, to point to your Scala installation
+# - SCALA_HOME, to point to your Scala installation, or SCALA_LIBRARY_PATH to
+#   point to the directory for Scala library JARs (if you install Scala as a
+#   Debian or RPM package, these are in a separate path, often /usr/share/java)
+# - MESOS_NATIVE_LIBRARY, to point to your libmesos.so if you use Mesos
 #
 # If using the standalone deploy mode, you can also set variables for it:
 # - SPARK_MASTER_IP, to bind the master to a different IP address
@@ -12,14 +14,6 @@
 # - SPARK_WORKER_CORES, to set the number of cores to use on this machine
 # - SPARK_WORKER_MEMORY, to set how much memory to use (e.g. 1000m, 2g)
 # - SPARK_WORKER_PORT / SPARK_WORKER_WEBUI_PORT
-# - SPARK_WORKER_INSTANCES, to set the number of worker instances/processes to be spawned on every slave machine
-#
-# Finally, Spark also relies on the following variables, but these can be set
-# on just the *master* (i.e. in your driver program), and will automatically
-# be propagated to workers:
-# - SPARK_MEM, to change the amount of memory used per node (this should
-#   be in the same format as the JVM's -Xmx option, e.g. 300m or 1g)
-# - SPARK_CLASSPATH, to add elements to Spark's classpath
-# - SPARK_JAVA_OPTS, to add JVM options
-# - SPARK_LIBRARY_PATH, to add extra search paths for native libraries.
+# - SPARK_WORKER_INSTANCES, to set the number of worker instances/processes
+#   to be spawned on every slave machine
 

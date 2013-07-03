@@ -198,7 +198,7 @@ private[spark] object SizeEstimator extends Logging {
           val elem = JArray.get(array, index)
           size += SizeEstimator.estimate(elem, state.visited)
         }
-        state.size += ((length / 100.0) * size).toLong
+        state.size += ((length / (ARRAY_SAMPLE_SIZE * 1.0)) * size).toLong
       }
     }
   }

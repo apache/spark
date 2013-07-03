@@ -1,41 +1,126 @@
 package spark.storage
 
+import java.io.{File, FileOutputStream, OutputStream, RandomAccessFile}
 import java.nio.ByteBuffer
-import java.io.{File, FileOutputStream, RandomAccessFile}
+import java.nio.channels.FileChannel
 import java.nio.channels.FileChannel.MapMode
 import java.util.{Random, Date}
 import java.text.SimpleDateFormat
 
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-
 import scala.collection.mutable.ArrayBuffer
 
-import spark.executor.ExecutorExitCode
+import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import spark.Utils
+import spark.executor.ExecutorExitCode
+import spark.serializer.{Serializer, SerializationStream}
+import spark.Logging
+import spark.network.netty.ShuffleSender
+import spark.network.netty.PathResolver
+
 
 /**
  * Stores BlockManager blocks on disk.
  */
 private class DiskStore(blockManager: BlockManager, rootDirs: String)
-  extends BlockStore(blockManager) {
+  extends BlockStore(blockManager) with Logging {
 
-  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
-  val subDirsPerLocalDir = System.getProperty("spark.diskStore.subDirectories", "64").toInt
+  class DiskBlockObjectWriter(blockId: String, serializer: Serializer, bufferSize: Int)
+    extends BlockObjectWriter(blockId) {
 
+    private val f: File = createFile(blockId /*, allowAppendExisting */)
+
+    // The file channel, used for repositioning / truncating the file.
+    private var channel: FileChannel = null
+    private var bs: OutputStream = null
+    private var objOut: SerializationStream = null
+    private var lastValidPosition = 0L
+    private var initialized = false
+
+    override def open(): DiskBlockObjectWriter = {
+      val fos = new FileOutputStream(f, true)
+      channel = fos.getChannel()
+      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos, bufferSize))
+      objOut = serializer.newInstance().serializeStream(bs)
+      initialized = true
+      this
+    }
+
+    override def close() {
+      if (initialized) {
+        objOut.close()
+        bs.close()
+        channel = null
+        bs = null
+        objOut = null
+      }
+      // Invoke the close callback handler.
+      super.close()
+    }
+
+    override def isOpen: Boolean = objOut != null
+
+    // Flush the partial writes, and set valid length to be the length of the entire file.
+    // Return the number of bytes written for this commit.
+    override def commit(): Long = {
+      if (initialized) {
+        // NOTE: Flush the serializer first and then the compressed/buffered output stream
+        objOut.flush()
+        bs.flush()
+        val prevPos = lastValidPosition
+        lastValidPosition = channel.position()
+        lastValidPosition - prevPos
+      } else {
+        // lastValidPosition is zero if stream is uninitialized
+        lastValidPosition
+      }
+    }
+
+    override def revertPartialWrites() {
+      if (initialized) { 
+        // Discard current writes. We do this by flushing the outstanding writes and
+        // truncate the file to the last valid position.
+        objOut.flush()
+        bs.flush()
+        channel.truncate(lastValidPosition)
+      }
+    }
+
+    override def write(value: Any) {
+      if (!initialized) {
+        open()
+      }
+      objOut.writeObject(value)
+    }
+
+    override def size(): Long = lastValidPosition
+  }
+
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  private val subDirsPerLocalDir = System.getProperty("spark.diskStore.subDirectories", "64").toInt
+
+  private var shuffleSender : ShuffleSender = null
   // Create one local directory for each path mentioned in spark.local.dir; then, inside this
   // directory, create multiple subdirectories that we will hash files into, in order to avoid
   // having really large inodes at the top level.
-  val localDirs = createLocalDirs()
-  val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
+  private val localDirs: Array[File] = createLocalDirs()
+  private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
   addShutdownHook()
+
+  def getBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int)
+    : BlockObjectWriter = {
+    new DiskBlockObjectWriter(blockId, serializer, bufferSize)
+  }
 
   override def getSize(blockId: String): Long = {
     getFile(blockId).length()
   }
 
-  override def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel) {
+  override def putBytes(blockId: String, _bytes: ByteBuffer, level: StorageLevel) {
+    // So that we do not modify the input offsets !
+    // duplicate does not copy buffer, so inexpensive
+    val bytes = _bytes.duplicate()
     logDebug("Attempting to put block " + blockId)
     val startTime = System.currentTimeMillis
     val file = createFile(blockId)
@@ -47,6 +132,18 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       blockId, Utils.memoryBytesToString(bytes.limit), (finishTime - startTime)))
+  }
+
+  private def getFileBytes(file: File): ByteBuffer = {
+    val length = file.length()
+    val channel = new RandomAccessFile(file, "r").getChannel()
+    val buffer = try {
+      channel.map(MapMode.READ_ONLY, 0, length)
+    } finally {
+      channel.close()
+    }
+
+    buffer
   }
 
   override def putValues(
@@ -61,18 +158,18 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     val file = createFile(blockId)
     val fileOut = blockManager.wrapForCompression(blockId,
       new FastBufferedOutputStream(new FileOutputStream(file)))
-    val objOut = blockManager.serializer.newInstance().serializeStream(fileOut)
+    val objOut = blockManager.defaultSerializer.newInstance().serializeStream(fileOut)
     objOut.writeAll(values.iterator)
     objOut.close()
     val length = file.length()
+
+    val timeTaken = System.currentTimeMillis - startTime
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      blockId, Utils.memoryBytesToString(length), (System.currentTimeMillis - startTime)))
+      blockId, Utils.memoryBytesToString(length), timeTaken))
 
     if (returnValues) {
       // Return a byte buffer for the contents of the file
-      val channel = new RandomAccessFile(file, "r").getChannel()
-      val buffer = channel.map(MapMode.READ_ONLY, 0, length)
-      channel.close()
+      val buffer = getFileBytes(file)
       PutResult(length, Right(buffer))
     } else {
       PutResult(length, null)
@@ -81,10 +178,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   override def getBytes(blockId: String): Option[ByteBuffer] = {
     val file = getFile(blockId)
-    val length = file.length().toInt
-    val channel = new RandomAccessFile(file, "r").getChannel()
-    val bytes = channel.map(MapMode.READ_ONLY, 0, length)
-    channel.close()
+    val bytes = getFileBytes(file)
     Some(bytes)
   }
 
@@ -92,11 +186,18 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes))
   }
 
+  /**
+   * A version of getValues that allows a custom serializer. This is used as part of the
+   * shuffle short-circuit code.
+   */
+  def getValues(blockId: String, serializer: Serializer): Option[Iterator[Any]] = {
+    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
+  }
+
   override def remove(blockId: String): Boolean = {
     val file = getFile(blockId)
     if (file.exists()) {
       file.delete()
-      true
     } else {
       false
     }
@@ -106,10 +207,13 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     getFile(blockId).exists()
   }
 
-  private def createFile(blockId: String): File = {
+  private def createFile(blockId: String, allowAppendExisting: Boolean = false): File = {
     val file = getFile(blockId)
-    if (file.exists()) {
-      throw new Exception("File for block " + blockId + " already exists on disk: " + file)
+    if (!allowAppendExisting && file.exists()) {
+      // NOTE(shivaram): Delete the file if it exists. This might happen if a ShuffleMap task
+      // was rescheduled on the same machine as the old task.
+      logWarning("File for block " + blockId + " already exists on disk: " + file + ". Deleting")
+      file.delete()
     }
     file
   }
@@ -144,8 +248,8 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   private def createLocalDirs(): Array[File] = {
     logDebug("Creating local directories at root dirs '" + rootDirs + "'")
     val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
-    rootDirs.split(",").map(rootDir => {
-      var foundLocalDir: Boolean = false
+    rootDirs.split(",").map { rootDir =>
+      var foundLocalDir = false
       var localDir: File = null
       var localDirId: String = null
       var tries = 0
@@ -156,12 +260,11 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
           localDirId = "%s-%04x".format(dateFormat.format(new Date), rand.nextInt(65536))
           localDir = new File(rootDir, "spark-local-" + localDirId)
           if (!localDir.exists) {
-            localDir.mkdirs()
-            foundLocalDir = true
+            foundLocalDir = localDir.mkdirs()
           }
         } catch {
           case e: Exception =>
-            logWarning("Attempt " + tries + " to create local dir failed", e)
+            logWarning("Attempt " + tries + " to create local dir " + localDir + " failed", e)
         }
       }
       if (!foundLocalDir) {
@@ -171,19 +274,40 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       }
       logInfo("Created local directory at " + localDir)
       localDir
-    })
+    }
   }
 
   private def addShutdownHook() {
+    localDirs.foreach(localDir => Utils.registerShutdownDeleteDir(localDir))
     Runtime.getRuntime.addShutdownHook(new Thread("delete Spark local dirs") {
       override def run() {
         logDebug("Shutdown hook called")
-        try {
-          localDirs.foreach(localDir => Utils.deleteRecursively(localDir))
-        } catch {
-          case t: Throwable => logError("Exception while deleting local spark dirs", t)
+        localDirs.foreach { localDir =>
+          try {
+            if (!Utils.hasRootAsShutdownDeleteDir(localDir)) Utils.deleteRecursively(localDir)
+          } catch {
+            case t: Throwable =>
+              logError("Exception while deleting local spark dir: " + localDir, t)
+          }
+        }
+        if (shuffleSender != null) {
+          shuffleSender.stop
         }
       }
     })
+  }
+
+  private[storage] def startShuffleBlockSender(port: Int): Int = {
+    val pResolver = new PathResolver {
+      override def getAbsolutePath(blockId: String): String = {
+        if (!blockId.startsWith("shuffle_")) {
+          return null
+        }
+        DiskStore.this.getFile(blockId).getAbsolutePath()
+      }
+    }
+    shuffleSender = new ShuffleSender(port, pResolver)
+    logInfo("Created ShuffleSender binding to port : "+ shuffleSender.port)
+    shuffleSender.port
   }
 }

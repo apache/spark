@@ -7,6 +7,7 @@ import scala.Tuple2
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
@@ -458,6 +459,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kClassTag: ClassTag[K
     valueClass: Class[_],
     outputFormatClass: Class[F]) {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass)
+  }
+
+  /** Output the RDD to any Hadoop-supported file system, compressing with the supplied codec. */
+  def saveAsHadoopFile[F <: OutputFormat[_, _]](
+    path: String,
+    keyClass: Class[_],
+    valueClass: Class[_],
+    outputFormatClass: Class[F],
+    codec: Class[_ <: CompressionCodec]) {
+    rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, codec)
   }
 
   /** Output the RDD to any Hadoop-supported file system. */

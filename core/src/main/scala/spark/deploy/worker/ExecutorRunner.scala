@@ -1,6 +1,7 @@
 package spark.deploy.worker
 
 import java.io._
+import java.lang.System.getenv
 import spark.deploy.{ExecutorState, ExecutorStateChanged, ApplicationDescription}
 import akka.actor.ActorRef
 import spark.{Utils, Logging}
@@ -21,10 +22,12 @@ private[spark] class ExecutorRunner(
     val memory: Int,
     val worker: ActorRef,
     val workerId: String,
-    val hostname: String,
+    val hostPort: String,
     val sparkHome: File,
     val workDir: File)
   extends Logging {
+
+  Utils.checkHostPort(hostPort, "Expected hostport")
 
   val fullId = appId + "/" + execId
   var workerThread: Thread = null
@@ -38,7 +41,7 @@ private[spark] class ExecutorRunner(
     workerThread.start()
 
     // Shutdown hook that kills actors on shutdown.
-    shutdownHook = new Thread() { 
+    shutdownHook = new Thread() {
       override def run() {
         if (process != null) {
           logInfo("Shutdown hook killing child process.")
@@ -68,16 +71,36 @@ private[spark] class ExecutorRunner(
   /** Replace variables such as {{EXECUTOR_ID}} and {{CORES}} in a command argument passed to us */
   def substituteVariables(argument: String): String = argument match {
     case "{{EXECUTOR_ID}}" => execId.toString
-    case "{{HOSTNAME}}" => hostname
+    case "{{HOSTNAME}}" => Utils.parseHostPort(hostPort)._1
     case "{{CORES}}" => cores.toString
     case other => other
   }
 
   def buildCommandSeq(): Seq[String] = {
     val command = appDesc.command
-    val script = if (System.getProperty("os.name").startsWith("Windows")) "run.cmd" else "run"
-    val runScript = new File(sparkHome, script).getCanonicalPath
-    Seq(runScript, command.mainClass) ++ (command.arguments ++ Seq(appId)).map(substituteVariables)
+    val runner = Option(getenv("JAVA_HOME")).map(_ + "/bin/java").getOrElse("java")
+    // SPARK-698: do not call the run.cmd script, as process.destroy()
+    // fails to kill a process tree on Windows
+    Seq(runner) ++ buildJavaOpts() ++ Seq(command.mainClass) ++
+      command.arguments.map(substituteVariables)
+  }
+
+  /**
+   * Attention: this must always be aligned with the environment variables in the run scripts and
+   * the way the JAVA_OPTS are assembled there.
+   */
+  def buildJavaOpts(): Seq[String] = {
+    val libraryOpts = Option(getenv("SPARK_LIBRARY_PATH"))
+      .map(p => List("-Djava.library.path=" + p))
+      .getOrElse(Nil)
+    val userOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString).getOrElse(Nil)
+    val memoryOpts = Seq("-Xms" + memory + "M", "-Xmx" + memory + "M")
+
+    // Figure out our classpath with the external compute-classpath script
+    val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
+    val classPath = Utils.executeAndGetOutput(Seq(sparkHome + "/bin/compute-classpath" + ext))
+
+    Seq("-cp", classPath) ++ libraryOpts ++ userOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
@@ -113,7 +136,6 @@ private[spark] class ExecutorRunner(
       for ((key, value) <- appDesc.command.environment) {
         env.put(key, value)
       }
-      env.put("SPARK_MEM", memory.toString + "m")
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
       env.put("SPARK_LAUNCH_WITH_SCALA", "0")

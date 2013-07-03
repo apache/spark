@@ -201,7 +201,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
     case class Block(id: String, iterator: Iterator[T], metadata: Any = null)
 
     val clock = new SystemClock()
-    val blockInterval = 200L
+    val blockInterval = System.getProperty("spark.streaming.blockInterval", "200").toLong
     val blockIntervalTimer = new RecurringTimer(clock, blockInterval, updateCurrentBuffer)
     val blockStorageLevel = storageLevel
     val blocksForPushing = new ArrayBlockingQueue[Block](1000)

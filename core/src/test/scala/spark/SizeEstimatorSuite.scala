@@ -78,7 +78,6 @@ class SizeEstimatorSuite
     // Arrays containing nulls should just have one pointer per element
     expectResult(56)(SizeEstimator.estimate(new Array[String](10)))
     expectResult(56)(SizeEstimator.estimate(new Array[AnyRef](10)))
-
     // For object arrays with non-null elements, each object should take one pointer plus
     // however many bytes that class takes. (Note that Array.fill calls the code in its
     // second parameter separately for each object, so we get distinct objects.)
@@ -115,7 +114,6 @@ class SizeEstimatorSuite
     expectResult(48)(SizeEstimator.estimate(DummyString("a")))
     expectResult(48)(SizeEstimator.estimate(DummyString("ab")))
     expectResult(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
-
     resetOrClear("os.arch", arch)
   }
 

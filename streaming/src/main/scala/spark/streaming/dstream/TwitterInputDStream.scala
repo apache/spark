@@ -3,34 +3,45 @@ package spark.streaming.dstream
 import spark._
 import spark.streaming._
 import storage.StorageLevel
-
 import twitter4j._
-import twitter4j.auth.BasicAuthorization
+import twitter4j.auth.Authorization
+import java.util.prefs.Preferences
+import twitter4j.conf.ConfigurationBuilder
+import twitter4j.conf.PropertyConfiguration
+import twitter4j.auth.OAuthAuthorization
+import twitter4j.auth.AccessToken
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
-* @constructor create a new Twitter stream using the supplied username and password to authenticate.
+* @constructor create a new Twitter stream using the supplied Twitter4J authentication credentials.
 * An optional set of string filters can be used to restrict the set of tweets. The Twitter API is
 * such that this may return a sampled subset of all tweets during each interval.
+* 
+* If no Authorization object is provided, initializes OAuth authorization using the system
+* properties twitter4j.oauth.consumerKey, .consumerSecret, .accessToken and .accessTokenSecret.
 */
 private[streaming]
 class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
-    username: String,
-    password: String,
+    twitterAuth: Option[Authorization],
     filters: Seq[String],
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[Status](ssc_)  {
+  
+  private def createOAuthAuthorization(): Authorization = {
+    new OAuthAuthorization(new ConfigurationBuilder().build())
+  }
 
+  private val authorization = twitterAuth.getOrElse(createOAuthAuthorization())
+  
   override def getReceiver(): NetworkReceiver[Status] = {
-    new TwitterReceiver(username, password, filters, storageLevel)
+    new TwitterReceiver(authorization, filters, storageLevel)
   }
 }
 
 private[streaming]
 class TwitterReceiver(
-    username: String,
-    password: String,
+    twitterAuth: Authorization,
     filters: Seq[String],
     storageLevel: StorageLevel
   ) extends NetworkReceiver[Status] {
@@ -40,8 +51,7 @@ class TwitterReceiver(
 
   protected override def onStart() {
     blockGenerator.start()
-    twitterStream = new TwitterStreamFactory()
-      .getInstance(new BasicAuthorization(username, password))
+    twitterStream = new TwitterStreamFactory().getInstance(twitterAuth)
     twitterStream.addListener(new StatusListener {
       def onStatus(status: Status) = {
         blockGenerator += status

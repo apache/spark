@@ -4,24 +4,21 @@ import spark.streaming._
 import receivers.{ActorReceiver, ReceiverSupervisorStrategy}
 import spark.streaming.dstream._
 import spark.storage.StorageLevel
-
 import spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import spark.api.java.{JavaSparkContext, JavaRDD}
-
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-
 import twitter4j.Status
-
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
 import akka.zeromq.Subscribe
-
 import scala.collection.JavaConversions._
+
 import scala.reflect.ClassTag
 
 import java.lang.{Long => JLong, Integer => JInt}
 import java.io.InputStream
 import java.util.{Map => JMap}
+import twitter4j.auth.Authorization
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -122,14 +119,16 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
    */
-  def kafkaStream[T](
+  def kafkaStream(
     zkQuorum: String,
     groupId: String,
     topics: JMap[String, JInt])
-  : JavaDStream[T] = {
-    implicit val cmt: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    ssc.kafkaStream[T](zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
+  : JavaDStream[String] = {
+    implicit val cmt: ClassTag[String] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
+    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
+      StorageLevel.MEMORY_ONLY_SER_2)
+
   }
 
   /**
@@ -137,49 +136,45 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   * in its own thread.
-   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
-   * By default the value is pulled from zookeper.
+   *               in its own thread.
+   * @param storageLevel RDD storage level. Defaults to memory-only
+   *
    */
-  def kafkaStream[T](
+  def kafkaStream(
     zkQuorum: String,
     groupId: String,
     topics: JMap[String, JInt],
-    initialOffsets: JMap[KafkaPartitionKey, JLong])
-  : JavaDStream[T] = {
-    implicit val cmt: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    ssc.kafkaStream[T](
-      zkQuorum,
-      groupId,
-      Map(topics.mapValues(_.intValue()).toSeq: _*),
-      Map(initialOffsets.mapValues(_.longValue()).toSeq: _*))
+    storageLevel: StorageLevel)
+  : JavaDStream[String] = {
+    implicit val cmt: ClassTag[String] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
+    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
+      storageLevel)
   }
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
-   * @param groupId The group id for this consumer.
+   * @param typeClass Type of RDD
+   * @param decoderClass Type of kafka decoder
+   * @param kafkaParams Map of kafka configuration paramaters.
+   *                    See: http://kafka.apache.org/configuration.html
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
-   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
-   * By default the value is pulled from zookeper.
    * @param storageLevel RDD storage level. Defaults to memory-only
    */
-  def kafkaStream[T](
-    zkQuorum: String,
-    groupId: String,
+  def kafkaStream[T, D <: kafka.serializer.Decoder[_]](
+    typeClass: Class[T],
+    decoderClass: Class[D],
+    kafkaParams: JMap[String, String],
     topics: JMap[String, JInt],
-    initialOffsets: JMap[KafkaPartitionKey, JLong],
     storageLevel: StorageLevel)
   : JavaDStream[T] = {
     implicit val cmt: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    ssc.kafkaStream[T](
-      zkQuorum,
-      groupId,
+    implicit val cmd: Manifest[D] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[D]]
+    ssc.kafkaStream[T, D](
+      kafkaParams.toMap,
       Map(topics.mapValues(_.intValue()).toSeq: _*),
-      Map(initialOffsets.mapValues(_.longValue()).toSeq: _*),
       storageLevel)
   }
 
@@ -316,44 +311,73 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param username Twitter username
-   * @param password Twitter password
+   * @param twitterAuth Twitter4J Authorization object
    * @param filters Set of filter strings to get only those tweets that match them
    * @param storageLevel Storage level to use for storing the received objects
    */
   def twitterStream(
-      username: String,
-      password: String,
+      twitterAuth: Authorization,
       filters: Array[String],
       storageLevel: StorageLevel
     ): JavaDStream[Status] = {
-    ssc.twitterStream(username, password, filters, storageLevel)
+    ssc.twitterStream(Some(twitterAuth), filters, storageLevel)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
+   * @param filters Set of filter strings to get only those tweets that match them
+   * @param storageLevel Storage level to use for storing the received objects
+   */
+  def twitterStream(
+      filters: Array[String],
+      storageLevel: StorageLevel
+    ): JavaDStream[Status] = {
+    ssc.twitterStream(None, filters, storageLevel)
   }
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param username Twitter username
-   * @param password Twitter password
+   * @param twitterAuth Twitter4J Authorization
    * @param filters Set of filter strings to get only those tweets that match them
    */
   def twitterStream(
-      username: String,
-      password: String,
+      twitterAuth: Authorization,
       filters: Array[String]
     ): JavaDStream[Status] = {
-    ssc.twitterStream(username, password, filters)
+    ssc.twitterStream(Some(twitterAuth), filters)
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
+   * @param filters Set of filter strings to get only those tweets that match them
+   */
+  def twitterStream(
+      filters: Array[String]
+    ): JavaDStream[Status] = {
+    ssc.twitterStream(None, filters)
   }
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param username Twitter username
-   * @param password Twitter password
+   * @param twitterAuth Twitter4J Authorization
    */
   def twitterStream(
-      username: String,
-      password: String
+      twitterAuth: Authorization
     ): JavaDStream[Status] = {
-    ssc.twitterStream(username, password)
+    ssc.twitterStream(Some(twitterAuth))
+  }
+
+  /**
+   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
+   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
+   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
+   */
+  def twitterStream(): JavaDStream[Status] = {
+    ssc.twitterStream()
   }
 
   /**

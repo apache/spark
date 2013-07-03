@@ -18,7 +18,7 @@ import scala.collection.mutable.ArrayBuffer
 private[spark]
 class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int) extends Logging {
   
-  private val localIpAddress = Utils.localIpAddress
+  private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
   private val workerActorSystems = ArrayBuffer[ActorSystem]()
   
@@ -26,13 +26,13 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 
     /* Start the Master */
-    val (masterSystem, masterPort) = Master.startSystemAndActor(localIpAddress, 0, 0)
+    val (masterSystem, masterPort) = Master.startSystemAndActor(localHostname, 0, 0)
     masterActorSystems += masterSystem
-    val masterUrl = "spark://" + localIpAddress + ":" + masterPort
+    val masterUrl = "spark://" + localHostname + ":" + masterPort
 
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
-      val (workerSystem, _) = Worker.startSystemAndActor(localIpAddress, 0, 0, coresPerWorker,
+      val (workerSystem, _) = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
         memoryPerWorker, masterUrl, null, Some(workerNum))
       workerActorSystems += workerSystem
     }

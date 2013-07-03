@@ -41,6 +41,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   after {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
   }
 
 
@@ -241,6 +242,17 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     for (i <- 0 until output.size) {
       assert(output(i) === expectedOutput(i))
     }
+  }
+
+  test("kafka input stream") {
+    val ssc = new StreamingContext(master, framework, batchDuration)
+    val topics = Map("my-topic" -> 1)
+    val test1 = ssc.kafkaStream("localhost:12345", "group", topics)
+    val test2 = ssc.kafkaStream("localhost:12345", "group", topics, StorageLevel.MEMORY_AND_DISK)
+
+    // Test specifying decoder
+    val kafkaParams = Map("zk.connect"->"localhost:12345","groupid"->"consumer-group")
+    val test3 = ssc.kafkaStream[String, kafka.serializer.StringDecoder](kafkaParams, topics, StorageLevel.MEMORY_AND_DISK)
   }
 }
 

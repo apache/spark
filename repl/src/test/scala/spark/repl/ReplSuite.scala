@@ -19,7 +19,7 @@ class ReplSuite extends FunSuite with ReplSuiteMixin {
     assertContains("res1: Int = 55", output)
   }
 
-  test("external vars") {
+  test ("external vars") {
     val output = runInterpreter("local", """
       var v = 7
       sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
@@ -103,6 +103,27 @@ class ReplSuite extends FunSuite with ReplSuiteMixin {
     assertContains("res0: Long = 3", output)
     assertContains("res1: Long = 3", output)
     assertContains("res2: Long = 3", output)
+  }
+
+  test ("local-cluster mode") {
+    val output = runInterpreter("local-cluster[1,1,512]", """
+      var v = 7
+      def getV() = v
+      sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+      v = 10
+      sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+      var array = new Array[Int](5)
+      val broadcastArray = sc.broadcast(array)
+      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+      array(0) = 5
+      sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+      """)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("res0: Int = 70", output)
+    assertContains("res1: Int = 100", output)
+    assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
+    assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
   }
 
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {

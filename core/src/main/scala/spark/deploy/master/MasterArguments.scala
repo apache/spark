@@ -7,13 +7,13 @@ import spark.Utils
  * Command-line parser for the master.
  */
 private[spark] class MasterArguments(args: Array[String]) {
-  var ip = Utils.localHostName()
+  var host = Utils.localHostName()
   var port = 7077
   var webUiPort = 8080
   
   // Check for settings in environment variables 
-  if (System.getenv("SPARK_MASTER_IP") != null) {
-    ip = System.getenv("SPARK_MASTER_IP")
+  if (System.getenv("SPARK_MASTER_HOST") != null) {
+    host = System.getenv("SPARK_MASTER_HOST")
   }
   if (System.getenv("SPARK_MASTER_PORT") != null) {
     port = System.getenv("SPARK_MASTER_PORT").toInt
@@ -26,7 +26,13 @@ private[spark] class MasterArguments(args: Array[String]) {
 
   def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
-      ip = value
+      Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
+      host = value
+      parse(tail)
+
+    case ("--host" | "-h") :: value :: tail =>
+      Utils.checkHost(value, "Please use hostname " + value)
+      host = value
       parse(tail)
 
     case ("--port" | "-p") :: IntParam(value) :: tail =>
@@ -54,7 +60,8 @@ private[spark] class MasterArguments(args: Array[String]) {
       "Usage: Master [options]\n" +
       "\n" +
       "Options:\n" +
-      "  -i IP, --ip IP         IP address or DNS name to listen on\n" +
+      "  -i HOST, --ip HOST     Hostname to listen on (deprecated, please use --host or -h) \n" +
+      "  -h HOST, --host HOST   Hostname to listen on\n" +
       "  -p PORT, --port PORT   Port to listen on (default: 7077)\n" +
       "  --webui-port PORT      Port for web UI (default: 8080)")
     System.exit(exitCode)
