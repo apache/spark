@@ -1,0 +1,14 @@
+# syntax: [instance].[sink|source].[name].[options]
+
+#*.sink.console.period=10
+
+#*.sink.console.unit=second
+
+#master.source.jvm.class=spark.metrics.source.JvmSource
+
+#worker.source.jvm.class=spark.metrics.source.JvmSource
+
+#driver.source.jvm.class=spark.metrics.source.JvmSource
+
+#executor.source.jvm.class=spark.metrics.source.JvmSource
+
