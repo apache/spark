@@ -13,34 +13,37 @@ import spark.metrics.source.Source
 
 private[spark] class MetricsSystem private (val instance: String) extends Logging {
   initLogging()
-  
+
   val confFile = System.getProperty("spark.metrics.conf.file", "unsupported")
   val metricsConfig = new MetricsConfig(confFile)
-  
+
   val sinks = new mutable.ArrayBuffer[Sink]
   val sources = new mutable.ArrayBuffer[Source]
   val registry = new MetricRegistry()
-  
+
+  val DEFAULT_SINKS = Map("jmx" -> "spark.metrics.sink.JmxSink")
+
+  metricsConfig.initilize()
   registerSources()
   registerSinks()
-  
+
   def start() {
     sinks.foreach(_.start)
   }
-   
+
   def stop() {
     sinks.foreach(_.stop)
   }
-  
+
   def registerSource(source: Source) {
     sources += source
     registry.register(source.sourceName, source.metricRegistry)
   }
-  
+
   def registerSources() {
     val instConfig = metricsConfig.getInstance(instance)
-    val sourceConfigs = MetricsConfig.subProperties(instConfig, MetricsSystem.SOURCE_REGEX)
- 
+    val sourceConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SOURCE_REGEX)
+
     // Register all the sources related to instance
     sourceConfigs.foreach { kv =>
       val classPath = kv._2.getProperty("class")
@@ -52,14 +55,14 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
       }
     }
   }
-  
+
   def registerSinks() {
     val instConfig = metricsConfig.getInstance(instance)
-    val sinkConfigs = MetricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
-    
+    val sinkConfigs = metricsConfig.subProperties(instConfig, MetricsSystem.SINK_REGEX)
+
     sinkConfigs.foreach { kv =>
-      val classPath = if (MetricsSystem.DEFAULT_SINKS.contains(kv._1)) {
-        MetricsSystem.DEFAULT_SINKS(kv._1)
+      val classPath = if (DEFAULT_SINKS.contains(kv._1)) {
+        DEFAULT_SINKS(kv._1)
       } else {
         // For non-default sink, a property class should be set and create using reflection
         kv._2.getProperty("class")
@@ -76,17 +79,14 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
 }
 
 private[spark] object MetricsSystem {
-  val DEFAULT_SINKS = Map("jmx" -> "spark.metrics.sink.JmxSink")
-      
   val SINK_REGEX = "^sink\\.(.+)\\.(.+)".r
   val SOURCE_REGEX = "^source\\.(.+)\\.(.+)".r
-  
   val timeUnits = Map(
-      "millisecond" -> TimeUnit.MILLISECONDS,
+      "illisecond" -> TimeUnit.MILLISECONDS,
       "second" -> TimeUnit.SECONDS,
       "minute" -> TimeUnit.MINUTES,
       "hour" -> TimeUnit.HOURS,
       "day" -> TimeUnit.DAYS)
-      
-   def createMetricsSystem(instance: String) = new MetricsSystem(instance)
+
+   def createMetricsSystem(instance: String): MetricsSystem = new MetricsSystem(instance)
 }

@@ -57,7 +57,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val webUi = new MasterWebUI(self, webUiPort)
 
   Utils.checkHost(host, "Expected hostname")
-  
+
   val masterInstrumentation = new MasterInstrumentation(this)
 
   val masterPublicAddress = {
@@ -76,7 +76,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
-    
+
     Master.metricsSystem.registerSource(masterInstrumentation)
     Master.metricsSystem.start()
   }
@@ -322,7 +322,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       removeWorker(worker)
     }
   }
-  
+
   override def postStop() {
     Master.metricsSystem.stop()
   }

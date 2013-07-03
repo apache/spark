@@ -274,9 +274,9 @@ class SparkContext(
   val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
   val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
 
-  def initDriverMetrics() = {
-     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
-     SparkEnv.get.metricsSystem.registerSource(blockManagerSource)
+  def initDriverMetrics() {
+    SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
+    SparkEnv.get.metricsSystem.registerSource(blockManagerSource)
   }
 
   initDriverMetrics()
