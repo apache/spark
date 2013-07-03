@@ -2,7 +2,7 @@ package spark.storage
 
 import java.io.{InputStream, OutputStream}
 
-import org.xerial.snappy.SnappyOutputStream
+import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 
 /**
  * Snappy implementation of [[spark.storage.CompressionCodec]]
