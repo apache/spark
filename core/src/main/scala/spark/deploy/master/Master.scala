@@ -278,7 +278,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         exec.state = ExecutorState.KILLED
       }
       app.markFinished(state)
-      app.driver ! ApplicationRemoved(state.toString)
+      if (state != ApplicationState.FINISHED) {
+        app.driver ! ApplicationRemoved(state.toString)
+      }
       schedule()
     }
   }
