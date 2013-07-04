@@ -1,6 +1,6 @@
 package spark.util
 
-import akka.actor.{ActorRef, Props, ActorSystemImpl, ActorSystem}
+import akka.actor.{ActorRef, Props, ExtendedActorSystem, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import akka.util.duration._
 import akka.pattern.ask
@@ -56,7 +56,7 @@ private[spark] object AkkaUtils {
 
     // Figure out the port number we bound to, in case port was passed as 0. This is a bit of a
     // hack because Akka doesn't let you figure out the port through the public API yet.
-    val provider = actorSystem.asInstanceOf[ActorSystemImpl].provider
+    val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
     val boundPort = provider.asInstanceOf[RemoteActorRefProvider].transport.address.port.get
     return (actorSystem, boundPort)
   }
