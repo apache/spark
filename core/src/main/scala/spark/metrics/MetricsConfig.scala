@@ -3,14 +3,14 @@ package spark.metrics
 import java.util.Properties
 import java.io.{File, FileInputStream}
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 import scala.util.matching.Regex
 
 private[spark] class MetricsConfig(val configFile: String) {
   val properties = new Properties()
   val DEFAULT_PREFIX = "*"
   val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
-  var propertyCategories: HashMap[String, Properties] = null
+  var propertyCategories: mutable.HashMap[String, Properties] = null
 
   private def setDefaultProperties(prop: Properties) {
     prop.setProperty("*.sink.jmx.enabled", "default")
@@ -43,8 +43,8 @@ private[spark] class MetricsConfig(val configFile: String) {
     }
   }
 
-  def subProperties(prop: Properties, regex: Regex): HashMap[String, Properties] = {
-    val subProperties = new HashMap[String, Properties]
+  def subProperties(prop: Properties, regex: Regex): mutable.HashMap[String, Properties] = {
+    val subProperties = new mutable.HashMap[String, Properties]
     import scala.collection.JavaConversions._
     prop.foreach { kv =>
       if (regex.findPrefixOf(kv._1) != None) {

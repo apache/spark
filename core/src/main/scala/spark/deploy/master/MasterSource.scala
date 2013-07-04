@@ -1,6 +1,6 @@
 package spark.deploy.master
 
-import com.codahale.metrics.{Gauge,MetricRegistry}
+import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import spark.metrics.source.Source
 
@@ -10,7 +10,7 @@ private[spark] class MasterSource(val master: Master) extends Source {
 
   // Gauge for worker numbers in cluster
   metricRegistry.register(MetricRegistry.name("workers","number"), new Gauge[Int] {
-      override def getValue: Int = master.workers.size
+    override def getValue: Int = master.workers.size
   })
 
   // Gauge for application numbers in cluster

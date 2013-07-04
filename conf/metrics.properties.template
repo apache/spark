@@ -1,5 +1,7 @@
 # syntax: [instance].[sink|source].[name].[options]
 
+#*.sink.console.class=spark.metrics.sink.ConsoleSink
+
 #*.sink.console.period=10
 
 #*.sink.console.unit=second

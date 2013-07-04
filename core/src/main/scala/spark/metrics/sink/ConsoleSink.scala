@@ -8,7 +8,6 @@ import java.util.concurrent.TimeUnit
 import spark.metrics.MetricsSystem
 
 class ConsoleSink(val property: Properties, val registry: MetricRegistry) extends Sink {
-
   val CONSOLE_DEFAULT_PERIOD = "10"
   val CONSOLE_DEFAULT_UNIT = "second"
 
