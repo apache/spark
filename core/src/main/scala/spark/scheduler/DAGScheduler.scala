@@ -312,7 +312,7 @@ class DAGScheduler(
         handleExecutorLost(execId)
 
       case completion: CompletionEvent =>
-        sparkListeners.foreach(_.onTaskEnd(SparkListenerTaskEnd(completion.task, 
+        sparkListeners.foreach(_.onTaskEnd(SparkListenerTaskEnd(completion.task,
                                completion.reason, completion.taskInfo, completion.taskMetrics)))
         handleTaskCompletion(completion)
 
@@ -651,7 +651,7 @@ class DAGScheduler(
                "(generation " + currentGeneration + ")")
     }
   }
-  
+
   private def handleExecutorGained(execId: String, hostPort: String) {
     // remove from failedGeneration(execId) ?
     if (failedGeneration.contains(execId)) {
@@ -747,6 +747,10 @@ class DAGScheduler(
     sizeBefore = pendingTasks.size
     pendingTasks.clearOldValues(cleanupTime)
     logInfo("pendingTasks " + sizeBefore + " --> " + pendingTasks.size)
+
+    sizeBefore = stageToInfos.size
+    stageToInfos.clearOldValues(cleanupTime)
+    logInfo("stageToInfos " + sizeBefore + " --> " + stageToInfos.size)
   }
 
   def stop() {
