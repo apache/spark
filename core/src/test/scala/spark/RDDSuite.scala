@@ -253,7 +253,6 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("takeSample") {
-    sc = new SparkContext("local", "test")
     val data = sc.parallelize(1 to 100, 2)
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
