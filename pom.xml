@@ -512,12 +512,12 @@
           <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
-            <version>1.7.1.cloudera.2</version>
+            <version>1.7.4</version>
           </dependency>
           <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-ipc</artifactId>
-            <version>1.7.1.cloudera.2</version>
+            <version>1.7.4</version>
             <exclusions>
               <exclusion>
                 <groupId>org.jboss.netty</groupId>
@@ -579,12 +579,12 @@
           <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
-            <version>1.7.1</version>
+            <version>1.7.4</version>
           </dependency>
           <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-ipc</artifactId>
-            <version>1.7.1</version>
+            <version>1.7.4</version>
           </dependency>
         </dependencies>
       </dependencyManagement>
