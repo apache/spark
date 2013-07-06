@@ -524,6 +524,7 @@ class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
+                    idToActiveJob -= stage.priority
                     activeJobs -= job
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
@@ -671,6 +672,7 @@ class DAGScheduler(
       val error = new SparkException("Job failed: " + reason)
       job.listener.jobFailed(error)
       sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
+      idToActiveJob -= resultStage.priority
       activeJobs -= job
       resultStageToJob -= resultStage
     }
