@@ -9,6 +9,8 @@ import spark.streaming.dstream.NetworkReceiver
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.ArrayBuffer
+
 /** A helper with set of defaults for supervisor strategy **/
 object ReceiverSupervisorStrategy {
 
@@ -136,8 +138,9 @@ private[streaming] class ActorReceiver[T: ClassManifest](
   }
 
   protected def pushBlock(iter: Iterator[T]) {
-    pushBlock("block-" + streamId + "-" + System.nanoTime(),
-      iter, null, storageLevel)
+    val buffer = new ArrayBuffer[T]
+    buffer ++= iter
+    pushBlock("block-" + streamId + "-" + System.nanoTime(), buffer, null, storageLevel)
   }
 
   protected def onStart() = {
