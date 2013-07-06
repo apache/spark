@@ -81,8 +81,12 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
       <td>
         {block.storageLevel.description}
       </td>
-      <td>{Utils.memoryBytesToString(block.memSize)}</td>
-      <td>{Utils.memoryBytesToString(block.diskSize)}</td>
+      <td sorttable_customkey={block.memSize.toString}>
+        {Utils.memoryBytesToString(block.memSize)}
+      </td>
+      <td sorttable_customkey={block.diskSize.toString}>
+        {Utils.memoryBytesToString(block.diskSize)}
+      </td>
     </tr>
   }
 

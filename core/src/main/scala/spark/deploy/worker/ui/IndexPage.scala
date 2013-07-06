@@ -77,7 +77,9 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
     <tr>
       <td>{executor.execId}</td>
       <td>{executor.cores}</td>
-      <td>{Utils.memoryMegabytesToString(executor.memory)}</td>
+      <td sorttable_customkey={executor.memory.toString}>
+        {Utils.memoryMegabytesToString(executor.memory)}
+      </td>
       <td>
         <ul class="unstyled">
           <li><strong>ID:</strong> {executor.appId}</li>

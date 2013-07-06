@@ -90,8 +90,10 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>{worker.host}:{worker.port}</td>
       <td>{worker.state}</td>
       <td>{worker.cores} ({worker.coresUsed} Used)</td>
-      <td>{Utils.memoryMegabytesToString(worker.memory)}
-        ({Utils.memoryMegabytesToString(worker.memoryUsed)} Used)</td>
+      <td sorttable_customkey={"%s.%s".format(worker.memory, worker.memoryUsed)}>
+        {Utils.memoryMegabytesToString(worker.memory)}
+        ({Utils.memoryMegabytesToString(worker.memoryUsed)} Used)
+      </td>
     </tr>
   }
 
@@ -105,7 +107,9 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>
         {app.coresGranted}
       </td>
-      <td>{Utils.memoryMegabytesToString(app.desc.memoryPerSlave)}</td>
+      <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
+        {Utils.memoryMegabytesToString(app.desc.memoryPerSlave)}
+      </td>
       <td>{DeployWebUI.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>

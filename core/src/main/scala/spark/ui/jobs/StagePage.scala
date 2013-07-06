@@ -93,7 +93,9 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val (info, metrics, exception) = taskData
     <tr>
       <td>{info.taskId}</td>
-      <td>{Option(metrics).map{m => parent.formatDuration(m.executorRunTime)}.getOrElse("")}</td>
+      <td sorttable_customkey={Option(metrics).map{m => m.executorRunTime.toString}.getOrElse("1")}>
+        {Option(metrics).map{m => parent.formatDuration(m.executorRunTime)}.getOrElse("")}
+      </td>
       <td>{info.taskLocality}</td>
       <td>{info.hostPort}</td>
       <td>{dateFmt.format(new Date(info.launchTime))}</td>
