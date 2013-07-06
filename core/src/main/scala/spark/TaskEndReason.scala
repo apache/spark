@@ -1,5 +1,6 @@
 package spark
 
+import spark.executor.TaskMetrics
 import spark.storage.BlockManagerId
 
 /**
@@ -24,7 +25,8 @@ private[spark] case class FetchFailed(
 private[spark] case class ExceptionFailure(
     className: String,
     description: String,
-    stackTrace: Array[StackTraceElement])
+    stackTrace: Array[StackTraceElement],
+    metrics: Option[TaskMetrics])
   extends TaskEndReason
 
 private[spark] case class OtherFailure(message: String) extends TaskEndReason

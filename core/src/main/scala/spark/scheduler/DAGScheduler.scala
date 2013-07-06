@@ -618,7 +618,7 @@ class DAGScheduler(
           handleExecutorLost(bmAddress.executorId, Some(task.generation))
         }
 
-      case ExceptionFailure(className, description, stackTrace) =>
+      case ExceptionFailure(className, description, stackTrace, metrics) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case other =>

@@ -145,6 +145,9 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     // Set the Spark execution environment for the worker thread
     SparkEnv.set(env)
     val ser = SparkEnv.get.closureSerializer.newInstance()
+    var attemptedTask: Option[Task[_]] = None
+    val start = System.currentTimeMillis()
+    var taskStart: Long = 0
     try {
       Accumulators.clear()
       Thread.currentThread().setContextClassLoader(classLoader)
@@ -153,10 +156,11 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
       val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(bytes)
       updateDependencies(taskFiles, taskJars)   // Download any files added with addFile
-      val taskStart = System.currentTimeMillis()
       val deserializedTask = ser.deserialize[Task[_]](
         taskBytes, Thread.currentThread.getContextClassLoader)
-      val deserTime = System.currentTimeMillis() - taskStart
+      attemptedTask = Some(deserializedTask)
+      val deserTime = System.currentTimeMillis() - start
+      taskStart = System.currentTimeMillis()
 
       // Run it
       val result: Any = deserializedTask.run(taskId)
@@ -174,13 +178,15 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       logInfo("Finished " + taskId)
       deserializedTask.metrics.get.executorRunTime = serviceTime.toInt
       deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
-
       val taskResult = new TaskResult(result, accumUpdates, deserializedTask.metrics.getOrElse(null))
       val serializedResult = ser.serialize(taskResult)
       localActor ! LocalStatusUpdate(taskId, TaskState.FINISHED, serializedResult)
     } catch {
       case t: Throwable => {
-        val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
+        val serviceTime = System.currentTimeMillis() - taskStart
+        val metrics = attemptedTask.flatMap(t => t.metrics)
+        metrics.foreach{m => m.executorRunTime = serviceTime.toInt}
+        val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
         localActor ! LocalStatusUpdate(taskId, TaskState.FAILED, ser.serialize(failure))
       }
     }
