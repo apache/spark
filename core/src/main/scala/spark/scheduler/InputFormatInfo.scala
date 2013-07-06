@@ -3,11 +3,13 @@ package spark.scheduler
 import spark.Logging
 import scala.collection.immutable.Set
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.conf.Configuration
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.collection.JavaConversions._
+import spark.deploy.SparkHadoopUtil
 
 
 /**
@@ -70,6 +72,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   // This method does not expect failures, since validate has already passed ...
   private def prefLocsFromMapreduceInputFormat(): Set[SplitInfo] = {
     val conf = new JobConf(configuration)
+    SparkHadoopUtil.addCredentials(conf);
     FileInputFormat.setInputPaths(conf, path)
 
     val instance: org.apache.hadoop.mapreduce.InputFormat[_, _] =
@@ -89,6 +92,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   // This method does not expect failures, since validate has already passed ...
   private def prefLocsFromMapredInputFormat(): Set[SplitInfo] = {
     val jobConf = new JobConf(configuration)
+    SparkHadoopUtil.addCredentials(jobConf);
     FileInputFormat.setInputPaths(jobConf, path)
 
     val instance: org.apache.hadoop.mapred.InputFormat[_, _] =

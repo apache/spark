@@ -1,6 +1,7 @@
 package spark.deploy
 
 import collection.mutable.HashMap
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.conf.Configuration
@@ -27,18 +28,7 @@ object SparkHadoopUtil {
   }
 
   def runAsUser(func: (Product) => Unit, args: Product, user: String) {
-
-    // println("running as user " + jobUserName)
-
-    UserGroupInformation.setConfiguration(yarnConf)
-    val appMasterUgi: UserGroupInformation = UserGroupInformation.createRemoteUser(user)
-    appMasterUgi.doAs(new PrivilegedExceptionAction[AnyRef] {
-      def run: AnyRef = {
-        func(args)
-        // no return value ...
-        null
-      }
-    })
+    func(args)
   }
 
   // Note that all params which start with SPARK are propagated all the way through, so if in yarn mode, this MUST be set to true.
@@ -60,4 +50,10 @@ object SparkHadoopUtil {
   // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
   // Always create a new config, dont reuse yarnConf.
   def newConfiguration(): Configuration = new YarnConfiguration(new Configuration())
+
+  // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
+  def addCredentials(conf: JobConf) {
+    val jobCreds = conf.getCredentials();
+    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+  }
 }

@@ -30,23 +30,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
 
   def run() {
     
-    // Initialization
-    val jobUserName = Utils.getUserNameFromEnvironment()
-    logInfo("running as user " + jobUserName)
-
-    // run as user ...
-    UserGroupInformation.setConfiguration(yarnConf)
-    val appMasterUgi: UserGroupInformation = UserGroupInformation.createRemoteUser(jobUserName)
-    appMasterUgi.doAs(new PrivilegedExceptionAction[AnyRef] {
-      def run: AnyRef = {
-        runImpl()
-        return null
-      }
-    })
-  }
-
-  private def runImpl() {
-
     appAttemptId = getApplicationAttemptId()
     resourceManager = registerWithResourceManager()
     val appMasterResponse: RegisterApplicationMasterResponse = registerApplicationMaster()
