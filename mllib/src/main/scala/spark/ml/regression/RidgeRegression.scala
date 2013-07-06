@@ -140,8 +140,8 @@ class RidgeRegression private (var lambdaLow: Double, var lambdaHigh: Double)
 object RidgeRegression {
 
   /**
-   * Train a ridge regression model given an RDD of (response, features) pairs. 
-   * We use the closed form solution to compute the cross-validation score for 
+   * Train a ridge regression model given an RDD of (response, features) pairs.
+   * We use the closed form solution to compute the cross-validation score for
    * a given lambda. The optimal lambda is computed by performing binary search
    * between the provided bounds of lambda.
    *
@@ -159,8 +159,8 @@ object RidgeRegression {
   }
 
   /**
-   * Train a ridge regression model given an RDD of (response, features) pairs. 
-   * We use the closed form solution to compute the cross-validation score for 
+   * Train a ridge regression model given an RDD of (response, features) pairs.
+   * We use the closed form solution to compute the cross-validation score for
    * a given lambda. The optimal lambda is computed by performing binary search
    * between lambda values of 0 and 100.
    *

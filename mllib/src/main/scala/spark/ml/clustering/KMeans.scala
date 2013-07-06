@@ -100,7 +100,7 @@ class KMeans private (
 
     val sc = data.sparkContext
 
-    var centers = if (initializationMode == KMeans.RANDOM) {
+    val centers = if (initializationMode == KMeans.RANDOM) {
       initRandom(data)
     } else {
       initKMeansParallel(data)
@@ -131,13 +131,11 @@ class KMeans private (
         val sums = Array.fill(runs, k)(new DoubleMatrix(dims))
         val counts = Array.fill(runs, k)(0L)
 
-        for (point <- points) {
-          for ((centers, runIndex) <- activeCenters.zipWithIndex) {
-            val (bestCenter, cost) = KMeans.findClosest(centers, point)
-            costAccums(runIndex) += cost
-            sums(runIndex)(bestCenter).addi(new DoubleMatrix(point))
-            counts(runIndex)(bestCenter) += 1
-          }
+        for (point <- points; (centers, runIndex) <- activeCenters.zipWithIndex) {
+          val (bestCenter, cost) = KMeans.findClosest(centers, point)
+          costAccums(runIndex) += cost
+          sums(runIndex)(bestCenter).addi(new DoubleMatrix(point))
+          counts(runIndex)(bestCenter) += 1
         }
 
         val contribs = for (i <- 0 until runs; j <- 0 until k) yield {

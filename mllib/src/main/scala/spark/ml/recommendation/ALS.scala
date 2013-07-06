@@ -168,7 +168,9 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     val grouped = ratings.partitionBy(new HashPartitioner(numBlocks))
     val links = grouped.mapPartitionsWithIndex((blockId, elements) => {
       val ratings = elements.map(_._2).toArray
-      Iterator((blockId, (makeInLinkBlock(numBlocks, ratings), makeOutLinkBlock(numBlocks, ratings))))
+      val inLinkBlock = makeInLinkBlock(numBlocks, ratings)
+      val outLinkBlock = makeOutLinkBlock(numBlocks, ratings)
+      Iterator.single((blockId, (inLinkBlock, outLinkBlock)))
     }, true)
     links.persist(StorageLevel.MEMORY_AND_DISK)
     (links.mapValues(_._1), links.mapValues(_._2))
