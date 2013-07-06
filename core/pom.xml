@@ -56,28 +56,16 @@
       <artifactId>akka-slf4j</artifactId>
     </dependency>
     <dependency>
+      <groupId>net.liftweb</groupId>
+      <artifactId>lift-json_2.9.2</artifactId>
+    </dependency>
+    <dependency>
       <groupId>it.unimi.dsi</groupId>
       <artifactId>fastutil</artifactId>
     </dependency>
     <dependency>
       <groupId>colt</groupId>
       <artifactId>colt</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>cc.spray</groupId>
-      <artifactId>spray-can</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>cc.spray</groupId>
-      <artifactId>spray-server</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>cc.spray</groupId>
-      <artifactId>spray-json_2.9.2</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.tomdz.twirl</groupId>
-      <artifactId>twirl-api</artifactId>
     </dependency>
     <dependency>
       <groupId>com.github.scala-incubator.io</groupId>
@@ -170,10 +158,6 @@
             <SPARK_CLASSPATH>${spark.classpath}</SPARK_CLASSPATH>
           </environmentVariables>
         </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.tomdz.twirl</groupId>
-        <artifactId>twirl-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>

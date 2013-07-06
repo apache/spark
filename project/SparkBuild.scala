@@ -4,7 +4,6 @@ import sbt.Classpaths.publishTask
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
-import twirl.sbt.TwirlPlugin._
 // For Sonatype publishing
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
@@ -158,9 +157,7 @@ object SparkBuild extends Build {
       "com.typesafe.akka" % "akka-slf4j" % "2.0.3" excludeAll(excludeNetty),
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
-      "cc.spray" % "spray-can" % "1.0-M2.1" excludeAll(excludeNetty),
-      "cc.spray" % "spray-server" % "1.0-M2.1" excludeAll(excludeNetty),
-      "cc.spray" % "spray-json_2.9.2" % "1.1.1" excludeAll(excludeNetty),
+      "net.liftweb" % "lift-json_2.9.2" % "2.5",
       "org.apache.mesos" % "mesos" % "0.9.0-incubating",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
       "org.apache.derby" % "derby" % "10.4.2.0" % "test"
@@ -190,7 +187,7 @@ object SparkBuild extends Build {
         "src/hadoop" + HADOOP_MAJOR_VERSION + "/scala"
       } )
     }
-  ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def rootSettings = sharedSettings ++ Seq(
     publish := {}

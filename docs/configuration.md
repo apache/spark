@@ -146,9 +146,16 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.ui.port</td>
-  <td>(random)</td>
+  <td>33000</td>
   <td>
-    Port for your application's dashboard, which shows memory usage of each RDD.
+    Port for your application's dashboard, which shows memory and workload data
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.retained_stages</td>
+  <td>1000</td>
+  <td>
+    How many stages the Spark UI remembers before garbage collecting.
   </td>
 </tr>
 <tr>

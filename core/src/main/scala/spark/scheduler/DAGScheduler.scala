@@ -256,7 +256,7 @@ class DAGScheduler(
     eventQueue.put(toSubmit)
     waiter.awaitResult() match {
       case JobSucceeded => {}
-      case JobFailed(exception: Exception) =>
+      case JobFailed(exception: Exception, _) =>
         logInfo("Failed to run " + callSite)
         throw exception
     }
@@ -324,7 +324,7 @@ class DAGScheduler(
         for (job <- activeJobs) {
           val error = new SparkException("Job cancelled because SparkContext was shut down")
           job.listener.jobFailed(error)
-          sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
+          sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error, None))))
         }
         return true
     }
@@ -503,6 +503,7 @@ class DAGScheduler(
         case _ => "Unkown"
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.origin, serviceTime))
+      stage.completionTime = Some(System.currentTimeMillis)
       val stageComp = StageCompleted(stageToInfos(stage))
       sparkListeners.foreach{_.onStageCompleted(stageComp)}
       running -= stage
@@ -618,8 +619,11 @@ class DAGScheduler(
           handleExecutorLost(bmAddress.executorId, Some(task.generation))
         }
 
+      case ExceptionFailure(className, description, stackTrace, metrics) =>
+        // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
+
       case other =>
-        // Non-fetch failure -- probably a bug in user code; abort all jobs depending on this stage
+        // Unrecognized failure - abort all jobs depending on this stage
         abortStage(idToStage(task.stageId), task + " failed: " + other)
     }
   }
@@ -667,11 +671,12 @@ class DAGScheduler(
    */
   private def abortStage(failedStage: Stage, reason: String) {
     val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
+    failedStage.completionTime = Some(System.currentTimeMillis())
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
       val error = new SparkException("Job failed: " + reason)
       job.listener.jobFailed(error)
-      sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error))))
+      sparkListeners.foreach(_.onJobEnd(SparkListenerJobEnd(job, JobFailed(error, Some(failedStage)))))
       idToActiveJob -= resultStage.priority
       activeJobs -= job
       resultStageToJob -= resultStage
