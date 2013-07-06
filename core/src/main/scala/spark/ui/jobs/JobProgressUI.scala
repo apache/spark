@@ -51,7 +51,7 @@ private[spark] class JobProgressListener extends SparkListener {
   val stageToTasksComplete = HashMap[Int, Int]()
   val stageToTasksFailed = HashMap[Int, Int]()
   val stageToTaskInfos =
-    HashMap[Int, ArrayBuffer[(TaskInfo, TaskMetrics, Option[ExceptionFailure])]]()
+    HashMap[Int, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
@@ -78,17 +78,17 @@ private[spark] class JobProgressListener extends SparkListener {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val sid = taskEnd.task.stageId
-    val (failureInfo, metrics): (Option[ExceptionFailure], TaskMetrics) =
+    val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
       taskEnd.reason match {
         case e: ExceptionFailure =>
           stageToTasksFailed(sid) = stageToTasksFailed.getOrElse(sid, 0) + 1
-          (Some(e), e.metrics.get)
+          (Some(e), e.metrics)
         case _ =>
           stageToTasksComplete(sid) = stageToTasksComplete.getOrElse(sid, 0) + 1
-          (None, taskEnd.taskMetrics)
+          (None, Some(taskEnd.taskMetrics))
       }
     val taskList = stageToTaskInfos.getOrElse(
-      sid, ArrayBuffer[(TaskInfo, TaskMetrics, Option[ExceptionFailure])]())
+      sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList += ((taskEnd.taskInfo, metrics, failureInfo))
     stageToTaskInfos(sid) = taskList
   }
@@ -111,7 +111,7 @@ private[spark] class JobProgressListener extends SparkListener {
   def hasShuffleRead(stageID: Int): Boolean = {
     // This is written in a slightly complicated way to avoid having to scan all tasks
     for (s <- stageToTaskInfos.get(stageID).getOrElse(Seq())) {
-      if (s._2 != null) return s._2.shuffleReadMetrics.isDefined
+      if (s._2 != null) return s._2.flatMap(m => m.shuffleReadMetrics).isDefined
     }
     return false // No tasks have finished for this stage
   }
@@ -120,7 +120,7 @@ private[spark] class JobProgressListener extends SparkListener {
   def hasShuffleWrite(stageID: Int): Boolean = {
     // This is written in a slightly complicated way to avoid having to scan all tasks
     for (s <- stageToTaskInfos.get(stageID).getOrElse(Seq())) {
-      if (s._2 != null) return s._2.shuffleWriteMetrics.isDefined
+      if (s._2 != null) return s._2.flatMap(m => m.shuffleWriteMetrics).isDefined
     }
     return false // No tasks have finished for this stage
   }

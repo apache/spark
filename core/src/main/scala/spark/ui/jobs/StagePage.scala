@@ -52,7 +52,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
       }
       else {
         val serviceTimes = validTasks.map{case (info, metrics, exception) =>
-          metrics.executorRunTime.toDouble}
+          metrics.get.executorRunTime.toDouble}
         val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles().map(
           ms => parent.formatDuration(ms.toLong))
 
@@ -61,13 +61,13 @@ private[spark] class StagePage(parent: JobProgressUI) {
 
         val shuffleReadSizes = validTasks.map {
           case(info, metrics, exception) =>
-            metrics.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
+            metrics.get.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
         }
         val shuffleReadQuantiles = "Shuffle Read (Remote)" +: getQuantileCols(shuffleReadSizes)
 
         val shuffleWriteSizes = validTasks.map {
           case(info, metrics, exception) =>
-            metrics.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
+            metrics.get.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
         }
         val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
@@ -87,21 +87,21 @@ private[spark] class StagePage(parent: JobProgressUI) {
   }
 
 
-  def taskRow(taskData: (TaskInfo, TaskMetrics, Option[ExceptionFailure])): Seq[Node] = {
+  def taskRow(taskData: (TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])): Seq[Node] = {
     def fmtStackTrace(trace: Seq[StackTraceElement]): Seq[Node] =
       trace.map(e => <span style="display:block;">{e.toString}</span>)
     val (info, metrics, exception) = taskData
     <tr>
       <td>{info.taskId}</td>
-      <td sorttable_customkey={Option(metrics).map{m => m.executorRunTime.toString}.getOrElse("1")}>
-        {Option(metrics).map{m => parent.formatDuration(m.executorRunTime)}.getOrElse("")}
+      <td sorttable_customkey={metrics.map{m => m.executorRunTime.toString}.getOrElse("1")}>
+        {metrics.map{m => parent.formatDuration(m.executorRunTime)}.getOrElse("")}
       </td>
       <td>{info.taskLocality}</td>
       <td>{info.hostPort}</td>
       <td>{dateFmt.format(new Date(info.launchTime))}</td>
-      {Option(metrics).flatMap{m => m.shuffleReadMetrics}.map{s =>
+      {metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>
         <td>{Utils.memoryBytesToString(s.remoteBytesRead)}</td>}.getOrElse("")}
-      {Option(metrics).flatMap{m => m.shuffleWriteMetrics}.map{s =>
+      {metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
         <td>{Utils.memoryBytesToString(s.shuffleBytesWritten)}</td>}.getOrElse("")}
       <td>{exception.map(e =>
         <span>
