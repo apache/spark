@@ -21,6 +21,8 @@ class KMeansSuite extends FunSuite with BeforeAndAfterAll {
 
   val EPSILON = 1e-4
 
+  import KMeans.{RANDOM, K_MEANS_PARALLEL}
+
   def prettyPrint(point: Array[Double]): String = point.mkString("(", ", ", ")")
 
   def prettyPrint(points: Array[Array[Double]]): String = {
@@ -82,10 +84,11 @@ class KMeansSuite extends FunSuite with BeforeAndAfterAll {
     model = KMeans.train(data, k=1, maxIterations=1, runs=5)
     assertSetsEqual(model.clusterCenters, Array(Array(1.0, 3.0, 4.0)))
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode="random")
+    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
     assertSetsEqual(model.clusterCenters, Array(Array(1.0, 3.0, 4.0)))
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode="k-means||")
+    model = KMeans.train(
+      data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
     assertSetsEqual(model.clusterCenters, Array(Array(1.0, 3.0, 4.0)))
   }
 
@@ -115,10 +118,10 @@ class KMeansSuite extends FunSuite with BeforeAndAfterAll {
     model = KMeans.train(data, k=1, maxIterations=1, runs=5)
     assertSetsEqual(model.clusterCenters, Array(Array(1.0, 3.0, 4.0)))
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode="random")
+    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
     assertSetsEqual(model.clusterCenters, Array(Array(1.0, 3.0, 4.0)))
 
-    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode="k-means||")
+    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
     assertSetsEqual(model.clusterCenters, Array(Array(1.0, 3.0, 4.0)))
   }
 
