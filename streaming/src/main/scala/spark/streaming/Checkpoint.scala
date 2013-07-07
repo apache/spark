@@ -8,7 +8,7 @@ import org.apache.hadoop.conf.Configuration
 import java.io._
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import java.util.concurrent.Executors
-
+import java.util.concurrent.RejectedExecutionException
 
 private[streaming]
 class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
@@ -91,7 +91,12 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
     oos.writeObject(checkpoint)
     oos.close()
     bos.close()
-    executor.execute(new CheckpointWriteHandler(checkpoint.checkpointTime, bos.toByteArray))
+    try {
+      executor.execute(new CheckpointWriteHandler(checkpoint.checkpointTime, bos.toByteArray))
+    } catch {
+      case rej: RejectedExecutionException =>
+        logError("Could not submit checkpoint task to the thread pool executor", rej)
+    }
   }
 
   def stop() {
