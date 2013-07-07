@@ -7,6 +7,7 @@ import org.jblas.DoubleMatrix
 import org.jblas.Solve
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 /**
  * Ridge Regression from Joseph Gonzalez's implementation in MLBase
@@ -100,9 +101,10 @@ class RidgeRegression private (var lambdaLow: Double, var lambdaHigh: Double)
 
     // Binary search for the best assignment to lambda.
     def binSearch(low: Double, high: Double): Seq[(Double, Double, DoubleMatrix)] = {
+      val buffer = mutable.ListBuffer.empty[(Double, Double, DoubleMatrix)]
+
       @tailrec
-      def loop(low: Double, high: Double, acc: Seq[(Double, Double, DoubleMatrix)])
-        : Seq[(Double, Double, DoubleMatrix)] = {
+      def loop(low: Double, high: Double): Seq[(Double, Double, DoubleMatrix)] = {
         val mid = (high - low) / 2 + low
         val lowValue = crossValidate((mid - low) / 2 + low)
         val highValue = crossValidate((high - mid) / 2 + mid)
@@ -112,13 +114,15 @@ class RidgeRegression private (var lambdaLow: Double, var lambdaHigh: Double)
           (mid - (high-low)/4, high)
         }
         if (newHigh - newLow > 1.0E-7) {
-          loop(newLow, newHigh, acc :+ lowValue :+ highValue)
+          buffer += lowValue += highValue
+          loop(newLow, newHigh)
         } else {
-          acc :+ lowValue :+ highValue
+          buffer += lowValue += highValue
+          buffer.result()
         }
       }
 
-      loop(low, high, Vector.empty)
+      loop(low, high)
     }
 
     // Actually compute the best lambda
