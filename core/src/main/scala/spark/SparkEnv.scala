@@ -5,7 +5,6 @@ import serializer.Serializer
 
 import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
-import akka.event.{Logging => AkkaLogging}
 
 import spark.broadcast.BroadcastManager
 import spark.storage.BlockManager
@@ -52,7 +51,6 @@ class SparkEnv (
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
-    actorSystem.eventStream.setLogLevel(AkkaLogging.ErrorLevel)
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
