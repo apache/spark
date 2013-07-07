@@ -1,6 +1,7 @@
 package spark.deploy
 
 import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
+import akka.event.{Logging => AkkaLogging}
 
 import spark.deploy.worker.Worker
 import spark.deploy.master.Master
@@ -43,8 +44,11 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
   def stop() {
     logInfo("Shutting down local Spark cluster.")
     // Stop the workers before the master so they don't get upset that it disconnected
+    workerActorSystems.foreach(_.eventStream.setLogLevel(AkkaLogging.ErrorLevel))
     workerActorSystems.foreach(_.shutdown())
     workerActorSystems.foreach(_.awaitTermination())
+
+    masterActorSystems.foreach(_.eventStream.setLogLevel(AkkaLogging.ErrorLevel))
     masterActorSystems.foreach(_.shutdown())
     masterActorSystems.foreach(_.awaitTermination())
   }
