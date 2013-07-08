@@ -58,12 +58,10 @@
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scalap</artifactId>
-      <version>2.9.3</version>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
-      <version>2.9.3</version>
     </dependency>
     <dependency>
       <groupId>net.liftweb</groupId>
