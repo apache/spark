@@ -49,7 +49,7 @@ object RidgeRegressionGenerator {
       }
     }
 
-    MLUtils.saveData(data, outputPath)
+    MLUtils.saveLabeledData(data, outputPath)
     sc.stop()
   }
 }
