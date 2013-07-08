@@ -35,7 +35,7 @@ object LogisticRegressionGenerator {
       (y, x)
     }
 
-    MLUtils.saveData(data, outputPath)
+    MLUtils.saveLabeledData(data, outputPath)
     sc.stop()
   }
 }

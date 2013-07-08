@@ -150,7 +150,7 @@ object LogisticRegression {
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
-    val data = MLUtils.loadData(sc, args(1))
+    val data = MLUtils.loadLabeledData(sc, args(1))
     val model = LogisticRegression.train(data, args(3).toInt, args(2).toDouble)
 
     sc.stop()

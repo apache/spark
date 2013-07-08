@@ -19,7 +19,7 @@ object MLUtils {
    * @return An RDD of tuples. For each tuple, the first element is the label, and the second
    *         element represents the feature values (an array of Double).
    */
-  def loadData(sc: SparkContext, dir: String): RDD[(Double, Array[Double])] = {
+  def loadLabeledData(sc: SparkContext, dir: String): RDD[(Double, Array[Double])] = {
     sc.textFile(dir).map { line =>
       val parts = line.split(",")
       val label = parts(0).toDouble
@@ -28,7 +28,7 @@ object MLUtils {
     }
   }
 
-  def saveData(data: RDD[(Double, Array[Double])], dir: String) {
+  def saveLabeledData(data: RDD[(Double, Array[Double])], dir: String) {
     val dataStr = data.map(x => x._1 + "," + x._2.mkString(" "))
     dataStr.saveAsTextFile(dir)
   }

@@ -187,7 +187,7 @@ object RidgeRegression {
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "RidgeRegression")
-    val data = MLUtils.loadData(sc, args(1))
+    val data = MLUtils.loadLabeledData(sc, args(1))
     val model = RidgeRegression.train(data, 0, 1000)
     sc.stop()
   }
