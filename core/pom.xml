@@ -56,6 +56,14 @@
       <artifactId>akka-slf4j</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scalap</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+    </dependency>
+    <dependency>
       <groupId>net.liftweb</groupId>
       <artifactId>lift-json_2.9.2</artifactId>
     </dependency>
