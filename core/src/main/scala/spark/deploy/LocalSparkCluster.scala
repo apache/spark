@@ -45,6 +45,7 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
     // Stop the workers before the master so they don't get upset that it disconnected
     workerActorSystems.foreach(_.shutdown())
     workerActorSystems.foreach(_.awaitTermination())
+
     masterActorSystems.foreach(_.shutdown())
     masterActorSystems.foreach(_.awaitTermination())
   }

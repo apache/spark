@@ -85,7 +85,6 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
       in.close()
       _ * fileVal + _ * fileVal
     }.collect
-    println(result)
     assert(result.toSet === Set((1,200), (2,300), (3,500)))
   }
 
