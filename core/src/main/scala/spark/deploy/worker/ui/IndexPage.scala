@@ -29,7 +29,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
     val stateFuture = (worker ? RequestWorkerState)(timeout).mapTo[WorkerState]
     val workerState = Await.result(stateFuture, 30 seconds)
 
-    val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Logs")
+    val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Logs", "Log Pages")
     val runningExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, workerState.executors)
     val finishedExecutorTable =
@@ -93,6 +93,12 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
         <a href={"log?appId=%s&executorId=%s&logType=stderr"
           .format(executor.appId, executor.execId)}>stderr</a>
       </td>
+      <td>
+	 <a href={"logPage?appId=%s&executorId=%s&logType=stdout&offset=0&lineLength=20"
+          .format(executor.appId, executor.execId)}>stdout-page</a>
+	 <a href={"logPage?appId=%s&executorId=%s&logType=stderr&offset=0&lineLength=20"
+          .format(executor.appId, executor.execId)}>stderr-page</a>
+      </td> 
     </tr>
   }
 
