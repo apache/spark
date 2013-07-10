@@ -118,9 +118,9 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
           {backButton}
           {nextButton}
           <br></br>
-          <pre>{logText}</pre>
-          {backButton}
-          {nextButton}
+          <div style="height:500px;overflow:scroll;padding:5px;">
+            <pre>{logText}</pre>
+          </div>
         </body>
       </html>
     UIUtils.basicSparkPage(content, "Log Page for " + appId)
