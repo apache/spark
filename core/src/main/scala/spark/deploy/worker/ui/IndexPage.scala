@@ -94,9 +94,9 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
           .format(executor.appId, executor.execId)}>stderr</a>
       </td>
       <td>
-	 <a href={"logPage?appId=%s&executorId=%s&logType=stdout&offset=0&lineLength=20"
+	 <a href={"logPage?appId=%s&executorId=%s&logType=stdout&offset=0&byteLength=2000"
           .format(executor.appId, executor.execId)}>stdout-page</a>
-	 <a href={"logPage?appId=%s&executorId=%s&logType=stderr&offset=0&lineLength=20"
+	 <a href={"logPage?appId=%s&executorId=%s&logType=stderr&offset=0&byteLength=2000"
           .format(executor.appId, executor.execId)}>stderr-page</a>
       </td> 
     </tr>

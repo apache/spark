@@ -635,6 +635,20 @@ private object Utils extends Logging {
     Source.fromBytes(buff).mkString
   }
 
+  /** Return an array containing part of a file from byte 'a' to 'b'. */
+  def offsetBytes(path: String, a: Int, b: Int): String = {
+    val file = new File(path)
+    val length = file.length()
+    val buff = new Array[Byte](math.min(b-a, length.toInt))
+    val skip = math.max(0, a)
+    val stream = new FileInputStream(file)
+
+    stream.skip(skip)
+    stream.read(buff)
+    stream.close()
+    Source.fromBytes(buff).mkString
+  }
+
   /**
    * Clone an object using a Spark serializer.
    */

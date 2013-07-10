@@ -9,13 +9,13 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.{Handler, Server}
 
+import scala.io.Source._
+import scala.xml._
+
 import spark.{Utils, Logging}
 import spark.ui.JettyUtils
 import spark.ui.JettyUtils._
-
-import scala.xml._
 import spark.ui.UIUtils
-import scala.io.Source._
 
 /**
  * Web UI server for the standalone worker.
@@ -74,42 +74,39 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
-    val getOffset = request.getParameter("offset")
-    val getLineLength = request.getParameter("lineLength")
+    val offset = Option(request.getParameter("offset")).map(_.toInt).getOrElse(0)
+
+    val maxBytes = 1024 * 1024
+    val defaultBytes = 100 * 1024
+    val byteLength = Option(request.getParameter("byteLength")).flatMap(s => Some(s.toInt)).getOrElse(defaultBytes)
+
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
-    val source = fromFile(path)
-    val lines = source.getLines().toArray
-    val logLength = lines.length
-    val offset = {
-      if (getOffset == null) 0
-      else if (getOffset.toInt < 0) 0
-      else getOffset.toInt
-    }
-    val lineLength = {
-      if (getLineLength == null) 0
-      else getLineLength.toInt
-    }
-    val logText = "<node>" + lines.slice(offset, offset+lineLength).mkString("\n") + "</node>"
-    val logXML = XML.loadString(logText)
+    val logLength = new File(path).length()
+    val logPageLength = math.min(byteLength, maxBytes)
+    val logText = <node>{Utils.offsetBytes(path, offset, offset+logPageLength)}</node>
+
     val backButton =
       if (offset > 0) {
-        if (offset-lineLength < 0) {
-          <a href={"?appId=%s&executorId=%s&logType=%s&offset=0&lineLength=%s".format(appId, executorId, logType, lineLength)}> <button style="float:left">back</button> </a>
-        }
-        else {
-          <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&lineLength=%s".format(appId, executorId, logType, offset-lineLength, lineLength)}> <button style="float:left">back</button> </a>
-        }
+        <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s"
+          .format(appId, executorId, logType, math.max(offset-logPageLength, 0), logPageLength)}>
+          <button style="float:left">back</button>
+        </a>
       }
       else {
         <button style="float:left" disabled="disabled">back</button>
       }
+
     val nextButton =
-      if (offset+lineLength < logLength) {
-        <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&lineLength=%s".format(appId, executorId, logType, offset+lineLength, lineLength)}> <button style="float:right">next</button> </a>
+      if (offset+logPageLength < logLength) {
+        <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
+          format(appId, executorId, logType, offset+logPageLength, logPageLength)}>
+          <button style="float:right">next</button>
+        </a>
       }
       else {
         <button style="float:right" disabled="disabled">next</button>
       }
+
     val content =
       <html>
         <body>
@@ -117,12 +114,11 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
           {backButton}
           {nextButton}
           <br></br>
-          <pre>{logXML}</pre>
+          <pre>{logText}</pre>
           {backButton}
           {nextButton}
         </body>
       </html>
-    source.close()
     UIUtils.basicSparkPage(content, "Log Page for " + appId)
   }
 

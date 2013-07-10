@@ -96,10 +96,10 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
           .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
       </td>
       <td>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
+        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout&offset=0&byteLength=2000"
+          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout-page</a>
+        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr&offset=0&byteLength=2000"
+          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr-page</a>
       </td>
     </tr>
   }
