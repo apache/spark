@@ -622,16 +622,15 @@ private object Utils extends Logging {
   }
 
   /** Return a string containing part of a file from byte 'a' to 'b'. */
-  def offsetBytes(path: String, a: Long, b: Long): String = {
+  def offsetBytes(path: String, start: Long, end: Long): String = {
     val file = new File(path)
     val length = file.length()
-    val B = math.min(length, b)
-    val A = math.max(0, a)
-    val buff = new Array[Byte]((B-A).toInt)
-    val skip = A
+    val effectiveStart = math.min(length, start)
+    val effectiveEnd = math.max(0, end)
+    val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
     val stream = new FileInputStream(file)
 
-    stream.skip(skip)
+    stream.skip(effectiveStart)
     stream.read(buff)
     stream.close()
     Source.fromBytes(buff).mkString

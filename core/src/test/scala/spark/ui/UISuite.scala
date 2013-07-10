@@ -91,13 +91,13 @@ class UISuite extends FunSuite {
     // Read last few bytes
     assert(Utils.offsetBytes(f1Path, 12, 18) === "7\n8\n9\n")
 
-    //Read some nonexistent bytes in the beginning
+    // Read some nonexistent bytes in the beginning
     assert(Utils.offsetBytes(f1Path, -5, 5) === "1\n2\n3")
 
-    //Read some nonexistent bytes at the end
+    // Read some nonexistent bytes at the end
     assert(Utils.offsetBytes(f1Path, 12, 22) === "7\n8\n9\n")
 
-    //Read some nonexistent bytes on both ends
+    // Read some nonexistent bytes on both ends
     assert(Utils.offsetBytes(f1Path, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
 
     FileUtils.deleteDirectory(tmpDir2)
