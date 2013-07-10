@@ -9,9 +9,6 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.{Handler, Server}
 
-import scala.io.Source._
-import scala.xml._
-
 import spark.{Utils, Logging}
 import spark.ui.JettyUtils
 import spark.ui.JettyUtils._
@@ -74,11 +71,11 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toInt).getOrElse(0)
+    val offset = Option(request.getParameter("offset")).map(_.toLong).getOrElse(0).asInstanceOf[Long]
 
     val maxBytes = 1024 * 1024
     val defaultBytes = 100 * 1024
-    val byteLength = Option(request.getParameter("byteLength")).flatMap(s => Some(s.toInt)).getOrElse(defaultBytes)
+    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
 
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
     val logLength = new File(path).length()

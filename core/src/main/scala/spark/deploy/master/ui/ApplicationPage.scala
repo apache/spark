@@ -38,7 +38,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
 
-    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Logs", "Log Pages")
+    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Log Pages")
     val executors = app.executors.values.toSeq
     val executorTable = UIUtils.listingTable(executorHeaders, executorRow, executors)
 
@@ -90,16 +90,10 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
       <td>{executor.memory}</td>
       <td>{executor.state}</td>
       <td>
-        <a href={"%s/log?appId=%s&executorId=%s&logType=stdout"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/log?appId=%s&executorId=%s&logType=stderr"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
-      </td>
-      <td>
         <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout&offset=0&byteLength=2000"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout-page</a>
+          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
         <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr&offset=0&byteLength=2000"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr-page</a>
+          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
       </td>
     </tr>
   }
