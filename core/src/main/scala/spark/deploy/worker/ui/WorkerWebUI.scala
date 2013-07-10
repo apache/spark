@@ -91,7 +91,8 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
     val backButton =
       if (fixedOffset > 0) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s"
-          .format(appId, executorId, logType, math.max(fixedOffset-logPageLength, 0), logPageLength)}>
+          .format(appId, executorId, logType, math.max(fixedOffset-logPageLength, 0),
+            logPageLength)}>
           <button style="float:left">back</button>
         </a>
       }

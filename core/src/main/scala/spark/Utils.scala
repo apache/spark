@@ -621,7 +621,7 @@ private object Utils extends Logging {
                          callSiteInfo.firstUserLine)
   }
 
-  /** Return a string containing part of a file from byte 'a' to 'b'. */
+  /** Return a string containing part of a file from byte 'start' to 'end'. */
   def offsetBytes(path: String, start: Long, end: Long): String = {
     val file = new File(path)
     val length = file.length()
