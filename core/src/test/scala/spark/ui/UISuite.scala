@@ -74,4 +74,32 @@ class UISuite extends FunSuite {
 
     FileUtils.deleteDirectory(tmpDir)
   }
+
+  test("reading offset bytes of a file") {
+    val tmpDir2 = Files.createTempDir()
+    val f1Path = tmpDir2 + "/f1"
+    val f1 = new FileOutputStream(f1Path)
+    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(Charsets.UTF_8))
+    f1.close()
+
+    // Read first few bytes
+    assert(Utils.offsetBytes(f1Path, 0, 5) === "1\n2\n3")
+
+    // Read some middle bytes
+    assert(Utils.offsetBytes(f1Path, 4, 11) === "3\n4\n5\n6")
+
+    // Read last few bytes
+    assert(Utils.offsetBytes(f1Path, 12, 18) === "7\n8\n9\n")
+
+    //Read some nonexistent bytes in the beginning
+    assert(Utils.offsetBytes(f1Path, -5, 5) === "1\n2\n3")
+
+    //Read some nonexistent bytes at the end
+    assert(Utils.offsetBytes(f1Path, 12, 22) === "7\n8\n9\n")
+
+    //Read some nonexistent bytes on both ends
+    assert(Utils.offsetBytes(f1Path, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+
+    FileUtils.deleteDirectory(tmpDir2)
+  }
 }

@@ -71,7 +71,7 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toLong).getOrElse(0).asInstanceOf[Long]
+    val offset = Option(request.getParameter("offset")).map(_.toLong).getOrElse(0L)
 
     val maxBytes = 1024 * 1024
     val defaultBytes = 100 * 1024
@@ -80,12 +80,18 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
     val logLength = new File(path).length()
     val logPageLength = math.min(byteLength, maxBytes)
-    val logText = <node>{Utils.offsetBytes(path, offset, offset+logPageLength)}</node>
+
+    val fixedOffset =
+      if (offset < 0) 0
+      else if (offset > logLength) logLength
+      else offset
+
+    val logText = <node>{Utils.offsetBytes(path, fixedOffset, fixedOffset+logPageLength)}</node>
 
     val backButton =
-      if (offset > 0) {
+      if (fixedOffset > 0) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s"
-          .format(appId, executorId, logType, math.max(offset-logPageLength, 0), logPageLength)}>
+          .format(appId, executorId, logType, math.max(fixedOffset-logPageLength, 0), logPageLength)}>
           <button style="float:left">back</button>
         </a>
       }
@@ -94,9 +100,9 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
       }
 
     val nextButton =
-      if (offset+logPageLength < logLength) {
+      if (fixedOffset+logPageLength < logLength) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
-          format(appId, executorId, logType, offset+logPageLength, logPageLength)}>
+          format(appId, executorId, logType, fixedOffset+logPageLength, logPageLength)}>
           <button style="float:right">next</button>
         </a>
       }

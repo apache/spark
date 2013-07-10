@@ -625,8 +625,10 @@ private object Utils extends Logging {
   def offsetBytes(path: String, a: Long, b: Long): String = {
     val file = new File(path)
     val length = file.length()
-    val buff = new Array[Byte](math.min((b-a).toInt, length.toInt))
-    val skip = math.max(0, a)
+    val B = math.min(length, b)
+    val A = math.max(0, a)
+    val buff = new Array[Byte]((B-A).toInt)
+    val skip = A
     val stream = new FileInputStream(file)
 
     stream.skip(skip)

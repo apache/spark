@@ -38,7 +38,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
 
-    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Log Pages")
+    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Logs")
     val executors = app.executors.values.toSeq
     val executorTable = UIUtils.listingTable(executorHeaders, executorRow, executors)
 

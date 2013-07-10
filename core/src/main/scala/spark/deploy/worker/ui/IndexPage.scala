@@ -29,7 +29,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
     val stateFuture = (worker ? RequestWorkerState)(timeout).mapTo[WorkerState]
     val workerState = Await.result(stateFuture, 30 seconds)
 
-    val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Log Pages")
+    val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Logs")
     val runningExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, workerState.executors)
     val finishedExecutorTable =
