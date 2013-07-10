@@ -252,6 +252,24 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(topK.sorted === Array("b", "a"))
   }
 
+  test("takeOrdered with predefined ordering") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    val rdd = sc.makeRDD(nums, 2)
+    val sortedTopK = rdd.takeOrdered(5)
+    assert(sortedTopK.size === 5)
+    assert(sortedTopK === Array(1, 2, 3, 4, 5))
+  }
+
+  test("takeOrdered with custom ordering") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    implicit val ord = implicitly[Ordering[Int]].reverse
+    val rdd = sc.makeRDD(nums, 2)
+    val sortedTopK = rdd.takeOrdered(5)
+    assert(sortedTopK.size === 5)
+    assert(sortedTopK === Array(10, 9, 8, 7, 6))
+    assert(sortedTopK === nums.sorted(ord).take(5))
+  }
+
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
     for (seed <- 1 to 5) {

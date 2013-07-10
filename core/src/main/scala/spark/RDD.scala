@@ -782,6 +782,18 @@ abstract class RDD[T: ClassManifest](
   }
 
   /**
+   * Returns the top K elements from this RDD as defined by
+   * the specified implicit Ordering[T] and maintains the
+   * ordering.
+   * @param num the number of top elements to return
+   * @param ord the implicit ordering for T
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
+    top(num)(ord.reverse).sorted(ord)
+  }
+
+  /**
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String) {
