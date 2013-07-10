@@ -1,12 +1,11 @@
 package spark
 
-import org.scalatest.FunSuite
-import java.io.{ByteArrayOutputStream, ByteArrayInputStream}
-import scala.util.Random
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
-import java.io.{FileOutputStream, File}
 import com.google.common.base.Charsets
+import com.google.common.io.Files
+import java.io.{ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream, File}
+import org.scalatest.FunSuite
+import org.apache.commons.io.FileUtils
+import scala.util.Random
 
 class UtilsSuite extends FunSuite {
 
