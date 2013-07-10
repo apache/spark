@@ -135,6 +135,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
           var mainArgs: Array[String] = new Array[String](args.userArgs.size())
           args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size())
           mainMethod.invoke(null, mainArgs)
+          // some job script has "System.exit(0)" at the end, for example SparkPi, SparkLR
+          // userThread will stop here unless it has uncaught exception thrown out
+          // It need shutdown hook to set SUCCEEDED
           successed = true
         } finally {
           if(successed){
@@ -308,11 +311,8 @@ object ApplicationMaster {
           logInfo("Invoking sc stop from shutdown hook") 
           sc.stop() 
           // best case ...
-          // due to the sparkContext is stopped and ApplicationMaster is down,
-          // the status of registered masters should be set KILLED better than FAILED.
-          // need discussion
           for (master <- applicationMasters) {
-            master.finishApplicationMaster(FinalApplicationStatus.KILLED)
+            master.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
           }
         } 
       } )
