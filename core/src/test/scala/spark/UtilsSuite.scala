@@ -3,6 +3,10 @@ package spark
 import org.scalatest.FunSuite
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream}
 import scala.util.Random
+import com.google.common.io.Files
+import org.apache.commons.io.FileUtils
+import java.io.{FileOutputStream, File}
+import com.google.common.base.Charsets
 
 class UtilsSuite extends FunSuite {
 
