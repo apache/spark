@@ -86,7 +86,10 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
       else if (offset > logLength) logLength
       else offset
 
-    val logText = <node>{Utils.offsetBytes(path, fixedOffset, fixedOffset+logPageLength)}</node>
+    val endOffset = math.min(fixedOffset+logPageLength, logLength)
+
+    val range = <h3>Bytes {fixedOffset.toString} - {(endOffset).toString} of {logLength}</h3>
+    val logText = <node>{Utils.offsetBytes(path, fixedOffset, endOffset)}</node>
 
     val backButton =
       if (fixedOffset > 0) {
@@ -101,9 +104,9 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
       }
 
     val nextButton =
-      if (fixedOffset+logPageLength < logLength) {
+      if (endOffset < logLength) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
-          format(appId, executorId, logType, fixedOffset+logPageLength, logPageLength)}>
+          format(appId, executorId, logType, endOffset, logPageLength)}>
           <button style="float:right">next</button>
         </a>
       }
@@ -114,6 +117,7 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
     val content =
       <html>
         <body>
+          {range}
           <hr></hr>
           {backButton}
           {nextButton}
