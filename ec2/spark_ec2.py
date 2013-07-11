@@ -236,7 +236,7 @@ def launch_cluster(conn, opts, cluster_name):
                                       die_on_error=False)
   if any(active_nodes):
     print >> stderr, ("ERROR: There are already instances running in " +
-        "group %s, %s or %s" % (master_group.name, slave_group.name))
+        "group %s or %s" % (master_group.name, slave_group.name))
     sys.exit(1)
 
   # Figure out Spark AMI
