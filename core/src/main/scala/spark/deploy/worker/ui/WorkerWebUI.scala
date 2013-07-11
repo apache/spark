@@ -129,7 +129,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
             <div style="float:right;">{nextButton}</div>
           </div>
           <br />
-          <div style="height:500px;overflow:scroll;padding:5px;">
+          <div style="height:500px;overflow:auto;padding:5px;">
             <pre>{logText}</pre>
           </div>
         </body>
