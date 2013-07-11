@@ -134,7 +134,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
           </div>
         </body>
       </html>
-    UIUtils.basicSparkPage(content, logType + " log Page for " + appId)
+    UIUtils.basicSparkPage(content, logType + " log page for " + appId)
   }
 
   def stop() {
