@@ -57,41 +57,39 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
-
-    val maxBytes = 1024 * 1024 // Guard against OOM
-    val defaultBytes = 100 * 1024
-    val numBytes = Option(request.getParameter("numBytes"))
-      .flatMap(s => Some(s.toInt)).getOrElse(defaultBytes)
-
+    val offset = Option(request.getParameter("offset"))
+    val byteLength = Option(request.getParameter("byteLength"))
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
-    val pre = "==== Last %s bytes of %s/%s/%s ====\n".format(numBytes, appId, executorId, logType)
-    pre + Utils.lastNBytes(path, math.min(numBytes, maxBytes))
+
+    val offsetBytes = Utils.getByteRange(path, offset, byteLength)
+    val fixedOffset = offsetBytes._1
+    val endOffset = offsetBytes._2
+    val logLength = offsetBytes._3
+
+    val pre = "==== Bytes %s-%s of %s of %s/%s/%s ====\n"
+      .format(fixedOffset, endOffset, logLength, appId, executorId, logType)
+    pre + Utils.offsetBytes(path, fixedOffset, endOffset)
   }
 
   def logPage(request: HttpServletRequest): Seq[scala.xml.Node] = {
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
-
-    val maxBytes = 1024 * 1024
-    val defaultBytes = 10000
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
-
+    val offset = Option(request.getParameter("offset"))
+    val byteLength = Option(request.getParameter("byteLength"))
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
-    val logLength = new File(path).length()
-    val offset = Option(request.getParameter("offset")).map(_.toLong).getOrElse(logLength-10000)
-    val logPageLength = math.min(byteLength, maxBytes)
 
-    val fixedOffset =
-      if (offset < 0) 0
-      else if (offset > logLength) logLength
-      else offset
+    val offsetBytes = Utils.getByteRange(path, offset, byteLength)
+    val fixedOffset = offsetBytes._1
+    val endOffset = offsetBytes._2
+    val logLength = offsetBytes._3
+    val logPageLength = offsetBytes._4
 
-    val endOffset = math.min(fixedOffset+logPageLength, logLength)
+    val logText = <node>{Utils.offsetBytes(path, fixedOffset, endOffset)}</node>
 
     val linkToMaster = <p><a href={worker.masterWebUiUrl}>Back to Master</a></p>
 
-    val range = <span>Bytes {fixedOffset.toString} - {(endOffset).toString} of {logLength}</span>
+    val range = <span>Bytes {fixedOffset.toString} - {endOffset.toString} of {logLength}</span>
 
     val backButton =
       if (fixedOffset > 0) {
@@ -116,8 +114,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         <button disabled="disabled">Next 0 Bytes</button>
       }
 
-    val logText = <node>{Utils.offsetBytes(path, fixedOffset, endOffset)}</node>
-
     val content =
       <html>
         <body>
@@ -134,7 +130,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
           </div>
         </body>
       </html>
-    UIUtils.basicSparkPage(content, logType + " log page for " + appId)
+    UIUtils.basicSparkPage(content, request.getParameter("logType") + " log page for " +
+      request.getParameter("appId"))
   }
 
   def stop() {
