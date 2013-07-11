@@ -497,7 +497,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
   if "." in opts.spark_version:
     # Pre-built deploy
     (spark_v, shark_v) = get_spark_shark_version(opts)
-  else if opts.shark_version is None:
+  elif opts.shark_version is None:
     # Spark-only custom deploy
     spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
     shark_v = ""
