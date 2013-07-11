@@ -61,15 +61,13 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
 
-    val offsetBytes = getByteRange(path, offset, byteLength)
-    val fixedOffset = offsetBytes._1
-    val endOffset = offsetBytes._2
+    val (startByte, endByte) = getByteRange(path, offset, byteLength)
     val file = new File(path)
     val logLength = file.length
 
     val pre = "==== Bytes %s-%s of %s of %s/%s/%s ====\n"
-      .format(fixedOffset, endOffset, logLength, appId, executorId, logType)
-    pre + Utils.offsetBytes(path, fixedOffset, endOffset)
+      .format(startByte, endByte, logLength, appId, executorId, logType)
+    pre + Utils.offsetBytes(path, startByte, endByte)
   }
 
   def logPage(request: HttpServletRequest): Seq[scala.xml.Node] = {
@@ -80,25 +78,23 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
 
-    val offsetBytes = getByteRange(path, offset, byteLength)
-    val fixedOffset = offsetBytes._1
-    val endOffset = offsetBytes._2
+    val (startByte, endByte) = getByteRange(path, offset, byteLength)
     val file = new File(path)
     val logLength = file.length
-    val logPageLength = endOffset-fixedOffset
+    val logPageLength = endByte-startByte
 
-    val logText = <node>{Utils.offsetBytes(path, fixedOffset, endOffset)}</node>
+    val logText = <node>{Utils.offsetBytes(path, startByte, endByte)}</node>
 
     val linkToMaster = <p><a href={worker.masterWebUiUrl}>Back to Master</a></p>
 
-    val range = <span>Bytes {fixedOffset.toString} - {endOffset.toString} of {logLength}</span>
+    val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 
     val backButton =
-      if (fixedOffset > 0) {
+      if (startByte > 0) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s"
-          .format(appId, executorId, logType, math.max(fixedOffset-logPageLength, 0),
+          .format(appId, executorId, logType, math.max(startByte-logPageLength, 0),
             logPageLength)}>
-          <button>Previous {math.min(logPageLength, fixedOffset)} Bytes</button>
+          <button>Previous {math.min(logPageLength, startByte)} Bytes</button>
         </a>
       }
       else {
@@ -106,10 +102,10 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
       }
 
     val nextButton =
-      if (endOffset < logLength) {
+      if (endByte < logLength) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
-          format(appId, executorId, logType, endOffset, logPageLength)}>
-          <button>Next {math.min(logPageLength, logLength-endOffset)} Bytes</button>
+          format(appId, executorId, logType, endByte, logPageLength)}>
+          <button>Next {math.min(logPageLength, logLength-endByte)} Bytes</button>
         </a>
       }
       else {
@@ -145,7 +141,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val logLength = file.length()
     val getOffset = offset.getOrElse(logLength-defaultBytes)
 
-    val fixedOffset =
+    val startByte =
       if (getOffset < 0) 0L
       else if (getOffset > logLength) logLength
       else getOffset
@@ -153,9 +149,9 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val getByteLength = byteLength.getOrElse(defaultBytes)
     val logPageLength = math.min(getByteLength, maxBytes)
 
-    val endOffset = math.min(fixedOffset+logPageLength, logLength)
+    val endByte = math.min(startByte+logPageLength, logLength)
 
-    (fixedOffset, endOffset)
+    (startByte, endByte)
   }
 
   def stop() {
