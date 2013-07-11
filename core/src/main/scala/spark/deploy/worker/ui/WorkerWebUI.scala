@@ -83,7 +83,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val (startByte, endByte) = getByteRange(path, offset, byteLength)
     val file = new File(path)
     val logLength = file.length
-    //val logPageLength = endByte-startByte
 
     val logText = <node>{Utils.offsetBytes(path, startByte, endByte)}</node>
 
