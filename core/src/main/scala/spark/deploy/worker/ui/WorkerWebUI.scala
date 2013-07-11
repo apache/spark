@@ -57,14 +57,15 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset"))
-    val byteLength = Option(request.getParameter("byteLength"))
+    val offset = Option(request.getParameter("offset")).map(_.toLong)
+    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
 
-    val offsetBytes = Utils.getByteRange(path, offset, byteLength)
+    val offsetBytes = getByteRange(path, offset, byteLength)
     val fixedOffset = offsetBytes._1
     val endOffset = offsetBytes._2
-    val logLength = offsetBytes._3
+    val file = new File(path)
+    val logLength = file.length
 
     val pre = "==== Bytes %s-%s of %s of %s/%s/%s ====\n"
       .format(fixedOffset, endOffset, logLength, appId, executorId, logType)
@@ -75,15 +76,16 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset"))
-    val byteLength = Option(request.getParameter("byteLength"))
+    val offset = Option(request.getParameter("offset")).map(_.toLong)
+    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
 
-    val offsetBytes = Utils.getByteRange(path, offset, byteLength)
+    val offsetBytes = getByteRange(path, offset, byteLength)
     val fixedOffset = offsetBytes._1
     val endOffset = offsetBytes._2
-    val logLength = offsetBytes._3
-    val logPageLength = offsetBytes._4
+    val file = new File(path)
+    val logLength = file.length
+    val logPageLength = endOffset-fixedOffset
 
     val logText = <node>{Utils.offsetBytes(path, fixedOffset, endOffset)}</node>
 
@@ -131,6 +133,29 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         </body>
       </html>
     UIUtils.basicSparkPage(content, logType + " log page for " + appId)
+  }
+
+  /** Determine the byte range for a log or log page. */
+  def getByteRange(path: String, offset: Option[Long], byteLength: Option[Int])
+  : (Long, Long) = {
+    val defaultBytes = 10000
+    val maxBytes = 1024 * 1024
+
+    val file = new File(path)
+    val logLength = file.length()
+    val getOffset = offset.getOrElse(logLength-defaultBytes)
+
+    val fixedOffset =
+      if (getOffset < 0) 0L
+      else if (getOffset > logLength) logLength
+      else getOffset
+
+    val getByteLength = byteLength.getOrElse(defaultBytes)
+    val logPageLength = math.min(getByteLength, maxBytes)
+
+    val endOffset = math.min(fixedOffset+logPageLength, logLength)
+
+    (fixedOffset, endOffset)
   }
 
   def stop() {

@@ -621,29 +621,6 @@ private object Utils extends Logging {
                          callSiteInfo.firstUserLine)
   }
 
-  /** Determine the byte range for a log or log page. */
-  def getByteRange(path: String, offset: Option[String], byteLength: Option[String])
-    : (Long, Long, Long, Int) = {
-    val defaultBytes = 10000
-    val maxBytes = 1024 * 1024
-
-    val file = new File(path)
-    val logLength = file.length()
-    val getOffset = offset.map(_.toLong).getOrElse(logLength-defaultBytes)
-
-    val fixedOffset =
-      if (getOffset < 0) 0L
-      else if (getOffset > logLength) logLength
-      else getOffset
-
-    val getByteLength = byteLength.map(_.toInt).getOrElse(defaultBytes)
-    val logPageLength = math.min(getByteLength, maxBytes)
-
-    val endOffset = math.min(fixedOffset+logPageLength, logLength)
-
-    (fixedOffset, endOffset, logLength, logPageLength)
-  }
-
   /** Return a string containing part of a file from byte 'start' to 'end'. */
   def offsetBytes(path: String, start: Long, end: Long): String = {
     val file = new File(path)
