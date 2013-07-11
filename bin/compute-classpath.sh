@@ -3,7 +3,7 @@
 # This script computes Spark's classpath and prints it to stdout; it's used by both the "run"
 # script and the ExecutorRunner in standalone cluster mode.
 
-SCALA_VERSION=2.9.3
+SCALA_VERSION=2.10
 
 # Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"

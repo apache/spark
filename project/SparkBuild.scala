@@ -161,7 +161,6 @@ object SparkBuild extends Build {
         "colt"                % "colt"             % "1.2.0",
         "org.apache.mesos"    % "mesos"            % "0.9.0-incubating",
         "org.apache.derby"    % "derby"            % "10.4.2.0"                     % "test",
-        "org.scala-lang"      % "scala-actors"     % "2.10.1",
         "org.scala-lang"      % "jline"            % "2.10.1",
         "org.scala-lang"      % "scala-reflect"    % "2.10.1"
       ) ++ (
@@ -169,19 +168,19 @@ object SparkBuild extends Build {
         if (HADOOP_YARN) {
           Seq(
             // Exclude rule required for all ?
-            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
-            "org.apache.hadoop" % "hadoop-yarn-api" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
+            "org.apache.hadoop" % "hadoop-client"      % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
+            "org.apache.hadoop" % "hadoop-yarn-api"    % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
             "org.apache.hadoop" % "hadoop-yarn-common" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
             "org.apache.hadoop" % "hadoop-yarn-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty)
           )
         } else {
           Seq(
-            "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
+            "org.apache.hadoop" % "hadoop-core"   % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
             "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty)
           )
         }
       } else {
-        Seq("org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty) )
+        Seq("org.apache.hadoop" % "hadoop-core"  % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty) )
       }),
     unmanagedSourceDirectories in Compile <+= baseDirectory{ _ /
       ( if (HADOOP_YARN && HADOOP_MAJOR_VERSION == "2") {
@@ -222,9 +221,6 @@ object SparkBuild extends Build {
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
-    resolvers ++= Seq(
-      "Akka Repository" at "http://repo.akka.io/releases/"
-    ),
     libraryDependencies ++= Seq(
       "org.apache.flume"      % "flume-ng-sdk"     % "1.2.0" % "compile"  excludeAll(excludeNetty),
       "com.github.sgroschupf" % "zkclient"         % "0.1",
