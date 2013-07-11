@@ -495,8 +495,15 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
   cluster_url = "%s:7077" % active_master
 
   if "." in opts.spark_version:
+    # Pre-built deploy
     (spark_v, shark_v) = get_spark_shark_version(opts)
+  else if opts.shark_version is None:
+    # Spark-only custom deploy
+    spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
+    shark_v = ""
+    modules = filter(lambda x: x != "shark", modules)
   else:
+    # Spark and Shark custom deploy
     spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
     shark_v = "%s|%s" % (opts.shark_git_repo, opts.shark_version)
 
