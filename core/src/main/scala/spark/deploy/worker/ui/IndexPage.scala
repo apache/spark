@@ -16,17 +16,18 @@ import spark.Utils
 import spark.ui.UIUtils
 
 private[spark] class IndexPage(parent: WorkerWebUI) {
+  val workerActor = parent.worker.self
   val worker = parent.worker
   val timeout = parent.timeout
 
   def renderJson(request: HttpServletRequest): JValue = {
-    val stateFuture = (worker ? RequestWorkerState)(timeout).mapTo[WorkerState]
+    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerState]
     val workerState = Await.result(stateFuture, 30 seconds)
     JsonProtocol.writeWorkerState(workerState)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (worker ? RequestWorkerState)(timeout).mapTo[WorkerState]
+    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerState]
     val workerState = Await.result(stateFuture, 30 seconds)
 
     val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Logs")
@@ -88,9 +89,9 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
         </ul>
       </td>
       <td>
-	 <a href={"logPage?appId=%s&executorId=%s&logType=stdout&offset=0&byteLength=10000"
+	 <a href={"logPage?appId=%s&executorId=%s&logType=stdout&byteLength=10000"
           .format(executor.appId, executor.execId)}>stdout</a>
-	 <a href={"logPage?appId=%s&executorId=%s&logType=stderr&offset=0&byteLength=10000"
+	 <a href={"logPage?appId=%s&executorId=%s&logType=stderr&byteLength=10000"
           .format(executor.appId, executor.execId)}>stderr</a>
       </td> 
     </tr>

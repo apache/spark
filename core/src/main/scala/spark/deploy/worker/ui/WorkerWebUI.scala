@@ -9,6 +9,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.{Handler, Server}
 
+import spark.deploy.worker.Worker
 import spark.{Utils, Logging}
 import spark.ui.JettyUtils
 import spark.ui.JettyUtils._
@@ -18,7 +19,7 @@ import spark.ui.UIUtils
  * Web UI server for the standalone worker.
  */
 private[spark]
-class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option[Int] = None)
+class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[Int] = None)
     extends Logging {
   implicit val timeout = Timeout(
     Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds"))
@@ -71,14 +72,14 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toLong).getOrElse(0L)
 
     val maxBytes = 1024 * 1024
-    val defaultBytes = 100 * 1024
+    val defaultBytes = 10000
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
 
     val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
     val logLength = new File(path).length()
+    val offset = Option(request.getParameter("offset")).map(_.toLong).getOrElse(logLength-10000)
     val logPageLength = math.min(byteLength, maxBytes)
 
     val fixedOffset =
@@ -88,46 +89,52 @@ class WorkerWebUI(val worker: ActorRef, val workDir: File, requestedPort: Option
 
     val endOffset = math.min(fixedOffset+logPageLength, logLength)
 
-    val range = <h3>Bytes {fixedOffset.toString} - {(endOffset).toString} of {logLength}</h3>
-    val logText = <node>{Utils.offsetBytes(path, fixedOffset, endOffset)}</node>
+    val linkToMaster = <p><a href={worker.masterWebUiUrl}>Back to Master</a></p>
+
+    val range = <span>Bytes {fixedOffset.toString} - {(endOffset).toString} of {logLength}</span>
 
     val backButton =
       if (fixedOffset > 0) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s"
           .format(appId, executorId, logType, math.max(fixedOffset-logPageLength, 0),
             logPageLength)}>
-          <button style="float:left">back</button>
+          <button>Previous {math.min(logPageLength, fixedOffset)} Bytes</button>
         </a>
       }
       else {
-        <button style="float:left" disabled="disabled">back</button>
+        <button disabled="disabled">Previous 0 Bytes</button>
       }
 
     val nextButton =
       if (endOffset < logLength) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
           format(appId, executorId, logType, endOffset, logPageLength)}>
-          <button style="float:right">next</button>
+          <button>Next {math.min(logPageLength, logLength-endOffset)} Bytes</button>
         </a>
       }
       else {
-        <button style="float:right" disabled="disabled">next</button>
+        <button disabled="disabled">Next 0 Bytes</button>
       }
+
+    val logText = <node>{Utils.offsetBytes(path, fixedOffset, endOffset)}</node>
 
     val content =
       <html>
         <body>
-          {range}
-          <hr></hr>
-          {backButton}
-          {nextButton}
-          <br></br>
+          {linkToMaster}
+          <hr />
+          <div>
+            <div style="float:left;width:40%">{backButton}</div>
+            <div style="float:left;">{range}</div>
+            <div style="float:right;">{nextButton}</div>
+          </div>
+          <br />
           <div style="height:500px;overflow:scroll;padding:5px;">
             <pre>{logText}</pre>
           </div>
         </body>
       </html>
-    UIUtils.basicSparkPage(content, "Log Page for " + appId)
+    UIUtils.basicSparkPage(content, logType + " log Page for " + appId)
   }
 
   def stop() {
