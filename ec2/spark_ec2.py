@@ -71,11 +71,6 @@ def parse_args():
   parser.add_option("--spark-git-repo", 
       default="https://github.com/mesos/spark", 
       help="Github repo from which to checkout supplied commit hash")
-  parser.add_option("--shark-version",
-      help="Git hash of shark version. Used only if spark hash is also given.")
-  parser.add_option("--shark-git-repo", 
-      default="https://github.com/amplab/shark", 
-      help="Github repo from which to checkout supplied commit hash")
   parser.add_option("--hadoop-major-version", default="2",
       help="Major version of Hadoop (default: 2)")
 
@@ -495,17 +490,13 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
   cluster_url = "%s:7077" % active_master
 
   if "." in opts.spark_version:
-    # Pre-built deploy
+    # Pre-built spark & shark deploy
     (spark_v, shark_v) = get_spark_shark_version(opts)
-  elif opts.shark_version is None:
+  else:
     # Spark-only custom deploy
     spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
     shark_v = ""
     modules = filter(lambda x: x != "shark", modules)
-  else:
-    # Spark and Shark custom deploy
-    spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
-    shark_v = "%s|%s" % (opts.shark_git_repo, opts.shark_version)
 
   template_vars = {
     "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
