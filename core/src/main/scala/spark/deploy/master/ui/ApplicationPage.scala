@@ -90,9 +90,9 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
       <td>{executor.memory}</td>
       <td>{executor.state}</td>
       <td>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout&byteLength=10000"
+        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
           .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr&byteLength=10000"
+        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
           .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
       </td>
     </tr>

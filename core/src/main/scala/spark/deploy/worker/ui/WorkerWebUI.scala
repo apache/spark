@@ -54,7 +54,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   }
 
   def log(request: HttpServletRequest): String = {
-    val defaultBytes = 10000
+    val defaultBytes = 100 * 1024
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
@@ -72,7 +72,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   }
 
   def logPage(request: HttpServletRequest): Seq[scala.xml.Node] = {
-    val defaultBytes = 10000
+    val defaultBytes = 100 * 1024
     val appId = request.getParameter("appId")
     val executorId = request.getParameter("executorId")
     val logType = request.getParameter("logType")
@@ -95,7 +95,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s"
           .format(appId, executorId, logType, math.max(startByte-byteLength, 0),
             byteLength)}>
-          <button>Previous {math.min(byteLength, startByte)} Bytes</button>
+          <button>Previous {Utils.memoryBytesToString(math.min(byteLength, startByte))} Bytes
+            </button>
         </a>
       }
       else {
@@ -106,7 +107,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
       if (endByte < logLength) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
           format(appId, executorId, logType, endByte, byteLength)}>
-          <button>Next {math.min(byteLength, logLength-endByte)} Bytes</button>
+          <button>Next {Utils.memoryBytesToString(math.min(byteLength, logLength-endByte))} Bytes
+            </button>
         </a>
       }
       else {
@@ -135,7 +137,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   /** Determine the byte range for a log or log page. */
   def getByteRange(path: String, offset: Option[Long], byteLength: Int)
   : (Long, Long) = {
-    val defaultBytes = 10000
+    val defaultBytes = 100 * 1024
     val maxBytes = 1024 * 1024
 
     val file = new File(path)
