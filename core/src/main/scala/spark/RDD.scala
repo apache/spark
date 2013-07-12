@@ -778,7 +778,7 @@ abstract class RDD[T: ClassManifest](
     }.reduce { (queue1, queue2) =>
       queue1 ++= queue2
       queue1
-    }.toArray
+    }.toArray.sorted(ord.reverse)
   }
 
   /**
@@ -789,9 +789,7 @@ abstract class RDD[T: ClassManifest](
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
-  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
-    top(num)(ord.reverse).sorted(ord)
-  }
+  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = top(num)(ord.reverse)
 
   /**
    * Save this RDD as a text file, using string representations of elements.
