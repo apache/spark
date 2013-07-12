@@ -91,33 +91,6 @@ class UtilsSuite extends FunSuite {
     assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11.00 h")
   }
 
-  test("reading last n bytes of a file") {
-    val tmpDir = Files.createTempDir()
-
-    // File smaller than limit
-    val f1Path = tmpDir + "/f1"
-    val f1 = new FileOutputStream(f1Path)
-    f1.write("a\nb\nc\nd".getBytes(Charsets.UTF_8))
-    f1.close()
-    assert(Utils.lastNBytes(f1Path, 1024) === "a\nb\nc\nd")
-
-    // File larger than limit
-    val f2Path = tmpDir + "/f2"
-    val f2 = new FileOutputStream(f2Path)
-    f2.write("1\n2\n3\n4\n5\n6\n7\n8\n".getBytes(Charsets.UTF_8))
-    f2.close()
-    assert(Utils.lastNBytes(f2Path, 8) === "5\n6\n7\n8\n")
-
-    // Request limit too
-    val f3Path = tmpDir + "/f2"
-    val f3 = new FileOutputStream(f3Path)
-    f3.write("1\n2\n3\n4\n5\n6\n7\n8\n".getBytes(Charsets.UTF_8))
-    f3.close()
-    assert(Utils.lastNBytes(f3Path, 8) === "5\n6\n7\n8\n")
-
-    FileUtils.deleteDirectory(tmpDir)
-  }
-
   test("reading offset bytes of a file") {
     val tmpDir2 = Files.createTempDir()
     val f1Path = tmpDir2 + "/f1"
