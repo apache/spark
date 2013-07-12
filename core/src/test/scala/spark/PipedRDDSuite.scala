@@ -67,7 +67,7 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
 
   test("pipe with non-zero exit status") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
-    val piped = nums.pipe("cat nonexistent_file")
+    val piped = nums.pipe(Seq("cat nonexistent_file", "2>", "/dev/null"))
     intercept[SparkException] {
       piped.collect()
     }

@@ -56,32 +56,24 @@
       <artifactId>akka-slf4j_${scala.version}</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scalap</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>net.liftweb</groupId>
+      <artifactId>lift-json_2.10</artifactId>
+    </dependency>
+    <dependency>
       <groupId>it.unimi.dsi</groupId>
       <artifactId>fastutil</artifactId>
     </dependency>
     <dependency>
       <groupId>colt</groupId>
       <artifactId>colt</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.spray</groupId>
-      <artifactId>spray-can</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.spray</groupId>
-      <artifactId>spray-routing</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.spray</groupId>
-      <artifactId>spray-io</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.spray</groupId>
-      <artifactId>spray-json_${scala.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.tomdz.twirl</groupId>
-      <artifactId>twirl-api</artifactId>
     </dependency>
     <dependency>
       <groupId>com.github.scala-incubator.io</groupId>
@@ -174,10 +166,6 @@
             <SPARK_CLASSPATH>${spark.classpath}</SPARK_CLASSPATH>
           </environmentVariables>
         </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.tomdz.twirl</groupId>
-        <artifactId>twirl-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>

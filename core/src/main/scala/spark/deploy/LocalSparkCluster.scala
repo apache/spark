@@ -17,11 +17,11 @@ import scala.collection.mutable.ArrayBuffer
  */
 private[spark]
 class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int) extends Logging {
-  
+
   private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
   private val workerActorSystems = ArrayBuffer[ActorSystem]()
-  
+
   def start(): String = {
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 

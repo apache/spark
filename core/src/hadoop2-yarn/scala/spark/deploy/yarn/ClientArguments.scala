@@ -13,7 +13,6 @@ class ClientArguments(val args: Array[String]) {
   var workerMemory = 1024
   var workerCores = 1
   var numWorkers = 2
-  var amUser = System.getProperty("user.name")
   var amQueue = System.getProperty("QUEUE", "default")
   var amMemory: Int = 512
   // TODO
@@ -58,10 +57,6 @@ class ClientArguments(val args: Array[String]) {
           workerCores = value
           args = tail
 
-        case ("--user") :: value :: tail =>
-          amUser = value
-          args = tail
-
         case ("--queue") :: value :: tail =>
           amQueue = value
           args = tail
@@ -96,8 +91,7 @@ class ClientArguments(val args: Array[String]) {
       "  --worker-cores NUM   Number of cores for the workers (Default: 1). This is unsused right now.\n" +
       "  --master-memory MEM  Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
       "  --worker-memory MEM  Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n" +
-      "  --queue QUEUE        The hadoop queue to use for allocation requests (Default: 'default')\n" +
-      "  --user USERNAME      Run the ApplicationMaster (and slaves) as a different user\n"
+      "  --queue QUEUE        The hadoop queue to use for allocation requests (Default: 'default')"
       )
     System.exit(exitCode)
   }

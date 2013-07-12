@@ -34,6 +34,7 @@ private[spark] class Stage(
 
   /** When first task was submitted to scheduler. */
   var submissionTime: Option[Long] = None
+  var completionTime: Option[Long] = None
 
   private var nextAttemptId = 0
 

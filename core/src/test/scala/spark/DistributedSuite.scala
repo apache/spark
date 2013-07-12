@@ -10,6 +10,7 @@ import org.scalatest.time.{Span, Millis}
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
 import org.scalacheck.Prop._
+import org.eclipse.jetty.server.{Server, Request, Handler}
 
 import com.google.common.io.Files
 
@@ -17,6 +18,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
 import storage.{GetBlock, BlockManagerWorker, StorageLevel}
+import ui.JettyUtils
 
 
 class NotSerializableClass

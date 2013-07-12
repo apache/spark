@@ -14,7 +14,7 @@ import spark.deploy.LaunchExecutor
 import spark.deploy.RegisterWorkerFailed
 import spark.deploy.master.Master
 import java.io.File
-
+import ui.WorkerWebUI
 
 private[spark] class Worker(
     host: String,
@@ -45,6 +45,7 @@ private[spark] class Worker(
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
+  var webUi: WorkerWebUI = null
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -76,35 +77,26 @@ private[spark] class Worker(
     sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
+    webUi = new WorkerWebUI(self, workDir, Some(webUiPort))
+    webUi.start()
     connectToMaster()
-    startWebUi()
   }
 
   def connectToMaster() {
     logInfo("Connecting to master " + masterUrl)
     master = context.actorFor(Master.toAkkaUrl(masterUrl))
-    master ! RegisterWorker(workerId, host, port, cores, memory, webUiPort, publicAddress)
+    master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort.get, publicAddress)
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     context.watch(master) // Doesn't work with remote actors, but useful for testing
   }
 
-  def startWebUi() {
-    val webUi = new WorkerWebUI(self, workDir)
-    try {
-      AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
-    } catch {
-      case e: Exception =>
-        logError("Failed to create web UI", e)
-        System.exit(1)
-    }
-  }
+  import context.dispatcher
 
   override def receive = {
     case RegisteredWorker(url) =>
       masterWebUiUrl = url
       logInfo("Successfully registered with master")
-      import context.dispatcher
-      context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
+        context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
         master ! Heartbeat(workerId)
       }
 
@@ -170,6 +162,7 @@ private[spark] class Worker(
 
   override def postStop() {
     executors.values.foreach(_.kill())
+    webUi.stop()
   }
 }
 

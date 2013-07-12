@@ -6,4 +6,4 @@ package spark.scheduler
 private[spark] sealed trait JobResult
 
 private[spark] case object JobSucceeded extends JobResult
-private[spark] case class JobFailed(exception: Exception) extends JobResult
+private[spark] case class JobFailed(exception: Exception, failedStage: Option[Stage]) extends JobResult

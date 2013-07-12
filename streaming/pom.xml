@@ -59,6 +59,10 @@
       <version>3.0.3</version>
     </dependency>
     <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.typesafe.akka</groupId>
       <artifactId>akka-zeromq_${scala.version}</artifactId>
       <version>${akka.version}</version>

@@ -571,6 +571,7 @@ private[spark] class ClusterTaskSetManager(
             return
 
           case ef: ExceptionFailure =>
+            sched.listener.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
             val key = ef.description
             val now = System.currentTimeMillis
             val (printFull, dupCount) = {

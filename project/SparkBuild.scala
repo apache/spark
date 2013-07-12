@@ -4,7 +4,6 @@ import sbt.Classpaths.publishTask
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
-import twirl.sbt.TwirlPlugin._
 // For Sonatype publishing
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
@@ -25,7 +24,7 @@ object SparkBuild extends Build {
   //val HADOOP_MAJOR_VERSION = "2"
   //val HADOOP_YARN = true
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming, mllib)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -36,6 +35,8 @@ object SparkBuild extends Build {
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
+
+  lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn (core)
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -141,28 +142,26 @@ object SparkBuild extends Build {
     ),
 
     libraryDependencies ++= Seq(
-        "com.google.guava"    % "guava"            % "11.0.1",
-        "log4j"               % "log4j"            % "1.2.16",
-        "org.slf4j"           % "slf4j-api"        % slf4jVersion,
-        "org.slf4j"           % "slf4j-log4j12"    % slf4jVersion,
-        "com.ning"            % "compress-lzf"     % "0.8.4",
-        "commons-daemon"      % "commons-daemon"   % "1.0.10",
-        "org.apache.hadoop"   % "hadoop-core"      % HADOOP_VERSION excludeAll(excludeNetty, excludeJackson),
-        "org.ow2.asm"         % "asm"              % "4.0",
-        "com.google.protobuf" % "protobuf-java"    % "2.4.1",
-        "de.javakaffee"       % "kryo-serializers" % "0.22",
-        "com.typesafe.akka"  %% "akka-remote"      % "2.1.4"        excludeAll(excludeNetty),
-        "com.typesafe.akka"  %% "akka-slf4j"       % "2.1.4"        excludeAll(excludeNetty),
-        "it.unimi.dsi"        % "fastutil"         % "6.4.4",
-        "io.spray"            % "spray-can"        % "1.1-M7"       excludeAll(excludeNetty),
-        "io.spray"            % "spray-io"         % "1.1-M7"       excludeAll(excludeNetty),
-        "io.spray"            % "spray-routing"    % "1.1-M7"       excludeAll(excludeNetty),
-        "io.spray"           %% "spray-json"       % "1.2.3"        excludeAll(excludeNetty),
-        "colt"                % "colt"             % "1.2.0",
-        "org.apache.mesos"    % "mesos"            % "0.9.0-incubating",
-        "org.apache.derby"    % "derby"            % "10.4.2.0"                     % "test",
-        "org.scala-lang"      % "jline"            % "2.10.1",
-        "org.scala-lang"      % "scala-reflect"    % "2.10.1"
+        "com.google.guava"         % "guava"            % "14.0.1",
+        "com.google.code.findbugs" % "jsr305"           % "1.3.+",
+        "log4j"                    % "log4j"            % "1.2.16",
+        "org.slf4j"                % "slf4j-api"        % slf4jVersion,
+        "org.slf4j"                % "slf4j-log4j12"    % slf4jVersion,
+        "com.ning"                 % "compress-lzf"     % "0.8.4",
+        "commons-daemon"           % "commons-daemon"   % "1.0.10",
+        "org.apache.hadoop"        % "hadoop-core"      % HADOOP_VERSION excludeAll(excludeNetty, excludeJackson),
+        "org.ow2.asm"              % "asm"              % "4.0",
+        "com.google.protobuf"      % "protobuf-java"    % "2.4.1",
+        "de.javakaffee"            % "kryo-serializers" % "0.22",
+        "com.typesafe.akka"       %% "akka-remote"      % "2.1.4"        excludeAll(excludeNetty),
+        "com.typesafe.akka"       %% "akka-slf4j"       % "2.1.4"        excludeAll(excludeNetty),
+        "net.liftweb"             %% "lift-json"        % "2.5.1",
+        "it.unimi.dsi"             % "fastutil"         % "6.4.4",
+        "colt"                     % "colt"             % "1.2.0",
+        "org.apache.mesos"         % "mesos"            % "0.9.0-incubating",
+        "org.apache.derby"         % "derby"            % "10.4.2.0"                     % "test",
+        "org.scala-lang"           % "jline"            % "2.10.1",
+        "org.scala-lang"           % "scala-reflect"    % "2.10.1"
       ) ++ (
       if (HADOOP_MAJOR_VERSION == "2") {
         if (HADOOP_YARN) {
@@ -189,7 +188,7 @@ object SparkBuild extends Build {
         "src/hadoop" + HADOOP_MAJOR_VERSION + "/scala"
       } )
     }
-  ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def rootSettings = sharedSettings ++ Seq(
     publish := {}
@@ -218,6 +217,13 @@ object SparkBuild extends Build {
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
+
+  def mllibSettings = sharedSettings ++ Seq(
+    name := "spark-mllib",
+    libraryDependencies ++= Seq(
+      "org.jblas" % "jblas" % "1.2.3"
+    )
+  )
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",

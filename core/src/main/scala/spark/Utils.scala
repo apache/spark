@@ -490,6 +490,26 @@ private object Utils extends Logging {
   }
 
   /**
+   * Returns a human-readable string representing a duration such as "35ms"
+   */
+  def msDurationToString(ms: Long): String = {
+    val second = 1000
+    val minute = 60 * second
+    val hour = 60 * minute
+
+    ms match {
+      case t if t < second =>
+        "%d ms".format(t)
+      case t if t < minute =>
+        "%.1f s".format(t.toFloat / second)
+      case t if t < hour =>
+        "%.1f m".format(t.toFloat / minute)
+      case t =>
+        "%.2f h".format(t.toFloat / hour)
+    }
+  }
+
+  /**
    * Convert a memory quantity in megabytes to a human-readable string such as "4.0 MB".
    */
   def memoryMegabytesToString(megabytes: Long): String = {
@@ -604,18 +624,19 @@ private object Utils extends Logging {
     "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
                          callSiteInfo.firstUserLine)
   }
-  /**
-   * Try to find a free port to bind to on the local host. This should ideally never be needed,
-   * except that, unfortunately, some of the networking libraries we currently rely on (e.g. Spray)
-   * don't let users bind to port 0 and then figure out which free port they actually bound to.
-   * We work around this by binding a ServerSocket and immediately unbinding it. This is *not*
-   * necessarily guaranteed to work, but it's the best we can do.
-   */
-  def findFreePort(): Int = {
-    val socket = new ServerSocket(0)
-    val portBound = socket.getLocalPort
-    socket.close()
-    portBound
+
+  /** Return a string containing the last `n` bytes of a file. */
+  def lastNBytes(path: String, n: Int): String = {
+    val file = new File(path)
+    val length = file.length()
+    val buff = new Array[Byte](math.min(n, length.toInt))
+    val skip = math.max(0, length - n)
+    val stream = new FileInputStream(file)
+
+    stream.skip(skip)
+    stream.read(buff)
+    stream.close()
+    Source.fromBytes(buff).mkString
   }
 
   /**

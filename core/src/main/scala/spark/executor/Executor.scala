@@ -93,15 +93,18 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo("Running task ID " + taskId)
       context.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
+      var attemptedTask: Option[Task[Any]] = None
+      var taskStart: Long = 0
       try {
         SparkEnv.set(env)
         Accumulators.clear()
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         val task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
+        attemptedTask = Some(task)
         logInfo("Its generation is " + task.generation)
         env.mapOutputTracker.updateGeneration(task.generation)
-        val taskStart = System.currentTimeMillis()
+        taskStart = System.currentTimeMillis()
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
         task.metrics.foreach{ m =>
@@ -129,7 +132,10 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         }
 
         case t: Throwable => {
-          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
+          val serviceTime = (System.currentTimeMillis() - taskStart).toInt
+          val metrics = attemptedTask.flatMap(t => t.metrics)
+          metrics.foreach{m => m.executorRunTime = serviceTime}
+          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
           context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may

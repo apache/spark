@@ -1,20 +1,10 @@
 package spark.util
 
-import akka.actor.{Props, ActorSystem, ExtendedActorSystem}
+import akka.actor.{ActorSystem, ExtendedActorSystem}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
-import akka.pattern.ask
-import akka.remote.RemoteActorRefProvider
-
-import spray.routing.Route
-import spray.io.IOExtension
-import spray.routing.HttpServiceActor
-import spray.can.server.{HttpServer, ServerSettings}
-import spray.io.SingletonHandler
 import scala.concurrent.Await
-import spark.{Utils, SparkException}
-
-import java.util.concurrent.TimeoutException
+import akka.remote.RemoteActorRefProvider
 
 /**
  * Various utility classes for working with Akka.
@@ -65,29 +55,4 @@ private[spark] object AkkaUtils {
     return (actorSystem, boundPort)
   }
 
-  /**
-   * Creates a Spray HTTP server bound to a given IP and port with a given Spray Route object to
-   * handle requests. Returns the bound port or throws a SparkException on failure.
-   * TODO: Not changing ip to host here - is it required ?
-   */
-  def startSprayServer(actorSystem: ActorSystem, ip: String, port: Int, route: Route, name: String = "HttpServer") = {
-    val ioWorker    = IOExtension(actorSystem).ioBridge()
-    val httpService = actorSystem.actorOf(Props(HttpServiceActor(route)))
-    val server      = actorSystem.actorOf(
-      Props(new HttpServer(ioWorker, SingletonHandler(httpService), ServerSettings())), name = name)
-    actorSystem.registerOnTermination { actorSystem.stop(ioWorker) }
-    val timeout = 3.seconds
-    val future  = server.ask(HttpServer.Bind(ip, port))(timeout)
-    try {
-      Await.result(future, timeout) match {
-        case bound: HttpServer.Bound =>
-          server
-        case other: Any =>
-          throw new SparkException("Failed to bind web UI to port " + port + ": " + other)
-      }
-    } catch {
-      case e: TimeoutException =>
-        throw new SparkException("Failed to bind web UI to port " + port)
-    }
-  }
 }
