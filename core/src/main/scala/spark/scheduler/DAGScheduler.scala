@@ -472,11 +472,11 @@ class DAGScheduler(
       }
     }
     if (tasks.size > 0) {
-      sparkListeners.foreach(_.onStageSubmitted(SparkListenerStageSubmitted(stage, tasks.size)))
+      val properties = idToActiveJob(stage.priority).properties
+      sparkListeners.foreach(_.onStageSubmitted(SparkListenerStageSubmitted(stage, tasks.size, properties)))
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
       logDebug("New pending tasks: " + myPending)
-      val properties = idToActiveJob(stage.priority).properties
       taskSched.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.priority, properties))
       if (!stage.submissionTime.isDefined) {

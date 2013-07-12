@@ -90,8 +90,8 @@ private[spark] class ClusterTaskSetManager(
   var priority = taskSet.priority
   var stageId = taskSet.stageId
   var name = "TaskSet_"+taskSet.stageId.toString
-  var parent:Schedulable = null
-
+  var parent: Schedulable = null
+  var schedulableQueue :ArrayBuffer[Schedulable] = null
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
 

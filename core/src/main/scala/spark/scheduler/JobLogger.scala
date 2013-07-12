@@ -45,7 +45,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
         event match {
           case SparkListenerJobStart(job, properties) =>
             processJobStartEvent(job, properties)
-          case SparkListenerStageSubmitted(stage, taskSize) =>
+          case SparkListenerStageSubmitted(stage, taskSize, properties) =>
             processStageSubmittedEvent(stage, taskSize)
           case StageCompleted(stageInfo) =>
             processStageCompletedEvent(stageInfo)

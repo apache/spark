@@ -14,6 +14,7 @@ import spark.scheduler.cluster._
 
 private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: TaskSet) extends TaskSetManager with Logging {
   var parent: Schedulable = null
+  var schedulableQueue :ArrayBuffer[Schedulable] = null
   var weight: Int = 1
   var minShare: Int = 0
   var runningTasks: Int = 0

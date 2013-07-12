@@ -1,13 +1,17 @@
 package spark.scheduler.cluster
 
-import scala.collection.mutable.ArrayBuffer
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 
+import scala.collection.mutable.ArrayBuffer
 /**
  * An interface for schedulable entities.
  * there are two type of Schedulable entities(Pools and TaskSetManagers)
  */
 private[spark] trait Schedulable {
   var parent: Schedulable
+  //childrens
+  def schedulableQueue: ArrayBuffer[Schedulable]
+  def schedulingMode: SchedulingMode
   def weight: Int
   def minShare: Int
   def runningTasks: Int
