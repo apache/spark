@@ -95,24 +95,22 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s"
           .format(appId, executorId, logType, math.max(startByte-byteLength, 0),
             byteLength)}>
-          <button>Previous {Utils.memoryBytesToString(math.min(byteLength, startByte))} Bytes
-            </button>
+          <button>Previous {Utils.memoryBytesToString(math.min(byteLength, startByte))}</button>
         </a>
       }
       else {
-        <button disabled="disabled">Previous 0 Bytes</button>
+        <button disabled="disabled">Previous 0 B</button>
       }
 
     val nextButton =
       if (endByte < logLength) {
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
           format(appId, executorId, logType, endByte, byteLength)}>
-          <button>Next {Utils.memoryBytesToString(math.min(byteLength, logLength-endByte))} Bytes
-            </button>
+          <button>Next {Utils.memoryBytesToString(math.min(byteLength, logLength-endByte))}</button>
         </a>
       }
       else {
-        <button disabled="disabled">Next 0 Bytes</button>
+        <button disabled="disabled">Next 0 B</button>
       }
 
     val content =
