@@ -782,7 +782,7 @@ abstract class RDD[T: ClassManifest](
   }
 
   /**
-   * Returns the top K elements from this RDD as defined by
+   * Returns the first K elements from this RDD as defined by
    * the specified implicit Ordering[T] and maintains the
    * ordering.
    * @param num the number of top elements to return
