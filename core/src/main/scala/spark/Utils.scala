@@ -627,15 +627,16 @@ private object Utils extends Logging {
                          callSiteInfo.firstUserLine)
   }
 
-  /** Return a string containing the last `n` bytes of a file. */
-  def lastNBytes(path: String, n: Int): String = {
+  /** Return a string containing part of a file from byte 'start' to 'end'. */
+  def offsetBytes(path: String, start: Long, end: Long): String = {
     val file = new File(path)
     val length = file.length()
-    val buff = new Array[Byte](math.min(n, length.toInt))
-    val skip = math.max(0, length - n)
+    val effectiveEnd = math.min(length, end)
+    val effectiveStart = math.max(0, start)
+    val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
     val stream = new FileInputStream(file)
 
-    stream.skip(skip)
+    stream.skip(effectiveStart)
     stream.read(buff)
     stream.close()
     Source.fromBytes(buff).mkString
