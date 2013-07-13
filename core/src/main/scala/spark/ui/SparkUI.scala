@@ -5,15 +5,13 @@ import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.server.{Handler, Server}
 
 import spark.{Logging, SparkContext, Utils}
+import spark.ui.env.EnvironmentUI
 import spark.ui.storage.BlockManagerUI
 import spark.ui.jobs.JobProgressUI
-import spark.ui.UIUtils._
 import spark.ui.JettyUtils._
 
 /** Top level user interface for Spark */
 private[spark] class SparkUI(sc: SparkContext) extends Logging {
-  // TODO(pwendell): It would be nice to add a view that prints out environment information
-
   val host = Utils.localHostName()
   val port = Option(System.getProperty("spark.ui.port")).getOrElse(SparkUI.DEFAULT_PORT).toInt
   var boundPort: Option[Int] = None
@@ -25,7 +23,8 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   )
   val storage = new BlockManagerUI(sc)
   val jobs = new JobProgressUI(sc)
-  val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ handlers
+  val env = new EnvironmentUI(sc)
+  val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++ handlers
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {
