@@ -6,6 +6,7 @@ import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
 import java.util.regex.Pattern
 
+import scala.collection.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConversions._
 import scala.io.Source
@@ -545,10 +546,15 @@ private object Utils extends Logging {
   /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    */
-  def executeAndGetOutput(command: Seq[String], workingDir: File = new File(".")): String = {
-    val process = new ProcessBuilder(command: _*)
+  def executeAndGetOutput(command: Seq[String], workingDir: File = new File("."),
+                          extraEnvironment: Map[String, String] = Map.empty): String = {
+    val builder = new ProcessBuilder(command: _*)
         .directory(workingDir)
-        .start()
+    val environment = builder.environment()
+    for ((key, value) <- extraEnvironment) {
+      environment.put(key, value)
+    }
+    val process = builder.start()
     new Thread("read stderr for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
