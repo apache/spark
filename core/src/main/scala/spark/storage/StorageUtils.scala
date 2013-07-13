@@ -47,8 +47,8 @@ object StorageUtils {
 
   /* Returns a map of blocks to their locations, compiled from a list of StorageStatus objects */
   def blockLocationsFromStorageStatus(storageStatusList: Seq[StorageStatus]) = {
-     val blockLocationPairs = storageStatusList
-       .flatMap(s => s.blocks.map(b => (b._1, s.blockManagerId.hostPort)))
+    val blockLocationPairs = storageStatusList
+      .flatMap(s => s.blocks.map(b => (b._1, s.blockManagerId.hostPort)))
     blockLocationPairs.groupBy(_._1).map{case (k, v) => (k, v.unzip._2)}.toMap
   }
 
