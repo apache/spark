@@ -29,10 +29,10 @@ private[spark] class IndexPage(parent: JobProgressUI) {
           <th>Stage Id</th>
           <th>Origin</th>
           <th>Submitted</th>
-          <td>Duration</td>
-          <td colspan="2">Tasks: Complete/Total</td>
-          <td>Shuffle Activity</td>
-          <td>Stored RDD</td>
+          <th>Duration</th>
+          <th colspan="2">Tasks: Complete/Total</th>
+          <th>Shuffle Activity</th>
+          <th>Stored RDD</th>
         </thead>
         <tbody>
           {rows.map(r => makeRow(r))}

@@ -38,8 +38,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         <div class="row">
           <div class="span12">
             <ul class="unstyled">
-              <li><strong>URL:</strong>{state.uri}</li>
-              <li><strong>Workers:</strong>{state.workers.size}</li>
+              <li><strong>URL:</strong> {state.uri}</li>
+              <li><strong>Workers:</strong> {state.workers.size}</li>
               <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
                 {state.workers.map(_.coresUsed).sum} Used</li>
               <li><strong>Memory:</strong>
