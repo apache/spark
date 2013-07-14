@@ -579,8 +579,15 @@ private object Utils extends Logging {
     output.toString
   }
 
+  /** 
+   * A regular expression to match classes of the "core" Spark API that we want to skip when
+   * finding the call site of a method.
+   */
+  private val SPARK_CLASS_REGEX = """^spark(\.api\.java)?(\.rdd)?\.[A-Z]""".r
+
   private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
                                     val firstUserLine: Int, val firstUserClass: String)
+
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
@@ -602,7 +609,7 @@ private object Utils extends Logging {
 
     for (el <- trace) {
       if (!finished) {
-        if (el.getClassName.startsWith("spark.") && !el.getClassName.startsWith("spark.examples.")) {
+        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName) != None) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
