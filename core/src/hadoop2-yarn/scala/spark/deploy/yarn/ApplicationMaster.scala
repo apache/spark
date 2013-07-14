@@ -130,7 +130,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     val t = new Thread {
       override def run() {
         var successed = false
-        try{
+        try {
           // Copy
           var mainArgs: Array[String] = new Array[String](args.userArgs.size())
           args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size())
@@ -140,9 +140,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
           // It need shutdown hook to set SUCCEEDED
           successed = true
         } finally {
-          if(successed){
+          if (successed) {
             ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
-          }else{
+          } else {
             ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.FAILED)
           }
         }
@@ -190,7 +190,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     logInfo("All workers have launched.")
 
     // Launch a progress reporter thread, else app will get killed after expiration (def: 10mins) timeout
-    if (userThread.isAlive){
+    if (userThread.isAlive) {
       // ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapse.
 
       val timeoutInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
@@ -208,7 +208,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
 
     val t = new Thread {
       override def run() {
-        while (userThread.isAlive){
+        while (userThread.isAlive) {
           val missingWorkerCount = args.numWorkers - yarnAllocator.getNumWorkersRunning
           if (missingWorkerCount > 0) {
             logInfo("Allocating " + missingWorkerCount + " containers to make up for (potentially ?) lost containers")
@@ -250,7 +250,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   def finishApplicationMaster(status: FinalApplicationStatus) {
 
     synchronized {
-      if(isFinished){
+      if (isFinished) {
         return
       }
       isFinished = true
@@ -276,7 +276,7 @@ object ApplicationMaster {
   private val ALLOCATOR_LOOP_WAIT_COUNT = 30
   def incrementAllocatorLoop(by: Int) {
     val count = yarnAllocatorLoop.getAndAdd(by)
-    if (count >= ALLOCATOR_LOOP_WAIT_COUNT){
+    if (count >= ALLOCATOR_LOOP_WAIT_COUNT) {
       yarnAllocatorLoop.synchronized {
         // to wake threads off wait ...
         yarnAllocatorLoop.notifyAll()
@@ -320,7 +320,7 @@ object ApplicationMaster {
 
     // Wait for initialization to complete and atleast 'some' nodes can get allocated
     yarnAllocatorLoop.synchronized {
-      while (yarnAllocatorLoop.get() <= ALLOCATOR_LOOP_WAIT_COUNT){
+      while (yarnAllocatorLoop.get() <= ALLOCATOR_LOOP_WAIT_COUNT) {
         yarnAllocatorLoop.wait(1000L)
       }
     }
