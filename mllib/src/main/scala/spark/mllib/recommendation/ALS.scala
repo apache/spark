@@ -161,7 +161,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     for (productBlock <- 0 until numBlocks) {
       // Create an array of (product, Seq(Rating)) ratings
       val groupedRatings = blockRatings(productBlock).groupBy(_.product).toArray
-      // Sort them by user ID
+      // Sort them by product ID
       val ordering = new Ordering[(Int, ArrayBuffer[Rating])] {
         def compare(a: (Int, ArrayBuffer[Rating]), b: (Int, ArrayBuffer[Rating])): Int = a._1 - b._1
       }
