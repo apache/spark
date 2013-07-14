@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+#
+# Usage: start-slave.sh <worker#> <master-spark-URL>
+#   where <master-spark-URL> is like "spark://localhost:7077"
 
 bin=`dirname "$0"`
 bin=`cd "$bin"; pwd`
