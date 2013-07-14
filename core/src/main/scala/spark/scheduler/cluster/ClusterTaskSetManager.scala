@@ -454,10 +454,10 @@ private[spark] class ClusterTaskSetManager(
           val taskId = sched.newTaskId()
           // Figure out whether this should count as a preferred launch
           val taskLocality =
-            if (isProcessLocalLocation(task, hostPort)) TaskLocality.PROCESS_LOCAL else
-            if (isHostLocalLocation(task, hostPort)) TaskLocality.NODE_LOCAL else
-            if (isRackLocalLocation(task, hostPort)) TaskLocality.RACK_LOCAL else
-              TaskLocality.ANY
+            if (isProcessLocalLocation(task, hostPort)) TaskLocality.PROCESS_LOCAL
+            else if (isHostLocalLocation(task, hostPort)) TaskLocality.NODE_LOCAL
+            else if (isRackLocalLocation(task, hostPort)) TaskLocality.RACK_LOCAL
+            else  TaskLocality.ANY
           val prefStr = taskLocality.toString
           logInfo("Starting task %s:%d as TID %s on slave %s: %s (%s)".format(
             taskSet.id, index, taskId, execId, hostPort, prefStr))
@@ -467,7 +467,7 @@ private[spark] class ClusterTaskSetManager(
           val info = new TaskInfo(taskId, index, time, execId, hostPort, taskLocality)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
-          if (TaskLocality.NODE_LOCAL == taskLocality) {
+          if (taskLocality == TaskLocality.PROCESS_LOCAL || taskLocality == TaskLocality.NODE_LOCAL) {
             lastPreferredLaunchTime = time
           }
           // Serialize and return the task
