@@ -131,9 +131,5 @@ else
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 fi
-<<<<<<< HEAD
 
-exec "$RUNNER" -cp  "$CLASSPATH" $EXTRA_ARGS "$@"
-=======
 exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"
->>>>>>> 4698a0d6886905ef21cbd52e108d0dcab3df12df
