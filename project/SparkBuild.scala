@@ -110,7 +110,9 @@ object SparkBuild extends Build {
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.8"    % "test",
-        "org.easymock"      % "easymock"        % "3.1"    % "test"
+        "org.easymock"      % "easymock"        % "3.1"    % "test",
+        "commons-io"        % "commons-io"      % "2.4"    % "test"
+
     ),
 
     parallelExecution := false,
