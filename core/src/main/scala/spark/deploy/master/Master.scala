@@ -80,6 +80,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       logInfo("Registering app " + description.name)
       val app = addApplication(description, sender)
       logInfo("Registered app " + description.name + " with ID " + app.id)
+      logInfo("Started App web UI at " + description.appUiUrl)
       waitingApps += app
       context.watch(sender)  // This doesn't work with remote actors but helps for testing
       sender ! RegisteredApplication(app.id)
