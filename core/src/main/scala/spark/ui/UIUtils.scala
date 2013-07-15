@@ -31,7 +31,7 @@ private[spark] object UIUtils {
         <link rel="stylesheet" href="/static/webui.css" type="text/css" />
         <link rel="stylesheet" href="/static/bootstrap-responsive.min.css" type="text/css" />
         <script src="/static/sorttable.js"></script>
-        <title>{title}</title>
+        <title>{sc.appName} - {title}</title>
         <style type="text/css">
           table.sortable thead {{ cursor: pointer; }}
         </style>
