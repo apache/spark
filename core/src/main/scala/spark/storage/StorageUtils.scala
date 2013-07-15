@@ -39,10 +39,17 @@ case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
 private[spark]
 object StorageUtils {
 
-  /* Given the current storage status of the BlockManager, returns information for each RDD */
-  def rddInfoFromStorageStatus(storageStatusList: Array[StorageStatus],
+  /* Returns RDD-level information, compiled from a list of StorageStatus objects */
+  def rddInfoFromStorageStatus(storageStatusList: Seq[StorageStatus],
     sc: SparkContext) : Array[RDDInfo] = {
     rddInfoFromBlockStatusList(storageStatusList.flatMap(_.blocks).toMap, sc)
+  }
+
+  /* Returns a map of blocks to their locations, compiled from a list of StorageStatus objects */
+  def blockLocationsFromStorageStatus(storageStatusList: Seq[StorageStatus]) = {
+    val blockLocationPairs = storageStatusList
+      .flatMap(s => s.blocks.map(b => (b._1, s.blockManagerId.hostPort)))
+    blockLocationPairs.groupBy(_._1).map{case (k, v) => (k, v.unzip._2)}.toMap
   }
 
   /* Given a list of BlockStatus objets, returns information for each RDD */

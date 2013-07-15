@@ -1,5 +1,7 @@
 package spark.ui
 
+import scala.util.{Failure, Success, Try}
+import java.net.ServerSocket
 import org.scalatest.FunSuite
 import org.eclipse.jetty.server.Server
 import java.net.ServerSocket

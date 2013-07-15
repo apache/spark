@@ -2,11 +2,14 @@ package spark.mllib.recommendation
 
 import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.util.Random
+import scala.util.Sorting
 
 import spark.{HashPartitioner, Partitioner, SparkContext, RDD}
 import spark.storage.StorageLevel
+import spark.KryoRegistrator
 import spark.SparkContext._
 
+import com.esotericsoftware.kryo.Kryo
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
 
 
@@ -31,6 +34,12 @@ private[recommendation] case class OutLinkBlock(
  */
 private[recommendation] case class InLinkBlock(
   elementIds: Array[Int], ratingsForBlock: Array[Array[(Array[Int], Array[Double])]])
+
+
+/**
+ * A more compact class to represent a rating than Tuple3[Int, Int, Double].
+ */
+private[recommendation] case class Rating(user: Int, product: Int, rating: Double)
 
 
 /**
@@ -84,15 +93,15 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    */
   def train(ratings: RDD[(Int, Int, Double)]): MatrixFactorizationModel = {
     val numBlocks = if (this.numBlocks == -1) {
-      math.max(ratings.context.defaultParallelism, ratings.partitions.size)
+      math.max(ratings.context.defaultParallelism, ratings.partitions.size / 2)
     } else {
       this.numBlocks
     }
 
     val partitioner = new HashPartitioner(numBlocks)
 
-    val ratingsByUserBlock = ratings.map{ case (u, p, r) => (u % numBlocks, (u, p, r)) }
-    val ratingsByProductBlock = ratings.map{ case (u, p, r) => (p % numBlocks, (p, u, r)) }
+    val ratingsByUserBlock = ratings.map{ case (u, p, r) => (u % numBlocks, Rating(u, p, r)) }
+    val ratingsByProductBlock = ratings.map{ case (u, p, r) => (p % numBlocks, Rating(p, u, r)) }
 
     val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
     val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
@@ -126,13 +135,13 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    * Make the out-links table for a block of the users (or products) dataset given the list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeOutLinkBlock(numBlocks: Int, ratings: Array[(Int, Int, Double)]): OutLinkBlock = {
-    val userIds = ratings.map(_._1).distinct.sorted
+  private def makeOutLinkBlock(numBlocks: Int, ratings: Array[Rating]): OutLinkBlock = {
+    val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
     val shouldSend = Array.fill(numUsers)(new BitSet(numBlocks))
-    for ((u, p, r) <- ratings) {
-      shouldSend(userIdToPos(u))(p % numBlocks) = true
+    for (r <- ratings) {
+      shouldSend(userIdToPos(r.user))(r.product % numBlocks) = true
     }
     OutLinkBlock(userIds, shouldSend)
   }
@@ -141,18 +150,28 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    * Make the in-links table for a block of the users (or products) dataset given a list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeInLinkBlock(numBlocks: Int, ratings: Array[(Int, Int, Double)]): InLinkBlock = {
-    val userIds = ratings.map(_._1).distinct.sorted
+  private def makeInLinkBlock(numBlocks: Int, ratings: Array[Rating]): InLinkBlock = {
+    val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
+    // Split out our ratings by product block
+    val blockRatings = Array.fill(numBlocks)(new ArrayBuffer[Rating])
+    for (r <- ratings) {
+      blockRatings(r.product % numBlocks) += r
+    }
     val ratingsForBlock = new Array[Array[(Array[Int], Array[Double])]](numBlocks)
     for (productBlock <- 0 until numBlocks) {
-      val ratingsInBlock = ratings.filter(t => t._2 % numBlocks == productBlock)
-      val ratingsByProduct = ratingsInBlock.groupBy(_._2)  // (p, Seq[(u, p, r)])
-                               .toArray
-                               .sortBy(_._1)
-                               .map{case (p, rs) => (rs.map(t => userIdToPos(t._1)), rs.map(_._3))}
-      ratingsForBlock(productBlock) = ratingsByProduct
+      // Create an array of (product, Seq(Rating)) ratings
+      val groupedRatings = blockRatings(productBlock).groupBy(_.product).toArray
+      // Sort them by product ID
+      val ordering = new Ordering[(Int, ArrayBuffer[Rating])] {
+        def compare(a: (Int, ArrayBuffer[Rating]), b: (Int, ArrayBuffer[Rating])): Int = a._1 - b._1
+      }
+      Sorting.quickSort(groupedRatings)(ordering)
+      // Translate the user IDs to indices based on userIdToPos
+      ratingsForBlock(productBlock) = groupedRatings.map { case (p, rs) =>
+        (rs.view.map(r => userIdToPos(r.user)).toArray, rs.view.map(_.rating).toArray)
+      }
     }
     InLinkBlock(userIds, ratingsForBlock)
   }
@@ -162,12 +181,12 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    * the users (or (blockId, (p, u, r)) for the products). We create these simultaneously to avoid
    * having to shuffle the (blockId, (u, p, r)) RDD twice, or to cache it.
    */
-  private def makeLinkRDDs(numBlocks: Int, ratings: RDD[(Int, (Int, Int, Double))])
+  private def makeLinkRDDs(numBlocks: Int, ratings: RDD[(Int, Rating)])
     : (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) =
   {
     val grouped = ratings.partitionBy(new HashPartitioner(numBlocks))
     val links = grouped.mapPartitionsWithIndex((blockId, elements) => {
-      val ratings = elements.map(_._2).toArray
+      val ratings = elements.map{_._2}.toArray
       val inLinkBlock = makeInLinkBlock(numBlocks, ratings)
       val outLinkBlock = makeOutLinkBlock(numBlocks, ratings)
       Iterator.single((blockId, (inLinkBlock, outLinkBlock)))
@@ -366,19 +385,30 @@ object ALS {
     train(ratings, rank, iterations, 0.01, -1)
   }
 
+  private class ALSRegistrator extends KryoRegistrator {
+    override def registerClasses(kryo: Kryo) {
+      kryo.register(classOf[Rating])
+    }
+  }
+
   def main(args: Array[String]) {
-    if (args.length != 5) {
-      println("Usage: ALS <master> <ratings_file> <rank> <iterations> <output_dir>")
+    if (args.length != 5 && args.length != 6) {
+      println("Usage: ALS <master> <ratings_file> <rank> <iterations> <output_dir> [<blocks>]")
       System.exit(1)
     }
     val (master, ratingsFile, rank, iters, outputDir) =
       (args(0), args(1), args(2).toInt, args(3).toInt, args(4))
+    val blocks = if (args.length == 6) args(5).toInt else -1
+    System.setProperty("spark.serializer", "spark.KryoSerializer")
+    System.setProperty("spark.kryo.registrator", classOf[ALSRegistrator].getName)
+    System.setProperty("spark.kryo.referenceTracking", "false")
+    System.setProperty("spark.locality.wait", "10000")
     val sc = new SparkContext(master, "ALS")
     val ratings = sc.textFile(ratingsFile).map { line =>
       val fields = line.split(',')
       (fields(0).toInt, fields(1).toInt, fields(2).toDouble)
     }
-    val model = ALS.train(ratings, rank, iters)
+    val model = ALS.train(ratings, rank, iters, 0.01, blocks)
     model.userFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }
                       .saveAsTextFile(outputDir + "/userFeatures")
     model.productFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }

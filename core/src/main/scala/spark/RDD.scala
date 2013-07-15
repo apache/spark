@@ -781,8 +781,18 @@ abstract class RDD[T: ClassTag](
     }.reduce { (queue1, queue2) =>
       queue1 ++= queue2
       queue1
-    }.toArray
+    }.toArray.sorted(ord.reverse)
   }
+
+  /**
+   * Returns the first K elements from this RDD as defined by
+   * the specified implicit Ordering[T] and maintains the
+   * ordering.
+   * @param num the number of top elements to return
+   * @param ord the implicit ordering for T
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = top(num)(ord.reverse)
 
   /**
    * Save this RDD as a text file, using string representations of elements.

@@ -549,10 +549,15 @@ private object Utils extends Logging {
   /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    */
-  def executeAndGetOutput(command: Seq[String], workingDir: File = new File(".")): String = {
-    val process = new ProcessBuilder(command: _*)
+  def executeAndGetOutput(command: Seq[String], workingDir: File = new File("."),
+                          extraEnvironment: Map[String, String] = Map.empty): String = {
+    val builder = new ProcessBuilder(command: _*)
         .directory(workingDir)
-        .start()
+    val environment = builder.environment()
+    for ((key, value) <- extraEnvironment) {
+      environment.put(key, value)
+    }
+    val process = builder.start()
     new Thread("read stderr for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
@@ -577,8 +582,15 @@ private object Utils extends Logging {
     output.toString
   }
 
+  /**
+   * A regular expression to match classes of the "core" Spark API that we want to skip when
+   * finding the call site of a method.
+   */
+  private val SPARK_CLASS_REGEX = """^spark(\.api\.java)?(\.rdd)?\.[A-Z]""".r
+
   private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
                                     val firstUserLine: Int, val firstUserClass: String)
+
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
@@ -600,7 +612,7 @@ private object Utils extends Logging {
 
     for (el <- trace) {
       if (!finished) {
-        if (el.getClassName.startsWith("spark.") && !el.getClassName.startsWith("spark.examples.")) {
+        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName) != None) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
@@ -625,15 +637,16 @@ private object Utils extends Logging {
                          callSiteInfo.firstUserLine)
   }
 
-  /** Return a string containing the last `n` bytes of a file. */
-  def lastNBytes(path: String, n: Int): String = {
+  /** Return a string containing part of a file from byte 'start' to 'end'. */
+  def offsetBytes(path: String, start: Long, end: Long): String = {
     val file = new File(path)
     val length = file.length()
-    val buff = new Array[Byte](math.min(n, length.toInt))
-    val skip = math.max(0, length - n)
+    val effectiveEnd = math.min(length, end)
+    val effectiveStart = math.max(0, start)
+    val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
     val stream = new FileInputStream(file)
 
-    stream.skip(skip)
+    stream.skip(effectiveStart)
     stream.read(buff)
     stream.close()
     Source.fromBytes(buff).mkString

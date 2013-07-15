@@ -77,7 +77,7 @@ private[spark] class Worker(
     sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    webUi = new WorkerWebUI(self, workDir, Some(webUiPort))
+    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
     webUi.start()
     connectToMaster()
   }

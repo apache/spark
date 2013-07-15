@@ -385,4 +385,29 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[T]]
     top(num, comp)
   }
+
+  /**
+   * Returns the first K elements from this RDD as defined by
+   * the specified Comparator[T] and maintains the order.
+   * @param num the number of top elements to return
+   * @param comp the comparator that defines the order
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int, comp: Comparator[T]): JList[T] = {
+    import scala.collection.JavaConversions._
+    val topElems = rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp))
+    val arr: java.util.Collection[T] = topElems.toSeq
+    new java.util.ArrayList(arr)
+  }
+
+  /**
+   * Returns the first K elements from this RDD using the
+   * natural ordering for T while maintain the order.
+   * @param num the number of top elements to return
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int): JList[T] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[T]]
+    takeOrdered(num, comp)
+  }
 }

@@ -1,8 +1,5 @@
 #!/bin/bash
 
-
-SCALA_VERSION=2.10
-
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 
@@ -78,7 +75,7 @@ else
       exit 1
     fi
   fi
-  if [ -z "$SCALA_LIBRARY_PATH" ]; then
+  if [[ ! -f "$FWDIR/RELEASE" && -z "$SCALA_LIBRARY_PATH" ]]; then
     if [ -z "$SCALA_HOME" ]; then
       echo "SCALA_HOME is not set" >&2
       exit 1
@@ -105,37 +102,28 @@ fi
 export JAVA_OPTS
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
 
-CORE_DIR="$FWDIR/core"
-EXAMPLES_DIR="$FWDIR/examples"
-REPL_DIR="$FWDIR/repl"
+if [ ! -f "$FWDIR/RELEASE" ]; then
+  CORE_DIR="$FWDIR/core"
+  EXAMPLES_DIR="$FWDIR/examples"
+  REPL_DIR="$FWDIR/repl"
 
-# Exit if the user hasn't compiled Spark
-if [ ! -e "$CORE_DIR/target" ]; then
-  echo "Failed to find Spark classes in $CORE_DIR/target" >&2
-  echo "You need to compile Spark before running this program" >&2
-  exit 1
-fi
+  # Exit if the user hasn't compiled Spark
+  if [ ! -e "$CORE_DIR/target" ]; then
+    echo "Failed to find Spark classes in $CORE_DIR/target" >&2
+    echo "You need to compile Spark before running this program" >&2
+    exit 1
+  fi
 
-if [[ "$@" = *repl* && ! -e "$REPL_DIR/target" ]]; then
-  echo "Failed to find Spark classes in $REPL_DIR/target" >&2
-  echo "You need to compile Spark repl module before running this program" >&2
-  exit 1
+  if [[ "$@" = *repl* && ! -e "$REPL_DIR/target" ]]; then
+    echo "Failed to find Spark classes in $REPL_DIR/target" >&2
+    echo "You need to compile Spark repl module before running this program" >&2
+    exit 1
+  fi
 fi
 
 # Compute classpath using external script
 CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
 export CLASSPATH
-
-# Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
-# to avoid the -sources and -doc packages that are built by publish-local.
-if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
-  # Use the JAR from the SBT build
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
-fi
-if [ -e "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar ]; then
-  # Use the JAR from the Maven build
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
-fi
 
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
   EXTRA_ARGS=""     # Java options will be passed to scala as JAVA_OPTS
@@ -143,5 +131,9 @@ else
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 fi
+<<<<<<< HEAD
 
 exec "$RUNNER" -cp  "$CLASSPATH" $EXTRA_ARGS "$@"
+=======
+exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"
+>>>>>>> 4698a0d6886905ef21cbd52e108d0dcab3df12df
