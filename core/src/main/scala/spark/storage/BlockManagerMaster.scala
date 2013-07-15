@@ -9,10 +9,13 @@ import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import scala.concurrent.Await
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+
 import akka.pattern.ask
 import scala.concurrent.duration._
 
-import spark.{Logging, SparkException, Utils}
+import spark.{Logging, SparkException}
 
 private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {
 
@@ -21,7 +24,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
 
   val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
-  val timeout = 10.seconds
+  val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
 
   /** Remove a dead executor from the driver actor. This is only called on the driver side. */
   def removeExecutor(execId: String) {
@@ -87,6 +90,19 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
   }
 
   /**
+   * Remove all blocks belonging to the given RDD.
+   */
+  def removeRdd(rddId: Int, blocking: Boolean) {
+    val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
+    future onFailure {
+      case e: Throwable => logError("Failed to remove RDD " + rddId, e)
+    }
+    if (blocking) {
+      Await.result(future, timeout)
+    }
+  }
+
+  /**
    * Return the memory status for each block manager, in the form of a map from
    * the block manager's id to two long values. The first value is the maximum
    * amount of memory allocated for the block manager, while the second is the
@@ -97,7 +113,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
   }
 
   def getStorageStatus: Array[StorageStatus] = {
-    askDriverWithReply[ArrayBuffer[StorageStatus]](GetStorageStatus).toArray
+    askDriverWithReply[Array[StorageStatus]](GetStorageStatus)
   }
 
   /** Stop the driver actor, called only on the Spark driver node */
@@ -134,7 +150,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
         val future = driverActor.ask(message)(timeout)
         val result = Await.result(future, timeout)
         if (result == null) {
-          throw new Exception("BlockManagerMaster returned null")
+          throw new SparkException("BlockManagerMaster returned null")
         }
         return result.asInstanceOf[T]
       } catch {

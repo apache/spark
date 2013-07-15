@@ -14,10 +14,10 @@ import spark.deploy.LaunchExecutor
 import spark.deploy.RegisterWorkerFailed
 import spark.deploy.master.Master
 import java.io.File
-
+import ui.WorkerWebUI
 
 private[spark] class Worker(
-    ip: String,
+    host: String,
     port: Int,
     webUiPort: Int,
     cores: Int,
@@ -25,6 +25,9 @@ private[spark] class Worker(
     masterUrl: String,
     workDirPath: String = null)
   extends Actor with Logging {
+
+  Utils.checkHost(host, "Expected hostname")
+  assert (port > 0)
 
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
 
@@ -40,8 +43,9 @@ private[spark] class Worker(
   val finishedExecutors = new HashMap[String, ExecutorRunner]
   val publicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
-    if (envVar != null) envVar else ip
+    if (envVar != null) envVar else host
   }
+  var webUi: WorkerWebUI = null
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -52,10 +56,14 @@ private[spark] class Worker(
   def createWorkDir() {
     workDir = Option(workDirPath).map(new File(_)).getOrElse(new File(sparkHome, "work"))
     try {
-      if (!workDir.exists() && !workDir.mkdirs()) {
+      // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
+      // So attempting to create and then check if directory was created or not.
+      workDir.mkdirs()
+      if ( !workDir.exists() || !workDir.isDirectory) {
         logError("Failed to create work directory " + workDir)
         System.exit(1)
       }
+      assert (workDir.isDirectory)
     } catch {
       case e: Exception =>
         logError("Failed to create work directory " + workDir, e)
@@ -65,39 +73,30 @@ private[spark] class Worker(
 
   override def preStart() {
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
-      ip, port, cores, Utils.memoryMegabytesToString(memory)))
+      host, port, cores, Utils.memoryMegabytesToString(memory)))
     sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
+    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
+    webUi.start()
     connectToMaster()
-    startWebUi()
   }
 
   def connectToMaster() {
     logInfo("Connecting to master " + masterUrl)
     master = context.actorFor(Master.toAkkaUrl(masterUrl))
-    master ! RegisterWorker(workerId, ip, port, cores, memory, webUiPort, publicAddress)
+    master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort.get, publicAddress)
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     context.watch(master) // Doesn't work with remote actors, but useful for testing
   }
 
-  def startWebUi() {
-    val webUi = new WorkerWebUI(self, workDir)
-    try {
-      AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
-    } catch {
-      case e: Exception =>
-        logError("Failed to create web UI", e)
-        System.exit(1)
-    }
-  }
+  import context.dispatcher
 
   override def receive = {
     case RegisteredWorker(url) =>
       masterWebUiUrl = url
       logInfo("Successfully registered with master")
-      import context.dispatcher
-      context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
+        context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
         master ! Heartbeat(workerId)
       }
 
@@ -108,7 +107,7 @@ private[spark] class Worker(
     case LaunchExecutor(appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
       logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
       val manager = new ExecutorRunner(
-        appId, execId, appDesc, cores_, memory_, self, workerId, ip, new File(execSparkHome_), workDir)
+        appId, execId, appDesc, cores_, memory_, self, workerId, host + ":" + port, new File(execSparkHome_), workDir)
       executors(appId + "/" + execId) = manager
       manager.start()
       coresUsed += cores_
@@ -143,7 +142,7 @@ private[spark] class Worker(
       masterDisconnected()
 
     case RequestWorkerState => {
-      sender ! WorkerState(ip, port, workerId, executors.values.toList,
+      sender ! WorkerState(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, masterUrl, cores, memory,
         coresUsed, memoryUsed, masterWebUiUrl)
     }
@@ -158,18 +157,19 @@ private[spark] class Worker(
   }
 
   def generateWorkerId(): String = {
-    "worker-%s-%s-%d".format(DATE_FORMAT.format(new Date), ip, port)
+    "worker-%s-%s-%d".format(DATE_FORMAT.format(new Date), host, port)
   }
 
   override def postStop() {
     executors.values.foreach(_.kill())
+    webUi.stop()
   }
 }
 
 private[spark] object Worker {
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
-    val (actorSystem, _) = startSystemAndActor(args.ip, args.port, args.webUiPort, args.cores,
+    val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.master, args.workDir)
     actorSystem.awaitTermination()
   }

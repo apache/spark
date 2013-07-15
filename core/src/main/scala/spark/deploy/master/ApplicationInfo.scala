@@ -10,7 +10,8 @@ private[spark] class ApplicationInfo(
     val id: String,
     val desc: ApplicationDescription,
     val submitDate: Date,
-    val driver: ActorRef)
+    val driver: ActorRef,
+    val appUiUrl: String)
 {
   var state = ApplicationState.WAITING
   var executors = new mutable.HashMap[Int, ExecutorInfo]
@@ -37,7 +38,7 @@ private[spark] class ApplicationInfo(
     coresGranted -= exec.cores
   }
 
-  def coresLeft: Int = desc.cores - coresGranted
+  def coresLeft: Int = desc.maxCores - coresGranted
 
   private var _retryCount = 0
 
@@ -60,4 +61,5 @@ private[spark] class ApplicationInfo(
       System.currentTimeMillis() - startTime
     }
   }
+
 }

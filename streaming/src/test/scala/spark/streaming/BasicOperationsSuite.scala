@@ -15,6 +15,7 @@ class BasicOperationsSuite extends TestSuiteBase {
   after {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
   }
 
   test("map") {
@@ -92,9 +93,9 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("count") {
     testOperation(
-      Seq(1 to 1, 1 to 2, 1 to 3, 1 to 4),
+      Seq(Seq(), 1 to 1, 1 to 2, 1 to 3, 1 to 4),
       (s: DStream[Int]) => s.count(),
-      Seq(Seq(1L), Seq(2L), Seq(3L), Seq(4L))
+      Seq(Seq(0L), Seq(1L), Seq(2L), Seq(3L), Seq(4L))
     )
   }
 

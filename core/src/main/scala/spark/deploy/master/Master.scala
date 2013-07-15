@@ -13,9 +13,10 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import spark.deploy._
 import spark.{Logging, SparkException, Utils}
 import spark.util.AkkaUtils
+import ui.MasterWebUI
 
 
-private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor with Logging {
+private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
 
@@ -35,9 +36,13 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
 
   var firstApp: Option[ApplicationInfo] = None
 
+  val webUi = new MasterWebUI(self)
+
+  Utils.checkHost(host, "Expected hostname")
+
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
-    if (envVar != null) envVar else ip
+    if (envVar != null) envVar else host
   }
 
   // As a temporary workaround before better ways of configuring memory, we allow users to set
@@ -46,23 +51,16 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
   val spreadOutApps = System.getProperty("spark.deploy.spreadOut", "true").toBoolean
 
   override def preStart() {
-    logInfo("Starting Spark master at spark://" + ip + ":" + port)
+    logInfo("Starting Spark master at spark://" + host + ":" + port)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-    startWebUi()
+    webUi.start()
     import context.dispatcher
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
   }
 
-  def startWebUi() {
-    val webUi = new MasterWebUI(self)
-    try {
-      AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
-    } catch {
-      case e: Exception =>
-        logError("Failed to create web UI", e)
-        System.exit(1)
-    }
+  override def postStop() {
+    webUi.stop()
   }
 
   override def receive = {
@@ -74,7 +72,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       } else {
         addWorker(id, host, workerPort, cores, memory, worker_webUiPort, publicAddress)
         context.watch(sender)  // This doesn't work with remote actors but helps for testing
-        sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUiPort)
+        sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUi.boundPort.get)
         schedule()
       }
     }
@@ -146,7 +144,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     }
 
     case RequestMasterState => {
-      sender ! MasterState(ip, port, workers.toArray, apps.toArray, completedApps.toArray)
+      sender ! MasterState(host, port, workers.toArray, apps.toArray, completedApps.toArray)
     }
   }
 
@@ -212,13 +210,13 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.actor ! LaunchExecutor(exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory, sparkHome)
-    exec.application.driver ! ExecutorAdded(exec.id, worker.id, worker.host, exec.cores, exec.memory)
+    exec.application.driver ! ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory)
   }
 
   def addWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int,
     publicAddress: String): WorkerInfo = {
     // There may be one or more refs to dead workers on this same node (w/ different ID's), remove them.
-    workers.filter(w => (w.host == host) && (w.state == WorkerState.DEAD)).foreach(workers -= _)
+    workers.filter(w => (w.host == host && w.port == port) && (w.state == WorkerState.DEAD)).foreach(workers -= _)
     val worker = new WorkerInfo(id, host, port, cores, memory, sender, webUiPort, publicAddress)
     workers += worker
     idToWorker(worker.id) = worker
@@ -243,7 +241,7 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
   def addApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    val app = new ApplicationInfo(now, newApplicationId(date), desc, date, driver)
+    val app = new ApplicationInfo(now, newApplicationId(date), desc, date, driver, desc.appUiUrl)
     apps += app
     idToApp(app.id) = app
     actorToApp(driver) = app
@@ -274,9 +272,12 @@ private[spark] class Master(ip: String, port: Int, webUiPort: Int) extends Actor
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
         exec.worker.actor ! KillExecutor(exec.application.id, exec.id)
+        exec.state = ExecutorState.KILLED
       }
       app.markFinished(state)
-      app.driver ! ApplicationRemoved(state.toString)
+      if (state != ApplicationState.FINISHED) {
+        app.driver ! ApplicationRemoved(state.toString)
+      }
       schedule()
     }
   }
@@ -308,7 +309,7 @@ private[spark] object Master {
 
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)
-    val (actorSystem, _) = startSystemAndActor(args.ip, args.port, args.webUiPort)
+    val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort)
     actorSystem.awaitTermination()
   }
 

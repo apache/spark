@@ -30,7 +30,7 @@ import scala.tools.util._
 import scala.language.{implicitConversions, existentials}
 import scala.reflect.{ClassTag, classTag}
 import scala.tools.reflect.StdRuntimeTags._
-import scala.reflect.{ClassTag, classTag}
+
 import java.lang.{Class => jClass}
 import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 
@@ -641,6 +641,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
     reset()
   }
+
   def reset() {
     intp.reset()
     // unleashAndSetPhase()
@@ -921,7 +922,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
         if (prop != null) prop else "local"
       }
     }
-    sparkContext = new SparkContext(master, "Spark shell")
+    val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
+    sparkContext = new SparkContext(master, "Spark shell", System.getenv("SPARK_HOME"), jars)
     echo("Created spark context..")
     sparkContext
   }
@@ -947,6 +949,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 object SparkILoop {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
+
+  def getAddedJars: Array[String] = Option(System.getenv("ADD_JARS")).map(_.split(',')).getOrElse(new Array[String](0))
 
   // Designed primarily for use by test code: take a String with a
   // bunch of code, and prints out a transcript of what it would look
@@ -975,8 +979,11 @@ object SparkILoop {
           }
         }
         val repl = new SparkILoop(input, output)
+
         if (settings.classpath.isDefault)
           settings.classpath.value = sys.props("java.class.path")
+
+        getAddedJars.foreach(settings.classpath.append(_))
 
         repl process settings
       }

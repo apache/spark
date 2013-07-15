@@ -11,6 +11,12 @@ import spark.{Logging, SparkException, Utils}
  */
 class BlockManagerSlaveActor(blockManager: BlockManager) extends Actor {
   override def receive = {
-    case RemoveBlock(blockId) => blockManager.removeBlock(blockId)
+
+    case RemoveBlock(blockId) =>
+      blockManager.removeBlock(blockId)
+
+    case RemoveRdd(rddId) =>
+      val numBlocksRemoved = blockManager.removeRdd(rddId)
+      sender ! numBlocksRemoved
   }
 }

@@ -119,7 +119,7 @@ trait SparkILoopInit {
       command("""
          @transient val sc = spark.repl.Main.interp.createSparkContext();
         """)
-      command("import spark.SparkContext._");
+      command("import spark.SparkContext._")
     }
    echo("Spark context available as sc.")
   }

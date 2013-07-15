@@ -9,7 +9,7 @@ import java.lang.management.ManagementFactory
  * Command-line parser for the master.
  */
 private[spark] class WorkerArguments(args: Array[String]) {
-  var ip = Utils.localHostName()
+  var host = Utils.localHostName()
   var port = 0
   var webUiPort = 8081
   var cores = inferDefaultCores()
@@ -38,7 +38,13 @@ private[spark] class WorkerArguments(args: Array[String]) {
 
   def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
-      ip = value
+      Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
+      host = value
+      parse(tail)
+
+    case ("--host" | "-h") :: value :: tail =>
+      Utils.checkHost(value, "Please use hostname " + value)
+      host = value
       parse(tail)
 
     case ("--port" | "-p") :: IntParam(value) :: tail =>
@@ -93,7 +99,8 @@ private[spark] class WorkerArguments(args: Array[String]) {
       "  -c CORES, --cores CORES  Number of cores to use\n" +
       "  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)\n" +
       "  -d DIR, --work-dir DIR   Directory to run apps in (default: SPARK_HOME/work)\n" +
-      "  -i IP, --ip IP           IP address or DNS name to listen on\n" +
+      "  -i HOST, --ip IP         Hostname to listen on (deprecated, please use --host or -h)\n" +
+      "  -h HOST, --host HOST     Hostname to listen on\n" +
       "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
       "  --webui-port PORT        Port for web UI (default: 8081)")
     System.exit(exitCode)

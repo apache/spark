@@ -17,9 +17,15 @@ JavaRDDLike[T, JavaRDD[T]] {
 
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
-   * it is computed. Can only be called once on each RDD.
+   * it is computed. This can only be used to assign a new storage level if the RDD does not
+   * have a storage level set yet..
    */
   def persist(newLevel: StorageLevel): JavaRDD[T] = wrapRDD(rdd.persist(newLevel))
+
+  /**
+   * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   */
+  def unpersist(): JavaRDD[T] = wrapRDD(rdd.unpersist())
 
   // Transformations (return a new RDD)
 
@@ -81,7 +87,6 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
-
 }
 
 object JavaRDD {

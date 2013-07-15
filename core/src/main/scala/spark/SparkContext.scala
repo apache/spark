@@ -1,48 +1,58 @@
 package spark
 
 import java.io._
-import java.util.concurrent.atomic.AtomicInteger
 import java.net.URI
+import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
+
 import scala.reflect.{ ClassTag, classTag}
 
-import org.apache.hadoop.fs.Path
+import scala.util.DynamicVariable
+import scala.collection.mutable.{ConcurrentMap, HashMap}
+
+import akka.actor.Actor._
+
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapred.InputFormat
-import org.apache.hadoop.mapred.SequenceFileInputFormat
-import org.apache.hadoop.io.Writable
-import org.apache.hadoop.io.IntWritable
-import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.io.FloatWritable
-import org.apache.hadoop.io.DoubleWritable
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.ArrayWritable
 import org.apache.hadoop.io.BooleanWritable
 import org.apache.hadoop.io.BytesWritable
-import org.apache.hadoop.io.ArrayWritable
+import org.apache.hadoop.io.DoubleWritable
+import org.apache.hadoop.io.FloatWritable
+import org.apache.hadoop.io.IntWritable
+import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.FileInputFormat
+import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.SequenceFileInputFormat
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.mesos.MesosNativeLibrary
 
-import spark.deploy.LocalSparkCluster
-import spark.partial.ApproximateEvaluator
-import spark.partial.PartialResult
+import spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import spark.partial.{ApproximateEvaluator, PartialResult}
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
-import spark.scheduler._
+import spark.scheduler.{DAGScheduler, ResultTask, ShuffleMapTask, SparkListener, SplitInfo, Stage, StageInfo, TaskScheduler}
+import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, ClusterScheduler}
 import spark.scheduler.local.LocalScheduler
-import spark.scheduler.cluster.{SparkDeploySchedulerBackend, SchedulerBackend, ClusterScheduler}
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import spark.storage.BlockManagerUI
-import spark.util.{MetadataCleaner, TimeStampedHashMap}
 import spark.storage.{StorageStatus, StorageUtils, RDDInfo}
+import spark.util.{MetadataCleaner, TimeStampedHashMap}
+import ui.{SparkUI}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -60,7 +70,10 @@ class SparkContext(
     val appName: String,
     val sparkHome: String = null,
     val jars: Seq[String] = Nil,
-    val environment: Map[String, String] = Map())
+    val environment: Map[String, String] = Map(),
+    // This is used only by yarn for now, but should be relevant to other cluster types (mesos, etc) too.
+    // This is typically generated from InputFormatInfo.computePreferredLocations .. host, set of data-local splits on host
+    val preferredNodeLocationData: scala.collection.Map[String, scala.collection.Set[SplitInfo]] = scala.collection.immutable.Map())
   extends Logging {
 
   // Ensure logging is initialized before we spawn any threads
@@ -68,7 +81,7 @@ class SparkContext(
 
   // Set Spark driver host and port system properties
   if (System.getProperty("spark.driver.host") == null) {
-    System.setProperty("spark.driver.host", Utils.localIpAddress)
+    System.setProperty("spark.driver.host", Utils.localHostName())
   }
   if (System.getProperty("spark.driver.port") == null) {
     System.setProperty("spark.driver.port", "0")
@@ -85,34 +98,37 @@ class SparkContext(
     isLocal)
   SparkEnv.set(env)
 
-  // Start the BlockManager UI
-  private[spark] val ui = new BlockManagerUI(
-    env.actorSystem, env.blockManager.master.driverActor, this)
-  ui.start()
-
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
-  private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]()
+  private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]
   private[spark] val metadataCleaner = new MetadataCleaner("SparkContext", this.cleanup)
 
+  // Initalize the Spark UI
+  private[spark] val ui = new SparkUI(this)
+  ui.bind()
 
   // Add each JAR given through the constructor
-  jars.foreach { addJar(_) }
+  if (jars != null) {
+    jars.foreach { addJar(_) }
+  }
 
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
   // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner
-  for (key <- Seq("SPARK_MEM", "SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS",
-      "SPARK_TESTING")) {
+  for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS", "SPARK_TESTING")) {
     val value = System.getenv(key)
     if (value != null) {
       executorEnvs(key) = value
     }
   }
-  executorEnvs ++= environment
+  // Since memory can be set with a system property too, use that
+  executorEnvs("SPARK_MEM") = SparkContext.executorMemoryRequested + "m"
+  if (environment != null) {
+    executorEnvs ++= environment
+  }
 
   // Create and start the scheduler
   private var taskScheduler: TaskScheduler = {
@@ -144,14 +160,12 @@ class SparkContext(
         scheduler
 
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        // Check to make sure SPARK_MEM <= memoryPerSlave. Otherwise Spark will just hang.
+        // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
         val memoryPerSlaveInt = memoryPerSlave.toInt
-        val sparkMemEnv = System.getenv("SPARK_MEM")
-        val sparkMemEnvInt = if (sparkMemEnv != null) Utils.memoryStringToMb(sparkMemEnv) else 512
-        if (sparkMemEnvInt > memoryPerSlaveInt) {
+        if (SparkContext.executorMemoryRequested > memoryPerSlaveInt) {
           throw new SparkException(
-            "Slave memory (%d MB) cannot be smaller than SPARK_MEM (%d MB)".format(
-              memoryPerSlaveInt, sparkMemEnvInt))
+            "Asked to launch cluster with %d MB RAM / worker but requested %d MB/worker".format(
+              memoryPerSlaveInt, SparkContext.executorMemoryRequested))
         }
 
         val scheduler = new ClusterScheduler(this)
@@ -163,6 +177,22 @@ class SparkContext(
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
         }
+        scheduler
+
+      case "yarn-standalone" =>
+        val scheduler = try {
+          val clazz = Class.forName("spark.scheduler.cluster.YarnClusterScheduler")
+          val cons = clazz.getConstructor(classOf[SparkContext])
+          cons.newInstance(this).asInstanceOf[ClusterScheduler]
+        } catch {
+          // TODO: Enumerate the exact reasons why it can fail
+          // But irrespective of it, it means we cannot proceed !
+          case th: Throwable => {
+            throw new SparkException("YARN mode not available ?", th)
+          }
+        }
+        val backend = new StandaloneSchedulerBackend(scheduler, this.env.actorSystem)
+        scheduler.initialize(backend)
         scheduler
 
       case _ =>
@@ -184,12 +214,14 @@ class SparkContext(
   }
   taskScheduler.start()
 
-  private var dagScheduler = new DAGScheduler(taskScheduler)
+  @volatile private var dagScheduler = new DAGScheduler(taskScheduler)
   dagScheduler.start()
+
+  ui.start()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
-    val conf = new Configuration()
+    val conf = SparkHadoopUtil.newConfiguration()
     // Explicitly check for S3 environment variables
     if (System.getenv("AWS_ACCESS_KEY_ID") != null && System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
       conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
@@ -207,6 +239,22 @@ class SparkContext(
   }
 
   private[spark] var checkpointDir: Option[String] = None
+
+  // Thread Local variable that can be used by users to pass information down the stack
+  private val localProperties = new DynamicVariable[Properties](null)
+
+  def initLocalProperties() {
+      localProperties.value = new Properties()
+  }
+
+  def addLocalProperties(key: String, value: String) {
+    if(localProperties.value == null) {
+      localProperties.value = new Properties()
+    }
+    localProperties.value.setProperty(key,value)
+  }
+  // Post init
+  taskScheduler.postStartHook()
 
   // Methods for creating RDDs
 
@@ -472,7 +520,7 @@ class SparkContext(
    */
   def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
     env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
-      (blockManagerId.ip + ":" + blockManagerId.port, mem)
+      (blockManagerId.host + ":" + blockManagerId.port, mem)
     }
   }
 
@@ -480,7 +528,7 @@ class SparkContext(
    * Return information about what RDDs are cached, if they are in mem or on disk, how much space
    * they take, etc.
    */
-  def getRDDStorageInfo : Array[RDDInfo] = {
+  def getRDDStorageInfo: Array[RDDInfo] = {
     StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
   }
 
@@ -491,7 +539,7 @@ class SparkContext(
   /**
    * Return information about blocks stored in all of the slaves
    */
-  def getExecutorStorageStatus : Array[StorageStatus] = {
+  def getExecutorStorageStatus: Array[StorageStatus] = {
     env.blockManager.master.getStorageStatus
   }
 
@@ -509,13 +557,18 @@ class SparkContext(
    * filesystems), or an HTTP, HTTPS or FTP URI.
    */
   def addJar(path: String) {
-    val uri = new URI(path)
-    val key = uri.getScheme match {
-      case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
-      case _ => path
+    if (null == path) {
+      logWarning("null specified as parameter to addJar",
+        new SparkException("null specified as parameter to addJar"))
+    } else {
+      val uri = new URI(path)
+      val key = uri.getScheme match {
+        case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
+        case _ => path
+      }
+      addedJars(key) = System.currentTimeMillis
+      logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
     }
-    addedJars(key) = System.currentTimeMillis
-    logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
   }
 
   /**
@@ -528,10 +581,14 @@ class SparkContext(
 
   /** Shut down the SparkContext. */
   def stop() {
-    if (dagScheduler != null) {
+    ui.stop()
+    // Do this only if not stopped already - best case effort.
+    // prevent NPE if stopped more than once.
+    val dagSchedulerCopy = dagScheduler
+    dagScheduler = null
+    if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
-      dagScheduler.stop()
-      dagScheduler = null
+      dagSchedulerCopy.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
@@ -546,6 +603,7 @@ class SparkContext(
       logInfo("SparkContext already stopped")
     }
   }
+
 
   /**
    * Get Spark's home location from either a value set through the constructor,
@@ -576,10 +634,10 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    val callSite = Utils.getSparkCallSite
+    val callSite = Utils.formatSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler)
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler, localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result
@@ -658,12 +716,11 @@ class SparkContext(
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
-      timeout: Long
-      ): PartialResult[R] = {
-    val callSite = Utils.getSparkCallSite
+      timeout: Long): PartialResult[R] = {
+    val callSite = Utils.formatSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout)
+    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout, localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }
@@ -686,7 +743,7 @@ class SparkContext(
    */
   def setCheckpointDir(dir: String, useExisting: Boolean = false) {
     val path = new Path(dir)
-    val fs = path.getFileSystem(new Configuration())
+    val fs = path.getFileSystem(SparkHadoopUtil.newConfiguration())
     if (!useExisting) {
       if (fs.exists(path)) {
         throw new Exception("Checkpoint directory '" + path + "' already exists.")
@@ -829,6 +886,15 @@ object SparkContext {
 
   /** Find the JAR that contains the class of a particular object */
   def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
+
+  /** Get the amount of memory per executor requested through system properties or SPARK_MEM */
+  private[spark] val executorMemoryRequested = {
+    // TODO: Might need to add some extra memory for the non-heap parts of the JVM
+    Option(System.getProperty("spark.executor.memory"))
+      .orElse(Option(System.getenv("SPARK_MEM")))
+      .map(Utils.memoryStringToMb)
+      .getOrElse(512)
+  }
 }
 
 

@@ -1,5 +1,7 @@
 package spark.streaming
 
+import spark.Utils
+
 case class Duration (private val millis: Long) {
 
   def < (that: Duration): Boolean = (this.millis < that.millis)
@@ -32,8 +34,10 @@ case class Duration (private val millis: Long) {
   def toFormattedString: String = millis.toString
 
   def milliseconds: Long = millis
-}
 
+  def prettyPrint = Utils.msDurationToString(millis)
+
+}
 
 /**
  * Helper object that creates instance of [[spark.streaming.Duration]] representing

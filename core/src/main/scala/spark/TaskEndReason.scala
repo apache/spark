@@ -1,5 +1,6 @@
 package spark
 
+import spark.executor.TaskMetrics
 import spark.storage.BlockManagerId
 
 /**
@@ -14,9 +15,20 @@ private[spark] case object Success extends TaskEndReason
 private[spark] 
 case object Resubmitted extends TaskEndReason // Task was finished earlier but we've now lost it
 
-private[spark] 
-case class FetchFailed(bmAddress: BlockManagerId, shuffleId: Int, mapId: Int, reduceId: Int) extends TaskEndReason
+private[spark] case class FetchFailed(
+    bmAddress: BlockManagerId,
+    shuffleId: Int,
+    mapId: Int,
+    reduceId: Int)
+  extends TaskEndReason
 
-private[spark] case class ExceptionFailure(exception: Throwable) extends TaskEndReason
+private[spark] case class ExceptionFailure(
+    className: String,
+    description: String,
+    stackTrace: Array[StackTraceElement],
+    metrics: Option[TaskMetrics])
+  extends TaskEndReason
 
 private[spark] case class OtherFailure(message: String) extends TaskEndReason
+
+private[spark] case class TaskResultTooBigFailure() extends TaskEndReason

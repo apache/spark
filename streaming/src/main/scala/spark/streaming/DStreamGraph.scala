@@ -54,8 +54,8 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
         throw new Exception("Batch duration already set as " + batchDuration +
           ". cannot set it again.")
       }
+      batchDuration = duration
     }
-    batchDuration = duration
   }
 
   def remember(duration: Duration) {

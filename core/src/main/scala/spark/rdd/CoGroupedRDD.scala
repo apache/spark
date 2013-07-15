@@ -6,7 +6,7 @@ import java.util.{HashMap => JHashMap}
 import scala.collection.JavaConversions
 import scala.collection.mutable.ArrayBuffer
 
-import spark.{Aggregator, Logging, Partition, Partitioner, RDD, SparkEnv, TaskContext}
+import spark.{Aggregator, Partition, Partitioner, RDD, SparkEnv, TaskContext}
 import spark.{Dependency, OneToOneDependency, ShuffleDependency}
 
 
@@ -49,12 +49,17 @@ private[spark] class CoGroupAggregator
  *
  * @param rdds parent RDDs.
  * @param part partitioner used to partition the shuffle output.
- * @param mapSideCombine flag indicating whether to merge values before shuffle step.
+ * @param mapSideCombine flag indicating whether to merge values before shuffle step. If the flag
+ *                       is on, Spark does an extra pass over the data on the map side to merge
+ *                       all values belonging to the same key together. This can reduce the amount
+ *                       of data shuffled if and only if the number of distinct keys is very small,
+ *                       and the ratio of key size to value size is also very small.
  */
 class CoGroupedRDD[K](
   @transient var rdds: Seq[RDD[(K, _)]],
   part: Partitioner,
-  val mapSideCombine: Boolean = true)
+  val mapSideCombine: Boolean = false,
+  val serializerClass: String = null)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
 
   private val aggr = new CoGroupAggregator
@@ -68,9 +73,9 @@ class CoGroupedRDD[K](
         logInfo("Adding shuffle dependency with " + rdd)
         if (mapSideCombine) {
           val mapSideCombinedRDD = rdd.mapPartitions(aggr.combineValuesByKey(_), true)
-          new ShuffleDependency[Any, ArrayBuffer[Any]](mapSideCombinedRDD, part)
+          new ShuffleDependency[Any, ArrayBuffer[Any]](mapSideCombinedRDD, part, serializerClass)
         } else {
-          new ShuffleDependency[Any, Any](rdd.asInstanceOf[RDD[(Any, Any)]], part)
+          new ShuffleDependency[Any, Any](rdd.asInstanceOf[RDD[(Any, Any)]], part, serializerClass)
         }
       }
     }
@@ -112,6 +117,7 @@ class CoGroupedRDD[K](
       }
     }
 
+    val ser = SparkEnv.get.serializerManager.get(serializerClass)
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
@@ -124,12 +130,12 @@ class CoGroupedRDD[K](
         val fetcher = SparkEnv.get.shuffleFetcher
         if (mapSideCombine) {
           // With map side combine on, for each key, the shuffle fetcher returns a list of values.
-          fetcher.fetch[K, Seq[Any]](shuffleId, split.index, context.taskMetrics).foreach {
+          fetcher.fetch[K, Seq[Any]](shuffleId, split.index, context.taskMetrics, ser).foreach {
             case (key, values) => getSeq(key)(depNum) ++= values
           }
         } else {
           // With map side combine off, for each key the shuffle fetcher returns a single value.
-          fetcher.fetch[K, Any](shuffleId, split.index, context.taskMetrics).foreach {
+          fetcher.fetch[K, Any](shuffleId, split.index, context.taskMetrics, ser).foreach {
             case (key, value) => getSeq(key)(depNum) += value
           }
         }

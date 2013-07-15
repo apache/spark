@@ -26,7 +26,7 @@ private[spark] class Stage(
     val parents: List[Stage],
     val priority: Int)
   extends Logging {
-  
+
   val isShuffleMap = shuffleDep != None
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
@@ -34,6 +34,7 @@ private[spark] class Stage(
 
   /** When first task was submitted to scheduler. */
   var submissionTime: Option[Long] = None
+  var completionTime: Option[Long] = None
 
   private var nextAttemptId = 0
 
@@ -60,7 +61,7 @@ private[spark] class Stage(
       numAvailableOutputs -= 1
     }
   }
- 
+
   def removeOutputsOnExecutor(execId: String) {
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {

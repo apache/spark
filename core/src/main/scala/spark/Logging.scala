@@ -68,6 +68,10 @@ trait Logging {
     if (log.isErrorEnabled) log.error(msg, throwable)
   }
 
+  protected def isTraceEnabled(): Boolean = {
+    log.isTraceEnabled
+  }
+
   // Method for ensuring that logging is initialized, to avoid having multiple
   // threads do it concurrently (as SLF4J initialization is not thread safe).
   protected def initLogging() { log }

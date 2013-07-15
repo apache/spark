@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
  * The Mesos executor for Spark.
  */
 private[spark] class Executor(executorId: String, slaveHostname: String, properties: Seq[(String, String)]) extends Logging {
-  
+
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
@@ -26,6 +26,11 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
   initLogging()
+
+  // No ip or host:port - just hostname
+  Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
+  // must not have port specified.
+  assert (0 == Utils.parseHostPort(slaveHostname)._2)
 
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
   Utils.setCustomHostname(slaveHostname)
@@ -37,7 +42,8 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
 
   // Create our ClassLoader and set it on this thread
   private val urlClassLoader = createClassLoader()
-  Thread.currentThread.setContextClassLoader(urlClassLoader)
+  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+  Thread.currentThread.setContextClassLoader(replClassLoader)
 
   // Make any thread terminations due to uncaught exceptions kill the entire
   // executor process to avoid surprising stalls.
@@ -67,6 +73,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
   // Initialize Spark environment (using system properties read above)
   val env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
   SparkEnv.set(env)
+  private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
 
   // Start worker thread pool
   val threadPool = new ThreadPoolExecutor(
@@ -82,22 +89,26 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
     override def run() {
       val startTime = System.currentTimeMillis()
       SparkEnv.set(env)
-      Thread.currentThread.setContextClassLoader(urlClassLoader)
+      Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo("Running task ID " + taskId)
       context.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
+      var attemptedTask: Option[Task[Any]] = None
+      var taskStart: Long = 0
       try {
         SparkEnv.set(env)
         Accumulators.clear()
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         val task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
+        attemptedTask = Some(task)
         logInfo("Its generation is " + task.generation)
         env.mapOutputTracker.updateGeneration(task.generation)
-        val taskStart = System.currentTimeMillis()
+        taskStart = System.currentTimeMillis()
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
         task.metrics.foreach{ m =>
+          m.hostname = Utils.localHostName
           m.executorDeserializeTime = (taskStart - startTime).toInt
           m.executorRunTime = (taskFinish - taskStart).toInt
         }
@@ -108,6 +119,10 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         val result = new TaskResult(value, accumUpdates, task.metrics.getOrElse(null))
         val serializedResult = ser.serialize(result)
         logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
+        if (serializedResult.limit >= (akkaFrameSize - 1024)) {
+          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskResultTooBigFailure()))
+          return
+        }
         context.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
         logInfo("Finished task ID " + taskId)
       } catch {
@@ -117,7 +132,10 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         }
 
         case t: Throwable => {
-          val reason = ExceptionFailure(t)
+          val serviceTime = (System.currentTimeMillis() - taskStart).toInt
+          val metrics = attemptedTask.flatMap(t => t.metrics)
+          metrics.foreach{m => m.executorRunTime = serviceTime}
+          val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
           context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may
@@ -142,26 +160,31 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
     val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
-    loader = new URLClassLoader(urls, loader)
+    new ExecutorURLClassLoader(urls, loader)
+  }
 
-    // If the REPL is in use, add another ClassLoader that will read
-    // new classes defined by the REPL as the user types code
+  /**
+   * If the REPL is in use, add another ClassLoader that will read
+   * new classes defined by the REPL as the user types code
+   */
+  private def addReplClassLoaderIfNeeded(parent: ClassLoader): ClassLoader = {
     val classUri = System.getProperty("spark.repl.class.uri")
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
-      loader = {
-        try {
-          val klass = Class.forName("spark.repl.ExecutorClassLoader")
-            .asInstanceOf[Class[_ <: ClassLoader]]
-          val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader])
-          constructor.newInstance(classUri, loader)
-        } catch {
-          case _: ClassNotFoundException => loader
-        }
+      try {
+        val klass = Class.forName("spark.repl.ExecutorClassLoader")
+          .asInstanceOf[Class[_ <: ClassLoader]]
+        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader])
+        return constructor.newInstance(classUri, parent)
+      } catch {
+        case _: ClassNotFoundException =>
+          logError("Could not find spark.repl.ExecutorClassLoader on classpath!")
+          System.exit(1)
+          null
       }
+    } else {
+      return parent
     }
-
-    return new ExecutorURLClassLoader(Array(), loader)
   }
 
   /**

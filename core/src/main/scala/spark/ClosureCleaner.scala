@@ -5,15 +5,22 @@ import java.lang.reflect.Field
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
-import org.objectweb.asm.{ClassReader, MethodVisitor, Type}
-import org.objectweb.asm.commons.EmptyVisitor
+import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.objectweb.asm.Opcodes._
+import java.io.{InputStream, IOException, ByteArrayOutputStream, ByteArrayInputStream, BufferedInputStream}
 
 private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
   private def getClassReader(cls: Class[_]): ClassReader = {
-    new ClassReader(cls.getResourceAsStream(
-      cls.getName.replaceFirst("^.*\\.", "") + ".class"))
+    // Copy data over, before delegating to ClassReader - else we can run out of open file handles.
+    val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
+    val resourceStream = cls.getResourceAsStream(className)
+    // todo: Fixme - continuing with earlier behavior ...
+    if (resourceStream == null) return new ClassReader(resourceStream)
+
+    val baos = new ByteArrayOutputStream(128)
+    Utils.copyStream(resourceStream, baos, true)
+    new ClassReader(new ByteArrayInputStream(baos.toByteArray))
   }
 
   // Check whether a class represents a Scala closure
@@ -154,10 +161,10 @@ private[spark] object ClosureCleaner extends Logging {
   }
 }
 
-private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends EmptyVisitor {
+private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    return new EmptyVisitor {
+    return new MethodVisitor(ASM4) {
       override def visitFieldInsn(op: Int, owner: String, name: String, desc: String) {
         if (op == GETFIELD) {
           for (cl <- output.keys if cl.getName == owner.replace('/', '.')) {
@@ -180,7 +187,7 @@ private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]]) exten
   }
 }
 
-private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends EmptyVisitor {
+private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM4) {
   var myName: String = null
   
   override def visit(version: Int, access: Int, name: String, sig: String,
@@ -190,7 +197,7 @@ private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends EmptyVisi
   
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    return new EmptyVisitor {
+    return new MethodVisitor(ASM4) {
       override def visitMethodInsn(op: Int, owner: String, name: String,
           desc: String) {
         val argTypes = Type.getArgumentTypes(desc)

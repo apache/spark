@@ -70,6 +70,13 @@ private[spark] class ResultTask[T, U](
     rdd.partitions(partition)
   }
 
+  private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.toSet.toSeq
+
+  {
+    // DEBUG code
+    preferredLocs.foreach (hostPort => Utils.checkHost(Utils.parseHostPort(hostPort)._1, "preferredLocs : " + preferredLocs))
+  }
+
   override def run(attemptId: Long): U = {
     val context = new TaskContext(stageId, partition, attemptId)
     metrics = Some(context.taskMetrics)
@@ -80,7 +87,7 @@ private[spark] class ResultTask[T, U](
     }
   }
 
-  override def preferredLocations: Seq[String] = locs
+  override def preferredLocations: Seq[String] = preferredLocs
 
   override def toString = "ResultTask(" + stageId + ", " + partition + ")"
 

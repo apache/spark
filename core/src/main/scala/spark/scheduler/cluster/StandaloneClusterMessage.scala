@@ -3,6 +3,7 @@ package spark.scheduler.cluster
 import spark.TaskState.TaskState
 import java.nio.ByteBuffer
 import spark.util.SerializableBuffer
+import spark.Utils
 
 private[spark] sealed trait StandaloneClusterMessage extends Serializable
 
@@ -19,8 +20,10 @@ case class RegisterExecutorFailed(message: String) extends StandaloneClusterMess
 
 // Executors to driver
 private[spark]
-case class RegisterExecutor(executorId: String, host: String, cores: Int)
-  extends StandaloneClusterMessage
+case class RegisterExecutor(executorId: String, hostPort: String, cores: Int)
+  extends StandaloneClusterMessage {
+  Utils.checkHostPort(hostPort, "Expected host port")
+}
 
 private[spark]
 case class StatusUpdate(executorId: String, taskId: Long, state: TaskState, data: SerializableBuffer)

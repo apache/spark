@@ -1,4 +1,65 @@
-#!/bin/sh
+#!/bin/bash --posix
+#
+# Shell script for starting the Spark Shell REPL
+# Note that it will set MASTER to spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}
+# if those two env vars are set in spark-env.sh but MASTER is not.
+# Options:
+#    -c <cores>    Set the number of cores for REPL to use
+#
 FWDIR="`dirname $0`"
-export SPARK_LAUNCH_WITH_SCALA=1
-exec $FWDIR/run spark.repl.Main "$@"
+
+for o in "$@"; do
+  if [ "$1" = "-c" -o "$1" = "--cores" ]; then
+    shift
+    if [ -n "$1" ]; then
+      OPTIONS="-Dspark.cores.max=$1"
+      shift
+    fi
+  fi
+done
+
+# Set MASTER from spark-env if possible
+if [ -z "$MASTER" ]; then
+  if [ -e "$FWDIR/conf/spark-env.sh" ]; then
+    . "$FWDIR/conf/spark-env.sh"
+  fi
+  if [[ "x" != "x$SPARK_MASTER_IP" && "y" != "y$SPARK_MASTER_PORT" ]]; then
+    MASTER="spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}"
+    export MASTER
+  fi
+fi
+
+# Copy restore-TTY-on-exit functions from Scala script so spark-shell exits properly even in
+# binary distribution of Spark where Scala is not installed
+exit_status=127
+saved_stty=""
+
+# restore stty settings (echo in particular)
+function restoreSttySettings() {
+  stty $saved_stty
+  saved_stty=""
+}
+
+function onExit() {
+  if [[ "$saved_stty" != "" ]]; then
+    restoreSttySettings
+  fi
+  exit $exit_status
+}
+
+# to reenable echo if we are interrupted before completing.
+trap onExit INT
+
+# save terminal settings
+saved_stty=$(stty -g 2>/dev/null)
+# clear on error so we don't later try to restore them
+if [[ ! $? ]]; then
+  saved_stty=""
+fi
+
+$FWDIR/run $OPTIONS spark.repl.Main "$@"
+
+# record the exit status lest it be overwritten:
+# then reenable echo and propagate the code.
+exit_status=$?
+onExit

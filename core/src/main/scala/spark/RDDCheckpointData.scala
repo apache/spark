@@ -3,6 +3,7 @@ package spark
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
 
 import rdd.{CheckpointRDD, CoalescedRDD}
 
@@ -66,14 +67,20 @@ private[spark] class RDDCheckpointData[T: ClassTag](rdd: RDD[T])
       }
     }
 
+    // Create the output path for the checkpoint
+    val path = new Path(rdd.context.checkpointDir.get, "rdd-" + rdd.id)
+    val fs = path.getFileSystem(new Configuration())
+    if (!fs.mkdirs(path)) {
+      throw new SparkException("Failed to create checkpoint path " + path)
+    }
+
     // Save to file, and reload it as an RDD
-    val path = new Path(rdd.context.checkpointDir.get, "rdd-" + rdd.id).toString
-    rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path) _)
-    val newRDD = new CheckpointRDD[T](rdd.context, path)
+    rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path.toString) _)
+    val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
 
     // Change the dependencies and partitions of the RDD
     RDDCheckpointData.synchronized {
-      cpFile = Some(path)
+      cpFile = Some(path.toString)
       cpRDD = Some(newRDD)
       rdd.markCheckpointed(newRDD)   // Update the RDD's dependencies and partitions
       cpState = Checkpointed
