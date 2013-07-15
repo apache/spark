@@ -12,9 +12,11 @@ import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConversions._
+import scala.collection.Map
 import scala.io.Source
 import scala.reflect.ClassTag
 import scala.Some
+
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
