@@ -26,8 +26,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     val workers = state.workers.sortBy(_.id)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("ID", "Job UI", "Description", "Cores", "Memory per Node", "Submit Time",
-      "User", "State", "Duration")
+    val appHeaders = Seq("ID", "Description", "Cores", "Memory per Node", "Submit Time", "User",
+      "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
@@ -104,9 +104,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         <a href={"app?appId=" + app.id}>{app.id}</a>
       </td>
       <td>
-        <a href={app.appUiUrl}>{app.appUiUrl}</a>
+        <a href={app.appUiUrl}>{app.desc.name}</a>
       </td>
-      <td>{app.desc.name}</td>
       <td>
         {app.coresGranted}
       </td>
