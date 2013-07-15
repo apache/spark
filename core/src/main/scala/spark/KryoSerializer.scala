@@ -210,6 +210,10 @@ class KryoSerializer extends spark.serializer.Serializer with Logging {
       val reg = Class.forName(regCls, true, classLoader).newInstance().asInstanceOf[KryoRegistrator]
       reg.registerClasses(kryo)
     }
+
+    // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops
+    kryo.setReferences(System.getProperty("spark.kryo.referenceTracking", "true").toBoolean)
+
     kryo
   }
 
