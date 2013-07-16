@@ -4,6 +4,7 @@ import java.sql.{Connection, ResultSet}
 
 import spark.{Logging, Partition, RDD, SparkContext, TaskContext}
 import spark.util.NextIterator
+import scala.reflect.ClassTag
 
 private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
   override def index = idx
@@ -28,7 +29,7 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  *   This should only call getInt, getString, etc; the RDD takes care of calling next.
  *   The default maps a ResultSet to an array of Object.
  */
-class JdbcRDD[T: ClassManifest](
+class JdbcRDD[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,
     sql: String,

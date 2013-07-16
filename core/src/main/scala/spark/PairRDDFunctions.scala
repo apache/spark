@@ -536,7 +536,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](
    * supplied codec.
    */
   def saveAsHadoopFile[F <: OutputFormat[K, V]](
-      path: String, codec: Class[_ <: CompressionCodec]) (implicit fm: ClassManifest[F]) {
+      path: String, codec: Class[_ <: CompressionCodec]) (implicit fm: ClassTag[F]) {
     saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]], codec)
   }
 
