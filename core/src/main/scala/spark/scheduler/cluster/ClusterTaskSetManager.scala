@@ -13,12 +13,12 @@ import spark.scheduler._
 import spark.TaskState.TaskState
 import java.nio.ByteBuffer
 
-private[spark] object TaskLocality extends Enumeration("PROCESS_LOCAL", "NODE_LOCAL", "RACK_LOCAL", "ANY") with Logging {
+private[spark] object TaskLocality extends Enumeration with Logging {
+
+  type TaskLocality = Value
 
   // process local is expected to be used ONLY within tasksetmanager for now.
   val PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY = Value
-
-  type TaskLocality = Value
 
   def isAllowed(constraint: TaskLocality, condition: TaskLocality): Boolean = {
 
