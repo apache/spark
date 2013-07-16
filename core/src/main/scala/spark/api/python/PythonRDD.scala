@@ -195,7 +195,7 @@ private[spark] object PythonRDD {
       val arr = elem.asInstanceOf[Array[Byte]]
       dOut.writeInt(arr.length)
       dOut.write(arr)
-    } else if (elem.isInstanceOf[scala.Tuple2[Array[Byte], Array[Byte]]]) {
+    } else if (elem.isInstanceOf[scala.Tuple2[_, _]]) {
       val t = elem.asInstanceOf[scala.Tuple2[Array[Byte], Array[Byte]]]
       val length = t._1.length + t._2.length - 3 - 3 + 4  // stripPickle() removes 3 bytes
       dOut.writeInt(length)
