@@ -35,26 +35,26 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
       val path = SparkFiles.get("FileServerSuite.txt")
-      val in  = new BufferedReader(new FileReader(path))
+      val in = new BufferedReader(new FileReader(path))
       val fileVal = in.readLine().toInt
       in.close()
       _ * fileVal + _ * fileVal
-    }.collect
+    }.collect()
     assert(result.toSet === Set((1,200), (2,300), (3,500)))
   }
 
   test("Distributing files locally using URL as input") {
     // addFile("file:///....")
     sc = new SparkContext("local[4]", "test")
-    sc.addFile((new File(tmpFile.toString)).toURL.toString)
+    sc.addFile(new File(tmpFile.toString).toURI.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
       val path = SparkFiles.get("FileServerSuite.txt")
-      val in  = new BufferedReader(new FileReader(path))
+      val in = new BufferedReader(new FileReader(path))
       val fileVal = in.readLine().toInt
       in.close()
       _ * fileVal + _ * fileVal
-    }.collect
+    }.collect()
     assert(result.toSet === Set((1,200), (2,300), (3,500)))
   }
 
@@ -80,11 +80,11 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
       val path = SparkFiles.get("FileServerSuite.txt")
-      val in  = new BufferedReader(new FileReader(path))
+      val in = new BufferedReader(new FileReader(path))
       val fileVal = in.readLine().toInt
       in.close()
       _ * fileVal + _ * fileVal
-    }.collect
+    }.collect()
     assert(result.toSet === Set((1,200), (2,300), (3,500)))
   }
 
