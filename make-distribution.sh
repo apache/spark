@@ -1,10 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Script to create a binary distribution for easy deploys of Spark.
 # The distribution directory defaults to dist/ but can be overridden below.
 # The distribution contains fat (assembly) jars that include the Scala library,
 # so it is completely self contained.
 # It does not contain source or *.class files.
+#
+# Arguments
+#   (none): Creates dist/ directory
+#      tgz: Additionally creates spark-$VERSION-bin.tar.gz
 #
 # Recommended deploy/testing procedure (standalone mode):
 # 1) Rsync / deploy the dist/ dir to one host
@@ -19,8 +23,14 @@ DISTDIR="$FWDIR/dist"
 
 # Get version from SBT
 export TERM=dumb   # Prevents color codes in SBT output
-VERSION=$($FWDIR/sbt/sbt "show version" | tail -1 | cut -f 2)
-echo "Making distribution for Spark $VERSION in $DISTDIR..."
+VERSION=$($FWDIR/sbt/sbt "show version" | tail -1 | cut -f 2 | sed 's/^\([a-zA-Z0-9.-]*\).*/\1/')
+
+if [ "$1" == "tgz" ]; then
+	echo "Making spark-$VERSION-bin.tar.gz"
+else
+	echo "Making distribution for Spark $VERSION in $DISTDIR..."
+fi
+
 
 # Build fat JAR
 $FWDIR/sbt/sbt "repl/assembly"
@@ -37,3 +47,11 @@ cp $FWDIR/repl/target/*.jar "$DISTDIR/jars/"
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/conf" "$DISTDIR"
 cp "$FWDIR/run" "$FWDIR/spark-shell" "$DISTDIR"
+
+
+if [ "$1" == "tgz" ]; then
+  TARDIR="$FWDIR/spark-$VERSION"
+  cp -r $DISTDIR $TARDIR
+  tar -zcf spark-$VERSION-bin.tar.gz -C $FWDIR spark-$VERSION
+  rm -rf $TARDIR
+fi
