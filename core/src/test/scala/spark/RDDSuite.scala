@@ -302,4 +302,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
     }
   }
+
+  test("runJob on an invalid partition") {
+    intercept[IllegalArgumentException] {
+      sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)
+    }
+  }
 }
