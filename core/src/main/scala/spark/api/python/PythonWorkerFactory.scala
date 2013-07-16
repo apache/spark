@@ -28,7 +28,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           startDaemon()
           new Socket(daemonHost, daemonPort)
         }
-        case e => throw e
+        case e : Throwable => throw e
       }
     }
   }
@@ -88,7 +88,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           }
         }.start()
       } catch {
-        case e => {
+        case e :Throwable => {
           stopDaemon()
           throw e
         }

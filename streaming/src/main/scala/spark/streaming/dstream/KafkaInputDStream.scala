@@ -118,7 +118,7 @@ class KafkaReceiver[T: ClassTag, D <: Decoder[_]: Manifest](
       zk.deleteRecursive(dir)
       zk.close()
     } catch {
-      case _ => // swallow
+      case _ : Throwable => // swallow
     }
   }
 }
