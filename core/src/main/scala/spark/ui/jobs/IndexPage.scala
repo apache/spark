@@ -89,7 +89,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
 
     <tr>
       <td>{s.id}</td>
-      <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.origin}</a></td>
+      <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
       <td>{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>

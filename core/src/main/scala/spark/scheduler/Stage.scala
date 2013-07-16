@@ -24,7 +24,8 @@ private[spark] class Stage(
     val rdd: RDD[_],
     val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
-    val priority: Int)
+    val priority: Int,
+    callSite: Option[String])
   extends Logging {
 
   val isShuffleMap = shuffleDep != None
@@ -85,7 +86,7 @@ private[spark] class Stage(
     return id
   }
 
-  def origin: String = rdd.origin
+  val name = callSite.getOrElse(rdd.origin)
 
   override def toString = "Stage " + id
 
