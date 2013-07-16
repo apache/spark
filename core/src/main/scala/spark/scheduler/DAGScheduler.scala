@@ -257,6 +257,15 @@ class DAGScheduler(
     if (partitions.size == 0) {
       return
     }
+
+    // Check to make sure we are not launching a task on a partition that does not exist.
+    val maxPartitions = finalRdd.partitions.length
+    partitions.find(p => p >= maxPartitions).foreach { p =>
+      throw new IllegalArgumentException(
+        "Attempting to access a non-existent partition: " + p + ". " +
+        "Total number of partitions: " + maxPartitions)
+    }
+
     val (toSubmit, waiter) = prepareJob(
         finalRdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     eventQueue.put(toSubmit)

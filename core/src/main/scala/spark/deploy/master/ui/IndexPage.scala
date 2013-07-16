@@ -103,7 +103,9 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
       </td>
-      <td>{app.desc.name}</td>
+      <td>
+        <a href={app.appUiUrl}>{app.desc.name}</a>
+      </td>
       <td>
         {app.coresGranted}
       </td>

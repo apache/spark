@@ -198,8 +198,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.kryo.referenceTracking</td>
+  <td>true</td>
+  <td>
+    Whether to track references to the same object when serializing data with Kryo, which is
+    necessary if your object graphs have loops and useful for efficiency if they contain multiple
+    copies of the same object. Can be disabled to improve performance if you know this is not the
+    case.
+  </td>
+</tr>
+<tr>
   <td>spark.kryoserializer.buffer.mb</td>
-  <td>32</td>
+  <td>2</td>
   <td>
     Maximum object size to allow within Kryo (the library needs to create a buffer at least as
     large as the largest single object you'll serialize). Increase this if you get a "buffer limit
