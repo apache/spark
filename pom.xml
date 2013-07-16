@@ -319,7 +319,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.1.5</version>
           <executions>
             <execution>
               <id>scala-compile-first</id>
@@ -346,12 +346,14 @@
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
             <recompileMode>incremental</recompileMode>
+            <useZincServer>true</useZincServer>
             <args>
               <arg>-unchecked</arg>
               <arg>-optimise</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms64m</jvmArg>
+              <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
               <jvmArg>-XX:MaxPermSize=${MaxPermGen}</jvmArg>
