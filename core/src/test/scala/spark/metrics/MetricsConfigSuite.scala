@@ -15,40 +15,36 @@ class MetricsConfigSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("MetricsConfig with default properties") {
-    val conf = new MetricsConfig("dummy-file")
-    conf.initilize()
+    val conf = new MetricsConfig(Option("dummy-file"))
+    conf.initialize()
 
-    assert(conf.properties.size() === 2)
-    assert(conf.properties.getProperty("*.sink.jmx.enabled") === "default")
-    assert(conf.properties.getProperty("*.source.jvm.class") === "spark.metrics.source.JvmSource")
+    assert(conf.properties.size() === 0)
     assert(conf.properties.getProperty("test-for-dummy") === null)
 
     val property = conf.getInstance("random")
-    assert(property.size() === 2)
-    assert(property.getProperty("sink.jmx.enabled") === "default")
-    assert(property.getProperty("source.jvm.class") === "spark.metrics.source.JvmSource")
+    assert(property.size() === 0)
   }
 
   test("MetricsConfig with properties set") {
-    val conf = new MetricsConfig(filePath)
-    conf.initilize()
+    val conf = new MetricsConfig(Option(filePath))
+    conf.initialize()
 
     val masterProp = conf.getInstance("master")
-    assert(masterProp.size() === 4)
+    assert(masterProp.size() === 3)
     assert(masterProp.getProperty("sink.console.period") === "20")
-    assert(masterProp.getProperty("sink.console.unit") === "minute")
-    assert(masterProp.getProperty("sink.jmx.enabled") === "default")
-    assert(masterProp.getProperty("source.jvm.class") == "spark.metrics.source.JvmSource")
+    assert(masterProp.getProperty("sink.console.unit") === "minutes")
+    assert(masterProp.getProperty("source.jvm.class") === "spark.metrics.source.JvmSource")
 
     val workerProp = conf.getInstance("worker")
-    assert(workerProp.size() === 4)
+    assert(workerProp.size() === 3)
     assert(workerProp.getProperty("sink.console.period") === "10")
-    assert(workerProp.getProperty("sink.console.unit") === "second")
+    assert(workerProp.getProperty("sink.console.unit") === "seconds")
+    assert(masterProp.getProperty("source.jvm.class") === "spark.metrics.source.JvmSource")
   }
 
   test("MetricsConfig with subProperties") {
-    val conf = new MetricsConfig(filePath)
-    conf.initilize()
+    val conf = new MetricsConfig(Option(filePath))
+    conf.initialize()
 
     val propCategories = conf.propertyCategories
     assert(propCategories.size === 2)
@@ -59,14 +55,10 @@ class MetricsConfigSuite extends FunSuite with BeforeAndAfter {
     assert(sourceProps("jvm").getProperty("class") === "spark.metrics.source.JvmSource")
 
     val sinkProps = conf.subProperties(masterProp, MetricsSystem.SINK_REGEX)
-    assert(sinkProps.size === 2)
+    assert(sinkProps.size === 1)
     assert(sinkProps.contains("console"))
-    assert(sinkProps.contains("jmx"))
 
     val consoleProps = sinkProps("console")
     assert(consoleProps.size() === 2)
-
-    val jmxProps = sinkProps("jmx")
-    assert(jmxProps.size() === 1)
   }
 }

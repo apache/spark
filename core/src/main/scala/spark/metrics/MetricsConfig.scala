@@ -1,44 +1,58 @@
 package spark.metrics
 
 import java.util.Properties
-import java.io.{File, FileInputStream}
+import java.io.{File, FileInputStream, InputStream, IOException}
 
 import scala.collection.mutable
 import scala.util.matching.Regex
 
-private[spark] class MetricsConfig(val configFile: String) {
-  val properties = new Properties()
+import spark.Logging
+
+private[spark] class MetricsConfig(val configFile: Option[String]) extends Logging {
+  initLogging()
+
   val DEFAULT_PREFIX = "*"
   val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
+  val METRICS_CONF = "metrics.properties"
+
+  val properties = new Properties()
   var propertyCategories: mutable.HashMap[String, Properties] = null
 
   private def setDefaultProperties(prop: Properties) {
-    prop.setProperty("*.sink.jmx.enabled", "default")
-    prop.setProperty("*.source.jvm.class", "spark.metrics.source.JvmSource")
+    // empty function, any default property can be set here
   }
 
-  def initilize() {
+  def initialize() {
     //Add default properties in case there's no properties file
     setDefaultProperties(properties)
 
-    val confFile = new File(configFile)
-    if (confFile.exists()) {
-      var fis: FileInputStream = null
-      try {
-        fis = new FileInputStream(configFile)
-        properties.load(fis)
-      } finally {
-        fis.close()
+    // If spark.metrics.conf is not set, try to get file in class path
+    var is: InputStream = null
+    try {
+      is = configFile match {
+        case Some(f) => new FileInputStream(f)
+        case None => getClass.getClassLoader.getResourceAsStream(METRICS_CONF)
       }
+
+      if (is != null) {
+        properties.load(is)
+      }
+    } catch {
+      case e: Exception => logError("Error loading configure file", e)
+    } finally {
+      if (is != null) is.close()
     }
 
     propertyCategories = subProperties(properties, INSTANCE_REGEX)
     if (propertyCategories.contains(DEFAULT_PREFIX)) {
       import scala.collection.JavaConversions._
+
       val defaultProperty = propertyCategories(DEFAULT_PREFIX)
-      for ((inst, prop) <- propertyCategories; p <- defaultProperty
-        if inst != DEFAULT_PREFIX; if prop.getProperty(p._1) == null) {
-        prop.setProperty(p._1, p._2)
+      for { (inst, prop) <- propertyCategories
+            if (inst != DEFAULT_PREFIX)
+            (k, v) <- defaultProperty
+            if (prop.getProperty(k) == null) } {
+        prop.setProperty(k, v)
       }
     }
   }
@@ -58,7 +72,7 @@ private[spark] class MetricsConfig(val configFile: String) {
   def getInstance(inst: String): Properties = {
     propertyCategories.get(inst) match {
       case Some(s) => s
-      case None => propertyCategories(DEFAULT_PREFIX)
+      case None => propertyCategories.getOrElse(DEFAULT_PREFIX, new Properties)
     }
   }
 }

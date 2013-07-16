@@ -68,6 +68,7 @@ private[spark] class Worker(
   var coresUsed = 0
   var memoryUsed = 0
 
+  val metricsSystem = MetricsSystem.createMetricsSystem("worker")
   val workerSource = new WorkerSource(this)
 
   def coresFree: Int = cores - coresUsed
@@ -100,10 +101,9 @@ private[spark] class Worker(
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
     webUi.start()
     connectToMaster()
-    startWebUi()
 
-    Worker.metricsSystem.registerSource(workerSource)
-    Worker.metricsSystem.start()
+    metricsSystem.registerSource(workerSource)
+    metricsSystem.start()
   }
 
   def connectToMaster() {
@@ -185,14 +185,11 @@ private[spark] class Worker(
   override def postStop() {
     executors.values.foreach(_.kill())
     webUi.stop()
-
-    Worker.metricsSystem.stop()
+    metricsSystem.stop()
   }
 }
 
 private[spark] object Worker {
-  private val metricsSystem = MetricsSystem.createMetricsSystem("worker")
-
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,

@@ -1,11 +1,82 @@
 # syntax: [instance].[sink|source].[name].[options]
 
+#  "instance" specify "who" (the role) use metrics system. In spark there are
+#  several roles like master, worker, executor, driver, these roles will
+#  create metrics system for monitoring. So instance represents these roles.
+#  Currently in Spark, several instances have already implemented: master,
+#  worker, executor, driver.
+#
+#  [instance] field can be "master", "worker", "executor", "driver", which means
+#  only the specified instance has this property.
+#  a wild card "*" can be used to represent instance name, which means all the
+#  instances will have this property.
+#
+#  "source" specify "where" (source) to collect metrics data. In metrics system,
+#  there exists two kinds of source:
+#    1. Spark internal source, like MasterSource, WorkerSource, etc, which will
+#    collect Spark component's internal state, these sources are related to
+#    instance and will be added after specific metrics system is created.
+#    2. Common source, like JvmSource, which will collect low level state, is
+#    configured by configuration and loaded through reflection.
+#
+#  "sink" specify "where" (destination) to output metrics data to. Several sinks
+#  can be coexisted and flush metrics to all these sinks.
+#
+#  [sink|source] field specify this property is source related or sink, this
+#  field can only be source or sink.
+#
+#  [name] field specify the name of source or sink, this is custom defined.
+#
+#  [options] field is the specific property of this source or sink, this source
+#  or sink is responsible for parsing this property.
+#
+#  Notes:
+#    1. Sinks should be added through configuration, like console sink, class
+#    full name should be specified by class property.
+#    2. Some sinks can specify polling period, like console sink, which is 10 seconds,
+#    it should be attention minimal polling period is 1 seconds, any period
+#    below than 1s is illegal.
+#    3. Wild card property can be overlapped by specific instance property, for
+#    example, *.sink.console.period can be overlapped by master.sink.console.period.
+#    4. A metrics specific configuration
+#    "spark.metrics.conf=${SPARK_HOME}/conf/metrics.properties" should be
+#    added to Java property using -Dspark.metrics.conf=xxx if you want to
+#    customize metrics system, or you can put it in ${SPARK_HOME}/conf,
+#    metrics system will search and load it automatically.
+
+# Enable JmxSink for all instances by class name
+#*.sink.jmx.class=spark.metrics.sink.JmxSink
+
+# Enable ConsoleSink for all instances by class name
 #*.sink.console.class=spark.metrics.sink.ConsoleSink
 
+# Polling period for ConsoleSink
 #*.sink.console.period=10
 
-#*.sink.console.unit=second
+#*.sink.console.unit=seconds
 
+# Master instance overlap polling period
+#master.sink.console.period=15
+
+#master.sink.console.unit=seconds
+
+# Enable CsvSink for all instances
+#*.sink.csv.class=spark.metrics.sink.CsvSink
+
+# Polling period for CsvSink
+#*.sink.csv.period=1
+
+#*.sink.csv.unit=minutes
+
+# Polling directory for CsvSink
+#*.sink.csv.directory=/tmp/
+
+# Worker instance overlap polling period
+#worker.sink.csv.period=10
+
+#worker.sink.csv.unit=minutes
+
+# Enable jvm source for instance master, worker, driver and executor
 #master.source.jvm.class=spark.metrics.source.JvmSource
 
 #worker.source.jvm.class=spark.metrics.source.JvmSource

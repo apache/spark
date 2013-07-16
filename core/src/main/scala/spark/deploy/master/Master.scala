@@ -58,6 +58,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   Utils.checkHost(host, "Expected hostname")
 
+  val metricsSystem = MetricsSystem.createMetricsSystem("master")
   val masterSource = new MasterSource(this)
 
   val masterPublicAddress = {
@@ -77,12 +78,13 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
 
-    Master.metricsSystem.registerSource(masterSource)
-    Master.metricsSystem.start()
+    metricsSystem.registerSource(masterSource)
+    metricsSystem.start()
   }
 
   override def postStop() {
     webUi.stop()
+    metricsSystem.stop()
   }
 
   override def receive = {
@@ -322,17 +324,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       removeWorker(worker)
     }
   }
-
-  override def postStop() {
-    Master.metricsSystem.stop()
-  }
 }
 
 private[spark] object Master {
   private val systemName = "sparkMaster"
   private val actorName = "Master"
   private val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
-  private val metricsSystem = MetricsSystem.createMetricsSystem("master")
 
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)

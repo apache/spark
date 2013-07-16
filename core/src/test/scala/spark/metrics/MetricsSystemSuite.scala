@@ -12,7 +12,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
 
   before {
     filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile()
-    System.setProperty("spark.metrics.conf.file", filePath)
+    System.setProperty("spark.metrics.conf", filePath)
   }
 
   test("MetricsSystem with default config") {
@@ -20,9 +20,8 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
     val sources = metricsSystem.sources
     val sinks = metricsSystem.sinks
 
-    assert(sources.length === 1)
-    assert(sinks.length === 1)
-    assert(sources(0).sourceName === "jvm")
+    assert(sources.length === 0)
+    assert(sinks.length === 0)
   }
 
   test("MetricsSystem with sources add") {
@@ -30,11 +29,11 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
     val sources = metricsSystem.sources
     val sinks = metricsSystem.sinks
 
-    assert(sources.length === 1)
-    assert(sinks.length === 2)
+    assert(sources.length === 0)
+    assert(sinks.length === 1)
 
     val source = new spark.deploy.master.MasterSource(null)
     metricsSystem.registerSource(source)
-    assert(sources.length === 2)
+    assert(sources.length === 1)
   }
 }
