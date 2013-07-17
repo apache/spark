@@ -34,15 +34,13 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-  // Test if we can correctly learn A, B where Y = logistic(A + B*X)
-  test("logistic regression") {
-    val nPoints = 10000
+  // Generate input of the form Y = logistic(offset + scale*X)
+  def generateLogisticInput(
+    offset: Double,
+    scale: Double,
+    nPoints: Int) : Seq[(Double, Array[Double])]  = {
     val rnd = new Random(42)
-
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
-
-    val A = 2.0
-    val B = -1.5
 
     // NOTE: if U is uniform[0, 1] then ln(u) - ln(1-u) is Logistic(0,1)
     val unifRand = new scala.util.Random(45)
@@ -51,14 +49,24 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
       math.log(u) - math.log(1.0-u)
     }
 
-    // y <- A + B*x + rlogis(100)
+    // y <- A + B*x + rLogis()
     // y <- as.numeric(y > 0)
     val y = (0 until nPoints).map { i =>
-      val yVal = A + B * x1(i) + rLogis(i)
+      val yVal = offset + scale * x1(i) + rLogis(i)
       if (yVal > 0) 1.0 else 0.0
     }
 
-    val testData = (0 until nPoints).map(i => (y(i).toDouble, Array(x1(i)))).toArray
+    val testData = (0 until nPoints).map(i => (y(i).toDouble, Array(x1(i))))
+    testData
+  }
+
+  // Test if we can correctly learn A, B where Y = logistic(A + B*X)
+  test("logistic regression") {
+    val nPoints = 10000
+    val A = 2.0
+    val B = -1.5
+
+    val testData = generateLogisticInput(A, B, nPoints)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
@@ -66,6 +74,30 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
                                      .setNumIterations(20)
 
     val model = lr.train(testRDD)
+
+    val weight0 = model.weights.get(0)
+    assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
+    assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")
+  }
+
+  test("logistic regression with initial weights") {
+    val nPoints = 10000
+    val A = 2.0
+    val B = -1.5
+
+    val testData = generateLogisticInput(A, B, nPoints)
+
+    val initialB = -1.0
+    val initialWeights = Array(initialB)
+
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    // Use half as many iterations as the previous test.
+    val lr = new LogisticRegression().setStepSize(10.0)
+                                     .setNumIterations(10)
+
+    val model = lr.train(testRDD, initialWeights)
 
     val weight0 = model.weights.get(0)
     assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")

@@ -48,16 +48,17 @@ object GradientDescent {
     updater: Updater,
     stepSize: Double,
     numIters: Int,
+    initialWeights: Array[Double],
     miniBatchFraction: Double=1.0) : (DoubleMatrix, Array[Double]) = {
 
     val lossHistory = new ArrayBuffer[Double](numIters)
 
-    val nfeatures: Int = data.take(1)(0)._2.length
     val nexamples: Long = data.count()
     val miniBatchSize = nexamples * miniBatchFraction
 
     // Initialize weights as a column matrix
-    var weights = DoubleMatrix.ones(nfeatures)
+    var weights = new DoubleMatrix(1, initialWeights.length,
+      initialWeights:_*)
     var reg_val = 0.0
 
     for (i <- 1 to numIters) {
