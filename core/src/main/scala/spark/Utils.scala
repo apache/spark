@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import java.io._
@@ -6,6 +23,7 @@ import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
 import java.util.regex.Pattern
 
+import scala.collection.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConversions._
 import scala.io.Source
@@ -486,6 +504,26 @@ private object Utils extends Logging {
   }
 
   /**
+   * Returns a human-readable string representing a duration such as "35ms"
+   */
+  def msDurationToString(ms: Long): String = {
+    val second = 1000
+    val minute = 60 * second
+    val hour = 60 * minute
+
+    ms match {
+      case t if t < second =>
+        "%d ms".format(t)
+      case t if t < minute =>
+        "%.1f s".format(t.toFloat / second)
+      case t if t < hour =>
+        "%.1f m".format(t.toFloat / minute)
+      case t =>
+        "%.2f h".format(t.toFloat / hour)
+    }
+  }
+
+  /**
    * Convert a memory quantity in megabytes to a human-readable string such as "4.0 MB".
    */
   def memoryMegabytesToString(megabytes: Long): String = {
@@ -525,10 +563,15 @@ private object Utils extends Logging {
   /**
    * Execute a command and get its output, throwing an exception if it yields a code other than 0.
    */
-  def executeAndGetOutput(command: Seq[String], workingDir: File = new File(".")): String = {
-    val process = new ProcessBuilder(command: _*)
+  def executeAndGetOutput(command: Seq[String], workingDir: File = new File("."),
+                          extraEnvironment: Map[String, String] = Map.empty): String = {
+    val builder = new ProcessBuilder(command: _*)
         .directory(workingDir)
-        .start()
+    val environment = builder.environment()
+    for ((key, value) <- extraEnvironment) {
+      environment.put(key, value)
+    }
+    val process = builder.start()
     new Thread("read stderr for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines) {
@@ -553,8 +596,15 @@ private object Utils extends Logging {
     output.toString
   }
 
+  /** 
+   * A regular expression to match classes of the "core" Spark API that we want to skip when
+   * finding the call site of a method.
+   */
+  private val SPARK_CLASS_REGEX = """^spark(\.api\.java)?(\.rdd)?\.[A-Z]""".r
+
   private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
                                     val firstUserLine: Int, val firstUserClass: String)
+
   /**
    * When called inside a class in the spark package, returns the name of the user code class
    * (outside the spark package) that called into Spark, as well as which Spark method they called.
@@ -576,7 +626,7 @@ private object Utils extends Logging {
 
     for (el <- trace) {
       if (!finished) {
-        if (el.getClassName.startsWith("spark.") && !el.getClassName.startsWith("spark.examples.")) {
+        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName) != None) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
@@ -600,18 +650,20 @@ private object Utils extends Logging {
     "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
                          callSiteInfo.firstUserLine)
   }
-  /**
-   * Try to find a free port to bind to on the local host. This should ideally never be needed,
-   * except that, unfortunately, some of the networking libraries we currently rely on (e.g. Spray)
-   * don't let users bind to port 0 and then figure out which free port they actually bound to.
-   * We work around this by binding a ServerSocket and immediately unbinding it. This is *not*
-   * necessarily guaranteed to work, but it's the best we can do.
-   */
-  def findFreePort(): Int = {
-    val socket = new ServerSocket(0)
-    val portBound = socket.getLocalPort
-    socket.close()
-    portBound
+
+  /** Return a string containing part of a file from byte 'start' to 'end'. */
+  def offsetBytes(path: String, start: Long, end: Long): String = {
+    val file = new File(path)
+    val length = file.length()
+    val effectiveEnd = math.min(length, end)
+    val effectiveStart = math.max(0, start)
+    val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
+    val stream = new FileInputStream(file)
+
+    stream.skip(effectiveStart)
+    stream.read(buff)
+    stream.close()
+    Source.fromBytes(buff).mkString
   }
 
   /**

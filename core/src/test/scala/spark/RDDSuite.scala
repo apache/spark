@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import scala.collection.mutable.HashMap
@@ -240,7 +257,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val ints = sc.makeRDD(scala.util.Random.shuffle(nums), 2)
     val topK = ints.top(5)
     assert(topK.size === 5)
-    assert(topK.sorted === nums.sorted.takeRight(5))
+    assert(topK === nums.reverse.take(5))
   }
 
   test("top with custom ordering") {
@@ -250,5 +267,62 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val topK = rdd.top(2)
     assert(topK.size === 2)
     assert(topK.sorted === Array("b", "a"))
+  }
+
+  test("takeOrdered with predefined ordering") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    val rdd = sc.makeRDD(nums, 2)
+    val sortedLowerK = rdd.takeOrdered(5)
+    assert(sortedLowerK.size === 5)
+    assert(sortedLowerK === Array(1, 2, 3, 4, 5))
+  }
+
+  test("takeOrdered with custom ordering") {
+    val nums = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    implicit val ord = implicitly[Ordering[Int]].reverse
+    val rdd = sc.makeRDD(nums, 2)
+    val sortedTopK = rdd.takeOrdered(5)
+    assert(sortedTopK.size === 5)
+    assert(sortedTopK === Array(10, 9, 8, 7, 6))
+    assert(sortedTopK === nums.sorted(ord).take(5))
+  }
+
+  test("takeSample") {
+    val data = sc.parallelize(1 to 100, 2)
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement=false, 20, seed)
+      assert(sample.size === 20)        // Got exactly 20 elements
+      assert(sample.toSet.size === 20)  // Elements are distinct
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement=false, 200, seed)
+      assert(sample.size === 100)        // Got only 100 elements
+      assert(sample.toSet.size === 100)  // Elements are distinct
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement=true, 20, seed)
+      assert(sample.size === 20)        // Got exactly 20 elements
+      assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement=true, 100, seed)
+      assert(sample.size === 100)        // Got exactly 100 elements
+      // Chance of getting all distinct elements is astronomically low, so test we got < 100
+      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement=true, 200, seed)
+      assert(sample.size === 200)        // Got exactly 200 elements
+      // Chance of getting all distinct elements is still quite low, so test we got < 100
+      assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
+    }
+  }
+
+  test("runJob on an invalid partition") {
+    intercept[IllegalArgumentException] {
+      sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)
+    }
   }
 }
