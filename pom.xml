@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.spark-project</groupId>
@@ -54,9 +71,7 @@
     <scala.version>2.9.3</scala.version>
     <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.0.3</akka.version>
-    <spray.version>1.0-M2.1</spray.version>
-    <spray.json.version>1.1.1</spray.json.version>
-    <slf4j.version>1.6.1</slf4j.version>
+    <slf4j.version>1.7.2</slf4j.version>
     <cdh.version>4.1.2</cdh.version>
     <log4j.version>1.2.17</log4j.version>
 
@@ -91,28 +106,6 @@
       <id>akka-repo</id>
       <name>Akka Repository</name>
       <url>http://repo.akka.io/releases/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>spray-repo</id>
-      <name>Spray Repository</name>
-      <url>http://repo.spray.cc/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>twitter4j-repo</id>
-      <name>Twitter4J Repository</name>
-      <url>http://twitter4j.org/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -230,26 +223,6 @@
         <version>1.2.0</version>
       </dependency>
       <dependency>
-        <groupId>cc.spray</groupId>
-        <artifactId>spray-can</artifactId>
-        <version>${spray.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>cc.spray</groupId>
-        <artifactId>spray-server</artifactId>
-        <version>${spray.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>cc.spray</groupId>
-        <artifactId>spray-json_2.9.2</artifactId>
-        <version>${spray.json.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.tomdz.twirl</groupId>
-        <artifactId>twirl-api</artifactId>
-        <version>1.0.2</version>
-      </dependency>
-      <dependency>
         <groupId>com.github.scala-incubator.io</groupId>
         <artifactId>scala-io-file_2.9.2</artifactId>
         <version>0.4.1</version>
@@ -270,7 +243,11 @@
         <version>10.4.2.0</version>
         <scope>test</scope>
       </dependency>
-
+      <dependency>
+        <groupId>net.liftweb</groupId>
+        <artifactId>lift-json_2.9.2</artifactId>
+        <version>2.5</version>
+      </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
@@ -279,6 +256,16 @@
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>jline</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-library</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scalap</artifactId>
         <version>${scala.version}</version>
       </dependency>
 
@@ -347,21 +334,9 @@
           <version>1.7</version>
         </plugin>
         <plugin>
-          <groupId>org.tomdz.twirl</groupId>
-          <artifactId>twirl-maven-plugin</artifactId>
-          <version>1.0.1</version>
-          <executions>
-            <execution>
-              <goals>
-                <goal>generate</goal>
-              </goals>
-            </execution>
-          </executions>
-        </plugin>
-        <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.1.5</version>
           <executions>
             <execution>
               <id>scala-compile-first</id>
@@ -388,12 +363,14 @@
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
             <recompileMode>incremental</recompileMode>
+            <useZincServer>true</useZincServer>
             <args>
               <arg>-unchecked</arg>
               <arg>-optimise</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms64m</jvmArg>
+              <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
               <jvmArg>-XX:MaxPermSize=${MaxPermGen}</jvmArg>
@@ -564,12 +541,12 @@
           <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
-            <version>1.7.1.cloudera.2</version>
+            <version>1.7.4</version>
           </dependency>
           <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-ipc</artifactId>
-            <version>1.7.1.cloudera.2</version>
+            <version>1.7.4</version>
             <exclusions>
               <exclusion>
                 <groupId>org.jboss.netty</groupId>
@@ -631,12 +608,12 @@
           <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro</artifactId>
-            <version>1.7.1.cloudera.2</version>
+            <version>1.7.4</version>
           </dependency>
           <dependency>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-ipc</artifactId>
-            <version>1.7.1.cloudera.2</version>
+            <version>1.7.4</version>
           </dependency>
         </dependencies>
       </dependencyManagement>

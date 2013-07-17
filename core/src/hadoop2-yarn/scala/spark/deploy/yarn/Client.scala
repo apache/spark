@@ -1,9 +1,30 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.yarn
 
 import java.net.{InetSocketAddress, URI}
+import java.nio.ByteBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.net.NetUtils
+import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -23,6 +44,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   
   var rpc: YarnRPC = YarnRPC.create(conf)
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
+  val credentials = UserGroupInformation.getCurrentUser().getCredentials();
   
   def run() {
     init(yarnConf)
@@ -40,8 +62,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
-    appContext.setUser(args.amUser)
-    
+    appContext.setUser(UserGroupInformation.getCurrentUser().getShortUserName())
+
     submitApp(appContext)
     
     monitorApplication(appId)
@@ -62,14 +84,21 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   
   def verifyClusterResources(app: GetNewApplicationResponse) = { 
     val maxMem = app.getMaximumResourceCapability().getMemory()
-    logInfo("Max mem capabililty of resources in this cluster " + maxMem)
+    logInfo("Max mem capabililty of a single resource in this cluster " + maxMem)
     
-    // If the cluster does not have enough memory resources, exit.
-    val requestedMem = (args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD) + args.numWorkers * args.workerMemory
-    if (requestedMem > maxMem) {
-      logError("Cluster cannot satisfy memory resource request of " + requestedMem)
+    // if we have requested more then the clusters max for a single resource then exit.
+    if (args.workerMemory > maxMem) {
+      logError("the worker size is to large to run on this cluster " + args.workerMemory);
       System.exit(1)
     }
+    val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
+    if (amMem > maxMem) {
+      logError("AM size is to large to run on this cluster "  + amMem)
+      System.exit(1)
+    }
+
+    // We could add checks to make sure the entire cluster has enough resources but that involves getting
+    // all the node reports and computing ourselves 
   }
   
   def createApplicationSubmissionContext(appId: ApplicationId): ApplicationSubmissionContext = {
@@ -86,6 +115,15 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // Upload Spark and the application JAR to the remote file system
     // Add them as local resources to the AM
     val fs = FileSystem.get(conf)
+
+    val delegTokenRenewer = Master.getMasterPrincipal(conf);
+    if (UserGroupInformation.isSecurityEnabled()) {
+      if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
+        logError("Can't get Master Kerberos principal for use as renewer")
+        System.exit(1)
+      }
+    }
+
     Map("spark.jar" -> System.getenv("SPARK_JAR"), "app.jar" -> args.userJar, "log4j.properties" -> System.getenv("SPARK_LOG4J_CONF"))
     .foreach { case(destName, _localPath) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
@@ -97,6 +135,11 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
         fs.copyFromLocalFile(false, true, src, dst)
         val destStatus = fs.getFileStatus(dst)
 
+        // get tokens for anything we upload to hdfs
+        if (UserGroupInformation.isSecurityEnabled()) {
+          fs.addDelegationTokens(delegTokenRenewer, credentials);
+        }
+
         val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
         amJarRsrc.setType(LocalResourceType.FILE)
         amJarRsrc.setVisibility(LocalResourceVisibility.APPLICATION)
@@ -106,6 +149,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
         locaResources(destName) = amJarRsrc
       }
     }
+    UserGroupInformation.getCurrentUser().addCredentials(credentials);
     return locaResources
   }
   
@@ -114,7 +158,6 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     val log4jConfLocalRes = localResources.getOrElse("log4j.properties", null)
 
     val env = new HashMap[String, String]()
-    Apps.addToEnvironment(env, Environment.USER.name, args.amUser)
 
     // If log4j present, ensure ours overrides all others
     if (log4jConfLocalRes != null) Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
@@ -141,6 +184,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       env("SPARK_YARN_LOG4J_TIMESTAMP") =  log4jConfLocalRes.getTimestamp().toString()
       env("SPARK_YARN_LOG4J_SIZE") =  log4jConfLocalRes.getSize().toString()
     }
+
 
     // Add each SPARK-* key to the environment
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
@@ -195,7 +239,13 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     }
 
     // Command for the ApplicationMaster
-    val commands = List[String]("java " +
+    var javaCommand = "java";
+    val javaHome = System.getenv("JAVA_HOME")
+    if (javaHome != null && !javaHome.isEmpty()) {
+      javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
+    }
+
+    val commands = List[String](javaCommand + 
       " -server " +
       JAVA_OPTS +
       " spark.deploy.yarn.ApplicationMaster" +
@@ -214,7 +264,12 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // Memory for the ApplicationMaster
     capability.setMemory(args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
     amContainer.setResource(capability)
-    
+
+    // Setup security tokens
+    val dob = new DataOutputBuffer()
+    credentials.writeTokenStorageToStream(dob)
+    amContainer.setContainerTokens(ByteBuffer.wrap(dob.getData()))
+
     return amContainer
   }
   

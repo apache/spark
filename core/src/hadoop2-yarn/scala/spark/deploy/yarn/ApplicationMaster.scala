@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.yarn
 
 import java.net.Socket
@@ -27,26 +44,10 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   private val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
 
   private var yarnAllocator: YarnAllocationHandler = null
+  private var isFinished:Boolean = false
 
   def run() {
     
-    // Initialization
-    val jobUserName = Utils.getUserNameFromEnvironment()
-    logInfo("running as user " + jobUserName)
-
-    // run as user ...
-    UserGroupInformation.setConfiguration(yarnConf)
-    val appMasterUgi: UserGroupInformation = UserGroupInformation.createRemoteUser(jobUserName)
-    appMasterUgi.doAs(new PrivilegedExceptionAction[AnyRef] {
-      def run: AnyRef = {
-        runImpl()
-        return null
-      }
-    })
-  }
-
-  private def runImpl() {
-
     appAttemptId = getApplicationAttemptId()
     resourceManager = registerWithResourceManager()
     val appMasterResponse: RegisterApplicationMasterResponse = registerApplicationMaster()
@@ -85,10 +86,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     
     // Wait for the user class to Finish     
     userThread.join()
-     
-    // Finish the ApplicationMaster
-    finishApplicationMaster()
-    // TODO: Exit based on success/failure
+
     System.exit(0)
   }
   
@@ -141,17 +139,30 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       }
     }
   }
-  
+
   private def startUserClass(): Thread  = {
     logInfo("Starting the user JAR in a separate Thread")
     val mainMethod = Class.forName(args.userClass, false, Thread.currentThread.getContextClassLoader)
       .getMethod("main", classOf[Array[String]])
     val t = new Thread {
       override def run() {
-        // Copy
-        var mainArgs: Array[String] = new Array[String](args.userArgs.size())
-        args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size())
-        mainMethod.invoke(null, mainArgs)
+        var successed = false
+        try {
+          // Copy
+          var mainArgs: Array[String] = new Array[String](args.userArgs.size())
+          args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size())
+          mainMethod.invoke(null, mainArgs)
+          // some job script has "System.exit(0)" at the end, for example SparkPi, SparkLR
+          // userThread will stop here unless it has uncaught exception thrown out
+          // It need shutdown hook to set SUCCEEDED
+          successed = true
+        } finally {
+          if (successed) {
+            ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
+          } else {
+            ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.FAILED)
+          }
+        }
       }
     }
     t.start()
@@ -196,7 +207,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     logInfo("All workers have launched.")
 
     // Launch a progress reporter thread, else app will get killed after expiration (def: 10mins) timeout
-    if (userThread.isAlive){
+    if (userThread.isAlive) {
       // ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapse.
 
       val timeoutInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
@@ -214,7 +225,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
 
     val t = new Thread {
       override def run() {
-        while (userThread.isAlive){
+        while (userThread.isAlive) {
           val missingWorkerCount = args.numWorkers - yarnAllocator.getNumWorkersRunning
           if (missingWorkerCount > 0) {
             logInfo("Allocating " + missingWorkerCount + " containers to make up for (potentially ?) lost containers")
@@ -252,14 +263,23 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     }
   }
   */
-  
-  def finishApplicationMaster() { 
+
+  def finishApplicationMaster(status: FinalApplicationStatus) {
+
+    synchronized {
+      if (isFinished) {
+        return
+      }
+      isFinished = true
+    }
+
+    logInfo("finishApplicationMaster with " + status)
     val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
       .asInstanceOf[FinishApplicationMasterRequest]
     finishReq.setAppAttemptId(appAttemptId)
-    // TODO: Check if the application has failed or succeeded
-    finishReq.setFinishApplicationStatus(FinalApplicationStatus.SUCCEEDED)
+    finishReq.setFinishApplicationStatus(status)
     resourceManager.finishApplicationMaster(finishReq)
+
   }
  
 }
@@ -273,7 +293,7 @@ object ApplicationMaster {
   private val ALLOCATOR_LOOP_WAIT_COUNT = 30
   def incrementAllocatorLoop(by: Int) {
     val count = yarnAllocatorLoop.getAndAdd(by)
-    if (count >= ALLOCATOR_LOOP_WAIT_COUNT){
+    if (count >= ALLOCATOR_LOOP_WAIT_COUNT) {
       yarnAllocatorLoop.synchronized {
         // to wake threads off wait ...
         yarnAllocatorLoop.notifyAll()
@@ -308,14 +328,16 @@ object ApplicationMaster {
           logInfo("Invoking sc stop from shutdown hook") 
           sc.stop() 
           // best case ...
-          for (master <- applicationMasters) master.finishApplicationMaster
+          for (master <- applicationMasters) {
+            master.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
+          }
         } 
       } )
     }
 
     // Wait for initialization to complete and atleast 'some' nodes can get allocated
     yarnAllocatorLoop.synchronized {
-      while (yarnAllocatorLoop.get() <= ALLOCATOR_LOOP_WAIT_COUNT){
+      while (yarnAllocatorLoop.get() <= ALLOCATOR_LOOP_WAIT_COUNT) {
         yarnAllocatorLoop.wait(1000L)
       }
     }

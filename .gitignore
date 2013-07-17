@@ -36,4 +36,5 @@ streaming-tests.log
 dependency-reduced-pom.xml
 .ensime
 .ensime_lucene
+checkpoint
 derby.log

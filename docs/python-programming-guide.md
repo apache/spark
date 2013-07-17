@@ -17,24 +17,23 @@ There are a few key differences between the Python and Scala APIs:
 * Python is dynamically typed, so RDDs can hold objects of different types.
 * PySpark does not currently support the following Spark features:
     - Special functions on RDDs of doubles, such as `mean` and `stdev`
-    - `lookup`
+    - `lookup`, `sample` and `sort`
     - `persist` at storage levels other than `MEMORY_ONLY`
-    - `sample`
-    - `sort`
+    - Execution on Windows -- this is slated for a future release
 
 In PySpark, RDDs support the same methods as their Scala counterparts but take Python functions and return Python collection types.
 Short functions can be passed to RDD methods using Python's [`lambda`](http://www.diveintopython.net/power_of_introspection/lambda_functions.html) syntax:
 
 {% highlight python %}
 logData = sc.textFile(logFile).cache()
-errors = logData.filter(lambda s: 'ERROR' in s.split())
+errors = logData.filter(lambda line: "ERROR" in line)
 {% endhighlight %}
 
 You can also pass functions that are defined using the `def` keyword; this is useful for more complicated functions that cannot be expressed using `lambda`:
 
 {% highlight python %}
 def is_error(line):
-    return 'ERROR' in line.split()
+    return "ERROR" in line
 errors = logData.filter(is_error)
 {% endhighlight %}
 
@@ -43,8 +42,7 @@ Functions can access objects in enclosing scopes, although modifications to thos
 {% highlight python %}
 error_keywords = ["Exception", "Error"]
 def is_error(line):
-     words = line.split()
-     return any(keyword in words for keyword in error_keywords)
+    return any(keyword in line for keyword in error_keywords)
 errors = logData.filter(is_error)
 {% endhighlight %}
 

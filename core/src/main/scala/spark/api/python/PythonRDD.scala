@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.api.python
 
 import java.io._
@@ -22,6 +39,8 @@ private[spark] class PythonRDD[T: ClassManifest](
     accumulator: Accumulator[JList[Array[Byte]]])
   extends RDD[Array[Byte]](parent) {
 
+  val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
   def this(parent: RDD[T], command: String, envVars: JMap[String, String],
@@ -45,37 +64,38 @@ private[spark] class PythonRDD[T: ClassManifest](
     new Thread("stdin writer for " + pythonExec) {
       override def run() {
         SparkEnv.set(env)
-        val out = new PrintWriter(worker.getOutputStream)
-        val dOut = new DataOutputStream(worker.getOutputStream)
+        val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
+        val dataOut = new DataOutputStream(stream)
+        val printOut = new PrintWriter(stream)
         // Partition index
-        dOut.writeInt(split.index)
+        dataOut.writeInt(split.index)
         // sparkFilesDir
-        PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dOut)
+        PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dataOut)
         // Broadcast variables
-        dOut.writeInt(broadcastVars.length)
+        dataOut.writeInt(broadcastVars.length)
         for (broadcast <- broadcastVars) {
-          dOut.writeLong(broadcast.id)
-          dOut.writeInt(broadcast.value.length)
-          dOut.write(broadcast.value)
-          dOut.flush()
+          dataOut.writeLong(broadcast.id)
+          dataOut.writeInt(broadcast.value.length)
+          dataOut.write(broadcast.value)
         }
+        dataOut.flush()
         // Serialized user code
         for (elem <- command) {
-          out.println(elem)
+          printOut.println(elem)
         }
-        out.flush()
+        printOut.flush()
         // Data values
         for (elem <- parent.iterator(split, context)) {
-          PythonRDD.writeAsPickle(elem, dOut)
+          PythonRDD.writeAsPickle(elem, dataOut)
         }
-        dOut.flush()
-        out.flush()
+        dataOut.flush()
+        printOut.flush()
         worker.shutdownOutput()
       }
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    val stream = new DataInputStream(worker.getInputStream)
+    val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
     return new Iterator[Array[Byte]] {
       def next(): Array[Byte] = {
         val obj = _nextObj
@@ -275,6 +295,8 @@ class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
   extends AccumulatorParam[JList[Array[Byte]]] {
 
   Utils.checkHost(serverHost, "Expected hostname")
+
+  val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
   
   override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
 
@@ -288,7 +310,7 @@ class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
       // This happens on the master, where we pass the updates to Python through a socket
       val socket = new Socket(serverHost, serverPort)
       val in = socket.getInputStream
-      val out = new DataOutputStream(socket.getOutputStream)
+      val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
       out.writeInt(val2.size)
       for (array <- val2) {
         out.writeInt(array.length)
