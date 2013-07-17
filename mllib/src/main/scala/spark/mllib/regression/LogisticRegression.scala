@@ -126,10 +126,8 @@ class LogisticRegression private (var stepSize: Double, var miniBatchFraction: D
       initalWeightsWithIntercept,
       miniBatchFraction)
 
-    val weightsArray = weights.toArray()
-
-    val intercept = weightsArray(0)
-    val weightsScaled = weightsArray.tail
+    val intercept = weights(0)
+    val weightsScaled = weights.tail
 
     val model = new LogisticRegressionModel(weightsScaled, intercept, stochasticLosses)
 

@@ -50,7 +50,7 @@ object GradientDescent {
     stepSize: Double,
     numIters: Int,
     initialWeights: Array[Double],
-    miniBatchFraction: Double=1.0) : (DoubleMatrix, Array[Double]) = {
+    miniBatchFraction: Double=1.0) : (Array[Double], Array[Double]) = {
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIters)
 
@@ -75,6 +75,6 @@ object GradientDescent {
       reg_val = update._2
     }
 
-    (weights, stochasticLossHistory.toArray)
+    (weights.toArray, stochasticLossHistory.toArray)
   }
 }
