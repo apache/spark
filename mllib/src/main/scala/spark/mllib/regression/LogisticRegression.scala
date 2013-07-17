@@ -30,7 +30,7 @@ import org.jblas.DoubleMatrix
 class LogisticRegressionModel(
   val weights: DoubleMatrix,
   val intercept: Double,
-  val losses: Array[Double]) extends RegressionModel {
+  val stochasticLosses: Array[Double]) extends RegressionModel {
 
   override def predict(testData: spark.RDD[Array[Double]]) = {
     testData.map { x =>
@@ -114,7 +114,7 @@ class LogisticRegression private (var stepSize: Double, var miniBatchFraction: D
 
     val initalWeightsWithIntercept = Array(1.0, initialWeights:_*)
 
-    val (weights, losses) = GradientDescent.runMiniBatchSGD(
+    val (weights, stochasticLosses) = GradientDescent.runMiniBatchSGD(
       data,
       new LogisticGradient(),
       new SimpleUpdater(),
@@ -126,17 +126,19 @@ class LogisticRegression private (var stepSize: Double, var miniBatchFraction: D
     val weightsScaled = weights.getRange(1, weights.length)
     val intercept = weights.get(0)
 
-    val model = new LogisticRegressionModel(weightsScaled, intercept, losses)
+    val model = new LogisticRegressionModel(weightsScaled, intercept, stochasticLosses)
 
     logInfo("Final model weights " + model.weights)
     logInfo("Final model intercept " + model.intercept)
-    logInfo("Last 10 losses " + model.losses.takeRight(10).mkString(", "))
+    logInfo("Last 10 stochastic losses " + model.stochasticLosses.takeRight(10).mkString(", "))
     model
   }
 }
 
 /**
  * Top-level methods for calling Logistic Regression.
+ * NOTE(shivaram): We use multiple train methods instead of default arguments to support 
+ *                 Java programs.
  */
 object LogisticRegression {
 

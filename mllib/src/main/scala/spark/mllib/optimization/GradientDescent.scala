@@ -40,7 +40,8 @@ object GradientDescent {
    *                            one iteration of SGD. Default value 1.0.
    *
    * @return weights - Column matrix containing weights for every feature.
-   * @return lossHistory - Array containing the loss computed for every iteration.
+   * @return stochasticLossHistory - Array containing the stochastic loss computed for 
+   *                                 every iteration.
    */
   def runMiniBatchSGD(
     data: RDD[(Double, Array[Double])],
@@ -51,7 +52,7 @@ object GradientDescent {
     initialWeights: Array[Double],
     miniBatchFraction: Double=1.0) : (DoubleMatrix, Array[Double]) = {
 
-    val lossHistory = new ArrayBuffer[Double](numIters)
+    val stochasticLossHistory = new ArrayBuffer[Double](numIters)
 
     val nexamples: Long = data.count()
     val miniBatchSize = nexamples * miniBatchFraction
@@ -69,12 +70,12 @@ object GradientDescent {
           (grad, loss)
       }.reduce((a, b) => (a._1.addi(b._1), a._2 + b._2))
 
-      lossHistory.append(lossSum / miniBatchSize + reg_val)
+      stochasticLossHistory.append(lossSum / miniBatchSize + reg_val)
       val update = updater.compute(weights, gradientSum.div(miniBatchSize), stepSize, i)
       weights = update._1
       reg_val = update._2
     }
 
-    (weights, lossHistory.toArray)
+    (weights, stochasticLossHistory.toArray)
   }
 }
