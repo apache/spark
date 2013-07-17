@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package spark.mllib.regression
+package spark.mllib.util
 
 import scala.util.Random
 
