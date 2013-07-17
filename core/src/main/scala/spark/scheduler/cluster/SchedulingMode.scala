@@ -1,6 +1,6 @@
 package spark.scheduler.cluster
 
-object SchedulingMode extends Enumeration{
+object SchedulingMode extends Enumeration {
 
   type SchedulingMode = Value
   val FAIR,FIFO = Value
