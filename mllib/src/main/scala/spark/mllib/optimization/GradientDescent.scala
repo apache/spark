@@ -57,9 +57,8 @@ object GradientDescent {
     val nexamples: Long = data.count()
     val miniBatchSize = nexamples * miniBatchFraction
 
-    // Initialize weights as a column matrix
-    var weights = new DoubleMatrix(1, initialWeights.length,
-      initialWeights:_*)
+    // Initialize weights as a column vector
+    var weights = new DoubleMatrix(initialWeights.length, 1, initialWeights:_*)
     var reg_val = 0.0
 
     for (i <- 1 to numIters) {

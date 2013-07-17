@@ -75,7 +75,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
     val model = lr.train(testRDD)
 
-    val weight0 = model.weights.get(0)
+    val weight0 = model.weights(0)
     assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
     assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")
   }
@@ -99,7 +99,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
     val model = lr.train(testRDD, initialWeights)
 
-    val weight0 = model.weights.get(0)
+    val weight0 = model.weights(0)
     assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
     assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")
   }

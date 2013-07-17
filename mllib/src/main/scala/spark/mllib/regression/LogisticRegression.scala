@@ -28,20 +28,23 @@ import org.jblas.DoubleMatrix
  * Based on Matlab code written by John Duchi.
  */
 class LogisticRegressionModel(
-  val weights: DoubleMatrix,
+  val weights: Array[Double],
   val intercept: Double,
   val stochasticLosses: Array[Double]) extends RegressionModel {
 
+  // Create a column vector that can be used for predictions
+  private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
+
   override def predict(testData: spark.RDD[Array[Double]]) = {
     testData.map { x =>
-      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(this.weights).get(0) + this.intercept
+      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(weightsMatrix).get(0) + this.intercept
       1.0/ (1.0 + math.exp(margin * -1))
     }
   }
 
   override def predict(testData: Array[Double]): Double = {
     val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
-    val margin = dataMat.mmul(this.weights).get(0) + this.intercept
+    val margin = dataMat.mmul(weightsMatrix).get(0) + this.intercept
     1.0/ (1.0 + math.exp(margin * -1))
   }
 }
@@ -123,12 +126,14 @@ class LogisticRegression private (var stepSize: Double, var miniBatchFraction: D
       initalWeightsWithIntercept,
       miniBatchFraction)
 
-    val weightsScaled = weights.getRange(1, weights.length)
-    val intercept = weights.get(0)
+    val weightsArray = weights.toArray()
+
+    val intercept = weightsArray(0)
+    val weightsScaled = weightsArray.tail
 
     val model = new LogisticRegressionModel(weightsScaled, intercept, stochasticLosses)
 
-    logInfo("Final model weights " + model.weights)
+    logInfo("Final model weights " + model.weights.mkString(","))
     logInfo("Final model intercept " + model.intercept)
     logInfo("Last 10 stochastic losses " + model.stochasticLosses.takeRight(10).mkString(", "))
     model
