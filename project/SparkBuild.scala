@@ -169,9 +169,9 @@ object SparkBuild extends Build {
       "org.ow2.asm" % "asm" % "4.0",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.22",
-      "com.typesafe.akka" % "akka-actor" % "2.0.3" excludeAll(excludeNetty),
-      "com.typesafe.akka" % "akka-remote" % "2.0.3" excludeAll(excludeNetty),
-      "com.typesafe.akka" % "akka-slf4j" % "2.0.3" excludeAll(excludeNetty),
+      "com.typesafe.akka" % "akka-actor" % "2.0.5" excludeAll(excludeNetty),
+      "com.typesafe.akka" % "akka-remote" % "2.0.5" excludeAll(excludeNetty),
+      "com.typesafe.akka" % "akka-slf4j" % "2.0.5" excludeAll(excludeNetty),
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
       "net.liftweb" % "lift-json_2.9.2" % "2.5",
@@ -251,7 +251,7 @@ object SparkBuild extends Build {
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty),
       "com.github.sgroschupf" % "zkclient" % "0.1" excludeAll(excludeNetty),
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty),
-      "com.typesafe.akka" % "akka-zeromq" % "2.0.3" excludeAll(excludeNetty)
+      "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
