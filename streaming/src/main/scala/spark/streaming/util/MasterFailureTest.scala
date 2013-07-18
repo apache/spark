@@ -363,20 +363,20 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
         val tempHadoopFile = new Path(testDir, ".tmp_" + (i+1).toString)
         FileUtils.writeStringToFile(localFile, input(i).toString + "\n")
         var tries = 0
-    var done = false
-        while (!done && tries < maxTries) {
-          tries += 1
-          try {
-            // fs.copyFromLocalFile(new Path(localFile.toString), hadoopFile)
-            fs.copyFromLocalFile(new Path(localFile.toString), tempHadoopFile)
-            fs.rename(tempHadoopFile, hadoopFile)
-        done = true
-      } catch {
-        case ioe: IOException => {
-              fs = testDir.getFileSystem(new Configuration())
-              logWarning("Attempt " + tries + " at generating file " + hadoopFile + " failed.", ioe)
-        }
-      }
+        var done = false
+            while (!done && tries < maxTries) {
+              tries += 1
+              try {
+                // fs.copyFromLocalFile(new Path(localFile.toString), hadoopFile)
+                fs.copyFromLocalFile(new Path(localFile.toString), tempHadoopFile)
+                fs.rename(tempHadoopFile, hadoopFile)
+            done = true
+          } catch {
+            case ioe: IOException => {
+                  fs = testDir.getFileSystem(new Configuration())
+                  logWarning("Attempt " + tries + " at generating file " + hadoopFile + " failed.", ioe)
+            }
+          }
         }
     if (!done)
           logError("Could not generate file " + hadoopFile)

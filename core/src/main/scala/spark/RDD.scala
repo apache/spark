@@ -500,18 +500,18 @@ abstract class RDD[T: ClassTag](
    * *same number of partitions*, but does *not* require them to have the same number
    * of elements in each partition.
    */
-  def zipPartitions[B: ClassManifest, V: ClassManifest](
+  def zipPartitions[B: ClassTag, V: ClassTag](
       f: (Iterator[T], Iterator[B]) => Iterator[V],
       rdd2: RDD[B]): RDD[V] =
     new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2)
 
-  def zipPartitions[B: ClassManifest, C: ClassManifest, V: ClassManifest](
+  def zipPartitions[B: ClassTag, C: ClassTag, V: ClassTag](
       f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V],
       rdd2: RDD[B],
       rdd3: RDD[C]): RDD[V] =
     new ZippedPartitionsRDD3(sc, sc.clean(f), this, rdd2, rdd3)
 
-  def zipPartitions[B: ClassManifest, C: ClassManifest, D: ClassManifest, V: ClassManifest](
+  def zipPartitions[B: ClassTag, C: ClassTag, D: ClassTag, V: ClassTag](
       f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
       rdd2: RDD[B],
       rdd3: RDD[C],
