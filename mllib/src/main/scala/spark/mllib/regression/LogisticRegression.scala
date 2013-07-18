@@ -28,21 +28,42 @@ import org.jblas.DoubleMatrix
  * Based on Matlab code written by John Duchi.
  */
 class LogisticRegressionModel(
-  val weights: DoubleMatrix,
+  val weights: Array[Double],
   val intercept: Double,
-  val losses: Array[Double]) extends RegressionModel {
+  val stochasticLosses: Array[Double]) extends RegressionModel {
+
+  // Create a column vector that can be used for predictions
+  private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
 
   override def predict(testData: spark.RDD[Array[Double]]) = {
     testData.map { x =>
-      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(this.weights).get(0) + this.intercept
+      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(weightsMatrix).get(0) + this.intercept
       1.0/ (1.0 + math.exp(margin * -1))
     }
   }
 
   override def predict(testData: Array[Double]): Double = {
     val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
-    val margin = dataMat.mmul(this.weights).get(0) + this.intercept
+    val margin = dataMat.mmul(weightsMatrix).get(0) + this.intercept
     1.0/ (1.0 + math.exp(margin * -1))
+  }
+}
+
+class LogisticGradient extends Gradient {
+  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
+      (DoubleMatrix, Double) = {
+    val margin: Double = -1.0 * data.dot(weights)
+    val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
+
+    val gradient = data.mul(gradientMultiplier)
+    val loss =
+      if (margin > 0) {
+        math.log(1 + math.exp(0 - margin))
+      } else {
+        math.log(1 + math.exp(margin)) - margin
+      }
+
+    (gradient, loss)
   }
 }
 
@@ -80,30 +101,73 @@ class LogisticRegression private (var stepSize: Double, var miniBatchFraction: D
   }
 
   def train(input: RDD[(Double, Array[Double])]): LogisticRegressionModel = {
+    val nfeatures: Int = input.take(1)(0)._2.length
+    val initialWeights = Array.fill(nfeatures)(1.0)
+    train(input, initialWeights)
+  }
+
+  def train(
+    input: RDD[(Double, Array[Double])],
+    initialWeights: Array[Double]): LogisticRegressionModel = {
+
     // Add a extra variable consisting of all 1.0's for the intercept.
     val data = input.map { case (y, features) =>
       (y, Array(1.0, features:_*))
     }
 
-    val (weights, losses) = GradientDescent.runMiniBatchSGD(
-      data, new LogisticGradient(), new SimpleUpdater(), stepSize, numIters, miniBatchFraction)
+    val initalWeightsWithIntercept = Array(1.0, initialWeights:_*)
 
-    val weightsScaled = weights.getRange(1, weights.length)
-    val intercept = weights.get(0)
+    val (weights, stochasticLosses) = GradientDescent.runMiniBatchSGD(
+      data,
+      new LogisticGradient(),
+      new SimpleUpdater(),
+      stepSize,
+      numIters,
+      initalWeightsWithIntercept,
+      miniBatchFraction)
 
-    val model = new LogisticRegressionModel(weightsScaled, intercept, losses)
+    val intercept = weights(0)
+    val weightsScaled = weights.tail
 
-    logInfo("Final model weights " + model.weights)
+    val model = new LogisticRegressionModel(weightsScaled, intercept, stochasticLosses)
+
+    logInfo("Final model weights " + model.weights.mkString(","))
     logInfo("Final model intercept " + model.intercept)
-    logInfo("Last 10 losses " + model.losses.takeRight(10).mkString(", "))
+    logInfo("Last 10 stochastic losses " + model.stochasticLosses.takeRight(10).mkString(", "))
     model
   }
 }
 
 /**
  * Top-level methods for calling Logistic Regression.
+ * NOTE(shivaram): We use multiple train methods instead of default arguments to support 
+ *                 Java programs.
  */
 object LogisticRegression {
+
+  /**
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
+   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
+   * gradient descent are initialized using the initial weights provided.
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to 
+   *        the number of features in the data.
+   */
+  def train(
+      input: RDD[(Double, Array[Double])],
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double,
+      initialWeights: Array[Double])
+    : LogisticRegressionModel =
+  {
+    new LogisticRegression(stepSize, miniBatchFraction, numIterations).train(input, initialWeights)
+  }
 
   /**
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
