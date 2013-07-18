@@ -24,21 +24,10 @@ import AssemblyKeys._
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
-  // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
-  // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
-  val HADOOP_VERSION = "1.0.4"
-  //val HADOOP_VERSION = "2.0.0-mr1-cdh4.1.1"
-  val HADOOP_YARN = false
-
-  // For Hadoop 2 YARN support
-  //val HADOOP_VERSION = "2.0.2-alpha"
-  //val HADOOP_MAJOR_VERSION = "2"
-  //val HADOOP_YARN = true
-
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming, mllib, tools)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming, mllib, tools, yarn)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -53,6 +42,8 @@ object SparkBuild extends Build {
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn (core)
+
+  lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn (core)
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -179,7 +170,7 @@ object SparkBuild extends Build {
       "org.apache.mesos" % "mesos" % "0.12.1",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
       "org.apache.derby" % "derby" % "10.4.2.0" % "test",
-      "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION,
+      "org.apache.hadoop" % "hadoop-client" % "1.0.4",
       "com.codahale.metrics" % "metrics-core" % "3.0.0",
       "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
@@ -243,6 +234,17 @@ object SparkBuild extends Build {
       "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
+
+  def yarnSettings = sharedSettings ++ Seq(
+    name := "spark-yarn",
+    libraryDependencies ++= Seq(
+      // Exclude rule required for all ?
+      "org.apache.hadoop" % "hadoop-client" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty),
+      "org.apache.hadoop" % "hadoop-yarn-api" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty),
+      "org.apache.hadoop" % "hadoop-yarn-common" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty),
+      "org.apache.hadoop" % "hadoop-yarn-client" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty)
+    )
+  )
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
     mergeStrategy in assembly := {
