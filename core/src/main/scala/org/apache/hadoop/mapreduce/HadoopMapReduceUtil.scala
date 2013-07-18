@@ -20,10 +20,32 @@ package org.apache.hadoop.mapreduce
 import org.apache.hadoop.conf.Configuration
 
 trait HadoopMapReduceUtil {
-  def newJobContext(conf: Configuration, jobId: JobID): JobContext = new JobContext(conf, jobId)
+  def newJobContext(conf: Configuration, jobId: JobID): JobContext = {
+    val klass = firstAvailableClass(
+        "org.apache.hadoop.mapreduce.task.JobContextImpl",
+        "org.apache.hadoop.mapreduce.JobContext")
+    val ctor = klass.getDeclaredConstructor(classOf[Configuration], classOf[JobID])
+    ctor.newInstance(conf, jobId).asInstanceOf[JobContext]
+  }
 
-  def newTaskAttemptContext(conf: Configuration, attemptId: TaskAttemptID): TaskAttemptContext = new TaskAttemptContext(conf, attemptId)
+  def newTaskAttemptContext(conf: Configuration, attemptId: TaskAttemptID): TaskAttemptContext = {
+    val klass = firstAvailableClass(
+        "org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl",
+        "org.apache.hadoop.mapreduce.TaskAttemptContext")
+    val ctor = klass.getDeclaredConstructor(classOf[Configuration], classOf[TaskAttemptID])
+    ctor.newInstance(conf, attemptId).asInstanceOf[TaskAttemptContext]
+  }
 
-  def newTaskAttemptID(jtIdentifier: String, jobId: Int, isMap: Boolean, taskId: Int, attemptId: Int) = new TaskAttemptID(jtIdentifier,
-    jobId, isMap, taskId, attemptId)
+  def newTaskAttemptID(jtIdentifier: String, jobId: Int, isMap: Boolean, taskId: Int, attemptId: Int) = {
+    new TaskAttemptID(jtIdentifier, jobId, isMap, taskId, attemptId)
+  }
+
+  private def firstAvailableClass(first: String, second: String): Class[_] = {
+    try {
+      Class.forName(first)
+    } catch {
+      case e: ClassNotFoundException =>
+        Class.forName(second)
+    }
+  }
 }

@@ -27,13 +27,8 @@ object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
   // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
   val HADOOP_VERSION = "1.0.4"
-  val HADOOP_MAJOR_VERSION = "1"
-  val HADOOP_YARN = false
-
-  // For Hadoop 2 versions such as "2.0.0-mr1-cdh4.1.1", set the HADOOP_MAJOR_VERSION to "2"
   //val HADOOP_VERSION = "2.0.0-mr1-cdh4.1.1"
-  //val HADOOP_MAJOR_VERSION = "2"
-  //val HADOOP_YARN = false
+  val HADOOP_YARN = false
 
   // For Hadoop 2 YARN support
   //val HADOOP_VERSION = "2.0.2-alpha"
@@ -184,37 +179,13 @@ object SparkBuild extends Build {
       "org.apache.mesos" % "mesos" % "0.12.1",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
       "org.apache.derby" % "derby" % "10.4.2.0" % "test",
+      "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION,
       "com.codahale.metrics" % "metrics-core" % "3.0.0",
       "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
       "com.twitter" % "chill_2.9.3" % "0.3.1",
       "com.twitter" % "chill-java" % "0.3.1"
-    ) ++ (
-      if (HADOOP_MAJOR_VERSION == "2") {
-        if (HADOOP_YARN) {
-          Seq(
-            // Exclude rule required for all ?
-            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
-            "org.apache.hadoop" % "hadoop-yarn-api" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
-            "org.apache.hadoop" % "hadoop-yarn-common" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
-            "org.apache.hadoop" % "hadoop-yarn-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm)
-          )
-        } else {
-          Seq(
-            "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
-            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm)
-          )
-        }
-      } else {
-        Seq("org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty) )
-      }),
-    unmanagedSourceDirectories in Compile <+= baseDirectory{ _ /
-      ( if (HADOOP_YARN && HADOOP_MAJOR_VERSION == "2") {
-        "src/hadoop2-yarn/scala"
-      } else {
-        "src/hadoop" + HADOOP_MAJOR_VERSION + "/scala"
-      } )
-    }
+    )
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def rootSettings = sharedSettings ++ Seq(
