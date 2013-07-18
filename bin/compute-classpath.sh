@@ -36,6 +36,7 @@ REPL_BIN_DIR="$FWDIR/repl-bin"
 EXAMPLES_DIR="$FWDIR/examples"
 BAGEL_DIR="$FWDIR/bagel"
 MLLIB_DIR="$FWDIR/mllib"
+TOOLS_DIR="$FWDIR/tools"
 STREAMING_DIR="$FWDIR/streaming"
 PYSPARK_DIR="$FWDIR/python"
 
@@ -70,6 +71,7 @@ function dev_classpath {
   fi
   CLASSPATH="$CLASSPATH:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$MLLIB_DIR/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$TOOLS_DIR/target/scala-$SCALA_VERSION/classes"
   for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
     CLASSPATH="$CLASSPATH:$jar"
   done

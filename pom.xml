@@ -58,6 +58,7 @@
     <module>core</module>
     <module>bagel</module>
     <module>examples</module>
+    <module>tools</module>
     <module>streaming</module>
     <module>repl</module>
     <module>repl-bin</module>
