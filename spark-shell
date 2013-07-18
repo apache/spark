@@ -1,4 +1,4 @@
-#!/bin/bash --posix
+#!/usr/bin/env bash
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -24,6 +24,9 @@
 # Options:
 #    -c <cores>    Set the number of cores for REPL to use
 #
+
+# Enter posix mode for bash
+set -o posix
 
 FWDIR="`dirname $0`"
 

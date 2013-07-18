@@ -13,7 +13,7 @@ title: Tutorial - Running a Simple Spark Application
 
 3. Edit the ~/SparkTest/sbt/sbt file to look like this:
 
-        #!/bin/bash
+        #!/usr/bin/env bash
         java -Xmx800M -XX:MaxPermSize=150m -jar $(dirname $0)/sbt-launch-*.jar "$@"
 
 4. To build a Spark application, you need Spark and its dependencies in a single Java archive (JAR) file. Create this JAR in Spark's main directory with sbt as:
