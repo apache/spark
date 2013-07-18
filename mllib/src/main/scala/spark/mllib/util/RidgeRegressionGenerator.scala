@@ -22,10 +22,51 @@ import scala.util.Random
 import org.jblas.DoubleMatrix
 
 import spark.{RDD, SparkContext}
-import spark.mllib.util.MLUtils
 
 
 object RidgeRegressionGenerator {
+
+  /**
+   * Generate an RDD containing test data used for RidgeRegression. This function generates
+   * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
+   * response variable `Y`.
+   *
+   * @param sc SparkContext to be used for generating the RDD.
+   * @param nexamples Number of examples that will be contained in the RDD.
+   * @param nfeatures Number of features to generate for each example.
+   * @param eps Epsilon factor by which examples are scaled.
+   * @param nparts Number of partitions in the RDD. Default value is 2.
+   */
+  def generateRidgeRDD(
+    sc: SparkContext,
+    nexamples: Int,
+    nfeatures: Int,
+    eps: Double,
+    nparts: Int = 2) : RDD[(Double, Array[Double])] = {
+    org.jblas.util.Random.seed(42)
+    // Random values distributed uniformly in [-0.5, 0.5]
+    val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
+    w.put(0, 0, 10)
+    w.put(1, 0, 10)
+
+    val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
+      org.jblas.util.Random.seed(42 + p)
+      val examplesInPartition = nexamples / nparts
+
+      val X = DoubleMatrix.rand(examplesInPartition, nfeatures)
+      val y = X.mmul(w)
+
+      val rnd = new Random(42 + p)
+
+      val normalValues = Array.fill[Double](examplesInPartition)(rnd.nextGaussian() * eps)
+      val yObs = new DoubleMatrix(normalValues).addi(y)
+
+      Iterator.tabulate(examplesInPartition) { i =>
+        (yObs.get(i, 0), X.getRow(i).toArray)
+      }
+    }
+    data
+  }
 
   def main(args: Array[String]) {
     if (args.length != 5) {
@@ -41,30 +82,8 @@ object RidgeRegressionGenerator {
     val parts: Int = if (args.length > 4) args(4).toInt else 2
     val eps = 10
 
-    org.jblas.util.Random.seed(42)
     val sc = new SparkContext(sparkMaster, "RidgeRegressionGenerator")
-
-    // Random values distributed uniformly in [-0.5, 0.5]
-    val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
-    w.put(0, 0, 10)
-    w.put(1, 0, 10)
-
-    val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until parts, parts).flatMap { p =>
-      org.jblas.util.Random.seed(42 + p)
-      val examplesInPartition = nexamples / parts
-
-      val X = DoubleMatrix.rand(examplesInPartition, nfeatures)
-      val y = X.mmul(w)
-
-      val rnd = new Random(42 + p)
-
-      val normalValues = Array.fill[Double](examplesInPartition)(rnd.nextGaussian() * eps)
-      val yObs = new DoubleMatrix(normalValues).addi(y)
-
-      Iterator.tabulate(examplesInPartition) { i =>
-        (yObs.get(i, 0), X.getRow(i).toArray)
-      }
-    }
+    val data = generateRidgeRDD(sc, nexamples, nfeatures, eps, parts)
 
     MLUtils.saveLabeledData(data, outputPath)
     sc.stop()
