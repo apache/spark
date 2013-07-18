@@ -158,7 +158,7 @@ def is_active(instance):
 def get_spark_shark_version(opts):
   spark_shark_map = {"0.7.2": "0.7.0"}
   version = opts.spark_version.replace("v", "")
-  if version not in ["0.7.2"]:
+  if version not in spark_shark_map:
     print >> stderr, "Don't know about Spark version: %s" % version
     sys.exit(1)
   return (version, spark_shark_map[version])
