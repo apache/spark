@@ -23,8 +23,7 @@ import org.jblas.DoubleMatrix
 
 import spark.{RDD, SparkContext}
 
-
-object RidgeRegressionGenerator {
+object RidgeRegressionDataGenerator {
 
   /**
    * Generate an RDD containing test data used for RidgeRegression. This function generates
@@ -82,7 +81,7 @@ object RidgeRegressionGenerator {
     val parts: Int = if (args.length > 4) args(4).toInt else 2
     val eps = 10
 
-    val sc = new SparkContext(sparkMaster, "RidgeRegressionGenerator")
+    val sc = new SparkContext(sparkMaster, "RidgeRegressionDataGenerator")
     val data = generateRidgeRDD(sc, nexamples, nfeatures, eps, parts)
 
     MLUtils.saveLabeledData(data, outputPath)
