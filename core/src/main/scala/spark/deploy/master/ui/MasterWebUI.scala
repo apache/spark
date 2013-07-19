@@ -32,12 +32,11 @@ import spark.ui.JettyUtils._
  * Web UI server for the standalone master.
  */
 private[spark]
-class MasterWebUI(val master: ActorRef, requestedPort: Option[Int] = None) extends Logging {
+class MasterWebUI(val master: ActorRef, requestedPort: Int) extends Logging {
   implicit val timeout = Duration.create(
     System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
   val host = Utils.localHostName()
-  val port = requestedPort.getOrElse(
-    System.getProperty("master.ui.port", MasterWebUI.DEFAULT_PORT).toInt)
+  val port = requestedPort
 
   var server: Option[Server] = None
   var boundPort: Option[Int] = None
@@ -72,5 +71,4 @@ class MasterWebUI(val master: ActorRef, requestedPort: Option[Int] = None) exten
 
 private[spark] object MasterWebUI {
   val STATIC_RESOURCE_DIR = "spark/ui/static"
-  val DEFAULT_PORT = "8080"
 }

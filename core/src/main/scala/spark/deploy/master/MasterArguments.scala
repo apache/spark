@@ -38,7 +38,10 @@ private[spark] class MasterArguments(args: Array[String]) {
   if (System.getenv("SPARK_MASTER_WEBUI_PORT") != null) {
     webUiPort = System.getenv("SPARK_MASTER_WEBUI_PORT").toInt
   }
-  
+  if (System.getProperty("master.ui.port") != null) {
+    webUiPort = System.getProperty("master.ui.port").toInt
+  }
+
   parse(args.toList)
 
   def parse(args: List[String]): Unit = args match {
