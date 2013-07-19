@@ -102,7 +102,6 @@ class SparkContext(
   }
 
   private val isLocal = (master == "local" || master.startsWith("local["))
-  private val isYarn = (master == "yarn-standalone")
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createFromSystemProperties(
@@ -579,17 +578,15 @@ class SparkContext(
       val uri = new URI(path)
       val key = uri.getScheme match {
         case null | "file" =>
-            if (!isYarn)
-                env.httpFileServer.addJar(new File(uri.getPath))
-            else
-                null
+          if (SparkHadoopUtil.isYarnMode()) {
+            logWarning("local jar specified as parameter to addJar under Yarn mode")
+            return 
+          }
+          env.httpFileServer.addJar(new File(uri.getPath))
         case _ => path
       }
-
-      if (key != null) {
-        addedJars(key) = System.currentTimeMillis
-        logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
-      }
+      addedJars(key) = System.currentTimeMillis
+      logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
     }
   }
 
