@@ -33,9 +33,19 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize))
       .reduceOption(_+_).getOrElse(0L)
 
-    val execTables =
-      for (a <- 0 until storageStatusList.size)
-        yield getExecTable(a)
+    val execHead = Seq("Executor ID", "Address", "RDD blocks", "Memory used", "Disk used")
+    def execRow(kv: Seq[String]) =
+      <tr>
+        <td>{kv(0)}</td>
+        <td>{kv(1)}</td>
+        <td>{kv(2)}</td>
+        <td>{kv(3)}</td>
+        <td>{kv(4)}</td>
+      </tr>
+    val execInfo =
+      for (b <- 0 until storageStatusList.size)
+        yield getExecInfo(b)
+    val execTable = UIUtils.listingTable(execHead, execRow, execInfo)
 
     val content =
       <div class="row">
@@ -50,30 +60,26 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       </div>
       <div class = "row">
         <div class="span12">
-          {execTables}
+          {execTable}
         </div>
       </div>;
 
     headerSparkPage(content, sc, "Executors", Executors)
   }
 
-  def getExecTable(a: Int): Seq[Node] = {
+  def getExecInfo(a: Int): Seq[String] = {
+    val execId = sc.getExecutorStorageStatus(a).blockManagerId.executorId
+    val hostPort = sc.getExecutorStorageStatus(a).blockManagerId.hostPort
     val memUsed = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).maxMem)
     val maxMem = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).memUsed())
     val diskUsed = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).diskUsed())
     val rddBlocks = sc.getExecutorStorageStatus(a).blocks.size.toString
-    val execInfo = Seq(
-      ("RDD blocks", rddBlocks),
-      ("Memory used", "%s/%s".format(memUsed, maxMem)),
-      ("Disk used", diskUsed)
+    Seq(
+      execId,
+      hostPort,
+      rddBlocks,
+      "%s/%s".format(memUsed, maxMem),
+      diskUsed
     )
-    def execRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-    val table = UIUtils.listingTable(Seq("Name", "Value"), execRow, execInfo)
-    val execId = sc.getExecutorStorageStatus(a).blockManagerId.executorId
-    val hostPort = sc.getExecutorStorageStatus(a).blockManagerId.hostPort
-    val header =
-      <h3>Executor {execId}</h3>
-        <h4>{hostPort}</h4>;
-    header ++ table
   }
 }
