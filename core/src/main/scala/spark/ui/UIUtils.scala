@@ -40,6 +40,10 @@ private[spark] object UIUtils {
       case Environment => <li class="active"><a href="/environment">Environment</a></li>
       case _ => <li><a href="/environment">Environment</a></li>
     }
+    val executors = page match {
+      case Executors => <li class="active"><a href="/executors">Executors</a></li>
+      case _ => <li><a href="/executors">Executors</a></li>
+    }
 
     <html>
       <head>
@@ -66,6 +70,7 @@ private[spark] object UIUtils {
                       {storage}
                       {jobs}
                       {environment}
+                      {executors}
                     </ul>
                     <ul id="infolist">
                       <li>Application: <strong>{sc.appName}</strong></li>

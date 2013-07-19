@@ -23,6 +23,7 @@ import org.eclipse.jetty.server.{Handler, Server}
 
 import spark.{Logging, SparkContext, Utils}
 import spark.ui.env.EnvironmentUI
+import spark.ui.exec.ExecutorsUI
 import spark.ui.storage.BlockManagerUI
 import spark.ui.jobs.JobProgressUI
 import spark.ui.JettyUtils._
@@ -41,7 +42,9 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   val storage = new BlockManagerUI(sc)
   val jobs = new JobProgressUI(sc)
   val env = new EnvironmentUI(sc)
-  val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++ handlers
+  val exec = new ExecutorsUI(sc)
+  val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
+    exec.getHandlers ++ handlers
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {

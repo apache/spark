@@ -24,6 +24,11 @@ class TaskMetrics extends Serializable {
   var hostname: String = _
 
   /**
+   * Executor's ID the task runs on
+   */
+  var executorId: String = _
+
+  /**
    * Time taken on the executor to deserialize this task
    */
   var executorDeserializeTime: Int = _

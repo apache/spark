@@ -17,4 +17,4 @@
 
 package spark.ui
 
-private[spark] object Page extends Enumeration { val Storage, Jobs, Environment = Value }
+private[spark] object Page extends Enumeration { val Storage, Jobs, Environment, Executors = Value }

@@ -126,6 +126,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         val taskFinish = System.currentTimeMillis()
         task.metrics.foreach{ m =>
           m.hostname = Utils.localHostName
+          m.executorId = executorId
           m.executorDeserializeTime = (taskStart - startTime).toInt
           m.executorRunTime = (taskFinish - taskStart).toInt
         }
