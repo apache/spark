@@ -41,4 +41,7 @@ object SparkHadoopUtil {
 
   // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
   def addCredentials(conf: JobConf) {}
+
+  def isYarnMode(): Boolean = { false }
+
 }
