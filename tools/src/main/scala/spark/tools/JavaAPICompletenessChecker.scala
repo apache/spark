@@ -290,10 +290,6 @@ object JavaAPICompletenessChecker {
     name.contains("$") || excludedNames.contains(name) || excludedByPattern
   }
 
-  private def isExcludedByAnnotation(method: Method): Boolean = {
-    method.getAnnotation(classOf[ExcludeFromJavaAPI]) != null
-  }
-
   private def isExcludedByInterface(method: Method): Boolean = {
     val excludedInterfaces =
       Set("spark.Logging", "org.apache.hadoop.mapreduce.HadoopMapReduceUtil")
@@ -309,7 +305,6 @@ object JavaAPICompletenessChecker {
   private def printMissingMethods(scalaClass: Class[_], javaClass: Class[_]) {
     val methods = scalaClass.getMethods
       .filterNot(_.isAccessible)
-      .filterNot(isExcludedByAnnotation)
       .filterNot(isExcludedByName)
       .filterNot(isExcludedByInterface)
     val javaEquivalents = methods.map(m => toJavaMethod(toSparkMethod(m))).toSet
