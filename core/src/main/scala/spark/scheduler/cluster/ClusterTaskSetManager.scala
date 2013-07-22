@@ -67,7 +67,7 @@ private[spark] class ClusterTaskSetManager(
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toDouble
 
   // Maximum times a task is allowed to fail before failing the job
-  val MAX_TASK_FAILURES = 4
+  val MAX_TASK_FAILURES = System.getProperty("spark.task.max.fail","4").toInt
 
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = System.getProperty("spark.speculation.quantile", "0.75").toDouble
