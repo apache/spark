@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+SCALA_VERSION=2.9.3
+
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 
@@ -135,6 +137,17 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
     echo "Failed to find Spark classes in $REPL_DIR/target" >&2
     echo "You need to compile Spark repl module before running this program" >&2
     exit 1
+  fi
+
+  # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
+  # to avoid the -sources and -doc packages that are built by publish-local.
+  if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
+    # Use the JAR from the SBT build
+    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
+  fi
+  if [ -e "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar ]; then
+    # Use the JAR from the Maven build
+    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
   fi
 fi
 
