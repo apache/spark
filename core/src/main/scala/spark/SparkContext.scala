@@ -577,7 +577,12 @@ class SparkContext(
     } else {
       val uri = new URI(path)
       val key = uri.getScheme match {
-        case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
+        case null | "file" =>
+          if (SparkHadoopUtil.isYarnMode()) {
+            logWarning("local jar specified as parameter to addJar under Yarn mode")
+            return 
+          }
+          env.httpFileServer.addJar(new File(uri.getPath))
         case _ => path
       }
       addedJars(key) = System.currentTimeMillis

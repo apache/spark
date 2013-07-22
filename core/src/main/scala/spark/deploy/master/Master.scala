@@ -53,7 +53,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   var firstApp: Option[ApplicationInfo] = None
 
-  val webUi = new MasterWebUI(self)
+  val webUi = new MasterWebUI(self, webUiPort)
 
   Utils.checkHost(host, "Expected hostname")
 

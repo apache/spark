@@ -15,16 +15,43 @@
  * limitations under the License.
  */
 
-package spark.mllib.regression
+package spark.mllib.util
 
 import scala.util.Random
 
-import org.jblas.DoubleMatrix
-
 import spark.{RDD, SparkContext}
-import spark.mllib.util.MLUtils
 
-object LogisticRegressionGenerator {
+object LogisticRegressionDataGenerator {
+
+  /**
+   * Generate an RDD containing test data for LogisticRegression. This function chooses
+   * positive labels with probability `probOne` and scales positive examples by `eps`.
+   *
+   * @param sc SparkContext to use for creating the RDD.
+   * @param nexamples Number of examples that will be contained in the RDD.
+   * @param nfeatures Number of features to generate for each example.
+   * @param eps Epsilon factor by which positive examples are scaled.
+   * @param nparts Number of partitions of the generated RDD. Default value is 2.
+   * @param probOne Probability that a label is 1 (and not 0). Default value is 0.5.
+   */
+  def generateLogisticRDD(
+    sc: SparkContext,
+    nexamples: Int,
+    nfeatures: Int,
+    eps: Double,
+    nparts: Int = 2,
+    probOne: Double = 0.5): RDD[(Double, Array[Double])] = {
+    val data = sc.parallelize(0 until nexamples, nparts).map { idx =>
+      val rnd = new Random(42 + idx)
+
+      val y = if (idx % 2 == 0) 0.0 else 1.0
+      val x = Array.fill[Double](nfeatures) {
+        rnd.nextGaussian() + (y * eps)
+      }
+      (y, x)
+    }
+    data
+  }
 
   def main(args: Array[String]) {
     if (args.length != 5) {
@@ -40,17 +67,8 @@ object LogisticRegressionGenerator {
     val parts: Int = if (args.length > 4) args(4).toInt else 2
     val eps = 3
 
-    val sc = new SparkContext(sparkMaster, "LogisticRegressionGenerator")
-
-    val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until nexamples, parts).map { idx =>
-      val rnd = new Random(42 + idx)
-
-      val y = if (idx % 2 == 0) 0 else 1
-      val x = Array.fill[Double](nfeatures) {
-        rnd.nextGaussian() + (y * eps)
-      }
-      (y, x)
-    }
+    val sc = new SparkContext(sparkMaster, "LogisticRegressionDataGenerator")
+    val data = generateLogisticRDD(sc, nexamples, nfeatures, eps, parts)
 
     MLUtils.saveLabeledData(data, outputPath)
     sc.stop()
