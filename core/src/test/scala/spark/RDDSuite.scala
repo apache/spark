@@ -90,15 +90,19 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("basic caching") {
+    val origCachedRdds = sc.getCachedRDDs.size
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
     assert(rdd.collect().toList === List(1, 2, 3, 4))
     assert(rdd.collect().toList === List(1, 2, 3, 4))
     assert(rdd.collect().toList === List(1, 2, 3, 4))
+    // Should only result in one cached RDD
+    assert(sc.getCachedRDDs.size === origCachedRdds + 1)
   }
 
   test("caching with failures") {
     val onlySplit = new Partition { override def index: Int = 0 }
     var shouldFail = true
+    val origCachedRdds = sc.getCachedRDDs.size
     val rdd = new RDD[Int](sc, Nil) {
       override def getPartitions: Array[Partition] = Array(onlySplit)
       override val getDependencies = List[Dependency[_]]()
@@ -110,12 +114,14 @@ class RDDSuite extends FunSuite with SharedSparkContext {
         }
       }
     }.cache()
+    assert(sc.getCachedRDDs.size === origCachedRdds + 1)
     val thrown = intercept[Exception]{
       rdd.collect()
     }
     assert(thrown.getMessage.contains("injected failure"))
     shouldFail = false
     assert(rdd.collect().toList === List(1, 2, 3, 4))
+    assert(sc.getCachedRDDs.size === origCachedRdds + 1)
   }
 
   test("empty RDD") {

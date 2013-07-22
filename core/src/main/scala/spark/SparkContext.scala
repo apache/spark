@@ -546,6 +546,12 @@ class SparkContext(
     StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
   }
 
+  /**
+   * Returns an immutable map of RDDs that have marked themselves as cached via cache() call.
+   * Note that this does not necessarily mean the caching or computation was successful.
+   */
+  def getCachedRDDs: Map[Int, RDD[_]] = persistentRdds.asInstanceOf[Map[Int, RDD[_]]]
+
   def getStageInfo: Map[Stage,StageInfo] = {
     dagScheduler.stageToInfos
   }
@@ -580,7 +586,7 @@ class SparkContext(
         case null | "file" =>
           if (SparkHadoopUtil.isYarnMode()) {
             logWarning("local jar specified as parameter to addJar under Yarn mode")
-            return 
+            return
           }
           env.httpFileServer.addJar(new File(uri.getPath))
         case _ => path
