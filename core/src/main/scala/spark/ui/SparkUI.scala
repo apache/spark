@@ -67,6 +67,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
     //  This server must register all handlers, including JobProgressUI, before binding
     //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
     jobs.start()
+    exec.start()
   }
 
   def stop() {
