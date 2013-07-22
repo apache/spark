@@ -33,9 +33,9 @@ import spark.rdd.ShuffledRDD
 import spark.SparkContext._
 
 class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
-  test("groupByKey with compression") {
+  test("groupByKey without compression") {
     try {
-      System.setProperty("spark.shuffle.compress", "true")
+      System.setProperty("spark.shuffle.compress", "false")
       sc = new SparkContext("local", "test")
       val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
       val groups = pairs.groupByKey(4).collect()
@@ -45,7 +45,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
       val valuesFor2 = groups.find(_._1 == 2).get._2
       assert(valuesFor2.toList.sorted === List(1))
     } finally {
-      System.setProperty("spark.blockManager.compress", "false")
+      System.setProperty("spark.shuffle.compress", "true")
     }
   }
 
