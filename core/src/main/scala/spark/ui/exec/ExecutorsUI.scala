@@ -111,16 +111,14 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       HashMap[String, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-      val eid = taskEnd.taskMetrics.executorId
+      val eid = taskEnd.taskInfo.executorId
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
           case e: ExceptionFailure =>
             executorToTasksFailed(eid) = executorToTasksFailed.getOrElse(eid, 0) + 1
-            logInfo("Executor %s has %s failed tasks.".format(eid, executorToTasksFailed(eid)))
             (Some(e), e.metrics)
           case _ =>
             executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
-            logInfo("Executor %s has %s completed tasks.".format(eid, executorToTasksComplete(eid)))
             (None, Some(taskEnd.taskMetrics))
         }
       val taskList = executorToTaskInfos.getOrElse(
