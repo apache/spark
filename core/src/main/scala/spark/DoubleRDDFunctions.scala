@@ -54,7 +54,13 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * Compute the sample standard deviation of this RDD's elements (which corrects for bias in
    * estimating the standard deviation by dividing by N-1 instead of N).
    */
-  def sampleStdev(): Double = stats().stdev
+  def sampleStdev(): Double = stats().sampleStdev
+
+  /**
+   * Compute the sample variance of this RDD's elements (which corrects for bias in
+   * estimating the variance by dividing by N-1 instead of N).
+   */
+  def sampleVariance(): Double = stats().sampleVariance
 
   /** (Experimental) Approximate operation to return the mean within a timeout. */
   def meanApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
