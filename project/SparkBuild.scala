@@ -170,7 +170,7 @@ object SparkBuild extends Build {
       "org.apache.mesos" % "mesos" % "0.12.1",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
       "org.apache.derby" % "derby" % "10.4.2.0" % "test",
-      "org.apache.hadoop" % "hadoop-client" % "1.0.4",
+      "org.apache.hadoop" % "hadoop-client" % "1.0.4" excludeAll(excludeJackson, excludeNetty, excludeAsm),
       "com.codahale.metrics" % "metrics-core" % "3.0.0",
       "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
@@ -239,12 +239,12 @@ object SparkBuild extends Build {
     name := "spark-yarn",
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
-      "org.apache.hadoop" % "hadoop-client" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty),
-      "org.apache.hadoop" % "hadoop-yarn-api" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty),
-      "org.apache.hadoop" % "hadoop-yarn-common" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty),
-      "org.apache.hadoop" % "hadoop-yarn-client" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty)
+      "org.apache.hadoop" % "hadoop-client" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-api" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-common" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-client" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty, excludeAsm)
     )
-  )
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
     mergeStrategy in assembly := {
