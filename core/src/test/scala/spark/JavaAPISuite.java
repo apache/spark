@@ -326,7 +326,9 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(20/6.0, rdd.mean(), 0.01);
     Assert.assertEquals(20/6.0, rdd.mean(), 0.01);
     Assert.assertEquals(6.22222, rdd.variance(), 0.01);
+    Assert.assertEquals(7.46667, rdd.sampleVariance(), 0.01);
     Assert.assertEquals(2.49444, rdd.stdev(), 0.01);
+    Assert.assertEquals(2.73252, rdd.sampleStdev(), 0.01);
 
     Double first = rdd.first();
     List<Double> take = rdd.take(5);
