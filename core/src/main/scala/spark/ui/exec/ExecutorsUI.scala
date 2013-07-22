@@ -30,10 +30,12 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
 
     val maxMem = storageStatusList.map(_.maxMem).reduce(_+_)
     val remainingMem = storageStatusList.map(_.memRemaining).reduce(_+_)
+    val memUsed = storageStatusList.map(_.memUsed()).reduce(_+_)
     val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize))
       .reduceOption(_+_).getOrElse(0L)
 
-    val execHead = Seq("Executor ID", "Address", "RDD blocks", "Memory used", "Disk used")
+    val execHead = Seq("Executor ID", "Address", "RDD blocks", "Memory used/Memory total",
+      "Disk used")
     def execRow(kv: Seq[String]) =
       <tr>
         <td>{kv(0)}</td>
@@ -52,8 +54,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
         <div class="span12">
           <ul class="unstyled">
             <li><strong>Memory:</strong>
-              {Utils.memoryBytesToString(maxMem - remainingMem)} Used
-              ({Utils.memoryBytesToString(remainingMem)} Available) </li>
+              {Utils.memoryBytesToString(memUsed)} Used
+              ({Utils.memoryBytesToString(maxMem)} Total) </li>
             <li><strong>Disk:</strong> {Utils.memoryBytesToString(diskSpaceUsed)} Used </li>
           </ul>
         </div>
@@ -70,8 +72,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   def getExecInfo(a: Int): Seq[String] = {
     val execId = sc.getExecutorStorageStatus(a).blockManagerId.executorId
     val hostPort = sc.getExecutorStorageStatus(a).blockManagerId.hostPort
-    val memUsed = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).maxMem)
-    val maxMem = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).memUsed())
+    val memUsed = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).memUsed())
+    val maxMem = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).maxMem)
     val diskUsed = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).diskUsed())
     val rddBlocks = sc.getExecutorStorageStatus(a).blocks.size.toString
     Seq(
