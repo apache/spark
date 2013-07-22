@@ -45,15 +45,21 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       .reduceOption(_+_).getOrElse(0L)
 
     val execHead = Seq("Executor ID", "Address", "RDD blocks", "Memory used", "Disk used",
-      "Tasks: Complete/Total")
+      "Failed tasks", "Complete tasks", "Total tasks")
     def execRow(kv: Seq[String]) =
       <tr>
         <td>{kv(0)}</td>
         <td>{kv(1)}</td>
         <td>{kv(2)}</td>
-        <td>{kv(3)}</td>
-        <td>{kv(4)}</td>
-        <td>{kv(5)}</td>
+        <td sorttable_customkey={kv(3)}>
+          {Utils.memoryBytesToString(kv(3).toLong)} / {Utils.memoryBytesToString(kv(4).toLong)}
+        </td>
+        <td sorttable_customkey={kv(5)}>
+          {Utils.memoryBytesToString(kv(5).toLong)}
+        </td>
+        <td>{kv(6)}</td>
+        <td>{kv(7)}</td>
+        <td>{kv(8)}</td>
       </tr>
     val execInfo =
       for (b <- 0 until storageStatusList.size)
@@ -83,24 +89,24 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   def getExecInfo(a: Int): Seq[String] = {
     val execId = sc.getExecutorStorageStatus(a).blockManagerId.executorId
     val hostPort = sc.getExecutorStorageStatus(a).blockManagerId.hostPort
-    val memUsed = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).memUsed())
-    val maxMem = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).maxMem)
-    val diskUsed = Utils.memoryBytesToString(sc.getExecutorStorageStatus(a).diskUsed())
     val rddBlocks = sc.getExecutorStorageStatus(a).blocks.size.toString
-    val completedTasks = listener.executorToTasksComplete.getOrElse(a.toString, 0)
-    val totalTasks = listener.executorToTaskInfos(a.toString).size
-    val failedTasks = listener.executorToTasksFailed.getOrElse(a.toString, 0) match {
-      case f if f > 0 => " (%s failed)".format(f)
-      case _ => ""
-    }
+    val memUsed = sc.getExecutorStorageStatus(a).memUsed().toString
+    val maxMem = sc.getExecutorStorageStatus(a).maxMem.toString
+    val diskUsed = sc.getExecutorStorageStatus(a).diskUsed().toString
+    val failedTasks = listener.executorToTasksFailed.getOrElse(a.toString, 0).toString
+    val completedTasks = listener.executorToTasksComplete.getOrElse(a.toString, 0).toString
+    val totalTasks = listener.executorToTaskInfos(a.toString).size.toString
 
     Seq(
       execId,
       hostPort,
       rddBlocks,
-      "%s / %s".format(memUsed, maxMem),
+      memUsed,
+      maxMem,
       diskUsed,
-      "%s / %s".format(completedTasks, totalTasks) + failedTasks
+      failedTasks,
+      completedTasks,
+      totalTasks
     )
   }
 
