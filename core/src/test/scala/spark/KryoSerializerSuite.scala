@@ -7,6 +7,7 @@ import org.scalatest.FunSuite
 import com.esotericsoftware.kryo._
 
 import SparkContext._
+import spark.test.{ClassWithoutNoArgConstructor, MyRegistrator}
 
 class KryoSerializerSuite extends FunSuite {
   test("basic types") {
@@ -109,6 +110,20 @@ class KryoSerializerSuite extends FunSuite {
     
     System.clearProperty("spark.kryo.registrator")
   }
+
+  test("kryo-collect") {
+    System.setProperty("spark.serializer", "spark.KryoSerializer")
+    System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
+
+    val sc = new SparkContext("local", "kryoTest")
+    val control = 1 :: 2 :: Nil
+    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
+    assert(control == result.toSeq)
+
+    System.clearProperty("spark.kryo.registrator")
+    System.clearProperty("spark.serializer")
+  }
+
 }
 
 package test {

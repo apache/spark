@@ -4,6 +4,8 @@ import java.io._
 
 import scala.collection.mutable.Map
 import spark.executor.TaskMetrics
+import spark.SparkEnv
+import java.nio.ByteBuffer
 
 // Task result. Also contains updates to accumulator variables.
 // TODO: Use of distributed cache to return result is a hack to get around
@@ -13,7 +15,19 @@ class TaskResult[T](var value: T, var accumUpdates: Map[Long, Any], var metrics:
   def this() = this(null.asInstanceOf[T], null, null)
 
   override def writeExternal(out: ObjectOutput) {
-    out.writeObject(value)
+
+    val objectSer = SparkEnv.get.serializer.newInstance()
+    val bb = objectSer.serialize(value)
+
+    out.writeInt( bb.remaining())
+    if (bb.hasArray) {
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      val bbval = new Array[Byte](bb.remaining())
+      bb.get(bbval)
+      out.write(bbval)
+    }
+
     out.writeInt(accumUpdates.size)
     for ((key, value) <- accumUpdates) {
       out.writeLong(key)
@@ -23,7 +37,16 @@ class TaskResult[T](var value: T, var accumUpdates: Map[Long, Any], var metrics:
   }
 
   override def readExternal(in: ObjectInput) {
-    value = in.readObject().asInstanceOf[T]
+
+    //this doesn't work since SparkEnv.get == null
+    // in this context
+    val objectSer = SparkEnv.get.serializer.newInstance()
+
+    val blen = in.readInt()
+    val byteVal = new Array[Byte](blen)
+    in.readFully(byteVal)
+    value = objectSer.deserialize(ByteBuffer.wrap(byteVal))
+
     val numUpdates = in.readInt
     if (numUpdates == 0) {
       accumUpdates = null
