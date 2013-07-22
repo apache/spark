@@ -38,8 +38,6 @@ class TaskResult[T](var value: T, var accumUpdates: Map[Long, Any], var metrics:
 
   override def readExternal(in: ObjectInput) {
 
-    //this doesn't work since SparkEnv.get == null
-    // in this context
     val objectSer = SparkEnv.get.serializer.newInstance()
 
     val blen = in.readInt()
