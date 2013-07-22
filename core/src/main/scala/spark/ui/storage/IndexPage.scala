@@ -33,10 +33,6 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = sc.getExecutorStorageStatus
     // Calculate macro-level statistics
-    val maxMem = storageStatusList.map(_.maxMem).reduce(_+_)
-    val remainingMem = storageStatusList.map(_.memRemaining).reduce(_+_)
-    val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize))
-      .reduceOption(_+_).getOrElse(0L)
 
     val rddHeaders = Seq(
       "RDD Name",
@@ -46,19 +42,7 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
       "Size in Memory",
       "Size on Disk")
     val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
-    val rddTable = listingTable(rddHeaders, rddRow, rdds)
-
-    val content =
-      <div class="row">
-        <div class="span12">
-          <ul class="unstyled">
-            <li><strong>Memory:</strong>
-              {Utils.memoryBytesToString(maxMem - remainingMem)} Used
-              ({Utils.memoryBytesToString(remainingMem)} Available) </li>
-            <li><strong>Disk:</strong> {Utils.memoryBytesToString(diskSpaceUsed)} Used </li>
-          </ul>
-        </div>
-      </div> ++ {rddTable};
+    val content = listingTable(rddHeaders, rddRow, rdds)
 
     headerSparkPage(content, parent.sc, "Spark Storage ", Storage)
   }
