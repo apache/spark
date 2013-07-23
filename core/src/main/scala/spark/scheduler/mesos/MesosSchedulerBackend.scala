@@ -89,7 +89,6 @@ private[spark] class MesosSchedulerBackend(
     val sparkHome = sc.getSparkHome().getOrElse(throw new SparkException(
       "Spark home is not set; set it through the spark.home system " +
       "property, the SPARK_HOME environment variable or the SparkContext constructor"))
-    val execScript = new File(sparkHome, "spark-executor").getCanonicalPath
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -97,14 +96,22 @@ private[spark] class MesosSchedulerBackend(
         .setValue(value)
         .build())
     }
+    val command = CommandInfo.newBuilder()
+      .setEnvironment(environment)
+    val uri = System.getProperty("spark.executor.uri")
+    if (uri == null) {
+      command.setValue(new File(sparkHome, "spark-executor").getCanonicalPath)
+    } else {
+      // Grab everything to the first '.'. We'll use that and '*' to
+      // glob the directory "correctly".
+      val basename = new File(uri).getName().split('.')(0)
+      command.setValue("cd %s*; ./spark-executor".format(basename))
+      command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
+    }
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder().setValue(executorMemory).build())
-      .build()
-    val command = CommandInfo.newBuilder()
-      .setValue(execScript)
-      .setEnvironment(environment)
       .build()
     ExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
