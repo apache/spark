@@ -23,21 +23,14 @@ import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 
 import spark.LocalSparkContext
-
-import spark.storage.BlockManager
-import spark.storage.BlockManagerId
-import spark.storage.BlockManagerMaster
-import spark.{Dependency, ShuffleDependency, OneToOneDependency}
-import spark.FetchFailedException
 import spark.MapOutputTracker
 import spark.RDD
 import spark.SparkContext
-import spark.SparkException
 import spark.Partition
 import spark.TaskContext
-import spark.TaskEndReason
-
-import spark.{FetchFailed, Success}
+import spark.{Dependency, ShuffleDependency, OneToOneDependency}
+import spark.{FetchFailed, Success, TaskEndReason}
+import spark.storage.{BlockManagerId, BlockManagerMaster}
 
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
