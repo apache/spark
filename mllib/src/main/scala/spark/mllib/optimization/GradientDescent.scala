@@ -39,9 +39,9 @@ object GradientDescent {
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
    *
-   * @return weights - Column matrix containing weights for every feature.
-   * @return stochasticLossHistory - Array containing the stochastic loss computed for 
-   *                                 every iteration.
+   * @return A tuple containing two elements. The first element is a column matrix containing
+   *         weights for every feature, and the second element is an array containing the stochastic
+   *         loss computed for every iteration.
    */
   def runMiniBatchSGD(
     data: RDD[(Double, Array[Double])],
