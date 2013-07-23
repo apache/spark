@@ -130,7 +130,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       val eid = taskEnd.taskInfo.executorId
       if (!executorToTasksActive.contains(eid))
         executorToTasksActive(eid) = HashSet[Long]()
-      executorToTasksActive(eid) -= taskStart.taskInfo.taskId
+      executorToTasksActive(eid) -= taskEnd.taskInfo.taskId
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
           case e: ExceptionFailure =>
