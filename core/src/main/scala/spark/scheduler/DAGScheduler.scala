@@ -52,7 +52,7 @@ class DAGScheduler(
   }
   taskSched.setListener(this)
 
-  //Called by TaskScheduler to report task's starting.
+  // Called by TaskScheduler to report task's starting.
   override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     eventQueue.put(BeginEvent(task, taskInfo))
   }
