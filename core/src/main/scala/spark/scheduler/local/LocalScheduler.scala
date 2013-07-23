@@ -219,7 +219,6 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       val taskSetId = taskIdToTaskSetId(taskId)
       val taskSetManager = activeTaskSets(taskSetId)
       taskSetTaskIds(taskSetId) -= taskId
-      SparkEnv.set(env)
       taskSetManager.statusUpdate(taskId, state, serializedData)
     }
   }
