@@ -117,6 +117,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
           val taskName = "task %s:%d".format(taskSet.id, index)
           copiesRunning(index) += 1
           increaseRunningTasks(1)
+          taskStarted(task, info)
           return Some(new TaskDescription(taskId, null, taskName, bytes))
         case None => {}
       }
@@ -144,6 +145,10 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
         taskFailed(tid, state, serializedData)
       case _ => {}
     }
+  }
+
+  def taskStarted(task: Task[_], info: TaskInfo) {
+    sched.listener.taskStarted(task, info)
   }
 
   def taskEnded(tid: Long, state: TaskState, serializedData: ByteBuffer) {
