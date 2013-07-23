@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<allocations>
+<pool name="production">
+    <minShare>2</minShare>
+    <weight>1</weight>
+    <schedulingMode>FAIR</schedulingMode>
+</pool>
+<pool name="test">
+    <minShare>3</minShare>
+    <weight>2</weight>
+    <schedulingMode>FIFO</schedulingMode>
+</pool>
+<pool name="data">
+</pool>
+</allocations>

@@ -1,4 +1,24 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
+
+import collection.mutable
+import serializer.Serializer
 
 import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
@@ -9,6 +29,7 @@ import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
 import spark.serializer.{Serializer, SerializerManager}
 import spark.util.AkkaUtils
+import spark.api.python.PythonWorkerFactory
 
 
 /**
@@ -37,7 +58,10 @@ class SparkEnv (
     // If executorId is NOT found, return defaultHostPort
     var executorIdToHostPort: Option[(String, String) => String]) {
 
+  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
+
   def stop() {
+    pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
     mapOutputTracker.stop()
     shuffleFetcher.stop()
@@ -50,6 +74,12 @@ class SparkEnv (
     actorSystem.awaitTermination()
   }
 
+  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
+    synchronized {
+      val key = (pythonExec, envVars)
+      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
+    }
+  }
 
   def resolveExecutorIdToHostPort(executorId: String, defaultHostPort: String): String = {
     val env = SparkEnv.get

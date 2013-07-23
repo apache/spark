@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # These variables are automatically filled in by the mesos-ec2 script.
 export MESOS_MASTERS="{{master_list}}"

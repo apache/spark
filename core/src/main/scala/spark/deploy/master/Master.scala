@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.master
 
 import akka.actor._
@@ -13,6 +30,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import spark.deploy._
 import spark.{Logging, SparkException, Utils}
 import spark.util.AkkaUtils
+import ui.MasterWebUI
 
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
@@ -35,6 +53,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   var firstApp: Option[ApplicationInfo] = None
 
+  val webUi = new MasterWebUI(self, webUiPort)
+
   Utils.checkHost(host, "Expected hostname")
 
   val masterPublicAddress = {
@@ -51,19 +71,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     logInfo("Starting Spark master at spark://" + host + ":" + port)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-    startWebUi()
+    webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
   }
 
-  def startWebUi() {
-    val webUi = new MasterWebUI(context.system, self)
-    try {
-      AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
-    } catch {
-      case e: Exception =>
-        logError("Failed to create web UI", e)
-        System.exit(1)
-    }
+  override def postStop() {
+    webUi.stop()
   }
 
   override def receive = {
@@ -75,7 +88,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       } else {
         addWorker(id, host, workerPort, cores, memory, worker_webUiPort, publicAddress)
         context.watch(sender)  // This doesn't work with remote actors but helps for testing
-        sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUiPort)
+        sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUi.boundPort.get)
         schedule()
       }
     }
@@ -278,7 +291,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         exec.state = ExecutorState.KILLED
       }
       app.markFinished(state)
-      app.driver ! ApplicationRemoved(state.toString)
+      if (state != ApplicationState.FINISHED) {
+        app.driver ! ApplicationRemoved(state.toString)
+      }
       schedule()
     }
   }

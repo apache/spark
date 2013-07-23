@@ -1,10 +1,25 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 import sbt._
 import sbt.Classpaths.publishTask
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
-import twirl.sbt.TwirlPlugin._
 // For Sonatype publishing
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
@@ -25,7 +40,7 @@ object SparkBuild extends Build {
   //val HADOOP_MAJOR_VERSION = "2"
   //val HADOOP_YARN = true
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming, mllib, tools)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -33,9 +48,13 @@ object SparkBuild extends Build {
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core) dependsOn (streaming)
 
+  lazy val tools = Project("tools", file("tools"), settings = examplesSettings) dependsOn (core) dependsOn (streaming)
+
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
+
+  lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn (core)
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -54,7 +73,7 @@ object SparkBuild extends Build {
 
     // Fork new JVMs for tests and set Java options for those
     fork := true,
-    javaOptions += "-Xmx2g",
+    javaOptions += "-Xmx2500m",
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
@@ -125,40 +144,39 @@ object SparkBuild extends Build {
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
-  )
+  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings
 
-  val slf4jVersion = "1.6.1"
+  val slf4jVersion = "1.7.2"
 
   val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
+  val excludeAsm = ExclusionRule(organization = "asm")
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
     resolvers ++= Seq(
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
       "Spray Repository" at "http://repo.spray.cc/",
-      "Cloudera Repository" at "https://repository.cloudera.com/artifactory/cloudera-repos/",
-      "Twitter4J Repository" at "http://twitter4j.org/maven2/"
+      "Cloudera Repository" at "https://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
 
     libraryDependencies ++= Seq(
-      "com.google.guava" % "guava" % "11.0.1",
+      "com.google.guava" % "guava" % "14.0.1",
+      "com.google.code.findbugs" % "jsr305" % "1.3.9",
       "log4j" % "log4j" % "1.2.16",
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
       "commons-daemon" % "commons-daemon" % "1.0.10",
       "com.ning" % "compress-lzf" % "0.8.4",
-      "asm" % "asm-all" % "3.3.1",
+      "org.ow2.asm" % "asm" % "4.0",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "de.javakaffee" % "kryo-serializers" % "0.22",
-      "com.typesafe.akka" % "akka-actor" % "2.0.3" excludeAll(excludeNetty),
-      "com.typesafe.akka" % "akka-remote" % "2.0.3" excludeAll(excludeNetty),
-      "com.typesafe.akka" % "akka-slf4j" % "2.0.3" excludeAll(excludeNetty),
+      "com.typesafe.akka" % "akka-actor" % "2.0.5" excludeAll(excludeNetty),
+      "com.typesafe.akka" % "akka-remote" % "2.0.5" excludeAll(excludeNetty),
+      "com.typesafe.akka" % "akka-slf4j" % "2.0.5" excludeAll(excludeNetty),
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
-      "cc.spray" % "spray-can" % "1.0-M2.1" excludeAll(excludeNetty),
-      "cc.spray" % "spray-server" % "1.0-M2.1" excludeAll(excludeNetty),
-      "cc.spray" % "spray-json_2.9.2" % "1.1.1" excludeAll(excludeNetty),
+      "net.liftweb" % "lift-json_2.9.2" % "2.5",
       "org.apache.mesos" % "mesos" % "0.9.0-incubating",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
       "org.apache.derby" % "derby" % "10.4.2.0" % "test"
@@ -167,15 +185,15 @@ object SparkBuild extends Build {
         if (HADOOP_YARN) {
           Seq(
             // Exclude rule required for all ?
-            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
-            "org.apache.hadoop" % "hadoop-yarn-api" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
-            "org.apache.hadoop" % "hadoop-yarn-common" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
-            "org.apache.hadoop" % "hadoop-yarn-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty)
+            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
+            "org.apache.hadoop" % "hadoop-yarn-api" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
+            "org.apache.hadoop" % "hadoop-yarn-common" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
+            "org.apache.hadoop" % "hadoop-yarn-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm)
           )
         } else {
           Seq(
-            "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty),
-            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty)
+            "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
+            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm)
           )
         }
       } else {
@@ -188,7 +206,7 @@ object SparkBuild extends Build {
         "src/hadoop" + HADOOP_MAJOR_VERSION + "/scala"
       } )
     }
-  ) ++ assemblySettings ++ extraAssemblySettings ++ Twirl.settings
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def rootSettings = sharedSettings ++ Seq(
     publish := {}
@@ -197,29 +215,56 @@ object SparkBuild extends Build {
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  )
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
-    libraryDependencies ++= Seq("com.twitter" % "algebird-core_2.9.2" % "0.1.11")
+    libraryDependencies ++= Seq(
+      "com.twitter" % "algebird-core_2.9.2" % "0.1.11",
+
+      "org.apache.hbase" % "hbase" % "0.94.6" excludeAll(excludeNetty, excludeAsm),
+
+      "org.apache.cassandra" % "cassandra-all" % "1.2.5"
+        exclude("com.google.guava", "guava")
+        exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru")
+        exclude("com.ning","compress-lzf")
+        exclude("io.netty", "netty")
+        exclude("jline","jline")
+        exclude("log4j","log4j")
+        exclude("org.apache.cassandra.deps", "avro")
+    )
+  )
+
+  def toolsSettings = sharedSettings ++ Seq(
+    name := "spark-tools"
   )
 
   def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
 
+  def mllibSettings = sharedSettings ++ Seq(
+    name := "spark-mllib",
+    libraryDependencies ++= Seq(
+      "org.jblas" % "jblas" % "1.2.3"
+    )
+  )
+
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
+    resolvers ++= Seq(
+      "Akka Repository" at "http://repo.akka.io/releases/"
+    ),
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty),
-      "com.github.sgroschupf" % "zkclient" % "0.1",
+      "com.github.sgroschupf" % "zkclient" % "0.1" excludeAll(excludeNetty),
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty),
-      "com.typesafe.akka" % "akka-zeromq" % "2.0.3" excludeAll(excludeNetty)
+      "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
     mergeStrategy in assembly := {
       case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase.matches("meta-inf/.*\\.sf$") => MergeStrategy.discard
+      case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }

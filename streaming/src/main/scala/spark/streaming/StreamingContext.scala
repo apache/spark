@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.streaming
 
 import akka.actor.Props
@@ -27,6 +44,8 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import twitter4j.Status
+import twitter4j.auth.Authorization
+
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -186,10 +205,11 @@ class StreamingContext private (
    *       should be same.
    */
   def actorStream[T: ClassManifest](
-    props: Props,
-    name: String,
-    storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
-    supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy): DStream[T] = {
+      props: Props,
+      name: String,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
+      supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
+    ): DStream[T] = {
     networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
   }
 
@@ -197,9 +217,10 @@ class StreamingContext private (
    * Create an input stream that receives messages pushed by a zeromq publisher.
    * @param publisherUrl Url of remote zeromq publisher
    * @param subscribe topic to subscribe to
-   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
-   *                       of byte thus it needs the converter(which might be deserializer of bytes)
-   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic
+   *                       and each frame has sequence of byte thus it needs the converter
+   *                       (which might be deserializer of bytes) to translate from sequence
+   *                       of sequence of bytes, where sequence refer to a frame
    *                       and sub sequence refer to its payload.
    * @param storageLevel RDD storage level. Defaults to memory-only.
    */
@@ -215,24 +236,39 @@ class StreamingContext private (
   }
 
   /**
-   * Create an input stream that pulls messages form a Kafka Broker.
+   * Create an input stream that pulls messages from a Kafka Broker.
    * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
    * @param groupId The group id for this consumer.
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   * in its own thread.
-   * @param initialOffsets Optional initial offsets for each of the partitions to consume.
-   * By default the value is pulled from zookeper.
+   *               in its own thread.
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
-  def kafkaStream[T: ClassManifest](
+  def kafkaStream(
       zkQuorum: String,
       groupId: String,
       topics: Map[String, Int],
-      initialOffsets: Map[KafkaPartitionKey, Long] = Map[KafkaPartitionKey, Long](),
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
+    ): DStream[String] = {
+    val kafkaParams = Map[String, String](
+      "zk.connect" -> zkQuorum, "groupid" -> groupId, "zk.connectiontimeout.ms" -> "10000")
+    kafkaStream[String, kafka.serializer.StringDecoder](kafkaParams, topics, storageLevel)
+  }
+
+  /**
+   * Create an input stream that pulls messages from a Kafka Broker.
+   * @param kafkaParams Map of kafka configuration paramaters.
+   *                    See: http://kafka.apache.org/configuration.html
+   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
+   *               in its own thread.
+   * @param storageLevel  Storage level to use for storing the received objects
+   */
+  def kafkaStream[T: ClassManifest, D <: kafka.serializer.Decoder[_]: Manifest](
+      kafkaParams: Map[String, String],
+      topics: Map[String, Int],
+      storageLevel: StorageLevel
     ): DStream[T] = {
-    val inputStream = new KafkaInputDStream[T](this, zkQuorum, groupId, topics, initialOffsets, storageLevel)
+    val inputStream = new KafkaInputDStream[T, D](this, kafkaParams, topics, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }
@@ -362,18 +398,18 @@ class StreamingContext private (
 
   /**
    * Create a input stream that returns tweets received from Twitter.
-   * @param username Twitter username
-   * @param password Twitter password
+   * @param twitterAuth Twitter4J authentication, or None to use Twitter4J's default OAuth
+   *        authorization; this uses the system properties twitter4j.oauth.consumerKey,
+   *        .consumerSecret, .accessToken and .accessTokenSecret.
    * @param filters Set of filter strings to get only those tweets that match them
    * @param storageLevel Storage level to use for storing the received objects
    */
   def twitterStream(
-      username: String,
-      password: String,
+      twitterAuth: Option[Authorization] = None,
       filters: Seq[String] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[Status] = {
-    val inputStream = new TwitterInputDStream(this, username, password, filters, storageLevel)
+    val inputStream = new TwitterInputDStream(this, twitterAuth, filters, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }
@@ -397,7 +433,8 @@ class StreamingContext private (
    * it will process either one or all of the RDDs returned by the queue.
    * @param queue      Queue of RDDs
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
-   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty. Set as null if no RDD should be returned when empty
+   * @param defaultRDD Default RDD is returned by the DStream when the queue is empty.
+   *                   Set as null if no RDD should be returned when empty
    * @tparam T         Type of objects in the RDD
    */
   def queueStream[T: ClassManifest](

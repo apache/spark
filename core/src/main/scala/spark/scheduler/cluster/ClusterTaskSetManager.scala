@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler.cluster
 
 import java.util.{HashMap => JHashMap, NoSuchElementException, Arrays}
@@ -455,10 +472,10 @@ private[spark] class ClusterTaskSetManager(
           val taskId = sched.newTaskId()
           // Figure out whether this should count as a preferred launch
           val taskLocality =
-            if (isProcessLocalLocation(task, hostPort)) TaskLocality.PROCESS_LOCAL else
-            if (isHostLocalLocation(task, hostPort)) TaskLocality.NODE_LOCAL else
-            if (isRackLocalLocation(task, hostPort)) TaskLocality.RACK_LOCAL else
-              TaskLocality.ANY
+            if (isProcessLocalLocation(task, hostPort)) TaskLocality.PROCESS_LOCAL
+            else if (isHostLocalLocation(task, hostPort)) TaskLocality.NODE_LOCAL
+            else if (isRackLocalLocation(task, hostPort)) TaskLocality.RACK_LOCAL
+            else  TaskLocality.ANY
           val prefStr = taskLocality.toString
           logInfo("Starting task %s:%d as TID %s on slave %s: %s (%s)".format(
             taskSet.id, index, taskId, execId, hostPort, prefStr))
@@ -468,7 +485,7 @@ private[spark] class ClusterTaskSetManager(
           val info = new TaskInfo(taskId, index, time, execId, hostPort, taskLocality)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
-          if (TaskLocality.NODE_LOCAL == taskLocality) {
+          if (taskLocality == TaskLocality.PROCESS_LOCAL || taskLocality == TaskLocality.NODE_LOCAL) {
             lastPreferredLaunchTime = time
           }
           // Serialize and return the task
@@ -573,6 +590,7 @@ private[spark] class ClusterTaskSetManager(
             return
 
           case ef: ExceptionFailure =>
+            sched.listener.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
             val key = ef.description
             val now = System.currentTimeMillis
             val (printFull, dupCount) = {

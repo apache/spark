@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.streaming.receivers
 
 import akka.actor.{ Actor, PoisonPill, Props, SupervisorStrategy }
@@ -8,6 +25,8 @@ import spark.storage.StorageLevel
 import spark.streaming.dstream.NetworkReceiver
 
 import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.mutable.ArrayBuffer
 
 /** A helper with set of defaults for supervisor strategy **/
 object ReceiverSupervisorStrategy {
@@ -136,8 +155,9 @@ private[streaming] class ActorReceiver[T: ClassManifest](
   }
 
   protected def pushBlock(iter: Iterator[T]) {
-    pushBlock("block-" + streamId + "-" + System.nanoTime(),
-      iter, null, storageLevel)
+    val buffer = new ArrayBuffer[T]
+    buffer ++= iter
+    pushBlock("block-" + streamId + "-" + System.nanoTime(), buffer, null, storageLevel)
   }
 
   protected def onStart() = {

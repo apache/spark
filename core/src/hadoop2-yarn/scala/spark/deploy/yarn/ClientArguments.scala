@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.yarn
 
 import spark.util.MemoryParam
@@ -13,7 +30,6 @@ class ClientArguments(val args: Array[String]) {
   var workerMemory = 1024
   var workerCores = 1
   var numWorkers = 2
-  var amUser = System.getProperty("user.name")
   var amQueue = System.getProperty("QUEUE", "default")
   var amMemory: Int = 512
   // TODO
@@ -58,10 +74,6 @@ class ClientArguments(val args: Array[String]) {
           workerCores = value
           args = tail
 
-        case ("--user") :: value :: tail =>
-          amUser = value
-          args = tail
-
         case ("--queue") :: value :: tail =>
           amQueue = value
           args = tail
@@ -96,8 +108,7 @@ class ClientArguments(val args: Array[String]) {
       "  --worker-cores NUM   Number of cores for the workers (Default: 1). This is unsused right now.\n" +
       "  --master-memory MEM  Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
       "  --worker-memory MEM  Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n" +
-      "  --queue QUEUE        The hadoop queue to use for allocation requests (Default: 'default')\n" +
-      "  --user USERNAME      Run the ApplicationMaster (and slaves) as a different user\n"
+      "  --queue QUEUE        The hadoop queue to use for allocation requests (Default: 'default')"
       )
     System.exit(exitCode)
   }

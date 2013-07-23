@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler.local
 
 import java.io.File
@@ -146,6 +163,9 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     SparkEnv.set(env)
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val objectSer = SparkEnv.get.serializer.newInstance()
+    var attemptedTask: Option[Task[_]] = None   
+    val start = System.currentTimeMillis()
+    var taskStart: Long = 0
     try {
       Accumulators.clear()
       Thread.currentThread().setContextClassLoader(classLoader)
@@ -154,10 +174,11 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
       val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(bytes)
       updateDependencies(taskFiles, taskJars)   // Download any files added with addFile
-      val deserStart = System.currentTimeMillis()
       val deserializedTask = ser.deserialize[Task[_]](
         taskBytes, Thread.currentThread.getContextClassLoader)
-      val deserTime = System.currentTimeMillis() - deserStart
+      attemptedTask = Some(deserializedTask)
+      val deserTime = System.currentTimeMillis() - start
+      taskStart = System.currentTimeMillis()
 
       // Run it
       val result: Any = deserializedTask.run(taskId)
@@ -171,16 +192,19 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       val resultToReturn = objectSer.deserialize[Any](serResult)
       val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
         ser.serialize(Accumulators.values))
+      val serviceTime = System.currentTimeMillis() - taskStart
       logInfo("Finished " + taskId)
-      deserializedTask.metrics.get.executorRunTime = deserTime.toInt//info.duration.toInt  //close enough
+      deserializedTask.metrics.get.executorRunTime = serviceTime.toInt
       deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
-
       val taskResult = new TaskResult(result, accumUpdates, deserializedTask.metrics.getOrElse(null))
       val serializedResult = ser.serialize(taskResult)
       localActor ! LocalStatusUpdate(taskId, TaskState.FINISHED, serializedResult)
     } catch {
       case t: Throwable => {
-        val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
+        val serviceTime = System.currentTimeMillis() - taskStart
+        val metrics = attemptedTask.flatMap(t => t.metrics)
+        metrics.foreach{m => m.executorRunTime = serviceTime.toInt}
+        val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
         localActor ! LocalStatusUpdate(taskId, TaskState.FAILED, ser.serialize(failure))
       }
     }

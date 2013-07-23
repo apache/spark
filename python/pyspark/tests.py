@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 """
 Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
@@ -12,6 +29,7 @@ import unittest
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import SPARK_HOME
+from pyspark.serializers import read_int
 
 
 class PySparkTestCase(unittest.TestCase):
@@ -116,6 +134,48 @@ class TestIO(PySparkTestCase):
             subprocess.check_call('ls', shell=True)
         self.sc.parallelize([1]).foreach(func)
 
+
+class TestDaemon(unittest.TestCase):
+    def connect(self, port):
+        from socket import socket, AF_INET, SOCK_STREAM
+        sock = socket(AF_INET, SOCK_STREAM)
+        sock.connect(('127.0.0.1', port))
+        # send a split index of -1 to shutdown the worker
+        sock.send("\xFF\xFF\xFF\xFF")
+        sock.close()
+        return True
+
+    def do_termination_test(self, terminator):
+        from subprocess import Popen, PIPE
+        from errno import ECONNREFUSED
+
+        # start daemon
+        daemon_path = os.path.join(os.path.dirname(__file__), "daemon.py")
+        daemon = Popen([sys.executable, daemon_path], stdin=PIPE, stdout=PIPE)
+
+        # read the port number
+        port = read_int(daemon.stdout)
+
+        # daemon should accept connections
+        self.assertTrue(self.connect(port))
+
+        # request shutdown
+        terminator(daemon)
+        time.sleep(1)
+
+        # daemon should no longer accept connections
+        with self.assertRaises(EnvironmentError) as trap:
+            self.connect(port)
+        self.assertEqual(trap.exception.errno, ECONNREFUSED)
+
+    def test_termination_stdin(self):
+        """Ensure that daemon and workers terminate when stdin is closed."""
+        self.do_termination_test(lambda daemon: daemon.stdin.close())
+
+    def test_termination_sigterm(self):
+        """Ensure that daemon and workers terminate on SIGTERM."""
+        from signal import SIGTERM
+        self.do_termination_test(lambda daemon: os.kill(daemon.pid, SIGTERM))
 
 if __name__ == "__main__":
     unittest.main()
