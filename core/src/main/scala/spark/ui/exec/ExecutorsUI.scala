@@ -5,7 +5,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.Handler
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Properties
 
 import spark.{ExceptionFailure, Logging, SparkContext, Success, Utils}
@@ -18,7 +18,6 @@ import spark.ui.JettyUtils._
 import spark.ui.Page.Executors
 import spark.ui.UIUtils.headerSparkPage
 import spark.ui.UIUtils
-import spark.Utils
 
 import scala.xml.{Node, XML}
 
@@ -114,7 +113,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   }
 
   private[spark] class ExecutorsListener extends SparkListener with Logging {
-    val executorToTasksActive = HashMap[String, Seq[Long]]()
+    val executorToTasksActive = HashMap[String, HashSet[Long]]()
     val executorToTasksComplete = HashMap[String, Int]()
     val executorToTasksFailed = HashMap[String, Int]()
     val executorToTaskInfos =
@@ -122,12 +121,14 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
 
     override def onTaskStart(taskStart: SparkListenerTaskStart) {
       val eid = taskStart.taskInfo.executorId
-      executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, Seq[Long]()) :+ taskStart.taskInfo.taskId
+      executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, HashSet[Long]()) +
+        taskStart.taskInfo.taskId
     }
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
       val eid = taskEnd.taskInfo.executorId
-      executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, Seq[Long]()).filterNot(_ == taskEnd.taskInfo.taskId)
+      executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, HashSet[Long]()) -
+        taskEnd.taskInfo.taskId
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
           case e: ExceptionFailure =>
