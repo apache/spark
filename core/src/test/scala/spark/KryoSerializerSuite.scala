@@ -133,9 +133,13 @@ class KryoSerializerSuite extends FunSuite {
     System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
 
     val sc = new SparkContext("local", "kryoTest")
-    val control = 1 :: 2 :: Nil
-    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
-    assert(control == result.toSeq)
+    try {
+      val control = 1 :: 2 :: Nil
+      val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
+      assert(control == result.toSeq)
+    } finally {
+      sc.stop()
+    }
 
     System.clearProperty("spark.kryo.registrator")
     System.clearProperty("spark.serializer")
