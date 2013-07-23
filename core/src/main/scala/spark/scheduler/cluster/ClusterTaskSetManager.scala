@@ -77,7 +77,6 @@ private[spark] class ClusterTaskSetManager(
   val env = SparkEnv.get
   val ser = env.closureSerializer.newInstance()
 
-
   val tasks = taskSet.tasks
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
