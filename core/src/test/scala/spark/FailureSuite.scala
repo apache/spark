@@ -18,9 +18,6 @@
 package spark
 
 import org.scalatest.FunSuite
-import org.scalatest.prop.Checkers
-
-import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
 
@@ -40,7 +37,7 @@ object FailureSuiteState {
 }
 
 class FailureSuite extends FunSuite with LocalSparkContext {
-  
+
   // Run a 3-task map job in which task 1 deterministically fails once, and check
   // whether the job completes successfully and we ran 4 tasks in total.
   test("failure in a single-stage job") {
@@ -66,7 +63,7 @@ class FailureSuite extends FunSuite with LocalSparkContext {
   test("failure in a two-stage job") {
     sc = new SparkContext("local[1,1]", "test")
     val results = sc.makeRDD(1 to 3).map(x => (x, x)).groupByKey(3).map {
-      case (k, v) => 
+      case (k, v) =>
         FailureSuiteState.synchronized {
           FailureSuiteState.tasksRun += 1
           if (k == 1 && FailureSuiteState.tasksFailed == 0) {
@@ -87,11 +84,29 @@ class FailureSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local[1,1]", "test")
     val results = sc.makeRDD(1 to 3).map(x => new NonSerializable)
 
-    val thrown = intercept[spark.SparkException] {
+    val thrown = intercept[SparkException] {
       results.collect()
     }
-    assert(thrown.getClass === classOf[spark.SparkException])
+    assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.contains("NotSerializableException"))
+
+    FailureSuiteState.clear()
+  }
+
+  test("failure because task closure is not serializable") {
+    sc = new SparkContext("local[1,1]", "test")
+    val a = new NonSerializable
+    val thrown = intercept[SparkException] {
+      sc.parallelize(1 to 10, 2).map(x => a).count()
+    }
+    assert(thrown.getClass === classOf[SparkException])
+    assert(thrown.getMessage.contains("NotSerializableException"))
+
+    val thrown1 = intercept[SparkException] {
+      sc.parallelize(1 to 10, 2).map(x => (x, a)).partitionBy(new HashPartitioner(3)).count()
+    }
+    assert(thrown1.getClass === classOf[SparkException])
+    assert(thrown1.getMessage.contains("NotSerializableException"))
 
     FailureSuiteState.clear()
   }

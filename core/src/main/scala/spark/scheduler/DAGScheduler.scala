@@ -17,19 +17,17 @@
 
 package spark.scheduler
 
-import cluster.TaskInfo
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
+import java.io.NotSerializableException
 import java.util.Properties
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
 import spark._
 import spark.executor.TaskMetrics
-import spark.partial.ApproximateActionListener
-import spark.partial.ApproximateEvaluator
-import spark.partial.PartialResult
+import spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
+import spark.scheduler.cluster.TaskInfo
 import spark.storage.{BlockManager, BlockManagerMaster}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
 
@@ -258,7 +256,8 @@ class DAGScheduler(
     assert(partitions.size > 0)
     val waiter = new JobWaiter(partitions.size, resultHandler)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val toSubmit = JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties)
+    val toSubmit = JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter,
+      properties)
     return (toSubmit, waiter)
   }
 
@@ -283,7 +282,7 @@ class DAGScheduler(
         "Total number of partitions: " + maxPartitions)
     }
 
-    val (toSubmit, waiter) = prepareJob(
+    val (toSubmit: JobSubmitted, waiter: JobWaiter[_]) = prepareJob(
         finalRdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     eventQueue.put(toSubmit)
     waiter.awaitResult() match {
@@ -466,6 +465,18 @@ class DAGScheduler(
   /** Submits stage, but first recursively submits any missing parents. */
   private def submitStage(stage: Stage) {
     logDebug("submitStage(" + stage + ")")
+
+    // Preemptively serialize the stage RDD to make sure the tasks for this stage will be
+    // serializable. We are catching this exception here because it would be fairly hard to
+    // catch the non-serializable exception down the road, where we have several different
+    // implementations for local scheduler and cluster schedulers.
+    try {
+      SparkEnv.get.closureSerializer.newInstance().serialize(stage.rdd)
+    } catch {
+      case e: NotSerializableException => abortStage(stage, e.toString)
+      return
+    }
+
     if (!waiting(stage) && !running(stage) && !failed(stage)) {
       val missing = getMissingParentStages(stage).sortBy(_.id)
       logDebug("missing: " + missing)
