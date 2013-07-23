@@ -23,13 +23,13 @@ abstract class Updater extends Serializable {
   /**
    * Compute an updated value for weights given the gradient, stepSize and iteration number.
    *
-   * @param weightsOld - Column matrix of size nx1 where n is the number of features.
+   * @param weightsOlds - Column matrix of size nx1 where n is the number of features.
    * @param gradient - Column matrix of size nx1 where n is the number of features.
    * @param stepSize - step size across iterations
    * @param iter - Iteration number
    *
-   * @return weightsNew - Column matrix containing updated weights
-   * @return reg_val - regularization value
+   * @return A tuple of 2 elements. The first element is a column matrix containing updated weights,
+   *         and the second element is the regularization value.
    */
   def compute(weightsOlds: DoubleMatrix, gradient: DoubleMatrix, stepSize: Double, iter: Int):
       (DoubleMatrix, Double)

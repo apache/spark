@@ -19,7 +19,7 @@ package spark.mllib.regression
 
 import spark.RDD
 
-trait RegressionModel {
+trait RegressionModel extends Serializable {
   /**
    * Predict values for the given data set using the model trained.
    *

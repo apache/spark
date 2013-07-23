@@ -36,8 +36,12 @@ class LogisticRegressionModel(
   private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
 
   override def predict(testData: spark.RDD[Array[Double]]) = {
+    // A small optimization to avoid serializing the entire model. Only the weightsMatrix
+    // and intercept is needed.
+    val localWeights = weightsMatrix
+    val localIntercept = intercept
     testData.map { x =>
-      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(weightsMatrix).get(0) + this.intercept
+      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(localWeights).get(0) + localIntercept
       1.0/ (1.0 + math.exp(margin * -1))
     }
   }
