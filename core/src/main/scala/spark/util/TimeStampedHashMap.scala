@@ -20,6 +20,7 @@ package spark.util
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConversions
 import scala.collection.mutable.Map
+import scala.collection.immutable
 import spark.scheduler.MapStatus
 
 /**
@@ -98,6 +99,8 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() with spark.Logging {
       f(kv)
     }
   }
+
+  def toMap: immutable.Map[A, B] = iterator.toMap
 
   /**
    * Removes old key-value pairs that have timestamp earlier than `threshTime`

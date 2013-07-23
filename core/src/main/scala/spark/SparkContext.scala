@@ -550,7 +550,7 @@ class SparkContext(
    * Returns an immutable map of RDDs that have marked themselves as cached via cache() call.
    * Note that this does not necessarily mean the caching or computation was successful.
    */
-  def getCachedRDDs: Map[Int, RDD[_]] = persistentRdds.asInstanceOf[Map[Int, RDD[_]]]
+  def getCachedRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 
   def getStageInfo: Map[Stage,StageInfo] = {
     dagScheduler.stageToInfos
