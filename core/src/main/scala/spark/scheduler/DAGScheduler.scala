@@ -52,6 +52,11 @@ class DAGScheduler(
   }
   taskSched.setListener(this)
 
+  // Called by TaskScheduler to report task's starting.
+  override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
+    eventQueue.put(BeginEvent(task, taskInfo))
+  }
+
   // Called by TaskScheduler to report task completions or failures.
   override def taskEnded(
       task: Task[_],
@@ -342,6 +347,9 @@ class DAGScheduler(
 
       case ExecutorLost(execId) =>
         handleExecutorLost(execId)
+
+      case begin: BeginEvent =>
+        sparkListeners.foreach(_.onTaskStart(SparkListenerTaskStart(begin.task, begin.taskInfo)))
 
       case completion: CompletionEvent =>
         sparkListeners.foreach(_.onTaskEnd(SparkListenerTaskEnd(completion.task,

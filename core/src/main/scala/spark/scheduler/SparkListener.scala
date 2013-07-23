@@ -29,6 +29,8 @@ case class SparkListenerStageSubmitted(stage: Stage, taskSize: Int) extends Spar
 
 case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 
+case class SparkListenerTaskStart(task: Task[_], taskInfo: TaskInfo) extends SparkListenerEvents
+
 case class SparkListenerTaskEnd(task: Task[_], reason: TaskEndReason, taskInfo: TaskInfo,
      taskMetrics: TaskMetrics) extends SparkListenerEvents
 
@@ -48,7 +50,12 @@ trait SparkListener {
    * Called when a stage is submitted
    */
   def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
-  
+
+  /**
+   * Called when a task starts
+   */
+  def onTaskStart(taskEnd: SparkListenerTaskStart) { }
+
   /**
    * Called when a task ends
    */

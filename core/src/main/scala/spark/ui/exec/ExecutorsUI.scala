@@ -5,7 +5,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.Handler
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Properties
 
 import spark.{ExceptionFailure, Logging, SparkContext, Success, Utils}
@@ -18,7 +18,6 @@ import spark.ui.JettyUtils._
 import spark.ui.Page.Executors
 import spark.ui.UIUtils.headerSparkPage
 import spark.ui.UIUtils
-import spark.Utils
 
 import scala.xml.{Node, XML}
 
@@ -45,7 +44,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       .reduceOption(_+_).getOrElse(0L)
 
     val execHead = Seq("Executor ID", "Address", "RDD blocks", "Memory used", "Disk used",
-      "Failed tasks", "Complete tasks", "Total tasks")
+      "Active tasks", "Failed tasks", "Complete tasks", "Total tasks")
     def execRow(kv: Seq[String]) =
       <tr>
         <td>{kv(0)}</td>
@@ -60,6 +59,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
         <td>{kv(6)}</td>
         <td>{kv(7)}</td>
         <td>{kv(8)}</td>
+        <td>{kv(9)}</td>
       </tr>
     val execInfo =
       for (b <- 0 until storageStatusList.size)
@@ -93,6 +93,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val memUsed = sc.getExecutorStorageStatus(a).memUsed().toString
     val maxMem = sc.getExecutorStorageStatus(a).maxMem.toString
     val diskUsed = sc.getExecutorStorageStatus(a).diskUsed().toString
+    val activeTasks = listener.executorToTasksActive.getOrElse(a.toString, Seq[Long]()).size.toString
     val failedTasks = listener.executorToTasksFailed.getOrElse(a.toString, 0).toString
     val completedTasks = listener.executorToTasksComplete.getOrElse(a.toString, 0).toString
     val totalTasks = listener.executorToTaskInfos(a.toString).size.toString
@@ -104,6 +105,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       memUsed,
       maxMem,
       diskUsed,
+      activeTasks,
       failedTasks,
       completedTasks,
       totalTasks
@@ -111,13 +113,24 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   }
 
   private[spark] class ExecutorsListener extends SparkListener with Logging {
+    val executorToTasksActive = HashMap[String, HashSet[Long]]()
     val executorToTasksComplete = HashMap[String, Int]()
     val executorToTasksFailed = HashMap[String, Int]()
     val executorToTaskInfos =
       HashMap[String, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
 
+    override def onTaskStart(taskStart: SparkListenerTaskStart) {
+      val eid = taskStart.taskInfo.executorId
+      if (!executorToTasksActive.contains(eid))
+        executorToTasksActive(eid) = HashSet[Long]()
+      executorToTasksActive(eid) += taskStart.taskInfo.taskId
+    }
+
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
       val eid = taskEnd.taskInfo.executorId
+      if (!executorToTasksActive.contains(eid))
+        executorToTasksActive(eid) = HashSet[Long]()
+      executorToTasksActive(eid) -= taskStart.taskInfo.taskId
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
           case e: ExceptionFailure =>

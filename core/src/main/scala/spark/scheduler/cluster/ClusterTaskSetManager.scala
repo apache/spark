@@ -496,6 +496,8 @@ private[spark] class ClusterTaskSetManager(
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
+          if (taskAttempts(index).size == 1)
+            taskStarted(task,info)
           return Some(new TaskDescription(taskId, execId, taskName, serializedTask))
         }
         case _ =>
@@ -516,6 +518,10 @@ private[spark] class ClusterTaskSetManager(
         taskLost(tid, state, serializedData)
       case _ =>
     }
+  }
+
+  def taskStarted(task: Task[_], info: TaskInfo) {
+    sched.listener.taskStarted(task, info)
   }
 
   def taskFinished(tid: Long, state: TaskState, serializedData: ByteBuffer) {

@@ -43,6 +43,8 @@ private[spark] case class JobSubmitted(
     properties: Properties = null)
   extends DAGSchedulerEvent
 
+private[spark] case class BeginEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent
+
 private[spark] case class CompletionEvent(
     task: Task[_],
     reason: TaskEndReason,

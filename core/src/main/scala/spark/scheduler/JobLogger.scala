@@ -68,6 +68,8 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
             processStageCompletedEvent(stageInfo)
           case SparkListenerJobEnd(job, result) =>
             processJobEndEvent(job, result)
+          case SparkListenerTaskStart(task, taskInfo) =>
+            processTaskStartEvent(task, taskInfo)
           case SparkListenerTaskEnd(task, reason, taskInfo, taskMetrics) =>
             processTaskEndEvent(task, reason, taskInfo, taskMetrics)
           case _ =>
@@ -252,7 +254,19 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
                  stageInfo.stage.id + " STATUS=COMPLETED")
     
   }
-  
+
+  override def onTaskStart(taskStart: SparkListenerTaskStart) {
+    eventQueue.put(taskStart)
+  }
+
+  protected def processTaskStartEvent(task: Task[_], taskInfo: TaskInfo) {
+    var taskStatus = ""
+    task match {
+      case resultTask: ResultTask[_, _] => taskStatus = "TASK_TYPE=RESULT_TASK"
+      case shuffleMapTask: ShuffleMapTask => taskStatus = "TASK_TYPE=SHUFFLE_MAP_TASK"
+    }
+  }
+
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     eventQueue.put(taskEnd)
   }
