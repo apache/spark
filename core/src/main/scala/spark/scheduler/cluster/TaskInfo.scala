@@ -53,14 +53,15 @@ class TaskInfo(
 
   def status: String = {
     if (running)
-      return "RUNNING"
-    if (failed)
-      return "FAILED"
-    if (successful)
-      return "SUCCESSFUL"
-    if (finished)
-      return "FINISHED"
-    "UNKNOWN"
+      "RUNNING"
+    else if (failed)
+      "FAILED"
+    else if (successful)
+      "SUCCESSFUL"
+    else if (finished)
+      "FINISHED"
+    else
+      "UNKNOWN"
   }
 
   def duration: Long = {
