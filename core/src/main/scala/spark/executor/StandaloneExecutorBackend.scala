@@ -22,9 +22,8 @@ import java.nio.ByteBuffer
 import akka.actor.{ActorRef, Actor, Props, Terminated}
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 
-import spark.{Logging, Utils}
+import spark.{Logging, Utils, SparkEnv}
 import spark.TaskState.TaskState
-import spark.deploy.SparkHadoopUtil
 import spark.scheduler.cluster.StandaloneClusterMessages._
 import spark.util.AkkaUtils
 
@@ -82,7 +81,8 @@ private[spark] class StandaloneExecutorBackend(
 
 private[spark] object StandaloneExecutorBackend {
   def run(driverUrl: String, executorId: String, hostname: String, cores: Int) {
-    SparkHadoopUtil.runAsUser(run0, Tuple4[Any, Any, Any, Any] (driverUrl, executorId, hostname, cores))
+    val env = SparkEnv.get
+    env.hadoop.runAsUser(run0, Tuple4[Any, Any, Any, Any] (driverUrl, executorId, hostname, cores))
   }
 
   // This will be run 'as' the user

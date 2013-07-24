@@ -23,7 +23,7 @@ import org.apache.hadoop.mapred.JobConf
 /**
  * Contains util methods to interact with Hadoop from spark.
  */
-object SparkHadoopUtil {
+class SparkHadoopUtil {
 
   def getUserNameFromEnvironment(): String = {
     // defaulting to -D ...

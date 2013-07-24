@@ -25,6 +25,7 @@ import akka.remote.RemoteActorRefProvider
 
 import spark.broadcast.BroadcastManager
 import spark.metrics.MetricsSystem
+import spark.deploy.SparkHadoopUtil
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
@@ -60,6 +61,7 @@ class SparkEnv (
     // If executorId is NOT found, return defaultHostPort
     var executorIdToHostPort: Option[(String, String) => String]) {
 
+  val hadoop = new SparkHadoopUtil
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   def stop() {
