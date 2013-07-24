@@ -130,11 +130,11 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       try {
         val socket = new Socket(driverHost, driverPort.toInt)
         socket.close()
-        logInfo("Master now available: " + driverHost + ":" + driverPort)
+        logInfo("Driver now available: " + driverHost + ":" + driverPort)
         driverUp = true
       } catch {
         case e: Exception =>
-          logError("Failed to connect to driver at " + driverHost + ":" + driverPort)
+          logWarning("Failed to connect to driver at " + driverHost + ":" + driverPort + ", retrying")
         Thread.sleep(100)
       }
     }
