@@ -29,6 +29,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import spark.deploy._
 import spark.{Logging, SparkException, Utils}
+import spark.metrics.MetricsSystem
 import spark.util.AkkaUtils
 import ui.MasterWebUI
 
@@ -57,6 +58,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   Utils.checkHost(host, "Expected hostname")
 
+  val metricsSystem = MetricsSystem.createMetricsSystem("master")
+  val masterSource = new MasterSource(this)
+
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
@@ -73,10 +77,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
+
+    metricsSystem.registerSource(masterSource)
+    metricsSystem.start()
   }
 
   override def postStop() {
     webUi.stop()
+    metricsSystem.stop()
   }
 
   override def receive = {
