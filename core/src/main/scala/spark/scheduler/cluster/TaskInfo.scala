@@ -57,9 +57,7 @@ class TaskInfo(
     else if (failed)
       "FAILED"
     else if (successful)
-      "SUCCESSFUL"
-    else if (finished)
-      "FINISHED"
+      "SUCCESS"
     else
       "UNKNOWN"
   }
