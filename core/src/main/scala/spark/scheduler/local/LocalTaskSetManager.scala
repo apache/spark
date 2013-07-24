@@ -114,6 +114,8 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
           val info = new TaskInfo(taskId, index, System.currentTimeMillis(), "local", "local:1",
             TaskLocality.NODE_LOCAL)
           taskInfos(taskId) = info
+          // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
+          // we assume the task can be serialized without exceptions.
           val bytes = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           logInfo("Size of task " + taskId + " is " + bytes.limit + " bytes")
