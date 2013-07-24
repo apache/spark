@@ -51,6 +51,18 @@ class TaskInfo(
 
   def running: Boolean = !finished
 
+  def status: String = {
+    if (running)
+      return "RUNNING"
+    if (failed)
+      return "FAILED"
+    if (successful)
+      return "SUCCESSFUL"
+    if (finished)
+      return "FINISHED"
+    "UNKNOWN"
+  }
+
   def duration: Long = {
     if (!finished) {
       throw new UnsupportedOperationException("duration() called on unfinished tasks")
