@@ -61,7 +61,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val taskTable = listingTable(taskHeaders, taskRow, tasks)
 
     // Excludes tasks which failed and have incomplete metrics
-    val validTasks = tasks.filter(t => t._1.status == "SUCCESSFUL" && (Option(t._2).isDefined))
+    val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (Option(t._2).isDefined))
 
     val summaryTable: Option[Seq[Node]] =
       if (validTasks.size == 0) {
