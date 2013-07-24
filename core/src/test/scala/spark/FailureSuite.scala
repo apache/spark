@@ -96,17 +96,27 @@ class FailureSuite extends FunSuite with LocalSparkContext {
   test("failure because task closure is not serializable") {
     sc = new SparkContext("local[1,1]", "test")
     val a = new NonSerializable
+
+    // Non-serializable closure in the final result stage
     val thrown = intercept[SparkException] {
       sc.parallelize(1 to 10, 2).map(x => a).count()
     }
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.contains("NotSerializableException"))
 
+    // Non-serializable closure in an earlier stage
     val thrown1 = intercept[SparkException] {
       sc.parallelize(1 to 10, 2).map(x => (x, a)).partitionBy(new HashPartitioner(3)).count()
     }
     assert(thrown1.getClass === classOf[SparkException])
     assert(thrown1.getMessage.contains("NotSerializableException"))
+
+    // Non-serializable closure in foreach function
+    val thrown2 = intercept[SparkException] {
+      sc.parallelize(1 to 10, 2).foreach(x => println(a))
+    }
+    assert(thrown2.getClass === classOf[SparkException])
+    assert(thrown2.getMessage.contains("NotSerializableException"))
 
     FailureSuiteState.clear()
   }

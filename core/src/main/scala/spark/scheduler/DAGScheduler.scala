@@ -465,18 +465,6 @@ class DAGScheduler(
   /** Submits stage, but first recursively submits any missing parents. */
   private def submitStage(stage: Stage) {
     logDebug("submitStage(" + stage + ")")
-
-    // Preemptively serialize the stage RDD to make sure the tasks for this stage will be
-    // serializable. We are catching this exception here because it would be fairly hard to
-    // catch the non-serializable exception down the road, where we have several different
-    // implementations for local scheduler and cluster schedulers.
-    try {
-      SparkEnv.get.closureSerializer.newInstance().serialize(stage.rdd)
-    } catch {
-      case e: NotSerializableException => abortStage(stage, e.toString)
-      return
-    }
-
     if (!waiting(stage) && !running(stage) && !failed(stage)) {
       val missing = getMissingParentStages(stage).sortBy(_.id)
       logDebug("missing: " + missing)
@@ -515,6 +503,19 @@ class DAGScheduler(
       }
     }
     if (tasks.size > 0) {
+      // Preemptively serialize a task to make sure it can be serialized. We are catching this
+      // exception here because it would be fairly hard to catch the non-serializable exception
+      // down the road, where we have several different implementations for local scheduler and
+      // cluster schedulers.
+      try {
+        SparkEnv.get.closureSerializer.newInstance().serialize(tasks.head)
+      } catch {
+        case e: NotSerializableException =>
+          abortStage(stage, e.toString)
+          running -= stage
+          return
+      }
+
       sparkListeners.foreach(_.onStageSubmitted(SparkListenerStageSubmitted(stage, tasks.size)))
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
