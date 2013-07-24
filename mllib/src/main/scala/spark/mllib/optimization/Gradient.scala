@@ -31,3 +31,31 @@ class LogisticGradient extends Gradient {
     (gradient, loss)
   }
 }
+
+
+class SquaredGradient extends Gradient {
+  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
+      (DoubleMatrix, Double) = {
+    val diff: Double = data.dot(weights) - label
+
+    val loss = 0.5 * diff * diff
+    val gradient = data.mul(diff)
+
+    (gradient, loss)
+  }
+}
+
+
+class HingeGradient extends Gradient {
+  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
+      (DoubleMatrix, Double) = {
+
+    val dotProduct = data.dot(weights)
+
+    if (1.0 > label * dotProduct)
+      (data.mul(-label),                        1.0 - label * dotProduct)
+    else
+      (DoubleMatrix.zeros(1,weights.length),    0.0)
+  }
+}
+

@@ -1,17 +1,18 @@
-package spark.mllib.regression
+package spark.mllib.classification
 
 import scala.util.Random
+import scala.math.signum
 
 import org.jblas.DoubleMatrix
 
 import spark.{RDD, SparkContext}
 import spark.mllib.util.MLUtils
 
-object LogisticRegressionGenerator {
+object LassoGenerator {
 
   def main(args: Array[String]) {
     if (args.length != 5) {
-      println("Usage: LogisticRegressionGenerator " +
+      println("Usage: LassoGenerator " +
         "<master> <output_dir> <num_examples> <num_features> <num_partitions>")
       System.exit(1)
     }
@@ -23,15 +24,18 @@ object LogisticRegressionGenerator {
     val parts: Int = if (args.length > 4) args(4).toInt else 2
     val eps = 3
 
-    val sc = new SparkContext(sparkMaster, "LogisticRegressionGenerator")
+    val sc = new SparkContext(sparkMaster, "LassoGenerator")
+
+    val globalRnd = new Random(94720)
+    val trueWeights = Array.fill[Double](nfeatures + 1) { globalRnd.nextGaussian() }
 
     val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until nexamples, parts).map { idx =>
       val rnd = new Random(42 + idx)
 
-      val y = if (idx % 2 == 0) 0 else 1
       val x = Array.fill[Double](nfeatures) {
-        rnd.nextGaussian() + (y * eps)
+        rnd.nextDouble() * 2.0 - 1.0
       }
+      val y = signum(((1.0 +: x) zip trueWeights).map{wx => wx._1 * wx._2}.reduceLeft(_+_) + rnd.nextGaussian() * 0.1)
       (y, x)
     }
 

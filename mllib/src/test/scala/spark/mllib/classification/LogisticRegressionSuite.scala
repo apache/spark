@@ -1,4 +1,4 @@
-package spark.mllib.regression
+package spark.mllib.classification
 
 import scala.util.Random
 
