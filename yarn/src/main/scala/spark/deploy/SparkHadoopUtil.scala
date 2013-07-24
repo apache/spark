@@ -32,22 +32,6 @@ object SparkHadoopUtil {
 
   val yarnConf = newConfiguration()
 
-  def getUserNameFromEnvironment(): String = {
-    // defaulting to env if -D is not present ...
-    val retval = System.getProperty(Environment.USER.name, System.getenv(Environment.USER.name))
-
-    // If nothing found, default to user we are running as
-    if (retval == null) System.getProperty("user.name") else retval
-  }
-
-  def runAsUser(func: (Product) => Unit, args: Product) {
-    runAsUser(func, args, getUserNameFromEnvironment())
-  }
-
-  def runAsUser(func: (Product) => Unit, args: Product, user: String) {
-    func(args)
-  }
-
   // Note that all params which start with SPARK are propagated all the way through, so if in yarn mode, this MUST be set to true.
   def isYarnMode(): Boolean = {
     val yarnMode = System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE"))
