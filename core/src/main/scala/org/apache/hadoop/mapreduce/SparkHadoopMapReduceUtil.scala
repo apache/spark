@@ -15,18 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.mapred
+package org.apache.hadoop.mapreduce
 
-trait HadoopMapRedUtil {
-  def newJobContext(conf: JobConf, jobId: JobID): JobContext = {
-    val klass = firstAvailableClass("org.apache.hadoop.mapred.JobContextImpl", "org.apache.hadoop.mapred.JobContext");
-    val ctor = klass.getDeclaredConstructor(classOf[JobConf], classOf[org.apache.hadoop.mapreduce.JobID])
+import org.apache.hadoop.conf.Configuration
+
+trait SparkHadoopMapReduceUtil {
+  def newJobContext(conf: Configuration, jobId: JobID): JobContext = {
+    val klass = firstAvailableClass(
+        "org.apache.hadoop.mapreduce.task.JobContextImpl",  // hadoop2, hadoop2-yarn
+        "org.apache.hadoop.mapreduce.JobContext")           // hadoop1
+    val ctor = klass.getDeclaredConstructor(classOf[Configuration], classOf[JobID])
     ctor.newInstance(conf, jobId).asInstanceOf[JobContext]
   }
 
-  def newTaskAttemptContext(conf: JobConf, attemptId: TaskAttemptID): TaskAttemptContext = {
-    val klass = firstAvailableClass("org.apache.hadoop.mapred.TaskAttemptContextImpl", "org.apache.hadoop.mapred.TaskAttemptContext")
-    val ctor = klass.getDeclaredConstructor(classOf[JobConf], classOf[TaskAttemptID])
+  def newTaskAttemptContext(conf: Configuration, attemptId: TaskAttemptID): TaskAttemptContext = {
+    val klass = firstAvailableClass(
+        "org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl",  // hadoop2, hadoop2-yarn
+        "org.apache.hadoop.mapreduce.TaskAttemptContext")           // hadoop1
+    val ctor = klass.getDeclaredConstructor(classOf[Configuration], classOf[TaskAttemptID])
     ctor.newInstance(conf, attemptId).asInstanceOf[TaskAttemptContext]
   }
 
