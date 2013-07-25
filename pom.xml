@@ -193,9 +193,14 @@
         <version>2.4.1</version>
       </dependency>
       <dependency>
-        <groupId>de.javakaffee</groupId>
-        <artifactId>kryo-serializers</artifactId>
-        <version>0.22</version>
+        <groupId>com.twitter</groupId>
+        <artifactId>chill</artifactId>
+        <version>0.3.0</version>
+      </dependency>
+      <dependency>
+        <groupId>com.twitter</groupId>
+        <artifactId>chill-java</artifactId>
+        <version>0.3.0</version>
       </dependency>
       <dependency>
         <groupId>com.typesafe.akka</groupId>
