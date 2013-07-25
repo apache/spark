@@ -51,6 +51,9 @@ private[spark] class ExecutorRunner(
   var process: Process = null
   var shutdownHook: Thread = null
 
+  private def getAppEnv(key: String): Option[String] =
+    appDesc.command.environment.get(key).orElse(Option(getenv(key)))
+
   def start() {
     workerThread = new Thread("ExecutorRunner for " + fullId) {
       override def run() { fetchAndRunExecutor() }
@@ -95,7 +98,7 @@ private[spark] class ExecutorRunner(
 
   def buildCommandSeq(): Seq[String] = {
     val command = appDesc.command
-    val runner = Option(getenv("JAVA_HOME")).map(_ + "/bin/java").getOrElse("java")
+    val runner = getAppEnv("JAVA_HOME").map(_ + "/bin/java").getOrElse("java")
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
     Seq(runner) ++ buildJavaOpts() ++ Seq(command.mainClass) ++
@@ -107,10 +110,10 @@ private[spark] class ExecutorRunner(
    * the way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(): Seq[String] = {
-    val libraryOpts = Option(getenv("SPARK_LIBRARY_PATH"))
+    val libraryOpts = getAppEnv("SPARK_LIBRARY_PATH")
       .map(p => List("-Djava.library.path=" + p))
       .getOrElse(Nil)
-    val userOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString).getOrElse(Nil)
+    val userOpts = getAppEnv("SPARK_JAVA_OPTS").map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq("-Xms" + memory + "M", "-Xmx" + memory + "M")
 
     // Figure out our classpath with the external compute-classpath script
