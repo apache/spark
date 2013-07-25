@@ -27,7 +27,8 @@ import serializer.{SerializerInstance, DeserializationStream, SerializationStrea
 import spark.broadcast._
 import spark.storage._
 
-private[spark] class KryoSerializationStream(kryo: Kryo, outStream: OutputStream) extends SerializationStream {
+private[spark]
+class KryoSerializationStream(kryo: Kryo, outStream: OutputStream) extends SerializationStream {
   val output = new KryoOutput(outStream)
 
   def writeObject[T](t: T): SerializationStream = {
@@ -39,7 +40,8 @@ private[spark] class KryoSerializationStream(kryo: Kryo, outStream: OutputStream
   def close() { output.close() }
 }
 
-private[spark] class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends DeserializationStream {
+private[spark]
+class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends DeserializationStream {
   val input = new KryoInput(inStream)
 
   def readObject[T](): T = {
