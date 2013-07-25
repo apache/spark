@@ -58,7 +58,7 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>chill</artifactId>
+      <artifactId>chill_2.9.3</artifactId>
       <version>0.3.0</version>
     </dependency>
     <dependency>
