@@ -28,6 +28,7 @@ import spark.scheduler.Stage
 import spark.ui.UIUtils._
 import spark.ui.Page._
 import spark.storage.StorageLevel
+import spark.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
 private[spark] class IndexPage(parent: JobProgressUI) {
@@ -38,6 +39,13 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val activeStages = listener.activeStages.toSeq
     val completedStages = listener.completedStages.reverse.toSeq
     val failedStages = listener.failedStages.reverse.toSeq
+
+    var activeTime = 0L
+    listener.stageToTasksActive.foreach {s =>
+      s._2.foreach { t =>
+        activeTime += t.timeRunning(System.currentTimeMillis())
+      }
+    }
 
     /** Special table which merges two header cells. */
     def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
@@ -57,11 +65,29 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       </table>
     }
 
+    val summary: NodeSeq =
+     <div>
+       <ul class="unstyled">
+          <li>
+            <strong>CPU time: </strong>
+            {parent.formatDuration(listener.totalTime + activeTime)}
+          </li>
+          <li>
+            <strong>Shuffle read: </strong>
+            {Utils.memoryBytesToString(listener.totalShuffleRead)}
+          </li>
+          <li>
+            <strong>Shuffle write: </strong>
+            {Utils.memoryBytesToString(listener.totalShuffleWrite)}
+          </li>
+       </ul>
+     </div>
     val activeStageTable: NodeSeq = stageTable(stageRow, activeStages)
     val completedStageTable = stageTable(stageRow, completedStages)
     val failedStageTable: NodeSeq = stageTable(stageRow, failedStages)
 
-    val content = <h2>Active Stages</h2> ++ activeStageTable ++
+    val content = summary ++
+                  <h2>Active Stages</h2> ++ activeStageTable ++
                   <h2>Completed Stages</h2>  ++ completedStageTable ++
                   <h2>Failed Stages</h2>  ++ failedStageTable
 
