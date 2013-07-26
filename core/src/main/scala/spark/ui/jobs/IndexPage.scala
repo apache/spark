@@ -56,7 +56,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
           <th>Submitted</th>
           <th>Duration</th>
           <th colspan="2">Tasks: Complete/Total</th>
-          <th>Shuffle Activity</th>
+          <th>Shuffle Read</th>
+          <th>Shuffle Write</th>
           <th>Stored RDD</th>
         </thead>
         <tbody>
@@ -120,13 +121,18 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       case Some(t) => dateFmt.format(new Date(t))
       case None => "Unknown"
     }
-    val (read, write) = (listener.hasShuffleRead(s.id), listener.hasShuffleWrite(s.id))
-    val shuffleInfo = (read, write) match {
-      case (true, true) => "Read/Write"
-      case (true, false) => "Read"
-      case (false, true) => "Write"
-      case _ => ""
-    }
+
+    val shuffleRead =
+      if (!listener.hasShuffleRead(s.id))
+        ""
+      else
+        Utils.memoryBytesToString(listener.stageToShuffleRead(s.id))
+    val shuffleWrite =
+      if (!listener.hasShuffleWrite(s.id))
+        ""
+      else
+        Utils.memoryBytesToString(listener.stageToShuffleWrite(s.id))
+
     val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
     val totalTasks = s.numPartitions
 
@@ -143,7 +149,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
         case _ =>
       }}
       </td>
-      <td>{shuffleInfo}</td>
+      <td>{shuffleRead}</td>
+      <td>{shuffleWrite}</td>
       <td>{if (s.rdd.getStorageLevel != StorageLevel.NONE) {
              <a href={"/storage/rdd?id=%s".format(s.rdd.id)}>
                {Option(s.rdd.name).getOrElse(s.rdd.id)}
