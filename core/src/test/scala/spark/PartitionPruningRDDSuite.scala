@@ -21,8 +21,8 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
       def compute(split: Partition, context: TaskContext) = {Iterator()}
     }
     val prunedRDD = PartitionPruningRDD.create(rdd, {x => if (x==2) true else false})
-    println(prunedRDD.partitions.length)
     val p = prunedRDD.partitions(0)
     assert(p.index == 2)
+    assert(prunedRDD.partitions.length == 1)
   }
 }
