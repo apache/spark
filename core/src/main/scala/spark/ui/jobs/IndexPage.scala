@@ -39,12 +39,11 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val activeStages = listener.activeStages.toSeq
     val completedStages = listener.completedStages.reverse.toSeq
     val failedStages = listener.failedStages.reverse.toSeq
+    val now = System.currentTimeMillis()
 
     var activeTime = 0L
-    listener.stageToTasksActive.foreach {s =>
-      s._2.foreach { t =>
-        activeTime += t.timeRunning(System.currentTimeMillis())
-      }
+    for (tasks <- listener.stageToTasksActive.values; t <- tasks) {
+      activeTime += t.timeRunning(now)
     }
 
     /** Special table which merges two header cells. */
@@ -73,14 +72,18 @@ private[spark] class IndexPage(parent: JobProgressUI) {
             <strong>CPU time: </strong>
             {parent.formatDuration(listener.totalTime + activeTime)}
           </li>
-          <li>
-            <strong>Shuffle read: </strong>
-            {Utils.memoryBytesToString(listener.totalShuffleRead)}
-          </li>
-          <li>
-            <strong>Shuffle write: </strong>
-            {Utils.memoryBytesToString(listener.totalShuffleWrite)}
-          </li>
+         {if (listener.totalShuffleRead > 0)
+           <li>
+              <strong>Shuffle read: </strong>
+              {Utils.memoryBytesToString(listener.totalShuffleRead)}
+            </li>
+         }
+         {if (listener.totalShuffleWrite > 0)
+           <li>
+              <strong>Shuffle write: </strong>
+              {Utils.memoryBytesToString(listener.totalShuffleWrite)}
+            </li>
+         }
        </ul>
      </div>
     val activeStageTable: NodeSeq = stageTable(stageRow, activeStages)

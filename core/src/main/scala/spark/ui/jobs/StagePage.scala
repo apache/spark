@@ -64,14 +64,18 @@ private[spark] class StagePage(parent: JobProgressUI) {
             <strong>CPU time: </strong>
             {parent.formatDuration(listener.stageToTime(stageId) + activeTime)}
           </li>
-          <li>
-            <strong>Shuffle read: </strong>
-            {Utils.memoryBytesToString(listener.stageToShuffleRead(stageId))}
-          </li>
-          <li>
-            <strong>Shuffle write: </strong>
-            {Utils.memoryBytesToString(listener.stageToShuffleWrite(stageId))}
-          </li>
+          {if (listener.hasShuffleRead(stageId))
+            <li>
+              <strong>Shuffle read: </strong>
+              {Utils.memoryBytesToString(listener.stageToShuffleRead(stageId))}
+            </li>
+          }
+          {if (listener.hasShuffleWrite(stageId))
+            <li>
+              <strong>Shuffle write: </strong>
+              {Utils.memoryBytesToString(listener.stageToShuffleWrite(stageId))}
+            </li>
+          }
         </ul>
       </div>
 
