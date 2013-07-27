@@ -26,7 +26,7 @@ import com.esotericsoftware.kryo._
 import SparkContext._
 import spark.test.{ClassWithoutNoArgConstructor, MyRegistrator}
 
-class KryoSerializerSuite extends FunSuite {
+class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   test("basic types") {
     val ser = (new KryoSerializer).newInstance()
     def check[T](t: T) {
@@ -128,23 +128,23 @@ class KryoSerializerSuite extends FunSuite {
     System.clearProperty("spark.kryo.registrator")
   }
 
-  test("kryo-collect") {
+  test("kryo with collect") {
+    val control = 1 :: 2 :: Nil
+    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
+    assert(control == result.toSeq)
+  }
+
+  override def beforeAll() {
     System.setProperty("spark.serializer", "spark.KryoSerializer")
     System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
+    super.beforeAll()
+  }
 
-    val sc = new SparkContext("local", "kryoTest")
-    try {
-      val control = 1 :: 2 :: Nil
-      val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
-      assert(control == result.toSeq)
-    } finally {
-      sc.stop()
-    }
-
+  override def afterAll() {
+    super.afterAll()
     System.clearProperty("spark.kryo.registrator")
     System.clearProperty("spark.serializer")
   }
-
 }
 
 package test {
