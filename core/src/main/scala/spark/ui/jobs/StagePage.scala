@@ -34,10 +34,10 @@ import spark.executor.TaskMetrics
 private[spark] class StagePage(parent: JobProgressUI) {
   def listener = parent.listener
   val dateFmt = parent.dateFmt
-  val now = System.currentTimeMillis()
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val stageId = request.getParameter("id").toInt
+    val now = System.currentTimeMillis()
 
     if (!listener.stageToTaskInfos.contains(stageId)) {
       val content =
