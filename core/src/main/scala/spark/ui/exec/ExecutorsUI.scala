@@ -121,10 +121,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
 
     override def onTaskStart(taskStart: SparkListenerTaskStart) {
       val eid = taskStart.taskInfo.executorId
-      if (!executorToTasksActive.contains(eid)) {
-        executorToTasksActive(eid) = HashSet[TaskInfo]()
-      }
-      executorToTasksActive(eid) += taskStart.taskInfo
+      val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
+      activeTasks += taskStart.taskInfo
       val taskList = executorToTaskInfos.getOrElse(
         eid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
       taskList += ((taskStart.taskInfo, None, None))
@@ -133,10 +131,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
       val eid = taskEnd.taskInfo.executorId
-      if (!executorToTasksActive.contains(eid)) {
-        executorToTasksActive(eid) = HashSet[TaskInfo]()
-      }
-      executorToTasksActive(eid) -= taskEnd.taskInfo
+      val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
+      activeTasks -= taskStart.taskInfo
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
           case e: ExceptionFailure =>

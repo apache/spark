@@ -125,16 +125,14 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       case None => "Unknown"
     }
 
-    val shuffleRead =
-      if (!listener.hasShuffleRead(s.id))
-        ""
-      else
-        Utils.memoryBytesToString(listener.stageToShuffleRead(s.id))
-    val shuffleWrite =
-      if (!listener.hasShuffleWrite(s.id))
-        ""
-      else
-        Utils.memoryBytesToString(listener.stageToShuffleWrite(s.id))
+    val shuffleRead = listener.stageToShuffleRead(s.id) match {
+      case 0 => ""
+      case b => Utils.memoryBytesToString(b)
+    }
+    val shuffleWrite = listener.stageToShuffleWrite(s.id) match {
+      case 0 => ""
+      case b => Utils.memoryBytesToString(b)
+    }
 
     val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
     val totalTasks = s.numPartitions
