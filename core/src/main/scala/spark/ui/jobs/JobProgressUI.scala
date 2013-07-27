@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.ui.jobs
 
 import akka.util.Duration
@@ -48,6 +65,7 @@ private[spark] class JobProgressListener extends SparkListener {
   val completedStages = ListBuffer[Stage]()
   val failedStages = ListBuffer[Stage]()
 
+  val stageToTasksActive = HashMap[Int, HashSet[Long]]()
   val stageToTasksComplete = HashMap[Int, Int]()
   val stageToTasksFailed = HashMap[Int, Int]()
   val stageToTaskInfos =
@@ -76,8 +94,22 @@ private[spark] class JobProgressListener extends SparkListener {
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) =
     activeStages += stageSubmitted.stage
 
+  override def onTaskStart(taskStart: SparkListenerTaskStart) {
+    val sid = taskStart.task.stageId
+    if (!stageToTasksActive.contains(sid))
+      stageToTasksActive(sid) = HashSet[Long]()
+    stageToTasksActive(sid) += taskStart.taskInfo.taskId
+    val taskList = stageToTaskInfos.getOrElse(
+      sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
+    taskList += ((taskStart.taskInfo, None, None))
+    stageToTaskInfos(sid) = taskList
+  }
+
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val sid = taskEnd.task.stageId
+    if (!stageToTasksActive.contains(sid))
+      stageToTasksActive(sid) = HashSet[Long]()
+    stageToTasksActive(sid) -= taskEnd.taskInfo.taskId
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
       taskEnd.reason match {
         case e: ExceptionFailure =>
@@ -89,6 +121,7 @@ private[spark] class JobProgressListener extends SparkListener {
       }
     val taskList = stageToTaskInfos.getOrElse(
       sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
+    taskList -= ((taskEnd.taskInfo, None, None))
     taskList += ((taskEnd.taskInfo, metrics, failureInfo))
     stageToTaskInfos(sid) = taskList
   }

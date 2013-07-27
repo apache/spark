@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.ui.jobs
 
 import java.util.Date
@@ -24,8 +41,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
     if (!listener.stageToTaskInfos.contains(stageId)) {
       val content =
         <div>
-          <h2>Summary Metrics</h2> No tasks have finished yet
-          <h2>Tasks</h2> No tasks have finished yet
+          <h2>Summary Metrics</h2> No tasks have started yet
+          <h2>Tasks</h2> No tasks have started yet
         </div>
       return headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
     }
@@ -36,7 +53,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val shuffleWrite = listener.hasShuffleWrite(stageId)
 
     val taskHeaders: Seq[String] =
-      Seq("Task ID", "Duration", "Locality Level", "Worker", "Launch Time") ++
+      Seq("Task ID", "Status", "Duration", "Locality Level", "Worker", "Launch Time") ++
         {if (shuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (shuffleWrite) Seq("Shuffle Write") else Nil} ++
       Seq("Details")
@@ -44,7 +61,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val taskTable = listingTable(taskHeaders, taskRow, tasks)
 
     // Excludes tasks which failed and have incomplete metrics
-    val validTasks = tasks.filter(t => Option(t._2).isDefined)
+    val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (Option(t._2).isDefined))
 
     val summaryTable: Option[Seq[Node]] =
       if (validTasks.size == 0) {
@@ -91,10 +108,17 @@ private[spark] class StagePage(parent: JobProgressUI) {
     def fmtStackTrace(trace: Seq[StackTraceElement]): Seq[Node] =
       trace.map(e => <span style="display:block;">{e.toString}</span>)
     val (info, metrics, exception) = taskData
+
+    val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
+      else metrics.map(m => m.executorRunTime).getOrElse(1)
+    val formatDuration = if (info.status == "RUNNING") parent.formatDuration(duration)
+      else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
+
     <tr>
       <td>{info.taskId}</td>
-      <td sorttable_customkey={metrics.map{m => m.executorRunTime.toString}.getOrElse("1")}>
-        {metrics.map{m => parent.formatDuration(m.executorRunTime)}.getOrElse("")}
+      <td>{info.status}</td>
+      <td sorttable_customkey={duration.toString}>
+        {formatDuration}
       </td>
       <td>{info.taskLocality}</td>
       <td>{info.hostPort}</td>

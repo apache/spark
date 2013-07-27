@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.spark-project</groupId>
@@ -41,9 +58,9 @@
     <module>core</module>
     <module>bagel</module>
     <module>examples</module>
+    <module>tools</module>
     <module>streaming</module>
     <module>repl</module>
-    <module>repl-bin</module>
   </modules>
 
   <properties>
@@ -176,9 +193,14 @@
         <version>2.4.1</version>
       </dependency>
       <dependency>
-        <groupId>de.javakaffee</groupId>
-        <artifactId>kryo-serializers</artifactId>
-        <version>0.22</version>
+        <groupId>com.twitter</groupId>
+        <artifactId>chill_2.9.3</artifactId>
+        <version>0.3.0</version>
+      </dependency>
+      <dependency>
+        <groupId>com.twitter</groupId>
+        <artifactId>chill-java</artifactId>
+        <version>0.3.0</version>
       </dependency>
       <dependency>
         <groupId>com.typesafe.akka</groupId>
@@ -230,6 +252,16 @@
         <groupId>net.liftweb</groupId>
         <artifactId>lift-json_2.9.2</artifactId>
         <version>2.5</version>
+      </dependency>
+      <dependency>
+        <groupId>com.codahale.metrics</groupId>
+        <artifactId>metrics-core</artifactId>
+        <version>3.0.0</version>
+      </dependency>
+      <dependency>
+        <groupId>com.codahale.metrics</groupId>
+        <artifactId>metrics-jvm</artifactId>
+        <version>3.0.0</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -319,7 +351,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.1.5</version>
           <executions>
             <execution>
               <id>scala-compile-first</id>
@@ -346,12 +378,14 @@
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
             <recompileMode>incremental</recompileMode>
+            <useZincServer>true</useZincServer>
             <args>
               <arg>-unchecked</arg>
               <arg>-optimise</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms64m</jvmArg>
+              <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
               <jvmArg>-XX:MaxPermSize=${MaxPermGen}</jvmArg>
@@ -598,6 +632,26 @@
           </dependency>
         </dependencies>
       </dependencyManagement>
+    </profile>
+    <profile>
+      <id>assembly</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <modules>
+        <module>assembly</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>expensive-modules</id>
+      <activation>
+        <property>
+          <name>!noExpensive</name>
+        </property>
+      </activation>
+      <modules>
+        <module>repl-bin</module>
+      </modules>
     </profile>
   </profiles>
 </project>

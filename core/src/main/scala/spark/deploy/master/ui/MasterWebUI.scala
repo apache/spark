@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.master.ui
 
 import akka.actor.ActorRef
@@ -15,12 +32,11 @@ import spark.ui.JettyUtils._
  * Web UI server for the standalone master.
  */
 private[spark]
-class MasterWebUI(val master: ActorRef, requestedPort: Option[Int] = None) extends Logging {
+class MasterWebUI(val master: ActorRef, requestedPort: Int) extends Logging {
   implicit val timeout = Duration.create(
     System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
   val host = Utils.localHostName()
-  val port = requestedPort.getOrElse(
-    System.getProperty("master.ui.port", MasterWebUI.DEFAULT_PORT).toInt)
+  val port = requestedPort
 
   var server: Option[Server] = None
   var boundPort: Option[Int] = None
@@ -55,5 +71,4 @@ class MasterWebUI(val master: ActorRef, requestedPort: Option[Int] = None) exten
 
 private[spark] object MasterWebUI {
   val STATIC_RESOURCE_DIR = "spark/ui/static"
-  val DEFAULT_PORT = "8080"
 }

@@ -1,18 +1,33 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler
 
-import cluster.TaskInfo
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
+import java.io.NotSerializableException
 import java.util.Properties
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 
 import spark._
 import spark.executor.TaskMetrics
-import spark.partial.ApproximateActionListener
-import spark.partial.ApproximateEvaluator
-import spark.partial.PartialResult
+import spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
+import spark.scheduler.cluster.TaskInfo
 import spark.storage.{BlockManager, BlockManagerMaster}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
 
@@ -34,6 +49,11 @@ class DAGScheduler(
     this(taskSched, SparkEnv.get.mapOutputTracker, SparkEnv.get.blockManager.master, SparkEnv.get)
   }
   taskSched.setListener(this)
+
+  // Called by TaskScheduler to report task's starting.
+  override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
+    eventQueue.put(BeginEvent(task, taskInfo))
+  }
 
   // Called by TaskScheduler to report task completions or failures.
   override def taskEnded(
@@ -150,7 +170,13 @@ class DAGScheduler(
    * as a result stage for the final RDD used directly in an action. The stage will also be given
    * the provided priority.
    */
-  private def newStage(rdd: RDD[_], shuffleDep: Option[ShuffleDependency[_,_]], priority: Int): Stage = {
+  private def newStage(
+      rdd: RDD[_],
+      shuffleDep: Option[ShuffleDependency[_,_]],
+      priority: Int,
+      callSite: Option[String] = None)
+    : Stage =
+  {
     if (shuffleDep != None) {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
@@ -158,7 +184,7 @@ class DAGScheduler(
       mapOutputTracker.registerShuffle(shuffleDep.get.shuffleId, rdd.partitions.size)
     }
     val id = nextStageId.getAndIncrement()
-    val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd, priority), priority)
+    val stage = new Stage(id, rdd, shuffleDep, getParentStages(rdd, priority), priority, callSite)
     idToStage(id) = stage
     stageToInfos(stage) = StageInfo(stage)
     stage
@@ -235,7 +261,8 @@ class DAGScheduler(
     assert(partitions.size > 0)
     val waiter = new JobWaiter(partitions.size, resultHandler)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val toSubmit = JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties)
+    val toSubmit = JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter,
+      properties)
     return (toSubmit, waiter)
   }
 
@@ -251,7 +278,16 @@ class DAGScheduler(
     if (partitions.size == 0) {
       return
     }
-    val (toSubmit, waiter) = prepareJob(
+
+    // Check to make sure we are not launching a task on a partition that does not exist.
+    val maxPartitions = finalRdd.partitions.length
+    partitions.find(p => p >= maxPartitions).foreach { p =>
+      throw new IllegalArgumentException(
+        "Attempting to access a non-existent partition: " + p + ". " +
+        "Total number of partitions: " + maxPartitions)
+    }
+
+    val (toSubmit: JobSubmitted, waiter: JobWaiter[_]) = prepareJob(
         finalRdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     eventQueue.put(toSubmit)
     waiter.awaitResult() match {
@@ -286,12 +322,12 @@ class DAGScheduler(
     event match {
       case JobSubmitted(finalRDD, func, partitions, allowLocal, callSite, listener, properties) =>
         val runId = nextRunId.getAndIncrement()
-        val finalStage = newStage(finalRDD, None, runId)
+        val finalStage = newStage(finalRDD, None, runId, Some(callSite))
         val job = new ActiveJob(runId, finalStage, func, partitions, callSite, listener, properties)
         clearCacheLocs()
         logInfo("Got job " + job.runId + " (" + callSite + ") with " + partitions.length +
                 " output partitions (allowLocal=" + allowLocal + ")")
-        logInfo("Final stage: " + finalStage + " (" + finalStage.origin + ")")
+        logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
         logInfo("Parents of final stage: " + finalStage.parents)
         logInfo("Missing parents: " + getMissingParentStages(finalStage))
         if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
@@ -310,6 +346,9 @@ class DAGScheduler(
 
       case ExecutorLost(execId) =>
         handleExecutorLost(execId)
+
+      case begin: BeginEvent =>
+        sparkListeners.foreach(_.onTaskStart(SparkListenerTaskStart(begin.task, begin.taskInfo)))
 
       case completion: CompletionEvent =>
         sparkListeners.foreach(_.onTaskEnd(SparkListenerTaskEnd(completion.task,
@@ -472,6 +511,19 @@ class DAGScheduler(
       }
     }
     if (tasks.size > 0) {
+      // Preemptively serialize a task to make sure it can be serialized. We are catching this
+      // exception here because it would be fairly hard to catch the non-serializable exception
+      // down the road, where we have several different implementations for local scheduler and
+      // cluster schedulers.
+      try {
+        SparkEnv.get.closureSerializer.newInstance().serialize(tasks.head)
+      } catch {
+        case e: NotSerializableException =>
+          abortStage(stage, e.toString)
+          running -= stage
+          return
+      }
+
       sparkListeners.foreach(_.onStageSubmitted(SparkListenerStageSubmitted(stage, tasks.size)))
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       myPending ++= tasks
@@ -502,7 +554,7 @@ class DAGScheduler(
         case Some(t) => "%.03f".format((System.currentTimeMillis() - t) / 1000.0)
         case _ => "Unkown"
       }
-      logInfo("%s (%s) finished in %s s".format(stage, stage.origin, serviceTime))
+      logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stage.completionTime = Some(System.currentTimeMillis)
       val stageComp = StageCompleted(stageToInfos(stage))
       sparkListeners.foreach{_.onStageCompleted(stageComp)}
@@ -568,7 +620,7 @@ class DAGScheduler(
               if (stage.outputLocs.count(_ == Nil) != 0) {
                 // Some tasks had failed; let's resubmit this stage
                 // TODO: Lower-level scheduler should also deal with this
-                logInfo("Resubmitting " + stage + " (" + stage.origin +
+                logInfo("Resubmitting " + stage + " (" + stage.name +
                   ") because some of its tasks had failed: " +
                   stage.outputLocs.zipWithIndex.filter(_._1 == Nil).map(_._2).mkString(", "))
                 submitStage(stage)
@@ -600,7 +652,7 @@ class DAGScheduler(
         running -= failedStage
         failed += failedStage
         // TODO: Cancel running tasks in the stage
-        logInfo("Marking " + failedStage + " (" + failedStage.origin +
+        logInfo("Marking " + failedStage + " (" + failedStage.name +
           ") for resubmision due to a fetch failure")
         // Mark the map whose fetch failed as broken in the map stage
         val mapStage = shuffleToMapStage(shuffleId)
@@ -608,7 +660,7 @@ class DAGScheduler(
           mapStage.removeOutputLoc(mapId, bmAddress)
           mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
         }
-        logInfo("The failed fetch was from " + mapStage + " (" + mapStage.origin +
+        logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
           "); marking it for resubmission")
         failed += mapStage
         // Remember that a fetch failed now; this is used to resubmit the broken

@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.master
 
 import akka.actor._
@@ -12,6 +29,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import spark.deploy._
 import spark.{Logging, SparkException, Utils}
+import spark.metrics.MetricsSystem
 import spark.util.AkkaUtils
 import ui.MasterWebUI
 
@@ -36,9 +54,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   var firstApp: Option[ApplicationInfo] = None
 
-  val webUi = new MasterWebUI(self)
+  val webUi = new MasterWebUI(self, webUiPort)
 
   Utils.checkHost(host, "Expected hostname")
+
+  val metricsSystem = MetricsSystem.createMetricsSystem("master")
+  val masterSource = new MasterSource(this)
 
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
@@ -56,10 +77,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
+
+    metricsSystem.registerSource(masterSource)
+    metricsSystem.start()
   }
 
   override def postStop() {
     webUi.stop()
+    metricsSystem.stop()
   }
 
   override def receive = {

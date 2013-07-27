@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.executor
 
 import java.io.{File, FileOutputStream}
@@ -52,7 +69,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
       override def uncaughtException(thread: Thread, exception: Throwable) {
         try {
           logError("Uncaught exception in thread " + thread, exception)
-          
+
           // We may have been called from a shutdown hook. If so, we must not call System.exit().
           // (If we do, we will deadlock.)
           if (!Utils.inShutdown()) {
@@ -70,9 +87,13 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
     }
   )
 
+  val executorSource = new ExecutorSource(this)
+
   // Initialize Spark environment (using system properties read above)
   val env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
   SparkEnv.set(env)
+  env.metricsSystem.registerSource(executorSource)
+
   private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
 
   // Start worker thread pool

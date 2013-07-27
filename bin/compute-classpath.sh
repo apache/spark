@@ -1,4 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 # This script computes Spark's classpath and prints it to stdout; it's used by both the "run"
 # script and the ExecutorRunner in standalone cluster mode.
@@ -19,6 +36,7 @@ REPL_BIN_DIR="$FWDIR/repl-bin"
 EXAMPLES_DIR="$FWDIR/examples"
 BAGEL_DIR="$FWDIR/bagel"
 MLLIB_DIR="$FWDIR/mllib"
+TOOLS_DIR="$FWDIR/tools"
 STREAMING_DIR="$FWDIR/streaming"
 PYSPARK_DIR="$FWDIR/python"
 
@@ -53,20 +71,10 @@ function dev_classpath {
   fi
   CLASSPATH="$CLASSPATH:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$MLLIB_DIR/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$TOOLS_DIR/target/scala-$SCALA_VERSION/classes"
   for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
     CLASSPATH="$CLASSPATH:$jar"
   done
-
-  # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
-  # to avoid the -sources and -doc packages that are built by publish-local.
-  if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
-    # Use the JAR from the SBT build
-    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
-  fi
-  if [ -e "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar ]; then
-    # Use the JAR from the Maven build
-    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
-  fi
 
   # Add Scala standard library
   if [ -z "$SCALA_LIBRARY_PATH" ]; then
