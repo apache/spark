@@ -2,7 +2,7 @@ package spark.mllib.classification
 
 import spark.RDD
 
-trait ClassificationModel {
+trait ClassificationModel extends Serializable {
   /**
    * Predict values for the given data set using the model trained.
    *
