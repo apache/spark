@@ -36,7 +36,7 @@ class LogisticRegression private (var stepSize: Double, var regParam: Double, va
   /**
    * Construct a LogisticRegression object with default parameters
    */
-  def this() = this(1.0, 1.0, 1.0, 100)
+  def this() = this(1.0, 0.0, 1.0, 100)
 
   /**
    * Set the step size per-iteration of SGD. Default 1.0.
@@ -145,7 +145,7 @@ object LogisticRegression {
       numIterations: Int)
     : LogisticRegressionModel =
   {
-    train(input, numIterations, 1.0, 1.0, 1.0)
+    train(input, numIterations, 1.0, 0.0, 1.0)
   }
 
   def main(args: Array[String]) {

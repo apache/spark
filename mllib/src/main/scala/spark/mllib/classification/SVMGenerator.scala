@@ -8,11 +8,11 @@ import org.jblas.DoubleMatrix
 import spark.{RDD, SparkContext}
 import spark.mllib.util.MLUtils
 
-object LassoGenerator {
+object SVMGenerator {
 
   def main(args: Array[String]) {
     if (args.length != 5) {
-      println("Usage: LassoGenerator " +
+      println("Usage: SVMGenerator " +
         "<master> <output_dir> <num_examples> <num_features> <num_partitions>")
       System.exit(1)
     }
@@ -24,7 +24,7 @@ object LassoGenerator {
     val parts: Int = if (args.length > 4) args(4).toInt else 2
     val eps = 3
 
-    val sc = new SparkContext(sparkMaster, "LassoGenerator")
+    val sc = new SparkContext(sparkMaster, "SVMGenerator")
 
     val globalRnd = new Random(94720)
     val trueWeights = Array.fill[Double](nfeatures + 1) { globalRnd.nextGaussian() }

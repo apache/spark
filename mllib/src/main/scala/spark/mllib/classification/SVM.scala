@@ -16,10 +16,8 @@ class SVMModel(
   val losses: Array[Double]) extends ClassificationModel {
 
   override def predict(testData: spark.RDD[Array[Double]]) = {
-    testData.map { x => {
-      println("Predicting " + x)
+    testData.map { x => 
       signum(new DoubleMatrix(1, x.length, x:_*).dot(this.weights) + this.intercept)
-    }
     }
   }
 

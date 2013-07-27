@@ -28,6 +28,9 @@ class SimpleUpdater extends Updater {
   }
 }
 
+/**
+L1 regularization -- corresponding proximal operator is the soft-thresholding function
+**/
 class L1Updater extends Updater {
   override def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix,
       stepSize: Double, iter: Int, regParam: Double): (DoubleMatrix, Double) = {
