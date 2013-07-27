@@ -135,7 +135,7 @@ private[spark] class Client(
         Await.result(future, timeout)
       } catch {
         case e: TimeoutException =>
-          logInfo("Close request to Master timed out; it may already be shut down.")
+          logInfo("Stop request to Master timed out; it may already be shut down.")
       }
       actor = null
     }
