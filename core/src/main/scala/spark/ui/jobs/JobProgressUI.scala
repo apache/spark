@@ -132,39 +132,29 @@ private[spark] class JobProgressListener extends SparkListener {
           (Some(e), e.metrics)
         case _ =>
           stageToTasksComplete(sid) = stageToTasksComplete.getOrElse(sid, 0) + 1
-          (None, Some(taskEnd.taskMetrics))
+          (None, Option(taskEnd.taskMetrics))
       }
 
     if (!stageToTime.contains(sid)) {
       stageToTime(sid) = 0L
     }
-    val time = if (metrics.isDefined) metrics.map(m => m.executorRunTime).getOrElse(0) else 0
+    val time = metrics.map(m => m.executorRunTime).getOrElse(0)
     stageToTime(sid) += time
     totalTime += time
 
     if (!stageToShuffleRead.contains(sid)) {
       stageToShuffleRead(sid) = 0L
     }
-    val shuffleRead =
-      if (metrics.isDefined) {
-        metrics.flatMap(m => m.shuffleReadMetrics).map(s => s.remoteBytesRead).getOrElse(0L)
-      }
-      else {
-        0L
-      }
+    val shuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s =>
+      s.remoteBytesRead).getOrElse(0L)
     stageToShuffleRead(sid) += shuffleRead
     totalShuffleRead += shuffleRead
 
     if (!stageToShuffleWrite.contains(sid)) {
       stageToShuffleWrite(sid) = 0L
     }
-    val shuffleWrite =
-      if (metrics.isDefined) {
-        metrics.flatMap(m => m.shuffleWriteMetrics).map(s => s.shuffleBytesWritten).getOrElse(0L)
-      }
-      else {
-        0L
-      }
+    val shuffleWrite = metrics.flatMap(m => m.shuffleWriteMetrics).map(s =>
+      s.shuffleBytesWritten).getOrElse(0L)
     stageToShuffleWrite(sid) += shuffleWrite
     totalShuffleWrite += shuffleWrite
 

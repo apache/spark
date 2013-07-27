@@ -144,7 +144,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
             (Some(e), e.metrics)
           case _ =>
             executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
-            (None, Some(taskEnd.taskMetrics))
+            (None, Option(taskEnd.taskMetrics))
         }
       val taskList = executorToTaskInfos.getOrElse(
         eid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
