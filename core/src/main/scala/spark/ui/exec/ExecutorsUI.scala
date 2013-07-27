@@ -132,7 +132,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
       val eid = taskEnd.taskInfo.executorId
       val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
-      activeTasks -= taskStart.taskInfo
+      activeTasks -= taskEnd.taskInfo
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
           case e: ExceptionFailure =>

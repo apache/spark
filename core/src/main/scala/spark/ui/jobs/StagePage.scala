@@ -50,8 +50,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
 
     val tasks = listener.stageToTaskInfos(stageId)
 
-    val shuffleRead = listener.hasShuffleRead(stageId)
-    val shuffleWrite = listener.hasShuffleWrite(stageId)
+    val shuffleRead = listener.stageToShuffleRead(stageId) > 0
+    val shuffleWrite = listener.stageToShuffleWrite(stageId) > 0
 
     var activeTime = 0L
     listener.stageToTasksActive(stageId).foreach { t =>
@@ -65,13 +65,13 @@ private[spark] class StagePage(parent: JobProgressUI) {
             <strong>CPU time: </strong>
             {parent.formatDuration(listener.stageToTime(stageId) + activeTime)}
           </li>
-          {if (listener.hasShuffleRead(stageId))
+          {if (shuffleRead)
             <li>
               <strong>Shuffle read: </strong>
               {Utils.memoryBytesToString(listener.stageToShuffleRead(stageId))}
             </li>
           }
-          {if (listener.hasShuffleWrite(stageId))
+          {if (shuffleWrite)
             <li>
               <strong>Shuffle write: </strong>
               {Utils.memoryBytesToString(listener.stageToShuffleWrite(stageId))}
