@@ -17,7 +17,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-  test("Lasso") {
+  test("Lasso_LocalRandomSGD") {
     val nPoints = 10000
     val rnd = new Random(42)
 
@@ -36,7 +36,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val ls = new Lasso().setStepSize(1.0)
+    val ls = new Lasso_LocalRandomSGD().setStepSize(1.0)
                         .setRegParam(0.01)
                                      .setNumIterations(20)
 

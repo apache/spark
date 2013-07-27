@@ -27,7 +27,7 @@ class SVMModel(
   }
 }
 
-class SVM private (var stepSize: Double, var regParam: Double, var miniBatchFraction: Double,
+class SVM_LocalRandomSGD private (var stepSize: Double, var regParam: Double, var miniBatchFraction: Double,
     var numIters: Int)
   extends Logging {
 
@@ -92,7 +92,7 @@ class SVM private (var stepSize: Double, var regParam: Double, var miniBatchFrac
 /**
  * Top-level methods for calling SVM.
  */
-object SVM {
+object SVM_LocalRandomSGD {
 
   /**
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
@@ -113,7 +113,7 @@ object SVM {
       miniBatchFraction: Double)
     : SVMModel =
   {
-    new SVM(stepSize, regParam, miniBatchFraction, numIterations).train(input)
+    new SVM_LocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input)
   }
 
   /**
@@ -161,7 +161,7 @@ object SVM {
     }
     val sc = new SparkContext(args(0), "SVM")
     val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = SVM.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+    val model = SVM_LocalRandomSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()
   }

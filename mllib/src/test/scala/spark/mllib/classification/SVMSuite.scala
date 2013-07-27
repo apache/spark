@@ -19,7 +19,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-  test("SVM") {
+  test("SVM_LocalRandomSGD") {
     val nPoints = 10000
     val rnd = new Random(42)
 
@@ -46,7 +46,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
       writer_data.write("\n")})
     writer_data.close()
 
-    val svm = new SVM().setStepSize(1.0)
+    val svm = new SVM_LocalRandomSGD().setStepSize(1.0)
                       .setRegParam(1.0)
                       .setNumIterations(100)
 

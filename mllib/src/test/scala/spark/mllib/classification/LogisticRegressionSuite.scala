@@ -18,7 +18,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   // Test if we can correctly learn A, B where Y = logistic(A + B*X)
-  test("logistic regression") {
+  test("LogisticRegression_LocalRandomSGD") {
     val nPoints = 10000
     val rnd = new Random(42)
 
@@ -45,7 +45,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegression().setStepSize(10.0)
+    val lr = new LogisticRegression_LocalRandomSGD().setStepSize(10.0)
                                      .setNumIterations(20)
 
     val model = lr.train(testRDD)
