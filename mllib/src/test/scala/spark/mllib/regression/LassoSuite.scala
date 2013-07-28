@@ -17,7 +17,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-  test("Lasso_LocalRandomSGD") {
+  test("LassoLocalRandomSGD") {
     val nPoints = 10000
     val rnd = new Random(42)
 
@@ -36,14 +36,14 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val ls = new Lasso_LocalRandomSGD().setStepSize(1.0)
+    val ls = new LassoLocalRandomSGD().setStepSize(1.0)
                         .setRegParam(0.01)
                                      .setNumIterations(20)
 
     val model = ls.train(testRDD)
 
-    val weight0 = model.weights.get(0)
-    val weight1 = model.weights.get(1)
+    val weight0 = model.weights(0)
+    val weight1 = model.weights(1)
     assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
     assert(weight1 >= -1.0e-3 && weight1 <= 1.0e-3, weight1 + " not in [-0.001, 0.001]")
     assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")

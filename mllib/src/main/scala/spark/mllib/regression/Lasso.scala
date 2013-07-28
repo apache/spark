@@ -53,7 +53,7 @@ class LassoModel(
 }
 
 
-class Lasso_LocalRandomSGD private (var stepSize: Double, var regParam: Double, var miniBatchFraction: Double,
+class LassoLocalRandomSGD private (var stepSize: Double, var regParam: Double, var miniBatchFraction: Double,
     var numIters: Int)
   extends Logging {
 
@@ -138,7 +138,7 @@ class Lasso_LocalRandomSGD private (var stepSize: Double, var regParam: Double, 
  *
  *
  */
-object Lasso_LocalRandomSGD {
+object LassoLocalRandomSGD {
 
   /**
    * Train a Lasso model given an RDD of (label, features) pairs. We run a fixed number
@@ -163,7 +163,7 @@ object Lasso_LocalRandomSGD {
       initialWeights: Array[Double])
     : LassoModel =
   {
-    new Lasso_LocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input, initialWeights)
+    new LassoLocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input, initialWeights)
   }
 
   /**
@@ -185,7 +185,7 @@ object Lasso_LocalRandomSGD {
       miniBatchFraction: Double)
     : LassoModel =
   {
-    new Lasso_LocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input)
+    new LassoLocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input)
   }
 
   /**
@@ -233,7 +233,7 @@ object Lasso_LocalRandomSGD {
     }
     val sc = new SparkContext(args(0), "Lasso")
     val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = Lasso_LocalRandomSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+    val model = LassoLocalRandomSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()
   }

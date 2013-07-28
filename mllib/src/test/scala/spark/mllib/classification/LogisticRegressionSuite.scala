@@ -1,6 +1,3 @@
-<<<<<<< HEAD:mllib/src/test/scala/spark/mllib/classification/LogisticRegressionSuite.scala
-package spark.mllib.classification
-=======
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,8 +15,7 @@ package spark.mllib.classification
  * limitations under the License.
  */
 
-package spark.mllib.regression
->>>>>>> FETCH_HEAD:mllib/src/test/scala/spark/mllib/regression/LogisticRegressionSuite.scala
+package spark.mllib.classification
 
 import scala.util.Random
 
@@ -37,13 +33,6 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-<<<<<<< HEAD:mllib/src/test/scala/spark/mllib/classification/LogisticRegressionSuite.scala
-  // Test if we can correctly learn A, B where Y = logistic(A + B*X)
-  test("LogisticRegression_LocalRandomSGD") {
-    val nPoints = 10000
-    val rnd = new Random(42)
-
-=======
   // Generate input of the form Y = logistic(offset + scale*X)
   def generateLogisticInput(
       offset: Double,
@@ -51,7 +40,6 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
       nPoints: Int,
       seed: Int): Seq[(Double, Array[Double])]  = {
     val rnd = new Random(seed)
->>>>>>> FETCH_HEAD:mllib/src/test/scala/spark/mllib/regression/LogisticRegressionSuite.scala
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
     // NOTE: if U is uniform[0, 1] then ln(u) - ln(1-u) is Logistic(0,1)
@@ -91,12 +79,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-<<<<<<< HEAD:mllib/src/test/scala/spark/mllib/classification/LogisticRegressionSuite.scala
-    val lr = new LogisticRegression_LocalRandomSGD().setStepSize(10.0)
-                                     .setNumIterations(20)
-=======
-    val lr = new LogisticRegression().setStepSize(10.0).setNumIterations(20)
->>>>>>> FETCH_HEAD:mllib/src/test/scala/spark/mllib/regression/LogisticRegressionSuite.scala
+    val lr = new LogisticRegressionLocalRandomSGD().setStepSize(10.0).setNumIterations(20)
 
     val model = lr.train(testRDD)
 
@@ -128,7 +111,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegression().setStepSize(10.0).setNumIterations(10)
+    val lr = new LogisticRegressionLocalRandomSGD().setStepSize(10.0).setNumIterations(10)
 
     val model = lr.train(testRDD, initialWeights)
 
