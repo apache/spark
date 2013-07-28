@@ -265,7 +265,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>4</td>
   <td>
     Number of individual task failures before giving up on the job.
-    Should greater or equal to 1. Number of allowed retries = this value - 1.
+    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
 
