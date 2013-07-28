@@ -35,7 +35,7 @@ np.random.seed(42)
 
 
 DataPoint = namedtuple("DataPoint", ['x', 'y'])
-from lr import DataPoint  # So that DataPoint is properly serialized
+from logistic_regression import DataPoint  # So that DataPoint is properly serialized
 
 
 def generateData():
@@ -48,8 +48,7 @@ def generateData():
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        print >> sys.stderr, \
-            "Usage: PythonLR <master> [<slices>]"
+        print >> sys.stderr, "Usage: logistic_regression <master> [<slices>]"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonLR", pyFiles=[realpath(__file__)])
     slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2
