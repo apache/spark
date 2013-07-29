@@ -35,19 +35,19 @@ class SVMModel(
   // Create a column vector that can be used for predictions
   private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
 
-  override def predict(testData: spark.RDD[Array[Double]]) = {
+  override def predict(testData: spark.RDD[Array[Double]]): RDD[Int] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
     val localWeights = weightsMatrix
     val localIntercept = intercept
     testData.map { x => 
-      signum(new DoubleMatrix(1, x.length, x:_*).dot(localWeights) + localIntercept)
+      signum(new DoubleMatrix(1, x.length, x:_*).dot(localWeights) + localIntercept).toInt
     }
   }
 
-  override def predict(testData: Array[Double]): Double = {
+  override def predict(testData: Array[Double]): Int = {
     val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
-    signum(dataMat.dot(weightsMatrix) + this.intercept)
+    signum(dataMat.dot(weightsMatrix) + this.intercept).toInt
   }
 }
 

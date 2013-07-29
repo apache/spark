@@ -70,8 +70,8 @@ class HingeGradient extends Gradient {
     val dotProduct = data.dot(weights)
 
     if (1.0 > label * dotProduct)
-      (data.mul(-label),                        1.0 - label * dotProduct)
+      (data.mul(-label), 1.0 - label * dotProduct)
     else
-      (DoubleMatrix.zeros(1,weights.length),    0.0)
+      (DoubleMatrix.zeros(1,weights.length), 0.0)
   }
 }

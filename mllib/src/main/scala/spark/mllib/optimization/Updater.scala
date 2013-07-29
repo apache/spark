@@ -46,17 +46,25 @@ class SimpleUpdater extends Updater {
 }
 
 /**
-L1 regularization -- corresponding proximal operator is the soft-thresholding function
+* L1 regularization -- corresponding proximal operator is the soft-thresholding function
+* That is, each weight component is shrunk towards 0 by shrinkageVal
+* If w >  shrinkageVal, set weight component to w-shrinkageVal.
+* If w < -shrinkageVal, set weight component to w+shrinkageVal.
+* If -shrinkageVal < w < shrinkageVal, set weight component to 0.
+* Equivalently, set weight component to signum(w) * max(0.0, abs(w) - shrinkageVal)
 **/
 class L1Updater extends Updater {
   override def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix,
       stepSize: Double, iter: Int, regParam: Double): (DoubleMatrix, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
     val normGradient = gradient.mul(thisIterStepSize)
+    // Take gradient step
     val newWeights = weightsOld.sub(normGradient)
+    // Soft thresholding
+    val shrinkageVal = regParam * thisIterStepSize
     (0 until newWeights.length).foreach(i => {
       val wi = newWeights.get(i)
-      newWeights.put(i, signum(wi) * max(0.0, abs(wi) - regParam * thisIterStepSize))
+      newWeights.put(i, signum(wi) * max(0.0, abs(wi) - shrinkageVal))
       })
     (newWeights, newWeights.norm1 * regParam)
   }

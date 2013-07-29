@@ -25,8 +25,6 @@ import org.scalatest.FunSuite
 
 import spark.SparkContext
 
-import java.io._
-
 class SVMSuite extends FunSuite with BeforeAndAfterAll {
   val sc = new SparkContext("local", "test")
 

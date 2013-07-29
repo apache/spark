@@ -35,21 +35,21 @@ class LogisticRegressionModel(
   // Create a column vector that can be used for predictions
   private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
 
-  override def predict(testData: spark.RDD[Array[Double]]) = {
+  override def predict(testData: spark.RDD[Array[Double]]): RDD[Int] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
     val localWeights = weightsMatrix
     val localIntercept = intercept
     testData.map { x =>
       val margin = new DoubleMatrix(1, x.length, x:_*).mmul(localWeights).get(0) + localIntercept
-      1.0/ (1.0 + math.exp(margin * -1))
+      (1.0/ (1.0 + math.exp(margin * -1))).toInt
     }
   }
 
-  override def predict(testData: Array[Double]): Double = {
+  override def predict(testData: Array[Double]): Int = {
     val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
     val margin = dataMat.mmul(weightsMatrix).get(0) + this.intercept
-    1.0/ (1.0 + math.exp(margin * -1))
+    (1.0/ (1.0 + math.exp(margin * -1))).toInt
   }
 }
 
@@ -69,14 +69,6 @@ class LogisticRegressionLocalRandomSGD private (var stepSize: Double, var miniBa
     this.stepSize = step
     this
   }
-
-
-
-
-
-
-
-
 
   /**
    * Set fraction of data to be used for each SGD iteration. Default 1.0.

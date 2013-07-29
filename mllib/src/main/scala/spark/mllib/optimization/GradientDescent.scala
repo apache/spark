@@ -76,10 +76,10 @@ object GradientDescent {
       weights = update._1
       reg_val = update._2
       stochasticLossHistory.append(lossSum / miniBatchSize + reg_val)
-      /***
-      Xinghao: The loss here is sum of lossSum computed using the weights before applying updater,
-      and reg_val using weights after applying updater
-      ***/
+      /*
+      * NOTE(Xinghao): The loss here is sum of lossSum computed using the weights before applying updater,
+      * and reg_val using weights after applying updater
+      */
     }
 
     (weights.toArray, stochasticLossHistory.toArray)
