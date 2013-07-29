@@ -21,9 +21,11 @@ import java.util.Date
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable.HashSet
 import scala.Some
 import scala.xml.{NodeSeq, Node}
 
+import spark.scheduler.cluster.TaskInfo
 import spark.scheduler.Stage
 import spark.storage.StorageLevel
 import spark.ui.Page._
@@ -110,8 +112,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
     <div class="progress">
-      <div class="bar bar-success" style={completeWidth}></div>
-      <div class="bar bar-warning" style={startWidth}></div>
+      <div class="bar" style={completeWidth}></div>
+      <div class="bar bar-info" style={startWidth}></div>
     </div>
   }
 
@@ -131,6 +133,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       case b => Utils.memoryBytesToString(b)
     }
 
+    val startedTasks = listener.stageToTasksActive.getOrElse(s.id, HashSet[TaskInfo]()).size
     val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
     val totalTasks = s.numPartitions
 
