@@ -53,9 +53,13 @@ if [[ "$SPARK_LAUNCH_WITH_SCALA" != "0" ]] ; then
     export SPARK_LAUNCH_WITH_SCALA=1
 fi
 
+if [ -n "$IPYTHON_OPTS" ]; then
+  IPYTHON=1
+fi
+
 if [[ "$IPYTHON" = "1" ]] ; then
-    export PYSPARK_PYTHON="ipython"
-    exec "$PYSPARK_PYTHON" -i -c "%run $PYTHONSTARTUP"
+  IPYTHON_OPTS=${IPYTHON_OPTS:--i}
+  exec ipython "$IPYTHON_OPTS" -c "%run $PYTHONSTARTUP"
 else
-    exec "$PYSPARK_PYTHON" "$@"
+  exec "$PYSPARK_PYTHON" "$@"
 fi
