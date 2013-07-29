@@ -564,8 +564,8 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
     decreaseRunningTasks(1)
     if (!finished(index)) {
       tasksFinished += 1
-      logInfo("Finished TID %s in %d ms (progress: %d/%d)".format(
-        tid, info.duration, tasksFinished, numTasks))
+      logInfo("Finished TID %s in %d ms on %s (progress: %d/%d)".format(
+        tid, info.duration, info.hostPort, tasksFinished, numTasks))
       // Deserialize task result and pass it to the scheduler
       try {
         val result = ser.deserialize[TaskResult[_]](serializedData)

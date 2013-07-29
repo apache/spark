@@ -22,7 +22,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.util.Duration
 import akka.util.duration._
-import akka.pattern.AskTimeoutException
+import java.util.concurrent.TimeoutException
 import spark.{SparkException, Logging}
 import akka.remote.RemoteClientLifeCycleEvent
 import akka.remote.RemoteClientShutdown
@@ -134,7 +134,8 @@ private[spark] class Client(
         val future = actor.ask(StopClient)(timeout)
         Await.result(future, timeout)
       } catch {
-        case e: AskTimeoutException =>  // Ignore it, maybe master went away
+        case e: TimeoutException =>
+          logInfo("Stop request to Master timed out; it may already be shut down.")
       }
       actor = null
     }
