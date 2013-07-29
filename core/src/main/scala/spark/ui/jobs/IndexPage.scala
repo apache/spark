@@ -76,16 +76,11 @@ private[spark] class IndexPage(parent: JobProgressUI) {
   }
 
   def makeProgressBar(completed: Int, total: Int): Seq[Node] = {
-    val width=130
-    val height=15
-    val completeWidth = (completed.toDouble / total) * width
+    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
 
-    <svg width={width.toString} height={height.toString}>
-      <rect width={width.toString} height={height.toString}
-            fill="white" stroke="rgb(51,51,51)" stroke-width="1" />
-      <rect width={completeWidth.toString} height={height.toString}
-            fill="rgb(0,136,204)" stroke="black" stroke-width="1" />
-    </svg>
+    <div class="progress">
+      <div class="bar" style={completeWidth}></div>
+    </div>
   }
 
 
