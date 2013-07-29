@@ -76,7 +76,7 @@ class SquaredL2Updater extends Updater {
     val thisIterStepSize = stepSize / math.sqrt(iter)
     val normGradient = gradient.mul(thisIterStepSize)
     val newWeights = weightsOld.sub(normGradient).div(2.0 * thisIterStepSize * regParam + 1.0)
-    (newWeights, pow(newWeights.norm2,2.0) * regParam)
+    (newWeights, pow(newWeights.norm2, 2.0) * regParam)
   }
 }
 
