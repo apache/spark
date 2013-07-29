@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package spark.mllib.regression
+package spark.mllib.classification
 
+import scala.math.signum
 import spark.{Logging, RDD, SparkContext}
 import spark.mllib.optimization._
 import spark.mllib.util.MLUtils
@@ -24,67 +25,56 @@ import spark.mllib.util.MLUtils
 import org.jblas.DoubleMatrix
 
 /**
- * Logistic Regression using Stochastic Gradient Descent.
- * Based on Matlab code written by John Duchi.
+ * SVM using Stochastic Gradient Descent.
  */
-class LogisticRegressionModel(
+class SVMModel(
   val weights: Array[Double],
   val intercept: Double,
-  val stochasticLosses: Array[Double]) extends RegressionModel {
+  val stochasticLosses: Array[Double]) extends ClassificationModel {
 
   // Create a column vector that can be used for predictions
   private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
 
-  override def predict(testData: spark.RDD[Array[Double]]) = {
+  override def predict(testData: spark.RDD[Array[Double]]): RDD[Int] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
     val localWeights = weightsMatrix
     val localIntercept = intercept
-    testData.map { x =>
-      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(localWeights).get(0) + localIntercept
-      1.0/ (1.0 + math.exp(margin * -1))
+    testData.map { x => 
+      signum(new DoubleMatrix(1, x.length, x:_*).dot(localWeights) + localIntercept).toInt
     }
   }
 
-  override def predict(testData: Array[Double]): Double = {
+  override def predict(testData: Array[Double]): Int = {
     val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
-    val margin = dataMat.mmul(weightsMatrix).get(0) + this.intercept
-    1.0/ (1.0 + math.exp(margin * -1))
+    signum(dataMat.dot(weightsMatrix) + this.intercept).toInt
   }
 }
 
-class LogisticGradient extends Gradient {
-  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
-      (DoubleMatrix, Double) = {
-    val margin: Double = -1.0 * data.dot(weights)
-    val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
 
-    val gradient = data.mul(gradientMultiplier)
-    val loss =
-      if (margin > 0) {
-        math.log(1 + math.exp(0 - margin))
-      } else {
-        math.log(1 + math.exp(margin)) - margin
-      }
 
-    (gradient, loss)
-  }
-}
-
-class LogisticRegression private (var stepSize: Double, var miniBatchFraction: Double,
+class SVMLocalRandomSGD private (var stepSize: Double, var regParam: Double, var miniBatchFraction: Double,
     var numIters: Int)
   extends Logging {
 
   /**
-   * Construct a LogisticRegression object with default parameters
+   * Construct a SVM object with default parameters
    */
-  def this() = this(1.0, 1.0, 100)
+  def this() = this(1.0, 1.0, 1.0, 100)
 
   /**
    * Set the step size per-iteration of SGD. Default 1.0.
    */
   def setStepSize(step: Double) = {
     this.stepSize = step
+    this
+  }
+
+  /**
+   * Set the regularization parameter. Default 1.0.
+   */
+  def setRegParam(param: Double) = {
+    this.regParam = param
     this
   }
 
@@ -104,53 +94,54 @@ class LogisticRegression private (var stepSize: Double, var miniBatchFraction: D
     this
   }
 
-  def train(input: RDD[(Double, Array[Double])]): LogisticRegressionModel = {
+  def train(input: RDD[(Int, Array[Double])]): SVMModel = {
     val nfeatures: Int = input.take(1)(0)._2.length
     val initialWeights = Array.fill(nfeatures)(1.0)
     train(input, initialWeights)
   }
 
   def train(
-    input: RDD[(Double, Array[Double])],
-    initialWeights: Array[Double]): LogisticRegressionModel = {
+    input: RDD[(Int, Array[Double])],
+    initialWeights: Array[Double]): SVMModel = {
 
     // Add a extra variable consisting of all 1.0's for the intercept.
     val data = input.map { case (y, features) =>
-      (y, Array(1.0, features:_*))
+      (y.toDouble, Array(1.0, features:_*))
     }
 
     val initalWeightsWithIntercept = Array(1.0, initialWeights:_*)
 
     val (weights, stochasticLosses) = GradientDescent.runMiniBatchSGD(
       data,
-      new LogisticGradient(),
-      new SimpleUpdater(),
+      new HingeGradient(),
+      new SquaredL2Updater(),
       stepSize,
       numIters,
+      regParam,
       initalWeightsWithIntercept,
       miniBatchFraction)
 
     val intercept = weights(0)
     val weightsScaled = weights.tail
 
-    val model = new LogisticRegressionModel(weightsScaled, intercept, stochasticLosses)
+    val model = new SVMModel(weightsScaled, intercept, stochasticLosses)
 
     logInfo("Final model weights " + model.weights.mkString(","))
     logInfo("Final model intercept " + model.intercept)
-    logInfo("Last 10 stochastic losses " + model.stochasticLosses.takeRight(10).mkString(", "))
+    logInfo("Last 10 stochasticLosses " + model.stochasticLosses.takeRight(10).mkString(", "))
     model
   }
 }
 
 /**
- * Top-level methods for calling Logistic Regression.
- * NOTE(shivaram): We use multiple train methods instead of default arguments to support 
- *                 Java programs.
+ * Top-level methods for calling SVM.
+
+
  */
-object LogisticRegression {
+object SVMLocalRandomSGD {
 
   /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
+   * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
@@ -158,85 +149,91 @@ object LogisticRegression {
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to 
    *        the number of features in the data.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[(Int, Array[Double])],
       numIterations: Int,
       stepSize: Double,
+      regParam: Double,
       miniBatchFraction: Double,
       initialWeights: Array[Double])
-    : LogisticRegressionModel =
+    : SVMModel =
   {
-    new LogisticRegression(stepSize, miniBatchFraction, numIterations).train(input, initialWeights)
+    new SVMLocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input, initialWeights)
   }
 
   /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
+   * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[(Int, Array[Double])],
       numIterations: Int,
       stepSize: Double,
+      regParam: Double,
       miniBatchFraction: Double)
-    : LogisticRegressionModel =
+    : SVMModel =
   {
-    new LogisticRegression(stepSize, miniBatchFraction, numIterations).train(input)
+    new SVMLocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input)
   }
 
   /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
+   * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. We use the entire data set to update
    * the gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
+   * @param regParam Regularization parameter.
    * @param numIterations Number of iterations of gradient descent to run.
-   * @return a LogisticRegressionModel which has the weights and offset from training.
+   * @return a SVMModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[(Int, Array[Double])],
       numIterations: Int,
-      stepSize: Double)
-    : LogisticRegressionModel =
+      stepSize: Double,
+      regParam: Double)
+    : SVMModel =
   {
-    train(input, numIterations, stepSize, 1.0)
+    train(input, numIterations, stepSize, regParam, 1.0)
   }
 
   /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
+   * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using a step size of 1.0. We use the entire data set to update
    * the gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
-   * @return a LogisticRegressionModel which has the weights and offset from training.
+   * @return a SVMModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[(Int, Array[Double])],
       numIterations: Int)
-    : LogisticRegressionModel =
+    : SVMModel =
   {
-    train(input, numIterations, 1.0, 1.0)
+    train(input, numIterations, 1.0, 1.0, 1.0)
   }
 
   def main(args: Array[String]) {
-    if (args.length != 4) {
-      println("Usage: LogisticRegression <master> <input_dir> <step_size> <niters>")
+    if (args.length != 5) {
+      println("Usage: SVM <master> <input_dir> <step_size> <regularization_parameter> <niters>")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "LogisticRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LogisticRegression.train(data, args(3).toInt, args(2).toDouble)
+    val sc = new SparkContext(args(0), "SVM")
+    val data = MLUtils.loadLabeledData(sc, args(1)).map(yx => (yx._1.toInt, yx._2))
+    val model = SVMLocalRandomSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()
   }

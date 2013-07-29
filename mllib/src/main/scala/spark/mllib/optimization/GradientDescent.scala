@@ -36,6 +36,7 @@ object GradientDescent {
    * @param updater - Updater object that will be used to update the model.
    * @param stepSize - stepSize to be used during update.
    * @param numIters - number of iterations that SGD should be run.
+   * @param regParam - regularization parameter
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
    *
@@ -49,6 +50,7 @@ object GradientDescent {
     updater: Updater,
     stepSize: Double,
     numIters: Int,
+    regParam: Double,
     initialWeights: Array[Double],
     miniBatchFraction: Double=1.0) : (Array[Double], Array[Double]) = {
 
@@ -70,9 +72,14 @@ object GradientDescent {
       }.reduce((a, b) => (a._1.addi(b._1), a._2 + b._2))
 
       stochasticLossHistory.append(lossSum / miniBatchSize + reg_val)
-      val update = updater.compute(weights, gradientSum.div(miniBatchSize), stepSize, i)
+      val update = updater.compute(weights, gradientSum.div(miniBatchSize), stepSize, i, regParam)
       weights = update._1
       reg_val = update._2
+      stochasticLossHistory.append(lossSum / miniBatchSize + reg_val)
+      /*
+      * NOTE(Xinghao): The loss here is sum of lossSum computed using the weights before applying updater,
+      * and reg_val using weights after applying updater
+      */
     }
 
     (weights.toArray, stochasticLossHistory.toArray)
