@@ -386,13 +386,16 @@ class RDD(object):
         >>> sc.parallelize([2, 3, 4, 5, 6]).take(10)
         [2, 3, 4, 5, 6]
         """
+        def takeUpToNum(iterator):
+            taken = 0
+            while taken < num:
+                yield next(iterator)
+                taken += 1
+        # Take only up to num elements from each partition we try
+        mapped = self.mapPartitions(takeUpToNum)
         items = []
-        for partition in range(self._jrdd.splits().size()):
-            iterator = self.ctx._takePartition(self._jrdd.rdd(), partition)
-            # Each item in the iterator is a string, Python object, batch of
-            # Python objects.  Regardless, it is sufficient to take `num`
-            # of these objects in order to collect `num` Python objects:
-            iterator = iterator.take(num)
+        for partition in range(mapped._jrdd.splits().size()):
+            iterator = self.ctx._takePartition(mapped._jrdd.rdd(), partition)
             items.extend(self._collect_iterator_through_file(iterator))
             if len(items) >= num:
                 break
