@@ -65,7 +65,15 @@ private[spark] class JobProgressListener extends SparkListener {
   val completedStages = ListBuffer[Stage]()
   val failedStages = ListBuffer[Stage]()
 
-  val stageToTasksActive = HashMap[Int, HashSet[Long]]()
+  // Total metrics reflect metrics only for completed tasks
+  var totalTime = 0L
+  var totalShuffleRead = 0L
+  var totalShuffleWrite = 0L
+
+  val stageToTime = HashMap[Int, Long]()
+  val stageToShuffleRead = HashMap[Int, Long]()
+  val stageToShuffleWrite = HashMap[Int, Long]()
+  val stageToTasksActive = HashMap[Int, HashSet[TaskInfo]]()
   val stageToTasksComplete = HashMap[Int, Int]()
   val stageToTasksFailed = HashMap[Int, Int]()
   val stageToTaskInfos =
@@ -86,6 +94,12 @@ private[spark] class JobProgressListener extends SparkListener {
       val toRemove = RETAINED_STAGES / 10
       stages.takeRight(toRemove).foreach( s => {
         stageToTaskInfos.remove(s.id)
+        stageToTime.remove(s.id)
+        stageToShuffleRead.remove(s.id)
+        stageToShuffleWrite.remove(s.id)
+        stageToTasksActive.remove(s.id)
+        stageToTasksComplete.remove(s.id)
+        stageToTasksFailed.remove(s.id)
       })
       stages.trimEnd(toRemove)
     }
@@ -96,9 +110,8 @@ private[spark] class JobProgressListener extends SparkListener {
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) {
     val sid = taskStart.task.stageId
-    if (!stageToTasksActive.contains(sid))
-      stageToTasksActive(sid) = HashSet[Long]()
-    stageToTasksActive(sid) += taskStart.taskInfo.taskId
+    val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
+    tasksActive += taskStart.taskInfo
     val taskList = stageToTaskInfos.getOrElse(
       sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList += ((taskStart.taskInfo, None, None))
@@ -107,9 +120,8 @@ private[spark] class JobProgressListener extends SparkListener {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val sid = taskEnd.task.stageId
-    if (!stageToTasksActive.contains(sid))
-      stageToTasksActive(sid) = HashSet[Long]()
-    stageToTasksActive(sid) -= taskEnd.taskInfo.taskId
+    val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
+    tasksActive -= taskEnd.taskInfo
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
       taskEnd.reason match {
         case e: ExceptionFailure =>
@@ -117,8 +129,26 @@ private[spark] class JobProgressListener extends SparkListener {
           (Some(e), e.metrics)
         case _ =>
           stageToTasksComplete(sid) = stageToTasksComplete.getOrElse(sid, 0) + 1
-          (None, Some(taskEnd.taskMetrics))
+          (None, Option(taskEnd.taskMetrics))
       }
+
+    stageToTime.getOrElseUpdate(sid, 0L)
+    val time = metrics.map(m => m.executorRunTime).getOrElse(0)
+    stageToTime(sid) += time
+    totalTime += time
+
+    stageToShuffleRead.getOrElseUpdate(sid, 0L)
+    val shuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s =>
+      s.remoteBytesRead).getOrElse(0L)
+    stageToShuffleRead(sid) += shuffleRead
+    totalShuffleRead += shuffleRead
+
+    stageToShuffleWrite.getOrElseUpdate(sid, 0L)
+    val shuffleWrite = metrics.flatMap(m => m.shuffleWriteMetrics).map(s =>
+      s.shuffleBytesWritten).getOrElse(0L)
+    stageToShuffleWrite(sid) += shuffleWrite
+    totalShuffleWrite += shuffleWrite
+
     val taskList = stageToTaskInfos.getOrElse(
       sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList -= ((taskEnd.taskInfo, None, None))
@@ -138,23 +168,5 @@ private[spark] class JobProgressListener extends SparkListener {
         }
       case _ =>
     }
-  }
-
-  /** Is this stage's input from a shuffle read. */
-  def hasShuffleRead(stageID: Int): Boolean = {
-    // This is written in a slightly complicated way to avoid having to scan all tasks
-    for (s <- stageToTaskInfos.get(stageID).getOrElse(Seq())) {
-      if (s._2 != null) return s._2.flatMap(m => m.shuffleReadMetrics).isDefined
-    }
-    return false // No tasks have finished for this stage
-  }
-
-  /** Is this stage's output to a shuffle write. */
-  def hasShuffleWrite(stageID: Int): Boolean = {
-    // This is written in a slightly complicated way to avoid having to scan all tasks
-    for (s <- stageToTaskInfos.get(stageID).getOrElse(Seq())) {
-      if (s._2 != null) return s._2.flatMap(m => m.shuffleWriteMetrics).isDefined
-    }
-    return false // No tasks have finished for this stage
   }
 }

@@ -37,6 +37,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val stageId = request.getParameter("id").toInt
+    val now = System.currentTimeMillis()
 
     if (!listener.stageToTaskInfos.contains(stageId)) {
       val content =
@@ -49,8 +50,35 @@ private[spark] class StagePage(parent: JobProgressUI) {
 
     val tasks = listener.stageToTaskInfos(stageId)
 
-    val shuffleRead = listener.hasShuffleRead(stageId)
-    val shuffleWrite = listener.hasShuffleWrite(stageId)
+    val shuffleRead = listener.stageToShuffleRead(stageId) > 0
+    val shuffleWrite = listener.stageToShuffleWrite(stageId) > 0
+
+    var activeTime = 0L
+    listener.stageToTasksActive(stageId).foreach { t =>
+      activeTime += t.timeRunning(now)
+    }
+
+    val summary =
+      <div>
+        <ul class="unstyled">
+          <li>
+            <strong>CPU time: </strong>
+            {parent.formatDuration(listener.stageToTime(stageId) + activeTime)}
+          </li>
+          {if (shuffleRead)
+            <li>
+              <strong>Shuffle read: </strong>
+              {Utils.memoryBytesToString(listener.stageToShuffleRead(stageId))}
+            </li>
+          }
+          {if (shuffleWrite)
+            <li>
+              <strong>Shuffle write: </strong>
+              {Utils.memoryBytesToString(listener.stageToShuffleWrite(stageId))}
+            </li>
+          }
+        </ul>
+      </div>
 
     val taskHeaders: Seq[String] =
       Seq("Task ID", "Status", "Duration", "Locality Level", "Worker", "Launch Time") ++
@@ -98,7 +126,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
       }
 
     val content =
-      <h2>Summary Metrics</h2> ++ summaryTable.getOrElse(Nil) ++ <h2>Tasks</h2> ++ taskTable;
+      summary ++ <h2>Summary Metrics</h2> ++ summaryTable.getOrElse(Nil) ++
+        <h2>Tasks</h2> ++ taskTable;
 
     headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
   }

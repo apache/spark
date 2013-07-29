@@ -113,7 +113,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   }
 
   private[spark] class ExecutorsListener extends SparkListener with Logging {
-    val executorToTasksActive = HashMap[String, HashSet[Long]]()
+    val executorToTasksActive = HashMap[String, HashSet[TaskInfo]]()
     val executorToTasksComplete = HashMap[String, Int]()
     val executorToTasksFailed = HashMap[String, Int]()
     val executorToTaskInfos =
@@ -121,9 +121,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
 
     override def onTaskStart(taskStart: SparkListenerTaskStart) {
       val eid = taskStart.taskInfo.executorId
-      if (!executorToTasksActive.contains(eid))
-        executorToTasksActive(eid) = HashSet[Long]()
-      executorToTasksActive(eid) += taskStart.taskInfo.taskId
+      val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
+      activeTasks += taskStart.taskInfo
       val taskList = executorToTaskInfos.getOrElse(
         eid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
       taskList += ((taskStart.taskInfo, None, None))
@@ -132,9 +131,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
       val eid = taskEnd.taskInfo.executorId
-      if (!executorToTasksActive.contains(eid))
-        executorToTasksActive(eid) = HashSet[Long]()
-      executorToTasksActive(eid) -= taskEnd.taskInfo.taskId
+      val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
+      activeTasks -= taskEnd.taskInfo
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
           case e: ExceptionFailure =>
@@ -142,7 +140,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
             (Some(e), e.metrics)
           case _ =>
             executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
-            (None, Some(taskEnd.taskMetrics))
+            (None, Option(taskEnd.taskMetrics))
         }
       val taskList = executorToTaskInfos.getOrElse(
         eid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
