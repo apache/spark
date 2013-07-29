@@ -141,7 +141,8 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       for (manager <- sortedTaskSetQueue) {
         do {
           launchTask = false
-          manager.slaveOffer(null, null, freeCpuCores) match {
+          // TODO(matei): don't pass null here?
+          manager.resourceOffer(null, null, freeCpuCores) match {
             case Some(task) =>
               tasks += task
               taskIdToTaskSetId(task.taskId) = manager.taskSet.id

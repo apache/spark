@@ -72,8 +72,8 @@ class DAGScheduler(
   }
 
   // Called by TaskScheduler when a host is added
-  override def executorGained(execId: String, hostPort: String) {
-    eventQueue.put(ExecutorGained(execId, hostPort))
+  override def executorGained(execId: String, host: String) {
+    eventQueue.put(ExecutorGained(execId, host))
   }
 
   // Called by TaskScheduler to cancel an entire TaskSet due to repeated failures.
@@ -104,15 +104,16 @@ class DAGScheduler(
 
   private val listenerBus = new SparkListenerBus()
 
-  var cacheLocs = new HashMap[Int, Array[List[String]]]
+  // Contains the locations that each RDD's partitions are cached on
+  private val cacheLocs = new HashMap[Int, Array[Seq[TaskLocation]]]
 
-  // For tracking failed nodes, we use the MapOutputTracker's generation number, which is
-  // sent with every task. When we detect a node failing, we note the current generation number
-  // and failed executor, increment it for new tasks, and use this to ignore stray ShuffleMapTask
-  // results.
-  // TODO: Garbage collect information about failure generations when we know there are no more
+  // For tracking failed nodes, we use the MapOutputTracker's epoch number, which is sent with
+  // every task. When we detect a node failing, we note the current epoch number and failed
+  // executor, increment it for new tasks, and use this to ignore stray ShuffleMapTask results.
+  //
+  // TODO: Garbage collect information about failure epochs when we know there are no more
   //       stray messages to detect.
-  val failedGeneration = new HashMap[String, Long]
+  val failedEpoch = new HashMap[String, Long]
 
   val idToActiveJob = new HashMap[Int, ActiveJob]
 
@@ -141,11 +142,13 @@ class DAGScheduler(
     listenerBus.addListener(listener)
   }
 
-  private def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
+  private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
-      val locs = BlockManager.blockIdsToExecutorLocations(blockIds, env, blockManagerMaster)
-      cacheLocs(rdd.id) = blockIds.map(locs.getOrElse(_, Nil))
+      val locs = BlockManager.blockIdsToBlockManagers(blockIds, env, blockManagerMaster)
+      cacheLocs(rdd.id) = blockIds.map { id =>
+        locs.getOrElse(id, Nil).map(bm => TaskLocation(bm.host, bm.executorId))
+      }
     }
     cacheLocs(rdd.id)
   }
@@ -345,8 +348,8 @@ class DAGScheduler(
           submitStage(finalStage)
         }
 
-      case ExecutorGained(execId, hostPort) =>
-        handleExecutorGained(execId, hostPort)
+      case ExecutorGained(execId, host) =>
+        handleExecutorGained(execId, host)
 
       case ExecutorLost(execId) =>
         handleExecutorLost(execId)
@@ -508,7 +511,7 @@ class DAGScheduler(
     } else {
       // This is a final stage; figure out its job's missing partitions
       val job = resultStageToJob(stage)
-      for (id <- 0 until job.numPartitions if (!job.finished(id))) {
+      for (id <- 0 until job.numPartitions if !job.finished(id)) {
         val partition = job.partitions(id)
         val locs = getPreferredLocs(stage.rdd, partition)
         tasks += new ResultTask(stage.id, stage.rdd, job.func, partition, locs, id)
@@ -518,7 +521,7 @@ class DAGScheduler(
     // should be "StageSubmitted" first and then "JobEnded"
     val properties = idToActiveJob(stage.priority).properties
     listenerBus.post(SparkListenerStageSubmitted(stage, tasks.size, properties))
-    
+
     if (tasks.size > 0) {
       // Preemptively serialize a task to make sure it can be serialized. We are catching this
       // exception here because it would be fairly hard to catch the non-serializable exception
@@ -599,7 +602,7 @@ class DAGScheduler(
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
-            if (failedGeneration.contains(execId) && smt.generation <= failedGeneration(execId)) {
+            if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
               stage.addOutputLoc(smt.partition, status)
@@ -611,11 +614,11 @@ class DAGScheduler(
               logInfo("waiting: " + waiting)
               logInfo("failed: " + failed)
               if (stage.shuffleDep != None) {
-                // We supply true to increment the generation number here in case this is a
+                // We supply true to increment the epoch number here in case this is a
                 // recomputation of the map outputs. In that case, some nodes may have cached
                 // locations with holes (from when we detected the error) and will need the
-                // generation incremented to refetch them.
-                // TODO: Only increment the generation number if this is not the first time
+                // epoch incremented to refetch them.
+                // TODO: Only increment the epoch number if this is not the first time
                 //       we registered these map outputs.
                 mapOutputTracker.registerMapOutputs(
                   stage.shuffleDep.get.shuffleId,
@@ -674,7 +677,7 @@ class DAGScheduler(
         lastFetchFailureTime = System.currentTimeMillis() // TODO: Use pluggable clock
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
-          handleExecutorLost(bmAddress.executorId, Some(task.generation))
+          handleExecutorLost(bmAddress.executorId, Some(task.epoch))
         }
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
@@ -690,14 +693,14 @@ class DAGScheduler(
    * Responds to an executor being lost. This is called inside the event loop, so it assumes it can
    * modify the scheduler's internal state. Use executorLost() to post a loss event from outside.
    *
-   * Optionally the generation during which the failure was caught can be passed to avoid allowing
+   * Optionally the epoch during which the failure was caught can be passed to avoid allowing
    * stray fetch failures from possibly retriggering the detection of a node as lost.
    */
-  private def handleExecutorLost(execId: String, maybeGeneration: Option[Long] = None) {
-    val currentGeneration = maybeGeneration.getOrElse(mapOutputTracker.getGeneration)
-    if (!failedGeneration.contains(execId) || failedGeneration(execId) < currentGeneration) {
-      failedGeneration(execId) = currentGeneration
-      logInfo("Executor lost: %s (generation %d)".format(execId, currentGeneration))
+  private def handleExecutorLost(execId: String, maybeEpoch: Option[Long] = None) {
+    val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
+    if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
+      failedEpoch(execId) = currentEpoch
+      logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
       blockManagerMaster.removeExecutor(execId)
       // TODO: This will be really slow if we keep accumulating shuffle map stages
       for ((shuffleId, stage) <- shuffleToMapStage) {
@@ -706,20 +709,20 @@ class DAGScheduler(
         mapOutputTracker.registerMapOutputs(shuffleId, locs, true)
       }
       if (shuffleToMapStage.isEmpty) {
-        mapOutputTracker.incrementGeneration()
+        mapOutputTracker.incrementEpoch()
       }
       clearCacheLocs()
     } else {
       logDebug("Additional executor lost message for " + execId +
-               "(generation " + currentGeneration + ")")
+               "(epoch " + currentEpoch + ")")
     }
   }
 
-  private def handleExecutorGained(execId: String, hostPort: String) {
-    // remove from failedGeneration(execId) ?
-    if (failedGeneration.contains(execId)) {
-      logInfo("Host gained which was in lost list earlier: " + hostPort)
-      failedGeneration -= execId
+  private def handleExecutorGained(execId: String, host: String) {
+    // remove from failedEpoch(execId) ?
+    if (failedEpoch.contains(execId)) {
+      logInfo("Host gained which was in lost list earlier: " + host)
+      failedEpoch -= execId
     }
   }
 
@@ -774,16 +777,16 @@ class DAGScheduler(
     visitedRdds.contains(target.rdd)
   }
 
-  private def getPreferredLocs(rdd: RDD[_], partition: Int): List[String] = {
+  private def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
     // If the partition is cached, return the cache locations
     val cached = getCacheLocs(rdd)(partition)
-    if (cached != Nil) {
+    if (!cached.isEmpty) {
       return cached
     }
     // If the RDD has some placement preferences (as is the case for input RDDs), get those
     val rddPrefs = rdd.preferredLocations(rdd.partitions(partition)).toList
-    if (rddPrefs != Nil) {
-      return rddPrefs
+    if (!rddPrefs.isEmpty) {
+      return rddPrefs.map(host => TaskLocation(host))
     }
     // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
     // that has any placement preferences. Ideally we would choose based on transfer sizes,

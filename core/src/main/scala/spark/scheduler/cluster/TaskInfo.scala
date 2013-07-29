@@ -28,10 +28,8 @@ class TaskInfo(
     val index: Int,
     val launchTime: Long,
     val executorId: String,
-    val hostPort: String,
+    val host: String,
     val taskLocality: TaskLocality.TaskLocality) {
-
-  Utils.checkHostPort(hostPort, "Expected hostport")
 
   var finishTime: Long = 0
   var failed = false

@@ -29,17 +29,8 @@ private[spark] trait TaskSetManager extends Schedulable {
   
   def taskSet: TaskSet
 
-  def slaveOffer(
-      execId: String,
-      hostPort: String,
-      availableCpus: Double,
-      overrideLocality: TaskLocality.TaskLocality = null): Option[TaskDescription]
-
-  def numPendingTasksForHostPort(hostPort: String): Int
-
-  def numRackLocalPendingTasksForHost(hostPort: String): Int
-
-  def numPendingTasksForHost(hostPort: String): Int
+  def resourceOffer(execId: String, hostPort: String, availableCpus: Double)
+    : Option[TaskDescription]
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer)
 

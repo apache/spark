@@ -72,7 +72,9 @@ class DummyTaskSetManager(
   override def executorLost(executorId: String, host: String): Unit = {
   }
 
-  override def slaveOffer(execId: String, host: String, avaiableCpus: Double, overrideLocality: TaskLocality.TaskLocality = null): Option[TaskDescription] = {
+  override def resourceOffer(execId: String, host: String, availableCpus: Double)
+    : Option[TaskDescription] =
+  {
     if (tasksFinished + runningTasks < numTasks) {
       increaseRunningTasks(1)
       return Some(new TaskDescription(0, execId, "task 0:0", null))
@@ -118,7 +120,7 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
        logInfo("parentName:%s, parent running tasks:%d, name:%s,runningTasks:%d".format(manager.parent.name, manager.parent.runningTasks, manager.name, manager.runningTasks))
     }
     for (taskSet <- taskSetQueue) {
-      taskSet.slaveOffer("execId_1", "hostname_1", 1) match {
+      taskSet.resourceOffer("execId_1", "hostname_1", 1) match {
         case Some(task) =>
           return taskSet.stageId
         case None => {}

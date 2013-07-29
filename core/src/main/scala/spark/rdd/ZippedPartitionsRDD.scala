@@ -55,6 +55,8 @@ abstract class ZippedPartitionsBaseRDD[V: ClassManifest](
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] = {
+    // TODO(matei): Fix this for hostPort
+
     // Note that as number of rdd's increase and/or number of slaves in cluster increase, the computed preferredLocations below
     // become diminishingly small : so we might need to look at alternate strategies to alleviate this.
     // If there are no (or very small number of preferred locations), we will end up transferred the blocks to 'any' node in the

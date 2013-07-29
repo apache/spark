@@ -98,14 +98,11 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     return None
   }
 
-  override def slaveOffer(
-      execId: String,
-      hostPort: String,
-      availableCpus: Double,
-      overrideLocality: TaskLocality.TaskLocality = null): Option[TaskDescription] =
+  override def resourceOffer(execId: String, host: String, availableCpus: Double)
+    : Option[TaskDescription] =
   {
     SparkEnv.set(sched.env)
-    logDebug("availableCpus:%d,numFinished:%d,numTasks:%d".format(
+    logDebug("availableCpus:%d, numFinished:%d, numTasks:%d".format(
       availableCpus.toInt, numFinished, numTasks))
     if (availableCpus > 0 && numFinished < numTasks) {
       findTask() match {
@@ -129,18 +126,6 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
       }
     }
     return None
-  }
-
-  override def numPendingTasksForHostPort(hostPort: String): Int = {
-    return 0
-  }
-
-  override def numRackLocalPendingTasksForHost(hostPort :String): Int = {
-    return 0
-  }
-
-  override def numPendingTasksForHost(hostPort: String): Int = {
-    return 0
   }
 
   override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {

@@ -17,8 +17,16 @@
 
 package spark.scheduler.cluster
 
-/**
- * Represents free resources available on an executor.
- */
-private[spark]
-class WorkerOffer(val executorId: String, val host: String, val cores: Int)
+
+private[spark] object TaskLocality
+  extends Enumeration("PROCESS_LOCAL", "NODE_LOCAL", "RACK_LOCAL", "ANY")
+{
+  // process local is expected to be used ONLY within tasksetmanager for now.
+  val PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY = Value
+
+  type TaskLocality = Value
+
+  def isAllowed(constraint: TaskLocality, condition: TaskLocality): Boolean = {
+    condition <= constraint
+  }
+}

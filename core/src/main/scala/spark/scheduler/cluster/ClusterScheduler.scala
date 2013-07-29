@@ -37,18 +37,22 @@ import java.util.{TimerTask, Timer}
  */
 private[spark] class ClusterScheduler(val sc: SparkContext)
   extends TaskScheduler
-  with Logging {
-
+  with Logging
+{
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong
+
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "15000").toLong
+
   // How often to revive offers in case there are pending tasks - that is how often to try to get
   // tasks scheduled in case there are nodes available : default 0 is to disable it - to preserve existing behavior
-  // Note that this is required due to delayed scheduling due to data locality waits, etc.
-  // TODO: rename property ?
-  val TASK_REVIVAL_INTERVAL = System.getProperty("spark.tasks.revive.interval", "0").toLong
+  // Note that this is required due to delay scheduling due to data locality waits, etc.
+  // TODO(matei): move to StandaloneSchedulerBackend?
+  val TASK_REVIVAL_INTERVAL = System.getProperty("spark.scheduler.revival.interval", "1000").toLong
 
+  // TODO(matei): replace this with something that only affects levels past PROCESS_LOCAL;
+  // basically it can be a "cliff" for locality
   /*
    This property controls how aggressive we should be to modulate waiting for node local task scheduling.
    To elaborate, currently there is a time limit (3 sec def) to ensure that spark attempts to wait for node locality of tasks before
@@ -71,7 +75,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
    If cluster is rack aware, then setting it to RACK_LOCAL gives best tradeoff and a 3x - 4x performance improvement while minimizing IO impact.
    Also, it brings down the variance in running time drastically.
     */
-  val TASK_SCHEDULING_AGGRESSION = TaskLocality.parse(System.getProperty("spark.tasks.schedule.aggression", "NODE_LOCAL"))
+  val TASK_SCHEDULING_AGGRESSION = TaskLocality.withName(
+    System.getProperty("spark.tasks.schedule.aggression", "NODE_LOCAL"))
 
   val activeTaskSets = new HashMap[String, TaskSetManager]
 
@@ -89,16 +94,11 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   // Which executor IDs we have executors on
   val activeExecutorIds = new HashSet[String]
 
-  // TODO: We might want to remove this and merge it with execId datastructures - but later.
-  // Which hosts in the cluster are alive (contains hostPort's) - used for process local and node local task locality.
-  private val hostPortsAlive = new HashSet[String]
-  private val hostToAliveHostPorts = new HashMap[String, HashSet[String]]
-
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
-  private val executorsByHostPort = new HashMap[String, HashSet[String]]
+  private val executorsByHost = new HashMap[String, HashSet[String]]
 
-  private val executorIdToHostPort = new HashMap[String, String]
+  private val executorIdToHost = new HashMap[String, String]
 
   // JAR server, if any JARs were added by the user to the SparkContext
   var jarServer: HttpServer = null
@@ -138,7 +138,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     schedulableBuilder.buildPools()
     // resolve executorId to hostPort mapping.
     def executorToHostPort(executorId: String, defaultHostPort: String): String = {
-      executorIdToHostPort.getOrElse(executorId, defaultHostPort)
+      executorIdToHost.getOrElse(executorId, defaultHostPort)
     }
 
     // Unfortunately, this means that SparkEnv is indirectly referencing ClusterScheduler
@@ -146,13 +146,12 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     SparkEnv.get.executorIdToHostPort = Some(executorToHostPort)
   }
 
-
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
   override def start() {
     backend.start()
 
-    if (JBoolean.getBoolean("spark.speculation")) {
+    if (System.getProperty("spark.speculation", "false").toBoolean) {
       new Thread("ClusterScheduler speculation check") {
         setDaemon(true)
 
@@ -172,6 +171,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
 
     // Change to always run with some default if TASK_REVIVAL_INTERVAL <= 0 ?
+    // TODO(matei): remove this thread
     if (TASK_REVIVAL_INTERVAL > 0) {
       new Thread("ClusterScheduler task offer revival check") {
         setDaemon(true)
@@ -201,7 +201,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
 
-      if (hasReceivedTask == false) {
+      if (!hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {
             if (!hasLaunchedTask) {
@@ -214,7 +214,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           }
         }, STARVATION_TIMEOUT, STARVATION_TIMEOUT)
       }
-      hasReceivedTask = true;
+      hasReceivedTask = true
     }
     backend.reviveOffers()
   }
@@ -235,172 +235,53 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
-  def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = {
-    synchronized {
-      SparkEnv.set(sc.env)
-      // Mark each slave as alive and remember its hostname
-      for (o <- offers) {
-        // DEBUG Code
-        Utils.checkHostPort(o.hostPort)
+  def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
+    SparkEnv.set(sc.env)
 
-        executorIdToHostPort(o.executorId) = o.hostPort
-        if (! executorsByHostPort.contains(o.hostPort)) {
-          executorsByHostPort(o.hostPort) = new HashSet[String]()
-        }
-
-        hostPortsAlive += o.hostPort
-        hostToAliveHostPorts.getOrElseUpdate(Utils.parseHostPort(o.hostPort)._1, new HashSet[String]).add(o.hostPort)
-        executorGained(o.executorId, o.hostPort)
+    // Mark each slave as alive and remember its hostname
+    for (o <- offers) {
+      executorIdToHost(o.executorId) = o.host
+      if (!executorsByHost.contains(o.host)) {
+        executorsByHost(o.host) = new HashSet[String]()
+        executorGained(o.executorId, o.host)
       }
-      // Build a list of tasks to assign to each slave
-      val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
-      // merge availableCpus into nodeToAvailableCpus block ?
-      val availableCpus = offers.map(o => o.cores).toArray
-      val nodeToAvailableCpus = {
-        val map = new HashMap[String, Int]()
-        for (offer <- offers) {
-          val hostPort = offer.hostPort
-          val cores = offer.cores
-          // DEBUG code
-          Utils.checkHostPort(hostPort)
-
-          val host = Utils.parseHostPort(hostPort)._1
-
-          map.put(host, map.getOrElse(host, 0) + cores)
-        }
-
-        map
-      }
-      var launchedTask = false
-      val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
-
-      for (manager <- sortedTaskSetQueue) {
-        logDebug("parentName:%s, name:%s, runningTasks:%s".format(
-          manager.parent.name, manager.name, manager.runningTasks))
-      }
-
-      for (manager <- sortedTaskSetQueue) {
-
-        // Split offers based on node local, rack local and off-rack tasks.
-        val processLocalOffers = new HashMap[String, ArrayBuffer[Int]]()
-        val nodeLocalOffers = new HashMap[String, ArrayBuffer[Int]]()
-        val rackLocalOffers = new HashMap[String, ArrayBuffer[Int]]()
-        val otherOffers = new HashMap[String, ArrayBuffer[Int]]()
-
-        for (i <- 0 until offers.size) {
-          val hostPort = offers(i).hostPort
-          // DEBUG code
-          Utils.checkHostPort(hostPort)
-
-          val numProcessLocalTasks =  math.max(0, math.min(manager.numPendingTasksForHostPort(hostPort), availableCpus(i)))
-          if (numProcessLocalTasks > 0){
-            val list = processLocalOffers.getOrElseUpdate(hostPort, new ArrayBuffer[Int])
-            for (j <- 0 until numProcessLocalTasks) list += i
-          }
-
-          val host = Utils.parseHostPort(hostPort)._1
-          val numNodeLocalTasks =  math.max(0,
-            // Remove process local tasks (which are also host local btw !) from this
-            math.min(manager.numPendingTasksForHost(hostPort) - numProcessLocalTasks, nodeToAvailableCpus(host)))
-          if (numNodeLocalTasks > 0){
-            val list = nodeLocalOffers.getOrElseUpdate(host, new ArrayBuffer[Int])
-            for (j <- 0 until numNodeLocalTasks) list += i
-          }
-
-          val numRackLocalTasks =  math.max(0,
-            // Remove node local tasks (which are also rack local btw !) from this
-            math.min(manager.numRackLocalPendingTasksForHost(hostPort) - numProcessLocalTasks - numNodeLocalTasks, nodeToAvailableCpus(host)))
-          if (numRackLocalTasks > 0){
-            val list = rackLocalOffers.getOrElseUpdate(host, new ArrayBuffer[Int])
-            for (j <- 0 until numRackLocalTasks) list += i
-          }
-          if (numNodeLocalTasks <= 0 && numRackLocalTasks <= 0){
-            // add to others list - spread even this across cluster.
-            val list = otherOffers.getOrElseUpdate(host, new ArrayBuffer[Int])
-            list += i
-          }
-        }
-
-        val offersPriorityList = new ArrayBuffer[Int](
-          processLocalOffers.size + nodeLocalOffers.size + rackLocalOffers.size + otherOffers.size)
-
-        // First process local, then host local, then rack, then others
-
-        // numNodeLocalOffers contains count of both process local and host offers.
-        val numNodeLocalOffers = {
-          val processLocalPriorityList = ClusterScheduler.prioritizeContainers(processLocalOffers)
-          offersPriorityList ++= processLocalPriorityList
-
-          val nodeLocalPriorityList = ClusterScheduler.prioritizeContainers(nodeLocalOffers)
-          offersPriorityList ++= nodeLocalPriorityList
-
-          processLocalPriorityList.size + nodeLocalPriorityList.size
-        }
-        val numRackLocalOffers = {
-          val rackLocalPriorityList = ClusterScheduler.prioritizeContainers(rackLocalOffers)
-          offersPriorityList ++= rackLocalPriorityList
-          rackLocalPriorityList.size
-        }
-        offersPriorityList ++= ClusterScheduler.prioritizeContainers(otherOffers)
-
-        var lastLoop = false
-        val lastLoopIndex = TASK_SCHEDULING_AGGRESSION match {
-          case TaskLocality.NODE_LOCAL => numNodeLocalOffers
-          case TaskLocality.RACK_LOCAL => numRackLocalOffers + numNodeLocalOffers
-          case TaskLocality.ANY => offersPriorityList.size
-        }
-
-        do {
-          launchedTask = false
-          var loopCount = 0
-          for (i <- offersPriorityList) {
-            val execId = offers(i).executorId
-            val hostPort = offers(i).hostPort
-
-            // If last loop and within the lastLoopIndex, expand scope - else use null (which will use default/existing)
-            val overrideLocality = if (lastLoop && loopCount < lastLoopIndex) TASK_SCHEDULING_AGGRESSION else null
-
-            // If last loop, override waiting for host locality - we scheduled all local tasks already and there might be more available ...
-            loopCount += 1
-
-            manager.slaveOffer(execId, hostPort, availableCpus(i), overrideLocality) match {
-              case Some(task) =>
-                tasks(i) += task
-                val tid = task.taskId
-                taskIdToTaskSetId(tid) = manager.taskSet.id
-                taskSetTaskIds(manager.taskSet.id) += tid
-                taskIdToExecutorId(tid) = execId
-                activeExecutorIds += execId
-                executorsByHostPort(hostPort) += execId
-                availableCpus(i) -= 1
-                launchedTask = true
-
-              case None => {}
-              }
-            }
-          // Loop once more - when lastLoop = true, then we try to schedule task on all nodes irrespective of
-          // data locality (we still go in order of priority : but that would not change anything since
-          // if data local tasks had been available, we would have scheduled them already)
-          if (lastLoop) {
-            // prevent more looping
-            launchedTask = false
-          } else if (!lastLoop && !launchedTask) {
-            // Do this only if TASK_SCHEDULING_AGGRESSION != NODE_LOCAL
-            if (TASK_SCHEDULING_AGGRESSION != TaskLocality.NODE_LOCAL) {
-              // fudge launchedTask to ensure we loop once more
-              launchedTask = true
-              // dont loop anymore
-              lastLoop = true
-            }
-          }
-        } while (launchedTask)
-      }
-
-      if (tasks.size > 0) {
-        hasLaunchedTask = true
-      }
-      return tasks
     }
+
+    // Build a list of tasks to assign to each slave
+    val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
+    val availableCpus = offers.map(o => o.cores).toArray
+    val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
+    for (manager <- sortedTaskSetQueue) {
+      logDebug("parentName: %s, name: %s, runningTasks: %s".format(
+        manager.parent.name, manager.name, manager.runningTasks))
+    }
+
+    var launchedTask = false
+    for (manager <- sortedTaskSetQueue; offer <- offers) {
+      do {
+        launchedTask = false
+        for (i <- 0 until offers.size) {
+          val execId = offers(i).executorId
+          val host = offers(i).host
+          for (task <- manager.resourceOffer(execId, host, availableCpus(i))) {
+            tasks(i) += task
+            val tid = task.taskId
+            taskIdToTaskSetId(tid) = manager.taskSet.id
+            taskSetTaskIds(manager.taskSet.id) += tid
+            taskIdToExecutorId(tid) = execId
+            activeExecutorIds += execId
+            executorsByHost(host) += execId
+            availableCpus(i) -= 1
+            launchedTask = true
+          }
+        }
+      } while (launchedTask)
+    }
+
+    if (tasks.size > 0) {
+      hasLaunchedTask = true
+    }
+    return tasks
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
@@ -514,7 +395,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
     synchronized {
       if (activeExecutorIds.contains(executorId)) {
-        val hostPort = executorIdToHostPort(executorId)
+        val hostPort = executorIdToHost(executorId)
         logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
         removeExecutor(executorId)
         failedExecutor = Some(executorId)
@@ -535,52 +416,37 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   /** Remove an executor from all our data structures and mark it as lost */
   private def removeExecutor(executorId: String) {
+    // TODO(matei): remove HostPort
     activeExecutorIds -= executorId
-    val hostPort = executorIdToHostPort(executorId)
-    if (hostPortsAlive.contains(hostPort)) {
-      // DEBUG Code
-      Utils.checkHostPort(hostPort)
+    val host = executorIdToHost(executorId)
 
-      hostPortsAlive -= hostPort
-      hostToAliveHostPorts.getOrElseUpdate(Utils.parseHostPort(hostPort)._1, new HashSet[String]).remove(hostPort)
-    }
-
-    val execs = executorsByHostPort.getOrElse(hostPort, new HashSet)
+    val execs = executorsByHost.getOrElse(host, new HashSet)
     execs -= executorId
     if (execs.isEmpty) {
-      executorsByHostPort -= hostPort
+      executorsByHost -= host
     }
-    executorIdToHostPort -= executorId
-    rootPool.executorLost(executorId, hostPort)
+    executorIdToHost -= executorId
+    rootPool.executorLost(executorId, host)
   }
 
-  def executorGained(execId: String, hostPort: String) {
-    listener.executorGained(execId, hostPort)
+  def executorGained(execId: String, host: String) {
+    listener.executorGained(execId, host)
   }
 
-  def getExecutorsAliveOnHost(host: String): Option[Set[String]] = {
-    Utils.checkHost(host)
-
-    val retval = hostToAliveHostPorts.get(host)
-    if (retval.isDefined) {
-      return Some(retval.get.toSet)
-    }
-
-    None
+  def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
+    executorsByHost.get(host).map(_.toSet)
   }
 
-  def isExecutorAliveOnHostPort(hostPort: String): Boolean = {
-    // Even if hostPort is a host, it does not matter - it is just a specific check.
-    // But we do have to ensure that only hostPort get into hostPortsAlive !
-    // So no check against Utils.checkHostPort
-    hostPortsAlive.contains(hostPort)
+  def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
+    executorsByHost.contains(host)
+  }
+
+  def isExecutorAlive(execId: String): Boolean = synchronized {
+    activeExecutorIds.contains(execId)
   }
 
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
-
-  // By default, (cached) hosts for rack is unknown
-  def getCachedHostsForRack(rack: String): Option[Set[String]] = None
 }
 
 
@@ -610,6 +476,7 @@ object ClusterScheduler {
 
     // order keyList based on population of value in map
     val keyList = _keyList.sortWith(
+      // TODO(matei): not sure why we're using getOrElse if keyList = map.keys... see if it matters
       (left, right) => map.get(left).getOrElse(Set()).size > map.get(right).getOrElse(Set()).size
     )
 
@@ -617,7 +484,7 @@ object ClusterScheduler {
     var index = 0
     var found = true
 
-    while (found){
+    while (found) {
       found = false
       for (key <- keyList) {
         val containerList: ArrayBuffer[T] = map.get(key).getOrElse(null)
