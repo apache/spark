@@ -10,6 +10,7 @@ To learn the basics of Spark, we recommend reading through the
 easy to follow even if you don't know Scala.
 This guide will show how to use the Spark features described there in Python.
 
+
 # Key Differences in the Python API
 
 There are a few key differences between the Python and Scala APIs:
@@ -50,6 +51,7 @@ PySpark will automatically ship these functions to workers, along with any objec
 Instances of classes will be serialized and shipped to workers by PySpark, but classes themselves cannot be automatically distributed to workers.
 The [Standalone Use](#standalone-use) section describes how to ship code dependencies to workers.
 
+
 # Installing and Configuring PySpark
 
 PySpark requires Python 2.6 or higher.
@@ -81,16 +83,41 @@ The Python shell can be used explore data interactively and is a simple way to l
 >>> help(pyspark) # Show all pyspark functions
 {% endhighlight %}
 
-By default, the `pyspark` shell creates SparkContext that runs jobs locally.
-To connect to a non-local cluster, set the `MASTER` environment variable.
+By default, the `pyspark` shell creates SparkContext that runs jobs locally on a single core.
+To connect to a non-local cluster, or use multiple cores, set the `MASTER` environment variable.
 For example, to use the `pyspark` shell with a [standalone Spark cluster](spark-standalone.html):
 
 {% highlight bash %}
 $ MASTER=spark://IP:PORT ./pyspark
 {% endhighlight %}
 
+Or, to use four cores on the local machine:
 
-# Standalone Use
+{% highlight bash %}
+$ MASTER=local[4] ./pyspark
+{% endhighlight %}
+
+
+## IPython
+
+It is also possible to launch PySpark in [IPython](http://ipython.org), the enhanced Python interpreter.
+To do this, simply set the `IPYTHON` variable to `1` when running `pyspark`:
+
+{% highlight bash %}
+$ IPYTHON=1 ./pyspark
+{% endhighlight %}
+
+Alternatively, you can customize the `ipython` command by setting `IPYTHON_OPTS`. For example, to launch
+the [IPython Notebook](http://ipython.org/notebook.html) with PyLab graphing support:
+
+{% highlight bash %}
+$ IPYTHON_OPTS="notebook --pylab inline" ./pyspark
+{% endhighlight %}
+
+IPython also works on a cluster or on multiple cores if you set the `MASTER` environment variable.
+
+
+# Standalone Programs
 
 PySpark can also be used from standalone Python scripts by creating a SparkContext in your script and running the script using `pyspark`.
 The Quick Start guide includes a [complete example](quick-start.html#a-standalone-job-in-python) of a standalone Python job.
@@ -104,6 +131,7 @@ sc = SparkContext("local", "Job Name", pyFiles=['MyFile.py', 'lib.zip', 'app.egg
 
 Files listed here will be added to the `PYTHONPATH` and shipped to remote worker machines.
 Code dependencies can be added to an existing SparkContext using its `addPyFile()` method.
+
 
 # Where to Go from Here
 
