@@ -160,7 +160,7 @@ class RDD(object):
         >>> sorted(sc.parallelize([1, 1, 2, 3]).distinct().collect())
         [1, 2, 3]
         """
-        return self.map(lambda x: (x, "")) \
+        return self.map(lambda x: (x, None)) \
                    .reduceByKey(lambda x, _: x) \
                    .map(lambda (x, _): x)
 
