@@ -75,11 +75,13 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     }
   }
 
-  def makeProgressBar(completed: Int, total: Int): Seq[Node] = {
+  def makeProgressBar(started: Int, completed: Int, total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
     <div class="progress">
-      <div class="bar" style={completeWidth}></div>
+      <div class="bar bar-success" style={completeWidth}></div>
+      <div class="bar bar-warning" style={startWidth}></div>
     </div>
   }
 
@@ -96,6 +98,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       case (false, true) => "Write"
       case _ => ""
     }
+    val startedTasks = listener.stageToTasksActive.getOrElse(s.id, Seq[Long]()).size
     val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
     val totalTasks = s.numPartitions
 
@@ -105,7 +108,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       <td>{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
-      <td class="progress-cell">{makeProgressBar(completedTasks, totalTasks)}</td>
+      <td class="progress-cell">{makeProgressBar(startedTasks, completedTasks, totalTasks)}</td>
       <td style="border-left: 0; text-align: center;">{completedTasks} / {totalTasks}
         {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
         case f if f > 0 => "(%s failed)".format(f)
