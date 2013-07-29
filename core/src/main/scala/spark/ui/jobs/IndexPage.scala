@@ -25,9 +25,9 @@ import scala.Some
 import scala.xml.{NodeSeq, Node}
 
 import spark.scheduler.Stage
-import spark.ui.UIUtils._
-import spark.ui.Page._
 import spark.storage.StorageLevel
+import spark.ui.Page._
+import spark.ui.UIUtils._
 import spark.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
