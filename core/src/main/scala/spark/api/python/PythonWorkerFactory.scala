@@ -17,7 +17,7 @@
 
 package spark.api.python
 
-import java.io.{DataInputStream, IOException}
+import java.io.{File, DataInputStream, IOException}
 import java.net.{Socket, SocketException, InetAddress}
 
 import scala.collection.JavaConversions._
@@ -67,7 +67,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/daemon.py"))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars)
-        val pythonPath = sparkHome + "/python/:" + workerEnv.get("PYTHONPATH")
+        val pythonPath = sparkHome + "/python/" + File.pathSeparator + workerEnv.get("PYTHONPATH")
         workerEnv.put("PYTHONPATH", pythonPath)
         daemon = pb.start()
 
