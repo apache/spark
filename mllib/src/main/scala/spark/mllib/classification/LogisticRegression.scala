@@ -86,19 +86,19 @@ class LogisticRegressionLocalRandomSGD private (var stepSize: Double, var miniBa
     this
   }
 
-  def train(input: RDD[(Double, Array[Double])]): LogisticRegressionModel = {
+  def train(input: RDD[(Int, Array[Double])]): LogisticRegressionModel = {
     val nfeatures: Int = input.take(1)(0)._2.length
     val initialWeights = Array.fill(nfeatures)(1.0)
     train(input, initialWeights)
   }
 
   def train(
-    input: RDD[(Double, Array[Double])],
+    input: RDD[(Int, Array[Double])],
     initialWeights: Array[Double]): LogisticRegressionModel = {
 
     // Add a extra variable consisting of all 1.0's for the intercept.
     val data = input.map { case (y, features) =>
-      (y, Array(1.0, features:_*))
+      (y.toDouble, Array(1.0, features:_*))
     }
 
     val initalWeightsWithIntercept = Array(1.0, initialWeights:_*)
@@ -141,13 +141,12 @@ object LogisticRegressionLocalRandomSGD {
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
-
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to 
    *        the number of features in the data.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[(Int, Array[Double])],
       numIterations: Int,
       stepSize: Double,
 
@@ -170,7 +169,7 @@ object LogisticRegressionLocalRandomSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[(Int, Array[Double])],
       numIterations: Int,
       stepSize: Double,
 
@@ -192,7 +191,7 @@ object LogisticRegressionLocalRandomSGD {
    * @return a LogisticRegressionModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[(Int, Array[Double])],
       numIterations: Int,
       stepSize: Double
       )
@@ -211,7 +210,7 @@ object LogisticRegressionLocalRandomSGD {
    * @return a LogisticRegressionModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[(Int, Array[Double])],
       numIterations: Int)
     : LogisticRegressionModel =
   {
@@ -224,7 +223,7 @@ object LogisticRegressionLocalRandomSGD {
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1))
+    val data = MLUtils.loadLabeledData(sc, args(1)).map(yx => (yx._1.toInt, yx._2))
     val model = LogisticRegressionLocalRandomSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()

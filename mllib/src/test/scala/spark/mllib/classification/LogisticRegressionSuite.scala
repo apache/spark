@@ -38,7 +38,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
       offset: Double,
       scale: Double,
       nPoints: Int,
-      seed: Int): Seq[(Double, Array[Double])]  = {
+      seed: Int): Seq[(Int, Array[Double])]  = {
     val rnd = new Random(seed)
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
@@ -51,19 +51,19 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
     // y <- A + B*x + rLogis()
     // y <- as.numeric(y > 0)
-    val y: Seq[Double] = (0 until nPoints).map { i =>
+    val y: Seq[Int] = (0 until nPoints).map { i =>
       val yVal = offset + scale * x1(i) + rLogis(i)
-      if (yVal > 0) 1.0 else 0.0
+      if (yVal > 0) 1 else 0
     }
 
     val testData = (0 until nPoints).map(i => (y(i), Array(x1(i))))
     testData
   }
 
-  def validatePrediction(predictions: Seq[Double], input: Seq[(Double, Array[Double])]) {
+  def validatePrediction(predictions: Seq[Int], input: Seq[(Int, Array[Double])]) {
     val numOffPredictions = predictions.zip(input).filter { case (prediction, (expected, _)) =>
       // A prediction is off if the prediction is more than 0.5 away from expected value.
-      math.abs(prediction - expected) > 0.5
+      math.abs(prediction.toDouble - expected.toDouble) > 0.5
     }.size
     // At least 80% of the predictions should be on.
     assert(numOffPredictions < input.length / 5)
