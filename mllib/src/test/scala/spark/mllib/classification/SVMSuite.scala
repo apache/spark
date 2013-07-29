@@ -25,6 +25,8 @@ import org.scalatest.FunSuite
 
 import spark.SparkContext
 
+import org.jblas.DoubleMatrix
+
 class SVMSuite extends FunSuite with BeforeAndAfterAll {
   val sc = new SparkContext("local", "test")
 
@@ -38,16 +40,17 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     intercept: Double,
     weights: Array[Double],
     nPoints: Int,
-    seed: Int): Seq[(Double, Array[Double])] = {
+    seed: Int): Seq[(Int, Array[Double])] = {
     val rnd = new Random(seed)
+    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(Array.fill[Double](weights.length)(rnd.nextGaussian()))
     val y = x.map(xi =>
-      signum((xi zip weights).map(xw => xw._1*xw._2).reduce(_+_) + intercept + 0.1 * rnd.nextGaussian())
+      signum((new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + 0.1 * rnd.nextGaussian()).toInt
       )
     y zip x
   }
 
-  def validatePrediction(predictions: Seq[Double], input: Seq[(Double, Array[Double])]) {
+  def validatePrediction(predictions: Seq[Int], input: Seq[(Int, Array[Double])]) {
     val numOffPredictions = predictions.zip(input).filter { case (prediction, (expected, _)) =>
       // A prediction is off if the prediction is more than 0.5 away from expected value.
       math.abs(prediction - expected) > 0.5

@@ -24,6 +24,8 @@ import org.scalatest.FunSuite
 
 import spark.SparkContext
 
+import org.jblas.DoubleMatrix
+
 
 class LassoSuite extends FunSuite with BeforeAndAfterAll {
   val sc = new SparkContext("local", "test")
@@ -40,8 +42,11 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     nPoints: Int,
     seed: Int): Seq[(Double, Array[Double])] = {
     val rnd = new Random(seed)
+    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(Array.fill[Double](weights.length)(rnd.nextGaussian()))
-    val y = x.map(xi => (xi zip weights).map(xw => xw._1*xw._2).reduce(_+_) + intercept + 0.1 * rnd.nextGaussian())
+    val y = x.map(xi =>
+      (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + 0.1 * rnd.nextGaussian()
+      )
     y zip x
   }
 
