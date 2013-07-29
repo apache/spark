@@ -38,6 +38,7 @@ import spark.util.AkkaUtils
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
+  val RETAINED_APPLICATIONS = System.getProperty("spark.deploy.retained_applications", "1000").toInt
 
   var nextAppNumber = 0
   val workers = new HashSet[WorkerInfo]
@@ -59,7 +60,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   Utils.checkHost(host, "Expected hostname")
 
-  val metricsSystem = MetricsSystem.createMetricsSystem("master")
+  val masterMetricsSystem = MetricsSystem.createMetricsSystem("master")
+  val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications")
   val masterSource = new MasterSource(this)
 
   val masterPublicAddress = {
@@ -79,13 +81,15 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
 
-    metricsSystem.registerSource(masterSource)
-    metricsSystem.start()
+    masterMetricsSystem.registerSource(masterSource)
+    masterMetricsSystem.start()
+    applicationMetricsSystem.start()
   }
 
   override def postStop() {
     webUi.stop()
-    metricsSystem.stop()
+    masterMetricsSystem.stop()
+    applicationMetricsSystem.stop()
   }
 
   override def receive = {
@@ -275,6 +279,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     val now = System.currentTimeMillis()
     val date = new Date(now)
     val app = new ApplicationInfo(now, newApplicationId(date), desc, date, driver, desc.appUiUrl)
+    applicationMetricsSystem.registerSource(app.appSource)
     apps += app
     idToApp(app.id) = app
     actorToApp(driver) = app
@@ -300,7 +305,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       idToApp -= app.id
       actorToApp -= app.driver
       addressToApp -= app.driver.path.address
-      completedApps += app   // Remember it in our history
+      if (completedApps.size >= RETAINED_APPLICATIONS) {
+        val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
+        completedApps.take(toRemove).foreach( a => {
+          applicationMetricsSystem.removeSource(a.appSource)
+        })
+        completedApps.trimStart(toRemove)
+      }
+      completedApps += app // Remember it in our history
       waitingApps -= app
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)

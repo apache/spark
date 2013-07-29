@@ -34,6 +34,7 @@ private[spark] class ApplicationInfo(
   var executors = new mutable.HashMap[Int, ExecutorInfo]
   var coresGranted = 0
   var endTime = -1L
+  val appSource = new ApplicationSource(this)
 
   private var nextExecutorId = 0
 

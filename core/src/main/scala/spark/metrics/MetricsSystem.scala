@@ -17,7 +17,7 @@
 
 package spark.metrics
 
-import com.codahale.metrics.{JmxReporter, MetricSet, MetricRegistry}
+import com.codahale.metrics._
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -91,6 +91,14 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
     } catch {
       case e: IllegalArgumentException => logInfo("Metrics already registered", e)
     }
+  }
+
+  def removeSource(source: Source) {
+    sources -= source
+    println("Removing source: " + source.sourceName)
+    registry.removeMatching(new MetricFilter {
+      def matches(name: String, metric: Metric): Boolean = name.startsWith(source.sourceName)
+    })
   }
 
   def registerSources() {
