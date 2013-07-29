@@ -62,8 +62,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
   def validatePrediction(predictions: Seq[Int], input: Seq[(Int, Array[Double])]) {
     val numOffPredictions = predictions.zip(input).filter { case (prediction, (expected, _)) =>
-      // A prediction is off if the prediction is more than 0.5 away from expected value.
-      math.abs(prediction.toDouble - expected.toDouble) > 0.5
+      (prediction != expected)
     }.size
     // At least 80% of the predictions should be on.
     assert(numOffPredictions < input.length / 5)
