@@ -267,7 +267,11 @@ class RDD(object):
         >>> def f(x): print x
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreach(f)
         """
-        self.map(f).collect()  # Force evaluation
+        def processPartition(iterator):
+            for x in iterator:
+                f(x)
+            yield None
+        self.mapPartitions(processPartition).collect()  # Force evaluation
 
     def collect(self):
         """
