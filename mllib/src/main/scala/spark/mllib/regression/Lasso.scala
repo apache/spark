@@ -53,8 +53,8 @@ class LassoModel(
 }
 
 
-class LassoLocalRandomSGD private (var stepSize: Double, var regParam: Double, var miniBatchFraction: Double,
-    var numIters: Int)
+class LassoLocalRandomSGD private (var stepSize: Double, var regParam: Double,
+    var miniBatchFraction: Double, var numIters: Int)
   extends Logging {
 
   /**
@@ -163,7 +163,8 @@ object LassoLocalRandomSGD {
       initialWeights: Array[Double])
     : LassoModel =
   {
-    new LassoLocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input, initialWeights)
+    new LassoLocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(
+      input, initialWeights)
   }
 
   /**
@@ -190,8 +191,8 @@ object LassoLocalRandomSGD {
 
   /**
    * Train a Lasso model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. We use the entire data set to update
-   * the gradient in each iteration.
+   * of iterations of gradient descent using the specified step size. We use the entire data set to
+   * update the gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
@@ -211,8 +212,8 @@ object LassoLocalRandomSGD {
 
   /**
    * Train a Lasso model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using a step size of 1.0. We use the entire data set to update
-   * the gradient in each iteration.
+   * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
+   * update the gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
