@@ -158,6 +158,8 @@ private[spark] class BlockManager(
   val metadataCleaner = new MetadataCleaner("BlockManager", this.dropOldBlocks)
   initialize()
 
+  var compressionCodec: CompressionCodec = null
+
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
    */
@@ -919,8 +921,15 @@ private[spark] class BlockManager(
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: OutputStream): OutputStream = {
+    if (compressionCodec == null) {
+      compressionCodec = Class.forName(System.getProperty("spark.storage.compression.codec",
+        "spark.storage.LZFCompressionCodec"), true, Thread.currentThread.getContextClassLoader)
+        .newInstance().asInstanceOf[CompressionCodec]
+    }
+
     if (shouldCompress(blockId)) {
-      (new LZFOutputStream(s)).setFinishBlockOnFlush(true)
+      //(new LZFOutputStream(s)).setFinishBlockOnFlush(true)
+      compressionCodec.compressionOutputStream(s)
     } else {
       s
     }
@@ -930,7 +939,14 @@ private[spark] class BlockManager(
    * Wrap an input stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: InputStream): InputStream = {
-    if (shouldCompress(blockId)) new LZFInputStream(s) else s
+    if (compressionCodec == null) {
+      compressionCodec = Class.forName(System.getProperty("spark.storage.compression.codec",
+        "spark.storage.LZFCompressionCodec"), true, Thread.currentThread.getContextClassLoader)
+        .newInstance().asInstanceOf[CompressionCodec]
+    }
+
+    if (shouldCompress(blockId)) /*new LZFInputStream(s) */
+      compressionCodec.compressionInputStream(s) else s
   }
 
   def dataSerialize(
