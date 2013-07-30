@@ -40,9 +40,12 @@ private[spark] class IndexPage(parent: JobProgressUI) {
                     </div>
                   </div> ++
                   <h3>Pools </h3> ++ poolTable.toNodeSeq ++
-                  <h3>Active Stages : {activeStages.size}</h3> ++ activeStagesTable.toNodeSeq++
-                  <h3>Completed Stages : {completedStages.size}</h3> ++ completedStagesTable.toNodeSeq++
-                  <h3>Failed Stages : {failedStages.size}</h3> ++ failedStagesTable.toNodeSeq
+                  <h3>Active Stages : {activeStages.size}</h3> ++
+                  activeStagesTable.toNodeSeq++
+                  <h3>Completed Stages : {completedStages.size}</h3> ++
+                  completedStagesTable.toNodeSeq++
+                  <h3>Failed Stages : {failedStages.size}</h3> ++
+                  failedStagesTable.toNodeSeq
 
     headerSparkPage(content, parent.sc, "Spark Stages/Pools", Jobs)
   }

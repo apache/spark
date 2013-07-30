@@ -644,7 +644,8 @@ private[spark] class ClusterTaskSetManager(
     }
   }
 
-  // TODO: for now we just find Pool not TaskSetManager, we can extend this function in future if needed
+  // TODO: for now we just find Pool not TaskSetManager
+  // we can extend this function in future if needed
   override def getSchedulableByName(name: String): Schedulable = {
     return null
   }

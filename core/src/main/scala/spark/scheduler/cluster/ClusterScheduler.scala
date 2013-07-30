@@ -9,10 +9,10 @@ import scala.collection.mutable.HashSet
 import spark._
 import spark.TaskState.TaskState
 import spark.scheduler._
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{TimerTask, Timer}
-import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 
 /**
  * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
@@ -257,7 +257,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
 
       for (manager <- sortedTaskSetQueue) {
-        logInfo("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
+        logInfo("parentName:%s, name:%s, runningTasks:%s".format(
+          manager.parent.name, manager.name, manager.runningTasks))
       }
 
       for (manager <- sortedTaskSetQueue) {

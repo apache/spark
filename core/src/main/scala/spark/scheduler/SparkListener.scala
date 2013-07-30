@@ -8,17 +8,18 @@ import spark.executor.TaskMetrics
 
 sealed trait SparkListenerEvents
 
-case class SparkListenerStageSubmitted(stage: Stage, taskSize: Int, properties: Properties) extends SparkListenerEvents
+case class SparkListenerStageSubmitted(stage: Stage, taskSize: Int, properties: Properties)
+     extends SparkListenerEvents
 
 case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 
 case class SparkListenerTaskEnd(task: Task[_], reason: TaskEndReason, taskInfo: TaskInfo,
      taskMetrics: TaskMetrics) extends SparkListenerEvents
 
-case class SparkListenerJobStart(job: ActiveJob, properties: Properties = null) 
+case class SparkListenerJobStart(job: ActiveJob, properties: Properties = null)
      extends SparkListenerEvents
 
-case class SparkListenerJobEnd(job: ActiveJob, jobResult: JobResult) 
+case class SparkListenerJobEnd(job: ActiveJob, jobResult: JobResult)
      extends SparkListenerEvents
 
 trait SparkListener {
@@ -26,12 +27,12 @@ trait SparkListener {
    * Called when a stage is completed, with information on the completed stage
    */
   def onStageCompleted(stageCompleted: StageCompleted) { }
-  
+
   /**
    * Called when a stage is submitted
    */
   def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
-  
+
   /**
    * Called when a task ends
    */
@@ -41,12 +42,12 @@ trait SparkListener {
    * Called when a job starts
    */
   def onJobStart(jobStart: SparkListenerJobStart) { }
-  
+
   /**
    * Called when a job ends
    */
   def onJobEnd(jobEnd: SparkListenerJobEnd) { }
-  
+
 }
 
 /**
