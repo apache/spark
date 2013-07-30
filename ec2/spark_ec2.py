@@ -398,6 +398,9 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
   modules = ['spark', 'shark', 'ephemeral-hdfs', 'persistent-hdfs', 
              'mapreduce', 'spark-standalone']
 
+  if opts.hadoop_major_version == "1":
+    modules = filter(lambda x: x != "mapreduce", modules)
+
   if opts.ganglia:
     modules.append('ganglia')
 
