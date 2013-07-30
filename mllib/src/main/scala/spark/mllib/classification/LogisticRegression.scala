@@ -151,7 +151,6 @@ object LogisticRegressionLocalRandomSGD {
       input: RDD[(Int, Array[Double])],
       numIterations: Int,
       stepSize: Double,
-
       miniBatchFraction: Double,
       initialWeights: Array[Double])
     : LogisticRegressionModel =
@@ -174,7 +173,6 @@ object LogisticRegressionLocalRandomSGD {
       input: RDD[(Int, Array[Double])],
       numIterations: Int,
       stepSize: Double,
-
       miniBatchFraction: Double)
     : LogisticRegressionModel =
   {
@@ -195,8 +193,7 @@ object LogisticRegressionLocalRandomSGD {
   def train(
       input: RDD[(Int, Array[Double])],
       numIterations: Int,
-      stepSize: Double
-      )
+      stepSize: Double)
     : LogisticRegressionModel =
   {
     train(input, numIterations, stepSize, 1.0)

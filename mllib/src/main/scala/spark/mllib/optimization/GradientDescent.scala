@@ -61,7 +61,7 @@ object GradientDescent {
 
     // Initialize weights as a column vector
     var weights = new DoubleMatrix(initialWeights.length, 1, initialWeights:_*)
-    var reg_val = 0.0
+    var regVal = 0.0
 
     for (i <- 1 to numIters) {
       val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42+i).map {
@@ -71,15 +71,14 @@ object GradientDescent {
           (grad, loss)
       }.reduce((a, b) => (a._1.addi(b._1), a._2 + b._2))
 
-      stochasticLossHistory.append(lossSum / miniBatchSize + reg_val)
+      /**
+       * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
+       * and regVal is the regularization value computed in the previous iteration as well.
+       */
+      stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
       val update = updater.compute(weights, gradientSum.div(miniBatchSize), stepSize, i, regParam)
       weights = update._1
-      reg_val = update._2
-      stochasticLossHistory.append(lossSum / miniBatchSize + reg_val)
-      /*
-      * NOTE(Xinghao): The loss here is sum of lossSum computed using the weights before applying updater,
-      * and reg_val using weights after applying updater
-      */
+      regVal = update._2
     }
 
     (weights.toArray, stochasticLossHistory.toArray)
