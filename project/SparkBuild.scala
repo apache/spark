@@ -242,14 +242,16 @@ object SparkBuild extends Build {
     name := "spark-tools"
   )
 
-  def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
+  def bagelSettings = sharedSettings ++ Seq(
+    name := "spark-bagel"
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % "1.2.3"
     )
-  )
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
