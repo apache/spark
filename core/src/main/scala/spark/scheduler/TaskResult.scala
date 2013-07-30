@@ -36,7 +36,7 @@ class TaskResult[T](var value: T, var accumUpdates: Map[Long, Any], var metrics:
     val objectSer = SparkEnv.get.serializer.newInstance()
     val bb = objectSer.serialize(value)
 
-    out.writeInt( bb.remaining())
+    out.writeInt(bb.remaining())
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
