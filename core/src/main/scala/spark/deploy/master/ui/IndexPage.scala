@@ -17,18 +17,20 @@
 
 package spark.deploy.master.ui
 
-import akka.dispatch.Await
-import akka.pattern.ask
-import akka.util.duration._
-
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import spark.deploy.{RequestMasterState, DeployWebUI, MasterState}
+import akka.dispatch.Await
+import akka.pattern.ask
+import akka.util.duration._
+
 import spark.Utils
-import spark.ui.UIUtils
+import spark.deploy.DeployWebUI
+import spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import spark.deploy.master.{ApplicationInfo, WorkerInfo}
+import spark.ui.UIUtils
+
 
 private[spark] class IndexPage(parent: MasterWebUI) {
   val master = parent.master
@@ -36,7 +38,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
+    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, 30 seconds)
 
     val workerHeaders = Seq("Id", "Address", "State", "Cores", "Memory")

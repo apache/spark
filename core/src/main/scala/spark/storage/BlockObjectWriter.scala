@@ -17,8 +17,6 @@
 
 package spark.storage
 
-import java.nio.ByteBuffer
-
 
 /**
  * An interface for writing JVM objects to some underlying storage. This interface allows

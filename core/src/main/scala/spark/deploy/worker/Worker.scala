@@ -17,22 +17,24 @@
 
 package spark.deploy.worker
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
-import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
-import akka.util.duration._
-import spark.{Logging, Utils}
-import spark.util.AkkaUtils
-import spark.deploy._
-import spark.metrics.MetricsSystem
-import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import java.text.SimpleDateFormat
 import java.util.Date
-import spark.deploy.RegisterWorker
-import spark.deploy.LaunchExecutor
-import spark.deploy.RegisterWorkerFailed
-import spark.deploy.master.Master
 import java.io.File
-import ui.WorkerWebUI
+
+import scala.collection.mutable.HashMap
+
+import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
+import akka.util.duration._
+
+import spark.{Logging, Utils}
+import spark.deploy.ExecutorState
+import spark.deploy.DeployMessages._
+import spark.deploy.master.Master
+import spark.deploy.worker.ui.WorkerWebUI
+import spark.metrics.MetricsSystem
+import spark.util.AkkaUtils
+
 
 private[spark] class Worker(
     host: String,
@@ -164,7 +166,7 @@ private[spark] class Worker(
       masterDisconnected()
 
     case RequestWorkerState => {
-      sender ! WorkerState(host, port, workerId, executors.values.toList,
+      sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, masterUrl, cores, memory,
         coresUsed, memoryUsed, masterWebUiUrl)
     }
