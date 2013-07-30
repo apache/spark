@@ -111,7 +111,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
-    <div class="progress" style ="margin-bottom: 0px">
+    <div class="progress" style="height: 15px; margin-bottom: 0px">
       <div class="bar" style={completeWidth}></div>
       <div class="bar bar-info" style={startWidth}></div>
     </div>
