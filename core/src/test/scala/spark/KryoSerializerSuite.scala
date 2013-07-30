@@ -24,7 +24,7 @@ import org.scalatest.FunSuite
 import com.esotericsoftware.kryo._
 
 import SparkContext._
-import spark.test.{ClassWithoutNoArgConstructor, MyRegistrator}
+import spark.test._
 
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   test("basic types") {
@@ -132,6 +132,12 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     val control = 1 :: 2 :: Nil
     val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
     assert(control == result.toSeq)
+  }
+
+  test("kryo with parallelize") {
+    val control = 1 :: 2 :: Nil
+    val result = sc.parallelize(control.map(new ClassWithoutNoArgConstructor(_))).map(_.x).collect()
+    assert (control == result.toSeq)
   }
 
   override def beforeAll() {

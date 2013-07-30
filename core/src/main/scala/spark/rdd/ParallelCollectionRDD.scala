@@ -21,14 +21,18 @@ import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Map
 import spark._
-import java.io.{ObjectInput, ObjectOutput, Externalizable}
+import java.io._
 import java.nio.ByteBuffer
+import scala.Serializable
 
 private[spark] class ParallelCollectionPartition[T: ClassManifest](
                                                                     var rddId: Long,
                                                                     var slice: Int,
                                                                     var values: Seq[T])
-  extends Partition with Externalizable {
+  extends Partition with Serializable {
+
+  // for externalization
+  def this() = this(0, 0, null)
 
   def iterator: Iterator[T] = values.iterator
 
@@ -41,7 +45,8 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
 
   override def index: Int = slice
 
-  override def writeExternal(out: ObjectOutput) {
+  @throws(classOf[IOException])
+  private def writeObject(out: ObjectOutputStream): Unit = {
     out.writeLong(rddId)
     out.writeInt(slice)
     out.writeInt(values.size)
@@ -59,22 +64,23 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
     })
   }
 
-  override def readExternal(in: ObjectInput) {
+  @throws(classOf[IOException])
+  private def readObject(in: ObjectInputStream): Unit = {
     rddId = in.readLong()
     slice = in.readInt()
     val s = in.readInt()
     val ser = SparkEnv.get.serializer.newInstance()
     var bb = ByteBuffer.allocate(1024)
-    values = (0 until s).map({
+    values = (0 until s).map(i => {
       val s = in.readInt()
       if (bb.capacity() < s) {
         bb = ByteBuffer.allocate(s)
       } else {
         bb.clear()
       }
-      in.readFully(bb.array())
+      in.readFully(bb.array(), 0, s)
       bb.limit(s)
-      ser.deserialize(bb)
+      ser.deserialize(bb): T
     }).toSeq
   }
 }
