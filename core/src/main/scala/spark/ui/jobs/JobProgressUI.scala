@@ -29,26 +29,21 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
   private val stagePage = new StagePage(this)
   private val poolPage = new PoolPage(this)
 
-  var stageTable: StageTable = null
   var stagePoolInfo: StagePoolInfo = null
-  var poolTable: PoolTable = null
   var stagePagePoolSource: PoolSource = null
 
   def start() {
+    _listener = Some(new JobProgressListener(sc))
     sc.getSchedulingMode match {
       case SchedulingMode.FIFO =>
-        _listener = Some(new JobProgressListener(sc))
         stagePoolInfo = new FIFOStagePoolInfo()
         stagePagePoolSource = new FIFOSource()
       case SchedulingMode.FAIR =>
-        _listener = Some(new FairJobProgressListener(sc))
         stagePoolInfo = new FairStagePoolInfo(listener)
         stagePagePoolSource = new FairSource(sc)
     }
 
     sc.addSparkListener(listener)
-    stageTable = new StageTable(dateFmt, formatDuration, listener)
-    poolTable = new PoolTable(listener)
   }
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)

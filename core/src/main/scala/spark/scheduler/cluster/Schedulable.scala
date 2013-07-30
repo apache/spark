@@ -9,7 +9,7 @@ import scala.collection.mutable.ArrayBuffer
  */
 private[spark] trait Schedulable {
   var parent: Schedulable
-  //childrens
+  // child queues
   def schedulableQueue: ArrayBuffer[Schedulable]
   def schedulingMode: SchedulingMode
   def weight: Int

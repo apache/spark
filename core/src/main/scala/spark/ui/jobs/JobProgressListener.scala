@@ -9,53 +9,13 @@ import spark.scheduler.cluster.TaskInfo
 import spark.executor.TaskMetrics
 import collection.mutable
 
-private[spark] class FairJobProgressListener(val sparkContext: SparkContext)
-  extends JobProgressListener(sparkContext) {
-
-  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.cluster.fair.pool"
-  val DEFAULT_POOL_NAME = "default"
-
-  override val stageToPool = HashMap[Stage, String]()
-  override val poolToActiveStages = HashMap[String, HashSet[Stage]]()
-
-  override def onStageCompleted(stageCompleted: StageCompleted) = {
-    super.onStageCompleted(stageCompleted)
-    val stage = stageCompleted.stageInfo.stage
-    poolToActiveStages(stageToPool(stage)) -= stage
-  }
-
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = {
-    super.onStageSubmitted(stageSubmitted)
-    val stage = stageSubmitted.stage
-    var poolName = DEFAULT_POOL_NAME
-    if (stageSubmitted.properties != null) {
-      poolName = stageSubmitted.properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
-    }
-    stageToPool(stage) = poolName
-    val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[Stage]())
-    stages += stage
-  }
-  
-  override def onJobEnd(jobEnd: SparkListenerJobEnd) {
-    super.onJobEnd(jobEnd)
-    jobEnd match {
-      case end: SparkListenerJobEnd =>
-        end.jobResult match {
-          case JobFailed(ex, Some(stage)) =>
-            poolToActiveStages(stageToPool(stage)) -= stage
-          case _ =>
-        }
-      case _ =>
-    }
-  }
-}
-
 private[spark] class JobProgressListener(val sc: SparkContext) extends SparkListener {
   // How many stages to remember
   val RETAINED_STAGES = System.getProperty("spark.ui.retained_stages", "1000").toInt
+  val DEFAULT_POOL_NAME = "default"
 
-  def stageToPool: HashMap[Stage, String] = null
-  def poolToActiveStages: HashMap[String, HashSet[Stage]] =null
+  val stageToPool = new HashMap[Stage, String]()
+  val poolToActiveStages = new HashMap[String, HashSet[Stage]]()
 
   val activeStages = HashSet[Stage]()
   val completedStages = ListBuffer[Stage]()
@@ -70,6 +30,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
 
   override def onStageCompleted(stageCompleted: StageCompleted) = {
     val stage = stageCompleted.stageInfo.stage
+    poolToActiveStages(stageToPool(stage)) -= stage
     activeStages -= stage
     completedStages += stage
     trimIfNecessary(completedStages)
@@ -86,8 +47,18 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     }
   }
 
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) =
-    activeStages += stageSubmitted.stage
+  /** For FIFO, all stages are contained by "default" pool but "default" pool here is meaningless */
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = {
+    val stage = stageSubmitted.stage
+    activeStages += stage
+    var poolName = DEFAULT_POOL_NAME
+    if (stageSubmitted.properties != null) {
+      poolName = stageSubmitted.properties.getProperty("spark.scheduler.cluster.fair.pool", DEFAULT_POOL_NAME)
+    }
+    stageToPool(stage) = poolName
+    val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[Stage]())
+    stages += stage
+  }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val sid = taskEnd.task.stageId
@@ -112,6 +83,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         end.jobResult match {
           case JobFailed(ex, Some(stage)) =>
             activeStages -= stage
+            poolToActiveStages(stageToPool(stage)) -= stage
             failedStages += stage
             trimIfNecessary(failedStages)
           case _ =>

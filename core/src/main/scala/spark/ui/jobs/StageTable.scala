@@ -44,16 +44,16 @@ private[spark] class FairStagePoolInfo(listener: JobProgressListener) extends St
 }
 
 /** Page showing list of all ongoing and recently finished stages */
-private[spark] class StageTable(val dateFmt: SimpleDateFormat, val formatDuration: Long => String, val listener: JobProgressListener) {
+private[spark] class StageTable(
+  val stages: Seq[Stage],
+  val parent: JobProgressUI) {
 
-  var stagePoolInfo: StagePoolInfo = null
+  val listener = parent.listener
+  val dateFmt = parent.dateFmt
+  var stagePoolInfo = parent.stagePoolInfo
   
-  def toNodeSeq(stages: Seq[Stage]): Seq[Node] = {
+  def toNodeSeq(): Seq[Node] = {
     stageTable(stageRow, stages)
-  }
-
-  def setStagePoolInfo(stagePoolInfo: StagePoolInfo) {
-    this.stagePoolInfo = stagePoolInfo
   }
 
   /** Special table which merges two header cells. */
@@ -77,7 +77,7 @@ private[spark] class StageTable(val dateFmt: SimpleDateFormat, val formatDuratio
 
   def getElapsedTime(submitted: Option[Long], completed: Long): String = {
     submitted match {
-      case Some(t) => formatDuration(completed - t)
+      case Some(t) => parent.formatDuration(completed - t)
       case _ => "Unknown"
     }
   }

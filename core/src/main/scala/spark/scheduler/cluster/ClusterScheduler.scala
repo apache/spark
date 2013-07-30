@@ -98,8 +98,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
-  //default scheduler is FIFO
-  val schedulingMode: SchedulingMode = SchedulingMode.withName(System.getProperty("spark.cluster.schedulingmode", "FIFO"))
+  // default scheduler is FIFO
+  val schedulingMode: SchedulingMode = SchedulingMode.withName(
+    System.getProperty("spark.cluster.schedulingmode", "FIFO"))
 
   override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener
@@ -107,7 +108,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   def initialize(context: SchedulerBackend) {
     backend = context
-    //temporarily set rootPool name to empty
+    // temporarily set rootPool name to empty
     rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
@@ -254,10 +255,11 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       }
       var launchedTask = false
       val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
-      for (manager <- sortedTaskSetQueue)
-      {
+
+      for (manager <- sortedTaskSetQueue) {
         logInfo("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
       }
+
       for (manager <- sortedTaskSetQueue) {
 
         // Split offers based on node local, rack local and off-rack tasks.

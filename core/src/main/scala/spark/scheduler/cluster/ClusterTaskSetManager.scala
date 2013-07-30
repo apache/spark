@@ -91,7 +91,6 @@ private[spark] class ClusterTaskSetManager(
   var stageId = taskSet.stageId
   var name = "TaskSet_"+taskSet.stageId.toString
   var parent: Schedulable = null
-  var schedulableQueue :ArrayBuffer[Schedulable] = null
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
 
@@ -645,17 +644,17 @@ private[spark] class ClusterTaskSetManager(
     }
   }
 
-  //TODO: for now we just find Pool not TaskSetManager, we can extend this function in future if needed
+  // TODO: for now we just find Pool not TaskSetManager, we can extend this function in future if needed
   override def getSchedulableByName(name: String): Schedulable = {
     return null
   }
 
   override def addSchedulable(schedulable:Schedulable) {
-    //nothing
+    // nothing
   }
 
   override def removeSchedulable(schedulable:Schedulable) {
-    //nothing
+    // nothing
   }
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {

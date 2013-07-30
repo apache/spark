@@ -4,7 +4,8 @@ import scala.util.Random
 
 import spark.SparkContext
 import spark.SparkContext._
-
+import spark.scheduler.cluster.SchedulingMode
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 /**
  * Continuously generates jobs that expose various features of the WebUI (internal testing tool).
  *
@@ -15,8 +16,17 @@ private[spark] object UIWorkloadGenerator {
   val INTER_JOB_WAIT_MS = 500
 
   def main(args: Array[String]) {
+    if (args.length < 2) {
+      println("usage: ./run spark.ui.UIWorkloadGenerator [master] [FIFO|FAIR]")
+      System.exit(1)
+    }
     val master = args(0)
+    val schedulingMode = SchedulingMode.withName(args(1))
     val appName = "Spark UI Tester"
+
+    if (schedulingMode == SchedulingMode.FAIR) {
+      System.setProperty("spark.cluster.schedulingmode", "FAIR")
+    }
     val sc = new SparkContext(master, appName)
 
     // NOTE: Right now there is no easy way for us to show spark.job.annotation for a given phase,
@@ -56,14 +66,21 @@ private[spark] object UIWorkloadGenerator {
 
     while (true) {
       for ((desc, job) <- jobs) {
-        try {
-          setName(desc)
-          job()
-          println("Job funished: " + desc)
-        } catch {
-          case e: Exception =>
-            println("Job Failed: " + desc)
-        }
+        new Thread {
+          override def run() {
+            if(schedulingMode == SchedulingMode.FAIR) {
+              sc.addLocalProperties("spark.scheduler.cluster.fair.pool",desc)
+            }
+            try {
+              setName(desc)
+              job()
+              println("Job funished: " + desc)
+            } catch {
+              case e: Exception =>
+                println("Job Failed: " + desc)
+            }
+          }
+        }.start
         Thread.sleep(INTER_JOB_WAIT_MS)
       }
     }

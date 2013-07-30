@@ -64,7 +64,8 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
 
   var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
-  val schedulingMode: SchedulingMode = SchedulingMode.withName(System.getProperty("spark.cluster.schedulingmode", "FIFO"))
+  val schedulingMode: SchedulingMode = SchedulingMode.withName(
+    System.getProperty("spark.cluster.schedulingmode", "FIFO"))
   val activeTaskSets = new HashMap[String, TaskSetManager]
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskSetTaskIds = new HashMap[String, HashSet[Long]]
@@ -72,7 +73,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
   var localActor: ActorRef = null
 
   override def start() {
-    //temporarily set rootPool name to empty
+    // temporarily set rootPool name to empty
     rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {

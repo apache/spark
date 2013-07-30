@@ -45,13 +45,13 @@ import spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import spark.partial.{ApproximateEvaluator, PartialResult}
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
 import spark.scheduler.{DAGScheduler, ResultTask, ShuffleMapTask, SparkListener, SplitInfo, Stage, StageInfo, TaskScheduler, ActiveJob}
-import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, ClusterScheduler, Schedulable}
+import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, ClusterScheduler, Schedulable,
+SchedulingMode}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.{StorageStatus, StorageUtils, RDDInfo}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
 import ui.{SparkUI}
-import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -542,17 +542,25 @@ class SparkContext(
     env.blockManager.master.getStorageStatus
   }
 
-  def getPoolsInfo: ArrayBuffer[Schedulable] = {
+  /**
+   *  Return pools for fair scheduler
+   *  TODO:now, we have not taken nested pools into account
+   */
+  def getPools: ArrayBuffer[Schedulable] = {
     taskScheduler.rootPool.schedulableQueue
   }
 
-  def getSchedulingMode: SchedulingMode = {
+  /**
+   *  Return current scheduling mode
+   */
+  def getSchedulingMode: SchedulingMode.SchedulingMode = {
     taskScheduler.schedulingMode
   }
 
   def getPoolNameToPool: HashMap[String, Schedulable] = {
     taskScheduler.rootPool.schedulableNameToSchedulable
   }
+
   /**
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.

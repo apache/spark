@@ -27,7 +27,7 @@ private[spark] trait PoolSource {
 /*
  * Pool source for FIFO scheduler algorithm on Index page
  */
-private[spark] class FIFOSource() extends PoolSource{
+private[spark] class FIFOSource() extends PoolSource {
   def getPools: Seq[Schedulable] = {
     Seq[Schedulable]()
   }
@@ -36,16 +36,16 @@ private[spark] class FIFOSource() extends PoolSource{
 /*
  * Pool source for Fair scheduler algorithm on Index page
  */
-private[spark] class FairSource(sc: SparkContext) extends PoolSource{
+private[spark] class FairSource(sc: SparkContext) extends PoolSource {
   def getPools: Seq[Schedulable] = {
-    sc.getPoolsInfo.toSeq
+    sc.getPools.toSeq
   }
 }
 
 /*
  * specific pool info for pool detail page
  */
-private[spark] class PoolDetailSource(sc: SparkContext, poolName: String) extends PoolSource{
+private[spark] class PoolDetailSource(sc: SparkContext, poolName: String) extends PoolSource {
   def getPools: Seq[Schedulable] = {
     val pools = HashSet[Schedulable]()
     pools += sc.getPoolNameToPool(poolName)
@@ -54,21 +54,18 @@ private[spark] class PoolDetailSource(sc: SparkContext, poolName: String) extend
 }
 
 /** Table showing list of pools */
-private[spark] class PoolTable(listener: JobProgressListener) {
+private[spark] class PoolTable(poolSource: PoolSource, listener: JobProgressListener) {
 
-  var poolSource: PoolSource = null
   var poolToActiveStages: HashMap[String, HashSet[Stage]] = listener.poolToActiveStages
 
-  def toNodeSeq: Seq[Node] = {
+  def toNodeSeq(): Seq[Node] = {
     poolTable(poolRow, poolSource.getPools)
   }
 
-  def setPoolSource(poolSource: PoolSource) {
-    this.poolSource = poolSource
-  }
-
-  //pool tables
-  def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[Stage]]) => Seq[Node], rows: Seq[Schedulable]): Seq[Node] = {
+  // pool tables
+  def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[Stage]]) => Seq[Node],
+    rows: Seq[Schedulable]
+    ): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable">
       <thead>
         <th>Pool Name</th>

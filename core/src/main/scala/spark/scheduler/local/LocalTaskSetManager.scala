@@ -14,7 +14,6 @@ import spark.scheduler.cluster._
 
 private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: TaskSet) extends TaskSetManager with Logging {
   var parent: Schedulable = null
-  var schedulableQueue :ArrayBuffer[Schedulable] = null
   var weight: Int = 1
   var minShare: Int = 0
   var runningTasks: Int = 0
@@ -48,11 +47,11 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   }
 
   def addSchedulable(schedulable: Schedulable): Unit = {
-    //nothing
+    // nothing
   }
 
   def removeSchedulable(schedulable: Schedulable): Unit = {
-    //nothing
+    // nothing
   }
 
   def getSchedulableByName(name: String): Schedulable = {
@@ -60,7 +59,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   }
 
   def executorLost(executorId: String, host: String): Unit = {
-    //nothing
+    // nothing
   }
 
   def checkSpeculatableTasks(): Boolean = {
