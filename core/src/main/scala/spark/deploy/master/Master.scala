@@ -38,7 +38,7 @@ import spark.util.AkkaUtils
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
-  val RETAINED_APPLICATIONS = System.getProperty("spark.deploy.retained_applications", "1000").toInt
+  val RETAINED_APPLICATIONS = System.getProperty("spark.deploy.retainedApplications", "200").toInt
 
   var nextAppNumber = 0
   val workers = new HashSet[WorkerInfo]
