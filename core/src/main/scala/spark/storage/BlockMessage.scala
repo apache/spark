@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.StringBuilder
 import scala.collection.mutable.ArrayBuffer
 
-import spark._
 import spark.network._
 
 private[spark] case class GetBlock(id: String)

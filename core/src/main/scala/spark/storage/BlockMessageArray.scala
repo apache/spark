@@ -19,7 +19,6 @@ package spark.storage
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.StringBuilder
 import scala.collection.mutable.ArrayBuffer
 
 import spark._
@@ -113,7 +112,7 @@ private[spark] object BlockMessageArray {
   
   def main(args: Array[String]) {
     val blockMessages = 
-      (0 until 10).map(i => {
+      (0 until 10).map { i =>
         if (i % 2 == 0) {
           val buffer =  ByteBuffer.allocate(100)
           buffer.clear
@@ -121,7 +120,7 @@ private[spark] object BlockMessageArray {
         } else {
           BlockMessage.fromGetBlock(GetBlock(i.toString))
         }
-      })
+      }
     val blockMessageArray = new BlockMessageArray(blockMessages)
     println("Block message array created")
     
