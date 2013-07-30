@@ -41,7 +41,8 @@ abstract class Updater extends Serializable {
 class SimpleUpdater extends Updater {
   override def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix,
       stepSize: Double, iter: Int, regParam: Double): (DoubleMatrix, Double) = {
-    val normGradient = gradient.mul(stepSize / math.sqrt(iter))
+    val thisIterStepSize = stepSize / math.sqrt(iter)
+    val normGradient = gradient.mul(thisIterStepSize)
     (weightsOld.sub(normGradient), 0)
   }
 }
