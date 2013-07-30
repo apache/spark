@@ -54,13 +54,7 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
     values.foreach(x => {
       val bb = ser.serialize(x)
       out.writeInt(bb.remaining())
-      if (bb.hasArray) {
-        out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
-      } else {
-        val b = new Array[Byte](bb.remaining())
-        bb.get(b)
-        out.write(b)
-      }
+      Utils.writeByteBuffer(bb, out)
     })
   }
 

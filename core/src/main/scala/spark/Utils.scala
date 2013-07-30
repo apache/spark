@@ -35,6 +35,7 @@ import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 
 import spark.serializer.SerializerInstance
 import spark.deploy.SparkHadoopUtil
+import java.nio.ByteBuffer
 
 
 /**
@@ -66,6 +67,19 @@ private object Utils extends Logging {
         Class.forName(desc.getName, false, loader)
     }
     return ois.readObject.asInstanceOf[T]
+  }
+
+  /**
+   * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
+   */
+  def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput) = {
+    if (bb.hasArray) {
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      val bbval = new Array[Byte](bb.remaining())
+      bb.get(bbval)
+      out.write(bbval)
+    }
   }
 
   def isAlpha(c: Char): Boolean = {

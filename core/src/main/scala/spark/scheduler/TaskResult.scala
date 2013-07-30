@@ -21,7 +21,7 @@ import java.io._
 
 import scala.collection.mutable.Map
 import spark.executor.TaskMetrics
-import spark.SparkEnv
+import spark.{Utils, SparkEnv}
 import java.nio.ByteBuffer
 
 // Task result. Also contains updates to accumulator variables.
@@ -37,13 +37,7 @@ class TaskResult[T](var value: T, var accumUpdates: Map[Long, Any], var metrics:
     val bb = objectSer.serialize(value)
 
     out.writeInt(bb.remaining())
-    if (bb.hasArray) {
-      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
-    } else {
-      val bbval = new Array[Byte](bb.remaining())
-      bb.get(bbval)
-      out.write(bbval)
-    }
+    Utils.writeByteBuffer(bb, out)
 
     out.writeInt(accumUpdates.size)
     for ((key, value) <- accumUpdates) {
