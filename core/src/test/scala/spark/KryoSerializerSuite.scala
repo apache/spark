@@ -131,13 +131,13 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   test("kryo with collect") {
     val control = 1 :: 2 :: Nil
     val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
-    assert(control == result.toSeq)
+    assert(control === result.toSeq)
   }
 
   test("kryo with parallelize") {
     val control = 1 :: 2 :: Nil
     val result = sc.parallelize(control.map(new ClassWithoutNoArgConstructor(_))).map(_.x).collect()
-    assert (control == result.toSeq)
+    assert (control === result.toSeq)
   }
 
   override def beforeAll() {
