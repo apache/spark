@@ -170,6 +170,7 @@ object SparkBuild extends Build {
       "com.ning" % "compress-lzf" % "0.8.4",
       "org.ow2.asm" % "asm" % "4.0",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
+      "de.javakaffee" % "kryo-serializers" % "0.22",
       "com.typesafe.akka" % "akka-actor" % "2.0.5" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-remote" % "2.0.5" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-slf4j" % "2.0.5" excludeAll(excludeNetty),
@@ -178,11 +179,7 @@ object SparkBuild extends Build {
       "net.liftweb" % "lift-json_2.9.2" % "2.5",
       "org.apache.mesos" % "mesos" % "0.9.0-incubating",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
-      "org.apache.derby" % "derby" % "10.4.2.0" % "test",
-      "com.codahale.metrics" % "metrics-core" % "3.0.0",
-      "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
-      "com.twitter" % "chill_2.9.3" % "0.3.0",
-      "com.twitter" % "chill-java" % "0.3.0"
+      "org.apache.derby" % "derby" % "10.4.2.0" % "test"
     ) ++ (
       if (HADOOP_MAJOR_VERSION == "2") {
         if (HADOOP_YARN) {
