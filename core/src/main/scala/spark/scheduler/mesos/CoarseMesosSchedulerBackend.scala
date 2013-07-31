@@ -131,7 +131,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
-      val basename = new File(uri).getName().split('.')(0)
+      val basename = uri.split('/').last.split('.').head
       command.setValue("cd %s*; ./run spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
         basename, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
