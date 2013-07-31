@@ -44,7 +44,7 @@ object SparkBuild extends Build {
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
-  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn (core)
+  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn (core) dependsOn(bagel) dependsOn(mllib)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core) dependsOn (streaming)
 
@@ -244,14 +244,14 @@ object SparkBuild extends Build {
 
   def bagelSettings = sharedSettings ++ Seq(
     name := "spark-bagel"
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % "1.2.3"
     )
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
