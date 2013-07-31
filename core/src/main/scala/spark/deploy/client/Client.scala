@@ -1,19 +1,38 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.client
 
-import spark.deploy._
+import java.util.concurrent.TimeoutException
+
 import akka.actor._
+import akka.actor.Terminated
 import akka.pattern.ask
 import akka.util.Duration
-import akka.util.duration._
-import akka.pattern.AskTimeoutException
-import spark.{SparkException, Logging}
+import akka.remote.RemoteClientDisconnected
 import akka.remote.RemoteClientLifeCycleEvent
 import akka.remote.RemoteClientShutdown
-import spark.deploy.RegisterApplication
-import spark.deploy.master.Master
-import akka.remote.RemoteClientDisconnected
-import akka.actor.Terminated
 import akka.dispatch.Await
+
+import spark.Logging
+import spark.deploy.{ApplicationDescription, ExecutorState}
+import spark.deploy.DeployMessages._
+import spark.deploy.master.Master
+
 
 /**
  * The main class used to talk to a Spark deploy cluster. Takes a master URL, an app description,
@@ -117,7 +136,8 @@ private[spark] class Client(
         val future = actor.ask(StopClient)(timeout)
         Await.result(future, timeout)
       } catch {
-        case e: AskTimeoutException =>  // Ignore it, maybe master went away
+        case e: TimeoutException =>
+          logInfo("Stop request to Master timed out; it may already be shut down.")
       }
       actor = null
     }

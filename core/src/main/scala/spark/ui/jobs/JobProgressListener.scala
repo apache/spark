@@ -21,6 +21,15 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val completedStages = ListBuffer[Stage]()
   val failedStages = ListBuffer[Stage]()
 
+  // Total metrics reflect metrics only for completed tasks
+  var totalTime = 0L
+  var totalShuffleRead = 0L
+  var totalShuffleWrite = 0L
+
+  val stageToTime = HashMap[Int, Long]()
+  val stageToShuffleRead = HashMap[Int, Long]()
+  val stageToShuffleWrite = HashMap[Int, Long]()
+  val stageToTasksActive = HashMap[Int, HashSet[TaskInfo]]()
   val stageToTasksComplete = HashMap[Int, Int]()
   val stageToTasksFailed = HashMap[Int, Int]()
   val stageToTaskInfos =
@@ -42,6 +51,12 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
       val toRemove = RETAINED_STAGES / 10
       stages.takeRight(toRemove).foreach( s => {
         stageToTaskInfos.remove(s.id)
+        stageToTime.remove(s.id)
+        stageToShuffleRead.remove(s.id)
+        stageToShuffleWrite.remove(s.id)
+        stageToTasksActive.remove(s.id)
+        stageToTasksComplete.remove(s.id)
+        stageToTasksFailed.remove(s.id)
       })
       stages.trimEnd(toRemove)
     }
@@ -60,9 +75,21 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[Stage]())
     stages += stage
   }
-
+  
+  override def onTaskStart(taskStart: SparkListenerTaskStart) {
+    val sid = taskStart.task.stageId
+    val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
+    tasksActive += taskStart.taskInfo
+    val taskList = stageToTaskInfos.getOrElse(
+      sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
+    taskList += ((taskStart.taskInfo, None, None))
+    stageToTaskInfos(sid) = taskList
+  }
+ 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val sid = taskEnd.task.stageId
+    val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
+    tasksActive -= taskEnd.taskInfo
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
       taskEnd.reason match {
         case e: ExceptionFailure =>
@@ -70,10 +97,29 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
           (Some(e), e.metrics)
         case _ =>
           stageToTasksComplete(sid) = stageToTasksComplete.getOrElse(sid, 0) + 1
-          (None, Some(taskEnd.taskMetrics))
+          (None, Option(taskEnd.taskMetrics))
       }
+
+    stageToTime.getOrElseUpdate(sid, 0L)
+    val time = metrics.map(m => m.executorRunTime).getOrElse(0)
+    stageToTime(sid) += time
+    totalTime += time
+
+    stageToShuffleRead.getOrElseUpdate(sid, 0L)
+    val shuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s =>
+      s.remoteBytesRead).getOrElse(0L)
+    stageToShuffleRead(sid) += shuffleRead
+    totalShuffleRead += shuffleRead
+
+    stageToShuffleWrite.getOrElseUpdate(sid, 0L)
+    val shuffleWrite = metrics.flatMap(m => m.shuffleWriteMetrics).map(s =>
+      s.shuffleBytesWritten).getOrElse(0L)
+    stageToShuffleWrite(sid) += shuffleWrite
+    totalShuffleWrite += shuffleWrite
+
     val taskList = stageToTaskInfos.getOrElse(
       sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
+    taskList -= ((taskEnd.taskInfo, None, None))
     taskList += ((taskEnd.taskInfo, metrics, failureInfo))
     stageToTaskInfos(sid) = taskList
   }

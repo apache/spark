@@ -1,15 +1,30 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.worker
 
 import java.io._
 import java.lang.System.getenv
-import spark.deploy.{ExecutorState, ExecutorStateChanged, ApplicationDescription}
+
 import akka.actor.ActorRef
+
 import spark.{Utils, Logging}
-import java.net.{URI, URL}
-import org.apache.hadoop.fs.{Path, FileSystem}
-import org.apache.hadoop.conf.Configuration
-import scala.Some
-import spark.deploy.ExecutorStateChanged
+import spark.deploy.{ExecutorState, ApplicationDescription}
+import spark.deploy.DeployMessages.ExecutorStateChanged
 
 /**
  * Manages the execution of one executor process.
@@ -33,6 +48,9 @@ private[spark] class ExecutorRunner(
   var workerThread: Thread = null
   var process: Process = null
   var shutdownHook: Thread = null
+
+  private def getAppEnv(key: String): Option[String] =
+    appDesc.command.environment.get(key).orElse(Option(getenv(key)))
 
   def start() {
     workerThread = new Thread("ExecutorRunner for " + fullId) {
@@ -78,7 +96,7 @@ private[spark] class ExecutorRunner(
 
   def buildCommandSeq(): Seq[String] = {
     val command = appDesc.command
-    val runner = Option(getenv("JAVA_HOME")).map(_ + "/bin/java").getOrElse("java")
+    val runner = getAppEnv("JAVA_HOME").map(_ + "/bin/java").getOrElse("java")
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
     Seq(runner) ++ buildJavaOpts() ++ Seq(command.mainClass) ++
@@ -90,15 +108,17 @@ private[spark] class ExecutorRunner(
    * the way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(): Seq[String] = {
-    val libraryOpts = Option(getenv("SPARK_LIBRARY_PATH"))
+    val libraryOpts = getAppEnv("SPARK_LIBRARY_PATH")
       .map(p => List("-Djava.library.path=" + p))
       .getOrElse(Nil)
-    val userOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString).getOrElse(Nil)
+    val userOpts = getAppEnv("SPARK_JAVA_OPTS").map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq("-Xms" + memory + "M", "-Xmx" + memory + "M")
 
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
-    val classPath = Utils.executeAndGetOutput(Seq(sparkHome + "/bin/compute-classpath" + ext))
+    val classPath = Utils.executeAndGetOutput(
+        Seq(sparkHome + "/bin/compute-classpath" + ext),
+        extraEnvironment=appDesc.command.environment)
 
     Seq("-cp", classPath) ++ libraryOpts ++ userOpts ++ memoryOpts
   }

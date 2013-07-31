@@ -1,17 +1,36 @@
-package spark.deploy.master.ui
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import akka.dispatch.Await
-import akka.pattern.ask
-import akka.util.duration._
+package spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import spark.deploy.{RequestMasterState, DeployWebUI, MasterState}
+import akka.dispatch.Await
+import akka.pattern.ask
+import akka.util.duration._
+
 import spark.Utils
-import spark.ui.UIUtils
+import spark.deploy.DeployWebUI
+import spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import spark.deploy.master.{ApplicationInfo, WorkerInfo}
+import spark.ui.UIUtils
+
 
 private[spark] class IndexPage(parent: MasterWebUI) {
   val master = parent.master
@@ -19,7 +38,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
+    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, 30 seconds)
 
     val workerHeaders = Seq("Id", "Address", "State", "Cores", "Memory")
@@ -38,8 +57,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         <div class="row">
           <div class="span12">
             <ul class="unstyled">
-              <li><strong>URL:</strong>{state.uri}</li>
-              <li><strong>Workers:</strong>{state.workers.size}</li>
+              <li><strong>URL:</strong> {state.uri}</li>
+              <li><strong>Workers:</strong> {state.workers.size}</li>
               <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
                 {state.workers.map(_.coresUsed).sum} Used</li>
               <li><strong>Memory:</strong>
@@ -103,7 +122,9 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
       </td>
-      <td>{app.desc.name}</td>
+      <td>
+        <a href={app.appUiUrl}>{app.desc.name}</a>
+      </td>
       <td>
         {app.coresGranted}
       </td>

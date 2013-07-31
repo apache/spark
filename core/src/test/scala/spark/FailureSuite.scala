@@ -1,9 +1,23 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import org.scalatest.FunSuite
-import org.scalatest.prop.Checkers
-
-import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
 
@@ -23,7 +37,7 @@ object FailureSuiteState {
 }
 
 class FailureSuite extends FunSuite with LocalSparkContext {
-  
+
   // Run a 3-task map job in which task 1 deterministically fails once, and check
   // whether the job completes successfully and we ran 4 tasks in total.
   test("failure in a single-stage job") {
@@ -49,7 +63,7 @@ class FailureSuite extends FunSuite with LocalSparkContext {
   test("failure in a two-stage job") {
     sc = new SparkContext("local[1,1]", "test")
     val results = sc.makeRDD(1 to 3).map(x => (x, x)).groupByKey(3).map {
-      case (k, v) => 
+      case (k, v) =>
         FailureSuiteState.synchronized {
           FailureSuiteState.tasksRun += 1
           if (k == 1 && FailureSuiteState.tasksFailed == 0) {
@@ -70,11 +84,39 @@ class FailureSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local[1,1]", "test")
     val results = sc.makeRDD(1 to 3).map(x => new NonSerializable)
 
-    val thrown = intercept[spark.SparkException] {
+    val thrown = intercept[SparkException] {
       results.collect()
     }
-    assert(thrown.getClass === classOf[spark.SparkException])
+    assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.contains("NotSerializableException"))
+
+    FailureSuiteState.clear()
+  }
+
+  test("failure because task closure is not serializable") {
+    sc = new SparkContext("local[1,1]", "test")
+    val a = new NonSerializable
+
+    // Non-serializable closure in the final result stage
+    val thrown = intercept[SparkException] {
+      sc.parallelize(1 to 10, 2).map(x => a).count()
+    }
+    assert(thrown.getClass === classOf[SparkException])
+    assert(thrown.getMessage.contains("NotSerializableException"))
+
+    // Non-serializable closure in an earlier stage
+    val thrown1 = intercept[SparkException] {
+      sc.parallelize(1 to 10, 2).map(x => (x, a)).partitionBy(new HashPartitioner(3)).count()
+    }
+    assert(thrown1.getClass === classOf[SparkException])
+    assert(thrown1.getMessage.contains("NotSerializableException"))
+
+    // Non-serializable closure in foreach function
+    val thrown2 = intercept[SparkException] {
+      sc.parallelize(1 to 10, 2).foreach(x => println(a))
+    }
+    assert(thrown2.getClass === classOf[SparkException])
+    assert(thrown2.getMessage.contains("NotSerializableException"))
 
     FailureSuiteState.clear()
   }

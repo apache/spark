@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.mllib.util
 
 import spark.{RDD, SparkContext}
@@ -19,7 +36,7 @@ object MLUtils {
    * @return An RDD of tuples. For each tuple, the first element is the label, and the second
    *         element represents the feature values (an array of Double).
    */
-  def loadData(sc: SparkContext, dir: String): RDD[(Double, Array[Double])] = {
+  def loadLabeledData(sc: SparkContext, dir: String): RDD[(Double, Array[Double])] = {
     sc.textFile(dir).map { line =>
       val parts = line.split(",")
       val label = parts(0).toDouble
@@ -28,7 +45,7 @@ object MLUtils {
     }
   }
 
-  def saveData(data: RDD[(Double, Array[Double])], dir: String) {
+  def saveLabeledData(data: RDD[(Double, Array[Double])], dir: String) {
     val dataStr = data.map(x => x._1 + "," + x._2.mkString(" "))
     dataStr.saveAsTextFile(dir)
   }

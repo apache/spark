@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.api.python
 
 import java.io._
@@ -46,34 +63,42 @@ private[spark] class PythonRDD[T: ClassManifest](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + pythonExec) {
       override def run() {
-        SparkEnv.set(env)
-        val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
-        val dataOut = new DataOutputStream(stream)
-        val printOut = new PrintWriter(stream)
-        // Partition index
-        dataOut.writeInt(split.index)
-        // sparkFilesDir
-        PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dataOut)
-        // Broadcast variables
-        dataOut.writeInt(broadcastVars.length)
-        for (broadcast <- broadcastVars) {
-          dataOut.writeLong(broadcast.id)
-          dataOut.writeInt(broadcast.value.length)
-          dataOut.write(broadcast.value)
+        try {
+          SparkEnv.set(env)
+          val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
+          val dataOut = new DataOutputStream(stream)
+          val printOut = new PrintWriter(stream)
+          // Partition index
+          dataOut.writeInt(split.index)
+          // sparkFilesDir
+          PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dataOut)
+          // Broadcast variables
+          dataOut.writeInt(broadcastVars.length)
+          for (broadcast <- broadcastVars) {
+            dataOut.writeLong(broadcast.id)
+            dataOut.writeInt(broadcast.value.length)
+            dataOut.write(broadcast.value)
+          }
+          dataOut.flush()
+          // Serialized user code
+          for (elem <- command) {
+            printOut.println(elem)
+          }
+          printOut.flush()
+          // Data values
+          for (elem <- parent.iterator(split, context)) {
+            PythonRDD.writeAsPickle(elem, dataOut)
+          }
+          dataOut.flush()
+          printOut.flush()
+          worker.shutdownOutput()
+        } catch {
+          case e: IOException =>
+            // This can happen for legitimate reasons if the Python code stops returning data before we are done
+            // passing elements through, e.g., for take(). Just log a message to say it happened.
+            logInfo("stdin writer to Python finished early")
+            logDebug("stdin writer to Python finished early", e)
         }
-        dataOut.flush()
-        // Serialized user code
-        for (elem <- command) {
-          printOut.println(elem)
-        }
-        printOut.flush()
-        // Data values
-        for (elem <- parent.iterator(split, context)) {
-          PythonRDD.writeAsPickle(elem, dataOut)
-        }
-        dataOut.flush()
-        printOut.flush()
-        worker.shutdownOutput()
       }
     }.start()
 
@@ -280,7 +305,7 @@ class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
   Utils.checkHost(serverHost, "Expected hostname")
 
   val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-  
+
   override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
 
   override def addInPlace(val1: JList[Array[Byte]], val2: JList[Array[Byte]])

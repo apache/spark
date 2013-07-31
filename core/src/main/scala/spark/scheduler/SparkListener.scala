@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler
 
 import java.util.Properties
@@ -12,6 +29,8 @@ case class SparkListenerStageSubmitted(stage: Stage, taskSize: Int, properties: 
      extends SparkListenerEvents
 
 case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
+
+case class SparkListenerTaskStart(task: Task[_], taskInfo: TaskInfo) extends SparkListenerEvents
 
 case class SparkListenerTaskEnd(task: Task[_], reason: TaskEndReason, taskInfo: TaskInfo,
      taskMetrics: TaskMetrics) extends SparkListenerEvents
@@ -32,6 +51,11 @@ trait SparkListener {
    * Called when a stage is submitted
    */
   def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
+
+  /**
+   * Called when a task starts
+   */
+  def onTaskStart(taskEnd: SparkListenerTaskStart) { }
 
   /**
    * Called when a task ends

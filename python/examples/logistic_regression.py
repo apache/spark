@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 """
 This example requires numpy (http://www.numpy.org/)
 """
@@ -18,7 +35,7 @@ np.random.seed(42)
 
 
 DataPoint = namedtuple("DataPoint", ['x', 'y'])
-from lr import DataPoint  # So that DataPoint is properly serialized
+from logistic_regression import DataPoint  # So that DataPoint is properly serialized
 
 
 def generateData():
@@ -31,8 +48,7 @@ def generateData():
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        print >> sys.stderr, \
-            "Usage: PythonLR <master> [<slices>]"
+        print >> sys.stderr, "Usage: logistic_regression <master> [<slices>]"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonLR", pyFiles=[realpath(__file__)])
     slices = int(sys.argv[2]) if len(sys.argv) > 2 else 2

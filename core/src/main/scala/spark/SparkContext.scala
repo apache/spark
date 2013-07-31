@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import java.io._
@@ -44,15 +61,16 @@ import org.apache.mesos.MesosNativeLibrary
 import spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import spark.partial.{ApproximateEvaluator, PartialResult}
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
-import spark.scheduler.{DAGScheduler, ResultTask, ShuffleMapTask, SparkListener,
+import spark.scheduler.{DAGScheduler, DAGSchedulerSource, ResultTask, ShuffleMapTask, SparkListener,
   SplitInfo, Stage, StageInfo, TaskScheduler, ActiveJob}
 import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
   ClusterScheduler, Schedulable, SchedulingMode}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import spark.storage.{StorageStatus, StorageUtils, RDDInfo}
+import spark.storage.{StorageStatus, StorageUtils, RDDInfo, BlockManagerSource}
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
 import ui.{SparkUI}
+import spark.metrics._
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -255,6 +273,16 @@ class SparkContext(
   }
   // Post init
   taskScheduler.postStartHook()
+
+  val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
+  val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
+
+  def initDriverMetrics() {
+    SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
+    SparkEnv.get.metricsSystem.registerSource(blockManagerSource)
+  }
+
+  initDriverMetrics()
 
   // Methods for creating RDDs
 
@@ -532,6 +560,12 @@ class SparkContext(
     StorageUtils.rddInfoFromStorageStatus(getExecutorStorageStatus, this)
   }
 
+  /**
+   * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
+   * Note that this does not necessarily mean the caching or computation was successful.
+   */
+  def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
+
   def getStageInfo: Map[Stage,StageInfo] = {
     dagScheduler.stageToInfos
   }
@@ -545,7 +579,7 @@ class SparkContext(
 
   /**
    *  Return pools for fair scheduler
-   *  TODO:now, we have not taken nested pools into account
+   *  TODO(xiajunluan):now, we have not taken nested pools into account
    */
   def getPools: ArrayBuffer[Schedulable] = {
     taskScheduler.rootPool.schedulableQueue
@@ -582,7 +616,12 @@ class SparkContext(
     } else {
       val uri = new URI(path)
       val key = uri.getScheme match {
-        case null | "file" => env.httpFileServer.addJar(new File(uri.getPath))
+        case null | "file" =>
+          if (SparkHadoopUtil.isYarnMode()) {
+            logWarning("local jar specified as parameter to addJar under Yarn mode")
+            return
+          }
+          env.httpFileServer.addJar(new File(uri.getPath))
         case _ => path
       }
       addedJars(key) = System.currentTimeMillis

@@ -1,14 +1,26 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.ui
 
+import scala.util.{Failure, Success, Try}
+import java.net.ServerSocket
 import org.scalatest.FunSuite
 import org.eclipse.jetty.server.Server
-import java.net.ServerSocket
-import scala.util.{Failure, Success, Try}
-import spark.Utils
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
-import java.io.{FileOutputStream, File}
-import com.google.common.base.Charsets
 
 class UISuite extends FunSuite {
   test("jetty port increases under contention") {
@@ -30,48 +42,5 @@ class UISuite extends FunSuite {
       case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
       case Failure  (e) =>
     }
-  }
-
-  test("string formatting of time durations") {
-    val second = 1000
-    val minute = second * 60
-    val hour = minute * 60
-    def str = Utils.msDurationToString(_)
-
-    assert(str(123) === "123 ms")
-    assert(str(second) === "1.0 s")
-    assert(str(second + 462) === "1.5 s")
-    assert(str(hour) === "1.00 h")
-    assert(str(minute) === "1.0 m")
-    assert(str(minute + 4 * second + 34) === "1.1 m")
-    assert(str(10 * hour + minute + 4 * second) === "10.02 h")
-    assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11.00 h")
-  }
-
-  test("reading last n bytes of a file") {
-    val tmpDir = Files.createTempDir()
-
-    // File smaller than limit
-    val f1Path = tmpDir + "/f1"
-    val f1 = new FileOutputStream(f1Path)
-    f1.write("a\nb\nc\nd".getBytes(Charsets.UTF_8))
-    f1.close()
-    assert(Utils.lastNBytes(f1Path, 1024) === "a\nb\nc\nd")
-
-    // File larger than limit
-    val f2Path = tmpDir + "/f2"
-    val f2 = new FileOutputStream(f2Path)
-    f2.write("1\n2\n3\n4\n5\n6\n7\n8\n".getBytes(Charsets.UTF_8))
-    f2.close()
-    assert(Utils.lastNBytes(f2Path, 8) === "5\n6\n7\n8\n")
-
-    // Request limit too
-    val f3Path = tmpDir + "/f2"
-    val f3 = new FileOutputStream(f3Path)
-    f3.write("1\n2\n3\n4\n5\n6\n7\n8\n".getBytes(Charsets.UTF_8))
-    f3.close()
-    assert(Utils.lastNBytes(f3Path, 8) === "5\n6\n7\n8\n")
-
-    FileUtils.deleteDirectory(tmpDir)
   }
 }

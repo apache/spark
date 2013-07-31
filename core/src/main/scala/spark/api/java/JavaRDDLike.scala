@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.api.java
 
 import java.util.{List => JList, Comparator}
@@ -383,5 +400,30 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def top(num: Int): JList[T] = {
     val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[T]]
     top(num, comp)
+  }
+
+  /**
+   * Returns the first K elements from this RDD as defined by
+   * the specified Comparator[T] and maintains the order.
+   * @param num the number of top elements to return
+   * @param comp the comparator that defines the order
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int, comp: Comparator[T]): JList[T] = {
+    import scala.collection.JavaConversions._
+    val topElems = rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp))
+    val arr: java.util.Collection[T] = topElems.toSeq
+    new java.util.ArrayList(arr)
+  }
+
+  /**
+   * Returns the first K elements from this RDD using the
+   * natural ordering for T while maintain the order.
+   * @param num the number of top elements to return
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int): JList[T] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[T]]
+    takeOrdered(num, comp)
   }
 }

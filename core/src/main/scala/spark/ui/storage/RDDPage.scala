@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
@@ -26,8 +43,14 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     val workers = filteredStorageStatusList.map((prefix, _))
     val workerTable = listingTable(workerHeaders, workerRow, workers)
 
-    val blockHeaders = Seq("Block Name", "Storage Level", "Size in Memory", "Size on Disk")
-    val blocks = filteredStorageStatusList.flatMap(_.blocks).toArray.sortWith(_._1 < _._1)
+    val blockHeaders = Seq("Block Name", "Storage Level", "Size in Memory", "Size on Disk",
+      "Locations")
+
+    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).toArray.sortWith(_._1 < _._1)
+    val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
+    val blocks = blockStatuses.map {
+      case(id, status) => (id, status, blockLocations.get(id).getOrElse(Seq("UNKNOWN")))
+    }
     val blockTable = listingTable(blockHeaders, blockRow, blocks)
 
     val content =
@@ -74,8 +97,8 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     headerSparkPage(content, parent.sc, "RDD Info: " + rddInfo.name, Jobs)
   }
 
-  def blockRow(blk: (String, BlockStatus)): Seq[Node] = {
-    val (id, block) = blk
+  def blockRow(row: (String, BlockStatus, Seq[String])): Seq[Node] = {
+    val (id, block, locations) = row
     <tr>
       <td>{id}</td>
       <td>
@@ -86,6 +109,9 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
       </td>
       <td sorttable_customkey={block.diskSize.toString}>
         {Utils.memoryBytesToString(block.diskSize)}
+      </td>
+      <td>
+        {locations.map(l => <span>{l}<br/></span>)}
       </td>
     </tr>
   }

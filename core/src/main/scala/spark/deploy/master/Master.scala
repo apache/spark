@@ -1,19 +1,38 @@
-package spark.deploy.master
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import akka.actor._
-import akka.actor.Terminated
-import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
-import akka.util.duration._
+package spark.deploy.master
 
 import java.text.SimpleDateFormat
 import java.util.Date
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import spark.deploy._
+import akka.actor._
+import akka.actor.Terminated
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
+import akka.util.duration._
+
 import spark.{Logging, SparkException, Utils}
+import spark.deploy.{ApplicationDescription, ExecutorState}
+import spark.deploy.DeployMessages._
+import spark.deploy.master.ui.MasterWebUI
+import spark.metrics.MetricsSystem
 import spark.util.AkkaUtils
-import ui.MasterWebUI
 
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
@@ -36,9 +55,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   var firstApp: Option[ApplicationInfo] = None
 
-  val webUi = new MasterWebUI(self)
+  val webUi = new MasterWebUI(self, webUiPort)
 
   Utils.checkHost(host, "Expected hostname")
+
+  val metricsSystem = MetricsSystem.createMetricsSystem("master")
+  val masterSource = new MasterSource(this)
 
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
@@ -56,10 +78,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     webUi.start()
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
+
+    metricsSystem.registerSource(masterSource)
+    metricsSystem.start()
   }
 
   override def postStop() {
     webUi.stop()
+    metricsSystem.stop()
   }
 
   override def receive = {
@@ -71,7 +97,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       } else {
         addWorker(id, host, workerPort, cores, memory, worker_webUiPort, publicAddress)
         context.watch(sender)  // This doesn't work with remote actors but helps for testing
-        sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUi.boundPort)
+        sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUi.boundPort.get)
         schedule()
       }
     }
@@ -143,7 +169,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case RequestMasterState => {
-      sender ! MasterState(host, port, workers.toArray, apps.toArray, completedApps.toArray)
+      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray)
     }
   }
 
@@ -208,20 +234,27 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo, sparkHome: String) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
-    worker.actor ! LaunchExecutor(exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory, sparkHome)
-    exec.application.driver ! ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory)
+    worker.actor ! LaunchExecutor(
+      exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory, sparkHome)
+    exec.application.driver ! ExecutorAdded(
+      exec.id, worker.id, worker.hostPort, exec.cores, exec.memory)
   }
 
   def addWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int,
     publicAddress: String): WorkerInfo = {
-    // There may be one or more refs to dead workers on this same node (w/ different ID's), remove them.
-    workers.filter(w => (w.host == host && w.port == port) && (w.state == WorkerState.DEAD)).foreach(workers -= _)
+    // There may be one or more refs to dead workers on this same node (w/ different ID's),
+    // remove them.
+    workers.filter { w =>
+      (w.host == host && w.port == port) && (w.state == WorkerState.DEAD)
+    }.foreach { w =>
+      workers -= w
+    }
     val worker = new WorkerInfo(id, host, port, cores, memory, sender, webUiPort, publicAddress)
     workers += worker
     idToWorker(worker.id) = worker
     actorToWorker(sender) = worker
     addressToWorker(sender.path.address) = worker
-    return worker
+    worker
   }
 
   def removeWorker(worker: WorkerInfo) {
@@ -232,7 +265,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     addressToWorker -= worker.actor.path.address
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
-      exec.application.driver ! ExecutorUpdated(exec.id, ExecutorState.LOST, Some("worker lost"), None)
+      exec.application.driver ! ExecutorUpdated(
+        exec.id, ExecutorState.LOST, Some("worker lost"), None)
       exec.application.removeExecutor(exec)
     }
   }
@@ -252,7 +286,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     if (workersAlive.size > 0 && !workersAlive.exists(_.memoryFree >= desc.memoryPerSlave)) {
       logWarning("Could not find any workers with enough memory for " + firstApp.get.id)
     }
-    return app
+    app
   }
 
   def finishApplication(app: ApplicationInfo) {

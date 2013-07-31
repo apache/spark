@@ -38,3 +38,5 @@ dependency-reduced-pom.xml
 .ensime_lucene
 checkpoint
 derby.log
+dist/
+spark-*-bin.tar.gz
