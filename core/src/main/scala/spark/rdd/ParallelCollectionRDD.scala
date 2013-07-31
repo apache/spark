@@ -24,6 +24,7 @@ import spark._
 import java.io._
 import java.nio.ByteBuffer
 import scala.Serializable
+import akka.serialization.JavaSerializer
 
 private[spark] class ParallelCollectionPartition[T: ClassManifest](
                                                                     var rddId: Long,
@@ -47,35 +48,44 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
 
   @throws(classOf[IOException])
   private def writeObject(out: ObjectOutputStream): Unit = {
-    out.writeLong(rddId)
-    out.writeInt(slice)
-    out.writeInt(values.size)
-    val ser = SparkEnv.get.serializer.newInstance()
-    values.foreach(x => {
-      val bb = ser.serialize(x)
-      out.writeInt(bb.remaining())
-      Utils.writeByteBuffer(bb, out)
-    })
+
+    val sfactory = SparkEnv.get.serializer
+    // treat java serializer with default action rather
+    // than going thru serialization,
+    // to avoid a separate serialization header.
+    sfactory match {
+      case js:JavaSerializer => out.defaultWriteObject()
+      case _ => {
+        // for every other serializer, we
+        // assume that it would support Seq[T] and
+        // do so efficiently.
+        val ser = sfactory.newInstance()
+        out.writeLong(rddId)
+        out.writeInt(slice)
+        val bb = ser.serialize(values)
+        out.writeInt(bb.remaining())
+        Utils.writeByteBuffer(bb, out)
+      }
+    }
   }
 
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = {
-    rddId = in.readLong()
-    slice = in.readInt()
-    val s = in.readInt()
-    val ser = SparkEnv.get.serializer.newInstance()
-    var bb = ByteBuffer.allocate(1024)
-    values = (0 until s).map(i => {
-      val s = in.readInt()
-      if (bb.capacity() < s) {
-        bb = ByteBuffer.allocate(s)
-      } else {
-        bb.clear()
-      }
-      in.readFully(bb.array(), 0, s)
-      bb.limit(s)
-      ser.deserialize(bb): T
-    }).toSeq
+
+    val sfactory = SparkEnv.get.serializer
+    sfactory match {
+      case js:JavaSerializer => in.defaultReadObject()
+      case _ =>
+        val ser = sfactory.newInstance()
+        rddId = in.readLong()
+        slice = in.readInt()
+
+        val s = in.readInt()
+        val bb = ByteBuffer.allocate(s)
+        in.readFully(bb.array(), 0, s)
+        bb.limit(s)
+        values = ser.deserialize(bb)
+    }
   }
 }
 
