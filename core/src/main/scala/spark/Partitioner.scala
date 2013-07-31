@@ -65,17 +65,9 @@ object Partitioner {
 class HashPartitioner(partitions: Int) extends Partitioner {
   def numPartitions = partitions
 
-  def getPartition(key: Any): Int = {
-    if (key == null) {
-      return 0
-    } else {
-      val mod = key.hashCode % partitions
-      if (mod < 0) {
-        mod + partitions
-      } else {
-        mod // Guard against negative hash codes
-      }
-    }
+  def getPartition(key: Any): Int = key match {
+    case null => 0
+    case _ => Utils.nonNegativeMod(key.hashCode, numPartitions)
   }
   
   override def equals(other: Any): Boolean = other match {
