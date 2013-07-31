@@ -27,10 +27,10 @@ import scala.Serializable
 import akka.serialization.JavaSerializer
 
 private[spark] class ParallelCollectionPartition[T: ClassManifest](
-                                                                    var rddId: Long,
-                                                                    var slice: Int,
-                                                                    var values: Seq[T])
-  extends Partition with Serializable {
+    var rddId: Long,
+    var slice: Int,
+    var values: Seq[T])
+    extends Partition with Serializable {
 
   // for externalization
   def this() = this(0, 0, null)
@@ -54,7 +54,7 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
     // than going thru serialization,
     // to avoid a separate serialization header.
     sfactory match {
-      case js:JavaSerializer => out.defaultWriteObject()
+      case js: JavaSerializer => out.defaultWriteObject()
       case _ => {
         // for every other serializer, we
         // assume that it would support Seq[T] and
@@ -74,7 +74,7 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
 
     val sfactory = SparkEnv.get.serializer
     sfactory match {
-      case js:JavaSerializer => in.defaultReadObject()
+      case js: JavaSerializer => in.defaultReadObject()
       case _ =>
         val ser = sfactory.newInstance()
         rddId = in.readLong()
@@ -90,11 +90,11 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
 }
 
 private[spark] class ParallelCollectionRDD[T: ClassManifest](
-                                                              @transient sc: SparkContext,
-                                                              @transient data: Seq[T],
-                                                              numSlices: Int,
-                                                              locationPrefs: Map[Int, Seq[String]])
-  extends RDD[T](sc, Nil) {
+    @transient sc: SparkContext,
+    @transient data: Seq[T],
+    numSlices: Int,
+    locationPrefs: Map[Int, Seq[String]])
+    extends RDD[T](sc, Nil) {
   // TODO: Right now, each split sends along its full data, even if later down the RDD chain it gets
   // cached. It might be worthwhile to write the data to a file in the DFS and read it in the split
   // instead.
