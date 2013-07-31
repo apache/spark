@@ -52,8 +52,10 @@ private[spark] class ApplicationInfo(
   }
 
   def removeExecutor(exec: ExecutorInfo) {
-    executors -= exec.id
-    coresGranted -= exec.cores
+    if (executors.contains(exec.id)) {
+      executors -= exec.id
+      coresGranted -= exec.cores
+    }
   }
 
   def coresLeft: Int = desc.maxCores - coresGranted
