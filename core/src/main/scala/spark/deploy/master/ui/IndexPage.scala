@@ -25,14 +25,21 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import spark.deploy.{RequestMasterState, DeployWebUI, MasterState}
+import spark.deploy.{JsonProtocol, RequestMasterState, DeployWebUI, MasterState}
 import spark.Utils
 import spark.ui.UIUtils
 import spark.deploy.master.{ApplicationInfo, WorkerInfo}
+import net.liftweb.json.JsonAST.JValue
 
 private[spark] class IndexPage(parent: MasterWebUI) {
   val master = parent.master
   implicit val timeout = parent.timeout
+
+  def renderJson(request: HttpServletRequest): JValue = {
+    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
+    val state = Await.result(stateFuture, 30 seconds)
+    JsonProtocol.writeMasterState(state)
+  }
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
