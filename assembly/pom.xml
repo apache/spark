@@ -62,43 +62,31 @@
       <groupId>org.spark-project</groupId>
       <artifactId>spark-core</artifactId>
       <classifier>${classifier.name}</classifier>
-      <version>0.8.0-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-bagel</artifactId>
       <classifier>${classifier.name}</classifier>
-      <version>0.8.0-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
-      <artifactId>spark-examples</artifactId>
+      <artifactId>spark-mllib</artifactId>
       <classifier>${classifier.name}</classifier>
-      <version>0.8.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-      <groupId>org.spark-project</groupId>
-      <artifactId>spark-examples</artifactId>
-      <classifier>javadoc</classifier>
-      <version>0.8.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-      <groupId>org.spark-project</groupId>
-      <artifactId>spark-examples</artifactId>
-      <classifier>sources</classifier>
-      <version>0.8.0-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-repl</artifactId>
       <classifier>${classifier.name}</classifier>
-      <version>0.8.0-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-streaming</artifactId>
       <classifier>${classifier.name}</classifier>
-      <version>0.8.0-SNAPSHOT</version>
+      <version>${project.version}</version>
     </dependency>
   </dependencies>
 </project>
