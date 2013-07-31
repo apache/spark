@@ -26,14 +26,14 @@ import AssemblyKeys._
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
   // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
-//  val HADOOP_VERSION = "1.0.4"
-//  val HADOOP_MAJOR_VERSION = "1"
-//  val HADOOP_YARN = false
+  val HADOOP_VERSION = "1.0.4"
+  val HADOOP_MAJOR_VERSION = "1"
+  val HADOOP_YARN = false
 
   // For Hadoop 2 versions such as "2.0.0-mr1-cdh4.1.1", set the HADOOP_MAJOR_VERSION to "2"
-  val HADOOP_VERSION = "2.0.0-mr1-cdh4.3.0"
-  val HADOOP_MAJOR_VERSION = "2"
-  val HADOOP_YARN = false
+  //val HADOOP_VERSION = "2.0.0-mr1-cdh4.1.1"
+  //val HADOOP_MAJOR_VERSION = "2"
+  //val HADOOP_YARN = false
 
   // For Hadoop 2 YARN support
   //val HADOOP_VERSION = "2.0.2-alpha"
@@ -170,7 +170,6 @@ object SparkBuild extends Build {
       "com.ning" % "compress-lzf" % "0.8.4",
       "org.ow2.asm" % "asm" % "4.0",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
-      "de.javakaffee" % "kryo-serializers" % "0.22",
       "com.typesafe.akka" % "akka-actor" % "2.0.5" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-remote" % "2.0.5" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-slf4j" % "2.0.5" excludeAll(excludeNetty),
@@ -179,7 +178,11 @@ object SparkBuild extends Build {
       "net.liftweb" % "lift-json_2.9.2" % "2.5",
       "org.apache.mesos" % "mesos" % "0.9.0-incubating",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
-      "org.apache.derby" % "derby" % "10.4.2.0" % "test"
+      "org.apache.derby" % "derby" % "10.4.2.0" % "test",
+      "com.codahale.metrics" % "metrics-core" % "3.0.0",
+      "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
+      "com.twitter" % "chill_2.9.3" % "0.3.0",
+      "com.twitter" % "chill-java" % "0.3.0"
     ) ++ (
       if (HADOOP_MAJOR_VERSION == "2") {
         if (HADOOP_YARN) {
