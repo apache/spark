@@ -756,4 +756,13 @@ private object Utils extends Logging {
     }
     return buf
   }
+
+ /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
+  * i.e. if 'x' is negative, than 'x' % 'mod' is negative too
+  * so function return (x % mod) + mod in that case.
+  */
+  def nonNegativeMod(x: Int, mod: Int): Int = {
+    val rawMod = x % mod
+    rawMod + (if (x < 0 && rawMod != 0) mod else 0)
+  }
 }
