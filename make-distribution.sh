@@ -66,6 +66,7 @@ cp $FWDIR/repl/target/*.jar "$DISTDIR/jars/"
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/conf" "$DISTDIR"
 cp "$FWDIR/run" "$FWDIR/spark-shell" "$DISTDIR"
+cp "$FWDIR/spark-executor" "$DISTDIR"
 
 
 if [ "$1" == "tgz" ]; then
