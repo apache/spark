@@ -32,9 +32,6 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
     var values: Seq[T])
   extends Partition with Serializable {
 
-  // for externalization
-  def this() = this(0, 0, null)
-
   def iterator: Iterator[T] = values.iterator
 
   override def hashCode(): Int = (41 * (41 + rddId) + slice).toInt
