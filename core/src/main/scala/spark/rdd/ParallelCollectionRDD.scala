@@ -30,7 +30,7 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
     var rddId: Long,
     var slice: Int,
     var values: Seq[T])
-    extends Partition with Serializable {
+  extends Partition with Serializable {
 
   // for externalization
   def this() = this(0, 0, null)
