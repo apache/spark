@@ -23,7 +23,6 @@ import scala.collection.Map
 import spark._
 import java.io._
 import scala.Serializable
-import akka.serialization.JavaSerializer
 import java.nio.ByteBuffer
 
 private[spark] class ParallelCollectionPartition[T: ClassManifest](
