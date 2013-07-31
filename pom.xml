@@ -183,6 +183,11 @@
         <version>0.8.4</version>
       </dependency>
       <dependency>
+        <groupId>org.xerial.snappy</groupId>
+        <artifactId>snappy-java</artifactId>
+        <version>1.0.5</version>
+      </dependency>
+      <dependency>
         <groupId>org.ow2.asm</groupId>
         <artifactId>asm</artifactId>
         <version>4.0</version>
