@@ -22,15 +22,15 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.Map
 import spark._
 import java.io._
-import java.nio.ByteBuffer
 import scala.Serializable
 import akka.serialization.JavaSerializer
+import java.nio.ByteBuffer
 
 private[spark] class ParallelCollectionPartition[T: ClassManifest](
     var rddId: Long,
     var slice: Int,
     var values: Seq[T])
-  extends Partition with Serializable {
+    extends Partition with Serializable {
 
   def iterator: Iterator[T] = values.iterator
 
@@ -47,21 +47,25 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
   private def writeObject(out: ObjectOutputStream): Unit = {
 
     val sfactory = SparkEnv.get.serializer
-    // treat java serializer with default action rather
-    // than going thru serialization,
-    // to avoid a separate serialization header.
+
+    // Treat java serializer with default action rather than going thru serialization, to avoid a
+    // separate serialization header.
+
     sfactory match {
       case js: JavaSerializer => out.defaultWriteObject()
       case _ => {
-        // for every other serializer, we
-        // assume that it would support Seq[T] and
-        // do so efficiently.
-        val ser = sfactory.newInstance()
+
         out.writeLong(rddId)
         out.writeInt(slice)
-        val bb = ser.serialize(values)
-        out.writeInt(bb.remaining())
-        Utils.writeByteBuffer(bb, out)
+
+        val ser = sfactory.newInstance()
+
+        out.writeInt(values.size)
+        values.foreach(v => {
+          val bb = ser.serialize(v)
+          out.writeInt(bb.remaining())
+          Utils.writeByteBuffer(bb, out)
+        })
       }
     }
   }
@@ -73,15 +77,24 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
     sfactory match {
       case js: JavaSerializer => in.defaultReadObject()
       case _ =>
-        val ser = sfactory.newInstance()
         rddId = in.readLong()
         slice = in.readInt()
 
+        val ser = sfactory.newInstance()
         val s = in.readInt()
-        val bb = ByteBuffer.allocate(s)
-        in.readFully(bb.array(), 0, s)
-        bb.limit(s)
-        values = ser.deserialize(bb)
+        var bb: ByteBuffer = null
+        values = (0 until s).map(i => {
+          val len = in.readInt()
+          if (bb == null || bb.capacity < len) {
+            bb = ByteBuffer.allocate(len)
+          } else {
+            bb.clear
+          }
+
+          in.readFully(bb.array(), 0, len);
+          bb.limit(len)
+          ser.deserialize(bb): T
+        }).toSeq
     }
   }
 }
