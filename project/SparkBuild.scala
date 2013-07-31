@@ -151,6 +151,7 @@ object SparkBuild extends Build {
   val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
   val excludeAsm = ExclusionRule(organization = "asm")
+  val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
@@ -236,6 +237,7 @@ object SparkBuild extends Build {
         exclude("jline","jline")
         exclude("log4j","log4j")
         exclude("org.apache.cassandra.deps", "avro")
+        excludeAll(excludeSnappy)
     )
   )
 
@@ -258,7 +260,7 @@ object SparkBuild extends Build {
       "Akka Repository" at "http://repo.akka.io/releases/"
     ),
     libraryDependencies ++= Seq(
-      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty),
+      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty, excludeSnappy),
       "com.github.sgroschupf" % "zkclient" % "0.1" excludeAll(excludeNetty),
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)
