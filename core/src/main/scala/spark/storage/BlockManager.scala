@@ -925,14 +925,14 @@ private[spark] class BlockManager(
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: OutputStream): OutputStream = {
-    if (shouldCompress(blockId)) compressionCodec.compressionOutputStream(s) else s
+    if (shouldCompress(blockId)) compressionCodec.compressedOutputStream(s) else s
   }
 
   /**
    * Wrap an input stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: InputStream): InputStream = {
-    if (shouldCompress(blockId)) compressionCodec.compressionInputStream(s) else s
+    if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
   }
 
   def dataSerialize(

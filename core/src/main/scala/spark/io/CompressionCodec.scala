@@ -30,9 +30,9 @@ import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
  */
 trait CompressionCodec {
 
-  def compressionOutputStream(s: OutputStream): OutputStream
+  def compressedOutputStream(s: OutputStream): OutputStream
 
-  def compressionInputStream(s: InputStream): InputStream
+  def compressedInputStream(s: InputStream): InputStream
 }
 
 
@@ -59,11 +59,11 @@ private[spark] object CompressionCodec {
  */
 class LZFCompressionCodec extends CompressionCodec {
 
-  override def compressionOutputStream(s: OutputStream): OutputStream = {
+  override def compressedOutputStream(s: OutputStream): OutputStream = {
     new LZFOutputStream(s).setFinishBlockOnFlush(true)
   }
 
-  override def compressionInputStream(s: InputStream): InputStream = new LZFInputStream(s)
+  override def compressedInputStream(s: InputStream): InputStream = new LZFInputStream(s)
 }
 
 
@@ -73,10 +73,10 @@ class LZFCompressionCodec extends CompressionCodec {
  */
 class SnappyCompressionCodec extends CompressionCodec {
 
-  override def compressionOutputStream(s: OutputStream): OutputStream = {
+  override def compressedOutputStream(s: OutputStream): OutputStream = {
     val blockSize = System.getProperty("spark.io.compression.snappy.block.size", "32768").toInt
     new SnappyOutputStream(s, blockSize)
   }
 
-  override def compressionInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
+  override def compressedInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
 }
