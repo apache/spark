@@ -118,6 +118,7 @@ private[spark] class ResultTask[T, U](
       out.write(bytes)
       out.writeInt(partition)
       out.writeInt(outputId)
+      out.writeLong(generation)
       out.writeObject(split)
     }
   }
@@ -132,6 +133,7 @@ private[spark] class ResultTask[T, U](
     func = func_.asInstanceOf[(TaskContext, Iterator[T]) => U]
     partition = in.readInt()
     val outputId = in.readInt()
+    generation = in.readLong()
     split = in.readObject().asInstanceOf[Partition]
   }
 }
