@@ -315,14 +315,15 @@ object KMeans {
   }
 
   def main(args: Array[String]) {
-    if (args.length != 4) {
-      println("Usage: KMeans <master> <input_file> <k> <max_iterations>")
+    if (args.length < 4) {
+      println("Usage: KMeans <master> <input_file> <k> <max_iterations> [<runs>]")
       System.exit(1)
     }
     val (master, inputFile, k, iters) = (args(0), args(1), args(2).toInt, args(3).toInt)
+    val runs = if (args.length >= 5) args(4).toInt else 1
     val sc = new SparkContext(master, "KMeans")
     val data = sc.textFile(inputFile).map(line => line.split(' ').map(_.toDouble))
-    val model = KMeans.train(data, k, iters)
+    val model = KMeans.train(data, k, iters, runs)
     val cost = model.computeCost(data)
     println("Cluster centers:")
     for (c <- model.clusterCenters) {
