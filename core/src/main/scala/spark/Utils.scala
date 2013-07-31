@@ -596,7 +596,7 @@ private object Utils extends Logging {
     output.toString
   }
 
-  /** 
+  /**
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
@@ -763,6 +763,6 @@ private object Utils extends Logging {
   */
   def nonNegativeMod(x: Int, mod: Int): Int = {
     val rawMod = x % mod
-    rawMod + (if (x < 0 && rawMod != 0) mod else 0)
+    rawMod + (if (rawMod < 0) mod else 0)
   }
 }
