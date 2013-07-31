@@ -18,16 +18,9 @@
 package spark.scheduler
 
 import java.io._
-import java.util.{HashMap => JHashMap}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
-import scala.collection.JavaConversions._
-
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-
-import com.ning.compress.lzf.LZFInputStream
-import com.ning.compress.lzf.LZFOutputStream
+import scala.collection.mutable.HashMap
 
 import spark._
 import spark.executor.ShuffleWriteMetrics
@@ -109,11 +102,7 @@ private[spark] class ShuffleMapTask(
     preferredLocs.foreach (hostPort => Utils.checkHost(Utils.parseHostPort(hostPort)._1, "preferredLocs : " + preferredLocs))
   }
 
-  var split = if (rdd == null) {
-    null
-  } else {
-    rdd.partitions(partition)
-  }
+  var split = if (rdd == null) null else rdd.partitions(partition)
 
   override def writeExternal(out: ObjectOutput) {
     RDDCheckpointData.synchronized {

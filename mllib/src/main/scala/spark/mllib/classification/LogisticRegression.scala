@@ -135,8 +135,8 @@ class LogisticRegressionLocalRandomSGD private (var stepSize: Double, var miniBa
 object LogisticRegressionLocalRandomSGD {
 
   /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
    *
@@ -155,12 +155,13 @@ object LogisticRegressionLocalRandomSGD {
       initialWeights: Array[Double])
     : LogisticRegressionModel =
   {
-    new LogisticRegressionLocalRandomSGD(stepSize, miniBatchFraction, numIterations).train(input, initialWeights)
+    new LogisticRegressionLocalRandomSGD(stepSize, miniBatchFraction, numIterations).train(
+      input, initialWeights)
   }
 
   /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
    *
    * @param input RDD of (label, array of features) pairs.
@@ -180,9 +181,9 @@ object LogisticRegressionLocalRandomSGD {
   }
 
   /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using the specified step size. We use the entire data set to update
-   * the gradient in each iteration.
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using the specified step size. We use the entire data
+   * set to update the gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
@@ -200,9 +201,9 @@ object LogisticRegressionLocalRandomSGD {
   }
 
   /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed number
-   * of iterations of gradient descent using a step size of 1.0. We use the entire data set to update
-   * the gradient in each iteration.
+   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
+   * number of iterations of gradient descent using a step size of 1.0. We use the entire data set
+   * to update the gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -218,12 +219,14 @@ object LogisticRegressionLocalRandomSGD {
 
   def main(args: Array[String]) {
     if (args.length != 5) {
-      println("Usage: LogisticRegression <master> <input_dir> <step_size> <regularization_parameter> <niters>")
+      println("Usage: LogisticRegression <master> <input_dir> <step_size> " +
+        "<regularization_parameter> <niters>")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
     val data = MLUtils.loadLabeledData(sc, args(1)).map(yx => (yx._1.toInt, yx._2))
-    val model = LogisticRegressionLocalRandomSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+    val model = LogisticRegressionLocalRandomSGD.train(
+      data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()
   }

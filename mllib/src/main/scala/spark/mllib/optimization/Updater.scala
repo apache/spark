@@ -25,7 +25,7 @@ abstract class Updater extends Serializable {
    * Compute an updated value for weights given the gradient, stepSize and iteration number.
    * Also returns the regularization value computed using the *updated* weights.
    *
-   * @param weightsOlds - Column matrix of size nx1 where n is the number of features.
+   * @param weightsOld - Column matrix of size nx1 where n is the number of features.
    * @param gradient - Column matrix of size nx1 where n is the number of features.
    * @param stepSize - step size across iterations
    * @param iter - Iteration number
@@ -34,8 +34,8 @@ abstract class Updater extends Serializable {
    * @return A tuple of 2 elements. The first element is a column matrix containing updated weights,
    *         and the second element is the regularization value computed using updated weights.
    */
-  def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix, stepSize: Double, iter: Int, regParam: Double):
-      (DoubleMatrix, Double)
+  def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix, stepSize: Double, iter: Int,
+      regParam: Double): (DoubleMatrix, Double)
 }
 
 class SimpleUpdater extends Updater {
@@ -64,10 +64,10 @@ class L1Updater extends Updater {
     val newWeights = weightsOld.sub(normGradient)
     // Soft thresholding
     val shrinkageVal = regParam * thisIterStepSize
-    (0 until newWeights.length).foreach(i => {
+    (0 until newWeights.length).foreach { i =>
       val wi = newWeights.get(i)
       newWeights.put(i, signum(wi) * max(0.0, abs(wi) - shrinkageVal))
-      })
+    }
     (newWeights, newWeights.norm1 * regParam)
   }
 }

@@ -21,9 +21,11 @@ import java.util.Date
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable.HashSet
 import scala.Some
 import scala.xml.{NodeSeq, Node}
 
+import spark.scheduler.cluster.TaskInfo
 import spark.scheduler.Stage
 import spark.storage.StorageLevel
 import spark.ui.Page._
@@ -105,17 +107,14 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     }
   }
 
-  def makeProgressBar(completed: Int, total: Int): Seq[Node] = {
-    val width=130
-    val height=15
-    val completeWidth = (completed.toDouble / total) * width
+  def makeProgressBar(started: Int, completed: Int, total: Int): Seq[Node] = {
+    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
-    <svg width={width.toString} height={height.toString}>
-      <rect width={width.toString} height={height.toString}
-            fill="white" stroke="rgb(51,51,51)" stroke-width="1" />
-      <rect width={completeWidth.toString} height={height.toString}
-            fill="rgb(0,136,204)" stroke="black" stroke-width="1" />
-    </svg>
+    <div class="progress" style="height: 15px; margin-bottom: 0px">
+      <div class="bar" style={completeWidth}></div>
+      <div class="bar bar-info" style={startWidth}></div>
+    </div>
   }
 
 
@@ -134,6 +133,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       case b => Utils.memoryBytesToString(b)
     }
 
+    val startedTasks = listener.stageToTasksActive.getOrElse(s.id, HashSet[TaskInfo]()).size
     val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
     val totalTasks = s.numPartitions
 
@@ -143,7 +143,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       <td>{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
-      <td class="progress-cell">{makeProgressBar(completedTasks, totalTasks)}</td>
+      <td class="progress-cell">{makeProgressBar(startedTasks, completedTasks, totalTasks)}</td>
       <td style="border-left: 0; text-align: center;">{completedTasks} / {totalTasks}
         {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
         case f if f > 0 => "(%s failed)".format(f)

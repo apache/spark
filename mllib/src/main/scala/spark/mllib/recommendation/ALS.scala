@@ -35,8 +35,7 @@ import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
  * of the elements within this block, and the list of destination blocks that each user or
  * product will need to send its feature vector to.
  */
-private[recommendation] case class OutLinkBlock(
-  elementIds: Array[Int], shouldSend: Array[BitSet])
+private[recommendation] case class OutLinkBlock(elementIds: Array[Int], shouldSend: Array[BitSet])
 
 
 /**
@@ -105,7 +104,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
   }
 
   /**
-   * Run ALS with the configured parmeters on an input RDD of (user, product, rating) triples.
+   * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
    */
   def train(ratings: RDD[(Int, Int, Double)]): MatrixFactorizationModel = {

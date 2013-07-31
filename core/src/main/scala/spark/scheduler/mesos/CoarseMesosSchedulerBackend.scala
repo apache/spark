@@ -110,12 +110,6 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
-    val runScript = new File(sparkHome, "run").getCanonicalPath
-    val driverUrl = "akka://spark@%s:%s/user/%s".format(
-      System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
-      StandaloneSchedulerBackend.ACTOR_NAME)
-    val command = "\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
-      runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -123,7 +117,26 @@ private[spark] class CoarseMesosSchedulerBackend(
         .setValue(value)
         .build())
     }
-    return CommandInfo.newBuilder().setValue(command).setEnvironment(environment).build()
+    val command = CommandInfo.newBuilder()
+      .setEnvironment(environment)
+    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+      System.getProperty("spark.driver.host"),
+      System.getProperty("spark.driver.port"),
+      StandaloneSchedulerBackend.ACTOR_NAME)
+    val uri = System.getProperty("spark.executor.uri")
+    if (uri == null) {
+      val runScript = new File(sparkHome, "run").getCanonicalPath
+      command.setValue("\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
+        runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+    } else {
+      // Grab everything to the first '.'. We'll use that and '*' to
+      // glob the directory "correctly".
+      val basename = uri.split('/').last.split('.').head
+      command.setValue("cd %s*; ./run spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
+        basename, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+      command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
+    }
+    return command.build()
   }
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
