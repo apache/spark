@@ -23,6 +23,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
+import spark.mllib.optimization._
 
 import org.jblas.DoubleMatrix
 
@@ -59,7 +60,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     assert(numOffPredictions < input.length / 5)
   }
 
-  test("LassoLocalRandomSGD") {
+  test("Lasso local random SGD") {
     val nPoints = 10000
 
     val A = 2.0
@@ -70,7 +71,9 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val ls = new LassoLocalRandomSGD().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
+
+    val sgdOpts = GradientDescentOpts().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
+    val ls = new Lasso(sgdOpts)
 
     val model = ls.train(testRDD)
 
@@ -90,7 +93,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     validatePrediction(validationData.map(row => model.predict(row._2)), validationData)
   }
 
-  test("LassoLocalRandomSGD with initial weights") {
+  test("Lasso local random SGD with initial weights") {
     val nPoints = 10000
 
     val A = 2.0
@@ -105,7 +108,9 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val ls = new LassoLocalRandomSGD().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
+
+    val sgdOpts = GradientDescentOpts().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
+    val ls = new Lasso(sgdOpts)
 
     val model = ls.train(testRDD, initialWeights)
 

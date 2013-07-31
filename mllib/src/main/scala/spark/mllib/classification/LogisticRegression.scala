@@ -55,38 +55,12 @@ class LogisticRegressionModel(
   }
 }
 
-class LogisticRegressionLocalRandomSGD private (var stepSize: Double, var miniBatchFraction: Double,
-    var numIters: Int)
-  extends Logging {
+class LogisticRegression(val opts: GradientDescentOpts) extends Logging {
 
   /**
    * Construct a LogisticRegression object with default parameters
    */
-  def this() = this(1.0, 1.0, 100)
-
-  /**
-   * Set the step size per-iteration of SGD. Default 1.0.
-   */
-  def setStepSize(step: Double) = {
-    this.stepSize = step
-    this
-  }
-
-  /**
-   * Set fraction of data to be used for each SGD iteration. Default 1.0.
-   */
-  def setMiniBatchFraction(fraction: Double) = {
-    this.miniBatchFraction = fraction
-    this
-  }
-
-  /**
-   * Set the number of iterations for SGD. Default 100.
-   */
-  def setNumIterations(iters: Int) = {
-    this.numIters = iters
-    this
-  }
+  def this() = this(new GradientDescentOpts())
 
   def train(input: RDD[(Int, Array[Double])]): LogisticRegressionModel = {
     val nfeatures: Int = input.take(1)(0)._2.length
@@ -109,11 +83,8 @@ class LogisticRegressionLocalRandomSGD private (var stepSize: Double, var miniBa
       data,
       new LogisticGradient(),
       new SimpleUpdater(),
-      stepSize,
-      numIters,
-      0.0,
-      initalWeightsWithIntercept,
-      miniBatchFraction)
+      opts,
+      initalWeightsWithIntercept)
 
     val intercept = weights(0)
     val weightsScaled = weights.tail
@@ -132,7 +103,7 @@ class LogisticRegressionLocalRandomSGD private (var stepSize: Double, var miniBa
  * NOTE(shivaram): We use multiple train methods instead of default arguments to support 
  *                 Java programs.
  */
-object LogisticRegressionLocalRandomSGD {
+object LogisticRegression {
 
   /**
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
@@ -155,8 +126,8 @@ object LogisticRegressionLocalRandomSGD {
       initialWeights: Array[Double])
     : LogisticRegressionModel =
   {
-    new LogisticRegressionLocalRandomSGD(stepSize, miniBatchFraction, numIterations).train(
-      input, initialWeights)
+    val sgdOpts = GradientDescentOpts(stepSize, numIterations, 0.0, miniBatchFraction)
+    new LogisticRegression(sgdOpts).train(input, initialWeights)
   }
 
   /**
@@ -177,7 +148,8 @@ object LogisticRegressionLocalRandomSGD {
       miniBatchFraction: Double)
     : LogisticRegressionModel =
   {
-    new LogisticRegressionLocalRandomSGD(stepSize, miniBatchFraction, numIterations).train(input)
+    val sgdOpts = GradientDescentOpts(stepSize, numIterations, 0.0, miniBatchFraction)
+    new LogisticRegression(sgdOpts).train(input)
   }
 
   /**
@@ -225,7 +197,7 @@ object LogisticRegressionLocalRandomSGD {
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
     val data = MLUtils.loadLabeledData(sc, args(1)).map(yx => (yx._1.toInt, yx._2))
-    val model = LogisticRegressionLocalRandomSGD.train(
+    val model = LogisticRegression.train(
       data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()

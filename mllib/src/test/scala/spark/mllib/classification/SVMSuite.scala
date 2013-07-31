@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
+import spark.mllib.optimization._
 
 import org.jblas.DoubleMatrix
 
@@ -44,10 +45,14 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val rnd = new Random(seed)
     val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(Array.fill[Double](weights.length)(rnd.nextGaussian()))
-    val y = x.map(xi =>
-      signum((new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + 0.1 * rnd.nextGaussian()).toInt
-      )
-    y zip x
+    val y = x.map { xi =>
+      signum(
+        (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) +
+        intercept +
+        0.1 * rnd.nextGaussian()
+      ).toInt
+    }
+    y.zip(x)
   }
 
   def validatePrediction(predictions: Seq[Int], input: Seq[(Int, Array[Double])]) {
@@ -58,7 +63,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     assert(numOffPredictions < input.length / 5)
   }
 
-  test("SVMLocalRandomSGD") {
+  test("SVM using local random SGD") {
     val nPoints = 10000
 
     val A = 2.0
@@ -70,7 +75,8 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val svm = new SVMLocalRandomSGD().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
+    val sgdOpts = GradientDescentOpts().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
+    val svm = new SVM(sgdOpts)
 
     val model = svm.train(testRDD)
 
@@ -84,7 +90,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     validatePrediction(validationData.map(row => model.predict(row._2)), validationData)
   }
 
-  test("SVMLocalRandomSGD with initial weights") {
+  test("SVM local random SGD with initial weights") {
     val nPoints = 10000
 
     val A = 2.0
@@ -100,7 +106,8 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val svm = new SVMLocalRandomSGD().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
+    val sgdOpts = GradientDescentOpts().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
+    val svm = new SVM(sgdOpts)
 
     val model = svm.train(testRDD, initialWeights)
 

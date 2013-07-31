@@ -24,7 +24,6 @@ import org.jblas.DoubleMatrix
 
 import scala.collection.mutable.ArrayBuffer
 
-
 object GradientDescent {
 
   /**
@@ -48,23 +47,20 @@ object GradientDescent {
     data: RDD[(Double, Array[Double])],
     gradient: Gradient,
     updater: Updater,
-    stepSize: Double,
-    numIters: Int,
-    regParam: Double,
-    initialWeights: Array[Double],
-    miniBatchFraction: Double=1.0) : (Array[Double], Array[Double]) = {
+    opts: GradientDescentOpts,
+    initialWeights: Array[Double]) : (Array[Double], Array[Double]) = {
 
-    val stochasticLossHistory = new ArrayBuffer[Double](numIters)
+    val stochasticLossHistory = new ArrayBuffer[Double](opts.numIters)
 
     val nexamples: Long = data.count()
-    val miniBatchSize = nexamples * miniBatchFraction
+    val miniBatchSize = nexamples * opts.miniBatchFraction
 
     // Initialize weights as a column vector
     var weights = new DoubleMatrix(initialWeights.length, 1, initialWeights:_*)
     var regVal = 0.0
 
-    for (i <- 1 to numIters) {
-      val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42+i).map {
+    for (i <- 1 to opts.numIters) {
+      val (gradientSum, lossSum) = data.sample(false, opts.miniBatchFraction, 42+i).map {
         case (y, features) =>
           val featuresRow = new DoubleMatrix(features.length, 1, features:_*)
           val (grad, loss) = gradient.compute(featuresRow, y, weights)
@@ -76,7 +72,8 @@ object GradientDescent {
        * and regVal is the regularization value computed in the previous iteration as well.
        */
       stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
-      val update = updater.compute(weights, gradientSum.div(miniBatchSize), stepSize, i, regParam)
+      val update = updater.compute(
+        weights, gradientSum.div(miniBatchSize), opts.stepSize, i, opts.regParam)
       weights = update._1
       regVal = update._2
     }
