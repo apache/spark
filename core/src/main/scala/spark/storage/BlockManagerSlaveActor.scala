@@ -19,7 +19,7 @@ package spark.storage
 
 import akka.actor.Actor
 
-import spark.{Logging, SparkException, Utils}
+import spark.storage.BlockManagerMessages._
 
 
 /**

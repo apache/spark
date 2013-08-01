@@ -29,6 +29,8 @@ import akka.util.Duration
 import akka.util.duration._
 
 import spark.{Logging, Utils, SparkException}
+import spark.storage.BlockManagerMessages._
+
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of

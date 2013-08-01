@@ -66,7 +66,6 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     override def close() {
       if (initialized) {
         objOut.close()
-        bs.close()
         channel = null
         bs = null
         objOut = null

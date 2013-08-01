@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-package spark.mllib.regression
+package spark.mllib.classification
 
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
+import org.scalatest.matchers.ShouldMatchers
 
 import spark.SparkContext
 
 
-class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
+class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll with ShouldMatchers {
   val sc = new SparkContext("local", "test")
 
   override def afterAll() {
@@ -38,7 +39,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
       offset: Double,
       scale: Double,
       nPoints: Int,
-      seed: Int): Seq[(Double, Array[Double])]  = {
+      seed: Int): Seq[(Int, Array[Double])]  = {
     val rnd = new Random(seed)
     val x1 = Array.fill[Double](nPoints)(rnd.nextGaussian())
 
@@ -51,22 +52,21 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
     // y <- A + B*x + rLogis()
     // y <- as.numeric(y > 0)
-    val y: Seq[Double] = (0 until nPoints).map { i =>
+    val y: Seq[Int] = (0 until nPoints).map { i =>
       val yVal = offset + scale * x1(i) + rLogis(i)
-      if (yVal > 0) 1.0 else 0.0
+      if (yVal > 0) 1 else 0
     }
 
     val testData = (0 until nPoints).map(i => (y(i), Array(x1(i))))
     testData
   }
 
-  def validatePrediction(predictions: Seq[Double], input: Seq[(Double, Array[Double])]) {
+  def validatePrediction(predictions: Seq[Int], input: Seq[(Int, Array[Double])]) {
     val numOffPredictions = predictions.zip(input).filter { case (prediction, (expected, _)) =>
-      // A prediction is off if the prediction is more than 0.5 away from expected value.
-      math.abs(prediction - expected) > 0.5
+      (prediction != expected)
     }.size
-    // At least 80% of the predictions should be on.
-    assert(numOffPredictions < input.length / 5)
+    // At least 83% of the predictions should be on.
+    ((input.length - numOffPredictions).toDouble / input.length) should be > 0.83
   }
 
   // Test if we can correctly learn A, B where Y = logistic(A + B*X)
@@ -79,7 +79,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegression().setStepSize(10.0).setNumIterations(20)
+    val lr = new LogisticRegressionLocalRandomSGD().setStepSize(10.0).setNumIterations(20)
 
     val model = lr.train(testRDD)
 
@@ -111,7 +111,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll {
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegression().setStepSize(10.0).setNumIterations(10)
+    val lr = new LogisticRegressionLocalRandomSGD().setStepSize(10.0).setNumIterations(10)
 
     val model = lr.train(testRDD, initialWeights)
 

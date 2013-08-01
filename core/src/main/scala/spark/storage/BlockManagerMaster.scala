@@ -23,6 +23,7 @@ import akka.pattern.ask
 import akka.util.Duration
 
 import spark.{Logging, SparkException}
+import spark.storage.BlockManagerMessages._
 
 
 private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {

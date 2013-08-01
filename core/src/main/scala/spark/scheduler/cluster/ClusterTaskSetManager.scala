@@ -85,7 +85,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toDouble
 
   // Maximum times a task is allowed to fail before failing the job
-  val MAX_TASK_FAILURES = 4
+  val MAX_TASK_FAILURES = System.getProperty("spark.task.maxFailures", "4").toInt
 
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = System.getProperty("spark.speculation.quantile", "0.75").toDouble
@@ -564,8 +564,8 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
     decreaseRunningTasks(1)
     if (!finished(index)) {
       tasksFinished += 1
-      logInfo("Finished TID %s in %d ms (progress: %d/%d)".format(
-        tid, info.duration, tasksFinished, numTasks))
+      logInfo("Finished TID %s in %d ms on %s (progress: %d/%d)".format(
+        tid, info.duration, info.hostPort, tasksFinished, numTasks))
       // Deserialize task result and pass it to the scheduler
       try {
         val result = ser.deserialize[TaskResult[_]](serializedData)

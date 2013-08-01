@@ -17,17 +17,18 @@
 
 package spark.scheduler.cluster
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import akka.actor._
-import akka.util.duration._
+import akka.dispatch.Await
 import akka.pattern.ask
+import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
 import akka.util.Duration
 
 import spark.{Utils, SparkException, Logging, TaskState}
-import akka.dispatch.Await
-import java.util.concurrent.atomic.AtomicInteger
-import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
+import spark.scheduler.cluster.StandaloneClusterMessages._
 
 /**
  * A standalone scheduler backend, which waits for standalone executors to connect to it through

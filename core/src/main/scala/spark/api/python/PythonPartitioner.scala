@@ -18,7 +18,7 @@
 package spark.api.python
 
 import spark.Partitioner
-
+import spark.Utils
 import java.util.Arrays
 
 /**
@@ -35,25 +35,10 @@ private[spark] class PythonPartitioner(
   val pyPartitionFunctionId: Long)
   extends Partitioner {
 
-  override def getPartition(key: Any): Int = {
-    if (key == null) {
-      return 0
-    }
-    else {
-      val hashCode = {
-        if (key.isInstanceOf[Array[Byte]]) {
-          Arrays.hashCode(key.asInstanceOf[Array[Byte]])
-        } else {
-          key.hashCode()
-        }
-      }
-      val mod = hashCode % numPartitions
-      if (mod < 0) {
-        mod + numPartitions
-      } else {
-        mod // Guard against negative hash codes
-      }
-    }
+  override def getPartition(key: Any): Int = key match {
+    case null => 0
+    case key: Array[Byte] => Utils.nonNegativeMod(Arrays.hashCode(key), numPartitions)
+    case _ => Utils.nonNegativeMod(key.hashCode(), numPartitions)
   }
 
   override def equals(other: Any): Boolean = other match {
