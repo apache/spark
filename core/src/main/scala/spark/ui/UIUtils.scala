@@ -66,7 +66,7 @@ private[spark] object UIUtils {
                 <div class="navbar-inner">
                   <div class="container">
                     <div class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></div>
-                    <ul class="nav">
+                    <ul class="nav nav-pills">
                       {storage}
                       {jobs}
                       {environment}
