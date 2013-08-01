@@ -32,6 +32,10 @@ import spark.{Dependency, ShuffleDependency, OneToOneDependency}
 import spark.{FetchFailed, Success, TaskEndReason}
 import spark.storage.{BlockManagerId, BlockManagerMaster}
 
+import spark.scheduler.cluster.Pool
+import spark.scheduler.cluster.SchedulingMode
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
+
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
  * rather than spawning an event loop thread as happens in the real code. They use EasyMock
@@ -49,6 +53,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
   val taskScheduler = new TaskScheduler() {
+    override def rootPool: Pool = null
+    override def schedulingMode: SchedulingMode = SchedulingMode.NONE
     override def start() = {}
     override def stop() = {}
     override def submitTasks(taskSet: TaskSet) = {

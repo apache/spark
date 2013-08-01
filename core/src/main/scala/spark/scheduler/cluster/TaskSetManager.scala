@@ -23,7 +23,10 @@ import spark.TaskState.TaskState
 import spark.scheduler.TaskSet
 
 private[spark] trait TaskSetManager extends Schedulable {
-
+  def schedulableQueue = null
+  
+  def schedulingMode = SchedulingMode.NONE
+  
   def taskSet: TaskSet
 
   def slaveOffer(
