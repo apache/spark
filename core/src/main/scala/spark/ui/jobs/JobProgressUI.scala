@@ -41,7 +41,6 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
   def listener = _listener.get
   val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
-
   private val indexPage = new IndexPage(this)
   private val stagePage = new StagePage(this)
   private val poolPage = new PoolPage(this)

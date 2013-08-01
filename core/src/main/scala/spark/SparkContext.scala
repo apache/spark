@@ -579,7 +579,7 @@ class SparkContext(
 
   /**
    *  Return pools for fair scheduler
-   *  TODO(xiajunluan):now, we have not taken nested pools into account
+   *  TODO(xiajunluan): We should take nested pools into account
    */
   def getPools: ArrayBuffer[Schedulable] = {
     taskScheduler.rootPool.schedulableQueue
