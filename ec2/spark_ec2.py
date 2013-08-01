@@ -37,7 +37,7 @@ from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
 from boto import ec2
 
 # A URL prefix from which to fetch AMI information
-AMI_PREFIX = "https://raw.github.com/pwendell/spark-ec2/ec2-updates/ami-list"
+AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
 
 # Configure and parse our command-line arguments
 def parse_args():
