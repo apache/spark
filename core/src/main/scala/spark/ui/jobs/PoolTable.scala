@@ -38,7 +38,7 @@ private[spark] class FIFOSource() extends PoolSource {
  */
 private[spark] class FairSource(sc: SparkContext) extends PoolSource {
   def getPools: Seq[Schedulable] = {
-    sc.getPools.toSeq
+    sc.getAllPools.toSeq
   }
 }
 
@@ -48,7 +48,7 @@ private[spark] class FairSource(sc: SparkContext) extends PoolSource {
 private[spark] class PoolDetailSource(sc: SparkContext, poolName: String) extends PoolSource {
   def getPools: Seq[Schedulable] = {
     val pools = HashSet[Schedulable]()
-    pools += sc.getPoolNameToPool(poolName)
+    pools += sc.getPoolForName(poolName).get
     pools.toSeq
   }
 }
