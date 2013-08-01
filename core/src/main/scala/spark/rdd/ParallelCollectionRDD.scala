@@ -23,7 +23,6 @@ import scala.collection.Map
 import spark._
 import java.io._
 import scala.Serializable
-import util.{NestedInputStream, NestedOutputStream}
 
 private[spark] class ParallelCollectionPartition[T: ClassManifest](
     var rddId: Long,
@@ -57,12 +56,7 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
         out.writeInt(slice)
 
         val ser = sfactory.newInstance()
-        val ssout = ser.serializeStream(new NestedOutputStream(out))
-        try {
-          ssout.writeObject(values)
-        } finally {
-          ssout.close()
-        }
+        Utils.serializeViaNestedStream(out, ser)(_.writeObject(values))
     }
   }
 
@@ -77,12 +71,7 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
         slice = in.readInt()
 
         val ser = sfactory.newInstance()
-        val ssin = ser.deserializeStream(new NestedInputStream(in))
-        try {
-          values = ssin.readObject()
-        } finally {
-          ssin.close()
-        }
+        Utils.deserializeViaNestedStream(in, ser)(ds => values = ds.readObject())
     }
   }
 }

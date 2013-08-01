@@ -33,7 +33,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 
-import spark.serializer.SerializerInstance
+import spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import spark.deploy.SparkHadoopUtil
 import java.nio.ByteBuffer
 
@@ -67,6 +67,34 @@ private object Utils extends Logging {
         Class.forName(desc.getName, false, loader)
     }
     return ois.readObject.asInstanceOf[T]
+  }
+
+  /** Serialize via nested stream using specific serializer */
+  def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(f: SerializationStream => Unit) = {
+    val osWrapper = ser.serializeStream(new OutputStream {
+      def write(b: Int) = os.write(b)
+
+      override def write(b: Array[Byte], off: Int, len: Int) = os.write(b, off, len)
+    })
+    try {
+      f(osWrapper)
+    } finally {
+      osWrapper.close()
+    }
+  }
+
+  /** Deserialize via nested stream using specific serializer */
+  def deserializeViaNestedStream(is: InputStream, ser: SerializerInstance)(f: DeserializationStream => Unit) = {
+    val isWrapper = ser.deserializeStream(new InputStream {
+      def read(): Int = is.read()
+
+      override def read(b: Array[Byte], off: Int, len: Int): Int = is.read(b, off, len)
+    })
+    try {
+      f(isWrapper)
+    } finally {
+      isWrapper.close()
+    }
   }
 
   /**
