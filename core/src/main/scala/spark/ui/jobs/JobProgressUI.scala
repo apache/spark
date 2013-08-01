@@ -45,20 +45,8 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
   private val stagePage = new StagePage(this)
   private val poolPage = new PoolPage(this)
 
-  var stagePoolInfo: StagePoolInfo = null
-  var stagePagePoolSource: PoolSource = null
-
   def start() {
     _listener = Some(new JobProgressListener(sc))
-    sc.getSchedulingMode match {
-      case SchedulingMode.FIFO =>
-        stagePoolInfo = new FIFOStagePoolInfo()
-        stagePagePoolSource = new FIFOSource()
-      case SchedulingMode.FAIR =>
-        stagePoolInfo = new FairStagePoolInfo(listener)
-        stagePagePoolSource = new FairSource(sc)
-    }
-
     sc.addSparkListener(listener)
   }
 
