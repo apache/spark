@@ -39,7 +39,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
   val RETAINED_APPLICATIONS = System.getProperty("spark.deploy.retainedApplications", "200").toInt
-
+  val REAPER_ITERATIONS = System.getProperty("spark.dead.worker.persistence", "15").toInt
+ 
   var nextAppNumber = 0
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
@@ -337,12 +338,17 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   /** Check for, and remove, any timed-out workers */
   def timeOutDeadWorkers() {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
-    val expirationTime = System.currentTimeMillis() - WORKER_TIMEOUT
-    val toRemove = workers.filter(_.lastHeartbeat < expirationTime).toArray
+    val currentTime = System.currentTimeMillis()
+    val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT).toArray
     for (worker <- toRemove) {
-      logWarning("Removing %s because we got no heartbeat in %d seconds".format(
-        worker.id, WORKER_TIMEOUT))
-      removeWorker(worker)
+      if (worker.state != WorkerState.DEAD) {
+        logWarning("Removing %s because we got no heartbeat in %d seconds".format(
+          worker.id, WORKER_TIMEOUT))
+        removeWorker(worker)
+      } else {
+        if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT))
+          workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it 
+      }
     }
   }
 }
