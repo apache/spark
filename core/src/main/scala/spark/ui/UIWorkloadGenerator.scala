@@ -32,6 +32,8 @@ private[spark] object UIWorkloadGenerator {
   val NUM_PARTITIONS = 100
   val INTER_JOB_WAIT_MS = 500
 
+
+
   def main(args: Array[String]) {
     if (args.length < 2) {
       println("usage: ./run spark.ui.UIWorkloadGenerator [master] [FIFO|FAIR]")
@@ -48,12 +50,13 @@ private[spark] object UIWorkloadGenerator {
 
     // NOTE: Right now there is no easy way for us to show spark.job.annotation for a given phase,
     //       but we pass it here anyways since it will be useful once we do.
-    def setName(s: String) = {
+    def setProperties(s: String) = {
       if(schedulingMode == SchedulingMode.FAIR) {
-        sc.addLocalProperties("spark.scheduler.cluster.fair.pool",desc)
+        sc.addLocalProperties("spark.scheduler.cluster.fair.pool", s)
       }
       sc.addLocalProperties("spark.job.annotation", s)
     }
+
     val baseData = sc.makeRDD(1 to NUM_PARTITIONS * 10, NUM_PARTITIONS)
     def nextFloat() = (new Random()).nextFloat()
 
@@ -87,9 +90,9 @@ private[spark] object UIWorkloadGenerator {
     while (true) {
       for ((desc, job) <- jobs) {
         new Thread {
-          override def run() { 
+          override def run() {
             try {
-              setName(desc)
+              setProperties(desc)
               job()
               println("Job funished: " + desc)
             } catch {
