@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import java.io.{FileWriter, PrintWriter, File}
@@ -7,6 +24,8 @@ import scala.io.Source
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.hadoop.io._
+import org.apache.hadoop.io.compress.{DefaultCodec, CompressionCodec, GzipCodec}
+
 
 import SparkContext._
 
@@ -26,6 +45,28 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(sc.textFile(outputDir).collect().toList === List("1", "2", "3", "4"))
   }
 
+  test("text files (compressed)") {
+    sc = new SparkContext("local", "test")
+    val tempDir = Files.createTempDir()
+    val normalDir = new File(tempDir, "output_normal").getAbsolutePath
+    val compressedOutputDir = new File(tempDir, "output_compressed").getAbsolutePath
+    val codec = new DefaultCodec()
+
+    val data = sc.parallelize("a" * 10000, 1)
+    data.saveAsTextFile(normalDir)
+    data.saveAsTextFile(compressedOutputDir, classOf[DefaultCodec])
+
+    val normalFile = new File(normalDir, "part-00000")
+    val normalContent = sc.textFile(normalDir).collect
+    assert(normalContent === Array.fill(10000)("a"))
+
+    val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
+    val compressedContent = sc.textFile(compressedOutputDir).collect
+    assert(compressedContent === Array.fill(10000)("a"))
+
+    assert(compressedFile.length < normalFile.length)
+  }
+
   test("SequenceFiles") {
     sc = new SparkContext("local", "test")
     val tempDir = Files.createTempDir()
@@ -35,6 +76,28 @@ class FileSuite extends FunSuite with LocalSparkContext {
     // Try reading the output back as a SequenceFile
     val output = sc.sequenceFile[IntWritable, Text](outputDir)
     assert(output.map(_.toString).collect().toList === List("(1,a)", "(2,aa)", "(3,aaa)"))
+  }
+
+  test("SequenceFile (compressed)") {
+    sc = new SparkContext("local", "test")
+    val tempDir = Files.createTempDir()
+    val normalDir = new File(tempDir, "output_normal").getAbsolutePath
+    val compressedOutputDir = new File(tempDir, "output_compressed").getAbsolutePath
+    val codec = new DefaultCodec()
+
+    val data = sc.parallelize(Seq.fill(100)("abc"), 1).map(x => (x, x))
+    data.saveAsSequenceFile(normalDir)
+    data.saveAsSequenceFile(compressedOutputDir, Some(classOf[DefaultCodec]))
+
+    val normalFile = new File(normalDir, "part-00000")
+    val normalContent = sc.sequenceFile[String, String](normalDir).collect
+    assert(normalContent === Array.fill(100)("abc", "abc"))
+
+    val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
+    val compressedContent = sc.sequenceFile[String, String](compressedOutputDir).collect
+    assert(compressedContent === Array.fill(100)("abc", "abc"))
+
+    assert(compressedFile.length < normalFile.length)
   }
 
   test("SequenceFile with writable key") {

@@ -1,6 +1,23 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.rdd
 
-import spark.{OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
+import spark.{Utils, OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
 import java.io.{ObjectOutputStream, IOException}
 
 
@@ -48,8 +65,27 @@ class ZippedRDD[T: ClassManifest, U: ClassManifest](
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] = {
+    // Note that as number of slaves in cluster increase, the computed preferredLocations can become small : so we might need
+    // to look at alternate strategies to alleviate this. (If there are no (or very small number of preferred locations), we
+    // will end up transferred the blocks to 'any' node in the cluster - paying with n/w and cache cost.
+    // Maybe pick one or the other ? (so that atleast one block is local ?).
+    // Choose node which is hosting 'larger' of the blocks ?
+    // Look at rack locality to ensure chosen host is atleast rack local to both hosting node ?, etc (would be good to defer this if possible)
     val (partition1, partition2) = s.asInstanceOf[ZippedPartition[T, U]].partitions
-    rdd1.preferredLocations(partition1).intersect(rdd2.preferredLocations(partition2))
+    val pref1 = rdd1.preferredLocations(partition1)
+    val pref2 = rdd2.preferredLocations(partition2)
+
+    // exact match - instance local and host local.
+    val exactMatchLocations = pref1.intersect(pref2)
+
+    // remove locations which are already handled via exactMatchLocations, and intersect where both partitions are node local.
+    val otherNodeLocalPref1 = pref1.filter(loc => ! exactMatchLocations.contains(loc)).map(loc => Utils.parseHostPort(loc)._1)
+    val otherNodeLocalPref2 = pref2.filter(loc => ! exactMatchLocations.contains(loc)).map(loc => Utils.parseHostPort(loc)._1)
+    val otherNodeLocalLocations = otherNodeLocalPref1.intersect(otherNodeLocalPref2)
+
+
+    // Can have mix of instance local (hostPort) and node local (host) locations as preference !
+    exactMatchLocations ++ otherNodeLocalLocations
   }
 
   override def clearDependencies() {

@@ -1,4 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 SCALA_VERSION=2.9.3
 
@@ -22,30 +39,39 @@ fi
 # values for that; it doesn't need a lot
 if [ "$1" = "spark.deploy.master.Master" -o "$1" = "spark.deploy.worker.Worker" ]; then
   SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
-  SPARK_DAEMON_JAVA_OPTS+=" -Dspark.akka.logLifecycleEvents=true"
-  SPARK_JAVA_OPTS=$SPARK_DAEMON_JAVA_OPTS   # Empty by default
+  SPARK_DAEMON_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS -Dspark.akka.logLifecycleEvents=true"
+  # Do not overwrite SPARK_JAVA_OPTS environment variable in this script
+  OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS"   # Empty by default
+else
+  OUR_JAVA_OPTS="$SPARK_JAVA_OPTS"
 fi
 
 
 # Add java opts for master, worker, executor. The opts maybe null
 case "$1" in
   'spark.deploy.master.Master')
-    SPARK_JAVA_OPTS+=" $SPARK_MASTER_OPTS"
+    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_MASTER_OPTS"
     ;;
   'spark.deploy.worker.Worker')
-    SPARK_JAVA_OPTS+=" $SPARK_WORKER_OPTS"
+    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_WORKER_OPTS"
     ;;
   'spark.executor.StandaloneExecutorBackend')
-    SPARK_JAVA_OPTS+=" $SPARK_EXECUTOR_OPTS"
+    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     ;;
   'spark.executor.MesosExecutorBackend')
-    SPARK_JAVA_OPTS+=" $SPARK_EXECUTOR_OPTS"
+    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     ;;
   'spark.repl.Main')
-    SPARK_JAVA_OPTS+=" $SPARK_REPL_OPTS"
+    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_REPL_OPTS"
     ;;
 esac
 
+# Figure out whether to run our class with java or with the scala launcher.
+# In most cases, we'd prefer to execute our process with java because scala
+# creates a shell script as the parent of its Java process, which makes it
+# hard to kill the child with stuff like Process.destroy(). However, for
+# the Spark shell, the wrapper is necessary to properly reset the terminal
+# when we exit, so we allow it to set a variable to launch with scala.
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
   if [ "$SCALA_HOME" ]; then
     RUNNER="${SCALA_HOME}/bin/scala"
@@ -58,16 +84,17 @@ if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
     fi
   fi
 else
-  if [ `command -v java` ]; then
-    RUNNER="java"
+  if [ -n "${JAVA_HOME}" ]; then
+    RUNNER="${JAVA_HOME}/bin/java"
   else
-    if [ -z "$JAVA_HOME" ]; then
+    if [ `command -v java` ]; then
+      RUNNER="java"
+    else
       echo "JAVA_HOME is not set" >&2
       exit 1
     fi
-    RUNNER="${JAVA_HOME}/bin/java"
   fi
-  if [ -z "$SCALA_LIBRARY_PATH" ]; then
+  if [[ ! -f "$FWDIR/RELEASE" && -z "$SCALA_LIBRARY_PATH" ]]; then
     if [ -z "$SCALA_HOME" ]; then
       echo "SCALA_HOME is not set" >&2
       exit 1
@@ -84,83 +111,54 @@ fi
 export SPARK_MEM
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
-JAVA_OPTS="$SPARK_JAVA_OPTS"
-JAVA_OPTS+=" -Djava.library.path=$SPARK_LIBRARY_PATH"
-JAVA_OPTS+=" -Xms$SPARK_MEM -Xmx$SPARK_MEM"
+JAVA_OPTS="$OUR_JAVA_OPTS"
+JAVA_OPTS="$JAVA_OPTS -Djava.library.path=$SPARK_LIBRARY_PATH"
+JAVA_OPTS="$JAVA_OPTS -Xms$SPARK_MEM -Xmx$SPARK_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e $FWDIR/conf/java-opts ] ; then
-  JAVA_OPTS+=" `cat $FWDIR/conf/java-opts`"
+  JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
 fi
 export JAVA_OPTS
+# Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
 
-CORE_DIR="$FWDIR/core"
-REPL_DIR="$FWDIR/repl"
-EXAMPLES_DIR="$FWDIR/examples"
-BAGEL_DIR="$FWDIR/bagel"
-STREAMING_DIR="$FWDIR/streaming"
-PYSPARK_DIR="$FWDIR/python"
+if [ ! -f "$FWDIR/RELEASE" ]; then
+  CORE_DIR="$FWDIR/core"
+  EXAMPLES_DIR="$FWDIR/examples"
+  REPL_DIR="$FWDIR/repl"
 
-# Exit if the user hasn't compiled Spark
-if [ ! -e "$REPL_DIR/target" ]; then
-  echo "Failed to find Spark classes in $REPL_DIR/target" >&2
-  echo "You need to compile Spark before running this program" >&2
-  exit 1
-fi
+  # Exit if the user hasn't compiled Spark
+  if [ ! -e "$CORE_DIR/target" ]; then
+    echo "Failed to find Spark classes in $CORE_DIR/target" >&2
+    echo "You need to compile Spark before running this program" >&2
+    exit 1
+  fi
 
-# Build up classpath
-CLASSPATH="$SPARK_CLASSPATH"
-CLASSPATH+=":$FWDIR/conf"
-CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/classes"
-if [ -n "$SPARK_TESTING" ] ; then
-  CLASSPATH+=":$CORE_DIR/target/scala-$SCALA_VERSION/test-classes"
-  CLASSPATH+=":$STREAMING_DIR/target/scala-$SCALA_VERSION/test-classes"
-fi
-CLASSPATH+=":$CORE_DIR/src/main/resources"
-CLASSPATH+=":$REPL_DIR/target/scala-$SCALA_VERSION/classes"
-CLASSPATH+=":$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
-CLASSPATH+=":$STREAMING_DIR/target/scala-$SCALA_VERSION/classes"
-CLASSPATH+=":$STREAMING_DIR/lib/org/apache/kafka/kafka/0.7.2-spark/*" # <-- our in-project Kafka Jar
-if [ -e "$FWDIR/lib_managed" ]; then
-  CLASSPATH+=":$FWDIR/lib_managed/jars/*"
-  CLASSPATH+=":$FWDIR/lib_managed/bundles/*"
-fi
-CLASSPATH+=":$REPL_DIR/lib/*"
-if [ -e repl-bin/target ]; then
-  for jar in `find "repl-bin/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
-    CLASSPATH+=":$jar"
-  done
-fi
-CLASSPATH+=":$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
-for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
-  CLASSPATH+=":$jar"
-done
-export CLASSPATH # Needed for spark-shell
+  if [[ "$@" = *repl* && ! -e "$REPL_DIR/target" ]]; then
+    echo "Failed to find Spark classes in $REPL_DIR/target" >&2
+    echo "You need to compile Spark repl module before running this program" >&2
+    exit 1
+  fi
 
-# Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
-# to avoid the -sources and -doc packages that are built by publish-local.
-if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
-  # Use the JAR from the SBT build
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
-fi
-if [ -e "$EXAMPLES_DIR/target/spark-examples-"*hadoop[12].jar ]; then
-  # Use the JAR from the Maven build
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples-"*hadoop[12].jar`
+  # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
+  # to avoid the -sources and -doc packages that are built by publish-local.
+  if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
+    # Use the JAR from the SBT build
+    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
+  fi
+  if [ -e "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar ]; then
+    # Use the JAR from the Maven build
+    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
+  fi
 fi
 
-# Figure out whether to run our class with java or with the scala launcher.
-# In most cases, we'd prefer to execute our process with java because scala
-# creates a shell script as the parent of its Java process, which makes it
-# hard to kill the child with stuff like Process.destroy(). However, for
-# the Spark shell, the wrapper is necessary to properly reset the terminal
-# when we exit, so we allow it to set a variable to launch with scala.
+# Compute classpath using external script
+CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
+export CLASSPATH
+
 if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
   EXTRA_ARGS=""     # Java options will be passed to scala as JAVA_OPTS
 else
-  CLASSPATH+=":$SCALA_LIBRARY_PATH/scala-library.jar"
-  CLASSPATH+=":$SCALA_LIBRARY_PATH/scala-compiler.jar"
-  CLASSPATH+=":$SCALA_LIBRARY_PATH/jline.jar"
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 fi
-
 exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"

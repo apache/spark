@@ -1,14 +1,37 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
+
+import collection.mutable
+import serializer.Serializer
 
 import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
-import serializer.Serializer
 import spark.broadcast.BroadcastManager
+import spark.metrics.MetricsSystem
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
+import spark.serializer.{Serializer, SerializerManager}
 import spark.util.AkkaUtils
+import spark.api.python.PythonWorkerFactory
+
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -20,6 +43,7 @@ import spark.util.AkkaUtils
 class SparkEnv (
     val executorId: String,
     val actorSystem: ActorSystem,
+    val serializerManager: SerializerManager,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -29,20 +53,45 @@ class SparkEnv (
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
     val httpFileServer: HttpFileServer,
-    val sparkFilesDir: String
-  ) {
+    val sparkFilesDir: String,
+    val metricsSystem: MetricsSystem,
+    // To be set only as part of initialization of SparkContext.
+    // (executorId, defaultHostPort) => executorHostPort
+    // If executorId is NOT found, return defaultHostPort
+    var executorIdToHostPort: Option[(String, String) => String]) {
+
+  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   def stop() {
+    pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
     mapOutputTracker.stop()
     shuffleFetcher.stop()
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
+    metricsSystem.stop()
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
     actorSystem.awaitTermination()
+  }
+
+  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
+    synchronized {
+      val key = (pythonExec, envVars)
+      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
+    }
+  }
+
+  def resolveExecutorIdToHostPort(executorId: String, defaultHostPort: String): String = {
+    val env = SparkEnv.get
+    if (env.executorIdToHostPort.isEmpty) {
+      // default to using host, not host port. Relevant to non cluster modes.
+      return defaultHostPort
+    }
+
+    env.executorIdToHostPort.get(executorId, defaultHostPort)
   }
 }
 
@@ -91,8 +140,14 @@ object SparkEnv extends Logging {
       Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
     }
 
-    val serializer = instantiateClass[Serializer]("spark.serializer", "spark.JavaSerializer")
-    
+    val serializerManager = new SerializerManager
+
+    val serializer = serializerManager.setDefault(
+      System.getProperty("spark.serializer", "spark.JavaSerializer"))
+
+    val closureSerializer = serializerManager.get(
+      System.getProperty("spark.closure.serializer", "spark.JavaSerializer"))
+
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
       if (isDriver) {
         logInfo("Registering " + name)
@@ -116,9 +171,6 @@ object SparkEnv extends Logging {
 
     val broadcastManager = new BroadcastManager(isDriver)
 
-    val closureSerializer = instantiateClass[Serializer](
-      "spark.closure.serializer", "spark.JavaSerializer")
-
     val cacheManager = new CacheManager(blockManager)
 
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
@@ -134,6 +186,13 @@ object SparkEnv extends Logging {
     val httpFileServer = new HttpFileServer()
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
+
+    val metricsSystem = if (isDriver) {
+      MetricsSystem.createMetricsSystem("driver")
+    } else {
+      MetricsSystem.createMetricsSystem("executor")
+    }
+    metricsSystem.start()
 
     // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
     // this is a temporary directory; in distributed mode, this is the executor's current working
@@ -153,6 +212,7 @@ object SparkEnv extends Logging {
     new SparkEnv(
       executorId,
       actorSystem,
+      serializerManager,
       serializer,
       closureSerializer,
       cacheManager,
@@ -162,7 +222,8 @@ object SparkEnv extends Logging {
       blockManager,
       connectionManager,
       httpFileServer,
-      sparkFilesDir)
+      sparkFilesDir,
+      metricsSystem,
+      None)
   }
-  
 }

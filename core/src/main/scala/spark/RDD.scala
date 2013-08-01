@@ -1,21 +1,37 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
-import java.net.URL
-import java.util.{Date, Random}
-import java.util.{HashMap => JHashMap}
+import java.util.Random
 
 import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
 
 import org.apache.hadoop.io.BytesWritable
+import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.TextOutputFormat
 
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 
+import spark.broadcast.Broadcast
 import spark.Partitioner._
 import spark.partial.BoundedDouble
 import spark.partial.CountEvaluator
@@ -32,13 +48,13 @@ import spark.rdd.MapPartitionsWithIndexRDD
 import spark.rdd.PipedRDD
 import spark.rdd.SampledRDD
 import spark.rdd.ShuffledRDD
-import spark.rdd.SubtractedRDD
 import spark.rdd.UnionRDD
 import spark.rdd.ZippedRDD
 import spark.rdd.ZippedPartitionsRDD2
 import spark.rdd.ZippedPartitionsRDD3
 import spark.rdd.ZippedPartitionsRDD4
 import spark.storage.StorageLevel
+import spark.util.BoundedPriorityQueue
 
 import SparkContext._
 
@@ -106,8 +122,11 @@ abstract class RDD[T: ClassManifest](
   // Methods and fields available on all RDDs
   // =======================================================================
 
+  /** The SparkContext that created this RDD. */
+  def sparkContext: SparkContext = sc
+
   /** A unique ID for this RDD (within its SparkContext). */
-  val id = sc.newRddId()
+  val id: Int = sc.newRddId()
 
   /** A friendly name for this RDD */
   var name: String = null
@@ -118,9 +137,18 @@ abstract class RDD[T: ClassManifest](
     this
   }
 
+  /** User-defined generator of this RDD*/
+  var generator = Utils.getCallSiteInfo.firstUserClass
+
+  /** Reset generator*/
+  def setGenerator(_generator: String) = {
+    generator = _generator
+  }
+
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
-   * it is computed. Can only be called once on each RDD.
+   * it is computed. This can only be used to assign a new storage level if the RDD does not
+   * have a storage level set yet..
    */
   def persist(newLevel: StorageLevel): RDD[T] = {
     // TODO: Handle changes of StorageLevel
@@ -139,6 +167,20 @@ abstract class RDD[T: ClassManifest](
 
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): RDD[T] = persist()
+
+  /**
+   * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   *
+   * @param blocking Whether to block until all blocks are deleted.
+   * @return This RDD.
+   */
+  def unpersist(blocking: Boolean = true): RDD[T] = {
+    logInfo("Removing RDD " + id + " from persistence list")
+    sc.env.blockManager.master.removeRdd(id, blocking)
+    sc.persistentRdds.remove(id)
+    storageLevel = StorageLevel.NONE
+    this
+  }
 
   /** Get the RDD's current storage level, or StorageLevel.NONE if none is set. */
   def getStorageLevel = storageLevel
@@ -260,8 +302,12 @@ abstract class RDD[T: ClassManifest](
     var fraction = 0.0
     var total = 0
     var multiplier = 3.0
-    var initialCount = count()
+    var initialCount = this.count()
     var maxSelected = 0
+
+    if (num < 0) {
+      throw new IllegalArgumentException("Negative number of elements requested")
+    }
 
     if (initialCount > Integer.MAX_VALUE - 1) {
       maxSelected = Integer.MAX_VALUE - 1
@@ -269,21 +315,21 @@ abstract class RDD[T: ClassManifest](
       maxSelected = initialCount.toInt
     }
 
-    if (num > initialCount) {
+    if (num > initialCount && !withReplacement) {
       total = maxSelected
-      fraction = math.min(multiplier * (maxSelected + 1) / initialCount, 1.0)
-    } else if (num < 0) {
-      throw(new IllegalArgumentException("Negative number of elements requested"))
+      fraction = multiplier * (maxSelected + 1) / initialCount
     } else {
-      fraction = math.min(multiplier * (num + 1) / initialCount, 1.0)
+      fraction = multiplier * (num + 1) / initialCount
       total = num
     }
 
     val rand = new Random(seed)
-    var samples = this.sample(withReplacement, fraction, rand.nextInt).collect()
+    var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
+    // If the first sample didn't turn out large enough, keep trying to take samples;
+    // this shouldn't happen often because we use a big multiplier for thei initial size
     while (samples.length < total) {
-      samples = this.sample(withReplacement, fraction, rand.nextInt).collect()
+      samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
     }
 
     Utils.randomizeInPlace(samples, rand).take(total)
@@ -341,13 +387,36 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
-  def pipe(command: Seq[String]): RDD[String] = new PipedRDD(this, command)
+  def pipe(command: String, env: Map[String, String]): RDD[String] =
+    new PipedRDD(this, command, env)
+
 
   /**
    * Return an RDD created by piping elements to a forked external process.
+   * The print behavior can be customized by providing two functions.
+   *
+   * @param command command to run in forked process.
+   * @param env environment variables to set.
+   * @param printPipeContext Before piping elements, this function is called as an oppotunity
+   *                         to pipe context data. Print line function (like out.println) will be
+   *                         passed as printPipeContext's parameter.
+   * @param printRDDElement Use this function to customize how to pipe elements. This function
+   *                        will be called with each RDD element as the 1st parameter, and the
+   *                        print line function (like out.println()) as the 2nd parameter.
+   *                        An example of pipe the RDD data of groupBy() in a streaming way,
+   *                        instead of constructing a huge String to concat all the elements:
+   *                        def printRDDElement(record:(String, Seq[String]), f:String=>Unit) =
+   *                          for (e <- record._2){f(e)}
+   * @return the result RDD
    */
-  def pipe(command: Seq[String], env: Map[String, String]): RDD[String] =
-    new PipedRDD(this, command, env)
+  def pipe(
+      command: Seq[String],
+      env: Map[String, String] = Map(),
+      printPipeContext: (String => Unit) => Unit = null,
+      printRDDElement: (T, String => Unit) => Unit = null): RDD[String] =
+    new PipedRDD(this, command, env,
+      if (printPipeContext ne null) sc.clean(printPipeContext) else null,
+      if (printRDDElement ne null) sc.clean(printRDDElement) else null)
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD.
@@ -479,7 +548,7 @@ abstract class RDD[T: ClassManifest](
    */
   def foreachPartition(f: Iterator[T] => Unit) {
     val cleanF = sc.clean(f)
-    sc.runJob(this, (iter: Iterator[T]) => f(iter))
+    sc.runJob(this, (iter: Iterator[T]) => cleanF(iter))
   }
 
   /**
@@ -712,11 +781,47 @@ abstract class RDD[T: ClassManifest](
   }
 
   /**
+   * Returns the top K elements from this RDD as defined by
+   * the specified implicit Ordering[T].
+   * @param num the number of top elements to return
+   * @param ord the implicit ordering for T
+   * @return an array of top elements
+   */
+  def top(num: Int)(implicit ord: Ordering[T]): Array[T] = {
+    mapPartitions { items =>
+      val queue = new BoundedPriorityQueue[T](num)
+      queue ++= items
+      Iterator.single(queue)
+    }.reduce { (queue1, queue2) =>
+      queue1 ++= queue2
+      queue1
+    }.toArray.sorted(ord.reverse)
+  }
+
+  /**
+   * Returns the first K elements from this RDD as defined by
+   * the specified implicit Ordering[T] and maintains the
+   * ordering.
+   * @param num the number of top elements to return
+   * @param ord the implicit ordering for T
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = top(num)(ord.reverse)
+
+  /**
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String) {
     this.map(x => (NullWritable.get(), new Text(x.toString)))
       .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
+  }
+
+  /**
+   * Save this RDD as a compressed text file, using string representations of elements.
+   */
+  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]) {
+    this.map(x => (NullWritable.get(), new Text(x.toString)))
+      .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path, codec)
   }
 
   /**
@@ -777,7 +882,7 @@ abstract class RDD[T: ClassManifest](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** Record user function generating this RDD. */
-  private[spark] val origin = Utils.getSparkCallSite
+  private[spark] val origin = Utils.formatSparkCallSite
 
   private[spark] def elementClassManifest: ClassManifest[T] = classManifest[T]
 

@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler
 
 import java.net.URI
@@ -24,9 +41,10 @@ private[spark] class Stage(
     val rdd: RDD[_],
     val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
-    val priority: Int)
+    val priority: Int,
+    callSite: Option[String])
   extends Logging {
-  
+
   val isShuffleMap = shuffleDep != None
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
@@ -34,6 +52,7 @@ private[spark] class Stage(
 
   /** When first task was submitted to scheduler. */
   var submissionTime: Option[Long] = None
+  var completionTime: Option[Long] = None
 
   private var nextAttemptId = 0
 
@@ -60,7 +79,7 @@ private[spark] class Stage(
       numAvailableOutputs -= 1
     }
   }
- 
+
   def removeOutputsOnExecutor(execId: String) {
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {
@@ -84,7 +103,7 @@ private[spark] class Stage(
     return id
   }
 
-  def origin: String = rdd.origin
+  val name = callSite.getOrElse(rdd.origin)
 
   override def toString = "Stage " + id
 

@@ -1,9 +1,27 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.streaming;
 
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.Files;
+import kafka.serializer.StringDecoder;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.junit.After;
 import org.junit.Assert;
@@ -23,7 +41,6 @@ import spark.streaming.api.java.JavaPairDStream;
 import spark.streaming.api.java.JavaStreamingContext;
 import spark.streaming.JavaTestUtils;
 import spark.streaming.JavaCheckpointTestUtils;
-import spark.streaming.dstream.KafkaPartitionKey;
 import spark.streaming.InputStreamsSuite;
 
 import java.io.*;
@@ -1203,10 +1220,14 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testKafkaStream() {
     HashMap<String, Integer> topics = Maps.newHashMap();
-    HashMap<KafkaPartitionKey, Long> offsets = Maps.newHashMap();
     JavaDStream test1 = ssc.kafkaStream("localhost:12345", "group", topics);
-    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics, offsets);
-    JavaDStream test3 = ssc.kafkaStream("localhost:12345", "group", topics, offsets,
+    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics,
+      StorageLevel.MEMORY_AND_DISK());
+
+    HashMap<String, String> kafkaParams = Maps.newHashMap();
+    kafkaParams.put("zk.connect","localhost:12345");
+    kafkaParams.put("groupid","consumer-group");
+    JavaDStream test3 = ssc.kafkaStream(String.class, StringDecoder.class, kafkaParams, topics,
       StorageLevel.MEMORY_AND_DISK());
   }
 
@@ -1263,7 +1284,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testTwitterStream() {
     String[] filters = new String[] { "good", "bad", "ugly" };
-    JavaDStream test = ssc.twitterStream("username", "password", filters, StorageLevel.MEMORY_ONLY());
+    JavaDStream test = ssc.twitterStream(filters, StorageLevel.MEMORY_ONLY());
   }
 
   @Test

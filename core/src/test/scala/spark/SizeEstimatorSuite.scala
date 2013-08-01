@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import org.scalatest.FunSuite
@@ -35,7 +52,7 @@ class SizeEstimatorSuite
   var oldOops: String = _
 
   override def beforeAll() {
-    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case 
+    // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     oldArch = System.setProperty("os.arch", "amd64")
     oldOops = System.setProperty("spark.test.useCompressedOops", "true")
   }
@@ -46,54 +63,54 @@ class SizeEstimatorSuite
   }
 
   test("simple classes") {
-    expect(16)(SizeEstimator.estimate(new DummyClass1))
-    expect(16)(SizeEstimator.estimate(new DummyClass2))
-    expect(24)(SizeEstimator.estimate(new DummyClass3))
-    expect(24)(SizeEstimator.estimate(new DummyClass4(null)))
-    expect(48)(SizeEstimator.estimate(new DummyClass4(new DummyClass3)))
+    assert(SizeEstimator.estimate(new DummyClass1) === 16)
+    assert(SizeEstimator.estimate(new DummyClass2) === 16)
+    assert(SizeEstimator.estimate(new DummyClass3) === 24)
+    assert(SizeEstimator.estimate(new DummyClass4(null)) === 24)
+    assert(SizeEstimator.estimate(new DummyClass4(new DummyClass3)) === 48)
   }
 
   // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
   // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("strings") {
-    expect(40)(SizeEstimator.estimate(DummyString("")))
-    expect(48)(SizeEstimator.estimate(DummyString("a")))
-    expect(48)(SizeEstimator.estimate(DummyString("ab")))
-    expect(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
+    assert(SizeEstimator.estimate(DummyString("")) === 40)
+    assert(SizeEstimator.estimate(DummyString("a")) === 48)
+    assert(SizeEstimator.estimate(DummyString("ab")) === 48)
+    assert(SizeEstimator.estimate(DummyString("abcdefgh")) === 56)
   }
 
   test("primitive arrays") {
-    expect(32)(SizeEstimator.estimate(new Array[Byte](10)))
-    expect(40)(SizeEstimator.estimate(new Array[Char](10)))
-    expect(40)(SizeEstimator.estimate(new Array[Short](10)))
-    expect(56)(SizeEstimator.estimate(new Array[Int](10)))
-    expect(96)(SizeEstimator.estimate(new Array[Long](10)))
-    expect(56)(SizeEstimator.estimate(new Array[Float](10)))
-    expect(96)(SizeEstimator.estimate(new Array[Double](10)))
-    expect(4016)(SizeEstimator.estimate(new Array[Int](1000)))
-    expect(8016)(SizeEstimator.estimate(new Array[Long](1000)))
+    assert(SizeEstimator.estimate(new Array[Byte](10)) === 32)
+    assert(SizeEstimator.estimate(new Array[Char](10)) === 40)
+    assert(SizeEstimator.estimate(new Array[Short](10)) === 40)
+    assert(SizeEstimator.estimate(new Array[Int](10)) === 56)
+    assert(SizeEstimator.estimate(new Array[Long](10)) === 96)
+    assert(SizeEstimator.estimate(new Array[Float](10)) === 56)
+    assert(SizeEstimator.estimate(new Array[Double](10)) === 96)
+    assert(SizeEstimator.estimate(new Array[Int](1000)) === 4016)
+    assert(SizeEstimator.estimate(new Array[Long](1000)) === 8016)
   }
 
   test("object arrays") {
     // Arrays containing nulls should just have one pointer per element
-    expect(56)(SizeEstimator.estimate(new Array[String](10)))
-    expect(56)(SizeEstimator.estimate(new Array[AnyRef](10)))
+    assert(SizeEstimator.estimate(new Array[String](10)) === 56)
+    assert(SizeEstimator.estimate(new Array[AnyRef](10)) === 56)
 
     // For object arrays with non-null elements, each object should take one pointer plus
     // however many bytes that class takes. (Note that Array.fill calls the code in its
     // second parameter separately for each object, so we get distinct objects.)
-    expect(216)(SizeEstimator.estimate(Array.fill(10)(new DummyClass1))) 
-    expect(216)(SizeEstimator.estimate(Array.fill(10)(new DummyClass2))) 
-    expect(296)(SizeEstimator.estimate(Array.fill(10)(new DummyClass3))) 
-    expect(56)(SizeEstimator.estimate(Array(new DummyClass1, new DummyClass2)))
+    assert(SizeEstimator.estimate(Array.fill(10)(new DummyClass1)) === 216)
+    assert(SizeEstimator.estimate(Array.fill(10)(new DummyClass2)) === 216)
+    assert(SizeEstimator.estimate(Array.fill(10)(new DummyClass3)) === 296)
+    assert(SizeEstimator.estimate(Array(new DummyClass1, new DummyClass2)) === 56)
 
     // Past size 100, our samples 100 elements, but we should still get the right size.
-    expect(28016)(SizeEstimator.estimate(Array.fill(1000)(new DummyClass3)))
+    assert(SizeEstimator.estimate(Array.fill(1000)(new DummyClass3)) === 28016)
 
     // If an array contains the *same* element many times, we should only count it once.
     val d1 = new DummyClass1
-    expect(72)(SizeEstimator.estimate(Array.fill(10)(d1))) // 10 pointers plus 8-byte object
-    expect(432)(SizeEstimator.estimate(Array.fill(100)(d1))) // 100 pointers plus 8-byte object
+    assert(SizeEstimator.estimate(Array.fill(10)(d1)) === 72) // 10 pointers plus 8-byte object
+    assert(SizeEstimator.estimate(Array.fill(100)(d1)) === 432) // 100 pointers plus 8-byte object
 
     // Same thing with huge array containing the same element many times. Note that this won't
     // return exactly 4032 because it can't tell that *all* the elements will equal the first
@@ -111,10 +128,10 @@ class SizeEstimatorSuite
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
-    expect(40)(SizeEstimator.estimate(DummyString("")))
-    expect(48)(SizeEstimator.estimate(DummyString("a")))
-    expect(48)(SizeEstimator.estimate(DummyString("ab")))
-    expect(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
+    assert(SizeEstimator.estimate(DummyString("")) === 40)
+    assert(SizeEstimator.estimate(DummyString("a")) === 48)
+    assert(SizeEstimator.estimate(DummyString("ab")) === 48)
+    assert(SizeEstimator.estimate(DummyString("abcdefgh")) === 56)
 
     resetOrClear("os.arch", arch)
   }
@@ -128,10 +145,10 @@ class SizeEstimatorSuite
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
-    expect(56)(SizeEstimator.estimate(DummyString("")))
-    expect(64)(SizeEstimator.estimate(DummyString("a")))
-    expect(64)(SizeEstimator.estimate(DummyString("ab")))
-    expect(72)(SizeEstimator.estimate(DummyString("abcdefgh")))
+    assert(SizeEstimator.estimate(DummyString("")) === 56)
+    assert(SizeEstimator.estimate(DummyString("a")) === 64)
+    assert(SizeEstimator.estimate(DummyString("ab")) === 64)
+    assert(SizeEstimator.estimate(DummyString("abcdefgh")) === 72)
 
     resetOrClear("os.arch", arch)
     resetOrClear("spark.test.useCompressedOops", oops)

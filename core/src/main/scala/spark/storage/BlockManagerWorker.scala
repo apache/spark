@@ -1,14 +1,25 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.storage
 
 import java.nio.ByteBuffer
 
-import scala.actors._
-import scala.actors.Actor._
-import scala.actors.remote._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.util.Random
-
-import spark.{Logging, Utils, SparkEnv}
+import spark.{Logging, Utils}
 import spark.network._
 
 /**
@@ -19,7 +30,7 @@ import spark.network._
  */
 private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
   initLogging()
-  
+
   blockManager.connectionManager.onReceiveMessage(onBlockMessageReceive)
 
   def onBlockMessageReceive(msg: Message, id: ConnectionManagerId): Option[Message] = {
@@ -51,7 +62,7 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
         logDebug("Received [" + pB + "]")
         putBlock(pB.id, pB.data, pB.level)
         return None
-      } 
+      }
       case BlockMessage.TYPE_GET_BLOCK => {
         val gB = new GetBlock(blockMessage.getId)
         logDebug("Received [" + gB + "]")
@@ -88,30 +99,26 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
 
 private[spark] object BlockManagerWorker extends Logging {
   private var blockManagerWorker: BlockManagerWorker = null
-  private val DATA_TRANSFER_TIME_OUT_MS: Long = 500
-  private val REQUEST_RETRY_INTERVAL_MS: Long = 1000
-  
+
   initLogging()
-  
+
   def startBlockManagerWorker(manager: BlockManager) {
     blockManagerWorker = new BlockManagerWorker(manager)
   }
-  
+
   def syncPutBlock(msg: PutBlock, toConnManagerId: ConnectionManagerId): Boolean = {
     val blockManager = blockManagerWorker.blockManager
-    val connectionManager = blockManager.connectionManager 
-    val serializer = blockManager.serializer
+    val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromPutBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val resultMessage = connectionManager.sendMessageReliablySync(
         toConnManagerId, blockMessageArray.toBufferMessage)
     return (resultMessage != None)
   }
-  
+
   def syncGetBlock(msg: GetBlock, toConnManagerId: ConnectionManagerId): ByteBuffer = {
     val blockManager = blockManagerWorker.blockManager
-    val connectionManager = blockManager.connectionManager 
-    val serializer = blockManager.serializer
+    val connectionManager = blockManager.connectionManager
     val blockMessage = BlockMessage.fromGetBlock(msg)
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val responseMessage = connectionManager.sendMessageReliablySync(

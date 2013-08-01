@@ -1,7 +1,24 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.rdd
 
-import scala.collection.mutable.HashMap
 import spark.{RDD, SparkContext, SparkEnv, Partition, TaskContext}
+import spark.storage.BlockManager
 
 private[spark] class BlockRDDPartition(val blockId: String, idx: Int) extends Partition {
   val index = idx
@@ -11,12 +28,7 @@ private[spark]
 class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[String])
   extends RDD[T](sc, Nil) {
 
-  @transient lazy val locations_  = {
-    val blockManager = SparkEnv.get.blockManager
-    /*val locations = blockIds.map(id => blockManager.getLocations(id))*/
-    val locations = blockManager.getLocations(blockIds)
-    HashMap(blockIds.zip(locations):_*)
-  }
+  @transient lazy val locations_ = BlockManager.blockIdsToExecutorLocations(blockIds, SparkEnv.get)
 
   override def getPartitions: Array[Partition] = (0 until blockIds.size).map(i => {
     new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]

@@ -1,13 +1,33 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import network.ConnectionManagerId
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers
 import org.scalatest.prop.Checkers
+import org.scalatest.time.{Span, Millis}
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
 import org.scalacheck.Prop._
+import org.eclipse.jetty.server.{Server, Request, Handler}
 
 import com.google.common.io.Files
 
@@ -15,14 +35,39 @@ import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
 import storage.{GetBlock, BlockManagerWorker, StorageLevel}
+import ui.JettyUtils
 
-class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter with LocalSparkContext {
+
+class NotSerializableClass
+class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
+
+
+class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
+  with LocalSparkContext {
 
   val clusterUrl = "local-cluster[2,1,512]"
 
   after {
     System.clearProperty("spark.reducer.maxMbInFlight")
     System.clearProperty("spark.storage.memoryFraction")
+  }
+
+  test("task throws not serializable exception") {
+    // Ensures that executors do not crash when an exn is not serializable. If executors crash,
+    // this test will hang. Correct behavior is that executors don't crash but fail tasks
+    // and the scheduler throws a SparkException.
+
+    // numSlaves must be less than numPartitions
+    val numSlaves = 3
+    val numPartitions = 10
+
+    sc = new SparkContext("local-cluster[%s,1,512]".format(numSlaves), "test")
+    val data = sc.parallelize(1 to 100, numPartitions).
+      map(x => throw new NotSerializableExn(new NotSerializableClass))
+    intercept[SparkException] {
+      data.count()
+    }
+    resetSparkContext()
   }
 
   test("local-cluster format") {
@@ -196,7 +241,6 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(Seq(true, true), 2)
     assert(data.count === 2) // force executors to start
-    val masterId = SparkEnv.get.blockManager.blockManagerId
     assert(data.map(markNodeIfIdentity).collect.size === 2)
     assert(data.map(failOnMarkedIdentity).collect.size === 2)
   }
@@ -252,12 +296,48 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter 
       assert(data2.count === 2)
     }
   }
+
+  test("unpersist RDDs") {
+    DistributedSuite.amMaster = true
+    sc = new SparkContext("local-cluster[3,1,512]", "test")
+    val data = sc.parallelize(Seq(true, false, false, false), 4)
+    data.persist(StorageLevel.MEMORY_ONLY_2)
+    data.count
+    assert(sc.persistentRdds.isEmpty === false)
+    data.unpersist()
+    assert(sc.persistentRdds.isEmpty === true)
+
+    failAfter(Span(3000, Millis)) {
+      try {
+        while (! sc.getRDDStorageInfo.isEmpty) {
+          Thread.sleep(200)
+        }
+      } catch {
+        case _ => { Thread.sleep(10) }
+          // Do nothing. We might see exceptions because block manager
+          // is racing this thread to remove entries from the driver.
+      }
+    }
+  }
+
+  test("job should fail if TaskResult exceeds Akka frame size") {
+    // We must use local-cluster mode since results are returned differently
+    // when running under LocalScheduler:
+    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    val akkaFrameSize =
+      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size").toInt
+    val rdd = sc.parallelize(Seq(1)).map{x => new Array[Byte](akkaFrameSize)}
+    val exception = intercept[SparkException] {
+      rdd.reduce((x, y) => x)
+    }
+    exception.getMessage should endWith("result exceeded Akka frame size")
+  }
 }
 
 object DistributedSuite {
   // Indicates whether this JVM is marked for failure.
   var mark = false
-  
+
   // Set by test to remember if we are in the driver program so we can assert
   // that we are not.
   var amMaster = false
@@ -274,9 +354,9 @@ object DistributedSuite {
   // Act like an identity function, but if mark was set to true previously, fail,
   // crashing the entire JVM.
   def failOnMarkedIdentity(item: Boolean): Boolean = {
-    if (mark) { 
+    if (mark) {
       System.exit(42)
-    } 
+    }
     item
-  } 
+  }
 }

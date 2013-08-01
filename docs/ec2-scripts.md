@@ -110,9 +110,8 @@ permissions on your private key file, you can run `launch` with the
 # Configuration
 
 You can edit `/root/spark/conf/spark-env.sh` on each machine to set Spark configuration options, such
-as JVM options and, most crucially, the amount of memory to use per machine (`SPARK_MEM`).
-This file needs to be copied to **every machine** to reflect the change. The easiest way to do this
-is to use a script we provide called `copy-dir`. First edit your `spark-env.sh` file on the master, 
+as JVM options. This file needs to be copied to **every machine** to reflect the change. The easiest way to
+do this is to use a script we provide called `copy-dir`. First edit your `spark-env.sh` file on the master, 
 then run `~/spark-ec2/copy-dir /root/spark/conf` to RSYNC it to all the workers.
 
 The [configuration guide](configuration.html) describes the available configuration options.

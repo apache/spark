@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import java.io.EOFException
@@ -18,6 +35,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
 import org.apache.hadoop.mapred.OutputCommitter
 import org.apache.hadoop.mapred.FileOutputCommitter
+import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.BytesWritable
@@ -62,7 +80,7 @@ class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : Cla
    * byte arrays to BytesWritable, and Strings to Text. The `path` can be on any Hadoop-supported
    * file system.
    */
-  def saveAsSequenceFile(path: String) {
+  def saveAsSequenceFile(path: String, codec: Option[Class[_ <: CompressionCodec]] = None) {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
     val keyClass = getWritableClass[K]
@@ -72,14 +90,18 @@ class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : Cla
 
     logInfo("Saving as sequence file of type (" + keyClass.getSimpleName + "," + valueClass.getSimpleName + ")" )
     val format = classOf[SequenceFileOutputFormat[Writable, Writable]]
+    val jobConf = new JobConf(self.context.hadoopConfiguration)
     if (!convertKey && !convertValue) {
-      self.saveAsHadoopFile(path, keyClass, valueClass, format)
+      self.saveAsHadoopFile(path, keyClass, valueClass, format, jobConf, codec)
     } else if (!convertKey && convertValue) {
-      self.map(x => (x._1,anyToWritable(x._2))).saveAsHadoopFile(path, keyClass, valueClass, format)
+      self.map(x => (x._1,anyToWritable(x._2))).saveAsHadoopFile(
+        path, keyClass, valueClass, format, jobConf, codec)
     } else if (convertKey && !convertValue) {
-      self.map(x => (anyToWritable(x._1),x._2)).saveAsHadoopFile(path, keyClass, valueClass, format)
+      self.map(x => (anyToWritable(x._1),x._2)).saveAsHadoopFile(
+        path, keyClass, valueClass, format, jobConf, codec)
     } else if (convertKey && convertValue) {
-      self.map(x => (anyToWritable(x._1),anyToWritable(x._2))).saveAsHadoopFile(path, keyClass, valueClass, format)
+      self.map(x => (anyToWritable(x._1),anyToWritable(x._2))).saveAsHadoopFile(
+        path, keyClass, valueClass, format, jobConf, codec)
     }
   }
 }

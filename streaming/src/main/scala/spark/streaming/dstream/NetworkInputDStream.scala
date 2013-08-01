@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.streaming.dstream
 
 import spark.streaming.{Time, StreamingContext, AddBlocks, RegisterReceiver, DeregisterReceiver}
@@ -140,12 +157,10 @@ abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Log
 
 
   /**
-   * Pushes a block (as iterator of values) into the block manager.
+   * Pushes a block (as an ArrayBuffer filled with data) into the block manager.
    */
-  def pushBlock(blockId: String, iterator: Iterator[T], metadata: Any, level: StorageLevel) {
-    val buffer = new ArrayBuffer[T] ++ iterator
-    env.blockManager.put(blockId, buffer.asInstanceOf[ArrayBuffer[Any]], level)
-
+  def pushBlock(blockId: String, arrayBuffer: ArrayBuffer[T], metadata: Any, level: StorageLevel) {
+    env.blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]], level)
     actor ! ReportBlock(blockId, metadata)
   }
 
@@ -195,10 +210,10 @@ abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Log
   class BlockGenerator(storageLevel: StorageLevel)
     extends Serializable with Logging {
 
-    case class Block(id: String, iterator: Iterator[T], metadata: Any = null)
+    case class Block(id: String, buffer: ArrayBuffer[T], metadata: Any = null)
 
     val clock = new SystemClock()
-    val blockInterval = 200L
+    val blockInterval = System.getProperty("spark.streaming.blockInterval", "200").toLong
     val blockIntervalTimer = new RecurringTimer(clock, blockInterval, updateCurrentBuffer)
     val blockStorageLevel = storageLevel
     val blocksForPushing = new ArrayBlockingQueue[Block](1000)
@@ -222,17 +237,13 @@ abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Log
       currentBuffer += obj
     }
 
-    private def createBlock(blockId: String, iterator: Iterator[T]) : Block = {
-      new Block(blockId, iterator)
-    }
-
     private def updateCurrentBuffer(time: Long) {
       try {
         val newBlockBuffer = currentBuffer
         currentBuffer = new ArrayBuffer[T]
         if (newBlockBuffer.size > 0) {
           val blockId = "input-" + NetworkReceiver.this.streamId + "-" + (time - blockInterval)
-          val newBlock = createBlock(blockId, newBlockBuffer.toIterator)
+          val newBlock = new Block(blockId, newBlockBuffer)
           blocksForPushing.add(newBlock)
         }
       } catch {
@@ -248,7 +259,7 @@ abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Log
       try {
         while(true) {
           val block = blocksForPushing.take()
-          NetworkReceiver.this.pushBlock(block.id, block.iterator, block.metadata, storageLevel)
+          NetworkReceiver.this.pushBlock(block.id, block.buffer, block.metadata, storageLevel)
         }
       } catch {
         case ie: InterruptedException =>

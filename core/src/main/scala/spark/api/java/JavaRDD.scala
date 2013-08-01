@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.api.java
 
 import spark._
@@ -14,11 +31,17 @@ JavaRDDLike[T, JavaRDD[T]] {
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): JavaRDD[T] = wrapRDD(rdd.cache())
 
-  /** 
+  /**
    * Set this RDD's storage level to persist its values across operations after the first time
-   * it is computed. Can only be called once on each RDD.
+   * it is computed. This can only be used to assign a new storage level if the RDD does not
+   * have a storage level set yet..
    */
   def persist(newLevel: StorageLevel): JavaRDD[T] = wrapRDD(rdd.persist(newLevel))
+
+  /**
+   * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   */
+  def unpersist(): JavaRDD[T] = wrapRDD(rdd.unpersist())
 
   // Transformations (return a new RDD)
 
@@ -31,7 +54,7 @@ JavaRDDLike[T, JavaRDD[T]] {
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int): JavaRDD[T] = wrapRDD(rdd.distinct(numPartitions))
-  
+
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
@@ -54,7 +77,7 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): JavaRDD[T] =
     wrapRDD(rdd.sample(withReplacement, fraction, seed))
-    
+
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
@@ -63,7 +86,7 @@ JavaRDDLike[T, JavaRDD[T]] {
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
-   * 
+   *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
@@ -80,7 +103,6 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
-
 }
 
 object JavaRDD {

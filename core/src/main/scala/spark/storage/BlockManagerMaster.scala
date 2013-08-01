@@ -1,19 +1,29 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.storage
 
-import java.io._
-import java.util.{HashMap => JHashMap}
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.util.Random
-
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.dispatch.Await
+import akka.actor.ActorRef
+import akka.dispatch.{Await, Future}
 import akka.pattern.ask
-import akka.util.{Duration, Timeout}
-import akka.util.duration._
+import akka.util.Duration
 
-import spark.{Logging, SparkException, Utils}
+import spark.{Logging, SparkException}
+
 
 private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {
 
@@ -88,6 +98,19 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
   }
 
   /**
+   * Remove all blocks belonging to the given RDD.
+   */
+  def removeRdd(rddId: Int, blocking: Boolean) {
+    val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
+    future onFailure {
+      case e: Throwable => logError("Failed to remove RDD " + rddId, e)
+    }
+    if (blocking) {
+      Await.result(future, timeout)
+    }
+  }
+
+  /**
    * Return the memory status for each block manager, in the form of a map from
    * the block manager's id to two long values. The first value is the maximum
    * amount of memory allocated for the block manager, while the second is the
@@ -98,7 +121,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
   }
 
   def getStorageStatus: Array[StorageStatus] = {
-    askDriverWithReply[ArrayBuffer[StorageStatus]](GetStorageStatus).toArray
+    askDriverWithReply[Array[StorageStatus]](GetStorageStatus)
   }
 
   /** Stop the driver actor, called only on the Spark driver node */
@@ -135,7 +158,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
         val future = driverActor.ask(message)(timeout)
         val result = Await.result(future, timeout)
         if (result == null) {
-          throw new Exception("BlockManagerMaster returned null")
+          throw new SparkException("BlockManagerMaster returned null")
         }
         return result.asInstanceOf[T]
       } catch {

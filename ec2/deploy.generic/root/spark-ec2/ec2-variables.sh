@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # These variables are automatically filled in by the spark-ec2 script.
 export MASTERS="{{master_list}}"

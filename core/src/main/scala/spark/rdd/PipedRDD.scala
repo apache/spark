@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.rdd
 
 import java.io.PrintWriter
@@ -9,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
 import spark.{RDD, SparkEnv, Partition, TaskContext}
+import spark.broadcast.Broadcast
 
 
 /**
@@ -18,14 +36,21 @@ import spark.{RDD, SparkEnv, Partition, TaskContext}
 class PipedRDD[T: ClassManifest](
     prev: RDD[T],
     command: Seq[String],
-    envVars: Map[String, String])
+    envVars: Map[String, String],
+    printPipeContext: (String => Unit) => Unit,
+    printRDDElement: (T, String => Unit) => Unit)
   extends RDD[String](prev) {
-
-  def this(prev: RDD[T], command: Seq[String]) = this(prev, command, Map())
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
-  def this(prev: RDD[T], command: String) = this(prev, PipedRDD.tokenize(command))
+  def this(
+      prev: RDD[T],
+      command: String,
+      envVars: Map[String, String] = Map(),
+      printPipeContext: (String => Unit) => Unit = null,
+      printRDDElement: (T, String => Unit) => Unit = null) =
+    this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement)
+
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
@@ -52,8 +77,17 @@ class PipedRDD[T: ClassManifest](
       override def run() {
         SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
+
+        // input the pipe context firstly
+        if (printPipeContext != null) {
+          printPipeContext(out.println(_))
+        }
         for (elem <- firstParent[T].iterator(split, context)) {
-          out.println(elem)
+          if (printRDDElement != null) {
+            printRDDElement(elem, out.println(_))
+          } else {
+            out.println(elem)
+          }
         }
         out.close()
       }

@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler
 
 import spark._
@@ -70,12 +87,11 @@ private[spark] class ResultTask[T, U](
     rdd.partitions(partition)
   }
 
-  // data locality is on a per host basis, not hyper specific to container (host:port). Unique on set of hosts.
-  val preferredLocs: Seq[String] = if (locs == null) Nil else locs.map(loc => Utils.parseHostPort(loc)._1).toSet.toSeq
+  private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.toSet.toSeq
 
   {
     // DEBUG code
-    preferredLocs.foreach (host => Utils.checkHost(host, "preferredLocs : " + preferredLocs))
+    preferredLocs.foreach (hostPort => Utils.checkHost(Utils.parseHostPort(hostPort)._1, "preferredLocs : " + preferredLocs))
   }
 
   override def run(attemptId: Long): U = {

@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.storage
 
 import java.nio.ByteBuffer
@@ -15,9 +32,9 @@ import org.scalatest.time.SpanSugar._
 import spark.JavaSerializer
 import spark.KryoSerializer
 import spark.SizeEstimator
-import spark.Utils
 import spark.util.AkkaUtils
 import spark.util.ByteBufferInputStream
+
 
 class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
   var store: BlockManager = null
@@ -47,6 +64,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     oldHeartBeat = System.setProperty("spark.storage.disableBlockManagerHeartBeat", "true")
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
+    // Set some value ...
+    System.setProperty("spark.hostPort", spark.Utils.localHostName() + ":" + 1111)
   }
 
   after {
@@ -97,9 +116,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("BlockManagerId object caching") {
-    val id1 = BlockManagerId("e1", "XXX", 1)
-    val id2 = BlockManagerId("e1", "XXX", 1) // this should return the same object as id1
-    val id3 = BlockManagerId("e1", "XXX", 2) // this should return a different object
+    val id1 = BlockManagerId("e1", "XXX", 1, 0)
+    val id2 = BlockManagerId("e1", "XXX", 1, 0) // this should return the same object as id1
+    val id3 = BlockManagerId("e1", "XXX", 2, 0) // this should return a different object
     assert(id2 === id1, "id2 is not same as id1")
     assert(id2.eq(id1), "id2 is not the same object as id1")
     assert(id3 != id1, "id3 is same as id1")
@@ -122,7 +141,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     // Putting a1, a2  and a3 in memory and telling master only about a1 and a2
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
-    store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY, false)
+    store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // Checking whether blocks are in memory
     assert(store.getSingle("a1") != None, "a1 was not in store")
@@ -168,7 +187,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     // Putting a1, a2 and a3 in memory and telling master only about a1 and a2
     store.putSingle("a1-to-remove", a1, StorageLevel.MEMORY_ONLY)
     store.putSingle("a2-to-remove", a2, StorageLevel.MEMORY_ONLY)
-    store.putSingle("a3-to-remove", a3, StorageLevel.MEMORY_ONLY, false)
+    store.putSingle("a3-to-remove", a3, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // Checking whether blocks are in memory and memory size
     val memStatus = master.getMemoryStatus.head._2
@@ -207,6 +226,39 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     }
   }
 
+  test("removing rdd") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000)
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    val a3 = new Array[Byte](400)
+    // Putting a1, a2 and a3 in memory.
+    store.putSingle("rdd_0_0", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle("rdd_0_1", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingle("nonrddblock", a3, StorageLevel.MEMORY_ONLY)
+    master.removeRdd(0, blocking = false)
+
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("rdd_0_0") should be (None)
+      master.getLocations("rdd_0_0") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("rdd_0_1") should be (None)
+      master.getLocations("rdd_0_1") should have size 0
+    }
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      store.getSingle("nonrddblock") should not be (None)
+      master.getLocations("nonrddblock") should have size (1)
+    }
+
+    store.putSingle("rdd_0_0", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle("rdd_0_1", a2, StorageLevel.MEMORY_ONLY)
+    master.removeRdd(0, blocking = true)
+    store.getSingle("rdd_0_0") should be (None)
+    master.getLocations("rdd_0_0") should have size 0
+    store.getSingle("rdd_0_1") should be (None)
+    master.getLocations("rdd_0_1") should have size 0
+  }
+
   test("reregistration on heart beat") {
     val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000)
@@ -235,7 +287,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    store.putSingle("a2", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.waitForAsyncReregister()
 
     assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
@@ -253,7 +305,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       master.removeExecutor(store.blockManagerId.executorId)
       val t1 = new Thread {
         override def run() {
-          store.put("a2", a2.iterator, StorageLevel.MEMORY_ONLY, true)
+          store.put("a2", a2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
         }
       }
       val t2 = new Thread {
@@ -463,9 +515,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val list1 = List(new Array[Byte](200), new Array[Byte](200))
     val list2 = List(new Array[Byte](200), new Array[Byte](200))
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, true)
-    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY, true)
-    store.put("list3", list3.iterator, StorageLevel.MEMORY_ONLY, true)
+    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.put("list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.get("list2") != None, "list2 was not in store")
     assert(store.get("list2").get.size == 2)
     assert(store.get("list3") != None, "list3 was not in store")
@@ -474,7 +526,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.get("list2") != None, "list2 was not in store")
     assert(store.get("list2").get.size == 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, true)
+    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.get("list1") != None, "list1 was not in store")
     assert(store.get("list1").get.size == 2)
     assert(store.get("list2") != None, "list2 was not in store")
@@ -489,9 +541,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val list3 = List(new Array[Byte](200), new Array[Byte](200))
     val list4 = List(new Array[Byte](200), new Array[Byte](200))
     // First store list1 and list2, both in memory, and list3, on disk only
-    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER, true)
-    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, true)
-    store.put("list3", list3.iterator, StorageLevel.DISK_ONLY, true)
+    store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
+    store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
+    store.put("list3", list3.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
     // At this point LRU should not kick in because list3 is only on disk
     assert(store.get("list1") != None, "list2 was not in store")
     assert(store.get("list1").get.size === 2)
@@ -506,7 +558,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.get("list3") != None, "list1 was not in store")
     assert(store.get("list3").get.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
-    store.put("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, true)
+    store.put("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
     assert(store.get("list1") === None, "list1 was in store")
     assert(store.get("list2") != None, "list3 was not in store")
     assert(store.get("list2").get.size === 2)

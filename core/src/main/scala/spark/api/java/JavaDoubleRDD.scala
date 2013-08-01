@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.api.java
 
 import spark.RDD
@@ -98,33 +115,48 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
 
   // Double RDD functions
 
-  /** Return the sum of the elements in this RDD. */
+  /** Add up the elements in this RDD. */
   def sum(): Double = srdd.sum()
 
-  /** Return a [[spark.StatCounter]] describing the elements in this RDD. */
+  /**
+   * Return a [[spark.util.StatCounter]] object that captures the mean, variance and count
+   * of the RDD's elements in one operation.
+   */
   def stats(): StatCounter = srdd.stats()
 
-  /** Return the mean of the elements in this RDD. */
+  /** Compute the mean of this RDD's elements. */
   def mean(): Double = srdd.mean()
 
-  /** Return the variance of the elements in this RDD. */
+  /** Compute the variance of this RDD's elements. */
   def variance(): Double = srdd.variance()
 
-  /** Return the standard deviation of the elements in this RDD. */
+  /** Compute the standard deviation of this RDD's elements. */
   def stdev(): Double = srdd.stdev()
+
+  /**
+   * Compute the sample standard deviation of this RDD's elements (which corrects for bias in
+   * estimating the standard deviation by dividing by N-1 instead of N).
+   */
+  def sampleStdev(): Double = srdd.sampleStdev()
+
+  /**
+   * Compute the sample variance of this RDD's elements (which corrects for bias in
+   * estimating the standard variance by dividing by N-1 instead of N).
+   */
+  def sampleVariance(): Double = srdd.sampleVariance()
 
   /** Return the approximate mean of the elements in this RDD. */
   def meanApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
     srdd.meanApprox(timeout, confidence)
 
-  /** Return the approximate mean of the elements in this RDD. */
+  /** (Experimental) Approximate operation to return the mean within a timeout. */
   def meanApprox(timeout: Long): PartialResult[BoundedDouble] = srdd.meanApprox(timeout)
 
-  /** Return the approximate sum of the elements in this RDD. */
+  /** (Experimental) Approximate operation to return the sum within a timeout. */
   def sumApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
     srdd.sumApprox(timeout, confidence)
- 
-  /** Return the approximate sum of the elements in this RDD. */
+
+  /** (Experimental) Approximate operation to return the sum within a timeout. */
   def sumApprox(timeout: Long): PartialResult[BoundedDouble] = srdd.sumApprox(timeout)
 }
 
