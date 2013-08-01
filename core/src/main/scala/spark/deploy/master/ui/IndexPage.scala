@@ -81,7 +81,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
         <div class="row">
           <div class="span12">
-            <h3> Workers </h3>
+            <h4> Workers </h4>
             <br/>
             {workerTable}
           </div>
@@ -91,7 +91,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
         <div class="row">
           <div class="span12">
-            <h3> Running Applications </h3>
+            <h4> Running Applications </h4>
             <br/>
             {activeAppsTable}
           </div>
@@ -101,7 +101,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
         <div class="row">
           <div class="span12">
-            <h3> Completed Applications </h3>
+            <h4> Completed Applications </h4>
             <br/>
             {completedAppsTable}
           </div>

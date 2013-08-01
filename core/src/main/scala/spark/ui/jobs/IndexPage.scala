@@ -93,9 +93,9 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val failedStageTable: NodeSeq = stageTable(stageRow, failedStages)
 
     val content = summary ++
-                  <h2>Active Stages</h2> ++ activeStageTable ++
-                  <h2>Completed Stages</h2>  ++ completedStageTable ++
-                  <h2>Failed Stages</h2>  ++ failedStageTable
+                  <h4>Active Stages</h4> ++ activeStageTable ++
+                  <h4>Completed Stages</h4>  ++ completedStageTable ++
+                  <h4>Failed Stages</h4>  ++ failedStageTable
 
     headerSparkPage(content, parent.sc, "Spark Stages", Jobs)
   }
@@ -137,23 +137,23 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
     val totalTasks = s.numPartitions
 
-    <tr>
-      <td style="font-size: small">{s.id}</td>
-      <td style="font-size: small"><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
-      <td style="font-size: small">{submissionTime}</td>
-      <td style="font-size: small">{getElapsedTime(s.submissionTime,
+    <tr style="font-size: small">
+      <td>{s.id}</td>
+      <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
+      <td>{submissionTime}</td>
+      <td>{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
       <td class="progress-cell">{makeProgressBar(startedTasks, completedTasks, totalTasks)}</td>
-      <td style="border-left: 0; text-align: center; font-size: small;">
+      <td style="border-left: 0; text-align: center;">
         {completedTasks} / {totalTasks}
         {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
         case f if f > 0 => "(%s failed)".format(f)
         case _ =>
         }}
       </td>
-      <td style="font-size: small">{shuffleRead}</td>
-      <td style="font-size: small">{shuffleWrite}</td>
-      <td style="font-size: small">{if (s.rdd.getStorageLevel != StorageLevel.NONE) {
+      <td>{shuffleRead}</td>
+      <td>{shuffleWrite}</td>
+      <td>{if (s.rdd.getStorageLevel != StorageLevel.NONE) {
              <a href={"/storage/rdd?id=%s".format(s.rdd.id)}>
                {Option(s.rdd.name).getOrElse(s.rdd.id)}
              </a>

@@ -72,7 +72,7 @@ private[spark] object UIUtils {
                       {environment}
                       {executors}
                     </ul>
-                    <ul id="infolist">
+                    <ul id="infolist" class="text">
                       <li>Application: <strong>{sc.appName}</strong></li>
                       <li>Executors: <strong>{sc.getExecutorStorageStatus.size}</strong></li>
                     </ul>
@@ -84,9 +84,9 @@ private[spark] object UIUtils {
 
           <div class="row" style="padding-top: 5px;">
             <div class="span12">
-              <h1 style="vertical-align: bottom; display: inline-block;">
+              <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
-              </h1>
+              </h3>
             </div>
           </div>
           <hr/>

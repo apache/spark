@@ -75,10 +75,10 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
 
     val content =
       <span>
-        <h2>Runtime Information</h2> {jvmTable}
-        <h2>Spark Properties</h2> {sparkPropertyTable}
-        <h2>System Properties</h2> {otherPropertyTable}
-        <h2>Classpath Entries</h2> {classPathTable}
+        <h4>Runtime Information</h4> {jvmTable}
+        <h4>Spark Properties</h4> {sparkPropertyTable}
+        <h4>System Properties</h4> {otherPropertyTable}
+        <h4>Classpath Entries</h4> {classPathTable}
       </span>
 
     headerSparkPage(content, sc, "Environment", Environment)
