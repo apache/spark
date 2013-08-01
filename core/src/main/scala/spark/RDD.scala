@@ -641,7 +641,7 @@ abstract class RDD[T: ClassManifest](
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = {
     // Clone the zero value since we will also be serializing it as part of tasks
-    var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+    var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
     val cleanOp = sc.clean(op)
     val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp)
     val mergeResult = (index: Int, taskResult: T) => jobResult = op(jobResult, taskResult)

@@ -23,7 +23,7 @@ import scala.collection.Map
 import spark._
 import java.io._
 import scala.Serializable
-import java.nio.ByteBuffer
+import util.{NestedInputStream, NestedOutputStream}
 
 private[spark] class ParallelCollectionPartition[T: ClassManifest](
     var rddId: Long,
@@ -57,12 +57,12 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
         out.writeInt(slice)
 
         val ser = sfactory.newInstance()
-        out.writeInt(values.size)
-        values.foreach(v => {
-          val bb = ser.serialize(v)
-          out.writeInt(bb.remaining())
-          Utils.writeByteBuffer(bb, out)
-        })
+        val ssout = ser.serializeStream(new NestedOutputStream(out))
+        try {
+          ssout.writeObject(values)
+        } finally {
+          ssout.close()
+        }
     }
   }
 
@@ -77,20 +77,12 @@ private[spark] class ParallelCollectionPartition[T: ClassManifest](
         slice = in.readInt()
 
         val ser = sfactory.newInstance()
-        val s = in.readInt()
-        var bb: ByteBuffer = null
-        values = (0 until s).map(i => {
-          val len = in.readInt()
-          if (bb == null || bb.capacity < len) {
-            bb = ByteBuffer.allocate(len)
-          } else {
-            bb.clear
-          }
-
-          in.readFully(bb.array(), 0, len);
-          bb.limit(len)
-          ser.deserialize(bb): T
-        }).toSeq
+        val ssin = ser.deserializeStream(new NestedInputStream(in))
+        try {
+          values = ssin.readObject()
+        } finally {
+          ssin.close()
+        }
     }
   }
 }
