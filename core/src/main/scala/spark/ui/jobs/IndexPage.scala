@@ -137,7 +137,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
     val totalTasks = s.numPartitions
 
-    <tr style="font-size: small">
+    <tr>
       <td>{s.id}</td>
       <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
       <td>{submissionTime}</td>
