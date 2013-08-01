@@ -17,21 +17,20 @@
 
 package spark.broadcast
 
-import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-
-import java.io._
-import java.net._
-import java.util.UUID
+import java.io.{File, FileOutputStream, ObjectInputStream, OutputStream}
+import java.net.URL
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
-import spark._
+import spark.{HttpServer, Logging, SparkEnv, Utils}
+import spark.io.CompressionCodec
 import spark.storage.StorageLevel
-import util.{MetadataCleaner, TimeStampedHashSet}
+import spark.util.{MetadataCleaner, TimeStampedHashSet}
+
 
 private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
-extends Broadcast[T](id) with Logging with Serializable {
+  extends Broadcast[T](id) with Logging with Serializable {
   
   def value = value_
 
@@ -85,6 +84,7 @@ private object HttpBroadcast extends Logging {
   private val files = new TimeStampedHashSet[String]
   private val cleaner = new MetadataCleaner("HttpBroadcast", cleanup)
 
+  private lazy val compressionCodec = CompressionCodec.createCodec()
 
   def initialize(isDriver: Boolean) {
     synchronized {
@@ -122,10 +122,12 @@ private object HttpBroadcast extends Logging {
 
   def write(id: Long, value: Any) {
     val file = new File(broadcastDir, "broadcast-" + id)
-    val out: OutputStream = if (compress) {
-      new LZFOutputStream(new FileOutputStream(file)) // Does its own buffering
-    } else {
-      new FastBufferedOutputStream(new FileOutputStream(file), bufferSize)
+    val out: OutputStream = {
+      if (compress) {
+        compressionCodec.compressedOutputStream(new FileOutputStream(file))
+      } else {
+        new FastBufferedOutputStream(new FileOutputStream(file), bufferSize)
+      }
     }
     val ser = SparkEnv.get.serializer.newInstance()
     val serOut = ser.serializeStream(out)
@@ -136,10 +138,12 @@ private object HttpBroadcast extends Logging {
 
   def read[T](id: Long): T = {
     val url = serverUri + "/broadcast-" + id
-    var in = if (compress) {
-      new LZFInputStream(new URL(url).openStream()) // Does its own buffering
-    } else {
-      new FastBufferedInputStream(new URL(url).openStream(), bufferSize)
+    val in = {
+      if (compress) {
+        compressionCodec.compressedInputStream(new URL(url).openStream())
+      } else {
+        new FastBufferedInputStream(new URL(url).openStream(), bufferSize)
+      }
     }
     val ser = SparkEnv.get.serializer.newInstance()
     val serIn = ser.deserializeStream(in)

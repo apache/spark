@@ -63,34 +63,42 @@ private[spark] class PythonRDD[T: ClassManifest](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + pythonExec) {
       override def run() {
-        SparkEnv.set(env)
-        val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
-        val dataOut = new DataOutputStream(stream)
-        val printOut = new PrintWriter(stream)
-        // Partition index
-        dataOut.writeInt(split.index)
-        // sparkFilesDir
-        PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dataOut)
-        // Broadcast variables
-        dataOut.writeInt(broadcastVars.length)
-        for (broadcast <- broadcastVars) {
-          dataOut.writeLong(broadcast.id)
-          dataOut.writeInt(broadcast.value.length)
-          dataOut.write(broadcast.value)
+        try {
+          SparkEnv.set(env)
+          val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
+          val dataOut = new DataOutputStream(stream)
+          val printOut = new PrintWriter(stream)
+          // Partition index
+          dataOut.writeInt(split.index)
+          // sparkFilesDir
+          PythonRDD.writeAsPickle(SparkFiles.getRootDirectory, dataOut)
+          // Broadcast variables
+          dataOut.writeInt(broadcastVars.length)
+          for (broadcast <- broadcastVars) {
+            dataOut.writeLong(broadcast.id)
+            dataOut.writeInt(broadcast.value.length)
+            dataOut.write(broadcast.value)
+          }
+          dataOut.flush()
+          // Serialized user code
+          for (elem <- command) {
+            printOut.println(elem)
+          }
+          printOut.flush()
+          // Data values
+          for (elem <- parent.iterator(split, context)) {
+            PythonRDD.writeAsPickle(elem, dataOut)
+          }
+          dataOut.flush()
+          printOut.flush()
+          worker.shutdownOutput()
+        } catch {
+          case e: IOException =>
+            // This can happen for legitimate reasons if the Python code stops returning data before we are done
+            // passing elements through, e.g., for take(). Just log a message to say it happened.
+            logInfo("stdin writer to Python finished early")
+            logDebug("stdin writer to Python finished early", e)
         }
-        dataOut.flush()
-        // Serialized user code
-        for (elem <- command) {
-          printOut.println(elem)
-        }
-        printOut.flush()
-        // Data values
-        for (elem <- parent.iterator(split, context)) {
-          PythonRDD.writeAsPickle(elem, dataOut)
-        }
-        dataOut.flush()
-        printOut.flush()
-        worker.shutdownOutput()
       }
     }.start()
 
@@ -297,7 +305,7 @@ class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
   Utils.checkHost(serverHost, "Expected hostname")
 
   val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-  
+
   override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
 
   override def addInPlace(val1: JList[Array[Byte]], val2: JList[Array[Byte]])

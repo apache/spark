@@ -17,27 +17,26 @@
 
 package spark.scheduler.local
 
-import java.io.File
-import java.util.concurrent.atomic.AtomicInteger
 import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
 
-import spark._
+import spark.{ExceptionFailure, Logging, SparkEnv, Success, TaskState}
 import spark.TaskState.TaskState
-import spark.scheduler._
-import spark.scheduler.cluster._
+import spark.scheduler.{Task, TaskResult, TaskSet}
+import spark.scheduler.cluster.{Schedulable, TaskDescription, TaskInfo, TaskLocality, TaskSetManager}
 
-private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: TaskSet) extends TaskSetManager with Logging {
+
+private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: TaskSet)
+  extends TaskSetManager with Logging {
+
   var parent: Schedulable = null
   var weight: Int = 1
   var minShare: Int = 0
   var runningTasks: Int = 0
   var priority: Int = taskSet.priority
   var stageId: Int = taskSet.stageId
-  var name: String = "TaskSet_"+taskSet.stageId.toString
-
+  var name: String = "TaskSet_" + taskSet.stageId.toString
 
   var failCount = new Array[Int](taskSet.tasks.size)
   val taskInfos = new HashMap[Long, TaskInfo]
@@ -50,49 +49,45 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   val numFailures = new Array[Int](numTasks)
   val MAX_TASK_FAILURES = sched.maxFailures
 
-  def increaseRunningTasks(taskNum: Int): Unit = {
-     runningTasks += taskNum
-     if (parent != null) {
-       parent.increaseRunningTasks(taskNum)
-     }
+  override def increaseRunningTasks(taskNum: Int): Unit = {
+    runningTasks += taskNum
+    if (parent != null) {
+     parent.increaseRunningTasks(taskNum)
+    }
   }
 
-  def decreaseRunningTasks(taskNum: Int): Unit = {
+  override def decreaseRunningTasks(taskNum: Int): Unit = {
     runningTasks -= taskNum
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)
     }
   }
 
-  def addSchedulable(schedulable: Schedulable): Unit = {
+  override def addSchedulable(schedulable: Schedulable): Unit = {
     //nothing
   }
 
-  def removeSchedulable(schedulable: Schedulable): Unit = {
+  override def removeSchedulable(schedulable: Schedulable): Unit = {
     //nothing
   }
 
-  def getSchedulableByName(name: String): Schedulable = {
+  override def getSchedulableByName(name: String): Schedulable = {
     return null
   }
 
-  def executorLost(executorId: String, host: String): Unit = {
+  override def executorLost(executorId: String, host: String): Unit = {
     //nothing
   }
 
-  def checkSpeculatableTasks(): Boolean = {
-    return true
-  }
+  override def checkSpeculatableTasks() = true
 
-  def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
+  override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
     var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
     sortedTaskSetQueue += this
     return sortedTaskSetQueue
   }
 
-  def hasPendingTasks(): Boolean = {
-    return true
-  }
+  override def hasPendingTasks() = true
 
   def findTask(): Option[Int] = {
     for (i <- 0 to numTasks-1) {
@@ -103,21 +98,32 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     return None
   }
 
-  def slaveOffer(execId: String, hostPort: String, availableCpus: Double, overrideLocality: TaskLocality.TaskLocality = null): Option[TaskDescription] = {
+  override def slaveOffer(
+      execId: String,
+      hostPort: String,
+      availableCpus: Double,
+      overrideLocality: TaskLocality.TaskLocality = null): Option[TaskDescription] =
+  {
     SparkEnv.set(sched.env)
-    logDebug("availableCpus:%d,numFinished:%d,numTasks:%d".format(availableCpus.toInt, numFinished, numTasks))
+    logDebug("availableCpus:%d,numFinished:%d,numTasks:%d".format(
+      availableCpus.toInt, numFinished, numTasks))
     if (availableCpus > 0 && numFinished < numTasks) {
       findTask() match {
         case Some(index) =>
           val taskId = sched.attemptId.getAndIncrement()
           val task = taskSet.tasks(index)
-          val info = new TaskInfo(taskId, index, System.currentTimeMillis(), "local", "local:1", TaskLocality.NODE_LOCAL)
+          val info = new TaskInfo(taskId, index, System.currentTimeMillis(), "local", "local:1",
+            TaskLocality.NODE_LOCAL)
           taskInfos(taskId) = info
-          val bytes = Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+          // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
+          // we assume the task can be serialized without exceptions.
+          val bytes = Task.serializeWithDependencies(
+            task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           logInfo("Size of task " + taskId + " is " + bytes.limit + " bytes")
           val taskName = "task %s:%d".format(taskSet.id, index)
           copiesRunning(index) += 1
           increaseRunningTasks(1)
+          taskStarted(task, info)
           return Some(new TaskDescription(taskId, null, taskName, bytes))
         case None => {}
       }
@@ -125,19 +131,19 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     return None
   }
 
-  def numPendingTasksForHostPort(hostPort: String): Int = {
+  override def numPendingTasksForHostPort(hostPort: String): Int = {
     return 0
   }
 
-  def numRackLocalPendingTasksForHost(hostPort :String): Int = {
+  override def numRackLocalPendingTasksForHost(hostPort :String): Int = {
     return 0
   }
 
-  def numPendingTasksForHost(hostPort: String): Int = {
+  override def numPendingTasksForHost(hostPort: String): Int = {
     return 0
   }
 
-  def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+  override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     SparkEnv.set(env)
     state match {
       case TaskState.FINISHED =>
@@ -146,6 +152,10 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
         taskFailed(tid, state, serializedData)
       case _ => {}
     }
+  }
+
+  def taskStarted(task: Task[_], info: TaskInfo) {
+    sched.listener.taskStarted(task, info)
   }
 
   def taskEnded(tid: Long, state: TaskState, serializedData: ByteBuffer) {
@@ -170,15 +180,18 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     val task = taskSet.tasks(index)
     info.markFailed()
     decreaseRunningTasks(1)
-    val reason: ExceptionFailure = ser.deserialize[ExceptionFailure](serializedData, getClass.getClassLoader)
+    val reason: ExceptionFailure = ser.deserialize[ExceptionFailure](
+      serializedData, getClass.getClassLoader)
     sched.listener.taskEnded(task, reason, null, null, info, reason.metrics.getOrElse(null))
     if (!finished(index)) {
       copiesRunning(index) -= 1
       numFailures(index) += 1
       val locs = reason.stackTrace.map(loc => "\tat %s".format(loc.toString))
-      logInfo("Loss was due to %s\n%s\n%s".format(reason.className, reason.description, locs.mkString("\n")))
+      logInfo("Loss was due to %s\n%s\n%s".format(
+        reason.className, reason.description, locs.mkString("\n")))
       if (numFailures(index) > MAX_TASK_FAILURES) {
-        val errorMessage = "Task %s:%d failed more than %d times; aborting job %s".format(taskSet.id, index, 4, reason.description)
+        val errorMessage = "Task %s:%d failed more than %d times; aborting job %s".format(
+          taskSet.id, index, 4, reason.description)
         decreaseRunningTasks(runningTasks)
         sched.listener.taskSetFailed(taskSet, errorMessage)
         // need to delete failed Taskset from schedule queue
@@ -187,6 +200,6 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     }
   }
 
-  def error(message: String) {
+  override def error(message: String) {
   }
 }

@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-package spark
+package spark.mllib.regression
 
-import com.google.common.collect.MapMaker
+import spark.RDD
 
-/**
- * An implementation of Cache that uses soft references.
- */
-private[spark] class SoftReferenceCache extends Cache {
-  val map = new MapMaker().softValues().makeMap[Any, Any]()
+trait RegressionModel extends Serializable {
+  /**
+   * Predict values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return RDD[Double] where each entry contains the corresponding prediction
+   */
+  def predict(testData: RDD[Array[Double]]): RDD[Double]
 
-  override def get(datasetId: Any, partition: Int): Any =
-    map.get((datasetId, partition))
-
-  override def put(datasetId: Any, partition: Int, value: Any): CachePutResponse = {
-    map.put((datasetId, partition), value)
-    return CachePutSuccess(0)
-  }
+  /**
+   * Predict values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Double prediction from the trained model
+   */
+  def predict(testData: Array[Double]): Double
 }

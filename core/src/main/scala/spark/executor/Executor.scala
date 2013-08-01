@@ -69,7 +69,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
       override def uncaughtException(thread: Thread, exception: Throwable) {
         try {
           logError("Uncaught exception in thread " + thread, exception)
-          
+
           // We may have been called from a shutdown hook. If so, we must not call System.exit().
           // (If we do, we will deadlock.)
           if (!Utils.inShutdown()) {
@@ -87,9 +87,13 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
     }
   )
 
+  val executorSource = new ExecutorSource(this)
+
   // Initialize Spark environment (using system properties read above)
   val env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
   SparkEnv.set(env)
+  env.metricsSystem.registerSource(executorSource)
+
   private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
 
   // Start worker thread pool

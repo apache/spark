@@ -76,17 +76,6 @@ function dev_classpath {
     CLASSPATH="$CLASSPATH:$jar"
   done
 
-  # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
-  # to avoid the -sources and -doc packages that are built by publish-local.
-  if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
-    # Use the JAR from the SBT build
-    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
-  fi
-  if [ -e "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar ]; then
-    # Use the JAR from the Maven build
-    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
-  fi
-
   # Add Scala standard library
   if [ -z "$SCALA_LIBRARY_PATH" ]; then
     if [ -z "$SCALA_HOME" ]; then

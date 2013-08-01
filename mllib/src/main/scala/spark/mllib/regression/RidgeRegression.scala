@@ -37,8 +37,11 @@ class RidgeRegressionModel(
   extends RegressionModel {
 
   override def predict(testData: RDD[Array[Double]]): RDD[Double] = {
+    // A small optimization to avoid serializing the entire model.
+    val localIntercept = this.intercept
+    val localWeights = this.weights
     testData.map { x =>
-      (new DoubleMatrix(1, x.length, x:_*).mmul(this.weights)).get(0) + this.intercept
+      (new DoubleMatrix(1, x.length, x:_*).mmul(localWeights)).get(0) + localIntercept
     }
   }
 

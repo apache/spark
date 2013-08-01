@@ -37,10 +37,15 @@ import akka.actor._
  * testing fault recovery.
  */
 
-private[spark] case class LocalReviveOffers()
-private[spark] case class LocalStatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
+private[spark]
+case class LocalReviveOffers()
 
-private[spark] class LocalActor(localScheduler: LocalScheduler, var freeCores: Int) extends Actor with Logging {
+private[spark]
+case class LocalStatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
+
+private[spark]
+class LocalActor(localScheduler: LocalScheduler, var freeCores: Int) extends Actor with Logging {
+
   def receive = {
     case LocalReviveOffers =>
       launchTask(localScheduler.resourceOffer(freeCores))
@@ -55,7 +60,7 @@ private[spark] class LocalActor(localScheduler: LocalScheduler, var freeCores: I
       freeCores -= 1
       localScheduler.threadPool.submit(new Runnable {
         def run() {
-          localScheduler.runTask(task.taskId,task.serializedTask)
+          localScheduler.runTask(task.taskId, task.serializedTask)
         }
       })
     }
@@ -110,7 +115,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
 
   override def submitTasks(taskSet: TaskSet) {
     synchronized {
-      var manager = new LocalTaskSetManager(this, taskSet)
+      val manager = new LocalTaskSetManager(this, taskSet)
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       activeTaskSets(taskSet.id) = manager
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
@@ -124,14 +129,15 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       val tasks = new ArrayBuffer[TaskDescription](freeCores)
       val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
       for (manager <- sortedTaskSetQueue) {
-        logDebug("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
+        logDebug("parentName:%s,name:%s,runningTasks:%s".format(
+          manager.parent.name, manager.name, manager.runningTasks))
       }
 
       var launchTask = false
       for (manager <- sortedTaskSetQueue) {
         do {
           launchTask = false
-          manager.slaveOffer(null,null,freeCpuCores) match {
+          manager.slaveOffer(null, null, freeCpuCores) match {
             case Some(task) =>
               tasks += task
               taskIdToTaskSetId(task.taskId) = manager.taskSet.id
@@ -139,7 +145,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
               freeCpuCores -= 1
               launchTask = true
             case None => {}
-            }
+          }
         } while(launchTask)
       }
       return tasks

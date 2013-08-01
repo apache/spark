@@ -36,12 +36,13 @@ object GradientDescent {
    * @param updater - Updater object that will be used to update the model.
    * @param stepSize - stepSize to be used during update.
    * @param numIters - number of iterations that SGD should be run.
+   * @param regParam - regularization parameter
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
    *
-   * @return weights - Column matrix containing weights for every feature.
-   * @return stochasticLossHistory - Array containing the stochastic loss computed for 
-   *                                 every iteration.
+   * @return A tuple containing two elements. The first element is a column matrix containing
+   *         weights for every feature, and the second element is an array containing the stochastic
+   *         loss computed for every iteration.
    */
   def runMiniBatchSGD(
     data: RDD[(Double, Array[Double])],
@@ -49,6 +50,7 @@ object GradientDescent {
     updater: Updater,
     stepSize: Double,
     numIters: Int,
+    regParam: Double,
     initialWeights: Array[Double],
     miniBatchFraction: Double=1.0) : (Array[Double], Array[Double]) = {
 
@@ -59,7 +61,7 @@ object GradientDescent {
 
     // Initialize weights as a column vector
     var weights = new DoubleMatrix(initialWeights.length, 1, initialWeights:_*)
-    var reg_val = 0.0
+    var regVal = 0.0
 
     for (i <- 1 to numIters) {
       val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42+i).map {
@@ -69,10 +71,14 @@ object GradientDescent {
           (grad, loss)
       }.reduce((a, b) => (a._1.addi(b._1), a._2 + b._2))
 
-      stochasticLossHistory.append(lossSum / miniBatchSize + reg_val)
-      val update = updater.compute(weights, gradientSum.div(miniBatchSize), stepSize, i)
+      /**
+       * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
+       * and regVal is the regularization value computed in the previous iteration as well.
+       */
+      stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
+      val update = updater.compute(weights, gradientSum.div(miniBatchSize), stepSize, i, regParam)
       weights = update._1
-      reg_val = update._2
+      regVal = update._2
     }
 
     (weights.toArray, stochasticLossHistory.toArray)

@@ -638,7 +638,7 @@ private object Utils extends Logging {
     output.toString
   }
 
-  /** 
+  /**
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
@@ -797,5 +797,14 @@ private object Utils extends Logging {
       endWord()
     }
     return buf
+  }
+
+ /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
+  * i.e. if 'x' is negative, than 'x' % 'mod' is negative too
+  * so function return (x % mod) + mod in that case.
+  */
+  def nonNegativeMod(x: Int, mod: Int): Int = {
+    val rawMod = x % mod
+    rawMod + (if (rawMod < 0) mod else 0)
   }
 }

@@ -17,6 +17,8 @@
 # limitations under the License.
 #
 
+SCALA_VERSION=2.9.3
+
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
 
@@ -70,7 +72,10 @@ esac
 # hard to kill the child with stuff like Process.destroy(). However, for
 # the Spark shell, the wrapper is necessary to properly reset the terminal
 # when we exit, so we allow it to set a variable to launch with scala.
-if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
+# We still fall back on java for the shell if this is a "release" created
+# from make-distribution.sh since it's possible scala is not installed
+# but we have everything we need to run the shell.
+if [[ "$SPARK_LAUNCH_WITH_SCALA" == "1" && ! -f "$FWDIR/RELEASE" ]]; then
   if [ "$SCALA_HOME" ]; then
     RUNNER="${SCALA_HOME}/bin/scala"
   else
@@ -135,6 +140,17 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
     echo "Failed to find Spark classes in $REPL_DIR/target" >&2
     echo "You need to compile Spark repl module before running this program" >&2
     exit 1
+  fi
+
+  # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
+  # to avoid the -sources and -doc packages that are built by publish-local.
+  if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
+    # Use the JAR from the SBT build
+    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
+  fi
+  if [ -e "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar ]; then
+    # Use the JAR from the Maven build
+    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
   fi
 fi
 

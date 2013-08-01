@@ -17,9 +17,12 @@
 
 package spark.deploy
 
-import master.{ApplicationInfo, WorkerInfo}
 import net.liftweb.json.JsonDSL._
-import worker.ExecutorRunner
+
+import spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
+import spark.deploy.master.{ApplicationInfo, WorkerInfo}
+import spark.deploy.worker.ExecutorRunner
+
 
 private[spark] object JsonProtocol {
  def writeWorkerInfo(obj: WorkerInfo) = {
@@ -57,7 +60,7 @@ private[spark] object JsonProtocol {
     ("appdesc" -> writeApplicationDescription(obj.appDesc))
   }
 
-  def writeMasterState(obj: MasterState) = {
+  def writeMasterState(obj: MasterStateResponse) = {
     ("url" -> ("spark://" + obj.uri)) ~
     ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
     ("cores" -> obj.workers.map(_.cores).sum) ~
@@ -68,7 +71,7 @@ private[spark] object JsonProtocol {
     ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo))
   }
 
-  def writeWorkerState(obj: WorkerState) = {
+  def writeWorkerState(obj: WorkerStateResponse) = {
     ("id" -> obj.workerId) ~
     ("masterurl" -> obj.masterUrl) ~
     ("masterwebuiurl" -> obj.masterWebUiUrl) ~

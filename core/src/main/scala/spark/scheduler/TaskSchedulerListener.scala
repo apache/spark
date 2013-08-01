@@ -27,6 +27,9 @@ import spark.executor.TaskMetrics
  * Interface for getting events back from the TaskScheduler.
  */
 private[spark] trait TaskSchedulerListener {
+  // A task has started.
+  def taskStarted(task: Task[_], taskInfo: TaskInfo)
+
   // A task has finished or failed.
   def taskEnded(task: Task[_], reason: TaskEndReason, result: Any, accumUpdates: Map[Long, Any],
                 taskInfo: TaskInfo, taskMetrics: TaskMetrics): Unit

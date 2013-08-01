@@ -18,14 +18,11 @@
 package spark
 
 import scala.collection.mutable
-import scala.collection.immutable
 
 import org.scalatest.FunSuite
 import com.esotericsoftware.kryo._
 
-import SparkContext._
 import spark.test._
-
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   test("basic types") {
     val ser = (new KryoSerializer).newInstance()
@@ -54,6 +51,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(Array(true, false, true))
     check(Array('a', 'b', 'c'))
     check(Array[Int]())
+    check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
   }
 
   test("pairs") {
@@ -104,7 +102,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 
   test("custom registrator") {
-    import spark.test._
+    import KryoTest._
     System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
 
     val ser = (new KryoSerializer).newInstance()
@@ -124,7 +122,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     val hashMap = new java.util.HashMap[String, String]
     hashMap.put("foo", "bar")
     check(hashMap)
-    
+
     System.clearProperty("spark.kryo.registrator")
   }
 
@@ -168,9 +166,9 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 }
 
-package test {
+object KryoTest {
   case class CaseClass(i: Int, s: String) {}
-  
+
   class ClassWithNoArgConstructor {
     var x: Int = 0
     override def equals(other: Any) = other match {

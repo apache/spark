@@ -17,20 +17,22 @@
 
 package spark.deploy.worker.ui
 
+import javax.servlet.http.HttpServletRequest
+
+import scala.xml.Node
+
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.duration._
 
-import javax.servlet.http.HttpServletRequest
-
 import net.liftweb.json.JsonAST.JValue
 
-import scala.xml.Node
-
-import spark.deploy.{RequestWorkerState, JsonProtocol, WorkerState}
-import spark.deploy.worker.ExecutorRunner
 import spark.Utils
+import spark.deploy.JsonProtocol
+import spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
+import spark.deploy.worker.ExecutorRunner
 import spark.ui.UIUtils
+
 
 private[spark] class IndexPage(parent: WorkerWebUI) {
   val workerActor = parent.worker.self
@@ -38,13 +40,13 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
   val timeout = parent.timeout
 
   def renderJson(request: HttpServletRequest): JValue = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerState]
+    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, 30 seconds)
     JsonProtocol.writeWorkerState(workerState)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerState]
+    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, 30 seconds)
 
     val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Logs")
@@ -69,7 +71,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
             <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
           </div>
         </div>
-          <hr/>
+        <hr/>
 
         <div class="row"> <!-- Running Executors -->
           <div class="span12">
@@ -88,7 +90,8 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
           </div>
         </div>;
 
-    UIUtils.basicSparkPage(content, "Spark Worker on %s:%s".format(workerState.host, workerState.port))
+    UIUtils.basicSparkPage(content, "Spark Worker on %s:%s".format(
+      workerState.host, workerState.port))
   }
 
   def executorRow(executor: ExecutorRunner): Seq[Node] = {

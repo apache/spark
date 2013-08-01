@@ -73,7 +73,6 @@ class Vector(val elements: Array[Double]) extends Serializable {
   def += (other: Vector): Vector = {
     if (length != other.length)
       throw new IllegalArgumentException("Vectors of different length")
-    var ans = 0.0
     var i = 0
     while (i < length) {
       elements(i) += other(i)
@@ -117,9 +116,7 @@ object Vector {
   def apply(elements: Double*) = new Vector(elements.toArray)
 
   def apply(length: Int, initializer: Int => Double): Vector = {
-    val elements = new Array[Double](length)
-    for (i <- 0 until length)
-      elements(i) = initializer(i)
+    val elements: Array[Double] = Array.tabulate(length)(initializer)
     return new Vector(elements)
   }
 
