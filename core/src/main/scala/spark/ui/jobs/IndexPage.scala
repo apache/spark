@@ -138,21 +138,22 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val totalTasks = s.numPartitions
 
     <tr>
-      <td>{s.id}</td>
-      <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
-      <td>{submissionTime}</td>
-      <td>{getElapsedTime(s.submissionTime,
+      <td style="font-size: small">{s.id}</td>
+      <td style="font-size: small"><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
+      <td style="font-size: small">{submissionTime}</td>
+      <td style="font-size: small">{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
       <td class="progress-cell">{makeProgressBar(startedTasks, completedTasks, totalTasks)}</td>
-      <td style="border-left: 0; text-align: center;">{completedTasks} / {totalTasks}
+      <td style="border-left: 0; text-align: center; font-size: small;">
+        {completedTasks} / {totalTasks}
         {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
         case f if f > 0 => "(%s failed)".format(f)
         case _ =>
-      }}
+        }}
       </td>
-      <td>{shuffleRead}</td>
-      <td>{shuffleWrite}</td>
-      <td>{if (s.rdd.getStorageLevel != StorageLevel.NONE) {
+      <td style="font-size: small">{shuffleRead}</td>
+      <td style="font-size: small">{shuffleWrite}</td>
+      <td style="font-size: small">{if (s.rdd.getStorageLevel != StorageLevel.NONE) {
              <a href={"/storage/rdd?id=%s".format(s.rdd.id)}>
                {Option(s.rdd.name).getOrElse(s.rdd.id)}
              </a>
