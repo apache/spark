@@ -343,7 +343,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     for (worker <- toRemove) {
       if (worker.state != WorkerState.DEAD) {
         logWarning("Removing %s because we got no heartbeat in %d seconds".format(
-          worker.id, WORKER_TIMEOUT))
+          worker.id, WORKER_TIMEOUT/1000))
         removeWorker(worker)
       } else {
         if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT))
