@@ -49,7 +49,7 @@
         <include>org.spark-project:*:jar</include>
       </includes>
       <excludes>
-        <exclude>org.spark-project:spark-dist:jar</exclude>
+        <exclude>org.spark-project:spark-assembly:jar</exclude>
       </excludes>
     </dependencySet>
     <dependencySet>

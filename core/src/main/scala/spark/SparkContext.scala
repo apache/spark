@@ -27,6 +27,7 @@ import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
+import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.util.DynamicVariable
 import scala.collection.mutable.{ConcurrentMap, HashMap}
@@ -60,8 +61,10 @@ import org.apache.mesos.MesosNativeLibrary
 import spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import spark.partial.{ApproximateEvaluator, PartialResult}
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
-import spark.scheduler.{DAGScheduler, DAGSchedulerSource, ResultTask, ShuffleMapTask, SparkListener, SplitInfo, Stage, StageInfo, TaskScheduler}
-import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, ClusterScheduler}
+import spark.scheduler.{DAGScheduler, DAGSchedulerSource, ResultTask, ShuffleMapTask, SparkListener,
+  SplitInfo, Stage, StageInfo, TaskScheduler, ActiveJob}
+import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
+  ClusterScheduler, Schedulable, SchedulingMode}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.{StorageStatus, StorageUtils, RDDInfo, BlockManagerSource}
@@ -572,6 +575,25 @@ class SparkContext(
    */
   def getExecutorStorageStatus: Array[StorageStatus] = {
     env.blockManager.master.getStorageStatus
+  }
+
+  /**
+   *  Return pools for fair scheduler
+   *  TODO(xiajunluan):now, we have not taken nested pools into account
+   */
+  def getPools: ArrayBuffer[Schedulable] = {
+    taskScheduler.rootPool.schedulableQueue
+  }
+
+  /**
+   *  Return current scheduling mode
+   */
+  def getSchedulingMode: SchedulingMode.SchedulingMode = {
+    taskScheduler.schedulingMode
+  }
+
+  def getPoolNameToPool: HashMap[String, Schedulable] = {
+    taskScheduler.rootPool.schedulableNameToSchedulable
   }
 
   /**

@@ -116,9 +116,9 @@ private[spark] object UIUtils {
               <img src="/static/spark_logo.png" />
             </div>
             <div class="span10">
-              <h2 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
+              <h3 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
                 {title}
-              </h2>
+              </h3>
             </div>
           </div>
           {content}

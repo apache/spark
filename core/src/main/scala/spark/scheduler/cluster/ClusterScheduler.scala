@@ -26,6 +26,7 @@ import scala.collection.mutable.HashSet
 import spark._
 import spark.TaskState.TaskState
 import spark.scheduler._
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{TimerTask, Timer}
@@ -114,6 +115,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
+  // default scheduler is FIFO
+  val schedulingMode: SchedulingMode = SchedulingMode.withName(
+    System.getProperty("spark.cluster.schedulingmode", "FIFO"))
 
   override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener
@@ -121,15 +125,13 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   def initialize(context: SchedulerBackend) {
     backend = context
-    //default scheduler is FIFO
-    val schedulingMode = System.getProperty("spark.cluster.schedulingmode", "FIFO")
-    //temporarily set rootPool name to empty
-    rootPool = new Pool("", SchedulingMode.withName(schedulingMode), 0, 0)
+    // temporarily set rootPool name to empty
+    rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
-        case "FIFO" =>
+        case SchedulingMode.FIFO =>
           new FIFOSchedulableBuilder(rootPool)
-        case "FAIR" =>
+        case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool)
       }
     }
@@ -270,10 +272,12 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       }
       var launchedTask = false
       val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
-      for (manager <- sortedTaskSetQueue)
-      {
-        logInfo("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
+
+      for (manager <- sortedTaskSetQueue) {
+        logDebug("parentName:%s, name:%s, runningTasks:%s".format(
+          manager.parent.name, manager.name, manager.runningTasks))
       }
+
       for (manager <- sortedTaskSetQueue) {
 
         // Split offers based on node local, rack local and off-rack tasks.

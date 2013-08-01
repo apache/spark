@@ -310,6 +310,14 @@ Apart from these, the following properties are also available, and may be useful
     Duration (milliseconds) of how long to batch new objects coming from network receivers.
   </td>
 </tr>
+<tr>
+  <td>spark.task.maxFailures</td>
+  <td>4</td>
+  <td>
+    Number of individual task failures before giving up on the job.
+    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
+  </td>
+</tr>
 
 </table>
 
