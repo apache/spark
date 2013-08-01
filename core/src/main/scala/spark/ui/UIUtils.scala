@@ -74,7 +74,6 @@ private[spark] object UIUtils {
                     </ul>
                     <ul id="infolist">
                       <li>Application: <strong>{sc.appName}</strong></li>
-                      <li>Master: <strong>{sc.master}</strong></li>
                       <li>Executors: <strong>{sc.getExecutorStorageStatus.size}</strong></li>
                     </ul>
                   </div>
@@ -117,9 +116,9 @@ private[spark] object UIUtils {
               <img src="/static/spark_logo.png" />
             </div>
             <div class="span10">
-              <h1 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
+              <h3 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
                 {title}
-              </h1>
+              </h3>
             </div>
           </div>
           {content}
