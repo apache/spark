@@ -22,7 +22,8 @@ import scala.collection.mutable
 import org.scalatest.FunSuite
 import com.esotericsoftware.kryo._
 
-import spark.test._
+import KryoTest._
+
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   test("basic types") {
     val ser = (new KryoSerializer).newInstance()
