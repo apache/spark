@@ -17,19 +17,20 @@
 
 package spark.deploy.master.ui
 
+import javax.servlet.http.HttpServletRequest
+
+import scala.xml.Node
+
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.duration._
 
-import javax.servlet.http.HttpServletRequest
-
-import scala.xml.Node
+import net.liftweb.json.JsonAST.JValue
 
 import spark.deploy.{JsonProtocol, RequestMasterState, DeployWebUI, MasterState}
 import spark.Utils
 import spark.ui.UIUtils
 import spark.deploy.master.{ApplicationInfo, WorkerInfo}
-import net.liftweb.json.JsonAST.JValue
 
 private[spark] class IndexPage(parent: MasterWebUI) {
   val master = parent.master
