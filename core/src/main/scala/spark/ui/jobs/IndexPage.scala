@@ -54,7 +54,11 @@ private[spark] class IndexPage(parent: JobProgressUI) {
     val summary: NodeSeq =
      <div>
        <ul class="unstyled">
-          <li>
+         <li>
+           <strong>Duration: </strong>
+           {parent.formatDuration(now - listener.sc.startTime)}
+         </li>
+         <li>
             <strong>CPU time: </strong>
             {parent.formatDuration(listener.totalTime + activeTime)}
           </li>
