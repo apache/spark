@@ -128,6 +128,8 @@ class SparkContext(
   private[spark] val ui = new SparkUI(this)
   ui.bind()
 
+  val startTime = System.currentTimeMillis()
+
   // Add each JAR given through the constructor
   if (jars != null) {
     jars.foreach { addJar(_) }
