@@ -47,3 +47,7 @@
   padding-top: 7px;
   padding-left: 4px;
 }
+
+.table td {
+  vertical-align: middle !important;
+}

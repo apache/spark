@@ -265,12 +265,18 @@ class SparkContext(
       localProperties.value = new Properties()
   }
 
-  def addLocalProperties(key: String, value: String) {
+  def addLocalProperty(key: String, value: String) {
     if(localProperties.value == null) {
       localProperties.value = new Properties()
     }
     localProperties.value.setProperty(key,value)
   }
+
+  /** Set a human readable description of the current job. */
+  def setDescription(value: String) {
+    addLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
+  }
+
   // Post init
   taskScheduler.postStartHook()
 
@@ -841,6 +847,7 @@ class SparkContext(
  * various Spark features.
  */
 object SparkContext {
+  val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
@@ -958,7 +965,6 @@ object SparkContext {
   }
 }
 
-
 /**
  * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
  * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
@@ -970,3 +976,4 @@ private[spark] class WritableConverter[T](
     val writableClass: ClassManifest[T] => Class[_ <: Writable],
     val convert: Writable => T)
   extends Serializable
+

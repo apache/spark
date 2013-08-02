@@ -46,13 +46,11 @@ private[spark] object UIWorkloadGenerator {
     }
     val sc = new SparkContext(master, appName)
 
-    // NOTE: Right now there is no easy way for us to show spark.job.annotation for a given phase,
-    //       but we pass it here anyways since it will be useful once we do.
     def setProperties(s: String) = {
       if(schedulingMode == SchedulingMode.FAIR) {
-        sc.addLocalProperties("spark.scheduler.cluster.fair.pool", s)
+        sc.addLocalProperty("spark.scheduler.cluster.fair.pool", s)
       }
-      sc.addLocalProperties("spark.job.annotation", s)
+      sc.addLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, s)
     }
 
     val baseData = sc.makeRDD(1 to NUM_PARTITIONS * 10, NUM_PARTITIONS)

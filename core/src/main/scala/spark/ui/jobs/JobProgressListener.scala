@@ -15,6 +15,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val DEFAULT_POOL_NAME = "default"
 
   val stageToPool = new HashMap[Stage, String]()
+  val stageToDescription = new HashMap[Stage, String]()
   val poolToActiveStages = new HashMap[String, HashSet[Stage]]()
 
   val activeStages = HashSet[Stage]()
@@ -57,6 +58,8 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         stageToTasksActive.remove(s.id)
         stageToTasksComplete.remove(s.id)
         stageToTasksFailed.remove(s.id)
+        stageToPool.remove(s)
+        if (stageToDescription.contains(s)) {stageToDescription.remove(s)}
       })
       stages.trimEnd(toRemove)
     }
@@ -66,12 +69,17 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = {
     val stage = stageSubmitted.stage
     activeStages += stage
-    var poolName = DEFAULT_POOL_NAME
-    if (stageSubmitted.properties != null) {
-      poolName = stageSubmitted.properties.getProperty("spark.scheduler.cluster.fair.pool",
-        DEFAULT_POOL_NAME)
-    }
+
+    val poolName = Option(stageSubmitted.properties).map {
+      p => p.getProperty("spark.scheduler.cluster.fair.pool", DEFAULT_POOL_NAME)
+    }.getOrElse(DEFAULT_POOL_NAME)
     stageToPool(stage) = poolName
+
+    val description = Option(stageSubmitted.properties).flatMap {
+      p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+    }
+    description.map(d => stageToDescription(stage) = d)
+
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[Stage]())
     stages += stage
   }
