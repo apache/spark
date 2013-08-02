@@ -579,10 +579,17 @@ class SparkContext(
 
   /**
    *  Return pools for fair scheduler
-   *  TODO(xiajunluan):now, we have not taken nested pools into account
+   *  TODO(xiajunluan): We should take nested pools into account
    */
-  def getPools: ArrayBuffer[Schedulable] = {
+  def getAllPools: ArrayBuffer[Schedulable] = {
     taskScheduler.rootPool.schedulableQueue
+  }
+
+  /**
+   * Return the pool associated with the given name, if one exists
+   */
+  def getPoolForName(pool: String): Option[Schedulable] = {
+    taskScheduler.rootPool.schedulableNameToSchedulable.get(pool)
   }
 
   /**
@@ -590,10 +597,6 @@ class SparkContext(
    */
   def getSchedulingMode: SchedulingMode.SchedulingMode = {
     taskScheduler.schedulingMode
-  }
-
-  def getPoolNameToPool: HashMap[String, Schedulable] = {
-    taskScheduler.rootPool.schedulableNameToSchedulable
   }
 
   /**

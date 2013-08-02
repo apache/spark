@@ -30,9 +30,7 @@ import spark.scheduler.cluster.SchedulingMode.SchedulingMode
  */
 private[spark] object UIWorkloadGenerator {
   val NUM_PARTITIONS = 100
-  val INTER_JOB_WAIT_MS = 500
-
-
+  val INTER_JOB_WAIT_MS = 5000
 
   def main(args: Array[String]) {
     if (args.length < 2) {

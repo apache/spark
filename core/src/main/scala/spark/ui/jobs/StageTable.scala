@@ -10,51 +10,20 @@ import scala.xml.{NodeSeq, Node}
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-import spark.scheduler.cluster.TaskInfo
+import spark.scheduler.cluster.{SchedulingMode, TaskInfo}
 import spark.scheduler.Stage
 import spark.ui.UIUtils._
 import spark.ui.Page._
 import spark.Utils
 import spark.storage.StorageLevel
 
-/*
- * Interface to get stage's pool name
- */
-private[spark] trait StagePoolInfo {
-  def getStagePoolName(s: Stage): String
-  
-  def hasHref: Boolean
-}
-
-/*
- * For FIFO scheduler algorithm, just show "N/A" and its link status is false
- */
-private[spark] class FIFOStagePoolInfo extends StagePoolInfo {
-  def getStagePoolName(s: Stage): String = "N/A"
-  
-  def hasHref: Boolean = false
-} 
-
-/*
- * For Fair scheduler algorithm, show its pool name  and pool detail  link status is true
- */
-private[spark] class FairStagePoolInfo(listener: JobProgressListener) extends StagePoolInfo {
-  def getStagePoolName(s: Stage): String = {
-    listener.stageToPool(s)
-  }
-
-  def hasHref: Boolean = true
-}
-
 /** Page showing list of all ongoing and recently finished stages */
-private[spark] class StageTable(
-  val stages: Seq[Stage],
-  val parent: JobProgressUI) {
+private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressUI) {
 
   val listener = parent.listener
   val dateFmt = parent.dateFmt
-  var stagePoolInfo = parent.stagePoolInfo
-  
+  val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
+
   def toNodeSeq(): Seq[Node] = {
     stageTable(stageRow, stages)
   }
@@ -64,7 +33,7 @@ private[spark] class StageTable(
     <table class="table table-bordered table-striped table-condensed sortable">
       <thead>
         <th>Stage Id</th>
-        <th>Pool Name</th>
+        {if (isFairScheduler) {<th>Pool Name</th>} else {}}
         <th>Origin</th>
         <th>Submitted</th>
         <td>Duration</td>
@@ -116,15 +85,13 @@ private[spark] class StageTable(
     val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
     val totalTasks = s.numPartitions
 
-    val poolName = stagePoolInfo.getStagePoolName(s)
+    val poolName = listener.stageToPool.get(s)
 
     <tr>
       <td>{s.id}</td>
-      <td>{if (stagePoolInfo.hasHref) {
-        <a href={"/stages/pool?poolname=%s".format(poolName)}>{poolName}</a>
-          } else {
-          {poolName}
-          }}</td>
+      {if (isFairScheduler) {
+        <td><a href={"/stages/pool?poolname=%s".format(poolName.get)}>{poolName.get}</a></td>}
+      }
       <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
       <td>{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,

@@ -1,65 +1,19 @@
 package spark.ui.jobs
 
-import java.util.Date
-
-import javax.servlet.http.HttpServletRequest
-
-import scala.Some
-import scala.xml.{NodeSeq, Node}
+import scala.xml.Node
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-import spark.SparkContext
 import spark.scheduler.Stage
-import spark.ui.UIUtils._
-import spark.ui.Page._
-import spark.storage.StorageLevel
 import spark.scheduler.cluster.Schedulable
 
-/*
- * Interface for get pools seq showing on Index or pool detail page
- */
-
-private[spark] trait PoolSource {
-  def getPools: Seq[Schedulable]
-}
-
-/*
- * Pool source for FIFO scheduler algorithm on Index page
- */
-private[spark] class FIFOSource() extends PoolSource {
-  def getPools: Seq[Schedulable] = {
-    Seq[Schedulable]()
-  }
-}
-
-/*
- * Pool source for Fair scheduler algorithm on Index page
- */
-private[spark] class FairSource(sc: SparkContext) extends PoolSource {
-  def getPools: Seq[Schedulable] = {
-    sc.getPools.toSeq
-  }
-}
-
-/*
- * specific pool info for pool detail page
- */
-private[spark] class PoolDetailSource(sc: SparkContext, poolName: String) extends PoolSource {
-  def getPools: Seq[Schedulable] = {
-    val pools = HashSet[Schedulable]()
-    pools += sc.getPoolNameToPool(poolName)
-    pools.toSeq
-  }
-}
-
 /** Table showing list of pools */
-private[spark] class PoolTable(poolSource: PoolSource, listener: JobProgressListener) {
+private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressListener) {
 
   var poolToActiveStages: HashMap[String, HashSet[Stage]] = listener.poolToActiveStages
 
   def toNodeSeq(): Seq[Node] = {
-    poolTable(poolRow, poolSource.getPools)
+    poolTable(poolRow, pools)
   }
 
   // pool tables
