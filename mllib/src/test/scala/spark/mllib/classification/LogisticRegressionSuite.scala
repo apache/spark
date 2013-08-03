@@ -80,8 +80,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll with Shoul
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val sgdOpts = GradientDescentOpts().setStepSize(10.0).setNumIterations(20)
-    val lr = new LogisticRegression(sgdOpts)
+    val lr = new LogisticRegressionWithSGD().setStepSize(10.0).setNumIterations(20)
 
     val model = lr.train(testRDD)
 
@@ -113,8 +112,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll with Shoul
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val sgdOpts = GradientDescentOpts().setStepSize(10.0).setNumIterations(10)
-    val lr = new LogisticRegression(sgdOpts)
+    val lr = new LogisticRegressionWithSGD().setStepSize(10.0).setNumIterations(10)
 
     val model = lr.train(testRDD, initialWeights)
 

@@ -44,7 +44,8 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     seed: Int): Seq[(Int, Array[Double])] = {
     val rnd = new Random(seed)
     val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
-    val x = Array.fill[Array[Double]](nPoints)(Array.fill[Double](weights.length)(rnd.nextGaussian()))
+    val x = Array.fill[Array[Double]](nPoints)(
+        Array.fill[Double](weights.length)(rnd.nextGaussian()))
     val y = x.map { xi =>
       signum(
         (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) +
@@ -75,8 +76,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val sgdOpts = GradientDescentOpts().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
-    val svm = new SVM(sgdOpts)
+    val svm = new SVMWithSGD().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
     val model = svm.train(testRDD)
 
@@ -106,8 +106,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val sgdOpts = GradientDescentOpts().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
-    val svm = new SVM(sgdOpts)
+    val svm = new SVMWithSGD().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
     val model = svm.train(testRDD, initialWeights)
 

@@ -19,6 +19,7 @@ package spark.mllib.classification
 
 import spark.{Logging, RDD, SparkContext}
 import spark.mllib.optimization._
+import spark.mllib.regression._
 import spark.mllib.util.MLUtils
 
 import scala.math.round
@@ -30,80 +31,46 @@ import org.jblas.DoubleMatrix
  * Based on Matlab code written by John Duchi.
  */
 class LogisticRegressionModel(
-  val weights: Array[Double],
-  val intercept: Double,
-  val stochasticLosses: Array[Double]) extends ClassificationModel {
+    override val weights: Array[Double],
+    override val intercept: Double)
+  extends GeneralizedLinearModel[Int](weights, intercept)
+  with ClassificationModel with Serializable {
 
-  // Create a column vector that can be used for predictions
-  private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
-
-  override def predict(testData: spark.RDD[Array[Double]]): RDD[Int] = {
-    // A small optimization to avoid serializing the entire model. Only the weightsMatrix
-    // and intercept is needed.
-    val localWeights = weightsMatrix
-    val localIntercept = intercept
-    testData.map { x =>
-      val margin = new DoubleMatrix(1, x.length, x:_*).mmul(localWeights).get(0) + localIntercept
-      round(1.0/ (1.0 + math.exp(margin * -1))).toInt
-    }
-  }
-
-  override def predict(testData: Array[Double]): Int = {
-    val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
-    val margin = dataMat.mmul(weightsMatrix).get(0) + this.intercept
+  override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+      intercept: Double) = {
+    val margin = dataMatrix.mmul(weightMatrix).get(0) + intercept
     round(1.0/ (1.0 + math.exp(margin * -1))).toInt
   }
 }
 
-class LogisticRegression(val opts: GradientDescentOpts) extends Logging {
+class LogisticRegressionWithSGD (
+    var stepSize: Double,
+    var numIterations: Int,
+    var regParam: Double,
+    var miniBatchFraction: Double,
+    var addIntercept: Boolean)
+  extends GeneralizedLinearAlgorithm[Int, LogisticRegressionModel]
+  with GradientDescent with Serializable {
+
+  val gradient = new LogisticGradient()
+  val updater = new SimpleUpdater()
 
   /**
    * Construct a LogisticRegression object with default parameters
    */
-  def this() = this(new GradientDescentOpts())
+  def this() = this(1.0, 100, 0.0, 1.0, true)
 
-  def train(input: RDD[(Int, Array[Double])]): LogisticRegressionModel = {
-    val nfeatures: Int = input.take(1)(0)._2.length
-    val initialWeights = Array.fill(nfeatures)(1.0)
-    train(input, initialWeights)
-  }
-
-  def train(
-    input: RDD[(Int, Array[Double])],
-    initialWeights: Array[Double]): LogisticRegressionModel = {
-
-    // Add a extra variable consisting of all 1.0's for the intercept.
-    val data = input.map { case (y, features) =>
-      (y.toDouble, Array(1.0, features:_*))
-    }
-
-    val initalWeightsWithIntercept = Array(1.0, initialWeights:_*)
-
-    val (weights, stochasticLosses) = GradientDescent.runMiniBatchSGD(
-      data,
-      new LogisticGradient(),
-      new SimpleUpdater(),
-      opts,
-      initalWeightsWithIntercept)
-
-    val intercept = weights(0)
-    val weightsScaled = weights.tail
-
-    val model = new LogisticRegressionModel(weightsScaled, intercept, stochasticLosses)
-
-    logInfo("Final model weights " + model.weights.mkString(","))
-    logInfo("Final model intercept " + model.intercept)
-    logInfo("Last 10 stochastic losses " + model.stochasticLosses.takeRight(10).mkString(", "))
-    model
+  def createModel(weights: Array[Double], intercept: Double) = {
+    new LogisticRegressionModel(weights, intercept)
   }
 }
 
 /**
  * Top-level methods for calling Logistic Regression.
- * NOTE(shivaram): We use multiple train methods instead of default arguments to support 
+ * NOTE(shivaram): We use multiple train methods instead of default arguments to support
  *                 Java programs.
  */
-object LogisticRegression {
+object LogisticRegressionWithSGD {
 
   /**
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
@@ -126,8 +93,8 @@ object LogisticRegression {
       initialWeights: Array[Double])
     : LogisticRegressionModel =
   {
-    val sgdOpts = GradientDescentOpts(stepSize, numIterations, 0.0, miniBatchFraction)
-    new LogisticRegression(sgdOpts).train(input, initialWeights)
+    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction, true).train(
+      input, initialWeights)
   }
 
   /**
@@ -148,8 +115,8 @@ object LogisticRegression {
       miniBatchFraction: Double)
     : LogisticRegressionModel =
   {
-    val sgdOpts = GradientDescentOpts(stepSize, numIterations, 0.0, miniBatchFraction)
-    new LogisticRegression(sgdOpts).train(input)
+    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction, true).train(
+      input)
   }
 
   /**
@@ -197,7 +164,7 @@ object LogisticRegression {
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
     val data = MLUtils.loadLabeledData(sc, args(1)).map(yx => (yx._1.toInt, yx._2))
-    val model = LogisticRegression.train(
+    val model = LogisticRegressionWithSGD.train(
       data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()

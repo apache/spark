@@ -44,10 +44,11 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     seed: Int): Seq[(Double, Array[Double])] = {
     val rnd = new Random(seed)
     val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
-    val x = Array.fill[Array[Double]](nPoints)(Array.fill[Double](weights.length)(rnd.nextGaussian()))
+    val x = Array.fill[Array[Double]](nPoints)(
+      Array.fill[Double](weights.length)(rnd.nextGaussian()))
     val y = x.map(xi =>
       (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + 0.1 * rnd.nextGaussian()
-      )
+    )
     y zip x
   }
 
@@ -72,8 +73,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val sgdOpts = GradientDescentOpts().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
-    val ls = new Lasso(sgdOpts)
+    val ls = new LassoWithSGD().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
 
     val model = ls.train(testRDD)
 
@@ -109,8 +109,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val sgdOpts = GradientDescentOpts().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
-    val ls = new Lasso(sgdOpts)
+    val ls = new LassoWithSGD().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
 
     val model = ls.train(testRDD, initialWeights)
 

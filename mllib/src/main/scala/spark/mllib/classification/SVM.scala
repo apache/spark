@@ -20,6 +20,7 @@ package spark.mllib.classification
 import scala.math.signum
 import spark.{Logging, RDD, SparkContext}
 import spark.mllib.optimization._
+import spark.mllib.regression._
 import spark.mllib.util.MLUtils
 
 import org.jblas.DoubleMatrix
@@ -28,78 +29,42 @@ import org.jblas.DoubleMatrix
  * SVM using Stochastic Gradient Descent.
  */
 class SVMModel(
-  val weights: Array[Double],
-  val intercept: Double,
-  val stochasticLosses: Array[Double]) extends ClassificationModel {
+    override val weights: Array[Double],
+    override val intercept: Double)
+  extends GeneralizedLinearModel[Int](weights, intercept)
+  with ClassificationModel with Serializable {
 
-  // Create a column vector that can be used for predictions
-  private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
-
-  override def predict(testData: spark.RDD[Array[Double]]): RDD[Int] = {
-    // A small optimization to avoid serializing the entire model. Only the weightsMatrix
-    // and intercept is needed.
-    val localWeights = weightsMatrix
-    val localIntercept = intercept
-    testData.map { x => 
-      signum(new DoubleMatrix(1, x.length, x:_*).dot(localWeights) + localIntercept).toInt
-    }
-  }
-
-  override def predict(testData: Array[Double]): Int = {
-    val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
-    signum(dataMat.dot(weightsMatrix) + this.intercept).toInt
+  override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+      intercept: Double) = {
+    signum(dataMatrix.dot(weightMatrix) + intercept).toInt
   }
 }
 
+class SVMWithSGD private (
+    var stepSize: Double,
+    var numIterations: Int,
+    var regParam: Double,
+    var miniBatchFraction: Double,
+    var addIntercept: Boolean)
+  extends GeneralizedLinearAlgorithm[Int, SVMModel] with GradientDescent with Serializable {
 
-
-class SVM(val opts: GradientDescentOpts) extends Logging {
+  val gradient = new HingeGradient()
+  val updater = new SquaredL2Updater()
 
   /**
    * Construct a SVM object with default parameters
    */
-  def this() = this(GradientDescentOpts(1.0, 100, 1.0, 1.0))
+  def this() = this(1.0, 100, 1.0, 1.0, true)
 
-  def train(input: RDD[(Int, Array[Double])]): SVMModel = {
-    val nfeatures: Int = input.take(1)(0)._2.length
-    val initialWeights = Array.fill(nfeatures)(1.0)
-    train(input, initialWeights)
-  }
-
-  def train(
-    input: RDD[(Int, Array[Double])],
-    initialWeights: Array[Double]): SVMModel = {
-
-    // Add a extra variable consisting of all 1.0's for the intercept.
-    val data = input.map { case (y, features) =>
-      (y.toDouble, Array(1.0, features:_*))
-    }
-
-    val initalWeightsWithIntercept = Array(1.0, initialWeights:_*)
-
-    val (weights, stochasticLosses) = GradientDescent.runMiniBatchSGD(
-      data,
-      new HingeGradient(),
-      new SquaredL2Updater(),
-      opts,
-      initalWeightsWithIntercept)
-
-    val intercept = weights(0)
-    val weightsScaled = weights.tail
-
-    val model = new SVMModel(weightsScaled, intercept, stochasticLosses)
-
-    logInfo("Final model weights " + model.weights.mkString(","))
-    logInfo("Final model intercept " + model.intercept)
-    logInfo("Last 10 stochasticLosses " + model.stochasticLosses.takeRight(10).mkString(", "))
-    model
+  def createModel(weights: Array[Double], intercept: Double) = {
+    new SVMModel(weights, intercept)
   }
 }
 
 /**
  * Top-level methods for calling SVM.
  */
-object SVM {
+object SVMWithSGD {
 
   /**
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
@@ -124,8 +89,8 @@ object SVM {
       initialWeights: Array[Double])
     : SVMModel =
   {
-    val sgdOpts = GradientDescentOpts(stepSize, numIterations, regParam, miniBatchFraction)
-    new SVM(sgdOpts).train(input, initialWeights)
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).train(input,
+      initialWeights)
   }
 
   /**
@@ -147,8 +112,7 @@ object SVM {
       miniBatchFraction: Double)
     : SVMModel =
   {
-    val sgdOpts = GradientDescentOpts(stepSize, numIterations, regParam, miniBatchFraction)
-    new SVM(sgdOpts).train(input)
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).train(input)
   }
 
   /**
@@ -196,7 +160,7 @@ object SVM {
     }
     val sc = new SparkContext(args(0), "SVM")
     val data = MLUtils.loadLabeledData(sc, args(1)).map(yx => (yx._1.toInt, yx._2))
-    val model = SVM.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+    val model = SVMWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()
   }
