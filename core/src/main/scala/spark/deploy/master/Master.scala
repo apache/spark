@@ -80,7 +80,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     webUi.start()
-    context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
+    context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
 
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
@@ -175,6 +175,10 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     case RequestMasterState => {
       sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray)
+    }
+
+    case CheckForWorkerTimeOut => {
+      timeOutDeadWorkers()
     }
   }
 

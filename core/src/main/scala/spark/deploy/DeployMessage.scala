@@ -109,6 +109,7 @@ private[deploy] object DeployMessages {
   }
 
   //  WorkerWebUI to Worker
+
   case object RequestWorkerState
 
   // Worker to WorkerWebUI
@@ -120,4 +121,9 @@ private[deploy] object DeployMessages {
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
   }
+
+  // Actor System to Master
+
+  case object CheckForWorkerTimeOut
+
 }
