@@ -164,7 +164,8 @@ private[spark] class ExecutorRunner(
       env.put("SPARK_LAUNCH_WITH_SCALA", "0")
       process = builder.start()
 
-      val header = "Spark Executor Command: %s\n%s\n\n".format(command.mkString(" "), "=" * 40)
+      val header = "Spark Executor Command: %s\n%s\n\n".format(
+        command.mkString("\"", "\" \"", "\""), "=" * 40)
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
