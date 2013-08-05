@@ -206,7 +206,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           override def run() {
             if (!hasLaunchedTask) {
               logWarning("Initial job has not accepted any resources; " +
-                "check your cluster UI to ensure that workers are registered")
+                "check your cluster UI to ensure that workers are registered " +
+                "and have sufficient memory")
             } else {
               this.cancel()
             }
