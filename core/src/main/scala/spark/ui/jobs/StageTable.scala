@@ -37,10 +37,9 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
         <th>Origin</th>
         <th>Submitted</th>
         <td>Duration</td>
-        <td colspan="2">Tasks: Complete/Total</td>
+        <td colspan="2">Tasks: Succeeded/Total</td>
         <td>Shuffle Read</td>
         <td>Shuffle Write</td>
-        <td>Stored RDD</td>
       </thead>
       <tbody>
         {rows.map(r => makeRow(r))}
@@ -105,12 +104,6 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
       </td>
       <td>{shuffleRead}</td>
       <td>{shuffleWrite}</td>
-      <td>{if (s.rdd.getStorageLevel != StorageLevel.NONE) {
-             <a href={"/storage/rdd?id=%s".format(s.rdd.id)}>
-               {Option(s.rdd.name).getOrElse(s.rdd.id)}
-             </a>
-          }}
-      </td>
     </tr>
   }
 }

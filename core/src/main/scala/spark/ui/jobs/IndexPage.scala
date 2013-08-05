@@ -69,11 +69,19 @@ private[spark] class IndexPage(parent: JobProgressUI) {
               {Utils.memoryBytesToString(listener.totalShuffleWrite)}
             </li>
          }
-          <li><strong>Active Stages Number:</strong> {activeStages.size} </li>
-          <li><strong>Completed Stages Number:</strong> {completedStages.size} </li>
-          <li><strong>Failed Stages Number:</strong> {failedStages.size} </li>
-          <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
-
+         <li><a href="#active">
+             <strong>Active Stages Number:</strong>
+             {activeStages.size}
+         </a></li>
+         <li><a href="#completed">
+             <strong>Completed Stages Number:</strong>
+             {completedStages.size}
+         </a></li>
+         <li><a href="#failed">
+             <strong>Failed Stages Number:</strong>
+             {failedStages.size}
+         </a></li>
+         <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
        </ul>
      </div>
 
@@ -83,11 +91,11 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       } else {
         Seq()
       }} ++
-      <h3>Active Stages : {activeStages.size}</h3> ++
+      <h3 id="active">Active Stages : {activeStages.size}</h3> ++
       activeStagesTable.toNodeSeq++
-      <h3>Completed Stages : {completedStages.size}</h3> ++
+      <h3 id="completed">Completed Stages : {completedStages.size}</h3> ++
       completedStagesTable.toNodeSeq++
-      <h3>Failed Stages : {failedStages.size}</h3> ++
+      <h3 id ="failed">Failed Stages : {failedStages.size}</h3> ++
       failedStagesTable.toNodeSeq
 
     headerSparkPage(content, parent.sc, "Spark Stages", Jobs)
