@@ -24,24 +24,31 @@ import org.jblas.DoubleMatrix
 import spark.{RDD, SparkContext}
 import spark.mllib.util.MLUtils
 
+/**
+* Generate RDD(s) containing data for Matrix Factorization.
+*
+* This method samples training entries according to the oversampling factor
+* 'tr_samp_fact', which is a multiplicative factor of the number of
+* degrees of freedom of the matrix: rank*(m+n-rank).
+* 
+* It optionally samples entries for a testing matrix using 
+* 'te_samp_fact', the percentage of the number of training entries 
+* to use for testing.
+*
+* This method takes the following inputs:
+* 	sparkMaster 		 (String) The master URL.
+* 	outputPath  		 (String) Directory to save output.
+* 	m 					 		 (Int) Number of rows in data matrix.
+* 	n 							 (Int) Number of columns in data matrix.
+* 	rank 					 (Int) Underlying rank of data matrix.
+* 	tr_samp_fact 	 (Double) Oversampling factor.
+* 	noise 					 (Boolean) Whether to add gaussian noise to training data.
+* 	sigma 					 (Double) Standard deviation of added gaussian noise.
+* 	test 					 (Boolean) Whether to create testing RDD.
+* 	te_samp_fact 	 (Double) Percentage of training data to use as test data.
+*/
 
 object MFDataGenerator{
-
-   /**
-   * Generate RDD(s) containing data for Matrix Factorization. This function chooses
-   * positive labels with probability `probOne` and scales positive examples by `eps`.
-   *
-   * @param sc SparkContext to use for creating the RDD.
-   * @param outputPath Directory to save output.
-   * @param m Number of rows in data matrix.
-   * @param n Number of columns in data matrix.
-   * @param rank Underlying rank of data matrix.
-   * @param tr_samp_fact Oversampling factor.
-   * @param noise Boolean value - whether to add gaussian noise to training data.
-   * @param sigma Standard deviation of added gaussian noise.
-   * @param test Boolean value - whether to create testing RDD.
-   * @param te_samp_fact Percentage of training data to use as test data.
-   */
 
   def main(args: Array[String]) {
     if (args.length != 10) {
