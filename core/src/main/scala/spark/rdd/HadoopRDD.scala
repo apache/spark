@@ -88,6 +88,7 @@ class HadoopRDD[K, V](
 
   override def compute(theSplit: Partition, context: TaskContext) = new NextIterator[(K, V)] {
     val split = theSplit.asInstanceOf[HadoopPartition]
+    logInfo("Input split: " + split.inputSplit)
     var reader: RecordReader[K, V] = null
 
     val conf = confBroadcast.value.value
