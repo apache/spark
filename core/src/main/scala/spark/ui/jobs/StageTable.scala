@@ -34,7 +34,7 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
       <thead>
         <th>Stage Id</th>
         {if (isFairScheduler) {<th>Pool Name</th>} else {}}
-        <th>Origin</th>
+        <th>Description</th>
         <th>Submitted</th>
         <td>Duration</td>
         <td colspan="2">Tasks: Complete/Total</td>
@@ -87,13 +87,17 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
 
     val poolName = listener.stageToPool.get(s)
 
+    val nameLink = <a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a>
+    val description = listener.stageToDescription.get(s)
+      .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
+
     <tr>
       <td>{s.id}</td>
       {if (isFairScheduler) {
         <td><a href={"/stages/pool?poolname=%s".format(poolName.get)}>{poolName.get}</a></td>}
       }
-      <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
-      <td>{submissionTime}</td>
+      <td>{description}</td>
+      <td valign="middle">{submissionTime}</td>
       <td>{getElapsedTime(s.submissionTime,
              s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
       <td class="progress-cell">{makeProgressBar(startedTasks, completedTasks, totalTasks)}</td>

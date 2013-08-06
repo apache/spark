@@ -26,6 +26,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.{Map, HashMap, ListBuffer}
 import scala.io.Source
 import spark._
+import spark.SparkContext
 import spark.executor.TaskMetrics
 import spark.scheduler.cluster.TaskInfo
 
@@ -317,8 +318,8 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
 
   protected def recordJobProperties(jobID: Int, properties: Properties) {
     if(properties != null) {
-      val annotation = properties.getProperty("spark.job.annotation", "")
-      jobLogInfo(jobID, annotation, false)
+      val description = properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION, "")
+      jobLogInfo(jobID, description, false)
     }
   }
 

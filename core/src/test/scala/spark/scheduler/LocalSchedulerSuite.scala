@@ -73,7 +73,7 @@ class LocalSchedulerSuite extends FunSuite with LocalSparkContext {
     TaskThreadInfo.threadToStarted(threadIndex) = new CountDownLatch(1)
     new Thread {
       if (poolName != null) {
-        sc.addLocalProperties("spark.scheduler.cluster.fair.pool",poolName)
+        sc.addLocalProperty("spark.scheduler.cluster.fair.pool", poolName)
       }
       override def run() {
         val ans = nums.map(number => {
