@@ -97,7 +97,7 @@ class SparkEnv (
 
 object SparkEnv extends Logging {
   private val env = new ThreadLocal[SparkEnv]
-  private var lastSetSparkEnv : SparkEnv = _
+  @volatile private var lastSetSparkEnv : SparkEnv = _
 
   def set(e: SparkEnv) {
 	  lastSetSparkEnv = e
