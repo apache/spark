@@ -33,12 +33,12 @@ object GraphLab {
    * @tparam A The type accumulated during the gather phase
    * @return the resulting graph after the algorithm converges
    */
-  def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](graph: Graph[VD, ED])(
+  def iterate[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](graph: Graph[VD, ED])(
     gatherFunc: (Vid, EdgeTriplet[VD, ED]) => A,
     mergeFunc: (A, A) => A,
     applyFunc: (Vertex[VD], Option[A]) => VD,
     scatterFunc: (Vid, EdgeTriplet[VD, ED]) => Boolean,
-    numIter: Int,
+    numIter: Int = Integer.MAX_VALUE,
     gatherDirection: EdgeDirection = EdgeDirection.In,
     scatterDirection: EdgeDirection = EdgeDirection.Out): Graph[VD, ED] = {
 
