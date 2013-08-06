@@ -14,7 +14,8 @@ class ExecutorSource(val executor: Executor) extends Source {
   private def fileStats(scheme: String) : Option[FileSystem.Statistics] =
     FileSystem.getAllStatistics().filter(s => s.getScheme.equals(scheme)).headOption
 
-  private def registerFileSystemStat[T](scheme: String, name: String, f: FileSystem.Statistics => T, defaultValue: T) = {
+  private def registerFileSystemStat[T](
+        scheme: String, name: String, f: FileSystem.Statistics => T, defaultValue: T) = {
     metricRegistry.register(MetricRegistry.name("filesystem", scheme, name), new Gauge[T] {
       override def getValue: T = fileStats(scheme).map(f).getOrElse(defaultValue)
     })
@@ -43,6 +44,7 @@ class ExecutorSource(val executor: Executor) extends Source {
     override def getValue: Int = executor.threadPool.getMaximumPoolSize()
   })
 
+  // Gauge for file system stats of this executor
   for (scheme <- Array("hdfs", "file")) {
     registerFileSystemStat(scheme, "bytesRead", _.getBytesRead(), 0L)
     registerFileSystemStat(scheme, "bytesWritten", _.getBytesWritten(), 0L)
