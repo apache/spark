@@ -44,22 +44,22 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
       ("Java Home", Properties.javaHome),
       ("Scala Version", Properties.versionString),
       ("Scala Home", Properties.scalaHome)
-    )
+    ).sorted
     def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-    def jvmTable = UIUtils.listingTable(Seq("Name", "Value"), jvmRow, jvmInformation.sorted)
+    def jvmTable = UIUtils.listingTable(Seq("Name", "Value"), jvmRow, jvmInformation)
 
     val properties = System.getProperties.iterator.toSeq
     val classPathProperty = properties
         .filter{case (k, v) => k.contains("java.class.path")}
         .headOption
         .getOrElse("", "")
-    val sparkProperties = properties.filter(_._1.startsWith("spark"))
-    val otherProperties = properties.diff(sparkProperties :+ classPathProperty)
+    val sparkProperties = properties.filter(_._1.startsWith("spark")).sorted
+    val otherProperties = properties.diff(sparkProperties :+ classPathProperty).sorted
 
     val propertyHeaders = Seq("Name", "Value")
     def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-    val sparkPropertyTable = UIUtils.listingTable(propertyHeaders, propertyRow, sparkProperties.sorted)
-    val otherPropertyTable = UIUtils.listingTable(propertyHeaders, propertyRow, otherProperties.sorted)
+    val sparkPropertyTable = UIUtils.listingTable(propertyHeaders, propertyRow, sparkProperties)
+    val otherPropertyTable = UIUtils.listingTable(propertyHeaders, propertyRow, otherProperties)
 
     val classPathEntries = classPathProperty._2
         .split(System.getProperty("path.separator", ":"))
@@ -67,11 +67,11 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
         .map(e => (e, "System Classpath"))
     val addedJars = sc.addedJars.iterator.toSeq.map{case (path, time) => (path, "Added By User")}
     val addedFiles = sc.addedFiles.iterator.toSeq.map{case (path, time) => (path, "Added By User")}
-    val classPath = addedJars ++ addedFiles ++ classPathEntries
+    val classPath = (addedJars ++ addedFiles ++ classPathEntries).sorted
 
     val classPathHeaders = Seq("Resource", "Source")
     def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
-    val classPathTable = UIUtils.listingTable(classPathHeaders, classPathRow, classPath.sorted)
+    val classPathTable = UIUtils.listingTable(classPathHeaders, classPathRow, classPath)
 
     val content =
       <span>

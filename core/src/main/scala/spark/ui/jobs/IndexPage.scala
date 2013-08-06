@@ -41,9 +41,9 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       activeTime += t.timeRunning(now)
     }
 
-    val activeStagesTable = new StageTable(activeStages, parent)
-    val completedStagesTable = new StageTable(completedStages, parent)
-    val failedStagesTable = new StageTable(failedStages, parent)
+    val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+    val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
+    val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
     val poolTable = new PoolTable(listener.sc.getAllPools, listener)
     val summary: NodeSeq =
@@ -69,18 +69,18 @@ private[spark] class IndexPage(parent: JobProgressUI) {
               {Utils.memoryBytesToString(listener.totalShuffleWrite)}
             </li>
          }
-         <li><a href="#active">
-             <strong>Active Stages Number:</strong>
-             {activeStages.size}
-         </a></li>
-         <li><a href="#completed">
-             <strong>Completed Stages Number:</strong>
-             {completedStages.size}
-         </a></li>
-         <li><a href="#failed">
-             <strong>Failed Stages Number:</strong>
-             {failedStages.size}
-         </a></li>
+         <li>
+           <a href="#active"><strong>Active Stages:</strong></a>
+           {activeStages.size}
+         </li>
+         <li>
+           <a href="#completed"><strong>Completed Stages:</strong></a>
+           {completedStages.size}
+         </li>
+         <li>
+           <a href="#failed"><strong>Failed Stages:</strong></a>
+           {failedStages.size}
+         </li>
          <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
        </ul>
      </div>

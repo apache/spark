@@ -25,7 +25,7 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
   val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
 
   def toNodeSeq(): Seq[Node] = {
-    stageTable(stageRow, stages.sortBy(_.submissionTime).reverse)
+    stageTable(stageRow, stages)
   }
 
   /** Special table which merges two header cells. */
