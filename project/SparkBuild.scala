@@ -40,7 +40,7 @@ object SparkBuild extends Build {
   //val HADOOP_MAJOR_VERSION = "2"
   //val HADOOP_YARN = true
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming, mllib, tools)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, graph, streaming, mllib, tools)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -51,6 +51,8 @@ object SparkBuild extends Build {
   lazy val tools = Project("tools", file("tools"), settings = examplesSettings) dependsOn (core) dependsOn (streaming)
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
+
+  lazy val graph = Project("graph", file("graph"), settings = graphSettings) dependsOn (core, bagel)
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
 
@@ -255,6 +257,8 @@ object SparkBuild extends Build {
       "org.jblas" % "jblas" % "1.2.3"
     )
   )
+
+  def graphSettings = sharedSettings ++ Seq(name := "spark-graph")
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",

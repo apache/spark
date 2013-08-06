@@ -164,4 +164,5 @@ else
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 fi
+
 exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"
