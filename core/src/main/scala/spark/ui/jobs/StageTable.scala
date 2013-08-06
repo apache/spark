@@ -62,8 +62,8 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
       <span style="text-align:center; position:absolute; width:100%;">
         {completed}/{total} {failed}
       </span>
-      <div class="bar" style={completeWidth}></div>
-      <div class="bar bar-info" style={startWidth}></div>
+      <div class="bar bar-completed" style={completeWidth}></div>
+      <div class="bar bar-running" style={startWidth}></div>
     </div>
   }
 
