@@ -63,11 +63,11 @@ class EdgeTripletRDD[VD: ClassManifest, ED: ClassManifest](
 
       override def hasNext: Boolean = pos < edgePartition.size
       override def next() = {
-        e.src.id = edgePartition.srcIds.getInt(pos)
+        e.src.id = edgePartition.srcIds.getLong(pos)
         // assert(vmap.containsKey(e.src.id))
         e.src.data = vmap.get(e.src.id)
 
-        e.dst.id = edgePartition.dstIds.getInt(pos)
+        e.dst.id = edgePartition.dstIds.getLong(pos)
         // assert(vmap.containsKey(e.dst.id))
         e.dst.data = vmap.get(e.dst.id)
 

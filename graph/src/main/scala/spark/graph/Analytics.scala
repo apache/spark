@@ -87,10 +87,10 @@ object Analytics extends Logging {
   def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]) = {
     val ccGraph = graph.mapVertices { case Vertex(vid, _) => vid }
 
-    GraphLab.iterate[Int, ED, Int](ccGraph)(
+    GraphLab.iterate(ccGraph)(
       (me_id, edge) => edge.otherVertex(me_id).data, // gather
-      (a: Int, b: Int) => math.min(a, b), // merge
-      (v, a: Option[Int]) => math.min(v.data, a.getOrElse(Integer.MAX_VALUE)), // apply
+      (a: Vid, b: Vid) => math.min(a, b), // merge
+      (v, a: Option[Vid]) => math.min(v.data, a.getOrElse(Long.MaxValue)), // apply
       (me_id, edge) => (edge.vertex(me_id).data < edge.otherVertex(me_id).data), // scatter
       gatherDirection = EdgeDirection.Both, scatterDirection = EdgeDirection.Both
     )

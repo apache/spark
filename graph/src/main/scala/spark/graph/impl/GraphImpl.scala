@@ -147,8 +147,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
               }
           }
         }
-        vmap.int2ObjectEntrySet().fastIterator().filter(!_.getValue()._2.isEmpty).map{ entry =>
-          (entry.getIntKey(), entry.getValue()._2)
+        vmap.long2ObjectEntrySet().fastIterator().filter(!_.getValue()._2.isEmpty).map{ entry =>
+          (entry.getLongKey(), entry.getValue()._2)
         }
       }
       .map{ case (vid, aOpt) => (vid, aOpt.get) }
@@ -202,8 +202,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
               }
           }
         }
-        vmap.int2ObjectEntrySet().fastIterator().filter(!_.getValue()._2.isEmpty).map{ entry =>
-          (entry.getIntKey(), entry.getValue()._2)
+        vmap.long2ObjectEntrySet().fastIterator().filter(!_.getValue()._2.isEmpty).map{ entry =>
+          (entry.getLongKey(), entry.getValue()._2)
         }
       }
       .map{ case (vid, aOpt) => (vid, aOpt.get) }
@@ -327,16 +327,16 @@ object GraphImpl {
 
     // A key-value RDD. The key is a vertex id, and the value is a list of
     // partitions that contains edges referencing the vertex.
-    val vid2pid : RDD[(Int, Seq[Pid])] = eTable.mapPartitions { iter =>
+    val vid2pid : RDD[(Vid, Seq[Pid])] = eTable.mapPartitions { iter =>
       val (pid, edgePartition) = iter.next()
-      val vSet = new it.unimi.dsi.fastutil.ints.IntOpenHashSet
+      val vSet = new VertexSet
       var i = 0
       while (i < edgePartition.srcIds.size) {
-        vSet.add(edgePartition.srcIds.getInt(i))
-        vSet.add(edgePartition.dstIds.getInt(i))
+        vSet.add(edgePartition.srcIds.getLong(i))
+        vSet.add(edgePartition.dstIds.getLong(i))
         i += 1
       }
-      vSet.iterator.map { vid => (vid.intValue, pid) }
+      vSet.iterator.map { vid => (vid.toLong, pid) }
     }.groupByKey(partitioner)
 
     vertices
