@@ -46,7 +46,7 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
       ("Scala Home", Properties.scalaHome)
     )
     def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-    def jvmTable = UIUtils.listingTable(Seq("Name", "Value"), jvmRow, jvmInformation)
+    def jvmTable = UIUtils.listingTable(Seq("Name", "Value"), jvmRow, jvmInformation.sorted)
 
     val properties = System.getProperties.iterator.toSeq
     val classPathProperty = properties
@@ -58,8 +58,8 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
 
     val propertyHeaders = Seq("Name", "Value")
     def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-    val sparkPropertyTable = UIUtils.listingTable(propertyHeaders, propertyRow, sparkProperties)
-    val otherPropertyTable = UIUtils.listingTable(propertyHeaders, propertyRow, otherProperties)
+    val sparkPropertyTable = UIUtils.listingTable(propertyHeaders, propertyRow, sparkProperties.sorted)
+    val otherPropertyTable = UIUtils.listingTable(propertyHeaders, propertyRow, otherProperties.sorted)
 
     val classPathEntries = classPathProperty._2
         .split(System.getProperty("path.separator", ":"))
@@ -71,7 +71,7 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
 
     val classPathHeaders = Seq("Resource", "Source")
     def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
-    val classPathTable = UIUtils.listingTable(classPathHeaders, classPathRow, classPath)
+    val classPathTable = UIUtils.listingTable(classPathHeaders, classPathRow, classPath.sorted)
 
     val content =
       <span>
