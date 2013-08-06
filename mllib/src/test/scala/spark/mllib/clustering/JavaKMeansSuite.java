@@ -86,6 +86,10 @@ public class JavaKMeansSuite implements Serializable {
 
     JavaRDD<double[]> data = sc.parallelize(points, 2);
     KMeansModel model = KMeans.train(data.rdd(), 1, 1);
+    assertSetsEqual(model.clusterCenters(), expectedCenter);
+
+    model = KMeans.train(data.rdd(), 1, 1, 1, KMeans.RANDOM());
+    assertSetsEqual(model.clusterCenters(), expectedCenter);
   }
 
   @Test
@@ -99,6 +103,13 @@ public class JavaKMeansSuite implements Serializable {
 
     JavaRDD<double[]> data = sc.parallelize(points, 2);
     KMeansModel model = new KMeans().setK(1).setMaxIterations(5).run(data.rdd());
+    assertSetsEqual(model.clusterCenters(), expectedCenter);
+
+    model = new KMeans().setK(1)
+                        .setMaxIterations(1)
+                        .setRuns(1)
+                        .setInitializationMode(KMeans.RANDOM())
+                        .run(data.rdd());
     assertSetsEqual(model.clusterCenters(), expectedCenter);
   }
 }

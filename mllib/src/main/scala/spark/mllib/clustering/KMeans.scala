@@ -194,8 +194,8 @@ class KMeans private (
    */
   private def initRandom(data: RDD[Array[Double]]): Array[ClusterCenters] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
-    val sample = data.takeSample(true, runs * k, new Random().nextInt())
-    Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k))
+    val sample = data.takeSample(true, runs * k, new Random().nextInt()).toSeq
+    Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).toArray)
   }
 
   /**
