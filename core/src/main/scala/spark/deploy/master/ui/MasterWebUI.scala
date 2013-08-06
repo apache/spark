@@ -57,7 +57,7 @@ class MasterWebUI(val master: ActorRef, requestedPort: Int) extends Logging {
     }
   }
 
-  val handlers = Array[(String, Handler)](
+  var handlers = Array[(String, Handler)](
     ("/static", createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)),
     ("/app/json", (request: HttpServletRequest) => applicationPage.renderJson(request)),
     ("/app", (request: HttpServletRequest) => applicationPage.render(request)),

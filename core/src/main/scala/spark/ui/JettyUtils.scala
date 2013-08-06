@@ -48,7 +48,7 @@ private[spark] object JettyUtils extends Logging {
   implicit def textResponderToHandler(responder: Responder[String]): Handler =
     createHandler(responder, "text/plain")
 
-  private def createHandler[T <% AnyRef](responder: Responder[T], contentType: String,
+  def createHandler[T <% AnyRef](responder: Responder[T], contentType: String,
                                  extractFn: T => String = (in: Any) => in.toString): Handler = {
     new AbstractHandler {
       def handle(target: String,

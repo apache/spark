@@ -101,6 +101,12 @@ private[spark] class Worker(
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
+
+    // Add default MetricsServlet handlers to webUi
+    metricsSystem.metricsServlet foreach { m =>
+      webUi.handlers = m.getHandlers ++ webUi.handlers
+    }
+
     webUi.start()
     connectToMaster()
 

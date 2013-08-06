@@ -65,6 +65,15 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications")
   val masterSource = new MasterSource(this)
 
+  // Add default MetricsServlet handler to web ui
+  masterMetricsSystem.metricsServlet foreach { m =>
+    webUi.handlers = m.getHandlers ++ webUi.handlers
+  }
+
+  applicationMetricsSystem.metricsServlet foreach { m =>
+    webUi.handlers = m.getHandlers ++ webUi.handlers
+  }
+
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host

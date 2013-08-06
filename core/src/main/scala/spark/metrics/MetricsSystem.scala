@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import spark.Logging
-import spark.metrics.sink.Sink
+import spark.metrics.sink.{MetricsServlet, Sink}
 import spark.metrics.source.Source
 
 /**
@@ -35,7 +35,7 @@ import spark.metrics.source.Source
  * "instance" specify "who" (the role) use metrics system. In spark there are several roles
  * like master, worker, executor, client driver, these roles will create metrics system
  * for monitoring. So instance represents these roles. Currently in Spark, several instances
- * have already implemented: master, worker, executor, driver.
+ * have already implemented: master, worker, executor, driver, applications.
  *
  * "source" specify "where" (source) to collect metrics data. In metrics system, there exists
  * two kinds of source:
@@ -51,8 +51,8 @@ import spark.metrics.source.Source
  * Metrics configuration format is like below:
  * [instance].[sink|source].[name].[options] = xxxx
  *
- * [instance] can be "master", "worker", "executor", "driver", which means only the specified
- * instance has this property.
+ * [instance] can be "master", "worker", "executor", "driver", "applications" which means only
+ * the specified instance has this property.
  * wild card "*" can be used to replace instance name, which means all the instances will have
  * this property.
  *
@@ -71,6 +71,9 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
   val sinks = new mutable.ArrayBuffer[Sink]
   val sources = new mutable.ArrayBuffer[Source]
   val registry = new MetricRegistry()
+
+  // Treat MetricsServlet as a special sink as it should be exposed to add handlers to web ui
+  var metricsServlet: Option[MetricsServlet] = None
 
   metricsConfig.initialize()
   registerSources()
@@ -126,7 +129,11 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
         val sink = Class.forName(classPath)
           .getConstructor(classOf[Properties], classOf[MetricRegistry])
           .newInstance(kv._2, registry)
-        sinks += sink.asInstanceOf[Sink]
+        if (kv._1 =="servlet") {
+           metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
+        } else {
+          sinks += sink.asInstanceOf[Sink]
+        }
       } catch {
         case e: Exception => logError("Sink class " + classPath + " cannot be instantialized", e)
       }
