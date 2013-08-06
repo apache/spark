@@ -2,11 +2,14 @@ package spark.graph.impl
 
 import scala.collection.JavaConversions._
 
-import spark.{ClosureCleaner, HashPartitioner, RDD}
+import spark.{ClosureCleaner, Partitioner, HashPartitioner, RDD}
 import spark.SparkContext._
 
 import spark.graph._
 import spark.graph.impl.GraphImpl._
+
+
+
 
 
 /**
@@ -294,6 +297,67 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
 object GraphImpl {
 
+
+  protected def edgePartitionFunction1D(src: Vid, dst: Vid, numParts: Pid): Pid = {
+    val mixingPrime: Vid = 1125899906842597L 
+    (math.abs(src) * mixingPrime).toInt % numParts
+  }
+
+  
+
+  /**
+   * This function implements a classic 2D-Partitioning of a sparse matrix.  
+   * Suppose we have a graph with 11 vertices that we want to partition 
+   * over 9 machines.  We can use the following sparse matrix representation:
+   *
+   *       __________________________________
+   *  v0   | P0 *     | P1       | P2    *  |      
+   *  v1   |  ****    |  *       |          |
+   *  v2   |  ******* |      **  |  ****    |
+   *  v3   |  *****   |  *  *    |       *  |   
+   *       ----------------------------------
+   *  v4   | P3 *     | P4 ***   | P5 **  * |      
+   *  v5   |  *  *    |  *       |          |
+   *  v6   |       *  |      **  |  ****    |
+   *  v7   |  * * *   |  *  *    |       *  |   
+   *       ----------------------------------
+   *  v8   | P6   *   | P7    *  | P8  *   *|      
+   *  v9   |     *    |  *    *  |          |
+   *  v10  |       *  |      **  |  *  *    |
+   *  v11  | * <-E    |  ***     |       ** |   
+   *       ----------------------------------
+   *
+   * The edge denoted by E connects v11 with v1 and is assigned to 
+   * processor P6.  To get the processor number we divide the matrix
+   * into sqrt(numProc) by sqrt(numProc) blocks.  Notice that edges
+   * adjacent to v11 can only be in the first colum of 
+   * blocks (P0, P3, P6) or the last row of blocks (P6, P7, P8).  
+   * As a consequence we can guarantee that v11 will need to be 
+   * replicated to at most 2 * sqrt(numProc) machines.
+   *
+   * Notice that P0 has many edges and as a consequence this 
+   * partitioning would lead to poor work balance.  To improve
+   * balance we first multiply each vertex id by a large prime 
+   * to effectively suffle the vertex locations. 
+   *
+   * One of the limitations of this approach is that the number of 
+   * machines must either be a perfect square.  We partially address
+   * this limitation by computing the machine assignment to the next 
+   * largest perfect square and then mapping back down to the actual 
+   * number of machines.  Unfortunately, this can also lead to work 
+   * imbalance and so it is suggested that a perfect square is used. 
+   *   
+   *
+   */
+  protected def edgePartitionFunction2D(src: Vid, dst: Vid, 
+    numParts: Pid, ceilSqrtNumParts: Pid): Pid = {
+    val mixingPrime: Vid = 1125899906842597L 
+    val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
+    val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
+    (col * ceilSqrtNumParts + row) % numParts
+  }
+
+
   /**
    * Create the edge table RDD, which is much more efficient for Java heap storage than the
    * normal edges data structure (RDD[(Vid, Vid, ED)]).
@@ -304,10 +368,18 @@ object GraphImpl {
    */
   protected def createETable[ED: ClassManifest](edges: RDD[Edge[ED]], numPartitions: Int)
     : RDD[(Pid, EdgePartition[ED])] = {
+      val ceilSqrt: Pid = math.ceil(math.sqrt(numPartitions)).toInt 
+
     edges
       .map { e =>
         // Random partitioning based on the source vertex id.
-        (math.abs(e.src) % numPartitions, (e.src, e.dst, e.data))
+        // val part: Pid = edgePartitionFunction1D(e.src, e.dst, numPartitions)
+        val part: Pid = edgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
+
+        // Should we be using 3-tuple or an optimized class
+        (part, (e.src, e.dst, e.data))
+        //  (math.abs(e.src) % numPartitions, (e.src, e.dst, e.data))
+       
       }
       .partitionBy(new HashPartitioner(numPartitions))
       .mapPartitionsWithIndex({ (pid, iter) =>
