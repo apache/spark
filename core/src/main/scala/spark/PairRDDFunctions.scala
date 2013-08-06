@@ -32,7 +32,7 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.mapred.FileOutputCommitter
 import org.apache.hadoop.mapred.FileOutputFormat
-import org.apache.hadoop.mapred.HadoopWriter
+import org.apache.hadoop.mapred.SparkHadoopWriter
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputFormat
 
@@ -653,7 +653,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
       conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
     }
     conf.setOutputCommitter(classOf[FileOutputCommitter])
-    FileOutputFormat.setOutputPath(conf, HadoopWriter.createPathFromString(path, conf))
+    FileOutputFormat.setOutputPath(conf, SparkHadoopWriter.createPathFromString(path, conf))
     saveAsHadoopDataset(conf)
   }
 
@@ -679,7 +679,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
 
     logInfo("Saving as hadoop file of type (" + keyClass.getSimpleName+ ", " + valueClass.getSimpleName+ ")")
 
-    val writer = new HadoopWriter(conf)
+    val writer = new SparkHadoopWriter(conf)
     writer.preSetup()
 
     def writeToFile(context: TaskContext, iter: Iterator[(K,V)]) {
