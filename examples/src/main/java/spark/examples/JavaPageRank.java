@@ -46,15 +46,6 @@ public class JavaPageRank {
     return out;
   }
 
-  public static double round(double value, int places) {
-    if (places < 0) throw new IllegalArgumentException();
-
-    long factor = (long) Math.pow(10, places);
-    value = value * factor;
-    long tmp = Math.round(value);
-    return (double) tmp / factor;
-  }
-
   public static void main(String[] args) throws Exception {
     if (args.length < 3) {
       System.err.println("Usage: JavaPageRank <master> <file> <number_of_iterations>");
@@ -121,7 +112,7 @@ public class JavaPageRank {
     // Collects all URL ranks and dump them to console.
     List<Tuple2<String, Double>> output = ranks.collect();
     for (Tuple2 tuple : output) {
-        System.out.println(tuple._1 + " has rank: " + round((Double)(tuple._2), 2) + ".");
+        System.out.println(tuple._1 + " has rank: " + tuple._2 + ".");
     }
 
     System.exit(0);
