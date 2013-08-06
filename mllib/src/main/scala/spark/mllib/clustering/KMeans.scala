@@ -112,7 +112,7 @@ class KMeans private (
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
    */
-  def train(data: RDD[Array[Double]]): KMeansModel = {
+  def run(data: RDD[Array[Double]]): KMeansModel = {
     // TODO: check whether data is persistent; this needs RDD.storageLevel to be publicly readable
 
     val sc = data.sparkContext
@@ -210,7 +210,7 @@ class KMeans private (
   private def initKMeansParallel(data: RDD[Array[Double]]): Array[ClusterCenters] = {
     // Initialize each run's center to a random point
     val seed = new Random().nextInt()
-    val sample = data.takeSample(true, runs, seed)
+    val sample = data.takeSample(true, runs, seed).toSeq
     val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r)))
 
     // On each step, sample 2 * k points on average for each run with probability proportional
@@ -271,7 +271,7 @@ object KMeans {
                 .setMaxIterations(maxIterations)
                 .setRuns(runs)
                 .setInitializationMode(initializationMode)
-                .train(data)
+                .run(data)
   }
 
   def train(data: RDD[Array[Double]], k: Int, maxIterations: Int, runs: Int): KMeansModel = {
