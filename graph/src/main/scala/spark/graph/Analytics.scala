@@ -52,9 +52,7 @@ object Analytics extends Logging {
       (me_id, edge) => Some(edge.src.data._2 / edge.src.data._1), // gather
       (a: Double, b: Double) => a + b, // merge
       1.0,
-      numIter).mapVertices {
-      case Vertex(id, (outDeg, r)) => Vertex(id, r)
-    }
+      numIter).mapVertices{ case Vertex(id, (outDeg, r)) => r }
   }
 
   /**
@@ -76,9 +74,7 @@ object Analytics extends Logging {
       (vertex, a: Option[Double]) =>
         (vertex.data._1, (resetProb + (1.0 - resetProb) * a.getOrElse(0.0)), vertex.data._2), // apply
       (me_id, edge) => math.abs(edge.src.data._3 - edge.src.data._2) > tol, // scatter
-      maxIter).mapVertices {
-      case Vertex(vid, data) => Vertex(vid, data._2)
-    }
+      maxIter).mapVertices { case Vertex(vid, data) => data._2 }
   }
 
 

@@ -91,6 +91,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     newGraph(vertices, triplets.map(e => Edge(e.src.id, e.dst.id, f(e))))
   }
 
+  override def correctEdges(): Graph[VD, ED] = {
+    val sc = vertices.context
+    val vset = sc.broadcast(vertices.map(_.id).collect().toSet)
+    val newEdges = edges.filter(e => vset.value.contains(e.src) && vset.value.contains(e.dst))
+    Graph(vertices, newEdges)
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
@@ -110,7 +116,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         part.map { v => (v._1, MutableTuple2(v._2, Option.empty[VD2])) }
       }, preservesPartitioning = true)
 
-    (new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable))
+    new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable)
       .mapPartitions { part =>
         val (vmap, edges) = part.next()
         val edgeSansAcc = new EdgeTriplet[VD, ED]()
@@ -150,7 +156,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
   /**
-   * Same as mapReduceNeighborhood but map function can return none and there is no default value.
+   * Same as aggregateNeighbors but map function can return none and there is no default value.
    * As a consequence, the resulting table may be much smaller than the set of vertices.
    */
   override def aggregateNeighbors[VD2: ClassManifest](
@@ -165,7 +171,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         part.map { v => (v._1, MutableTuple2(v._2, Option.empty[VD2])) }
       }, preservesPartitioning = true)
 
-    (new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable))
+    new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable)
       .mapPartitions { part =>
         val (vmap, edges) = part.next()
         val edgeSansAcc = new EdgeTriplet[VD, ED]()
@@ -187,8 +193,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
               }
           }
           if (gatherDirection == EdgeDirection.Out || gatherDirection == EdgeDirection.Both) {
-            e.dst.data._2 =
-              if (e.dst.data._2.isEmpty) {
+            e.src.data._2 =
+              if (e.src.data._2.isEmpty) {
                 mapFunc(edgeSansAcc.src.id, edgeSansAcc)
               } else {
                 val tmp = mapFunc(edgeSansAcc.src.id, edgeSansAcc)
@@ -218,7 +224,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       }
     }, preservesPartitioning = true).cache()
 
-    new GraphImpl(newVTable.partitions.size, eTable.partitions.size, null, null, newVTable, eTable)
+    new GraphImpl(newVTable.partitions.length, eTable.partitions.length, null, null, newVTable, eTable)
   }
 
   override def joinVertices[U: ClassManifest](
@@ -239,7 +245,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       }
     }, preservesPartitioning = true).cache()
 
-    new GraphImpl(newVTable.partitions.size, eTable.partitions.size, null, null, newVTable, eTable)
+    new GraphImpl(newVTable.partitions.length, eTable.partitions.length, null, null, newVTable, eTable)
   }
 
 
@@ -307,6 +313,7 @@ object GraphImpl {
       .mapPartitionsWithIndex({ (pid, iter) =>
         val edgePartition = new EdgePartition[ED]
         iter.foreach { case (_, (src, dst, data)) => edgePartition.add(src, dst, data) }
+        edgePartition.trim()
         Iterator((pid, edgePartition))
       }, preservesPartitioning = true)
   }
