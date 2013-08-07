@@ -111,6 +111,7 @@ private[spark] class ExecutorRunner(
     val libraryOpts = getAppEnv("SPARK_LIBRARY_PATH")
       .map(p => List("-Djava.library.path=" + p))
       .getOrElse(Nil)
+    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString).getOrElse(Nil)
     val userOpts = getAppEnv("SPARK_JAVA_OPTS").map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq("-Xms" + memory + "M", "-Xmx" + memory + "M")
 
@@ -120,7 +121,7 @@ private[spark] class ExecutorRunner(
         Seq(sparkHome + "/bin/compute-classpath" + ext),
         extraEnvironment=appDesc.command.environment)
 
-    Seq("-cp", classPath) ++ libraryOpts ++ userOpts ++ memoryOpts
+    Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
