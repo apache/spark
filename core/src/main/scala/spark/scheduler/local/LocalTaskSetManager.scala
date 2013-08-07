@@ -42,7 +42,8 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   val taskInfos = new HashMap[Long, TaskInfo]
   val numTasks = taskSet.tasks.size
   var numFinished = 0
-  val ser = SparkEnv.get.closureSerializer.newInstance()
+  val env = SparkEnv.get
+  val ser = env.closureSerializer.newInstance()
   val copiesRunning = new Array[Int](numTasks)
   val finished = new Array[Boolean](numTasks)
   val numFailures = new Array[Int](numTasks)
@@ -143,6 +144,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   }
 
   override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+    SparkEnv.set(env)
     state match {
       case TaskState.FINISHED =>
         taskEnded(tid, state, serializedData)

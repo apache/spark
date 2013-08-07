@@ -22,7 +22,9 @@ import scala.collection.mutable
 import org.scalatest.FunSuite
 import com.esotericsoftware.kryo._
 
-class KryoSerializerSuite extends FunSuite {
+import KryoTest._
+
+class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   test("basic types") {
     val ser = (new KryoSerializer).newInstance()
     def check[T](t: T) {
@@ -123,6 +125,45 @@ class KryoSerializerSuite extends FunSuite {
     check(hashMap)
 
     System.clearProperty("spark.kryo.registrator")
+  }
+
+  test("kryo with collect") {
+    val control = 1 :: 2 :: Nil
+    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_)).collect().map(_.x)
+    assert(control === result.toSeq)
+  }
+
+  test("kryo with parallelize") {
+    val control = 1 :: 2 :: Nil
+    val result = sc.parallelize(control.map(new ClassWithoutNoArgConstructor(_))).map(_.x).collect()
+    assert (control === result.toSeq)
+  }
+
+  test("kryo with reduce") {
+    val control = 1 :: 2 :: Nil
+    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_))
+        .reduce((t1, t2) => new ClassWithoutNoArgConstructor(t1.x + t2.x)).x
+    assert(control.sum === result)
+  }
+
+  // TODO: this still doesn't work
+  ignore("kryo with fold") {
+    val control = 1 :: 2 :: Nil
+    val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_))
+        .fold(new ClassWithoutNoArgConstructor(10))((t1, t2) => new ClassWithoutNoArgConstructor(t1.x + t2.x)).x
+    assert(10 + control.sum === result)
+  }
+
+  override def beforeAll() {
+    System.setProperty("spark.serializer", "spark.KryoSerializer")
+    System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
+    super.beforeAll()
+  }
+
+  override def afterAll() {
+    super.afterAll()
+    System.clearProperty("spark.kryo.registrator")
+    System.clearProperty("spark.serializer")
   }
 }
 

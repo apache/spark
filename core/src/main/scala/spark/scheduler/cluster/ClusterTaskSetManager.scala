@@ -92,7 +92,8 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   val SPECULATION_MULTIPLIER = System.getProperty("spark.speculation.multiplier", "1.5").toDouble
 
   // Serializer for closures and tasks.
-  val ser = SparkEnv.get.closureSerializer.newInstance()
+  val env = SparkEnv.get
+  val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
   val numTasks = tasks.length
@@ -534,6 +535,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   }
 
   override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+    SparkEnv.set(env)
     state match {
       case TaskState.FINISHED =>
         taskFinished(tid, state, serializedData)

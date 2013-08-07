@@ -169,7 +169,8 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     // Set the Spark execution environment for the worker thread
     SparkEnv.set(env)
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    var attemptedTask: Option[Task[_]] = None
+    val objectSer = SparkEnv.get.serializer.newInstance()
+    var attemptedTask: Option[Task[_]] = None   
     val start = System.currentTimeMillis()
     var taskStart: Long = 0
     try {
@@ -193,9 +194,9 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       // executor does. This is useful to catch serialization errors early
       // on in development (so when users move their local Spark programs
       // to the cluster, they don't get surprised by serialization errors).
-      val serResult = ser.serialize(result)
+      val serResult = objectSer.serialize(result)
       deserializedTask.metrics.get.resultSize = serResult.limit()
-      val resultToReturn = ser.deserialize[Any](serResult)
+      val resultToReturn = objectSer.deserialize[Any](serResult)
       val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
         ser.serialize(Accumulators.values))
       val serviceTime = System.currentTimeMillis() - taskStart
