@@ -44,7 +44,7 @@ object SparkBuild extends Build {
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
-  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn (core)
+  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn (core) dependsOn(bagel) dependsOn(mllib)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core) dependsOn (streaming) dependsOn(mllib)
 
@@ -151,6 +151,7 @@ object SparkBuild extends Build {
   val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
   val excludeAsm = ExclusionRule(organization = "asm")
+  val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
@@ -168,6 +169,7 @@ object SparkBuild extends Build {
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
       "commons-daemon" % "commons-daemon" % "1.0.10",
       "com.ning" % "compress-lzf" % "0.8.4",
+      "org.xerial.snappy" % "snappy-java" % "1.0.5",
       "org.ow2.asm" % "asm" % "4.0",
       "com.google.protobuf" % "protobuf-java" % "2.4.1",
       "com.typesafe.akka" % "akka-actor" % "2.0.5" excludeAll(excludeNetty),
@@ -235,6 +237,7 @@ object SparkBuild extends Build {
         exclude("jline","jline")
         exclude("log4j","log4j")
         exclude("org.apache.cassandra.deps", "avro")
+        excludeAll(excludeSnappy)
     )
   )
 
@@ -242,7 +245,9 @@ object SparkBuild extends Build {
     name := "spark-tools"
   )
 
-  def bagelSettings = sharedSettings ++ Seq(name := "spark-bagel")
+  def bagelSettings = sharedSettings ++ Seq(
+    name := "spark-bagel"
+  )
 
   def mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
@@ -257,7 +262,7 @@ object SparkBuild extends Build {
       "Akka Repository" at "http://repo.akka.io/releases/"
     ),
     libraryDependencies ++= Seq(
-      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty),
+      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty, excludeSnappy),
       "com.github.sgroschupf" % "zkclient" % "0.1" excludeAll(excludeNetty),
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)

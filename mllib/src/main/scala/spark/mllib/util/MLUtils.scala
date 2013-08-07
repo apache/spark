@@ -39,9 +39,9 @@ object MLUtils {
    */
   def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
-      val parts = line.split(",")
+      val parts = line.split(',')
       val label = parts(0).toDouble
-      val features = parts(1).trim().split(" ").map(_.toDouble)
+      val features = parts(1).trim().split(' ').map(_.toDouble)
       LabeledPoint(label, features)
     }
   }

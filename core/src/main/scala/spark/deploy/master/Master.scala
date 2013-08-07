@@ -38,7 +38,9 @@ import spark.util.AkkaUtils
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
-
+  val RETAINED_APPLICATIONS = System.getProperty("spark.deploy.retainedApplications", "200").toInt
+  val REAPER_ITERATIONS = System.getProperty("spark.dead.worker.persistence", "15").toInt
+ 
   var nextAppNumber = 0
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
@@ -59,7 +61,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   Utils.checkHost(host, "Expected hostname")
 
-  val metricsSystem = MetricsSystem.createMetricsSystem("master")
+  val masterMetricsSystem = MetricsSystem.createMetricsSystem("master")
+  val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications")
   val masterSource = new MasterSource(this)
 
   val masterPublicAddress = {
@@ -77,15 +80,17 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     webUi.start()
-    context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis)(timeOutDeadWorkers())
+    context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
 
-    metricsSystem.registerSource(masterSource)
-    metricsSystem.start()
+    masterMetricsSystem.registerSource(masterSource)
+    masterMetricsSystem.start()
+    applicationMetricsSystem.start()
   }
 
   override def postStop() {
     webUi.stop()
-    metricsSystem.stop()
+    masterMetricsSystem.stop()
+    applicationMetricsSystem.stop()
   }
 
   override def receive = {
@@ -170,6 +175,10 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     case RequestMasterState => {
       sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray)
+    }
+
+    case CheckForWorkerTimeOut => {
+      timeOutDeadWorkers()
     }
   }
 
@@ -275,6 +284,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     val now = System.currentTimeMillis()
     val date = new Date(now)
     val app = new ApplicationInfo(now, newApplicationId(date), desc, date, driver, desc.appUiUrl)
+    applicationMetricsSystem.registerSource(app.appSource)
     apps += app
     idToApp(app.id) = app
     actorToApp(driver) = app
@@ -300,7 +310,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       idToApp -= app.id
       actorToApp -= app.driver
       addressToApp -= app.driver.path.address
-      completedApps += app   // Remember it in our history
+      if (completedApps.size >= RETAINED_APPLICATIONS) {
+        val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
+        completedApps.take(toRemove).foreach( a => {
+          applicationMetricsSystem.removeSource(a.appSource)
+        })
+        completedApps.trimStart(toRemove)
+      }
+      completedApps += app // Remember it in our history
       waitingApps -= app
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
@@ -325,12 +342,17 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   /** Check for, and remove, any timed-out workers */
   def timeOutDeadWorkers() {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
-    val expirationTime = System.currentTimeMillis() - WORKER_TIMEOUT
-    val toRemove = workers.filter(_.lastHeartbeat < expirationTime).toArray
+    val currentTime = System.currentTimeMillis()
+    val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT).toArray
     for (worker <- toRemove) {
-      logWarning("Removing %s because we got no heartbeat in %d seconds".format(
-        worker.id, WORKER_TIMEOUT))
-      removeWorker(worker)
+      if (worker.state != WorkerState.DEAD) {
+        logWarning("Removing %s because we got no heartbeat in %d seconds".format(
+          worker.id, WORKER_TIMEOUT/1000))
+        removeWorker(worker)
+      } else {
+        if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT))
+          workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it 
+      }
     }
   }
 }

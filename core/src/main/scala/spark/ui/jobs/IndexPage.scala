@@ -17,25 +17,18 @@
 
 package spark.ui.jobs
 
-import java.util.Date
-
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.HashSet
-import scala.Some
 import scala.xml.{NodeSeq, Node}
 
-import spark.scheduler.cluster.TaskInfo
-import spark.scheduler.Stage
-import spark.storage.StorageLevel
+import spark.scheduler.cluster.SchedulingMode
 import spark.ui.Page._
 import spark.ui.UIUtils._
 import spark.Utils
 
-/** Page showing list of all ongoing and recently finished stages */
+/** Page showing list of all ongoing and recently finished stages and pools*/
 private[spark] class IndexPage(parent: JobProgressUI) {
   def listener = parent.listener
-  val dateFmt = parent.dateFmt
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val activeStages = listener.activeStages.toSeq
@@ -48,29 +41,19 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       activeTime += t.timeRunning(now)
     }
 
-    /** Special table which merges two header cells. */
-    def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
-      <table class="table table-bordered table-striped table-condensed sortable">
-        <thead>
-          <th>Stage Id</th>
-          <th>Origin</th>
-          <th>Submitted</th>
-          <th>Duration</th>
-          <th colspan="2">Tasks: Complete/Total</th>
-          <th>Shuffle Read</th>
-          <th>Shuffle Write</th>
-          <th>Stored RDD</th>
-        </thead>
-        <tbody>
-          {rows.map(r => makeRow(r))}
-        </tbody>
-      </table>
-    }
+    val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+    val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
+    val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
+    val poolTable = new PoolTable(listener.sc.getAllPools, listener)
     val summary: NodeSeq =
      <div>
        <ul class="unstyled">
-          <li>
+         <li>
+           <strong>Duration: </strong>
+           {parent.formatDuration(now - listener.sc.startTime)}
+         </li>
+         <li>
             <strong>CPU time: </strong>
             {parent.formatDuration(listener.totalTime + activeTime)}
           </li>
@@ -86,78 +69,35 @@ private[spark] class IndexPage(parent: JobProgressUI) {
               {Utils.memoryBytesToString(listener.totalShuffleWrite)}
             </li>
          }
+         <li>
+           <a href="#active"><strong>Active Stages:</strong></a>
+           {activeStages.size}
+         </li>
+         <li>
+           <a href="#completed"><strong>Completed Stages:</strong></a>
+           {completedStages.size}
+         </li>
+         <li>
+           <a href="#failed"><strong>Failed Stages:</strong></a>
+           {failedStages.size}
+         </li>
+         <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
        </ul>
      </div>
-    val activeStageTable: NodeSeq = stageTable(stageRow, activeStages)
-    val completedStageTable = stageTable(stageRow, completedStages)
-    val failedStageTable: NodeSeq = stageTable(stageRow, failedStages)
 
-    val content = summary ++
-                  <h2>Active Stages</h2> ++ activeStageTable ++
-                  <h2>Completed Stages</h2>  ++ completedStageTable ++
-                  <h2>Failed Stages</h2>  ++ failedStageTable
+    val content = summary ++ 
+      {if (listener.sc.getSchedulingMode == SchedulingMode.FAIR) {
+         <h3>Pools</h3> ++ poolTable.toNodeSeq
+      } else {
+        Seq()
+      }} ++
+      <h3 id="active">Active Stages : {activeStages.size}</h3> ++
+      activeStagesTable.toNodeSeq++
+      <h3 id="completed">Completed Stages : {completedStages.size}</h3> ++
+      completedStagesTable.toNodeSeq++
+      <h3 id ="failed">Failed Stages : {failedStages.size}</h3> ++
+      failedStagesTable.toNodeSeq
 
     headerSparkPage(content, parent.sc, "Spark Stages", Jobs)
-  }
-
-  def getElapsedTime(submitted: Option[Long], completed: Long): String = {
-    submitted match {
-      case Some(t) => parent.formatDuration(completed - t)
-      case _ => "Unknown"
-    }
-  }
-
-  def makeProgressBar(started: Int, completed: Int, total: Int): Seq[Node] = {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
-
-    <div class="progress" style="height: 15px; margin-bottom: 0px">
-      <div class="bar" style={completeWidth}></div>
-      <div class="bar bar-info" style={startWidth}></div>
-    </div>
-  }
-
-
-  def stageRow(s: Stage): Seq[Node] = {
-    val submissionTime = s.submissionTime match {
-      case Some(t) => dateFmt.format(new Date(t))
-      case None => "Unknown"
-    }
-
-    val shuffleRead = listener.stageToShuffleRead.getOrElse(s.id, 0L) match {
-      case 0 => ""
-      case b => Utils.memoryBytesToString(b)
-    }
-    val shuffleWrite = listener.stageToShuffleWrite.getOrElse(s.id, 0L) match {
-      case 0 => ""
-      case b => Utils.memoryBytesToString(b)
-    }
-
-    val startedTasks = listener.stageToTasksActive.getOrElse(s.id, HashSet[TaskInfo]()).size
-    val completedTasks = listener.stageToTasksComplete.getOrElse(s.id, 0)
-    val totalTasks = s.numPartitions
-
-    <tr>
-      <td>{s.id}</td>
-      <td><a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a></td>
-      <td>{submissionTime}</td>
-      <td>{getElapsedTime(s.submissionTime,
-             s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
-      <td class="progress-cell">{makeProgressBar(startedTasks, completedTasks, totalTasks)}</td>
-      <td style="border-left: 0; text-align: center;">{completedTasks} / {totalTasks}
-        {listener.stageToTasksFailed.getOrElse(s.id, 0) match {
-        case f if f > 0 => "(%s failed)".format(f)
-        case _ =>
-      }}
-      </td>
-      <td>{shuffleRead}</td>
-      <td>{shuffleWrite}</td>
-      <td>{if (s.rdd.getStorageLevel != StorageLevel.NONE) {
-             <a href={"/storage/rdd?id=%s".format(s.rdd.id)}>
-               {Option(s.rdd.name).getOrElse(s.rdd.id)}
-             </a>
-          }}
-      </td>
-    </tr>
   }
 }

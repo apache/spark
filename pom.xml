@@ -58,6 +58,7 @@
     <module>core</module>
     <module>bagel</module>
     <module>examples</module>
+    <module>mllib</module>
     <module>tools</module>
     <module>streaming</module>
     <module>repl</module>
@@ -181,6 +182,11 @@
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
         <version>0.8.4</version>
+      </dependency>
+      <dependency>
+        <groupId>org.xerial.snappy</groupId>
+        <artifactId>snappy-java</artifactId>
+        <version>1.0.5</version>
       </dependency>
       <dependency>
         <groupId>org.ow2.asm</groupId>

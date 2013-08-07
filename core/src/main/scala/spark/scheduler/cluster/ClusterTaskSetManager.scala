@@ -85,7 +85,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toDouble
 
   // Maximum times a task is allowed to fail before failing the job
-  val MAX_TASK_FAILURES = 4
+  val MAX_TASK_FAILURES = System.getProperty("spark.task.maxFailures", "4").toInt
 
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = System.getProperty("spark.speculation.quantile", "0.75").toDouble
@@ -107,9 +107,8 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   var runningTasks = 0
   var priority = taskSet.priority
   var stageId = taskSet.stageId
-  var name = "TaskSet_" + taskSet.stageId.toString
+  var name = "TaskSet_"+taskSet.stageId.toString
   var parent: Schedulable = null
-
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
 
@@ -697,18 +696,18 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
     }
   }
 
-  // TODO: for now we just find Pool not TaskSetManager,
+  // TODO(xiajunluan): for now we just find Pool not TaskSetManager
   // we can extend this function in future if needed
   override def getSchedulableByName(name: String): Schedulable = {
     return null
   }
 
   override def addSchedulable(schedulable:Schedulable) {
-    //nothing
+    // nothing
   }
 
   override def removeSchedulable(schedulable:Schedulable) {
-    //nothing
+    // nothing
   }
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
