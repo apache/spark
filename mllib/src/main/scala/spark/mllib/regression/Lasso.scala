@@ -30,7 +30,7 @@ import org.jblas.DoubleMatrix
 class LassoModel(
     override val weights: Array[Double],
     override val intercept: Double)
-  extends GeneralizedLinearModel[Double](weights, intercept)
+  extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {
 
   override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
@@ -46,11 +46,15 @@ class LassoWithSGD (
     var regParam: Double,
     var miniBatchFraction: Double,
     var addIntercept: Boolean)
-  extends GeneralizedLinearAlgorithm[Double, LassoModel]
-  with GradientDescent with Serializable {
+  extends GeneralizedLinearAlgorithm[LassoModel]
+  with Serializable {
 
   val gradient = new SquaredGradient()
   val updater = new L1Updater()
+  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+                                                        .setNumIterations(numIterations)
+                                                        .setRegParam(regParam)
+                                                        .setMiniBatchFraction(miniBatchFraction)
 
   /**
    * Construct a Lasso object with default parameters
@@ -82,7 +86,7 @@ object LassoWithSGD {
    *        the number of features in the data.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -90,7 +94,7 @@ object LassoWithSGD {
       initialWeights: Array[Double])
     : LassoModel =
   {
-    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).train(input,
+    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input,
         initialWeights)
   }
 
@@ -106,14 +110,14 @@ object LassoWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double)
     : LassoModel =
   {
-    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).train(input)
+    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input)
   }
 
   /**
@@ -128,7 +132,7 @@ object LassoWithSGD {
    * @return a LassoModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double)
@@ -147,7 +151,7 @@ object LassoWithSGD {
    * @return a LassoModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int)
     : LassoModel =
   {

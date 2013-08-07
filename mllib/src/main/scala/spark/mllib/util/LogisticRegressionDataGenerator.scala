@@ -20,6 +20,7 @@ package spark.mllib.util
 import scala.util.Random
 
 import spark.{RDD, SparkContext}
+import spark.mllib.regression.LabeledPoint
 
 object LogisticRegressionDataGenerator {
 
@@ -40,7 +41,7 @@ object LogisticRegressionDataGenerator {
     nfeatures: Int,
     eps: Double,
     nparts: Int = 2,
-    probOne: Double = 0.5): RDD[(Double, Array[Double])] = {
+    probOne: Double = 0.5): RDD[LabeledPoint] = {
     val data = sc.parallelize(0 until nexamples, nparts).map { idx =>
       val rnd = new Random(42 + idx)
 
@@ -48,7 +49,7 @@ object LogisticRegressionDataGenerator {
       val x = Array.fill[Double](nfeatures) {
         rnd.nextGaussian() + (y * eps)
       }
-      (y, x)
+      LabeledPoint(y, x)
     }
     data
   }

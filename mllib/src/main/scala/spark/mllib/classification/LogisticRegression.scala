@@ -33,13 +33,13 @@ import org.jblas.DoubleMatrix
 class LogisticRegressionModel(
     override val weights: Array[Double],
     override val intercept: Double)
-  extends GeneralizedLinearModel[Int](weights, intercept)
+  extends GeneralizedLinearModel(weights, intercept)
   with ClassificationModel with Serializable {
 
   override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
       intercept: Double) = {
     val margin = dataMatrix.mmul(weightMatrix).get(0) + intercept
-    round(1.0/ (1.0 + math.exp(margin * -1))).toInt
+    round(1.0/ (1.0 + math.exp(margin * -1)))
   }
 }
 
@@ -49,12 +49,15 @@ class LogisticRegressionWithSGD (
     var regParam: Double,
     var miniBatchFraction: Double,
     var addIntercept: Boolean)
-  extends GeneralizedLinearAlgorithm[Int, LogisticRegressionModel]
-  with GradientDescent with Serializable {
+  extends GeneralizedLinearAlgorithm[LogisticRegressionModel]
+  with Serializable {
 
   val gradient = new LogisticGradient()
   val updater = new SimpleUpdater()
-
+  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+                                                        .setNumIterations(numIterations)
+                                                        .setRegParam(regParam)
+                                                        .setMiniBatchFraction(miniBatchFraction)
   /**
    * Construct a LogisticRegression object with default parameters
    */
@@ -86,14 +89,14 @@ object LogisticRegressionWithSGD {
    *        the number of features in the data.
    */
   def train(
-      input: RDD[(Int, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
       initialWeights: Array[Double])
     : LogisticRegressionModel =
   {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction, true).train(
+    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction, true).run(
       input, initialWeights)
   }
 
@@ -109,13 +112,13 @@ object LogisticRegressionWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
   def train(
-      input: RDD[(Int, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double)
     : LogisticRegressionModel =
   {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction, true).train(
+    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction, true).run(
       input)
   }
 
@@ -131,7 +134,7 @@ object LogisticRegressionWithSGD {
    * @return a LogisticRegressionModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Int, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double)
     : LogisticRegressionModel =
@@ -149,7 +152,7 @@ object LogisticRegressionWithSGD {
    * @return a LogisticRegressionModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Int, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int)
     : LogisticRegressionModel =
   {
@@ -157,15 +160,14 @@ object LogisticRegressionWithSGD {
   }
 
   def main(args: Array[String]) {
-    if (args.length != 5) {
+    if (args.length != 4) {
       println("Usage: LogisticRegression <master> <input_dir> <step_size> " +
-        "<regularization_parameter> <niters>")
+        "<niters>")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "LogisticRegression")
-    val data = MLUtils.loadLabeledData(sc, args(1)).map(yx => (yx._1.toInt, yx._2))
-    val model = LogisticRegressionWithSGD.train(
-      data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+    val data = MLUtils.loadLabeledData(sc, args(1))
+    val model = LogisticRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
 
     sc.stop()
   }

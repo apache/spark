@@ -71,7 +71,8 @@ class RidgeRegression private (var lambdaLow: Double, var lambdaHigh: Double)
     this
   }
 
-  def train(input: RDD[(Double, Array[Double])]): RidgeRegressionModel = {
+  def train(inputLabeled: RDD[LabeledPoint]): RidgeRegressionModel = {
+    val input = inputLabeled.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
     val nfeatures: Int = input.take(1)(0)._2.length
     val nexamples: Long = input.count()
 
@@ -183,7 +184,7 @@ object RidgeRegression {
    * @param lambdaHigh upper bound used in binary search for lambda
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       lambdaLow: Double,
       lambdaHigh: Double)
     : RidgeRegressionModel =
@@ -199,7 +200,7 @@ object RidgeRegression {
    *
    * @param input RDD of (response, array of features) pairs.
    */
-  def train(input: RDD[(Double, Array[Double])]) : RidgeRegressionModel = {
+  def train(input: RDD[LabeledPoint]) : RidgeRegressionModel = {
     train(input, 0.0, 100.0)
   }
 

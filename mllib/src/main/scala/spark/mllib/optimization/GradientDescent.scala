@@ -24,15 +24,12 @@ import org.jblas.DoubleMatrix
 
 import scala.collection.mutable.ArrayBuffer
 
-trait GradientDescent extends Optimizer {
+class GradientDescent(gradient: Gradient, updater: Updater) extends Optimizer {
 
-  val gradient: Gradient
-  val updater: Updater
-
-  var stepSize: Double
-  var numIterations: Int
-  var regParam: Double
-  var miniBatchFraction: Double
+  var stepSize: Double = 1.0
+  var numIterations: Int = 100
+  var regParam: Double = 0.0
+  var miniBatchFraction: Double = 1.0
 
   /**
    * Set the step size per-iteration of SGD. Default 1.0.

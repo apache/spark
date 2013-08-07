@@ -17,16 +17,44 @@
 
 package spark.mllib.regression
 
+import scala.collection.JavaConversions._
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
-import spark.mllib.optimization._
 
 import org.jblas.DoubleMatrix
 
+object LassoSuite {
+
+  def generateLassoInputAsList(
+    intercept: Double,
+    weights: Array[Double],
+    nPoints: Int,
+    seed: Int): java.util.List[LabeledPoint] = {
+    seqAsJavaList(generateLassoInput(intercept, weights, nPoints, seed))
+  }
+
+
+  // Generate noisy input of the form Y = x.dot(weights) + intercept + noise
+  def generateLassoInput(
+    intercept: Double,
+    weights: Array[Double],
+    nPoints: Int,
+    seed: Int): Seq[LabeledPoint] = {
+    val rnd = new Random(seed)
+    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
+    val x = Array.fill[Array[Double]](nPoints)(
+      Array.fill[Double](weights.length)(rnd.nextGaussian()))
+    val y = x.map(xi =>
+      (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + 0.1 * rnd.nextGaussian()
+    )
+    y.zip(x).map(p => LabeledPoint(p._1, p._2))
+  }
+
+}
 
 class LassoSuite extends FunSuite with BeforeAndAfterAll {
   val sc = new SparkContext("local", "test")
@@ -36,26 +64,10 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-  // Generate noisy input of the form Y = x.dot(weights) + intercept + noise
-  def generateLassoInput(
-    intercept: Double,
-    weights: Array[Double],
-    nPoints: Int,
-    seed: Int): Seq[(Double, Array[Double])] = {
-    val rnd = new Random(seed)
-    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
-    val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(rnd.nextGaussian()))
-    val y = x.map(xi =>
-      (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + 0.1 * rnd.nextGaussian()
-    )
-    y zip x
-  }
-
-  def validatePrediction(predictions: Seq[Double], input: Seq[(Double, Array[Double])]) {
-    val numOffPredictions = predictions.zip(input).filter { case (prediction, (expected, _)) =>
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+    val numOffPredictions = predictions.zip(input).filter { case (prediction, expected) =>
       // A prediction is off if the prediction is more than 0.5 away from expected value.
-      math.abs(prediction - expected) > 0.5
+      math.abs(prediction - expected.label) > 0.5
     }.size
     // At least 80% of the predictions should be on.
     assert(numOffPredictions < input.length / 5)
@@ -68,14 +80,15 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     val B = -1.5
     val C = 1.0e-2
 
-    val testData = generateLassoInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = LassoSuite.generateLassoInput(A, Array[Double](B,C), nPoints, 42)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val ls = new LassoWithSGD().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
+    val ls = new LassoWithSGD()
+    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
 
-    val model = ls.train(testRDD)
+    val model = ls.run(testRDD)
 
     val weight0 = model.weights(0)
     val weight1 = model.weights(1)
@@ -83,14 +96,14 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
     assert(weight1 >= -1.0e-3 && weight1 <= 1.0e-3, weight1 + " not in [-0.001, 0.001]")
 
-    val validationData = generateLassoInput(A, Array[Double](B,C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData,2)
+    val validationData = LassoSuite.generateLassoInput(A, Array[Double](B,C), nPoints, 17)
+    val validationRDD  = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_._2)).collect(), validationData)
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row._2)), validationData)
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 
   test("Lasso local random SGD with initial weights") {
@@ -100,7 +113,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     val B = -1.5
     val C = 1.0e-2
 
-    val testData = generateLassoInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = LassoSuite.generateLassoInput(A, Array[Double](B,C), nPoints, 42)
 
     val initialB = -1.0
     val initialC = -1.0
@@ -109,9 +122,10 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val ls = new LassoWithSGD().setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
+    val ls = new LassoWithSGD()
+    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
 
-    val model = ls.train(testRDD, initialWeights)
+    val model = ls.run(testRDD, initialWeights)
 
     val weight0 = model.weights(0)
     val weight1 = model.weights(1)
@@ -119,13 +133,13 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
     assert(weight1 >= -1.0e-3 && weight1 <= 1.0e-3, weight1 + " not in [-0.001, 0.001]")
 
-    val validationData = generateLassoInput(A, Array[Double](B,C), nPoints, 17)
+    val validationData = LassoSuite.generateLassoInput(A, Array[Double](B,C), nPoints, 17)
     val validationRDD  = sc.parallelize(validationData,2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_._2)).collect(), validationData)
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row._2)), validationData)
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 }

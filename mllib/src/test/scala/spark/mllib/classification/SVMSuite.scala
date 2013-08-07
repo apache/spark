@@ -19,21 +19,24 @@ package spark.mllib.classification
 
 import scala.util.Random
 import scala.math.signum
+import scala.collection.JavaConversions._
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
-import spark.mllib.optimization._
+import spark.mllib.regression._
 
 import org.jblas.DoubleMatrix
 
-class SVMSuite extends FunSuite with BeforeAndAfterAll {
-  val sc = new SparkContext("local", "test")
+object SVMSuite {
 
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
+  def generateSVMInputAsList(
+    intercept: Double,
+    weights: Array[Double],
+    nPoints: Int,
+    seed: Int): java.util.List[LabeledPoint] = {
+    seqAsJavaList(generateSVMInput(intercept, weights, nPoints, seed))
   }
 
   // Generate noisy input of the form Y = signum(x.dot(weights) + intercept + noise)
@@ -41,7 +44,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     intercept: Double,
     weights: Array[Double],
     nPoints: Int,
-    seed: Int): Seq[(Int, Array[Double])] = {
+    seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
     val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(
@@ -53,16 +56,27 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
         0.1 * rnd.nextGaussian()
       ).toInt
     }
-    y.zip(x)
+    y.zip(x).map(p => LabeledPoint(p._1, p._2))
   }
 
-  def validatePrediction(predictions: Seq[Int], input: Seq[(Int, Array[Double])]) {
-    val numOffPredictions = predictions.zip(input).filter { case (prediction, (expected, _)) =>
-      (prediction != expected)
+}
+
+class SVMSuite extends FunSuite with BeforeAndAfterAll {
+  val sc = new SparkContext("local", "test")
+
+  override def afterAll() {
+    sc.stop()
+    System.clearProperty("spark.driver.port")
+  }
+
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+    val numOffPredictions = predictions.zip(input).filter { case (prediction, expected) =>
+      (prediction != expected.label)
     }.size
     // At least 80% of the predictions should be on.
     assert(numOffPredictions < input.length / 5)
   }
+
 
   test("SVM using local random SGD") {
     val nPoints = 10000
@@ -71,23 +85,24 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val B = -1.5
     val C = 1.0
 
-    val testData = generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val svm = new SVMWithSGD().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
+    val svm = new SVMWithSGD()
+    svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
-    val model = svm.train(testRDD)
+    val model = svm.run(testRDD)
 
-    val validationData = generateSVMInput(A, Array[Double](B,C), nPoints, 17)
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
     val validationRDD  = sc.parallelize(validationData,2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_._2)).collect(), validationData)
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row._2)), validationData)
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 
   test("SVM local random SGD with initial weights") {
@@ -97,7 +112,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val B = -1.5
     val C = 1.0
 
-    val testData = generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
 
     val initialB = -1.0
     val initialC = -1.0
@@ -106,17 +121,18 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val svm = new SVMWithSGD().setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
+    val svm = new SVMWithSGD()
+    svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
 
-    val model = svm.train(testRDD, initialWeights)
+    val model = svm.run(testRDD, initialWeights)
 
-    val validationData = generateSVMInput(A, Array[Double](B,C), nPoints, 17)
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
     val validationRDD  = sc.parallelize(validationData,2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_._2)).collect(), validationData)
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row._2)), validationData)
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 }

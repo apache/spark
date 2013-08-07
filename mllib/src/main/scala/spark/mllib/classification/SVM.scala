@@ -31,12 +31,12 @@ import org.jblas.DoubleMatrix
 class SVMModel(
     override val weights: Array[Double],
     override val intercept: Double)
-  extends GeneralizedLinearModel[Int](weights, intercept)
+  extends GeneralizedLinearModel(weights, intercept)
   with ClassificationModel with Serializable {
 
   override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
       intercept: Double) = {
-    signum(dataMatrix.dot(weightMatrix) + intercept).toInt
+    signum(dataMatrix.dot(weightMatrix) + intercept)
   }
 }
 
@@ -46,11 +46,14 @@ class SVMWithSGD private (
     var regParam: Double,
     var miniBatchFraction: Double,
     var addIntercept: Boolean)
-  extends GeneralizedLinearAlgorithm[Int, SVMModel] with GradientDescent with Serializable {
+  extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
 
   val gradient = new HingeGradient()
   val updater = new SquaredL2Updater()
-
+  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+                                                        .setNumIterations(numIterations)
+                                                        .setRegParam(regParam)
+                                                        .setMiniBatchFraction(miniBatchFraction)
   /**
    * Construct a SVM object with default parameters
    */
@@ -81,7 +84,7 @@ object SVMWithSGD {
    *        the number of features in the data.
    */
   def train(
-      input: RDD[(Int, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -89,7 +92,7 @@ object SVMWithSGD {
       initialWeights: Array[Double])
     : SVMModel =
   {
-    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).train(input,
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input,
       initialWeights)
   }
 
@@ -105,14 +108,14 @@ object SVMWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
   def train(
-      input: RDD[(Int, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double)
     : SVMModel =
   {
-    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).train(input)
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input)
   }
 
   /**
@@ -127,7 +130,7 @@ object SVMWithSGD {
    * @return a SVMModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Int, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double)
@@ -146,7 +149,7 @@ object SVMWithSGD {
    * @return a SVMModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Int, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int)
     : SVMModel =
   {
@@ -159,7 +162,7 @@ object SVMWithSGD {
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SVM")
-    val data = MLUtils.loadLabeledData(sc, args(1)).map(yx => (yx._1.toInt, yx._2))
+    val data = MLUtils.loadLabeledData(sc, args(1))
     val model = SVMWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()

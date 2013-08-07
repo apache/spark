@@ -17,11 +17,8 @@
 
 package spark.mllib.regression
 
-import spark.{Logging, RDD, SparkContext, SparkException}
+import spark.{Logging, RDD}
 import spark.mllib.optimization._
-import spark.mllib.util.MLUtils
-
-import scala.math.round
 
 import org.jblas.DoubleMatrix
 
@@ -30,18 +27,23 @@ import org.jblas.DoubleMatrix
  * GeneralizedLinearAlgorithm. GLMs consist of a weight vector,
  * an intercept.
  */
-abstract class GeneralizedLinearModel[T: ClassManifest](
-    val weights: Array[Double],
-    val intercept: Double)
+abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept: Double)
   extends Serializable {
 
   // Create a column vector that can be used for predictions
   private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
 
+  /**
+   * Predict the result given a data point and the weights learned.
+   * 
+   * @param dataMatrix Row vector containing the features for this data point
+   * @param weightMatrix Column vector containing the weights of the model
+   * @param intercept Intercept of the model.
+   */
   def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
-    intercept: Double): T
+    intercept: Double): Double
 
-  def predict(testData: spark.RDD[Array[Double]]): RDD[T] = {
+  def predict(testData: spark.RDD[Array[Double]]): RDD[Double] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
     val localWeights = weightsMatrix
@@ -53,7 +55,7 @@ abstract class GeneralizedLinearModel[T: ClassManifest](
     }
   }
 
-  def predict(testData: Array[Double]): T = {
+  def predict(testData: Array[Double]): Double = {
     val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
     predictPoint(dataMat, weightsMatrix, intercept)
   }
@@ -61,23 +63,17 @@ abstract class GeneralizedLinearModel[T: ClassManifest](
 
 /**
  * GeneralizedLinearAlgorithm abstracts out the training for all GLMs. 
- * This class should be mixed in with an Optimizer to create a new GLM.
- *
- * NOTE(shivaram): This is an abstract class rather than a trait as we use
- * a view bound to convert labels to Double.
+ * This class should be extended with an Optimizer to create a new GLM.
  */
-abstract class GeneralizedLinearAlgorithm[T, M](implicit
-    t: T => Double,
-    tManifest: Manifest[T],
-    methodEv: M <:< GeneralizedLinearModel[T])
+abstract class GeneralizedLinearAlgorithm[M](implicit
+    methodEv: M <:< GeneralizedLinearModel)
   extends Logging with Serializable {
 
-  // We need an optimizer mixin to solve the GLM
-  self : Optimizer =>
-
-  var addIntercept: Boolean
+  val optimizer: Optimizer
 
   def createModel(weights: Array[Double], intercept: Double): M
+
+  var addIntercept: Boolean
 
   /**
    * Set if the algorithm should add an intercept. Default true.
@@ -87,26 +83,22 @@ abstract class GeneralizedLinearAlgorithm[T, M](implicit
     this
   }
 
-  def train(input: RDD[(T, Array[Double])]) : M = {
-    val nfeatures: Int = input.first()._2.length
+  def run(input: RDD[LabeledPoint]) : M = {
+    val nfeatures: Int = input.first().features.length
     val initialWeights = Array.fill(nfeatures)(1.0)
-    train(input, initialWeights)
+    run(input, initialWeights)
   }
 
-  def train(
-      input: RDD[(T, Array[Double])],
+  def run(
+      input: RDD[LabeledPoint],
       initialWeights: Array[Double])
     : M = {
 
     // Add a extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
-      input.map { case (y, features) =>
-        (y.toDouble, Array(1.0, features:_*))
-      }
+      input.map(labeledPoint => (labeledPoint.label, Array(1.0, labeledPoint.features:_*)))
     } else {
-      input.map { case (y, features) =>
-        (y.toDouble, features)
-      }
+      input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
     }
 
     val initialWeightsWithIntercept = if (addIntercept) {
@@ -115,7 +107,7 @@ abstract class GeneralizedLinearAlgorithm[T, M](implicit
       initialWeights
     }
 
-    val weights = optimize(data, initialWeightsWithIntercept)
+    val weights = optimizer.optimize(data, initialWeightsWithIntercept)
     val intercept = weights(0)
     val weightsScaled = weights.tail
 
