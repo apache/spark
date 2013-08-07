@@ -12,7 +12,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
   }
 
-  test("joinVertices") {
+ /* test("joinVertices") {
     sc = new SparkContext("local", "test")
     val vertices = sc.parallelize(Seq(Vertex(1, "one"), Vertex(2, "two"), Vertex(3, "three")), 2)
     val edges = sc.parallelize((Seq(Edge(1, 2, "onetwo"))))
@@ -29,6 +29,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     val e = g1.edges.collect()
     assert(e(0).data === "onetwo")
   }
+  */
 
 //  test("graph partitioner") {
 //    sc = new SparkContext("local", "test")

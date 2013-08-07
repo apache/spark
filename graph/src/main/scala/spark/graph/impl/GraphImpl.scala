@@ -101,6 +101,19 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     Graph(vertices, newEdges)
   }
 
+
+  override def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (_ => true), 
+    vpred: Vertex[VD] => Boolean = (_ => true) ): Graph[VD, ED] = {
+
+    // Restrict the set of vertices to those that satisfy the vertex predicate
+    val newVertices = vertices.filter(vpred)
+    // Restrict the set of edges to those that satisfy the vertex and the edge predicate.
+    val newEdges = triplets.filter(t => vpred(t.src) && vpred(t.dst) && epred(t))
+      .map( t => Edge(t.src.id, t.dst.id, t.data) )
+
+    new GraphImpl(newVertices, newEdges)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -303,7 +316,7 @@ object GraphImpl {
     (math.abs(src) * mixingPrime).toInt % numParts
   }
 
-  
+
 
   /**
    * This function implements a classic 2D-Partitioning of a sparse matrix.  
@@ -340,7 +353,7 @@ object GraphImpl {
    * balance we first multiply each vertex id by a large prime 
    * to effectively suffle the vertex locations. 
    *
-   * One of the limitations of this approach is that the number of 
+   * One of the limitations of this approach is that the number of
    * machines must either be a perfect square.  We partially address
    * this limitation by computing the machine assignment to the next 
    * largest perfect square and then mapping back down to the actual 
