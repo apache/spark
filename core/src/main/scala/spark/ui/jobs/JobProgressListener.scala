@@ -1,7 +1,7 @@
 package spark.ui.jobs
 
 import scala.Seq
-import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
+import scala.collection.mutable.{ListBuffer, HashMap, HashSet}
 
 import spark.{ExceptionFailure, SparkContext, Success, Utils}
 import spark.scheduler._
@@ -34,7 +34,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val stageToTasksComplete = HashMap[Int, Int]()
   val stageToTasksFailed = HashMap[Int, Int]()
   val stageToTaskInfos =
-    HashMap[Int, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
+    HashMap[Int, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
@@ -89,7 +89,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive += taskStart.taskInfo
     val taskList = stageToTaskInfos.getOrElse(
-      sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
+      sid, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList += ((taskStart.taskInfo, None, None))
     stageToTaskInfos(sid) = taskList
   }
@@ -126,7 +126,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     totalShuffleWrite += shuffleWrite
 
     val taskList = stageToTaskInfos.getOrElse(
-      sid, ArrayBuffer[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
+      sid, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList -= ((taskEnd.taskInfo, None, None))
     taskList += ((taskEnd.taskInfo, metrics, failureInfo))
     stageToTaskInfos(sid) = taskList
