@@ -51,3 +51,27 @@
 .table td {
   vertical-align: middle !important;
 }
+
+.progress-completed .bar,
+.progress .bar-completed {
+  background-color: #b3def9;
+  background-image: -moz-linear-gradient(top, #addfff, #badcf2);
+  background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#addfff), to(#badcf2));
+  background-image: -webkit-linear-gradient(top, #addfff, #badcf2);
+  background-image: -o-linear-gradient(top, #addfff, #badcf2);
+  background-image: linear-gradient(to bottom, #addfff, #badcf2);
+  background-repeat: repeat-x;
+  filter: progid:dximagetransform.microsoft.gradient(startColorstr='#ffaddfff', endColorstr='#ffbadcf2', GradientType=0);
+}
+
+.progress-running .bar,
+.progress .bar-running {
+  background-color: #c2ebfa;
+  background-image: -moz-linear-gradient(top, #bdedff, #c7e8f5);
+  background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#bdedff), to(#c7e8f5));
+  background-image: -webkit-linear-gradient(top, #bdedff, #c7e8f5);
+  background-image: -o-linear-gradient(top, #bdedff, #c7e8f5);
+  background-image: linear-gradient(to bottom, #bdedff, #c7e8f5);
+  background-repeat: repeat-x;
+  filter: progid:dximagetransform.microsoft.gradient(startColorstr='#ffbdedff', endColorstr='#ffc7e8f5', GradientType=0);
+}

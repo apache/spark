@@ -17,7 +17,7 @@ private[spark] class PoolPage(parent: JobProgressUI) {
     val poolName = request.getParameter("poolname")
     val poolToActiveStages = listener.poolToActiveStages
     val activeStages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[Stage]).toSeq
-    val activeStagesTable = new StageTable(activeStages, parent)
+    val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
 
     val pool = listener.sc.getPoolForName(poolName).get
     val poolTable = new PoolTable(Seq(pool), listener)

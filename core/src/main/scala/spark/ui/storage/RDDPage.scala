@@ -83,18 +83,19 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
       <hr/>
       <div class="row">
         <div class="span12">
+          <h3> Data Distribution Summary </h3>
           {workerTable}
         </div>
       </div>
       <hr/>
       <div class="row">
         <div class="span12">
-          <h3> RDD Summary </h3>
+          <h3> Partitions </h3>
           {blockTable}
         </div>
       </div>;
 
-    headerSparkPage(content, parent.sc, "RDD Info: " + rddInfo.name, Jobs)
+    headerSparkPage(content, parent.sc, "RDD Info: " + rddInfo.name, Storage)
   }
 
   def blockRow(row: (String, BlockStatus, Seq[String])): Seq[Node] = {
