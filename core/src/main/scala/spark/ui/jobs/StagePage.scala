@@ -36,100 +36,100 @@ private[spark] class StagePage(parent: JobProgressUI) {
   val dateFmt = parent.dateFmt
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stageId = request.getParameter("id").toInt
-    val now = System.currentTimeMillis()
+    listener.synchronized {
+      val stageId = request.getParameter("id").toInt
+      val now = System.currentTimeMillis()
 
-    if (!listener.stageToTaskInfos.contains(stageId)) {
-      val content =
+      if (!listener.stageToTaskInfos.contains(stageId)) {
+        val content =
+          <div>
+            <h2>Summary Metrics</h2> No tasks have started yet
+            <h2>Tasks</h2> No tasks have started yet
+          </div>
+        return headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
+      }
+
+      val tasks = listener.stageToTaskInfos(stageId).toSeq.sortBy(_._1.launchTime)
+
+      val shuffleRead = listener.stageToShuffleRead.getOrElse(stageId, 0L) > 0
+      val shuffleWrite = listener.stageToShuffleWrite.getOrElse(stageId, 0L) > 0
+
+      var activeTime = 0L
+      listener.stageToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
+
+      val summary =
         <div>
-          <h2>Summary Metrics</h2> No tasks have started yet
-          <h2>Tasks</h2> No tasks have started yet
+          <ul class="unstyled">
+            <li>
+              <strong>CPU time: </strong>
+              {parent.formatDuration(listener.stageToTime.getOrElse(stageId, 0L) + activeTime)}
+            </li>
+            {if (shuffleRead)
+              <li>
+                <strong>Shuffle read: </strong>
+                {Utils.memoryBytesToString(listener.stageToShuffleRead.getOrElse(stageId, 0L))}
+              </li>
+            }
+            {if (shuffleWrite)
+              <li>
+                <strong>Shuffle write: </strong>
+                {Utils.memoryBytesToString(listener.stageToShuffleWrite.getOrElse(stageId, 0L))}
+              </li>
+            }
+          </ul>
         </div>
-      return headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
-    }
 
-    val tasks = listener.stageToTaskInfos(stageId).toSeq
+      val taskHeaders: Seq[String] =
+        Seq("Task ID", "Status", "Duration", "Locality Level", "Worker", "Launch Time") ++
+          {if (shuffleRead) Seq("Shuffle Read")  else Nil} ++
+          {if (shuffleWrite) Seq("Shuffle Write") else Nil} ++
+        Seq("Details")
 
-    val shuffleRead = listener.stageToShuffleRead(stageId) > 0
-    val shuffleWrite = listener.stageToShuffleWrite(stageId) > 0
+      val taskTable = listingTable(taskHeaders, taskRow, tasks)
 
-    var activeTime = 0L
-    listener.stageToTasksActive(stageId).foreach { t =>
-      activeTime += t.timeRunning(now)
-    }
+      // Excludes tasks which failed and have incomplete metrics
+      val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (t._2.isDefined))
 
-    val summary =
-      <div>
-        <ul class="unstyled">
-          <li>
-            <strong>CPU time: </strong>
-            {parent.formatDuration(listener.stageToTime(stageId) + activeTime)}
-          </li>
-          {if (shuffleRead)
-            <li>
-              <strong>Shuffle read: </strong>
-              {Utils.memoryBytesToString(listener.stageToShuffleRead(stageId))}
-            </li>
-          }
-          {if (shuffleWrite)
-            <li>
-              <strong>Shuffle write: </strong>
-              {Utils.memoryBytesToString(listener.stageToShuffleWrite(stageId))}
-            </li>
-          }
-        </ul>
-      </div>
-
-    val taskHeaders: Seq[String] =
-      Seq("Task ID", "Status", "Duration", "Locality Level", "Worker", "Launch Time") ++
-        {if (shuffleRead) Seq("Shuffle Read")  else Nil} ++
-        {if (shuffleWrite) Seq("Shuffle Write") else Nil} ++
-      Seq("Details")
-
-    val taskTable = listingTable(taskHeaders, taskRow, tasks)
-
-    // Excludes tasks which failed and have incomplete metrics
-    val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (Option(t._2).isDefined))
-
-    val summaryTable: Option[Seq[Node]] =
-      if (validTasks.size == 0) {
-        None
-      }
-      else {
-        val serviceTimes = validTasks.map{case (info, metrics, exception) =>
-          metrics.get.executorRunTime.toDouble}
-        val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles().map(
-          ms => parent.formatDuration(ms.toLong))
-
-        def getQuantileCols(data: Seq[Double]) =
-          Distribution(data).get.getQuantiles().map(d => Utils.memoryBytesToString(d.toLong))
-
-        val shuffleReadSizes = validTasks.map {
-          case(info, metrics, exception) =>
-            metrics.get.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
+      val summaryTable: Option[Seq[Node]] =
+        if (validTasks.size == 0) {
+          None
         }
-        val shuffleReadQuantiles = "Shuffle Read (Remote)" +: getQuantileCols(shuffleReadSizes)
+        else {
+          val serviceTimes = validTasks.map{case (info, metrics, exception) =>
+            metrics.get.executorRunTime.toDouble}
+          val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles().map(
+            ms => parent.formatDuration(ms.toLong))
 
-        val shuffleWriteSizes = validTasks.map {
-          case(info, metrics, exception) =>
-            metrics.get.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
+          def getQuantileCols(data: Seq[Double]) =
+            Distribution(data).get.getQuantiles().map(d => Utils.memoryBytesToString(d.toLong))
+
+          val shuffleReadSizes = validTasks.map {
+            case(info, metrics, exception) =>
+              metrics.get.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
+          }
+          val shuffleReadQuantiles = "Shuffle Read (Remote)" +: getQuantileCols(shuffleReadSizes)
+
+          val shuffleWriteSizes = validTasks.map {
+            case(info, metrics, exception) =>
+              metrics.get.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
+          }
+          val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
+
+          val listings: Seq[Seq[String]] = Seq(serviceQuantiles,
+            if (shuffleRead) shuffleReadQuantiles else Nil,
+            if (shuffleWrite) shuffleWriteQuantiles else Nil)
+
+          val quantileHeaders = Seq("Metric", "Min", "25%", "50%", "75%", "Max")
+          def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
+          Some(listingTable(quantileHeaders, quantileRow, listings))
         }
-        val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
-        val listings: Seq[Seq[String]] = Seq(serviceQuantiles,
-          if (shuffleRead) shuffleReadQuantiles else Nil,
-          if (shuffleWrite) shuffleWriteQuantiles else Nil)
+      val content =
+        summary ++ <h2>Summary Metrics</h2> ++ summaryTable.getOrElse(Nil) ++
+          <h2>Tasks</h2> ++ taskTable;
 
-        val quantileHeaders = Seq("Metric", "Min", "25%", "50%", "75%", "Max")
-        def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
-        Some(listingTable(quantileHeaders, quantileRow, listings))
-      }
-
-    val content =
-      summary ++ <h2>Summary Metrics</h2> ++ summaryTable.getOrElse(Nil) ++
-        <h2>Tasks</h2> ++ taskTable;
-
-    headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
+      headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
+    }
   }
 
 
