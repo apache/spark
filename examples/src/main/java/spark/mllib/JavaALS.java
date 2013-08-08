@@ -39,9 +39,9 @@ public class  JavaALS {
   static class ParseRating extends Function<String, Rating> {
     public Rating call(String line) {
       StringTokenizer tok = new StringTokenizer(line, ",");
-      Integer x = Integer.parseInt(tok.nextToken());
-      Integer y = Integer.parseInt(tok.nextToken());
-      Double rating = Double.parseDouble(tok.nextToken());
+      int x = Integer.parseInt(tok.nextToken());
+      int y = Integer.parseInt(tok.nextToken());
+      double rating = Double.parseDouble(tok.nextToken());
       return new Rating(x, y, rating);
     }
   }

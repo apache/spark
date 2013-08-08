@@ -37,7 +37,7 @@ public class JavaALSSuite implements Serializable {
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
+    sc = new JavaSparkContext("local", "JavaALS");
   }
 
   @After

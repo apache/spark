@@ -17,9 +17,6 @@
 
 package spark.mllib.recommendation
 
-import java.lang.{Integer => JInt}
-import java.lang.{Double => JDouble}
-
 import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.util.Random
 import scala.util.Sorting
@@ -58,13 +55,7 @@ private[recommendation] case class InLinkBlock(
 /**
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
  */
-case class Rating(val user: Int, val product: Int, val rating: Double) {
-
-  // Constructor to build a rating from java Integers and Doubles.
-  def this(user: JInt, product: JInt, rating: JDouble) = {
-    this(user.intValue(), product.intValue(), rating.doubleValue())
-  }
-}
+case class Rating(val user: Int, val product: Int, val rating: Double)
 
 /**
  * Alternating Least Squares matrix factorization.

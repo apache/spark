@@ -34,7 +34,7 @@ public class JavaKMeansSuite implements Serializable {
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
+    sc = new JavaSparkContext("local", "JavaKMeans");
   }
 
   @After
