@@ -75,8 +75,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
 
         <div class="row"> <!-- Running Executors -->
           <div class="span12">
-            <h3> Running Executors {workerState.executors.size} </h3>
-            <br/>
+            <h4> Running Executors {workerState.executors.size} </h4>
             {runningExecutorTable}
           </div>
         </div>
@@ -84,8 +83,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
 
         <div class="row"> <!-- Finished Executors  -->
           <div class="span12">
-            <h3> Finished Executors </h3>
-            <br/>
+            <h4> Finished Executors </h4>
             {finishedExecutorTable}
           </div>
         </div>;

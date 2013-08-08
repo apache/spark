@@ -5,6 +5,10 @@
   padding: 0;
 }
 
+body {
+  font-size: 15px !important;
+}
+
 .version {
   line-height: 30px;
   vertical-align: bottom;
@@ -46,6 +50,7 @@
   padding: 0;
   padding-top: 7px;
   padding-left: 4px;
+  line-height: 15px !important;
 }
 
 .table td {

@@ -90,8 +90,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
 
         <div class="row"> <!-- Executors -->
           <div class="span12">
-            <h3> Executor Summary </h3>
-            <br/>
+            <h4> Executor Summary </h4>
             {executorTable}
           </div>
         </div>;

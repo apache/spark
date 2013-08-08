@@ -66,7 +66,7 @@ private[spark] object UIUtils {
                 <div class="navbar-inner">
                   <div class="container">
                     <a href="/" class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></a>
-                    <ul class="nav">
+                    <ul class="nav nav-pills">
                       {jobs}
                       {storage}
                       {environment}
@@ -81,9 +81,9 @@ private[spark] object UIUtils {
 
           <div class="row" style="padding-top: 5px;">
             <div class="span12">
-              <h1 style="vertical-align: bottom; display: inline-block;">
+              <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
-              </h1>
+              </h3>
             </div>
           </div>
           <hr/>

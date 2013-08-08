@@ -90,7 +90,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
       <hr/>
       <div class="row">
         <div class="span12">
-          <h3> Partitions </h3>
+          <h4> Partitions </h4>
           {blockTable}
         </div>
       </div>;
