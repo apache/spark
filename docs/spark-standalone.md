@@ -43,7 +43,7 @@ Finally, the following configuration options can be passed to the master and wor
   </tr>
   <tr>
     <td><code>-p PORT</code>, <code>--port PORT</code></td>
-    <td>IP address or DNS name to listen on (default: 7077 for master, random for worker)</td>
+    <td>Port for service to listen on (default: 7077 for master, random for worker)</td>
   </tr>
   <tr>
     <td><code>--webui-port PORT</code></td>

@@ -92,7 +92,8 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   val SPECULATION_MULTIPLIER = System.getProperty("spark.speculation.multiplier", "1.5").toDouble
 
   // Serializer for closures and tasks.
-  val ser = SparkEnv.get.closureSerializer.newInstance()
+  val env = SparkEnv.get
+  val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
   val numTasks = tasks.length
@@ -107,9 +108,8 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   var runningTasks = 0
   var priority = taskSet.priority
   var stageId = taskSet.stageId
-  var name = "TaskSet_" + taskSet.stageId.toString
+  var name = "TaskSet_"+taskSet.stageId.toString
   var parent: Schedulable = null
-
   // Last time when we launched a preferred task (for delay scheduling)
   var lastPreferredLaunchTime = System.currentTimeMillis
 
@@ -535,6 +535,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   }
 
   override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+    SparkEnv.set(env)
     state match {
       case TaskState.FINISHED =>
         taskFinished(tid, state, serializedData)
@@ -697,18 +698,18 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
     }
   }
 
-  // TODO: for now we just find Pool not TaskSetManager,
+  // TODO(xiajunluan): for now we just find Pool not TaskSetManager
   // we can extend this function in future if needed
   override def getSchedulableByName(name: String): Schedulable = {
     return null
   }
 
   override def addSchedulable(schedulable:Schedulable) {
-    //nothing
+    // nothing
   }
 
   override def removeSchedulable(schedulable:Schedulable) {
-    //nothing
+    // nothing
   }
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {

@@ -48,7 +48,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
       return headerSparkPage(content, parent.sc, "Stage Details: %s".format(stageId), Jobs)
     }
 
-    val tasks = listener.stageToTaskInfos(stageId)
+    val tasks = listener.stageToTaskInfos(stageId).toSeq
 
     val shuffleRead = listener.stageToShuffleRead(stageId) > 0
     val shuffleWrite = listener.stageToShuffleWrite(stageId) > 0
