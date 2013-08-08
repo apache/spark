@@ -69,6 +69,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
               {Utils.memoryBytesToString(listener.totalShuffleWrite)}
             </li>
          }
+         <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
          <li>
            <a href="#active"><strong>Active Stages:</strong></a>
            {activeStages.size}
@@ -81,7 +82,6 @@ private[spark] class IndexPage(parent: JobProgressUI) {
            <a href="#failed"><strong>Failed Stages:</strong></a>
            {failedStages.size}
          </li>
-         <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
        </ul>
      </div>
 
