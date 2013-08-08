@@ -139,6 +139,18 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     assert (control === result.toSeq)
   }
 
+  test("kryo with parallelize for specialized tuples") {
+    assert (sc.parallelize( Array((1, 11), (2, 22), (3, 33)) ).count === 3)
+  }
+
+  test("kryo with parallelize for primitive arrays") {
+    assert (sc.parallelize( Array(1, 2, 3) ).count === 3)
+  }
+
+  test("kryo with collect for specialized tuples") {
+    assert (sc.parallelize( Array((1, 11), (2, 22), (3, 33)) ).collect().head === (1, 11))
+  }
+
   test("kryo with reduce") {
     val control = 1 :: 2 :: Nil
     val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_))
