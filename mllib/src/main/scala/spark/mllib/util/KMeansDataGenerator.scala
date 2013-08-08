@@ -32,7 +32,7 @@ object KMeansDataGenerator {
    * @param numPoints Number of points that will be contained in the RDD
    * @param k Number of clusters
    * @param d Number of dimensions
-   * @parak r Scaling factor for the distribution of the initial centers
+   * @param r Scaling factor for the distribution of the initial centers
    * @param numPartitions Number of partitions of the generated RDD; default 2
    */
   def generateKMeansRDD(
