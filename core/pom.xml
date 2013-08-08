@@ -63,12 +63,12 @@
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill_2.9.3</artifactId>
-      <version>0.3.0</version>
+      <version>0.3.1</version>
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill-java</artifactId>
-      <version>0.3.0</version>
+      <version>0.3.1</version>
     </dependency>
     <dependency>
       <groupId>com.typesafe.akka</groupId>
