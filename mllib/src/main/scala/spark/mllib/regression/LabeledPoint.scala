@@ -23,10 +23,4 @@ package spark.mllib.regression
  * @param label Label for this data point.
  * @param features List of features for this data point.
  */
-case class LabeledPoint(val label: Double, val features: Array[Double]) {
-
-  /**
-   * Construct a labeled point using java.lang.Double.
-   */
-  def this(label: java.lang.Double, features: Array[Double]) = this(label.doubleValue(), features)
-}
+case class LabeledPoint(val label: Double, val features: Array[Double])

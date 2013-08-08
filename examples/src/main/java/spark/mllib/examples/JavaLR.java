@@ -37,7 +37,7 @@ public class JavaLR {
   static class ParsePoint extends Function<String, LabeledPoint> {
     public LabeledPoint call(String line) {
       String[] parts = line.split(",");
-      Double y = Double.parseDouble(parts[0]);
+      double y = Double.parseDouble(parts[0]);
       StringTokenizer tok = new StringTokenizer(parts[1], " ");
       int numTokens = tok.countTokens();
       double[] x = new double[numTokens];

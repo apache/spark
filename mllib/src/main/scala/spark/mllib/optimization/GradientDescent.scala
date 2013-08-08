@@ -24,7 +24,7 @@ import org.jblas.DoubleMatrix
 
 import scala.collection.mutable.ArrayBuffer
 
-class GradientDescent(gradient: Gradient, updater: Updater) extends Optimizer {
+class GradientDescent(var gradient: Gradient, var updater: Updater) extends Optimizer {
 
   var stepSize: Double = 1.0
   var numIterations: Int = 100
@@ -60,6 +60,23 @@ class GradientDescent(gradient: Gradient, updater: Updater) extends Optimizer {
    */
   def setRegParam(regParam: Double): this.type = {
     this.regParam = regParam
+    this
+  }
+
+  /**
+   * Set the gradient function to be used for SGD.
+   */
+  def setGradient(gradient: Gradient): this.type = {
+    this.gradient = gradient
+    this
+  }
+
+
+  /**
+   * Set the updater function to be used for SGD.
+   */
+  def setUpdater(updater: Updater): this.type = {
+    this.updater = updater
     this
   }
 
