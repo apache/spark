@@ -23,10 +23,11 @@ import java.io.FileNotFoundException
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 import java.util.concurrent.LinkedBlockingQueue
+
 import scala.collection.mutable.{Map, HashMap, ListBuffer}
 import scala.io.Source
+
 import spark._
-import spark.SparkContext
 import spark.executor.TaskMetrics
 import spark.scheduler.cluster.TaskInfo
 

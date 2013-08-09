@@ -17,16 +17,20 @@
 
 package spark.scheduler
 
-import scala.collection.mutable.ArrayBuffer
-
 import java.util.concurrent.LinkedBlockingQueue
 
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+
+import spark.Logging
+
 /** Asynchronously passes SparkListenerEvents to registered SparkListeners. */
-class SparkListenerEventProcessor() {
-  /* sparkListeners is not thread safe, so this assumes that listeners are all added before any
-   * SparkListenerEvents occur. */
-  private val sparkListeners = ArrayBuffer[SparkListener]()
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvents]
+class SparkListenerEventProcessor() extends Logging {
+  private val sparkListeners = new ArrayBuffer[SparkListener]() with SynchronizedBuffer[SparkListener]
+
+  /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
+   * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
+  private val EVENT_QUEUE_CAPACITY = 10000 
+  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvents](EVENT_QUEUE_CAPACITY)
 
   new Thread("SparkListenerEventProcessor") {
     setDaemon(true)
@@ -57,6 +61,12 @@ class SparkListenerEventProcessor() {
   }
 
   def addEvent(event: SparkListenerEvents) {
-    eventQueue.put(event)
+    val eventAdded = eventQueue.offer(event)
+    if (!eventAdded) {
+      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
+        "This likely means one of the SparkListeners is too slow and cannot keep up with the " +
+        "rate at which tasks are being started by the scheduler.")
+    }
   }
 }
+
