@@ -23,6 +23,7 @@ import spark.api.java.JavaRDD;
 import spark.api.java.JavaSparkContext;
 import spark.api.java.function.FlatMapFunction;
 import spark.api.java.function.Function;
+import spark.api.java.function.Function2;
 import spark.api.java.function.PairFlatMapFunction;
 import spark.api.java.function.PairFunction;
 
@@ -39,12 +40,11 @@ import java.util.ArrayList;
  * where URL and their neighbors are separated by space(s).
  */
 public class JavaPageRank {
-  private static double sum(List<Double> numbers) {
-    double out = 0.0;
-    for (double number : numbers) {
-      out += number;
+  private static class Sum extends Function2<Double, Double, Double> {
+    @Override
+    public Double call(Double a, Double b) {
+      return a + b;
     }
-    return out;
   }
 
   public static void main(String[] args) throws Exception {
@@ -91,16 +91,15 @@ public class JavaPageRank {
             for (String n : s._1) {
               results.add(new Tuple2<String, Double>(n, s._2 / s._1.size()));
             }
-
             return results;
           }
       });
 
       // Re-calculates URL ranks based on neighbor contributions.
-      ranks = contribs.groupByKey().mapValues(new Function<List<Double>, Double>() {
+      ranks = contribs.reduceByKey(new Sum()).mapValues(new Function<Double, Double>() {
         @Override
-        public Double call(List<Double> cs) throws Exception {
-          return 0.15 + sum(cs) * 0.85;
+        public Double call(Double sum) throws Exception {
+          return 0.15 + sum * 0.85;
         }
       });
     }
