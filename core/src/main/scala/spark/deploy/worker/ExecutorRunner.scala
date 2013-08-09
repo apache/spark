@@ -22,6 +22,9 @@ import java.lang.System.getenv
 
 import akka.actor.ActorRef
 
+import com.google.common.base.Charsets
+import com.google.common.io.Files
+
 import spark.{Utils, Logging}
 import spark.deploy.{ExecutorState, ApplicationDescription}
 import spark.deploy.DeployMessages.ExecutorStateChanged
@@ -126,7 +129,7 @@ private[spark] class ExecutorRunner(
 
   /** Spawn a thread that will redirect a given stream to a file */
   def redirectStream(in: InputStream, file: File) {
-    val out = new FileOutputStream(file)
+    val out = new FileOutputStream(file, true)
     new Thread("redirect output to " + file) {
       override def run() {
         try {
@@ -162,9 +165,16 @@ private[spark] class ExecutorRunner(
       env.put("SPARK_LAUNCH_WITH_SCALA", "0")
       process = builder.start()
 
+      val header = "Spark Executor Command: %s\n%s\n\n".format(
+        command.mkString("\"", "\" \"", "\""), "=" * 40)
+
       // Redirect its stdout and stderr to files
-      redirectStream(process.getInputStream, new File(executorDir, "stdout"))
-      redirectStream(process.getErrorStream, new File(executorDir, "stderr"))
+      val stdout = new File(executorDir, "stdout")
+      Files.write(header, stdout, Charsets.UTF_8)
+      redirectStream(process.getInputStream, stdout)
+
+      val stderr = new File(executorDir, "stderr")
+      redirectStream(process.getErrorStream, stderr)
 
       // Wait for it to exit; this is actually a bad thing if it happens, because we expect to run
       // long-lived processes only. However, in the future, we might restart the executor a few

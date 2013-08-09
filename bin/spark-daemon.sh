@@ -75,6 +75,8 @@ if [ "$SPARK_IDENT_STRING" = "" ]; then
   export SPARK_IDENT_STRING="$USER"
 fi
 
+export SPARK_PRINT_LAUNCH_COMMAND="1"
+
 # get log directory
 if [ "$SPARK_LOG_DIR" = "" ]; then
   export SPARK_LOG_DIR="$SPARK_HOME/logs"
@@ -124,8 +126,9 @@ case $startStop in
 
     spark_rotate_log $log
     echo starting $command, logging to $log
+    echo "Spark Daemon: $command" > $log
     cd "$SPARK_PREFIX"
-    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/run $command "$@" > "$log" 2>&1 < /dev/null &
+    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/run $command "$@" >> "$log" 2>&1 < /dev/null &
     echo $! > $pid
     sleep 1; head "$log"
     ;;
