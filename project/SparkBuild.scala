@@ -40,6 +40,9 @@ object SparkBuild extends Build {
   //val HADOOP_MAJOR_VERSION = "2"
   //val HADOOP_YARN = true
 
+  // HBase version jar thrown to lib_managed in this build; set as appropriate.
+  val HBASE_VERSION = "0.94.6"
+
   lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming, mllib, tools)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
@@ -227,7 +230,7 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "com.twitter" % "algebird-core_2.9.2" % "0.1.11",
 
-      "org.apache.hbase" % "hbase" % "0.94.6" excludeAll(excludeNetty, excludeAsm),
+      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm),
 
       "org.apache.cassandra" % "cassandra-all" % "1.2.5"
         exclude("com.google.guava", "guava")
