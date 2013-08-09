@@ -51,8 +51,10 @@ private[spark] class StagePage(parent: JobProgressUI) {
 
       val tasks = listener.stageToTaskInfos(stageId).toSeq.sortBy(_._1.launchTime)
 
-      val shuffleRead = listener.stageToShuffleRead.getOrElse(stageId, 0L) > 0
-      val shuffleWrite = listener.stageToShuffleWrite.getOrElse(stageId, 0L) > 0
+      val shuffleReadBytes = listener.stageToShuffleRead.getOrElse(stageId, 0L)
+      val hasShuffleRead = shuffleReadBytes > 0
+      val shuffleWriteBytes = listener.stageToShuffleWrite.getOrElse(stageId, 0L)
+      val hasShuffleWrite = shuffleWriteBytes > 0
 
       var activeTime = 0L
       listener.stageToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
@@ -64,16 +66,16 @@ private[spark] class StagePage(parent: JobProgressUI) {
               <strong>CPU time: </strong>
               {parent.formatDuration(listener.stageToTime.getOrElse(stageId, 0L) + activeTime)}
             </li>
-            {if (shuffleRead)
+            {if (hasShuffleRead)
               <li>
                 <strong>Shuffle read: </strong>
-                {Utils.memoryBytesToString(listener.stageToShuffleRead.getOrElse(stageId, 0L))}
+                {Utils.memoryBytesToString(shuffleReadBytes)}
               </li>
             }
-            {if (shuffleWrite)
+            {if (hasShuffleWrite)
               <li>
                 <strong>Shuffle write: </strong>
-                {Utils.memoryBytesToString(listener.stageToShuffleWrite.getOrElse(stageId, 0L))}
+                {Utils.memoryBytesToString(shuffleWriteBytes)}
               </li>
             }
           </ul>
@@ -81,8 +83,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
 
       val taskHeaders: Seq[String] =
         Seq("Task ID", "Status", "Duration", "Locality Level", "Worker", "Launch Time") ++
-          {if (shuffleRead) Seq("Shuffle Read")  else Nil} ++
-          {if (shuffleWrite) Seq("Shuffle Write") else Nil} ++
+          {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
+          {if (hasShuffleWrite) Seq("Shuffle Write") else Nil} ++
         Seq("Details")
 
       val taskTable = listingTable(taskHeaders, taskRow, tasks)
@@ -116,8 +118,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
           val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
           val listings: Seq[Seq[String]] = Seq(serviceQuantiles,
-            if (shuffleRead) shuffleReadQuantiles else Nil,
-            if (shuffleWrite) shuffleWriteQuantiles else Nil)
+            if (hasShuffleRead) shuffleReadQuantiles else Nil,
+            if (hasShuffleWrite) shuffleWriteQuantiles else Nil)
 
           val quantileHeaders = Seq("Metric", "Min", "25%", "50%", "75%", "Max")
           def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>

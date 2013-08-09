@@ -14,17 +14,19 @@ private[spark] class PoolPage(parent: JobProgressUI) {
   def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val poolName = request.getParameter("poolname")
-    val poolToActiveStages = listener.poolToActiveStages
-    val activeStages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[Stage]).toSeq
-    val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+    listener.synchronized {
+      val poolName = request.getParameter("poolname")
+      val poolToActiveStages = listener.poolToActiveStages
+      val activeStages = poolToActiveStages.get(poolName).toSeq.flatten
+      val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
 
-    val pool = listener.sc.getPoolForName(poolName).get
-    val poolTable = new PoolTable(Seq(pool), listener)
+      val pool = listener.sc.getPoolForName(poolName).get
+      val poolTable = new PoolTable(Seq(pool), listener)
 
-    val content = <h3>Pool </h3> ++ poolTable.toNodeSeq() ++
-                  <h3>Active Stages : {activeStages.size}</h3> ++ activeStagesTable.toNodeSeq()
+      val content = <h3>Pool </h3> ++ poolTable.toNodeSeq() ++
+                    <h3>Active Stages : {activeStages.size}</h3> ++ activeStagesTable.toNodeSeq()
 
-    headerSparkPage(content, parent.sc, "Spark Pool Details", Jobs)
+      headerSparkPage(content, parent.sc, "Spark Pool Details", Jobs)
+    }
   }
 }

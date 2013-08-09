@@ -31,73 +31,75 @@ private[spark] class IndexPage(parent: JobProgressUI) {
   def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val activeStages = listener.activeStages.toSeq
-    val completedStages = listener.completedStages.reverse.toSeq
-    val failedStages = listener.failedStages.reverse.toSeq
-    val now = System.currentTimeMillis()
+    listener.synchronized {
+      val activeStages = listener.activeStages.toSeq
+      val completedStages = listener.completedStages.reverse.toSeq
+      val failedStages = listener.failedStages.reverse.toSeq
+      val now = System.currentTimeMillis()
 
-    var activeTime = 0L
-    for (tasks <- listener.stageToTasksActive.values; t <- tasks) {
-      activeTime += t.timeRunning(now)
+      var activeTime = 0L
+      for (tasks <- listener.stageToTasksActive.values; t <- tasks) {
+        activeTime += t.timeRunning(now)
+      }
+
+      val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+      val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
+      val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
+
+      val poolTable = new PoolTable(listener.sc.getAllPools, listener)
+      val summary: NodeSeq =
+       <div>
+         <ul class="unstyled">
+           <li>
+             <strong>Duration: </strong>
+             {parent.formatDuration(now - listener.sc.startTime)}
+           </li>
+           <li>
+              <strong>CPU time: </strong>
+              {parent.formatDuration(listener.totalTime + activeTime)}
+            </li>
+           {if (listener.totalShuffleRead > 0)
+             <li>
+                <strong>Shuffle read: </strong>
+                {Utils.memoryBytesToString(listener.totalShuffleRead)}
+              </li>
+           }
+           {if (listener.totalShuffleWrite > 0)
+             <li>
+                <strong>Shuffle write: </strong>
+                {Utils.memoryBytesToString(listener.totalShuffleWrite)}
+              </li>
+           }
+           <li>
+             <a href="#active"><strong>Active Stages:</strong></a>
+             {activeStages.size}
+           </li>
+           <li>
+             <a href="#completed"><strong>Completed Stages:</strong></a>
+             {completedStages.size}
+           </li>
+           <li>
+             <a href="#failed"><strong>Failed Stages:</strong></a>
+             {failedStages.size}
+           </li>
+           <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
+         </ul>
+       </div>
+
+      val content = summary ++ 
+        {if (listener.sc.getSchedulingMode == SchedulingMode.FAIR) {
+           <h3>Pools</h3> ++ poolTable.toNodeSeq
+        } else {
+          Seq()
+        }} ++
+        <h3 id="active">Active Stages : {activeStages.size}</h3> ++
+        activeStagesTable.toNodeSeq++
+        <h3 id="completed">Completed Stages : {completedStages.size}</h3> ++
+        completedStagesTable.toNodeSeq++
+        <h3 id ="failed">Failed Stages : {failedStages.size}</h3> ++
+        failedStagesTable.toNodeSeq
+
+      headerSparkPage(content, parent.sc, "Spark Stages", Jobs)
     }
-
-    val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
-    val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
-    val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
-
-    val poolTable = new PoolTable(listener.sc.getAllPools, listener)
-    val summary: NodeSeq =
-     <div>
-       <ul class="unstyled">
-         <li>
-           <strong>Duration: </strong>
-           {parent.formatDuration(now - listener.sc.startTime)}
-         </li>
-         <li>
-            <strong>CPU time: </strong>
-            {parent.formatDuration(listener.totalTime + activeTime)}
-          </li>
-         {if (listener.totalShuffleRead > 0)
-           <li>
-              <strong>Shuffle read: </strong>
-              {Utils.memoryBytesToString(listener.totalShuffleRead)}
-            </li>
-         }
-         {if (listener.totalShuffleWrite > 0)
-           <li>
-              <strong>Shuffle write: </strong>
-              {Utils.memoryBytesToString(listener.totalShuffleWrite)}
-            </li>
-         }
-         <li>
-           <a href="#active"><strong>Active Stages:</strong></a>
-           {activeStages.size}
-         </li>
-         <li>
-           <a href="#completed"><strong>Completed Stages:</strong></a>
-           {completedStages.size}
-         </li>
-         <li>
-           <a href="#failed"><strong>Failed Stages:</strong></a>
-           {failedStages.size}
-         </li>
-         <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
-       </ul>
-     </div>
-
-    val content = summary ++ 
-      {if (listener.sc.getSchedulingMode == SchedulingMode.FAIR) {
-         <h3>Pools</h3> ++ poolTable.toNodeSeq
-      } else {
-        Seq()
-      }} ++
-      <h3 id="active">Active Stages : {activeStages.size}</h3> ++
-      activeStagesTable.toNodeSeq++
-      <h3 id="completed">Completed Stages : {completedStages.size}</h3> ++
-      completedStagesTable.toNodeSeq++
-      <h3 id ="failed">Failed Stages : {failedStages.size}</h3> ++
-      failedStagesTable.toNodeSeq
-
-    headerSparkPage(content, parent.sc, "Spark Stages", Jobs)
   }
 }

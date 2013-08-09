@@ -547,7 +547,7 @@ class SparkContext(
   }
 
   def addSparkListener(listener: SparkListener) {
-    dagScheduler.sparkListeners += listener
+    dagScheduler.addSparkListener(listener)
   }
 
   /**
