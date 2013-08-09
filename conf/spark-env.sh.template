@@ -16,4 +16,9 @@
 # - SPARK_WORKER_PORT / SPARK_WORKER_WEBUI_PORT
 # - SPARK_WORKER_INSTANCES, to set the number of worker instances/processes
 #   to be spawned on every slave machine
+# - SPARK_JAVA_OPTS, to set the jvm options for executor backend. Note: This is
+#   only for node-specific options, whereas app-specific options should be set
+#   in the application.
+#   Examples of node-speicic options : -Dspark.local.dir, GC related options.
+#   Examples of app-specific options : -Dspark.serializer
 
