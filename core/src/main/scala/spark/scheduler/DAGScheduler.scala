@@ -102,7 +102,7 @@ class DAGScheduler(
 
   private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
-  private val listenerEventProcessor = new SparkListenerEventProcessor()
+  private val listenerBus = new SparkListenerBus()
 
   var cacheLocs = new HashMap[Int, Array[List[String]]]
 
@@ -138,7 +138,7 @@ class DAGScheduler(
   }
 
   def addSparkListener(listener: SparkListener) {
-    listenerEventProcessor.addListener(listener)
+    listenerBus.addListener(listener)
   }
 
   private def getCacheLocs(rdd: RDD[_]): Array[List[String]] = {
@@ -338,7 +338,7 @@ class DAGScheduler(
           // Compute very short actions like first() or take() with no parent stages locally.
           runLocally(job)
         } else {
-          listenerEventProcessor.addEvent(SparkListenerJobStart(job, properties))
+          listenerBus.post(SparkListenerJobStart(job, properties))
           idToActiveJob(runId) = job
           activeJobs += job
           resultStageToJob(finalStage) = job
@@ -352,10 +352,10 @@ class DAGScheduler(
         handleExecutorLost(execId)
 
       case begin: BeginEvent =>
-        listenerEventProcessor.addEvent(SparkListenerTaskStart(begin.task, begin.taskInfo))
+        listenerBus.post(SparkListenerTaskStart(begin.task, begin.taskInfo))
 
       case completion: CompletionEvent =>
-        listenerEventProcessor.addEvent(SparkListenerTaskEnd(
+        listenerBus.post(SparkListenerTaskEnd(
           completion.task, completion.reason, completion.taskInfo, completion.taskMetrics))
         handleTaskCompletion(completion)
 
@@ -367,7 +367,7 @@ class DAGScheduler(
         for (job <- activeJobs) {
           val error = new SparkException("Job cancelled because SparkContext was shut down")
           job.listener.jobFailed(error)
-          listenerEventProcessor.addEvent(SparkListenerJobEnd(job, JobFailed(error, None)))
+          listenerBus.post(SparkListenerJobEnd(job, JobFailed(error, None)))
         }
         return true
     }
@@ -517,8 +517,7 @@ class DAGScheduler(
     // must be run listener before possible NotSerializableException
     // should be "StageSubmitted" first and then "JobEnded"
     val properties = idToActiveJob(stage.priority).properties
-    listenerEventProcessor.addEvent( 
-      SparkListenerStageSubmitted(stage, tasks.size, properties))
+    listenerBus.post(SparkListenerStageSubmitted(stage, tasks.size, properties))
     
     if (tasks.size > 0) {
       // Preemptively serialize a task to make sure it can be serialized. We are catching this
@@ -564,7 +563,7 @@ class DAGScheduler(
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stage.completionTime = Some(System.currentTimeMillis)
-      listenerEventProcessor.addEvent(StageCompleted(stageToInfos(stage)))
+      listenerBus.post(StageCompleted(stageToInfos(stage)))
       running -= stage
     }
     event.reason match {
@@ -588,7 +587,7 @@ class DAGScheduler(
                     activeJobs -= job
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
-                    listenerEventProcessor.addEvent(SparkListenerJobEnd(job, JobSucceeded))
+                    listenerBus.post(SparkListenerJobEnd(job, JobSucceeded))
                   }
                   job.listener.taskSucceeded(rt.outputId, event.result)
                 }
@@ -735,7 +734,7 @@ class DAGScheduler(
       val job = resultStageToJob(resultStage)
       val error = new SparkException("Job failed: " + reason)
       job.listener.jobFailed(error)
-      listenerEventProcessor.addEvent(SparkListenerJobEnd(job, JobFailed(error, Some(failedStage))))
+      listenerBus.post(SparkListenerJobEnd(job, JobFailed(error, Some(failedStage))))
       idToActiveJob -= resultStage.priority
       activeJobs -= job
       resultStageToJob -= resultStage
