@@ -123,7 +123,8 @@ private[spark] class ConnectionManager(port: Int) extends Logging {
         } finally {
           writeRunnableStarted.synchronized {
             writeRunnableStarted -= key
-            if (register && conn.changeInterestForWrite()) {
+            val needReregister = register || conn.resetForceReregister()
+            if (needReregister && conn.changeInterestForWrite()) {
               conn.registerInterest()
             }
           }
