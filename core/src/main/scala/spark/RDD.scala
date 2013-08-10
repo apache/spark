@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 
+import spark.api.java.JavaRDD
 import spark.broadcast.Broadcast
 import spark.Partitioner._
 import spark.partial.BoundedDouble
@@ -949,5 +950,9 @@ abstract class RDD[T: ClassManifest](
     getClass.getSimpleName,
     id,
     origin)
+
+  def toJavaRDD() : JavaRDD[T] = {
+    new JavaRDD(this)(elementClassManifest)
+  }
 
 }

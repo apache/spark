@@ -55,8 +55,7 @@ private[recommendation] case class InLinkBlock(
 /**
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
  */
-private[recommendation] case class Rating(user: Int, product: Int, rating: Double)
-
+case class Rating(val user: Int, val product: Int, val rating: Double)
 
 /**
  * Alternating Least Squares matrix factorization.
@@ -107,7 +106,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
    */
-  def train(ratings: RDD[(Int, Int, Double)]): MatrixFactorizationModel = {
+  def run(ratings: RDD[Rating]): MatrixFactorizationModel = {
     val numBlocks = if (this.numBlocks == -1) {
       math.max(ratings.context.defaultParallelism, ratings.partitions.size / 2)
     } else {
@@ -116,8 +115,10 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
 
     val partitioner = new HashPartitioner(numBlocks)
 
-    val ratingsByUserBlock = ratings.map{ case (u, p, r) => (u % numBlocks, Rating(u, p, r)) }
-    val ratingsByProductBlock = ratings.map{ case (u, p, r) => (p % numBlocks, Rating(p, u, r)) }
+    val ratingsByUserBlock = ratings.map{ rating => (rating.user % numBlocks, rating) }
+    val ratingsByProductBlock = ratings.map{ rating =>
+      (rating.product % numBlocks, Rating(rating.product, rating.user, rating.rating))
+    }
 
     val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
     val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
@@ -356,14 +357,14 @@ object ALS {
    * @param blocks     level of parallelism to split computation into
    */
   def train(
-      ratings: RDD[(Int, Int, Double)],
+      ratings: RDD[Rating],
       rank: Int,
       iterations: Int,
       lambda: Double,
       blocks: Int)
     : MatrixFactorizationModel =
   {
-    new ALS(blocks, rank, iterations, lambda).train(ratings)
+    new ALS(blocks, rank, iterations, lambda).run(ratings)
   }
 
   /**
@@ -378,7 +379,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def train(ratings: RDD[(Int, Int, Double)], rank: Int, iterations: Int, lambda: Double)
+  def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double)
     : MatrixFactorizationModel =
   {
     train(ratings, rank, iterations, lambda, -1)
@@ -395,7 +396,7 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
-  def train(ratings: RDD[(Int, Int, Double)], rank: Int, iterations: Int)
+  def train(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel =
   {
     train(ratings, rank, iterations, 0.01, -1)
@@ -423,7 +424,7 @@ object ALS {
     val sc = new SparkContext(master, "ALS")
     val ratings = sc.textFile(ratingsFile).map { line =>
       val fields = line.split(',')
-      (fields(0).toInt, fields(1).toInt, fields(2).toDouble)
+      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
     }
     val model = ALS.train(ratings, rank, iters, 0.01, blocks)
     model.userFeatures.map{ case (id, vec) => id + "," + vec.mkString(" ") }
