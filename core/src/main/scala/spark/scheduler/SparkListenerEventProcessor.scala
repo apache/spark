@@ -31,6 +31,7 @@ class SparkListenerEventProcessor() extends Logging {
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
   private val EVENT_QUEUE_CAPACITY = 10000 
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvents](EVENT_QUEUE_CAPACITY)
+  private var queueFullErrorMessageLogged = false
 
   new Thread("SparkListenerEventProcessor") {
     setDaemon(true)
@@ -62,10 +63,11 @@ class SparkListenerEventProcessor() extends Logging {
 
   def addEvent(event: SparkListenerEvents) {
     val eventAdded = eventQueue.offer(event)
-    if (!eventAdded) {
+    if (!eventAdded && !queueFullErrorMessageLogged) {
       logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
         "This likely means one of the SparkListeners is too slow and cannot keep up with the " +
         "rate at which tasks are being started by the scheduler.")
+      queueFullErrorMessageLogged = true
     }
   }
 }
