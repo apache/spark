@@ -9,6 +9,13 @@ import spark.scheduler.cluster.TaskInfo
 import spark.executor.TaskMetrics
 import collection.mutable
 
+/**
+ * Tracks task-level information to be displayed in the UI.
+ *
+ * All access to the data structures in this class must be synchronized on the
+ * class, since the UI thread and the DAGScheduler event loop may otherwise
+ * be reading/updating the internal data structures concurrently.
+ */
 private[spark] class JobProgressListener(val sc: SparkContext) extends SparkListener {
   // How many stages to remember
   val RETAINED_STAGES = System.getProperty("spark.ui.retained_stages", "1000").toInt
@@ -38,7 +45,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
-  override def onStageCompleted(stageCompleted: StageCompleted) = {
+  override def onStageCompleted(stageCompleted: StageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo.stage
     poolToActiveStages(stageToPool(stage)) -= stage
     activeStages -= stage
@@ -47,7 +54,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   }
 
   /** If stages is too large, remove and garbage collect old stages */
-  def trimIfNecessary(stages: ListBuffer[Stage]) {
+  def trimIfNecessary(stages: ListBuffer[Stage]) = synchronized {
     if (stages.size > RETAINED_STAGES) {
       val toRemove = RETAINED_STAGES / 10
       stages.takeRight(toRemove).foreach( s => {
@@ -66,7 +73,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   }
 
   /** For FIFO, all stages are contained by "default" pool but "default" pool here is meaningless */
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = {
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = synchronized {
     val stage = stageSubmitted.stage
     activeStages += stage
 
@@ -84,7 +91,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     stages += stage
   }
   
-  override def onTaskStart(taskStart: SparkListenerTaskStart) {
+  override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
     val sid = taskStart.task.stageId
     val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive += taskStart.taskInfo
@@ -94,7 +101,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     stageToTaskInfos(sid) = taskList
   }
  
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val sid = taskEnd.task.stageId
     val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive -= taskEnd.taskInfo
@@ -132,7 +139,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     stageToTaskInfos(sid) = taskList
   }
 
-  override def onJobEnd(jobEnd: SparkListenerJobEnd) {
+  override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
     jobEnd match {
       case end: SparkListenerJobEnd =>
         end.jobResult match {
@@ -145,23 +152,5 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         }
       case _ =>
     }
-  }
-
-  /** Is this stage's input from a shuffle read. */
-  def hasShuffleRead(stageID: Int): Boolean = {
-    // This is written in a slightly complicated way to avoid having to scan all tasks
-    for (s <- stageToTaskInfos.get(stageID).getOrElse(Seq())) {
-      if (s._2 != null) return s._2.flatMap(m => m.shuffleReadMetrics).isDefined
-    }
-    return false // No tasks have finished for this stage
-  }
-
-  /** Is this stage's output to a shuffle write. */
-  def hasShuffleWrite(stageID: Int): Boolean = {
-    // This is written in a slightly complicated way to avoid having to scan all tasks
-    for (s <- stageToTaskInfos.get(stageID).getOrElse(Seq())) {
-      if (s._2 != null) return s._2.flatMap(m => m.shuffleWriteMetrics).isDefined
-    }
-    return false // No tasks have finished for this stage
   }
 }

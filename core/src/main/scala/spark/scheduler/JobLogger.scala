@@ -23,10 +23,11 @@ import java.io.FileNotFoundException
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 import java.util.concurrent.LinkedBlockingQueue
+
 import scala.collection.mutable.{Map, HashMap, ListBuffer}
 import scala.io.Source
+
 import spark._
-import spark.SparkContext
 import spark.executor.TaskMetrics
 import spark.scheduler.cluster.TaskInfo
 
@@ -54,31 +55,6 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   def getJobIDToStages = jobIDToStages
   def getEventQueue = eventQueue
   
-  new Thread("JobLogger") {
-    setDaemon(true)
-    override def run() {
-      while (true) {
-        val event = eventQueue.take
-        logDebug("Got event of type " + event.getClass.getName)
-        event match {
-          case SparkListenerJobStart(job, properties) =>
-            processJobStartEvent(job, properties)
-          case SparkListenerStageSubmitted(stage, taskSize, properties) =>
-            processStageSubmittedEvent(stage, taskSize)
-          case StageCompleted(stageInfo) =>
-            processStageCompletedEvent(stageInfo)
-          case SparkListenerJobEnd(job, result) =>
-            processJobEndEvent(job, result)
-          case SparkListenerTaskStart(task, taskInfo) =>
-            processTaskStartEvent(task, taskInfo)
-          case SparkListenerTaskEnd(task, reason, taskInfo, taskMetrics) =>
-            processTaskEndEvent(task, reason, taskInfo, taskMetrics)
-          case _ =>
-        }
-      }
-    }
-  }.start()
-
   // Create a folder for log files, the folder's name is the creation time of the jobLogger
   protected def createLogDir() {
     val dir = new File(logDir + "/" + logDirName + "/")
@@ -239,49 +215,32 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   }
   
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
-    eventQueue.put(stageSubmitted)
-  }
-
-  protected def processStageSubmittedEvent(stage: Stage, taskSize: Int) {
-    stageLogInfo(stage.id, "STAGE_ID=" + stage.id + " STATUS=SUBMITTED" + " TASK_SIZE=" + taskSize)
+    stageLogInfo(
+      stageSubmitted.stage.id,
+      "STAGE_ID=%d STATUS=SUBMITTED TASK_SIZE=%d".format(
+        stageSubmitted.stage.id, stageSubmitted.taskSize))
   }
   
   override def onStageCompleted(stageCompleted: StageCompleted) {
-    eventQueue.put(stageCompleted)
-  }
-
-  protected def processStageCompletedEvent(stageInfo: StageInfo) {
-    stageLogInfo(stageInfo.stage.id, "STAGE_ID=" + 
-                 stageInfo.stage.id + " STATUS=COMPLETED")
+    stageLogInfo(
+      stageCompleted.stageInfo.stage.id,
+      "STAGE_ID=%d STATUS=COMPLETED".format(stageCompleted.stageInfo.stage.id))
     
   }
 
-  override def onTaskStart(taskStart: SparkListenerTaskStart) {
-    eventQueue.put(taskStart)
-  }
-
-  protected def processTaskStartEvent(task: Task[_], taskInfo: TaskInfo) {
-    var taskStatus = ""
-    task match {
-      case resultTask: ResultTask[_, _] => taskStatus = "TASK_TYPE=RESULT_TASK"
-      case shuffleMapTask: ShuffleMapTask => taskStatus = "TASK_TYPE=SHUFFLE_MAP_TASK"
-    }
-  }
+  override def onTaskStart(taskStart: SparkListenerTaskStart) { }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-    eventQueue.put(taskEnd)
-  }
-
-  protected def processTaskEndEvent(task: Task[_], reason: TaskEndReason, 
-      taskInfo: TaskInfo, taskMetrics: TaskMetrics) {
+    val task = taskEnd.task
+    val taskInfo = taskEnd.taskInfo
     var taskStatus = ""
     task match {
       case resultTask: ResultTask[_, _] => taskStatus = "TASK_TYPE=RESULT_TASK"
       case shuffleMapTask: ShuffleMapTask => taskStatus = "TASK_TYPE=SHUFFLE_MAP_TASK"
     }
-    reason match {
+    taskEnd.reason match {
       case Success => taskStatus += " STATUS=SUCCESS"
-        recordTaskMetrics(task.stageId, taskStatus, taskInfo, taskMetrics)
+        recordTaskMetrics(task.stageId, taskStatus, taskInfo, taskEnd.taskMetrics)
       case Resubmitted => 
         taskStatus += " STATUS=RESUBMITTED TID=" + taskInfo.taskId + 
                       " STAGE_ID=" + task.stageId
@@ -300,12 +259,9 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   }
   
   override def onJobEnd(jobEnd: SparkListenerJobEnd) {
-    eventQueue.put(jobEnd)
-  }
-
-  protected def processJobEndEvent(job: ActiveJob, reason: JobResult) {
+    val job = jobEnd.job
     var info = "JOB_ID=" + job.runId
-    reason match {
+    jobEnd.jobResult match {
       case JobSucceeded => info += " STATUS=SUCCESS"
       case JobFailed(exception, _) =>
         info += " STATUS=FAILED REASON="
@@ -324,10 +280,8 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart) {
-    eventQueue.put(jobStart)
-  }
- 
-  protected def processJobStartEvent(job: ActiveJob, properties: Properties) {
+    val job = jobStart.job
+    val properties = jobStart.properties
     createLogWriter(job.runId)
     recordJobProperties(job.runId, properties)
     buildJobDep(job.runId, job.finalStage)

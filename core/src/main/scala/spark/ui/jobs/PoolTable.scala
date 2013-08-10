@@ -13,11 +13,12 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
   var poolToActiveStages: HashMap[String, HashSet[Stage]] = listener.poolToActiveStages
 
   def toNodeSeq(): Seq[Node] = {
-    poolTable(poolRow, pools)
+    listener.synchronized {
+      poolTable(poolRow, pools)
+    }
   }
 
-  // pool tables
-  def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[Stage]]) => Seq[Node],
+  private def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[Stage]]) => Seq[Node],
     rows: Seq[Schedulable]
     ): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable">
@@ -35,12 +36,16 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
     </table>
   }
 
-  def poolRow(p: Schedulable, poolToActiveStages: HashMap[String, HashSet[Stage]]): Seq[Node] = {
+  private def poolRow(p: Schedulable, poolToActiveStages: HashMap[String, HashSet[Stage]]): Seq[Node] = {
+    val activeStages = poolToActiveStages.get(p.name) match {
+      case Some(stages) => stages.size
+      case None => 0
+    }
     <tr>
       <td><a href={"/stages/pool?poolname=%s".format(p.name)}>{p.name}</a></td>
       <td>{p.minShare}</td>
       <td>{p.weight}</td>
-      <td>{poolToActiveStages.getOrElseUpdate(p.name, new HashSet[Stage]()).size}</td>
+      <td>{activeStages}</td>
       <td>{p.runningTasks}</td>
       <td>{p.schedulingMode}</td>
     </tr>

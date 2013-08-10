@@ -25,11 +25,13 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
   val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
 
   def toNodeSeq(): Seq[Node] = {
-    stageTable(stageRow, stages)
+    listener.synchronized {
+      stageTable(stageRow, stages)
+    }
   }
 
   /** Special table which merges two header cells. */
-  def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
+  private def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable">
       <thead>
         <th>Stage Id</th>
@@ -47,14 +49,14 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
     </table>
   }
 
-  def getElapsedTime(submitted: Option[Long], completed: Long): String = {
+  private def getElapsedTime(submitted: Option[Long], completed: Long): String = {
     submitted match {
       case Some(t) => parent.formatDuration(completed - t)
       case _ => "Unknown"
     }
   }
 
-  def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] = {
+  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
@@ -68,7 +70,7 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
   }
 
 
-  def stageRow(s: Stage): Seq[Node] = {
+  private def stageRow(s: Stage): Seq[Node] = {
     val submissionTime = s.submissionTime match {
       case Some(t) => dateFmt.format(new Date(t))
       case None => "Unknown"
