@@ -132,9 +132,10 @@ object BlockFetcherIterator {
                 "Unexpected message " + blockMessage.getType + " received from " + cmId)
             }
             val blockId = blockMessage.getId
+            val networkSize = blockMessage.getData.limit()
             results.put(new FetchResult(blockId, sizeMap(blockId),
               () => dataDeserialize(blockId, blockMessage.getData, serializer)))
-            _remoteBytesRead += req.size
+            _remoteBytesRead += networkSize
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           }
         }
