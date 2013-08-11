@@ -29,14 +29,14 @@ object LassoGenerator {
     val trueWeights = new DoubleMatrix(1, nfeatures+1,
       Array.fill[Double](nfeatures + 1) { globalRnd.nextGaussian() }:_*)
 
-    val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until nexamples, parts).map { idx =>
+    val data: RDD[LabeledPoint] = sc.parallelize(0 until nexamples, parts).map { idx =>
       val rnd = new Random(42 + idx)
 
       val x = Array.fill[Double](nfeatures) {
         rnd.nextDouble() * 2.0 - 1.0
       }
       val y = (new DoubleMatrix(1, x.length, x:_*)).dot(trueWeights) + rnd.nextGaussian() * 0.1
-      (y, x)
+      LabeledPoint(y, x)
     }
 
     MLUtils.saveLabeledData(data, outputPath)

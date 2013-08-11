@@ -21,6 +21,7 @@ import spark.{RDD, SparkContext}
 import spark.SparkContext._
 
 import org.jblas.DoubleMatrix
+import spark.mllib.regression.LabeledPoint
 
 /**
  * Helper methods to load and save data
@@ -36,17 +37,17 @@ object MLUtils {
    * @return An RDD of tuples. For each tuple, the first element is the label, and the second
    *         element represents the feature values (an array of Double).
    */
-  def loadLabeledData(sc: SparkContext, dir: String): RDD[(Double, Array[Double])] = {
+  def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
       val parts = line.split(',')
       val label = parts(0).toDouble
       val features = parts(1).trim().split(' ').map(_.toDouble)
-      (label, features)
+      LabeledPoint(label, features)
     }
   }
 
-  def saveLabeledData(data: RDD[(Double, Array[Double])], dir: String) {
-    val dataStr = data.map(x => x._1 + "," + x._2.mkString(" "))
+  def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
+    val dataStr = data.map(x => x.label + "," + x.features.mkString(" "))
     dataStr.saveAsTextFile(dir)
   }
 

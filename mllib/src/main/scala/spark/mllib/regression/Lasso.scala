@@ -28,117 +28,48 @@ import org.jblas.DoubleMatrix
  *
  */
 class LassoModel(
-  val weights: Array[Double],
-  val intercept: Double,
-  val stochasticLosses: Array[Double]) extends RegressionModel {
+    override val weights: Array[Double],
+    override val intercept: Double)
+  extends GeneralizedLinearModel(weights, intercept)
+  with RegressionModel with Serializable {
 
-  // Create a column vector that can be used for predictions
-  private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
-
-  override def predict(testData: spark.RDD[Array[Double]]) = {
-    // A small optimization to avoid serializing the entire model. Only the weightsMatrix
-    // and intercept is needed.
-    val localWeights = weightsMatrix
-    val localIntercept = intercept
-    testData.map { x =>
-      new DoubleMatrix(1, x.length, x:_*).dot(localWeights) + localIntercept
-    }
-  }
-
-
-  override def predict(testData: Array[Double]): Double = {
-    val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
-    dataMat.dot(weightsMatrix) + this.intercept
+  override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+      intercept: Double) = {
+    dataMatrix.dot(weightMatrix) + intercept
   }
 }
 
 
-class LassoLocalRandomSGD private (var stepSize: Double, var regParam: Double,
-    var miniBatchFraction: Double, var numIters: Int)
-  extends Logging {
+class LassoWithSGD (
+    var stepSize: Double,
+    var numIterations: Int,
+    var regParam: Double,
+    var miniBatchFraction: Double,
+    var addIntercept: Boolean)
+  extends GeneralizedLinearAlgorithm[LassoModel]
+  with Serializable {
+
+  val gradient = new SquaredGradient()
+  val updater = new L1Updater()
+  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+                                                        .setNumIterations(numIterations)
+                                                        .setRegParam(regParam)
+                                                        .setMiniBatchFraction(miniBatchFraction)
 
   /**
    * Construct a Lasso object with default parameters
    */
-  def this() = this(1.0, 1.0, 1.0, 100)
+  def this() = this(1.0, 100, 1.0, 1.0, true)
 
-  /**
-   * Set the step size per-iteration of SGD. Default 1.0.
-   */
-  def setStepSize(step: Double) = {
-    this.stepSize = step
-    this
-  }
-
-  /**
-   * Set the regularization parameter. Default 1.0.
-   */
-  def setRegParam(param: Double) = {
-    this.regParam = param
-    this
-  }
-
-  /**
-   * Set fraction of data to be used for each SGD iteration. Default 1.0.
-   */
-  def setMiniBatchFraction(fraction: Double) = {
-    this.miniBatchFraction = fraction
-    this
-  }
-
-  /**
-   * Set the number of iterations for SGD. Default 100.
-   */
-  def setNumIterations(iters: Int) = {
-    this.numIters = iters
-    this
-  }
-
-  def train(input: RDD[(Double, Array[Double])]): LassoModel = {
-    val nfeatures: Int = input.take(1)(0)._2.length
-    val initialWeights = Array.fill(nfeatures)(1.0)
-    train(input, initialWeights)
-  }
-
-  def train(
-    input: RDD[(Double, Array[Double])],
-    initialWeights: Array[Double]): LassoModel = {
-
-    // Add a extra variable consisting of all 1.0's for the intercept.
-    val data = input.map { case (y, features) =>
-      (y, Array(1.0, features:_*))
-    }
-
-    val initalWeightsWithIntercept = Array(1.0, initialWeights:_*)
-
-    val (weights, stochasticLosses) = GradientDescent.runMiniBatchSGD(
-      data,
-      new SquaredGradient(),
-      new L1Updater(),
-      stepSize,
-      numIters,
-      regParam,
-      initalWeightsWithIntercept,
-      miniBatchFraction)
-
-    val intercept = weights(0)
-    val weightsScaled = weights.tail
-
-    val model = new LassoModel(weightsScaled, intercept, stochasticLosses)
-
-    logInfo("Final model weights " + model.weights.mkString(","))
-    logInfo("Final model intercept " + model.intercept)
-    logInfo("Last 10 stochasticLosses " + model.stochasticLosses.takeRight(10).mkString(", "))
-    model
+  def createModel(weights: Array[Double], intercept: Double) = {
+    new LassoModel(weights, intercept)
   }
 }
 
 /**
  * Top-level methods for calling Lasso.
- *
- *
  */
-object LassoLocalRandomSGD {
+object LassoWithSGD {
 
   /**
    * Train a Lasso model given an RDD of (label, features) pairs. We run a fixed number
@@ -155,7 +86,7 @@ object LassoLocalRandomSGD {
    *        the number of features in the data.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
@@ -163,8 +94,8 @@ object LassoLocalRandomSGD {
       initialWeights: Array[Double])
     : LassoModel =
   {
-    new LassoLocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(
-      input, initialWeights)
+    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input,
+        initialWeights)
   }
 
   /**
@@ -179,14 +110,14 @@ object LassoLocalRandomSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double)
     : LassoModel =
   {
-    new LassoLocalRandomSGD(stepSize, regParam, miniBatchFraction, numIterations).train(input)
+    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input)
   }
 
   /**
@@ -201,7 +132,7 @@ object LassoLocalRandomSGD {
    * @return a LassoModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
       regParam: Double)
@@ -220,7 +151,7 @@ object LassoLocalRandomSGD {
    * @return a LassoModel which has the weights and offset from training.
    */
   def train(
-      input: RDD[(Double, Array[Double])],
+      input: RDD[LabeledPoint],
       numIterations: Int)
     : LassoModel =
   {
@@ -234,7 +165,7 @@ object LassoLocalRandomSGD {
     }
     val sc = new SparkContext(args(0), "Lasso")
     val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = LassoLocalRandomSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+    val model = LassoWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
 
     sc.stop()
   }

@@ -22,6 +22,7 @@ import scala.util.Random
 import org.jblas.DoubleMatrix
 
 import spark.{RDD, SparkContext}
+import spark.mllib.regression.LabeledPoint
 
 object RidgeRegressionDataGenerator {
 
@@ -41,14 +42,14 @@ object RidgeRegressionDataGenerator {
     nexamples: Int,
     nfeatures: Int,
     eps: Double,
-    nparts: Int = 2) : RDD[(Double, Array[Double])] = {
+    nparts: Int = 2) : RDD[LabeledPoint] = {
     org.jblas.util.Random.seed(42)
     // Random values distributed uniformly in [-0.5, 0.5]
     val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
     w.put(0, 0, 10)
     w.put(1, 0, 10)
 
-    val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
+    val data: RDD[LabeledPoint] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
       org.jblas.util.Random.seed(42 + p)
       val examplesInPartition = nexamples / nparts
 
@@ -61,7 +62,7 @@ object RidgeRegressionDataGenerator {
       val yObs = new DoubleMatrix(normalValues).addi(y)
 
       Iterator.tabulate(examplesInPartition) { i =>
-        (yObs.get(i, 0), X.getRow(i).toArray)
+        LabeledPoint(yObs.get(i, 0), X.getRow(i).toArray)
       }
     }
     data
