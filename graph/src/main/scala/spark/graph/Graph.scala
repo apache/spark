@@ -179,6 +179,15 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (_ => true), 
     vpred: Vertex[VD] => Boolean = (_ => true) ): Graph[VD, ED]
 
+
+  // /**
+  //  * Combine the attrributes of edges connecting the same vertices.   
+  //  *
+  //  * @todo Do we want to support this function
+  //  */
+  // def combineEdges(reduce: (ED, ED) => ED): Graph[VD, ED]
+
+
   /**
    * This function is used to compute a statistic for the neighborhood of each
    * vertex.
@@ -360,7 +369,7 @@ object Graph {
   import spark.graph.impl._
   import spark.SparkContext._
 
-  def apply(rawEdges: RDD[(Int, Int)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
+  def apply(rawEdges: RDD[(Vid, Vid)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
     // Reduce to unique edges.
     val edges: RDD[Edge[Int]] =
       if (uniqueEdges) {

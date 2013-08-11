@@ -3,10 +3,20 @@ package spark.graph
 import org.scalatest.FunSuite
 
 import spark.SparkContext
-import spark.graph.impl.GraphImpl
+import spark.graph._
+
 
 
 class GraphSuite extends FunSuite with LocalSparkContext {
+
+//  val sc = new SparkContext("local[4]", "test")
+
+  test("Graph Creation") {
+    val rawEdges = (0L to 100L).zip((1L to 99L) :+ 0L)
+    val edges = sc.parallelize(rawEdges)
+    val graph = Graph(edges)
+    assert( graph.edges.count() === rawEdges.size )
+  }
 
   test("aggregateNeighbors") {
 
