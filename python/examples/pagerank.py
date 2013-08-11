@@ -23,13 +23,13 @@ from operator import add
 from pyspark import SparkContext
 
 
-def _cal_contribs(urls, rank):
+def computeContribs(urls, rank):
     """Calculates URL contributions to the rank of other URLs."""
     num_urls = len(urls)
-    return [[url, rank / num_urls] for url in urls]
+    for url in urls: yield (url, rank / num_urls)
 
 
-def _parse_neighbors(urls):
+def parseNeighbors(urls):
     """Parses a urls pair string into urls pair."""
     parts = re.split(r'\s+', urls)
     return parts[0], parts[1]
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     lines = sc.textFile(sys.argv[2], 1)
 
     # Loads all URLs from input file and initialize their neighbors.
-    links = lines.map(lambda urls: _parse_neighbors(urls)).distinct().groupByKey().cache()
+    links = lines.map(lambda urls: parseNeighbors(urls)).distinct().groupByKey().cache()
 
     # Loads all URLs with other URL(s) link to from input file and initialize ranks of them to one.
     ranks = links.map(lambda (url, neighbors): (url, 1.0))
@@ -59,10 +59,12 @@ if __name__ == "__main__":
     # Calculates and updates URL ranks continuously using PageRank algorithm.
     for iteration in xrange(int(sys.argv[3])):
         # Calculates URL contributions to the rank of other URLs.
-        contribs = links.join(ranks).flatMap(lambda (url, (urls, rank)): _cal_contribs(urls, rank))
+        contribs = links.join(ranks).flatMap(lambda (url, (urls, rank)):
+            computeContribs(urls, rank))
 
         # Re-calculates URL ranks based on neighbor contributions.
-        ranks = contribs.reduceByKey(add).map(lambda (url, rank): (url, rank * 0.85 + 0.15))
+        ranks = contribs.reduceByKey(add).mapValues(lambda rank: rank * 0.85 + 0.15)
 
     # Collects all URL ranks and dump them to console.
-    for (link, rank) in ranks.collect(): print "%s has rank: %s." % (link, rank)
+    for (link, rank) in ranks.collect():
+        print "%s has rank: %s." % (link, rank)
