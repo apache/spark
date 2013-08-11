@@ -65,8 +65,7 @@ abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept:
  * GeneralizedLinearAlgorithm abstracts out the training for all GLMs. 
  * This class should be extended with an Optimizer to create a new GLM.
  */
-abstract class GeneralizedLinearAlgorithm[M](implicit
-    methodEv: M <:< GeneralizedLinearModel)
+abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
   val optimizer: Optimizer
@@ -89,10 +88,7 @@ abstract class GeneralizedLinearAlgorithm[M](implicit
     run(input, initialWeights)
   }
 
-  def run(
-      input: RDD[LabeledPoint],
-      initialWeights: Array[Double])
-    : M = {
+  def run(input: RDD[LabeledPoint], initialWeights: Array[Double]) : M = {
 
     // Add a extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
