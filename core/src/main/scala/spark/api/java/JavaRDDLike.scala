@@ -366,10 +366,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Gets the name of the file to which this RDD was checkpointed
    */
   def getCheckpointFile(): Optional[String] = {
-    rdd.getCheckpointFile match {
-      case Some(file) => Optional.of(file)
-      case _ => Optional.absent()
-    }
+    JavaUtils.optionToOptional(rdd.getCheckpointFile)
   }
 
   /** A description of this RDD and its recursive dependencies for debugging. */

@@ -41,6 +41,8 @@ import spark.Partitioner._
 import spark.RDD
 import spark.SparkContext.rddToPairRDDFunctions
 
+import com.google.common.base.Optional
+
 class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManifest[K],
   implicit val vManifest: ClassManifest[V]) extends JavaRDDLike[(K, V), JavaPairRDD[K, V]] {
 
@@ -276,8 +278,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * partition the output RDD.
    */
   def leftOuterJoin[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
-  : JavaPairRDD[K, (V, Option[W])] =
-    fromRDD(rdd.leftOuterJoin(other, partitioner))
+  : JavaPairRDD[K, (V, Optional[W])] = {
+    val joinResult = rdd.leftOuterJoin(other, partitioner)
+    fromRDD(joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
+  }
 
   /**
    * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
@@ -286,8 +290,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * partition the output RDD.
    */
   def rightOuterJoin[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
-  : JavaPairRDD[K, (Option[V], W)] =
-    fromRDD(rdd.rightOuterJoin(other, partitioner))
+  : JavaPairRDD[K, (Optional[V], W)] = {
+    val joinResult = rdd.rightOuterJoin(other, partitioner)
+    fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
+  }
 
   /** 
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the existing
@@ -340,8 +346,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
    * using the existing partitioner/parallelism level.
    */
-  def leftOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, Option[W])] =
-    fromRDD(rdd.leftOuterJoin(other))
+  def leftOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, Optional[W])] = {
+    val joinResult = rdd.leftOuterJoin(other)
+    fromRDD(joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
+  }
 
   /**
    * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
@@ -349,8 +357,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
    * into `numPartitions` partitions.
    */
-  def leftOuterJoin[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (V, Option[W])] =
-    fromRDD(rdd.leftOuterJoin(other, numPartitions))
+  def leftOuterJoin[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (V, Optional[W])] = {
+    val joinResult = rdd.leftOuterJoin(other, numPartitions)
+    fromRDD(joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
+  }
 
   /**
    * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
@@ -358,8 +368,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
    * RDD using the existing partitioner/parallelism level.
    */
-  def rightOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (Option[V], W)] =
-    fromRDD(rdd.rightOuterJoin(other))
+  def rightOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (Optional[V], W)] = {
+    val joinResult = rdd.rightOuterJoin(other)
+    fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
+  }
 
   /**
    * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
@@ -367,8 +379,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
    * RDD into the given number of partitions.
    */
-  def rightOuterJoin[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (Option[V], W)] =
-    fromRDD(rdd.rightOuterJoin(other, numPartitions))
+  def rightOuterJoin[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (Optional[V], W)] = {
+    val joinResult = rdd.rightOuterJoin(other, numPartitions)
+    fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
+  }
 
   /**
    * Return the key-value pairs in this RDD to the master as a Map.

@@ -121,7 +121,7 @@ object JavaAPICompletenessChecker {
     SparkMethod(name, returnType, parameters)
   }
 
-  private def toJavaType(scalaType: SparkType): SparkType = {
+  private def toJavaType(scalaType: SparkType, isReturnType: Boolean): SparkType = {
     val renameSubstitutions = Map(
       "scala.collection.Map" -> "java.util.Map",
       // TODO: the JavaStreamingContext API accepts Array arguments
@@ -140,40 +140,43 @@ object JavaAPICompletenessChecker {
             case "spark.RDD" =>
               if (parameters(0).name == classOf[Tuple2[_, _]].getName) {
                 val tupleParams =
-                  parameters(0).asInstanceOf[ParameterizedType].parameters.map(toJavaType)
+                  parameters(0).asInstanceOf[ParameterizedType].parameters.map(applySubs)
                 ParameterizedType(classOf[JavaPairRDD[_, _]].getName, tupleParams)
               } else {
-                ParameterizedType(classOf[JavaRDD[_]].getName, parameters.map(toJavaType))
+                ParameterizedType(classOf[JavaRDD[_]].getName, parameters.map(applySubs))
               }
             case "spark.streaming.DStream" =>
               if (parameters(0).name == classOf[Tuple2[_, _]].getName) {
                 val tupleParams =
-                  parameters(0).asInstanceOf[ParameterizedType].parameters.map(toJavaType)
+                  parameters(0).asInstanceOf[ParameterizedType].parameters.map(applySubs)
                 ParameterizedType("spark.streaming.api.java.JavaPairDStream", tupleParams)
               } else {
                 ParameterizedType("spark.streaming.api.java.JavaDStream",
-                  parameters.map(toJavaType))
+                  parameters.map(applySubs))
               }
-            // TODO: Spark Streaming uses Guava's Optional in place of Option, leading to some
-            // false-positives here:
-            case "scala.Option" =>
-              toJavaType(parameters(0))
+            case "scala.Option" => {
+              if (isReturnType) {
+                ParameterizedType("com.google.common.base.Optional", parameters.map(applySubs))
+              } else {
+                applySubs(parameters(0))
+              }
+            }
             case "scala.Function1" =>
               val firstParamName = parameters.last.name
               if (firstParamName.startsWith("scala.collection.Traversable") ||
                 firstParamName.startsWith("scala.collection.Iterator")) {
                 ParameterizedType("spark.api.java.function.FlatMapFunction",
                   Seq(parameters(0),
-                    parameters.last.asInstanceOf[ParameterizedType].parameters(0)).map(toJavaType))
+                    parameters.last.asInstanceOf[ParameterizedType].parameters(0)).map(applySubs))
               } else if (firstParamName == "scala.runtime.BoxedUnit") {
                 ParameterizedType("spark.api.java.function.VoidFunction",
-                  parameters.dropRight(1).map(toJavaType))
+                  parameters.dropRight(1).map(applySubs))
               } else {
-                ParameterizedType("spark.api.java.function.Function", parameters.map(toJavaType))
+                ParameterizedType("spark.api.java.function.Function", parameters.map(applySubs))
               }
             case _ =>
               ParameterizedType(renameSubstitutions.getOrElse(name, name),
-                parameters.map(toJavaType))
+                parameters.map(applySubs))
           }
         case BaseType(name) =>
           if (renameSubstitutions.contains(name)) {
@@ -194,8 +197,9 @@ object JavaAPICompletenessChecker {
 
   private def toJavaMethod(method: SparkMethod): SparkMethod = {
     val params = method.parameters
-      .filterNot(_.name == "scala.reflect.ClassManifest").map(toJavaType)
-    SparkMethod(method.name, toJavaType(method.returnType), params)
+      .filterNot(_.name == "scala.reflect.ClassManifest")
+      .map(toJavaType(_, isReturnType = false))
+    SparkMethod(method.name, toJavaType(method.returnType, isReturnType = true), params)
   }
 
   private def isExcludedByName(method: Method): Boolean = {
