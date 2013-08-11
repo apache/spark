@@ -212,6 +212,12 @@
           <classifier>hadoop2-yarn</classifier>
         </dependency>
         <dependency>
+          <groupId>org.spark-project</groupId>
+          <artifactId>spark-mllib</artifactId>
+          <version>${project.version}</version>
+          <classifier>hadoop2-yarn</classifier>
+        </dependency>
+        <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-client</artifactId>
           <scope>provided</scope>
