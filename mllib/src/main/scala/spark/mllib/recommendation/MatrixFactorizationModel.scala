@@ -22,6 +22,15 @@ import spark.SparkContext._
 
 import org.jblas._
 
+/**
+ * Model representing the result of matrix factorization.
+ *
+ * @param rank Rank for the features in this model.
+ * @param userFeatures RDD of tuples where each tuple represents the userId and
+ *                     the features computed for this user.
+ * @param productFeatures RDD of tuples where each tuple represents the productId
+ *                        and the features computed for this product.
+ */
 class MatrixFactorizationModel(
     val rank: Int,
     val userFeatures: RDD[(Int, Array[Double])],

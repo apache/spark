@@ -168,10 +168,10 @@ class RidgeRegression private (var lambdaLow: Double, var lambdaHigh: Double)
 
 /**
  * Top-level methods for calling Ridge Regression.
- * NOTE(shivaram): We use multiple train methods instead of default arguments to support 
- *                 Java programs.
  */
 object RidgeRegression {
+  // NOTE(shivaram): We use multiple train methods instead of default arguments to support
+  // Java programs.
 
   /**
    * Train a ridge regression model given an RDD of (response, features) pairs.

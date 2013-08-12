@@ -1,22 +1,23 @@
-package spark.mllib.classification
+package spark.mllib.util
 
 import scala.util.Random
 import scala.math.signum
 
-import org.jblas.DoubleMatrix
-
 import spark.{RDD, SparkContext}
-import spark.mllib.util.MLUtils
 
 import org.jblas.DoubleMatrix
 import spark.mllib.regression.LabeledPoint
 
-object SVMGenerator {
+/**
+ * Generate sample data used for SVM. This class generates uniform random values
+ * for the features and adds Gaussian noise with weight 0.1 to generate labels.
+ */
+object SVMDataGenerator {
 
   def main(args: Array[String]) {
-    if (args.length != 5) {
+    if (args.length < 2) {
       println("Usage: SVMGenerator " +
-        "<master> <output_dir> <num_examples> <num_features> <num_partitions>")
+        "<master> <output_dir> [num_examples] [num_features] [num_partitions]")
       System.exit(1)
     }
 
@@ -25,7 +26,6 @@ object SVMGenerator {
     val nexamples: Int = if (args.length > 2) args(2).toInt else 1000
     val nfeatures: Int = if (args.length > 3) args(3).toInt else 2
     val parts: Int = if (args.length > 4) args(4).toInt else 2
-    val eps = 3
 
     val sc = new SparkContext(sparkMaster, "SVMGenerator")
 

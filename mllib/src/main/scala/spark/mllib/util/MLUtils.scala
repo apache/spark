@@ -24,18 +24,19 @@ import org.jblas.DoubleMatrix
 import spark.mllib.regression.LabeledPoint
 
 /**
- * Helper methods to load and save data
- * Data format:
- * <l>, <f1> <f2> ...
- * where <f1>, <f2> are feature values in Double and <l> is the corresponding label as Double.
+ * Helper methods to load, save and pre-process data used in ML Lib.
  */
 object MLUtils {
 
   /**
+   * Load labeled data from a file. The data format used here is
+   * <L>, <f1> <f2> ...
+   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   *
    * @param sc SparkContext
    * @param dir Directory to the input data files.
-   * @return An RDD of tuples. For each tuple, the first element is the label, and the second
-   *         element represents the feature values (an array of Double).
+   * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
+   *         the label, and the second element represents the feature values (an array of Double).
    */
   def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
@@ -46,6 +47,14 @@ object MLUtils {
     }
   }
 
+  /**
+   * Save labeled data to a file. The data format used here is
+   * <L>, <f1> <f2> ...
+   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   *
+   * @param data An RDD of LabeledPoints containing data to be saved.
+   * @param dir Directory to save the data.
+   */
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
     val dataStr = data.map(x => x.label + "," + x.features.mkString(" "))
     dataStr.saveAsTextFile(dir)

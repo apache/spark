@@ -24,12 +24,17 @@ import org.jblas.DoubleMatrix
 
 import scala.collection.mutable.ArrayBuffer
 
+/**
+ * Class used to solve an optimization problem using Gradient Descent.
+ * @param gradient Gradient function to be used.
+ * @param updater Updater to be used to update weights after every iteration.
+ */
 class GradientDescent(var gradient: Gradient, var updater: Updater) extends Optimizer {
 
-  var stepSize: Double = 1.0
-  var numIterations: Int = 100
-  var regParam: Double = 0.0
-  var miniBatchFraction: Double = 1.0
+  private var stepSize: Double = 1.0
+  private var numIterations: Int = 100
+  private var regParam: Double = 0.0
+  private var miniBatchFraction: Double = 1.0
 
   /**
    * Set the step size per-iteration of SGD. Default 1.0.
@@ -97,10 +102,10 @@ class GradientDescent(var gradient: Gradient, var updater: Updater) extends Opti
 
 }
 
+// Top-level method to run gradient descent.
 object GradientDescent extends Logging {
   /**
    * Run gradient descent in parallel using mini batches.
-   * Based on Matlab code written by John Duchi.
    *
    * @param data - Input data for SGD. RDD of form (label, [feature values]).
    * @param gradient - Gradient object that will be used to compute the gradient.
@@ -137,8 +142,8 @@ object GradientDescent extends Logging {
     for (i <- 1 to numIterations) {
       val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42+i).map {
         case (y, features) =>
-          val featuresRow = new DoubleMatrix(features.length, 1, features:_*)
-          val (grad, loss) = gradient.compute(featuresRow, y, weights)
+          val featuresCol = new DoubleMatrix(features.length, 1, features:_*)
+          val (grad, loss) = gradient.compute(featuresCol, y, weights)
           (grad, loss)
       }.reduce((a, b) => (a._1.addi(b._1), a._2 + b._2))
 

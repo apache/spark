@@ -24,8 +24,10 @@ import spark.mllib.util.MLUtils
 import org.jblas.DoubleMatrix
 
 /**
- * Lasso using Stochastic Gradient Descent.
+ * Regression model trained using Lasso.
  *
+ * @param weights Weights computed for every feature.
+ * @param intercept Intercept computed for this model.
  */
 class LassoModel(
     override val weights: Array[Double],
@@ -39,8 +41,10 @@ class LassoModel(
   }
 }
 
-
-class LassoWithSGD (
+/**
+ * Train a regression model with L1-regularization using Stochastic Gradient Descent.
+ */
+class LassoWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
     var regParam: Double,
