@@ -85,6 +85,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         Seq("Task ID", "Status", "Duration", "Locality Level", "Worker", "Launch Time") ++
           {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
           {if (hasShuffleWrite) Seq("Shuffle Write") else Nil} ++
+        Seq("GC Time") ++
         Seq("Details")
 
       val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite), tasks)
@@ -145,6 +146,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
       else metrics.map(m => m.executorRunTime).getOrElse(1)
     val formatDuration = if (info.status == "RUNNING") parent.formatDuration(duration)
       else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
+    val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
 
     <tr>
       <td>{info.taskId}</td>
@@ -163,6 +165,9 @@ private[spark] class StagePage(parent: JobProgressUI) {
         <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
           Utils.memoryBytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
       }}
+      <td sortable_customkey={gcTime}>
+        {if (gcTime > 0) {parent.formatDuration(gcTime)} else ""}
+      </td>
       <td>{exception.map(e =>
         <span>
           {e.className} ({e.description})<br/>

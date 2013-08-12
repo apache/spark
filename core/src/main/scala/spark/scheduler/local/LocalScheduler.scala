@@ -18,8 +18,11 @@
 package spark.scheduler.local
 
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.util.concurrent.atomic.AtomicInteger
 import java.nio.ByteBuffer
+
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
@@ -31,6 +34,7 @@ import spark.scheduler._
 import spark.scheduler.cluster._
 import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 import akka.actor._
+import management.ManagementFactory
 
 /**
  * A FIFO or Fair TaskScheduler implementation that runs tasks locally in a thread pool. Optionally
@@ -173,6 +177,9 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     var attemptedTask: Option[Task[_]] = None   
     val start = System.currentTimeMillis()
     var taskStart: Long = 0
+    def getTotalGCTime = ManagementFactory.getGarbageCollectorMXBeans.map(g => g.getCollectionTime).sum
+    val startGCTime = getTotalGCTime
+
     try {
       Accumulators.clear()
       Thread.currentThread().setContextClassLoader(classLoader)
@@ -202,6 +209,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       val serviceTime = System.currentTimeMillis() - taskStart
       logInfo("Finished " + taskId)
       deserializedTask.metrics.get.executorRunTime = serviceTime.toInt
+      deserializedTask.metrics.get.jvmGCTime = getTotalGCTime - startGCTime
       deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
       val taskResult = new TaskResult(result, accumUpdates, deserializedTask.metrics.getOrElse(null))
       val serializedResult = ser.serialize(taskResult)
@@ -210,7 +218,10 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       case t: Throwable => {
         val serviceTime = System.currentTimeMillis() - taskStart
         val metrics = attemptedTask.flatMap(t => t.metrics)
-        metrics.foreach{m => m.executorRunTime = serviceTime.toInt}
+        metrics.foreach{ m =>
+          m.executorRunTime = serviceTime.toInt
+          m.jvmGCTime = getTotalGCTime - startGCTime
+        }
         val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
         localActor ! LocalStatusUpdate(taskId, TaskState.FAILED, ser.serialize(failure))
       }

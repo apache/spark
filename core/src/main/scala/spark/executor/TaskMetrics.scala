@@ -31,12 +31,17 @@ class TaskMetrics extends Serializable {
   /**
    * Time the executor spends actually running the task (including fetching shuffle data)
    */
-  var executorRunTime:Int = _
+  var executorRunTime: Int = _
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult
    */
   var resultSize: Long = _
+
+  /**
+   * Amount of time the JVM spent in garbage collection while executing this task
+   */
+  var jvmGCTime: Long = _
 
   /**
    * If this task reads from shuffle output, metrics on getting shuffle data will be collected here
