@@ -24,18 +24,24 @@ import org.jblas.DoubleMatrix
 import spark.{RDD, SparkContext}
 import spark.mllib.regression.LabeledPoint
 
+/**
+ * Generate sample data used for RidgeRegression. This class generates
+ * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
+ * response variable `Y`.
+ *
+ */
 object RidgeRegressionDataGenerator {
 
   /**
-   * Generate an RDD containing test data used for RidgeRegression. This function generates
-   * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
-   * response variable `Y`.
+   * Generate an RDD containing sample data for RidgeRegression.
    *
    * @param sc SparkContext to be used for generating the RDD.
    * @param nexamples Number of examples that will be contained in the RDD.
    * @param nfeatures Number of features to generate for each example.
    * @param eps Epsilon factor by which examples are scaled.
    * @param nparts Number of partitions in the RDD. Default value is 2.
+   *
+   * @return RDD of LabeledPoint containing sample data.
    */
   def generateRidgeRDD(
     sc: SparkContext,
@@ -69,9 +75,9 @@ object RidgeRegressionDataGenerator {
   }
 
   def main(args: Array[String]) {
-    if (args.length != 5) {
+    if (args.length < 2) {
       println("Usage: RidgeRegressionGenerator " +
-        "<master> <output_dir> <num_examples> <num_features> <num_partitions>")
+        "<master> <output_dir> [num_examples] [num_features] [num_partitions]")
       System.exit(1)
     }
 

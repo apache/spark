@@ -22,11 +22,15 @@ import scala.util.Random
 import spark.{RDD, SparkContext}
 import spark.mllib.regression.LabeledPoint
 
+/**
+ * Generate test data for LogisticRegression. This class chooses positive labels
+ * with probability `probOne` and scales features for positive examples by `eps`.
+ */
+
 object LogisticRegressionDataGenerator {
 
   /**
-   * Generate an RDD containing test data for LogisticRegression. This function chooses
-   * positive labels with probability `probOne` and scales positive examples by `eps`.
+   * Generate an RDD containing test data for LogisticRegression.
    *
    * @param sc SparkContext to use for creating the RDD.
    * @param nexamples Number of examples that will be contained in the RDD.

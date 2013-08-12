@@ -24,8 +24,11 @@ import org.jblas.DoubleMatrix
 
 /**
  * GeneralizedLinearModel (GLM) represents a model trained using 
- * GeneralizedLinearAlgorithm. GLMs consist of a weight vector,
+ * GeneralizedLinearAlgorithm. GLMs consist of a weight vector and
  * an intercept.
+ *
+ * @param weights Weights computed for every feature.
+ * @param intercept Intercept computed for this model.
  */
 abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept: Double)
   extends Serializable {
@@ -43,6 +46,12 @@ abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept:
   def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
     intercept: Double): Double
 
+  /**
+   * Predict values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return RDD[Double] where each entry contains the corresponding prediction
+   */
   def predict(testData: spark.RDD[Array[Double]]): RDD[Double] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
@@ -55,6 +64,12 @@ abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept:
     }
   }
 
+  /**
+   * Predict values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Double prediction from the trained model
+   */
   def predict(testData: Array[Double]): Double = {
     val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
     predictPoint(dataMat, weightsMatrix, intercept)
@@ -62,7 +77,7 @@ abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept:
 }
 
 /**
- * GeneralizedLinearAlgorithm abstracts out the training for all GLMs. 
+ * GeneralizedLinearAlgorithm implements methods to train a Genearalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
  */
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
@@ -70,9 +85,12 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   val optimizer: Optimizer
 
-  def createModel(weights: Array[Double], intercept: Double): M
+  /**
+   * Create a model given the weights and intercept
+   */
+  protected def createModel(weights: Array[Double], intercept: Double): M
 
-  var addIntercept: Boolean
+  protected var addIntercept: Boolean
 
   /**
    * Set if the algorithm should add an intercept. Default true.
@@ -82,12 +100,20 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     this
   }
 
+  /**
+   * Run the algorithm with the configured parameters on an input
+   * RDD of LabeledPoint entries.
+   */
   def run(input: RDD[LabeledPoint]) : M = {
     val nfeatures: Int = input.first().features.length
     val initialWeights = Array.fill(nfeatures)(1.0)
     run(input, initialWeights)
   }
 
+  /**
+   * Run the algorithm with the configured parameters on an input RDD
+   * of LabeledPoint entries starting from the initial weights provided.
+   */
   def run(input: RDD[LabeledPoint], initialWeights: Array[Double]) : M = {
 
     // Add a extra variable consisting of all 1.0's for the intercept.

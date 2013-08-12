@@ -20,10 +20,14 @@ package spark.mllib.optimization
 import scala.math._
 import org.jblas.DoubleMatrix
 
+/**
+ * Class used to update weights used in Gradient Descent.
+ */
 abstract class Updater extends Serializable {
   /**
-   * Compute an updated value for weights given the gradient, stepSize and iteration number.
-   * Also returns the regularization value computed using the *updated* weights.
+   * Compute an updated value for weights given the gradient, stepSize, iteration number and
+   * regularization parameter. Also returns the regularization value computed using the
+   * *updated* weights.
    *
    * @param weightsOld - Column matrix of size nx1 where n is the number of features.
    * @param gradient - Column matrix of size nx1 where n is the number of features.
@@ -38,6 +42,10 @@ abstract class Updater extends Serializable {
       regParam: Double): (DoubleMatrix, Double)
 }
 
+/**
+ * A simple updater that adaptively adjusts the learning rate the
+ * square root of the number of iterations. Does not perform any regularization.
+ */
 class SimpleUpdater extends Updater {
   override def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix,
       stepSize: Double, iter: Int, regParam: Double): (DoubleMatrix, Double) = {
@@ -48,11 +56,15 @@ class SimpleUpdater extends Updater {
 }
 
 /**
- * L1 regularization -- corresponding proximal operator is the soft-thresholding function
- * That is, each weight component is shrunk towards 0 by shrinkageVal
+ * Updater that adjusts learning rate and performs L1 regularization.
+ *
+ * The corresponding proximal operator used is the soft-thresholding function.
+ * That is, each weight component is shrunk towards 0 by shrinkageVal.
+ *
  * If w >  shrinkageVal, set weight component to w-shrinkageVal.
  * If w < -shrinkageVal, set weight component to w+shrinkageVal.
  * If -shrinkageVal < w < shrinkageVal, set weight component to 0.
+ *
  * Equivalently, set weight component to signum(w) * max(0.0, abs(w) - shrinkageVal)
  */
 class L1Updater extends Updater {
@@ -72,6 +84,9 @@ class L1Updater extends Updater {
   }
 }
 
+/**
+ * Updater that adjusts the learning rate and performs L2 regularization
+ */
 class SquaredL2Updater extends Updater {
   override def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix,
       stepSize: Double, iter: Int, regParam: Double): (DoubleMatrix, Double) = {

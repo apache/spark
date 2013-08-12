@@ -26,7 +26,10 @@ import spark.mllib.util.MLUtils
 import org.jblas.DoubleMatrix
 
 /**
- * SVM using Stochastic Gradient Descent.
+ * Model built using SVM.
+ *
+ * @param weights Weights computed for every feature.
+ * @param intercept Intercept computed for this model.
  */
 class SVMModel(
     override val weights: Array[Double],
@@ -40,6 +43,9 @@ class SVMModel(
   }
 }
 
+/**
+ * Train an SVM using Stochastic Gradient Descent.
+ */
 class SVMWithSGD private (
     var stepSize: Double,
     var numIterations: Int,

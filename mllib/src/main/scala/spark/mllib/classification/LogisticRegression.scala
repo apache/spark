@@ -27,8 +27,10 @@ import scala.math.round
 import org.jblas.DoubleMatrix
 
 /**
- * Logistic Regression using Stochastic Gradient Descent.
- * Based on Matlab code written by John Duchi.
+ * Classification model trained using Logistic Regression.
+ *
+ * @param weights Weights computed for every feature.
+ * @param intercept Intercept computed for this model.
  */
 class LogisticRegressionModel(
     override val weights: Array[Double],
@@ -43,7 +45,10 @@ class LogisticRegressionModel(
   }
 }
 
-class LogisticRegressionWithSGD (
+/**
+ * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
+ */
+class LogisticRegressionWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
     var regParam: Double,
@@ -70,10 +75,10 @@ class LogisticRegressionWithSGD (
 
 /**
  * Top-level methods for calling Logistic Regression.
- * NOTE(shivaram): We use multiple train methods instead of default arguments to support
- *                 Java programs.
  */
 object LogisticRegressionWithSGD {
+  // NOTE(shivaram): We use multiple train methods instead of default arguments to support
+  // Java programs.
 
   /**
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
