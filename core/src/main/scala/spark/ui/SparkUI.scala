@@ -45,10 +45,8 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   val exec = new ExecutorsUI(sc)
 
   // Add MetricsServlet handlers by default
-  val metricsServletHandlers = SparkEnv.get.metricsSystem.metricsServlet match {
-    case Some(s) => s.getHandlers
-    case None => Array[(String, Handler)]()
-  }
+  val metricsServletHandlers = SparkEnv.get.metricsSystem.metricsServlet.map(_.getHandlers)
+    .getOrElse(Array())
 
   val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
     exec.getHandlers ++ metricsServletHandlers ++ handlers

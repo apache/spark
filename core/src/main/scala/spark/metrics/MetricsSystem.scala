@@ -129,7 +129,7 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
         val sink = Class.forName(classPath)
           .getConstructor(classOf[Properties], classOf[MetricRegistry])
           .newInstance(kv._2, registry)
-        if (kv._1 =="servlet") {
+        if (kv._1 == "servlet") {
            metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
         } else {
           sinks += sink.asInstanceOf[Sink]

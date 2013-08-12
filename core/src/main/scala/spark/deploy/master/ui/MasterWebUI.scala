@@ -17,7 +17,6 @@
 
 package spark.deploy.master.ui
 
-import akka.actor.ActorRef
 import akka.util.Duration
 
 import javax.servlet.http.HttpServletRequest
@@ -25,6 +24,7 @@ import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.server.{Handler, Server}
 
 import spark.{Logging, Utils}
+import spark.deploy.master.Master
 import spark.ui.JettyUtils
 import spark.ui.JettyUtils._
 
@@ -32,11 +32,13 @@ import spark.ui.JettyUtils._
  * Web UI server for the standalone master.
  */
 private[spark]
-class MasterWebUI(val master: ActorRef, requestedPort: Int) extends Logging {
+class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
   implicit val timeout = Duration.create(
     System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
   val host = Utils.localHostName()
   val port = requestedPort
+
+  val masterActorRef = master.self
 
   var server: Option[Server] = None
   var boundPort: Option[Int] = None
@@ -57,7 +59,11 @@ class MasterWebUI(val master: ActorRef, requestedPort: Int) extends Logging {
     }
   }
 
-  var handlers = Array[(String, Handler)](
+  val metricsHandlers = master.masterMetricsSystem.metricsServlet.map(_.getHandlers)
+    .getOrElse(Array()) ++ master.applicationMetricsSystem.metricsServlet.map(_.getHandlers)
+    .getOrElse(Array())
+
+  val handlers = metricsHandlers ++ Array[(String, Handler)](
     ("/static", createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)),
     ("/app/json", (request: HttpServletRequest) => applicationPage.renderJson(request)),
     ("/app", (request: HttpServletRequest) => applicationPage.render(request)),

@@ -41,16 +41,11 @@
 #    customize metrics system. You can also put the file in ${SPARK_HOME}/conf
 #    and it will be loaded automatically.
 #    5. MetricsServlet is added by default as a sink in master, worker and client
-#    driver, you can send http request "/metrics" to get a snapshot of all the
-#    registered metrics in json format. For master, requests "/metrics/master" and
-#    "/metrics/applications" can be sent seperately to get metrics snapshot of
-#    instance master and applications.
+#    driver, you can send http request "/metrics/json" to get a snapshot of all the
+#    registered metrics in json format. For master, requests "/metrics/master/json" and
+#    "/metrics/applications/json" can be sent seperately to get metrics snapshot of
+#    instance master and applications. MetricsServlet may not be configured by self.
 #
-
-# Change MetricsServlet's property
-#*.sink.servlet.uri=/metrics
-#
-#*.sink.servlet.sample=false
 
 # Enable JmxSink for all instances by class name
 #*.sink.jmx.class=spark.metrics.sink.JmxSink

@@ -30,12 +30,14 @@ class MetricsConfigSuite extends FunSuite with BeforeAndAfter {
     val conf = new MetricsConfig(Option("dummy-file"))
     conf.initialize()
 
-    assert(conf.properties.size() === 3)
+    assert(conf.properties.size() === 5)
     assert(conf.properties.getProperty("test-for-dummy") === null)
 
     val property = conf.getInstance("random")
-    assert(property.size() === 1)
+    assert(property.size() === 3)
     assert(property.getProperty("sink.servlet.class") === "spark.metrics.sink.MetricsServlet")
+    assert(property.getProperty("sink.servlet.uri") === "/metrics/json")
+    assert(property.getProperty("sink.servlet.sample") === "false")
   }
 
   test("MetricsConfig with properties set") {
@@ -43,19 +45,22 @@ class MetricsConfigSuite extends FunSuite with BeforeAndAfter {
     conf.initialize()
 
     val masterProp = conf.getInstance("master")
-    assert(masterProp.size() === 5)
+    assert(masterProp.size() === 6)
     assert(masterProp.getProperty("sink.console.period") === "20")
     assert(masterProp.getProperty("sink.console.unit") === "minutes")
     assert(masterProp.getProperty("source.jvm.class") === "spark.metrics.source.JvmSource")
     assert(masterProp.getProperty("sink.servlet.class") === "spark.metrics.sink.MetricsServlet")
-    assert(masterProp.getProperty("sink.servlet.uri") === "/metrics/master")
+    assert(masterProp.getProperty("sink.servlet.uri") === "/metrics/master/json")
+    assert(masterProp.getProperty("sink.servlet.sample") === "false")
 
     val workerProp = conf.getInstance("worker")
-    assert(workerProp.size() === 4)
+    assert(workerProp.size() === 6)
     assert(workerProp.getProperty("sink.console.period") === "10")
     assert(workerProp.getProperty("sink.console.unit") === "seconds")
     assert(workerProp.getProperty("source.jvm.class") === "spark.metrics.source.JvmSource")
     assert(workerProp.getProperty("sink.servlet.class") === "spark.metrics.sink.MetricsServlet")
+    assert(workerProp.getProperty("sink.servlet.uri") === "/metrics/json")
+    assert(workerProp.getProperty("sink.servlet.sample") === "false")
   }
 
   test("MetricsConfig with subProperties") {
@@ -79,6 +84,6 @@ class MetricsConfigSuite extends FunSuite with BeforeAndAfter {
     assert(consoleProps.size() === 2)
 
     val servletProps = sinkProps("servlet")
-    assert(servletProps.size() === 2)
+    assert(servletProps.size() === 3)
   }
 }

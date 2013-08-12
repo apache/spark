@@ -34,15 +34,9 @@ class MetricsServlet(val property: Properties, val registry: MetricRegistry) ext
   val SERVLET_KEY_URI = "uri"
   val SERVLET_KEY_SAMPLE = "sample"
 
-  val SERVLET_DEFAULT_URI = "/metrics"
-  val SERVLET_DEFAULT_SAMPLE = false
+  val servletURI = property.getProperty(SERVLET_KEY_URI)
 
-  val servletURI = property.getProperty(SERVLET_KEY_URI, SERVLET_DEFAULT_URI)
-
-  val servletShowSample = Option(property.getProperty(SERVLET_KEY_SAMPLE)) match {
-    case Some(s) => s.toBoolean
-    case None => SERVLET_DEFAULT_SAMPLE
-  }
+  val servletShowSample = property.getProperty(SERVLET_KEY_SAMPLE).toBoolean
 
   val mapper = new ObjectMapper().registerModule(
     new MetricsModule(TimeUnit.SECONDS, TimeUnit.MILLISECONDS, servletShowSample))

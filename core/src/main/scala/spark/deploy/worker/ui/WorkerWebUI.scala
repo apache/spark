@@ -17,7 +17,6 @@
 
 package spark.deploy.worker.ui
 
-import akka.actor.ActorRef
 import akka.util.{Duration, Timeout}
 
 import java.io.{FileInputStream, File}
@@ -49,7 +48,9 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   val indexPage = new IndexPage(this)
 
-  var handlers = Array[(String, Handler)](
+  val metricsHandlers = worker.metricsSystem.metricsServlet.map(_.getHandlers).getOrElse(Array())
+
+  val handlers = metricsHandlers ++ Array[(String, Handler)](
     ("/static", createStaticHandler(WorkerWebUI.STATIC_RESOURCE_DIR)),
     ("/log", (request: HttpServletRequest) => log(request)),
     ("/logPage", (request: HttpServletRequest) => logPage(request)),
