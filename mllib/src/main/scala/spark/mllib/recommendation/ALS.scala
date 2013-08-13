@@ -124,9 +124,18 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
 
     // Initialize user and product factors randomly
-    val seed = new Random().nextInt()
-    var users = userOutLinks.mapValues(_.elementIds.map(u => randomFactor(rank, seed ^ u)))
-    var products = productOutLinks.mapValues(_.elementIds.map(p => randomFactor(rank, seed ^ ~p)))
+    var users = userOutLinks.mapPartitions(itr => {
+      val rand = new Random()
+      itr.map({case (x,y) =>
+	       (x,y.elementIds.map(u => randomFactor(rank, rand)))
+	     })
+    })
+    var products = productOutLinks.mapPartitions(itr => {
+      val rand = new Random()
+      itr.map({case (x,y) =>
+	       (x,y.elementIds.map(u => randomFactor(rank, rand)))
+	     })
+    })
 
     for (iter <- 0 until iterations) {
       // perform ALS update
@@ -213,11 +222,9 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
   }
 
   /**
-   * Make a random factor vector with the given seed.
-   * TODO: Initialize things using mapPartitionsWithIndex to make it faster?
+   * Make a random factor vector with the given random.
    */
-  private def randomFactor(rank: Int, seed: Int): Array[Double] = {
-    val rand = new Random(seed)
+  private def randomFactor(rank: Int, rand: Random): Array[Double] = {
     Array.fill(rank)(rand.nextDouble)
   }
 
