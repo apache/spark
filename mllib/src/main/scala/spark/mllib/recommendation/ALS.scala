@@ -124,16 +124,16 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
 
     // Initialize user and product factors randomly
-    var users = userOutLinks.mapPartitions(itr => {
+    var users = userOutLinks.mapPartitions {itr =>
       val rand = new Random()
-      itr.map({case (x,y) =>
-	       (x,y.elementIds.map(u => randomFactor(rank, rand)))
+      itr.map({case (x, y) =>
+	       (x, y.elementIds.map(u => randomFactor(rank, rand)))
 	     })
-    })
-    var products = productOutLinks.mapPartitions(itr => {
+    }
+    var products = productOutLinks.mapPartitions {itr =>
       val rand = new Random()
-      itr.map({case (x,y) =>
-	       (x,y.elementIds.map(u => randomFactor(rank, rand)))
+      itr.map({case (x, y) =>
+	       (x, y.elementIds.map(u => randomFactor(rank, rand)))
 	     })
     })
 
