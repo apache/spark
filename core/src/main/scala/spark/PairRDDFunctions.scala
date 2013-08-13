@@ -715,6 +715,10 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
    */
   def values: RDD[V] = self.map(_._2)
 
+
+  def index(existingIndex: RDD[JHashMap[K,Int]] = null): IndexedRDD[K,V] = 
+    IndexedRDD(self, existingIndex)
+
   private[spark] def getKeyClass() = implicitly[ClassManifest[K]].erasure
 
   private[spark] def getValueClass() = implicitly[ClassManifest[V]].erasure
