@@ -34,7 +34,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
 
     assert(sources.length === 0)
     assert(sinks.length === 0)
-    assert(metricsSystem.metricsServlet != None)
+    assert(!metricsSystem.getServletHandlers.isEmpty)
   }
 
   test("MetricsSystem with sources add") {
@@ -44,7 +44,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
 
     assert(sources.length === 0)
     assert(sinks.length === 1)
-    assert(metricsSystem.metricsServlet != None)
+    assert(!metricsSystem.getServletHandlers.isEmpty)
 
     val source = new spark.deploy.master.MasterSource(null)
     metricsSystem.registerSource(source)
