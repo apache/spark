@@ -23,6 +23,7 @@ import java.util.Comparator
 import scala.Tuple2
 import scala.collection.JavaConversions._
 
+import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputFormat
@@ -40,8 +41,6 @@ import spark.Partitioner
 import spark.Partitioner._
 import spark.RDD
 import spark.SparkContext.rddToPairRDDFunctions
-
-import com.google.common.base.Optional
 
 class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManifest[K],
   implicit val vManifest: ClassManifest[V]) extends JavaRDDLike[(K, V), JavaPairRDD[K, V]] {
