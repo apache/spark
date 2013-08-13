@@ -48,6 +48,7 @@ class LogisticRegressionModel(
 
 /**
  * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
+ * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 class LogisticRegressionWithSGD private (
     var stepSize: Double,
@@ -79,6 +80,7 @@ class LogisticRegressionWithSGD private (
 
 /**
  * Top-level methods for calling Logistic Regression.
+ * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 object LogisticRegressionWithSGD {
   // NOTE(shivaram): We use multiple train methods instead of default arguments to support
@@ -89,6 +91,7 @@ object LogisticRegressionWithSGD {
    * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -113,6 +116,7 @@ object LogisticRegressionWithSGD {
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -135,6 +139,7 @@ object LogisticRegressionWithSGD {
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using the specified step size. We use the entire data
    * set to update the gradient in each iteration.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
@@ -155,6 +160,7 @@ object LogisticRegressionWithSGD {
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using a step size of 1.0. We use the entire data set
    * to update the gradient in each iteration.
+   * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
