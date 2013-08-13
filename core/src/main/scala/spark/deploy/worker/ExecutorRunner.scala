@@ -169,10 +169,10 @@ private[spark] class ExecutorRunner(
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
-      Files.write(header, stdout, Charsets.UTF_8)
       redirectStream(process.getInputStream, stdout)
 
       val stderr = new File(executorDir, "stderr")
+      Files.write(header, stderr, Charsets.UTF_8)
       redirectStream(process.getErrorStream, stderr)
 
       // Wait for it to exit; this is actually a bad thing if it happens, because we expect to run
