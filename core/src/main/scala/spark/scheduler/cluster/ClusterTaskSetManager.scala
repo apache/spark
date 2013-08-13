@@ -42,9 +42,6 @@ import spark.TaskResultTooBigFailure
 private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet: TaskSet)
   extends TaskSetManager with Logging {
 
-  // Maximum time to wait to run a task in a preferred location (in ms)
-  val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
-
   // CPUs to request per task
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toDouble
 
@@ -74,8 +71,6 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   var stageId = taskSet.stageId
   var name = "TaskSet_"+taskSet.stageId.toString
   var parent: Schedulable = null
-  // Last time when we launched a preferred task (for delay scheduling)
-  var lastPreferredLaunchTime = System.currentTimeMillis
 
   // Set of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
@@ -114,11 +109,9 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   val EXCEPTION_PRINT_INTERVAL =
     System.getProperty("spark.logging.exceptionPrintInterval", "10000").toLong
 
-  // Map of recent exceptions (identified by string representation and
-  // top stack frame) to duplicate count (how many times the same
-  // exception has appeared) and time the full exception was
-  // printed. This should ideally be an LRU map that can drop old
-  // exceptions automatically.
+  // Map of recent exceptions (identified by string representation and top stack frame) to
+  // duplicate count (how many times the same exception has appeared) and time the full exception
+  // was printed. This should ideally be an LRU map that can drop old exceptions automatically.
   val recentExceptions = HashMap[String, (Int, Long)]()
 
   // Figure out the current map output tracker epoch and set it on all tasks
@@ -133,6 +126,16 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
   }
+
+  // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
+  val myLocalityLevels = computeValidLocalityLevels()
+  val localityWaits = myLocalityLevels.map(getLocalityWait)  // spark.locality.wait
+
+  // Delay scheduling variables: we keep track of our current locality level and the time we
+  // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
+  // We then move down if we manage to launch a "more local" task.
+  var currentLocalityIndex = 0    // Index of our current locality level in validLocalityLevels
+  var lastLaunchTime = System.currentTimeMillis()  // Time we last launched a task at this level
 
   /**
    * Add a task to all the pending-task lists that it should be on. If readding is set, we are
@@ -169,7 +172,9 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
       addTo(pendingTasksWithNoPrefs)
     }
 
-    addTo(allPendingTasks)
+    if (!readding) {
+      allPendingTasks += index  // No point scanning this whole list to find the old task there
+    }
   }
 
   /**
@@ -324,18 +329,9 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
     : Option[TaskDescription] =
   {
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
-      val curTime = System.currentTimeMillis
+      val curTime = System.currentTimeMillis()
 
-      // If explicitly specified, use that
-      val locality = {
-        // expand only if we have waited for more than LOCALITY_WAIT for a host local task ...
-        // TODO(matei): Multi-level delay scheduling
-        if (curTime - lastPreferredLaunchTime < LOCALITY_WAIT) {
-          TaskLocality.NODE_LOCAL
-        } else {
-          TaskLocality.ANY
-        }
-      }
+      val locality = getAllowedLocalityLevel(curTime)
 
       findTask(execId, host, locality) match {
         case Some((index, taskLocality)) => {
@@ -350,16 +346,16 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
           val info = new TaskInfo(taskId, index, curTime, execId, host, taskLocality)
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
-          if (taskLocality == TaskLocality.PROCESS_LOCAL || taskLocality == TaskLocality.NODE_LOCAL) {
-            lastPreferredLaunchTime = curTime
-          }
+          // Update our locality level for delay scheduling
+          currentLocalityIndex = getLocalityIndex(locality)
+          lastLaunchTime = curTime
           // Serialize and return the task
-          val startTime = System.currentTimeMillis
+          val startTime = System.currentTimeMillis()
           // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
           // we assume the task can be serialized without exceptions.
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
-          val timeTaken = System.currentTimeMillis - startTime
+          val timeTaken = System.currentTimeMillis() - startTime
           increaseRunningTasks(1)
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
@@ -372,6 +368,34 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
       }
     }
     return None
+  }
+
+  /**
+   * Get the level we can launch tasks according to delay scheduling, based on current wait time.
+   */
+  private def getAllowedLocalityLevel(curTime: Long): TaskLocality.TaskLocality = {
+    while (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex) &&
+        currentLocalityIndex < myLocalityLevels.length - 1)
+    {
+      // Jump to the next locality level, and remove our waiting time for the current one since
+      // we don't want to count it again on the next one
+      lastLaunchTime += localityWaits(currentLocalityIndex)
+      currentLocalityIndex += 1
+    }
+    myLocalityLevels(currentLocalityIndex)
+  }
+
+  /**
+   * Find the index in myLocalityLevels for a given locality. This is also designed to work with
+   * localities that are not in myLocalityLevels (in case we somehow get those) by returning the
+   * next-biggest level we have. Uses the fact that the last value in myLocalityLevels is ANY.
+   */
+  def getLocalityIndex(locality: TaskLocality.TaskLocality): Int = {
+    var index = 0
+    while (locality > myLocalityLevels(index)) {
+      index += 1
+    }
+    index
   }
 
   /** Called by cluster scheduler when one of our tasks changes state */
@@ -467,7 +491,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
           case ef: ExceptionFailure =>
             sched.listener.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
             val key = ef.description
-            val now = System.currentTimeMillis
+            val now = System.currentTimeMillis()
             val (printFull, dupCount) = {
               if (recentExceptions.contains(key)) {
                 val (dupCount, printTime) = recentExceptions(key)
@@ -630,5 +654,39 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
 
   override def hasPendingTasks(): Boolean = {
     numTasks > 0 && tasksFinished < numTasks
+  }
+
+  private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
+    val defaultWait = System.getProperty("spark.locality.wait", "3000")
+    level match {
+      case TaskLocality.PROCESS_LOCAL =>
+        System.getProperty("spark.locality.wait.process", defaultWait).toLong
+      case TaskLocality.NODE_LOCAL =>
+        System.getProperty("spark.locality.wait.node", defaultWait).toLong
+      case TaskLocality.RACK_LOCAL =>
+        System.getProperty("spark.locality.wait.rack", defaultWait).toLong
+      case TaskLocality.ANY =>
+        0L
+    }
+  }
+
+  /**
+   * Compute the locality levels used in this TaskSet. Assumes that all tasks have already been
+   * added to queues using addPendingTask.
+   */
+  private def computeValidLocalityLevels(): Array[TaskLocality.TaskLocality] = {
+    import TaskLocality.{PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY}
+    val levels = new ArrayBuffer[TaskLocality.TaskLocality]
+    if (!pendingTasksForExecutor.isEmpty && getLocalityWait(PROCESS_LOCAL) != 0) {
+      levels += PROCESS_LOCAL
+    }
+    if (!pendingTasksForHost.isEmpty && getLocalityWait(NODE_LOCAL) != 0) {
+      levels += NODE_LOCAL
+    }
+    if (!pendingTasksForRack.isEmpty && getLocalityWait(RACK_LOCAL) != 0) {
+      levels += RACK_LOCAL
+    }
+    levels += ANY
+    levels.toArray
   }
 }

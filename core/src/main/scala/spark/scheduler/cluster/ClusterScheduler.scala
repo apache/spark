@@ -45,39 +45,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "15000").toLong
 
-  // How often to revive offers in case there are pending tasks - that is how often to try to get
-  // tasks scheduled in case there are nodes available : default 0 is to disable it - to preserve existing behavior
-  // Note that this is required due to delay scheduling due to data locality waits, etc.
-  // TODO(matei): move to StandaloneSchedulerBackend?
-  val TASK_REVIVAL_INTERVAL = System.getProperty("spark.scheduler.revival.interval", "1000").toLong
-
-  // TODO(matei): replace this with something that only affects levels past PROCESS_LOCAL;
-  // basically it can be a "cliff" for locality
-  /*
-   This property controls how aggressive we should be to modulate waiting for node local task scheduling.
-   To elaborate, currently there is a time limit (3 sec def) to ensure that spark attempts to wait for node locality of tasks before
-   scheduling on other nodes. We have modified this in yarn branch such that offers to task set happen in prioritized order :
-   node-local, rack-local and then others
-   But once all available node local (and no pref) tasks are scheduled, instead of waiting for 3 sec before
-   scheduling to other nodes (which degrades performance for time sensitive tasks and on larger clusters), we can
-   modulate that : to also allow rack local nodes or any node. The default is still set to HOST - so that previous behavior is
-   maintained. This is to allow tuning the tension between pulling rdd data off node and scheduling computation asap.
-
-   TODO: rename property ? The value is one of
-   - NODE_LOCAL (default, no change w.r.t current behavior),
-   - RACK_LOCAL and
-   - ANY
-
-   Note that this property makes more sense when used in conjugation with spark.tasks.revive.interval > 0 : else it is not very effective.
-
-   Additional Note: For non trivial clusters, there is a 4x - 5x reduction in running time (in some of our experiments) based on whether
-   it is left at default NODE_LOCAL, RACK_LOCAL (if cluster is configured to be rack aware) or ANY.
-   If cluster is rack aware, then setting it to RACK_LOCAL gives best tradeoff and a 3x - 4x performance improvement while minimizing IO impact.
-   Also, it brings down the variance in running time drastically.
-    */
-  val TASK_SCHEDULING_AGGRESSION = TaskLocality.withName(
-    System.getProperty("spark.tasks.schedule.aggression", "NODE_LOCAL"))
-
   val activeTaskSets = new HashMap[String, TaskSetManager]
 
   val taskIdToTaskSetId = new HashMap[Long, String]
@@ -136,14 +103,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       }
     }
     schedulableBuilder.buildPools()
-    // resolve executorId to hostPort mapping.
-    def executorToHostPort(executorId: String, defaultHostPort: String): String = {
-      executorIdToHost.getOrElse(executorId, defaultHostPort)
-    }
-
-    // Unfortunately, this means that SparkEnv is indirectly referencing ClusterScheduler
-    // Will that be a design violation ?
-    SparkEnv.get.executorIdToHostPort = Some(executorToHostPort)
   }
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
@@ -164,28 +123,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
               case e: InterruptedException => {}
             }
             checkSpeculatableTasks()
-          }
-        }
-      }.start()
-    }
-
-
-    // Change to always run with some default if TASK_REVIVAL_INTERVAL <= 0 ?
-    // TODO(matei): remove this thread
-    if (TASK_REVIVAL_INTERVAL > 0) {
-      new Thread("ClusterScheduler task offer revival check") {
-        setDaemon(true)
-
-        override def run() {
-          logInfo("Starting speculative task offer revival thread")
-          while (true) {
-            try {
-              Thread.sleep(TASK_REVIVAL_INTERVAL)
-            } catch {
-              case e: InterruptedException => {}
-            }
-
-            if (hasPendingTasks()) backend.reviveOffers()
           }
         }
       }.start()
@@ -329,7 +266,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       backend.reviveOffers()
     }
     if (taskFailed) {
-
       // Also revive offers if a task had failed for some reason other than host lost
       backend.reviveOffers()
     }
@@ -384,7 +320,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   }
 
   // Check for pending tasks in all our active jobs.
-  def hasPendingTasks(): Boolean = {
+  def hasPendingTasks: Boolean = {
     synchronized {
       rootPool.hasPendingTasks()
     }
@@ -416,10 +352,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   /** Remove an executor from all our data structures and mark it as lost */
   private def removeExecutor(executorId: String) {
-    // TODO(matei): remove HostPort
     activeExecutorIds -= executorId
     val host = executorIdToHost(executorId)
-
     val execs = executorsByHost.getOrElse(host, new HashSet)
     execs -= executorId
     if (execs.isEmpty) {

@@ -26,6 +26,7 @@ import akka.dispatch.Await
 import akka.pattern.ask
 import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
 import akka.util.Duration
+import akka.util.duration._
 
 import spark.{Utils, SparkException, Logging, TaskState}
 import spark.scheduler.cluster.StandaloneClusterMessages._
@@ -39,8 +40,6 @@ private[spark]
 class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: ActorSystem)
   extends SchedulerBackend with Logging
 {
-  // TODO(matei): periodically revive offers as in MesosScheduler
-
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
 
@@ -55,6 +54,10 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
       context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+
+      // Periodically revive offers to allow delay scheduling to work
+      val reviveInterval = System.getProperty("spark.scheduler.revive.interval", "1000").toLong
+      context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
     def receive = {
