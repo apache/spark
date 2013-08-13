@@ -65,7 +65,7 @@ class LogisticRegressionWithSGD private (
       .setNumIterations(numIterations)
       .setRegParam(regParam)
       .setMiniBatchFraction(miniBatchFraction)
-  override val validateFuncs = List(DataValidators.classificationLabels)
+  override val validators = List(DataValidators.classificationLabels)
 
   /**
    * Construct a LogisticRegression object with default parameters

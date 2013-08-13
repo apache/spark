@@ -41,7 +41,8 @@ class SVMModel(
 
   override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
       intercept: Double) = {
-    signum(dataMatrix.dot(weightMatrix) + intercept)
+    val margin = dataMatrix.dot(weightMatrix) + intercept
+    if (margin < 0) 0.0 else 1.0
   }
 }
 
@@ -65,7 +66,7 @@ class SVMWithSGD private (
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
-  override val validateFuncs = List(DataValidators.classificationLabels)
+  override val validators = List(DataValidators.classificationLabels)
 
   /**
    * Construct a SVM object with default parameters

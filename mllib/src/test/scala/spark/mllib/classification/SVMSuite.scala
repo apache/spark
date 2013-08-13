@@ -48,7 +48,7 @@ object SVMSuite {
     val rnd = new Random(seed)
     val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(
-        Array.fill[Double](weights.length)(rnd.nextGaussian()))
+        Array.fill[Double](weights.length)(rnd.nextDouble() * 2.0 - 1.0))
     val y = x.map { xi =>
       val yD = (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) +
         intercept + 0.01 * rnd.nextGaussian()
@@ -83,7 +83,8 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
   test("SVM using local random SGD") {
     val nPoints = 10000
 
-    val A = 2.0
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
     val B = -1.5
     val C = 1.0
 
@@ -110,7 +111,8 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
   test("SVM local random SGD with initial weights") {
     val nPoints = 10000
 
-    val A = 2.0
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
     val B = -1.5
     val C = 1.0
 
@@ -141,7 +143,8 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
   test("SVM with invalid labels") {
     val nPoints = 10000
 
-    val A = 2.0
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
     val B = -1.5
     val C = 1.0
 

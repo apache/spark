@@ -84,13 +84,15 @@ class HingeGradient extends Gradient {
       (DoubleMatrix, Double) = {
 
     val dotProduct = data.dot(weights)
-    val labelScaled = 2*label - 1.0
 
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
-    if (1.0 > labelScaled * dotProduct)
+    val labelScaled = 2 * label - 1.0
+
+    if (1.0 > labelScaled * dotProduct) {
       (data.mul(-labelScaled), 1.0 - labelScaled * dotProduct)
-    else
+    } else {
       (DoubleMatrix.zeros(1, weights.length), 0.0)
+    }
   }
 }

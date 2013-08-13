@@ -83,7 +83,7 @@ abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept:
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
-  protected val validateFuncs: Seq[RDD[LabeledPoint] => Boolean] = List()
+  protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
   val optimizer: Optimizer
 
@@ -119,7 +119,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   def run(input: RDD[LabeledPoint], initialWeights: Array[Double]) : M = {
 
     // Check the data properties before running the optimizer
-    if (!validateFuncs.forall(func => func(input))) {
+    if (!validators.forall(func => func(input))) {
       throw new SparkException("Input validation failed.")
     }
 
