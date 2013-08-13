@@ -158,7 +158,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         case t: Throwable => {
           val serviceTime = (System.currentTimeMillis() - taskStart).toInt
           val metrics = attemptedTask.flatMap(t => t.metrics)
-          metrics.foreach{m =>
+          metrics.foreach {m =>
             m.executorRunTime = serviceTime
             m.jvmGCTime = getTotalGCTime - startGCTime
           }

@@ -218,7 +218,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       case t: Throwable => {
         val serviceTime = System.currentTimeMillis() - taskStart
         val metrics = attemptedTask.flatMap(t => t.metrics)
-        metrics.foreach{ m =>
+        metrics.foreach {m =>
           m.executorRunTime = serviceTime.toInt
           m.jvmGCTime = getTotalGCTime - startGCTime
         }
