@@ -35,7 +35,7 @@ import spark.deploy.master.{ApplicationInfo, WorkerInfo}
 import spark.ui.UIUtils
 
 private[spark] class IndexPage(parent: MasterWebUI) {
-  val master = parent.master
+  val master = parent.masterActorRef
   implicit val timeout = parent.timeout
 
   def renderJson(request: HttpServletRequest): JValue = {

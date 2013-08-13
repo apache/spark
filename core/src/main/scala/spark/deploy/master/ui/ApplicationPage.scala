@@ -33,7 +33,7 @@ import spark.deploy.master.ExecutorInfo
 import spark.ui.UIUtils
 
 private[spark] class ApplicationPage(parent: MasterWebUI) {
-  val master = parent.master
+  val master = parent.masterActorRef
   implicit val timeout = parent.timeout
 
   /** Executor details for a particular application */
