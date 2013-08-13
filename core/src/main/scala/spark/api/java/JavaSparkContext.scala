@@ -32,6 +32,8 @@ import spark.SparkContext.IntAccumulatorParam
 import spark.SparkContext.DoubleAccumulatorParam
 import spark.broadcast.Broadcast
 
+import com.google.common.base.Optional
+
 /**
  * A Java-friendly version of [[spark.SparkContext]] that returns [[spark.api.java.JavaRDD]]s and
  * works with Java collections instead of Scala ones.
@@ -337,7 +339,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * or the spark.home Java property, or the SPARK_HOME environment variable
    * (in that order of preference). If neither of these is set, return None.
    */
-  def getSparkHome(): Option[String] = sc.getSparkHome()
+  def getSparkHome(): Optional[String] = JavaUtils.optionToOptional(sc.getSparkHome())
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
