@@ -73,7 +73,10 @@ private[spark] class MetricsSystem private (val instance: String) extends Loggin
   val registry = new MetricRegistry()
 
   // Treat MetricsServlet as a special sink as it should be exposed to add handlers to web ui
-  var metricsServlet: Option[MetricsServlet] = None
+  private var metricsServlet: Option[MetricsServlet] = None
+
+  /** Get any UI handlers used by this metrics system. */
+  def getServletHandlers = metricsServlet.map(_.getHandlers).getOrElse(Array())
 
   metricsConfig.initialize()
   registerSources()

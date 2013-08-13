@@ -48,7 +48,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   val indexPage = new IndexPage(this)
 
-  val metricsHandlers = worker.metricsSystem.metricsServlet.map(_.getHandlers).getOrElse(Array())
+  val metricsHandlers = worker.metricsSystem.getServletHandlers
 
   val handlers = metricsHandlers ++ Array[(String, Handler)](
     ("/static", createStaticHandler(WorkerWebUI.STATIC_RESOURCE_DIR)),

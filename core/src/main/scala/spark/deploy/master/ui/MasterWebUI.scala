@@ -59,9 +59,8 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
     }
   }
 
-  val metricsHandlers = master.masterMetricsSystem.metricsServlet.map(_.getHandlers)
-    .getOrElse(Array()) ++ master.applicationMetricsSystem.metricsServlet.map(_.getHandlers)
-    .getOrElse(Array())
+  val metricsHandlers = master.masterMetricsSystem.getServletHandlers ++
+    master.applicationMetricsSystem.getServletHandlers
 
   val handlers = metricsHandlers ++ Array[(String, Handler)](
     ("/static", createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)),
