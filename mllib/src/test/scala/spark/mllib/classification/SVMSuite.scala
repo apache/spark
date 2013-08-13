@@ -50,11 +50,9 @@ object SVMSuite {
     val x = Array.fill[Array[Double]](nPoints)(
         Array.fill[Double](weights.length)(rnd.nextGaussian()))
     val y = x.map { xi =>
-      signum(
-        (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) +
-        intercept +
-        0.1 * rnd.nextGaussian()
-      ).toInt
+      val yD = (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) +
+        intercept + 0.01 * rnd.nextGaussian()
+      if (yD < 0) 0.0 else 1.0
     }
     y.zip(x).map(p => LabeledPoint(p._1, p._2))
   }
@@ -100,7 +98,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     val model = svm.run(testRDD)
 
     val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
-    val validationRDD  = sc.parallelize(validationData,2)
+    val validationRDD  = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
@@ -138,5 +136,28 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
+  test("SVM with invalid labels") {
+    val nPoints = 10000
+
+    val A = 2.0
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testRDD = sc.parallelize(testData, 2)
+
+    val testRDDInvalid = testRDD.map { lp =>
+      if (lp.label == 0.0) {
+        LabeledPoint(-1.0, lp.features)
+      } else {
+        lp
+      }
+    }
+
+    intercept[spark.SparkException] {
+      val model = SVMWithSGD.train(testRDDInvalid, 100)
+    }
   }
 }

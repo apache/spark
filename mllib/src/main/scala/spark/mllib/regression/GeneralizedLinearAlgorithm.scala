@@ -17,7 +17,7 @@
 
 package spark.mllib.regression
 
-import spark.{Logging, RDD}
+import spark.{Logging, RDD, SparkException}
 import spark.mllib.optimization._
 
 import org.jblas.DoubleMatrix
@@ -83,6 +83,8 @@ abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept:
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   extends Logging with Serializable {
 
+  protected val validateFuncs: Seq[RDD[LabeledPoint] => Boolean] = List()
+
   val optimizer: Optimizer
 
   /**
@@ -115,6 +117,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * of LabeledPoint entries starting from the initial weights provided.
    */
   def run(input: RDD[LabeledPoint], initialWeights: Array[Double]) : M = {
+
+    // Check the data properties before running the optimizer
+    if (!validateFuncs.forall(func => func(input))) {
+      throw new SparkException("Input validation failed.")
+    }
 
     // Add a extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {

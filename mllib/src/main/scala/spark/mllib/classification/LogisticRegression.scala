@@ -17,12 +17,13 @@
 
 package spark.mllib.classification
 
+import scala.math.round
+
 import spark.{Logging, RDD, SparkContext}
 import spark.mllib.optimization._
 import spark.mllib.regression._
 import spark.mllib.util.MLUtils
-
-import scala.math.round
+import spark.mllib.util.DataValidators
 
 import org.jblas.DoubleMatrix
 
@@ -59,10 +60,13 @@ class LogisticRegressionWithSGD private (
 
   val gradient = new LogisticGradient()
   val updater = new SimpleUpdater()
-  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
-                                                        .setNumIterations(numIterations)
-                                                        .setRegParam(regParam)
-                                                        .setMiniBatchFraction(miniBatchFraction)
+  override val optimizer = new GradientDescent(gradient, updater)
+      .setStepSize(stepSize)
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setMiniBatchFraction(miniBatchFraction)
+  override val validateFuncs = List(DataValidators.classificationLabels)
+
   /**
    * Construct a LogisticRegression object with default parameters
    */
