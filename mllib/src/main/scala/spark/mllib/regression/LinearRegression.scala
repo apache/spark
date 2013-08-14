@@ -24,14 +24,14 @@ import spark.mllib.util.MLUtils
 import org.jblas.DoubleMatrix
 
 /**
- * Regression model trained using RidgeRegression.
+ * Regression model trained using LinearRegression.
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-class RidgeRegressionModel(
-    override val weights: Array[Double],
-    override val intercept: Double)
+class LinearRegressionModel(
+                  override val weights: Array[Double],
+                  override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {
 
@@ -42,41 +42,39 @@ class RidgeRegressionModel(
 }
 
 /**
- * Train a regression model with L2-regularization using Stochastic Gradient Descent.
+ * Train a regression model with no regularization using Stochastic Gradient Descent.
  */
-class RidgeRegressionWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var regParam: Double,
-    var miniBatchFraction: Double,
-    var addIntercept: Boolean)
-    extends GeneralizedLinearAlgorithm[RidgeRegressionModel]
+class LinearRegressionWithSGD private (
+                             var stepSize: Double,
+                             var numIterations: Int,
+                             var miniBatchFraction: Double,
+                             var addIntercept: Boolean)
+  extends GeneralizedLinearAlgorithm[LinearRegressionModel]
   with Serializable {
 
   val gradient = new SquaredGradient()
-  val updater = new SquaredL2Updater()
+  val updater = new SimpleUpdater()
   val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
     .setNumIterations(numIterations)
-    .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
   /**
-   * Construct a RidgeRegression object with default parameters
+   * Construct a LinearRegression object with default parameters
    */
-  def this() = this(1.0, 100, 1.0, 1.0, true)
+  def this() = this(1.0, 100, 1.0, true)
 
   def createModel(weights: Array[Double], intercept: Double) = {
-    new RidgeRegressionModel(weights, intercept)
+    new LinearRegressionModel(weights, intercept)
   }
 }
 
 /**
- * Top-level methods for calling RidgeRegression.
+ * Top-level methods for calling LinearRegression.
  */
-object RidgeRegressionWithSGD {
+object LinearRegressionWithSGD {
 
   /**
-   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
+   * Train a Linear Regression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
@@ -84,92 +82,86 @@ object RidgeRegressionWithSGD {
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to 
    *        the number of features in the data.
    */
   def train(
-    input: RDD[LabeledPoint],
-    numIterations: Int,
-    stepSize: Double,
-    regParam: Double,
-    miniBatchFraction: Double,
-    initialWeights: Array[Double])
-  : RidgeRegressionModel =
+             input: RDD[LabeledPoint],
+             numIterations: Int,
+             stepSize: Double,
+             miniBatchFraction: Double,
+             initialWeights: Array[Double])
+  : LinearRegressionModel =
   {
-    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input,
+    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction, true).run(input,
       initialWeights)
   }
 
   /**
-   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
+   * Train a LinearRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
   def train(
-    input: RDD[LabeledPoint],
-    numIterations: Int,
-    stepSize: Double,
-    regParam: Double,
-    miniBatchFraction: Double)
-  : RidgeRegressionModel =
+             input: RDD[LabeledPoint],
+             numIterations: Int,
+             stepSize: Double,
+             miniBatchFraction: Double)
+  : LinearRegressionModel =
   {
-    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input)
+    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction, true).run(input)
   }
 
   /**
-   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
+   * Train a LinearRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. We use the entire data set to
    * update the gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
-   * @param regParam Regularization parameter.
    * @param numIterations Number of iterations of gradient descent to run.
-   * @return a RidgeRegressionModel which has the weights and offset from training.
+   * @return a LinearRegressionModel which has the weights and offset from training.
    */
   def train(
-    input: RDD[LabeledPoint],
-    numIterations: Int,
-    stepSize: Double,
-    regParam: Double)
-  : RidgeRegressionModel =
+             input: RDD[LabeledPoint],
+             numIterations: Int,
+             stepSize: Double)
+  : LinearRegressionModel =
   {
-    train(input, numIterations, stepSize, regParam, 1.0)
+    train(input, numIterations, stepSize, 1.0)
   }
 
   /**
-   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
+   * Train a LinearRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
    * update the gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
-   * @return a RidgeRegressionModel which has the weights and offset from training.
+   * @return a LinearRegressionModel which has the weights and offset from training.
    */
   def train(
-    input: RDD[LabeledPoint],
-    numIterations: Int)
-  : RidgeRegressionModel =
+             input: RDD[LabeledPoint],
+             numIterations: Int)
+  : LinearRegressionModel =
   {
-    train(input, numIterations, 1.0, 1.0, 1.0)
+    train(input, numIterations, 1.0, 1.0)
   }
 
   def main(args: Array[String]) {
     if (args.length != 5) {
-      println("Usage: RidgeRegression <master> <input_dir> <step_size> <regularization_parameter> <niters>")
+      println("Usage: LinearRegression <master> <input_dir> <step_size> <niters>")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "RidgeRegression")
+    val sc = new SparkContext(args(0), "LinearRegression")
     val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = RidgeRegressionWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+    val model = LinearRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
 
     sc.stop()
   }

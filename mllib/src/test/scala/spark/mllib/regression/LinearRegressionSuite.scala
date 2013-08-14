@@ -25,26 +25,27 @@ import org.scalatest.FunSuite
 
 import spark.SparkContext
 import spark.SparkContext._
-import spark.mllib.util.RidgeRegressionDataGenerator
+import spark.mllib.util.LinearRegressionDataGenerator
+import spark.mllib.regression.LabeledPoint
 import org.jblas.DoubleMatrix
 
-object RidgeRegressionSuite {
+object LinearRegressionSuite {
 
-  def generateRidgeRegressionInputAsList(
-    intercept: Double,
-    weights: Array[Double],
-    nPoints: Int,
-    seed: Int): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateRidgeRegressionInput(intercept, weights, nPoints, seed))
+  def generateLinearRegressionInputAsList(
+                                intercept: Double,
+                                weights: Array[Double],
+                                nPoints: Int,
+                                seed: Int): java.util.List[LabeledPoint] = {
+    seqAsJavaList(generateLinearRegressionInput(intercept, weights, nPoints, seed))
   }
 
 
   // Generate noisy input of the form Y = x.dot(weights) + intercept + noise
-  def generateRidgeRegressionInput(
-    intercept: Double,
-    weights: Array[Double],
-    nPoints: Int,
-    seed: Int): Seq[LabeledPoint] = {
+  def generateLinearRegressionInput(
+                          intercept: Double,
+                          weights: Array[Double],
+                          nPoints: Int,
+                          seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
     val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(
@@ -57,8 +58,7 @@ object RidgeRegressionSuite {
 
 }
 
-
-class RidgeRegressionSuite extends FunSuite with BeforeAndAfterAll {
+class LinearRegressionSuite extends FunSuite with BeforeAndAfterAll {
   @transient private var sc: SparkContext = _
 
   override def beforeAll() {
@@ -73,28 +73,15 @@ class RidgeRegressionSuite extends FunSuite with BeforeAndAfterAll {
   // Test if we can correctly learn Y = 3 + 10*X1 + 10*X2 when
   // X1 and X2 are collinear.
   test("multi-collinear variables") {
-    val testRDD = RidgeRegressionDataGenerator.generateRidgeRDD(sc, 100, 2, 0.0, intercept=3.0).cache()
-    val ridgeReg = new RidgeRegressionWithSGD()
-    ridgeReg.optimizer.setNumIterations(1000).setRegParam(0.0).setStepSize(1.0)
+    val testRDD = LinearRegressionDataGenerator.generateLinearRDD(sc, 100, 2, 0.0, intercept=3.0).cache()
+    val linReg = new LinearRegressionWithSGD()
+    linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
 
-    val model = ridgeReg.run(testRDD)
+    val model = linReg.run(testRDD)
 
     assert(model.intercept >= 2.5 && model.intercept <= 3.5)
     assert(model.weights.length === 2)
     assert(model.weights(0) >= 9.0 && model.weights(0) <= 11.0)
     assert(model.weights(1) >= 9.0 && model.weights(1) <= 11.0)
-  }
-
-  test("multi-collinear variables with regularization") {
-    val testRDD = RidgeRegressionDataGenerator.generateRidgeRDD(sc, 100, 2, 0.0, intercept=3.0).cache()
-    val ridgeReg = new RidgeRegressionWithSGD()
-    ridgeReg.optimizer.setNumIterations(1000).setRegParam(1.0).setStepSize(1.0)
-
-    val model = ridgeReg.run(testRDD)
-
-    assert(model.intercept <= 5.0)
-    assert(model.weights.length === 2)
-    assert(model.weights(0) <= 3.0)
-    assert(model.weights(1) <= 3.0)
   }
 }

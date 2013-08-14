@@ -25,15 +25,15 @@ import spark.{RDD, SparkContext}
 import spark.mllib.regression.LabeledPoint
 
 /**
- * Generate sample data used for RidgeRegression. This class generates
+ * Generate sample data used for LinearRegression. This class generates
  * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
  * response variable `Y`.
  *
  */
-object RidgeRegressionDataGenerator {
+object LinearRegressionDataGenerator {
 
   /**
-   * Generate an RDD containing sample data for RidgeRegression.
+   * Generate an RDD containing sample data for LinearRegression.
    *
    * @param sc SparkContext to be used for generating the RDD.
    * @param nexamples Number of examples that will be contained in the RDD.
@@ -43,7 +43,7 @@ object RidgeRegressionDataGenerator {
    *
    * @return RDD of LabeledPoint containing sample data.
    */
-  def generateRidgeRDD(
+  def generateLinearRDD(
     sc: SparkContext,
     nexamples: Int,
     nfeatures: Int,
@@ -77,7 +77,7 @@ object RidgeRegressionDataGenerator {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
-      println("Usage: RidgeRegressionGenerator " +
+      println("Usage: LinearRegressionGenerator " +
         "<master> <output_dir> [num_examples] [num_features] [num_partitions]")
       System.exit(1)
     }
@@ -89,8 +89,8 @@ object RidgeRegressionDataGenerator {
     val parts: Int = if (args.length > 4) args(4).toInt else 2
     val eps = 10
 
-    val sc = new SparkContext(sparkMaster, "RidgeRegressionDataGenerator")
-    val data = generateRidgeRDD(sc, nexamples, nfeatures, eps, parts)
+    val sc = new SparkContext(sparkMaster, "LinearRegressionDataGenerator")
+    val data = generateLinearRDD(sc, nexamples, nfeatures, eps, parts)
 
     MLUtils.saveLabeledData(data, outputPath)
     sc.stop()
