@@ -50,7 +50,7 @@ private[spark] case class CoalescedRDDPartition(
 class CoalescedRDD[T: ClassManifest](
     @transient var prev: RDD[T],
     maxPartitions: Int,
-    balanceSlack: Double = 0.20 )
+    balanceSlack: Double = 0.10 )
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
@@ -158,7 +158,7 @@ class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack: Double)
 
   // determines the tradeoff between load-balancing the partitions sizes and their locality
   // e.g. balanceSlack=0.10 means that it allows up to 10% imbalance in favor of locality
-  val slack = (balanceSlack * maxPartitions).toInt
+  val slack = (balanceSlack * prev.partitions.size).toInt
 
   private var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
