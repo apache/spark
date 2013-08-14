@@ -123,7 +123,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
       <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
       <td>
         {Utils.memoryBytesToString(status.memUsed(prefix))}
-        ({Utils.memoryBytesToString(status.memRemaining)} Total Available)
+        ({Utils.memoryBytesToString(status.memRemaining)} Remaining)
       </td>
       <td>{Utils.memoryBytesToString(status.diskUsed(prefix))}</td>
     </tr>

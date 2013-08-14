@@ -85,9 +85,10 @@ private[spark] class StagePage(parent: JobProgressUI) {
         Seq("Task ID", "Status", "Duration", "Locality Level", "Worker", "Launch Time") ++
           {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
           {if (hasShuffleWrite) Seq("Shuffle Write") else Nil} ++
+        Seq("GC Time") ++
         Seq("Details")
 
-      val taskTable = listingTable(taskHeaders, taskRow, tasks)
+      val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite), tasks)
 
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (t._2.isDefined))
@@ -135,7 +136,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
   }
 
 
-  def taskRow(taskData: (TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])): Seq[Node] = {
+  def taskRow(shuffleRead: Boolean, shuffleWrite: Boolean)
+             (taskData: (TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])): Seq[Node] = {
     def fmtStackTrace(trace: Seq[StackTraceElement]): Seq[Node] =
       trace.map(e => <span style="display:block;">{e.toString}</span>)
     val (info, metrics, exception) = taskData
@@ -144,6 +146,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
       else metrics.map(m => m.executorRunTime).getOrElse(1)
     val formatDuration = if (info.status == "RUNNING") parent.formatDuration(duration)
       else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
+    val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
 
     <tr>
       <td>{info.taskId}</td>
@@ -154,10 +157,17 @@ private[spark] class StagePage(parent: JobProgressUI) {
       <td>{info.taskLocality}</td>
       <td>{info.hostPort}</td>
       <td>{dateFmt.format(new Date(info.launchTime))}</td>
-      {metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>
-        <td>{Utils.memoryBytesToString(s.remoteBytesRead)}</td>}.getOrElse("")}
-      {metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-        <td>{Utils.memoryBytesToString(s.shuffleBytesWritten)}</td>}.getOrElse("")}
+      {if (shuffleRead) {
+        <td>{metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>
+          Utils.memoryBytesToString(s.remoteBytesRead)}.getOrElse("")}</td>
+      }}
+      {if (shuffleWrite) {
+        <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
+          Utils.memoryBytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
+      }}
+      <td sorttable_customkey={gcTime.toString}>
+        {if (gcTime > 0) parent.formatDuration(gcTime) else ""}
+      </td>
       <td>{exception.map(e =>
         <span>
           {e.className} ({e.description})<br/>
