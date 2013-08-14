@@ -116,7 +116,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
 
   // Figure out the current map output tracker epoch and set it on all tasks
   val epoch = sched.mapOutputTracker.getEpoch
-  logDebug("Epoch for " + taskSet.id + ": " + epoch)
+  logDebug("Epoch for " + taskSet + ": " + epoch)
   for (t <- tasks) {
     t.epoch = epoch
   }
@@ -129,7 +129,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
 
   // Figure out which locality levels we have in our TaskSet, so we can do delay scheduling
   val myLocalityLevels = computeValidLocalityLevels()
-  val localityWaits = myLocalityLevels.map(getLocalityWait)  // spark.locality.wait
+  val localityWaits = myLocalityLevels.map(getLocalityWait) // Time to wait at each level
 
   // Delay scheduling variables: we keep track of our current locality level and the time we
   // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
@@ -687,6 +687,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
       levels += RACK_LOCAL
     }
     levels += ANY
+    logDebug("Valid locality levels for " + taskSet + ": " + levels.mkString(", "))
     levels.toArray
   }
 }

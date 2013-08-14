@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package spark.scheduler
+package spark.scheduler.cluster
 
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter

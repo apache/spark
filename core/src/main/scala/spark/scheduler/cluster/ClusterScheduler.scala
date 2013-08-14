@@ -385,25 +385,17 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
 
 object ClusterScheduler {
-
-  // Used to 'spray' available containers across the available set to ensure too many containers on same host
-  // are not used up. Used in yarn mode and in task scheduling (when there are multiple containers available
-  // to execute a task)
-  // For example: yarn can returns more containers than we would have requested under ANY, this method
-  // prioritizes how to use the allocated containers.
-  // flatten the map such that the array buffer entries are spread out across the returned value.
-  // given <host, list[container]> == <h1, [c1 .. c5]>, <h2, [c1 .. c3]>, <h3, [c1, c2]>, <h4, c1>, <h5, c1>, i
-  // the return value would be something like : h1c1, h2c1, h3c1, h4c1, h5c1, h1c2, h2c2, h3c2, h1c3, h2c3, h1c4, h1c5
-  // We then 'use' the containers in this order (consuming only the top K from this list where
-  // K = number to be user). This is to ensure that if we have multiple eligible allocations,
-  // they dont end up allocating all containers on a small number of hosts - increasing probability of
-  // multiple container failure when a host goes down.
-  // Note, there is bias for keys with higher number of entries in value to be picked first (by design)
-  // Also note that invocation of this method is expected to have containers of same 'type'
-  // (host-local, rack-local, off-rack) and not across types : so that reordering is simply better from
-  // the available list - everything else being same.
-  // That is, we we first consume data local, then rack local and finally off rack nodes. So the
-  // prioritization from this method applies to within each category
+  /**
+   * Used to balance containers across hosts.
+   *
+   * Accepts a map of hosts to resource offers for that host, and returns a prioritized list of
+   * resource offers representing the order in which the offers should be used.  The resource
+   * offers are ordered such that we'll allocate one container on each host before allocating a
+   * second container on any host, and so on, in order to reduce the damage if a host fails.
+   *
+   * For example, given <h1, [o1, o2, o3]>, <h2, [o4]>, <h1, [o5, o6]>, returns
+   * [o1, o5, o4, 02, o6, o3]
+   */
   def prioritizeContainers[K, T] (map: HashMap[K, ArrayBuffer[T]]): List[T] = {
     val _keyList = new ArrayBuffer[K](map.size)
     _keyList ++= map.keys
