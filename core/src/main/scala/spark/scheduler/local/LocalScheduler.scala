@@ -34,7 +34,6 @@ import spark.scheduler._
 import spark.scheduler.cluster._
 import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 import akka.actor._
-import management.ManagementFactory
 
 /**
  * A FIFO or Fair TaskScheduler implementation that runs tasks locally in a thread pool. Optionally
@@ -218,7 +217,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       case t: Throwable => {
         val serviceTime = System.currentTimeMillis() - taskStart
         val metrics = attemptedTask.flatMap(t => t.metrics)
-        metrics.foreach {m =>
+        for (m <- metrics) {
           m.executorRunTime = serviceTime.toInt
           m.jvmGCTime = getTotalGCTime - startGCTime
         }

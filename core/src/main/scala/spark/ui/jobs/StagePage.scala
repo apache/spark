@@ -166,7 +166,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
           Utils.memoryBytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
       }}
       <td sorttable_customkey={gcTime.toString}>
-        {if (gcTime > 0) {parent.formatDuration(gcTime)} else ""}
+        {if (gcTime > 0) parent.formatDuration(gcTime) else ""}
       </td>
       <td>{exception.map(e =>
         <span>

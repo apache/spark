@@ -130,7 +130,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         taskStart = System.currentTimeMillis()
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
-        task.metrics.foreach{ m =>
+        for (m <- task.metrics) {
           m.hostname = Utils.localHostName
           m.executorDeserializeTime = (taskStart - startTime).toInt
           m.executorRunTime = (taskFinish - taskStart).toInt
@@ -158,7 +158,7 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         case t: Throwable => {
           val serviceTime = (System.currentTimeMillis() - taskStart).toInt
           val metrics = attemptedTask.flatMap(t => t.metrics)
-          metrics.foreach {m =>
+          for (m <- metrics) {
             m.executorRunTime = serviceTime
             m.jvmGCTime = getTotalGCTime - startGCTime
           }
