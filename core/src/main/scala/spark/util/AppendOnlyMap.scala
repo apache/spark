@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package spark.util
+package org.apache.spark.util
 
 /**
  * A simple open hash table optimized for the append-only use case, where keys
@@ -29,14 +29,10 @@ package spark.util
  */
 private[spark]
 class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] with Serializable {
-  if (!isPowerOf2(initialCapacity)) {
-    throw new IllegalArgumentException("Initial capacity must be power of 2")
-  }
-  if (initialCapacity >= (1 << 30)) {
-    throw new IllegalArgumentException("Can't make capacity bigger than 2^29 elements")
-  }
+  require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
+  require(initialCapacity >= 1, "Invalid initial capacity")
 
-  private var capacity = initialCapacity
+  private var capacity = nextPowerOf2(initialCapacity)
   private var curSize = 0
 
   // Holds keys and values in the same array for memory locality; specifically, the order of
@@ -225,17 +221,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
     capacity = newCapacity
   }
 
-  private def isPowerOf2(num: Int): Boolean = {
-    var n = num
-    while (n > 0) {
-      if (n == 1) {
-        return true
-      } else if (n % 2 == 1) {
-        return false
-      } else {
-        n /= 2
-      }
-    }
-    return false
+  private def nextPowerOf2(n: Int): Int = {
+    val highBit = Integer.highestOneBit(n)
+    if (highBit == n) n else highBit << 1
   }
 }

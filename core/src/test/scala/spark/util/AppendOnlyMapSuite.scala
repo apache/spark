@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package spark.util
+package org.apache.spark.util
 
 import scala.collection.mutable.HashSet
 
@@ -25,16 +25,18 @@ class AppendOnlyMapSuite extends FunSuite {
   test("initialization") {
     val goodMap1 = new AppendOnlyMap[Int, Int](1)
     assert(goodMap1.size === 0)
-    val goodMap2 = new AppendOnlyMap[Int, Int](256)
+    val goodMap2 = new AppendOnlyMap[Int, Int](255)
     assert(goodMap2.size === 0)
-    intercept[IllegalArgumentException] {
-      new AppendOnlyMap[Int, Int](255)     // Invalid map size: not power of 2
-    }
+    val goodMap3 = new AppendOnlyMap[Int, Int](256)
+    assert(goodMap3.size === 0)
     intercept[IllegalArgumentException] {
       new AppendOnlyMap[Int, Int](1 << 30) // Invalid map size: bigger than 2^29
     }
     intercept[IllegalArgumentException] {
-      new AppendOnlyMap[Int, Int](-1)      // Invalid map size: not power of 2
+      new AppendOnlyMap[Int, Int](-1)
+    }
+    intercept[IllegalArgumentException] {
+      new AppendOnlyMap[Int, Int](0)
     }
   }
 
@@ -137,5 +139,16 @@ class AppendOnlyMapSuite extends FunSuite {
       "null!!"
     })
     assert(map.size === 401)
+  }
+
+  test("inserting in capacity-1 map") {
+    val map = new AppendOnlyMap[String, String](1)
+    for (i <- 1 to 100) {
+      map("" + i) = "" + i
+    }
+    assert(map.size === 100)
+    for (i <- 1 to 100) {
+      assert(map("" + i) === "" + i)
+    }
   }
 }
