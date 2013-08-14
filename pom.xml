@@ -70,7 +70,7 @@
 
     <java.version>1.5</java.version>
     <scala.version>2.9.3</scala.version>
-    <mesos.version>0.9.0-incubating</mesos.version>
+    <mesos.version>0.12.1</mesos.version>
     <akka.version>2.0.3</akka.version>
     <slf4j.version>1.7.2</slf4j.version>
     <cdh.version>4.1.2</cdh.version>
