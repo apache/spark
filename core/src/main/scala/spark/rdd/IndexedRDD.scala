@@ -44,6 +44,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
     val valuesRDD: RDD[ Seq[Seq[V]] ])
   extends RDD[(K, V)](index.context, 
     List(new OneToOneDependency(index), new OneToOneDependency(valuesRDD)) ) {
+  //with PairRDDFunctions[K,V] {
 
 
 
@@ -129,6 +130,8 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    */
   def cogroup[W: ClassManifest](other: RDD[(K, W)], partitionerUnused: Partitioner): 
   IndexedRDD[K, (Seq[V], Seq[W])] = {
+    //RDD[(K, (Seq[V], Seq[W]))] = {
+    assert(false)
     other match {
       case other: IndexedRDD[_, _] if other.index == index => {
         // if both RDDs share exactly the same index and therefore the same super set of keys
@@ -302,14 +305,23 @@ object IndexedRDD {
     existingIndex: RDD[JHashMap[K,Int]] = null ): IndexedRDD[K, V] = {
 
     if(existingIndex == null) {
-      // build th index
-      val groups = tbl.groupByKey().mapPartitions( iter => {
+      // Shuffle the table (if necessary)
+      val shuffledTbl =
+        if (tbl.partitioner.isEmpty) {
+          new ShuffledRDD[K,V](tbl, Partitioner.defaultPartitioner(tbl))
+        } else { tbl }
+
+      val groups = shuffledTbl.mapPartitions( iter => {
         val indexMap = new JHashMap[K, Int]()
         val values = new ArrayBuffer[Seq[V]]()
-        for((k,ar) <- iter){
-          val ind = values.size
-          indexMap.put(k, ind)
-          values.append(ar)
+        for((k,v) <- iter){
+          if(!indexMap.contains(k)) {
+            val ind = indexMap.size
+            indexMap.put(k, ind)
+            values.append(new ArrayBuffer[V]())
+          }
+          val ind = indexMap.get(k)
+          values(ind).asInstanceOf[ArrayBuffer[V]].append(v)
         }
         List((indexMap, values.toSeq)).iterator
         }, true).cache
