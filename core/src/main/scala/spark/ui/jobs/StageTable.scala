@@ -1,21 +1,14 @@
 package spark.ui.jobs
 
 import java.util.Date
-import java.text.SimpleDateFormat
 
-import javax.servlet.http.HttpServletRequest
-
-import scala.Some
-import scala.xml.{NodeSeq, Node}
-import scala.collection.mutable.HashMap
+import scala.xml.Node
 import scala.collection.mutable.HashSet
 
+import spark.Utils
 import spark.scheduler.cluster.{SchedulingMode, TaskInfo}
 import spark.scheduler.Stage
-import spark.ui.UIUtils._
-import spark.ui.Page._
-import spark.Utils
-import spark.storage.StorageLevel
+
 
 /** Page showing list of all ongoing and recently finished stages */
 private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressUI) {
@@ -38,10 +31,10 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
         {if (isFairScheduler) {<th>Pool Name</th>} else {}}
         <th>Description</th>
         <th>Submitted</th>
-        <td>Duration</td>
-        <td>Tasks: Succeeded/Total</td>
-        <td>Shuffle Read</td>
-        <td>Shuffle Write</td>
+        <th>Duration</th>
+        <th>Tasks: Succeeded/Total</th>
+        <th>Shuffle Read</th>
+        <th>Shuffle Write</th>
       </thead>
       <tbody>
         {rows.map(r => makeRow(r))}

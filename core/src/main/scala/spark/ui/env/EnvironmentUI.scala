@@ -19,18 +19,17 @@ package spark.ui.env
 
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
-
 import scala.collection.JavaConversions._
 import scala.util.Properties
+import scala.xml.Node
+
+import org.eclipse.jetty.server.Handler
 
 import spark.ui.JettyUtils._
-import spark.ui.UIUtils.headerSparkPage
+import spark.ui.UIUtils
 import spark.ui.Page.Environment
 import spark.SparkContext
-import spark.ui.UIUtils
 
-import scala.xml.Node
 
 private[spark] class EnvironmentUI(sc: SparkContext) {
 
@@ -49,10 +48,9 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
     def jvmTable = UIUtils.listingTable(Seq("Name", "Value"), jvmRow, jvmInformation)
 
     val properties = System.getProperties.iterator.toSeq
-    val classPathProperty = properties
-        .filter{case (k, v) => k.contains("java.class.path")}
-        .headOption
-        .getOrElse("", "")
+    val classPathProperty = properties.find { case (k, v) =>
+      k.contains("java.class.path")
+    }.getOrElse(("", ""))
     val sparkProperties = properties.filter(_._1.startsWith("spark")).sorted
     val otherProperties = properties.diff(sparkProperties :+ classPathProperty).sorted
 
@@ -76,11 +74,14 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
     val content =
       <span>
         <h4>Runtime Information</h4> {jvmTable}
-        <h4>Spark Properties</h4> {sparkPropertyTable}
-        <h4>System Properties</h4> {otherPropertyTable}
-        <h4>Classpath Entries</h4> {classPathTable}
+        <hr/>
+        <h4>{sparkProperties.size} Spark Properties</h4> {sparkPropertyTable}
+        <hr/>
+        <h4>{otherProperties.size} System Properties</h4> {otherPropertyTable}
+        <hr/>
+        <h4>{classPath.size} Classpath Entries</h4> {classPathTable}
       </span>
 
-    headerSparkPage(content, sc, "Environment", Environment)
+    UIUtils.headerSparkPage(content, sc, "Environment", Environment)
   }
 }

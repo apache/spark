@@ -22,7 +22,8 @@ import scala.util.Random
 import spark.SparkContext
 import spark.SparkContext._
 import spark.scheduler.cluster.SchedulingMode
-import spark.scheduler.cluster.SchedulingMode.SchedulingMode
+
+
 /**
  * Continuously generates jobs that expose various features of the WebUI (internal testing tool).
  *
