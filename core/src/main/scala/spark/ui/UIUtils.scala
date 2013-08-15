@@ -125,9 +125,21 @@ private[spark] object UIUtils {
   }
 
   /** Returns an HTML table constructed by generating a row for each object in a sequence. */
-  def listingTable[T](headers: Seq[String], makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable">
-      <thead>{headers.map(h => <th>{h}</th>)}</thead>
+  def listingTable[T](
+      headers: Seq[String],
+      makeRow: T => Seq[Node],
+      rows: Seq[T],
+      fixedWidth: Boolean = false): Seq[Node] = {
+
+    val colWidth = 100.toDouble / headers.size
+    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    var tableClass = "table table-bordered table-striped table-condensed sortable"
+    if (fixedWidth) {
+      tableClass += " table-fixed"
+    }
+
+    <table class={tableClass}>
+      <thead>{headers.map(h => <th width={colWidthAttr}>{h}</th>)}</thead>
       <tbody>
         {rows.map(r => makeRow(r))}
       </tbody>

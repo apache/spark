@@ -21,7 +21,7 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
   private def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[Stage]]) => Seq[Node],
     rows: Seq[Schedulable]
     ): Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable">
+    <table class="table table-bordered table-striped table-condensed sortable table-fixed">
       <thead>
         <th>Pool Name</th>
         <th>Minimum Share</th>

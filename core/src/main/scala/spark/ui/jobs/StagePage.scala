@@ -123,16 +123,16 @@ private[spark] class StagePage(parent: JobProgressUI) {
             if (hasShuffleRead) shuffleReadQuantiles else Nil,
             if (hasShuffleWrite) shuffleWriteQuantiles else Nil)
 
-          val quantileHeaders = Seq("Metric", "Min (0th percentitle)", "25th percentile",
-            "50th percentile", "75th percentile", "Max (100th percentile)")
+          val quantileHeaders = Seq("Metric", "Min", "25th percentile",
+            "Median", "75th percentile", "Max")
           def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
-          Some(listingTable(quantileHeaders, quantileRow, listings))
+          Some(listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
 
       val content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
-        <div>{summaryTable.getOrElse("No tasks have reported their execution metrics yet.")}</div> ++
+        <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <hr/><h4>Tasks</h4> ++ taskTable;
 
       headerSparkPage(content, parent.sc, "Details for Stage %d".format(stageId), Jobs)

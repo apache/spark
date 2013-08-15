@@ -49,6 +49,10 @@
   line-height: 15px !important;
 }
 
+.table-fixed {
+  table-layout:fixed;
+}
+
 .table td {
   vertical-align: middle !important;
 }
