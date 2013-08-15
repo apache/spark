@@ -31,6 +31,8 @@ import scala.collection.mutable.HashSet
 
 import spark.rdd.ShuffledRDD
 import spark.SparkContext._
+import spark._
+
 
 class IndexedRDDSuite extends FunSuite with SharedSparkContext {
 
@@ -165,6 +167,7 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1), (4,-4), (4, 4) )).index()
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w'))).index(rdd1.index)
     val joined = rdd1.join(rdd2).collect()
+    assert(joined.size === 6)
     assert(joined.toSet === Set(
       (1, (1, 'x')),
       (1, (2, 'x')),
@@ -177,8 +180,8 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
 
 
   test("join all-to-all") {
-    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (1, 3)))
-    val rdd2 = sc.parallelize(Array((1, 'x'), (1, 'y')))
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (1, 3))).index()
+    val rdd2 = sc.parallelize(Array((1, 'x'), (1, 'y'))).index(rdd1.index)
     val joined = rdd1.join(rdd2).collect()
     assert(joined.size === 6)
     assert(joined.toSet === Set(
@@ -191,8 +194,8 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     ))
   }
 
-  test("leftOuterJoin") {
-    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+  test("leftOuterJoinIndex") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1))).index()
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
     val joined = rdd1.leftOuterJoin(rdd2).collect()
     assert(joined.size === 5)
@@ -201,6 +204,35 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
       (1, (2, Some('x'))),
       (2, (1, Some('y'))),
       (2, (1, Some('z'))),
+      (3, (1, None))
+    ))
+  }
+
+  test("leftOuterJoinIndextoIndex") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1))).index()
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w'))).index()
+    val joined = rdd1.leftOuterJoin(rdd2).collect()
+    assert(joined.size === 5)
+    assert(joined.toSet === Set(
+      (1, (1, Some('x'))),
+      (1, (2, Some('x'))),
+      (2, (1, Some('y'))),
+      (2, (1, Some('z'))),
+      (3, (1, None))
+    ))
+  }
+
+  test("leftOuterJoinIndextoSharedIndex") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1), (4, -4))).index()
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w'))).index(rdd1.index)
+    val joined = rdd1.leftOuterJoin(rdd2).collect()
+    assert(joined.size === 6)
+    assert(joined.toSet === Set(
+      (1, (1, Some('x'))),
+      (1, (2, Some('x'))),
+      (2, (1, Some('y'))),
+      (2, (1, Some('z'))),
+      (4, (-4, Some('w'))),
       (3, (1, None))
     ))
   }
