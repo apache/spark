@@ -37,6 +37,37 @@
     <deb.user>root</deb.user>
   </properties>
 
+  <dependencies>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-bagel</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-examples</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>spark-repl</artifactId>
+      <version>${project.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+
   <build>
     <plugins>
       <plugin>
@@ -86,46 +117,6 @@
 
   <profiles>
     <profile>
-      <id>hadoop1</id>
-      <properties>
-        <classifier>hadoop1</classifier>
-      </properties>
-      <dependencies>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-core</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-repl</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop1</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
-          <scope>runtime</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
       <id>hadoop2</id>
       <properties>
         <classifier>hadoop2</classifier>
@@ -156,11 +147,6 @@
           <artifactId>spark-repl</artifactId>
           <version>${project.version}</version>
           <classifier>hadoop2</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-core</artifactId>
           <scope>runtime</scope>
         </dependency>
         <dependency>

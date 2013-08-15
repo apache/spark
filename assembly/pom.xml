@@ -39,12 +39,6 @@
 
   <profiles>
     <profile>
-      <id>hadoop1</id>
-      <properties>
-        <classifier.name>hadoop1</classifier.name>
-      </properties>
-    </profile>
-    <profile>
       <id>hadoop2</id>
       <properties>
         <classifier.name>hadoop2</classifier.name>

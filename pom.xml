@@ -325,6 +325,17 @@
         <version>0.8</version>
         <scope>test</scope>
       </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client</artifactId>
+        <version>1.2.1</version>
+        <exclusions>
+          <exclusion>
+            <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -531,33 +542,12 @@
 
   <profiles>
     <profile>
-      <id>hadoop1</id>
-      <properties>
-        <hadoop.major.version>1</hadoop.major.version>
-      </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-core</artifactId>
-            <version>1.2.1</version>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
-    </profile>
-
-    <profile>
       <id>hadoop2</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
       </properties>
       <dependencyManagement>
         <dependencies>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-core</artifactId>
-            <version>2.0.0-mr1-cdh${cdh.version}</version>
-          </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
