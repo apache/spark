@@ -72,11 +72,11 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
             </li>
             <li>
               <strong>Memory Size:</strong>
-              {Utils.memoryBytesToString(rddInfo.memSize)}
+              {Utils.bytesToString(rddInfo.memSize)}
             </li>
             <li>
               <strong>Disk Size:</strong>
-              {Utils.memoryBytesToString(rddInfo.diskSize)}
+              {Utils.bytesToString(rddInfo.diskSize)}
             </li>
           </ul>
         </div>
@@ -107,10 +107,10 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
         {block.storageLevel.description}
       </td>
       <td sorttable_customkey={block.memSize.toString}>
-        {Utils.memoryBytesToString(block.memSize)}
+        {Utils.bytesToString(block.memSize)}
       </td>
       <td sorttable_customkey={block.diskSize.toString}>
-        {Utils.memoryBytesToString(block.diskSize)}
+        {Utils.bytesToString(block.diskSize)}
       </td>
       <td>
         {locations.map(l => <span>{l}<br/></span>)}
@@ -123,10 +123,10 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     <tr>
       <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
       <td>
-        {Utils.memoryBytesToString(status.memUsed(prefix))}
-        ({Utils.memoryBytesToString(status.memRemaining)} Remaining)
+        {Utils.bytesToString(status.memUsed(prefix))}
+        ({Utils.bytesToString(status.memRemaining)} Remaining)
       </td>
-      <td>{Utils.memoryBytesToString(status.diskUsed(prefix))}</td>
+      <td>{Utils.bytesToString(status.diskUsed(prefix))}</td>
     </tr>
   }
 }

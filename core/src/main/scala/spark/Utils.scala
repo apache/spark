@@ -521,9 +521,9 @@ private object Utils extends Logging {
   }
 
   /**
-   * Convert a memory quantity in bytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
    */
-  def memoryBytesToString(size: Long): String = {
+  def bytesToString(size: Long): String = {
     val TB = 1L << 40
     val GB = 1L << 30
     val MB = 1L << 20
@@ -566,10 +566,10 @@ private object Utils extends Logging {
   }
 
   /**
-   * Convert a memory quantity in megabytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in megabytes to a human-readable string such as "4.0 MB".
    */
-  def memoryMegabytesToString(megabytes: Long): String = {
-    memoryBytesToString(megabytes * 1024L * 1024L)
+  def megabytesToString(megabytes: Long): String = {
+    bytesToString(megabytes * 1024L * 1024L)
   }
 
   /**

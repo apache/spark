@@ -38,7 +38,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   // blocks from the memory store.
   private val putLock = new Object()
 
-  logInfo("MemoryStore started with capacity %s.".format(Utils.memoryBytesToString(maxMemory)))
+  logInfo("MemoryStore started with capacity %s.".format(Utils.bytesToString(maxMemory)))
 
   def freeMemory: Long = maxMemory - currentMemory
 
@@ -164,10 +164,10 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         currentMemory += size
         if (deserialized) {
           logInfo("Block %s stored as values to memory (estimated size %s, free %s)".format(
-            blockId, Utils.memoryBytesToString(size), Utils.memoryBytesToString(freeMemory)))
+            blockId, Utils.bytesToString(size), Utils.bytesToString(freeMemory)))
         } else {
           logInfo("Block %s stored as bytes to memory (size %s, free %s)".format(
-            blockId, Utils.memoryBytesToString(size), Utils.memoryBytesToString(freeMemory)))
+            blockId, Utils.bytesToString(size), Utils.bytesToString(freeMemory)))
         }
         true
       } else {

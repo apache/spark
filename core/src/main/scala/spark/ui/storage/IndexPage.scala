@@ -58,8 +58,8 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
       </td>
       <td>{rdd.numCachedPartitions}</td>
       <td>{rdd.numCachedPartitions / rdd.numPartitions.toDouble}</td>
-      <td>{Utils.memoryBytesToString(rdd.memSize)}</td>
-      <td>{Utils.memoryBytesToString(rdd.diskSize)}</td>
+      <td>{Utils.bytesToString(rdd.memSize)}</td>
+      <td>{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
   }
 }

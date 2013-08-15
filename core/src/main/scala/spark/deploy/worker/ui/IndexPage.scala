@@ -65,8 +65,8 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
                 Master URL:</strong> {workerState.masterUrl}
               </li>
               <li><strong>Cores:</strong> {workerState.cores} ({workerState.coresUsed} Used)</li>
-              <li><strong>Memory:</strong> {Utils.memoryMegabytesToString(workerState.memory)}
-                ({Utils.memoryMegabytesToString(workerState.memoryUsed)} Used)</li>
+              <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
+                ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
             </ul>
             <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
           </div>
@@ -97,7 +97,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
       <td>{executor.execId}</td>
       <td>{executor.cores}</td>
       <td sorttable_customkey={executor.memory.toString}>
-        {Utils.memoryMegabytesToString(executor.memory)}
+        {Utils.megabytesToString(executor.memory)}
       </td>
       <td>
         <ul class="unstyled">

@@ -96,7 +96,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   override def receive = {
     case RegisterWorker(id, host, workerPort, cores, memory, worker_webUiPort, publicAddress) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-        host, workerPort, cores, Utils.memoryMegabytesToString(memory)))
+        host, workerPort, cores, Utils.megabytesToString(memory)))
       if (idToWorker.contains(id)) {
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {

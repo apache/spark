@@ -46,10 +46,10 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
         <td>{kv(1)}</td>
         <td>{kv(2)}</td>
         <td sorttable_customkey={kv(3)}>
-          {Utils.memoryBytesToString(kv(3).toLong)} / {Utils.memoryBytesToString(kv(4).toLong)}
+          {Utils.bytesToString(kv(3).toLong)} / {Utils.bytesToString(kv(4).toLong)}
         </td>
         <td sorttable_customkey={kv(5)}>
-          {Utils.memoryBytesToString(kv(5).toLong)}
+          {Utils.bytesToString(kv(5).toLong)}
         </td>
         <td>{kv(6)}</td>
         <td>{kv(7)}</td>
@@ -66,9 +66,9 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
         <div class="span12">
           <ul class="unstyled">
             <li><strong>Memory:</strong>
-              {Utils.memoryBytesToString(memUsed)} Used
-              ({Utils.memoryBytesToString(maxMem)} Total) </li>
-            <li><strong>Disk:</strong> {Utils.memoryBytesToString(diskSpaceUsed)} Used </li>
+              {Utils.bytesToString(memUsed)} Used
+              ({Utils.bytesToString(maxMem)} Total) </li>
+            <li><strong>Disk:</strong> {Utils.bytesToString(diskSpaceUsed)} Used </li>
           </ul>
         </div>
       </div>

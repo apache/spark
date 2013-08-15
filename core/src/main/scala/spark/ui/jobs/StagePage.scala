@@ -70,13 +70,13 @@ private[spark] class StagePage(parent: JobProgressUI) {
             {if (hasShuffleRead)
               <li>
                 <strong>Shuffle read: </strong>
-                {Utils.memoryBytesToString(shuffleReadBytes)}
+                {Utils.bytesToString(shuffleReadBytes)}
               </li>
             }
             {if (hasShuffleWrite)
               <li>
                 <strong>Shuffle write: </strong>
-                {Utils.memoryBytesToString(shuffleWriteBytes)}
+                {Utils.bytesToString(shuffleWriteBytes)}
               </li>
             }
           </ul>
@@ -105,7 +105,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
             ms => parent.formatDuration(ms.toLong))
 
           def getQuantileCols(data: Seq[Double]) =
-            Distribution(data).get.getQuantiles().map(d => Utils.memoryBytesToString(d.toLong))
+            Distribution(data).get.getQuantiles().map(d => Utils.bytesToString(d.toLong))
 
           val shuffleReadSizes = validTasks.map {
             case(info, metrics, exception) =>
@@ -166,11 +166,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
       </td>
       {if (shuffleRead) {
         <td>{metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>
-          Utils.memoryBytesToString(s.remoteBytesRead)}.getOrElse("")}</td>
+          Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")}</td>
       }}
       {if (shuffleWrite) {
         <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-          Utils.memoryBytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
+          Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
       }}
       <td>{exception.map(e =>
         <span>
