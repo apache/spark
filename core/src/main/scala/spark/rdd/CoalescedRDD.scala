@@ -25,7 +25,7 @@ private[spark] case class CoalescedRDDPartition(
     index: Int,
     @transient rdd: RDD[_],
     parentsIndices: Array[Int],
-    prefLoc: String = ""
+    @transient preferredLocation: String = ""
   ) extends Partition {
   var parents: Seq[Partition] = parentsIndices.map(rdd.partitions(_))
 
@@ -37,20 +37,13 @@ private[spark] case class CoalescedRDDPartition(
   }
 
   /**
-   * Gets the preferred location for this coalesced RDD partition.
-   * Most parent indices should prefer this machine.
-   * @return preferred location
-   */
-  def getPreferredLocation = prefLoc
-
-  /**
    * Computes how many of the parents partitions have getPreferredLocation
    * as one of their preferredLocations
    * @return locality of this coalesced partition between 0 and 1
    */
   def localFraction :Double = {
     var loc: Int = 0
-    parents.foreach(p => if (rdd.preferredLocations(p).contains(getPreferredLocation)) loc += 1)
+    parents.foreach(p => if (rdd.preferredLocations(p).contains(preferredLocation)) loc += 1)
     if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
   }
 }
@@ -128,7 +121,7 @@ class CoalescedRDD[T: ClassManifest](
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     if (partition.isInstanceOf[CoalescedRDDPartition])
-      List(partition.asInstanceOf[CoalescedRDDPartition].getPreferredLocation)
+      List(partition.asInstanceOf[CoalescedRDDPartition].preferredLocation)
     else
       super.getPreferredLocations(partition)
   }
