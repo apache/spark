@@ -31,7 +31,7 @@ private[spark] case class CoalescedRDDPartition(
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
-    // Update the reference to parent split at the time of task serialization
+    // Update the reference to parent partition at the time of task serialization
     parents = parentsIndices.map(rdd.partitions(_))
     oos.defaultWriteObject()
   }
@@ -68,7 +68,7 @@ private[spark] case class CoalescedRDDPartition(
  * If there is locality information, it proceeds to pack them with the following three goals:
  *
  * (1) Balance the groups so they roughly have the same number of parent partitions
- * (2) Achieve locality per partition, i.e. there exists one machine which most parent splits prefer
+ * (2) Achieve locality per partition, i.e. find one machine which most parent partitions prefer
  * (3) Be efficient, i.e. O(n) algorithm for n parent partitions (problem is likely NP-hard)
  * (4) Balance preferred machines, i.e. avoid as much as possible picking the same preferred machine
  *
@@ -102,9 +102,9 @@ class CoalescedRDD[T: ClassManifest](
     res.toArray
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
-    split.asInstanceOf[CoalescedRDDPartition].parents.iterator.flatMap { parentSplit =>
-      firstParent[T].iterator(parentSplit, context)
+  override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
+    partition.asInstanceOf[CoalescedRDDPartition].parents.iterator.flatMap { parentPartition =>
+      firstParent[T].iterator(parentPartition, context)
     }
   }
 
@@ -121,16 +121,16 @@ class CoalescedRDD[T: ClassManifest](
   }
 
   /**
-   * Returns the preferred machine for the split. If split is of type CoalescedRDDPartition,
+   * Returns the preferred machine for the partition. If split is of type CoalescedRDDPartition,
    * then the preferred machine will be one which most parent splits prefer too.
-   * @param split
+   * @param partition
    * @return the machine most preferred by split
    */
-  override def getPreferredLocations(split: Partition): Seq[String] = {
-    if (split.isInstanceOf[CoalescedRDDPartition])
-      List(split.asInstanceOf[CoalescedRDDPartition].getPreferredLocation)
+  override def getPreferredLocations(partition: Partition): Seq[String] = {
+    if (partition.isInstanceOf[CoalescedRDDPartition])
+      List(partition.asInstanceOf[CoalescedRDDPartition].getPreferredLocation)
     else
-      super.getPreferredLocations(split)
+      super.getPreferredLocations(partition)
   }
 
 }
