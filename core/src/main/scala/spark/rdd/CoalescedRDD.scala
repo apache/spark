@@ -42,8 +42,7 @@ private[spark] case class CoalescedRDDPartition(
    * @return locality of this coalesced partition between 0 and 1
    */
   def localFraction :Double = {
-    var loc: Int = 0
-    parents.foreach(p => if (rdd.preferredLocations(p).contains(preferredLocation)) loc += 1)
+    val loc = parents.count(p => rdd.preferredLocations(p).contains(preferredLocation))
     if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
   }
 }
