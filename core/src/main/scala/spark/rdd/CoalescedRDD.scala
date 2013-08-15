@@ -79,7 +79,7 @@ private[spark] case class CoalescedRDDPartition(
 class CoalescedRDD[T: ClassManifest](
     @transient var prev: RDD[T],
     maxPartitions: Int,
-    balanceSlack: Double = 0.10 )
+    balanceSlack: Double = 0.10)
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
