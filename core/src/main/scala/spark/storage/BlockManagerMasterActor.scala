@@ -332,7 +332,7 @@ object BlockManagerMasterActor {
     private val _blocks = new JHashMap[String, BlockStatus]
 
     logInfo("Registering block manager %s with %s RAM".format(
-      blockManagerId.hostPort, Utils.memoryBytesToString(maxMem)))
+      blockManagerId.hostPort, Utils.bytesToString(maxMem)))
 
     def updateLastSeenMs() {
       _lastSeenMs = System.currentTimeMillis()
@@ -358,12 +358,12 @@ object BlockManagerMasterActor {
         if (storageLevel.useMemory) {
           _remainingMem -= memSize
           logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.memoryBytesToString(memSize),
-            Utils.memoryBytesToString(_remainingMem)))
+            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
+            Utils.bytesToString(_remainingMem)))
         }
         if (storageLevel.useDisk) {
           logInfo("Added %s on disk on %s (size: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.memoryBytesToString(diskSize)))
+            blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
         }
       } else if (_blocks.containsKey(blockId)) {
         // If isValid is not true, drop the block.
@@ -372,12 +372,12 @@ object BlockManagerMasterActor {
         if (blockStatus.storageLevel.useMemory) {
           _remainingMem += blockStatus.memSize
           logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.memoryBytesToString(memSize),
-            Utils.memoryBytesToString(_remainingMem)))
+            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
+            Utils.bytesToString(_remainingMem)))
         }
         if (blockStatus.storageLevel.useDisk) {
           logInfo("Removed %s on %s on disk (size: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.memoryBytesToString(diskSize)))
+            blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
         }
       }
     }

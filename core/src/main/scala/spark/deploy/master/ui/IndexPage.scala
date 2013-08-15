@@ -70,8 +70,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
               <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
                 {state.workers.map(_.coresUsed).sum} Used</li>
               <li><strong>Memory:</strong>
-                {Utils.memoryMegabytesToString(state.workers.map(_.memory).sum)} Total,
-                {Utils.memoryMegabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
+                {Utils.megabytesToString(state.workers.map(_.memory).sum)} Total,
+                {Utils.megabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
               <li><strong>Applications:</strong>
                 {state.activeApps.size} Running,
                 {state.completedApps.size} Completed </li>
@@ -116,8 +116,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>{worker.state}</td>
       <td>{worker.cores} ({worker.coresUsed} Used)</td>
       <td sorttable_customkey={"%s.%s".format(worker.memory, worker.memoryUsed)}>
-        {Utils.memoryMegabytesToString(worker.memory)}
-        ({Utils.memoryMegabytesToString(worker.memoryUsed)} Used)
+        {Utils.megabytesToString(worker.memory)}
+        ({Utils.megabytesToString(worker.memoryUsed)} Used)
       </td>
     </tr>
   }
@@ -135,7 +135,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         {app.coresGranted}
       </td>
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
-        {Utils.memoryMegabytesToString(app.desc.memoryPerSlave)}
+        {Utils.megabytesToString(app.desc.memoryPerSlave)}
       </td>
       <td>{DeployWebUI.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>

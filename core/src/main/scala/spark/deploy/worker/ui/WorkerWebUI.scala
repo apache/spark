@@ -114,7 +114,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
           .format(appId, executorId, logType, math.max(startByte-byteLength, 0),
           byteLength)}>
           <button type="button" class="btn btn-default">
-            Previous {Utils.memoryBytesToString(math.min(byteLength, startByte))}
+            Previous {Utils.bytesToString(math.min(byteLength, startByte))}
           </button>
         </a>
       }
@@ -129,7 +129,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
           format(appId, executorId, logType, endByte, byteLength)}>
           <button type="button" class="btn btn-default">
-            Next {Utils.memoryBytesToString(math.min(byteLength, logLength-endByte))}
+            Next {Utils.bytesToString(math.min(byteLength, logLength-endByte))}
           </button>
         </a>
       }

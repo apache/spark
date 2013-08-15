@@ -153,7 +153,7 @@ object StatsReportListener extends Logging {
   }
 
   def showBytesDistribution(heading: String, dist: Distribution) {
-    showDistribution(heading, dist, (d => Utils.memoryBytesToString(d.toLong)): Double => String)
+    showDistribution(heading, dist, (d => Utils.bytesToString(d.toLong)): Double => String)
   }
 
   def showMillisDistribution(heading: String, dOpt: Option[Distribution]) {

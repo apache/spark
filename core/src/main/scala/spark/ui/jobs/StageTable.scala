@@ -71,11 +71,11 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
 
     val shuffleRead = listener.stageToShuffleRead.getOrElse(s.id, 0L) match {
       case 0 => ""
-      case b => Utils.memoryBytesToString(b)
+      case b => Utils.bytesToString(b)
     }
     val shuffleWrite = listener.stageToShuffleWrite.getOrElse(s.id, 0L) match {
       case 0 => ""
-      case b => Utils.memoryBytesToString(b)
+      case b => Utils.bytesToString(b)
     }
 
     val startedTasks = listener.stageToTasksActive.getOrElse(s.id, HashSet[TaskInfo]()).size
