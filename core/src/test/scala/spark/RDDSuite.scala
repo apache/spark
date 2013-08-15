@@ -184,7 +184,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(splits.length === 3) // ensure it indeed created 3 partitions
 
     assert(splits.foldLeft(true)
-      ( (x,y) => if (!x) false else y.length >= 2) === true) // (2+ balance)
+      ( (x,y) => if (!x) false else y.length >= 1) === true) // (1+ balance)
 
     // If we try to coalesce into more partitions than the original RDD, it should just
     // keep the original number of partitions.
@@ -208,17 +208,17 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val data2 = sc.makeRDD(blocks)
     val coalesced2 = data2.coalesce(numMachines*2)
 
-    // test that you get over 95% locality in each group
+    // test that you get over 90% locality in each group
     val minLocality = coalesced2.partitions
       .map( part => part.asInstanceOf[CoalescedRDDPartition].localFraction )
       .foldLeft(100.)( (perc, loc) => math.min(perc,loc) )
-    assert(minLocality > 0.95)
+    assert(minLocality > 0.90)
 
-    // test that the groups are load balanced with 100 +/- 15 elements in each
+    // test that the groups are load balanced with 100 +/- 20 elements in each
     val maxImbalance = coalesced2.partitions
       .map( part => part.asInstanceOf[CoalescedRDDPartition].parents.size )
       .foldLeft(0)((dev, curr) => math.max(math.abs(100-curr),dev))
-    assert(maxImbalance < 15)
+    assert(maxImbalance < 20)
   }
 
   test("zipped RDDs") {

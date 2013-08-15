@@ -310,7 +310,7 @@ class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack: Double)
         for ((p,i) <- prev.partitions.zipWithIndex) {
           groupArr(i).list += p
         }
-      } else { // old code, just splits them grouping partitions that are next to each other
+      } else { // no locality available, then simply split partitions based on positions in array
         (0 until maxPartitions).foreach { i =>
           val rangeStart = ((i.toLong * prev.partitions.length) / maxPartitions).toInt
           val rangeEnd = (((i.toLong + 1) * prev.partitions.length) / maxPartitions).toInt
