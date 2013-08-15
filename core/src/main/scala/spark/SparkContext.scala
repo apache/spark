@@ -279,7 +279,7 @@ class SparkContext(
   }
 
   /** Set a human readable description of the current job. */
-  def setCurrentJobDescription(value: String) {
+  def setJobDescription(value: String) {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
 
