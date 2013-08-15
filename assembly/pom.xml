@@ -41,31 +41,26 @@
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-core</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-bagel</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-mllib</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-repl</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-streaming</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
   </dependencies>

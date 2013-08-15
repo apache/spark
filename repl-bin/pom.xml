@@ -32,8 +32,8 @@
   <url>http://spark-project.org/</url>
 
   <properties>
-    <deb.pkg.name>spark-${classifier}</deb.pkg.name>
-    <deb.install.path>/usr/share/spark-${classifier}</deb.install.path>
+    <deb.pkg.name>spark</deb.pkg.name>
+    <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
   </properties>
 
@@ -75,7 +75,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-shaded-${classifier}.jar</outputFile>
+          <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -207,7 +207,7 @@
                   <compression>gzip</compression>
                   <dataSet>
                     <data>
-                      <src>${project.build.directory}/${project.artifactId}-${project.version}-shaded-${classifier}.jar</src>
+                      <src>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</src>
                       <type>file</type>
                       <mapper>
                         <type>perm</type>
