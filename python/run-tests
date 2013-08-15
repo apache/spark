@@ -26,20 +26,18 @@ cd "$FWDIR/python"
 
 FAILED=0
 
-$FWDIR/pyspark pyspark/rdd.py
-FAILED=$(($?||$FAILED))
+rm -f unit-tests.log
 
-$FWDIR/pyspark pyspark/context.py
-FAILED=$(($?||$FAILED))
+function run_test() {
+    $FWDIR/pyspark $1 2>&1 | tee -a unit-tests.log
+    FAILED=$((PIPESTATUS[0]||$FAILED))
+}
 
-$FWDIR/pyspark -m doctest pyspark/broadcast.py
-FAILED=$(($?||$FAILED))
-
-$FWDIR/pyspark -m doctest pyspark/accumulators.py
-FAILED=$(($?||$FAILED))
-
-$FWDIR/pyspark -m unittest pyspark.tests
-FAILED=$(($?||$FAILED))
+run_test "pyspark/rdd.py"
+run_test "pyspark/context.py"
+run_test "-m doctest pyspark/broadcast.py"
+run_test "-m doctest pyspark/accumulators.py"
+run_test "pyspark/tests.py"
 
 if [[ $FAILED != 0 ]]; then
     echo -en "\033[31m"  # Red

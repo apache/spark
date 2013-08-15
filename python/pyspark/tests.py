@@ -64,7 +64,7 @@ class TestCheckpoint(PySparkTestCase):
         flatMappedRDD = parCollection.flatMap(lambda x: range(1, x + 1))
 
         self.assertFalse(flatMappedRDD.isCheckpointed())
-        self.assertIsNone(flatMappedRDD.getCheckpointFile())
+        self.assertTrue(flatMappedRDD.getCheckpointFile() is None)
 
         flatMappedRDD.checkpoint()
         result = flatMappedRDD.collect()
@@ -79,13 +79,13 @@ class TestCheckpoint(PySparkTestCase):
         flatMappedRDD = parCollection.flatMap(lambda x: [x])
 
         self.assertFalse(flatMappedRDD.isCheckpointed())
-        self.assertIsNone(flatMappedRDD.getCheckpointFile())
+        self.assertTrue(flatMappedRDD.getCheckpointFile() is None)
 
         flatMappedRDD.checkpoint()
         flatMappedRDD.count()  # forces a checkpoint to be computed
         time.sleep(1)  # 1 second
 
-        self.assertIsNotNone(flatMappedRDD.getCheckpointFile())
+        self.assertTrue(flatMappedRDD.getCheckpointFile() is not None)
         recovered = self.sc._checkpointFile(flatMappedRDD.getCheckpointFile())
         self.assertEquals([1, 2, 3, 4], recovered.collect())
 
@@ -164,9 +164,12 @@ class TestDaemon(unittest.TestCase):
         time.sleep(1)
 
         # daemon should no longer accept connections
-        with self.assertRaises(EnvironmentError) as trap:
+        try:
             self.connect(port)
-        self.assertEqual(trap.exception.errno, ECONNREFUSED)
+        except EnvironmentError as exception:
+            self.assertEqual(exception.errno, ECONNREFUSED)
+        else:
+            self.fail("Expected EnvironmentError to be raised")
 
     def test_termination_stdin(self):
         """Ensure that daemon and workers terminate when stdin is closed."""
