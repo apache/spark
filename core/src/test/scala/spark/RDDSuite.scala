@@ -178,18 +178,20 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     // RDD with locality preferences spread (non-randomly) over 6 machines, m0 through m5
     val data = sc.makeRDD((1 to 9).map( i => (i, (i to (i+2)).map{ j => "m" + (j%6)} )))
     val coalesced1 = data.coalesce(3)
-    assert(coalesced1.collect().toList.sorted === (1 to 9).toList) // no data lost (NB: order might reshuffle)
+    assert(coalesced1.collect().toList.sorted === (1 to 9).toList) // no data lost
 
     val splits = coalesced1.glom().collect().map(_.toList).toList
     assert(splits.length === 3) // ensure it indeed created 3 partitions
 
-    assert(splits.foldLeft(true)( (x,y) => if (!x) false else y.length >= 2) === true) // descent balance (2+ per bin)
+    assert(splits.foldLeft(true)
+      ( (x,y) => if (!x) false else y.length >= 2) === true) // (2+ balance)
 
     // If we try to coalesce into more partitions than the original RDD, it should just
     // keep the original number of partitions.
     val coalesced4 = data.coalesce(20)
     assert(coalesced4.glom().collect().map(_.toList).toList.sortWith(
-      (x, y) => if (x.isEmpty) false else if (y.isEmpty) true else x(0) < y(0)) === (1 to 9).map(x => List(x)).toList)
+      (x, y) => if (x.isEmpty) false else if (y.isEmpty) true else x(0) < y(0)) === (1 to 9).
+      map(x => List(x)).toList)
 
 
     // large scale experiment
@@ -200,18 +202,21 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val machines = mutable.ListBuffer[String]()
     (1 to numMachines).foreach(machines += "m"+_)
 
-    val blocks = (1 to partitions).map( i => (i, (i to (i+2)).map{ j => machines(rnd.nextInt(machines.size)) } ))
+    val blocks = (1 to partitions).map( i => (i, (i to (i+2))
+      .map{ j => machines(rnd.nextInt(machines.size)) } ))
 
     val data2 = sc.makeRDD(blocks)
     val coalesced2 = data2.coalesce(numMachines*2)
 
     // test that you get over 95% locality in each group
-    val minLocality = coalesced2.partitions.map( part => part.asInstanceOf[CoalescedRDDPartition].localFraction )
+    val minLocality = coalesced2.partitions
+      .map( part => part.asInstanceOf[CoalescedRDDPartition].localFraction )
       .foldLeft(100.)( (perc, loc) => math.min(perc,loc) )
     assert(minLocality > 0.95)
 
     // test that the groups are load balanced with 100 +/- 15 elements in each
-    val maxImbalance = coalesced2.partitions.map( part => part.asInstanceOf[CoalescedRDDPartition].parents.size )
+    val maxImbalance = coalesced2.partitions
+      .map( part => part.asInstanceOf[CoalescedRDDPartition].parents.size )
       .foldLeft(0)((dev, curr) => math.max(math.abs(100-curr),dev))
     assert(maxImbalance < 15)
   }
