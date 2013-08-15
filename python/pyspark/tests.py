@@ -125,6 +125,17 @@ class TestAddFile(PySparkTestCase):
         from userlibrary import UserClass
         self.assertEqual("Hello World!", UserClass().hello())
 
+    def test_add_egg_file_locally(self):
+        # To ensure that we're actually testing addPyFile's effects, check that
+        # this fails due to `userlibrary` not being on the Python path:
+        def func():
+            from userlib import UserClass
+        self.assertRaises(ImportError, func)
+        path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1-py2.7.egg")
+        self.sc.addPyFile(path)
+        from userlib import UserClass
+        self.assertEqual("Hello World from inside a package!", UserClass().hello())
+
 
 class TestIO(PySparkTestCase):
 
