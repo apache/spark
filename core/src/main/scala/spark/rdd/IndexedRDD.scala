@@ -58,6 +58,12 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   override def getPartitions: Array[Partition] = tuples.getPartitions 
   override def getPreferredLocations(s: Partition): Seq[String] = tuples.getPreferredLocations(s)
 
+  override def cache: IndexedRDD[K,V] = {
+    index.cache
+    valuesRDD.cache
+    return this
+  }
+
 
   /**
    * Construct a new IndexedRDD that is indexed by only the keys in the RDD
