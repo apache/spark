@@ -73,7 +73,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     private var objOut: SerializationStream = null
     private var lastValidPosition = 0L
     private var initialized = false
-    private var syncTime = 0L
+    private var _timeWriting = 0L
 
     override def open(): DiskBlockObjectWriter = {
       fos = new FileOutputStream(f, true)
@@ -92,10 +92,12 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
           objOut.flush()
           fos.getFD.sync()
           objOut.close()
-          syncTime += System.nanoTime() - start
+          _timeWriting += System.nanoTime() - start
         } else {
           objOut.close()
         }
+
+        _timeWriting += ts.timeWriting
 
         channel = null
         bs = null
@@ -144,10 +146,8 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
     override def size(): Long = lastValidPosition
 
-    override def timeWriting: Long = {
-      // ts could be null if never written to
-      Option(ts).map(t => t.timeWriting).getOrElse(0L) + syncTime
-    }
+    // Only valid if called after close()
+    override def timeWriting = _timeWriting
   }
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10

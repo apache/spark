@@ -157,10 +157,10 @@ private[spark] class ShuffleMapTask(
       var totalTime = 0L
       val compressedSizes: Array[Byte] = buckets.writers.map { writer: BlockObjectWriter =>
         writer.commit()
-        totalTime += writer.timeWriting()
         writer.close()
         val size = writer.size()
         totalBytes += size
+        totalTime += writer.timeWriting()
         MapOutputTracker.compressSize(size)
       }
 
