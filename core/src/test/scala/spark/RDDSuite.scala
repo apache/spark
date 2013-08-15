@@ -22,7 +22,8 @@ import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.{Span, Millis}
 import spark.SparkContext._
-import spark.rdd.{CoalescedRDD, CoGroupedRDD, EmptyRDD, PartitionPruningRDD, ShuffledRDD}
+import spark.rdd._
+import scala.collection.parallel.mutable
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -184,16 +185,35 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     assert(splits.foldLeft(true)( (x,y) => if (!x) false else y.length >= 2) === true) // descent balance (2+ per bin)
 
-    val prefs = List(List("m1","m2","m3"), List("m4","m5","m6"))
-    val data2 = sc.makeRDD((1 to 100).map( i => (i, prefs(i % 2) ))) // alternate machine prefs
-    val coalesced2 = data2.coalesce(10)
-    val splits2 = coalesced2.glom().collect().map(_.toList).toList
+    // If we try to coalesce into more partitions than the original RDD, it should just
+    // keep the original number of partitions.
+    val coalesced4 = data.coalesce(20)
+    assert(coalesced4.glom().collect().map(_.toList).toList.sortWith(
+      (x, y) => if (x.isEmpty) false else if (y.isEmpty) true else x(0) < y(0)) === (1 to 9).map(x => List(x)).toList)
 
-    // this gives a list of pairs, each pair is of the form (even,odd), where even is the number of even elements...
-    val list = splits2.map( ls => ls.foldLeft((0,0))( (x,y) => if (y % 2 == 0) (x._1+1,x._2) else (x._1,x._2+1)) )
-    val maxes = list.map( { case (a,b) => if (a>b) a else b } ) // get the maxs, this represents the locality
-    maxes.foreach( locality => assert( locality > 7) ) // at least 70% locality in each partition
 
+    // large scale experiment
+    import collection.mutable
+    val rnd = scala.util.Random
+    val partitions = 10000
+    val numMachines = 50
+    val machines = mutable.ListBuffer[String]()
+    (1 to numMachines).foreach(machines += "m"+_)
+
+    val blocks = (1 to partitions).map( i => (i, (i to (i+2)).map{ j => machines(rnd.nextInt(machines.size)) } ))
+
+    val data2 = sc.makeRDD(blocks)
+    val coalesced2 = data2.coalesce(numMachines*2)
+
+    // test that you get over 95% locality in each group
+    val minLocality = coalesced2.partitions.map( part => part.asInstanceOf[CoalescedRDDPartition].localFraction )
+      .foldLeft(100.)( (perc, loc) => math.min(perc,loc) )
+    assert(minLocality > 0.95)
+
+    // test that the groups are load balanced with 100 +/- 15 elements in each
+    val maxImbalance = coalesced2.partitions.map( part => part.asInstanceOf[CoalescedRDDPartition].parents.size )
+      .foldLeft(0)((dev, curr) => math.max(math.abs(100-curr),dev))
+    assert(maxImbalance < 15)
   }
 
   test("zipped RDDs") {
