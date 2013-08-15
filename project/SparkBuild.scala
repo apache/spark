@@ -24,10 +24,15 @@ import AssemblyKeys._
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
+  // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
+  // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
+  val HADOOP_VERSION = "1.2.1"
+  val HADOOP_YARN = false
+
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming, mllib, tools, yarn)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects:_*)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
@@ -48,6 +53,17 @@ object SparkBuild extends Build {
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
+
+  // Allows build configuration to be set through environment variables
+  lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", HADOOP_VERSION)
+  lazy val isYarnMode = scala.util.Properties.envOrNone("SPARK_YARN_MODE") match {
+    case None => HADOOP_YARN
+    case Some(v) => v.toBoolean
+  }
+
+  // Conditionally include the yarn sub-project
+  lazy val maybeYarn = if(isYarnMode) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
+  lazy val allProjects = Seq[ProjectReference](core, repl, examples, bagel, streaming, mllib, tools) ++ maybeYarn
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
@@ -170,7 +186,7 @@ object SparkBuild extends Build {
       "org.apache.mesos" % "mesos" % "0.12.1",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
       "org.apache.derby" % "derby" % "10.4.2.0" % "test",
-      "org.apache.hadoop" % "hadoop-client" % "1.2.1" excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
       "com.codahale.metrics" % "metrics-core" % "3.0.0",
       "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
@@ -239,10 +255,10 @@ object SparkBuild extends Build {
     name := "spark-yarn",
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
-      "org.apache.hadoop" % "hadoop-client" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-api" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-common" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-client" % "2.0.2-alpha" excludeAll(excludeJackson, excludeNetty, excludeAsm)
+      "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-api" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
