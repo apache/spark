@@ -23,10 +23,11 @@ private[spark] class PoolPage(parent: JobProgressUI) {
       val pool = listener.sc.getPoolForName(poolName).get
       val poolTable = new PoolTable(Seq(pool), listener)
 
-      val content = <h3>Pool </h3> ++ poolTable.toNodeSeq() ++
-                    <h3>Active Stages : {activeStages.size}</h3> ++ activeStagesTable.toNodeSeq()
+      val content = <h4>Summary </h4> ++ poolTable.toNodeSeq() ++
+                    <hr/>
+                    <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq()
 
-      headerSparkPage(content, parent.sc, "Spark Pool Details", Jobs)
+      headerSparkPage(content, parent.sc, "Fair Scheduler Pool: " + poolName, Jobs)
     }
   }
 }

@@ -24,7 +24,7 @@ import scala.xml.{NodeSeq, Node}
 import spark.scheduler.cluster.SchedulingMode
 import spark.ui.Page._
 import spark.ui.UIUtils._
-import spark.Utils
+
 
 /** Page showing list of all ongoing and recently finished stages and pools*/
 private[spark] class IndexPage(parent: JobProgressUI) {
@@ -46,7 +46,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
-      val poolTable = new PoolTable(listener.sc.getAllPools, listener)
+      val pools = listener.sc.getAllPools
+      val poolTable = new PoolTable(pools, listener)
       val summary: NodeSeq =
        <div>
          <ul class="unstyled">
@@ -76,15 +77,15 @@ private[spark] class IndexPage(parent: JobProgressUI) {
 
       val content = summary ++
         {if (listener.sc.getSchedulingMode == SchedulingMode.FAIR) {
-           <h4>Pools</h4> ++ poolTable.toNodeSeq
+           <hr/><h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
         } else {
           Seq()
         }} ++
-        <h4 id="active">Active Stages: {activeStages.size}</h4> ++
+        <hr/><h4 id="active">{activeStages.size} Active Stages</h4> ++
         activeStagesTable.toNodeSeq++
-        <h4 id="completed">Completed Stages: {completedStages.size}</h4> ++
+        <hr/><h4 id="completed">{completedStages.size} Completed Stages</h4> ++
         completedStagesTable.toNodeSeq++
-        <h4 id ="failed">Failed Stages: {failedStages.size}</h4> ++
+        <hr/><h4 id ="failed">{failedStages.size} Failed Stages</h4> ++
         failedStagesTable.toNodeSeq
 
       headerSparkPage(content, parent.sc, "Spark Stages", Jobs)
