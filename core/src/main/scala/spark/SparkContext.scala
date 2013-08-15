@@ -267,16 +267,20 @@ class SparkContext(
       localProperties.value = new Properties()
   }
 
-  def addLocalProperty(key: String, value: String) {
-    if(localProperties.value == null) {
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.value == null) {
       localProperties.value = new Properties()
     }
-    localProperties.value.setProperty(key,value)
+    if (value == null) {
+      localProperties.value.remove(key)
+    } else {
+      localProperties.value.setProperty(key, value)
+    }
   }
 
   /** Set a human readable description of the current job. */
-  def setDescription(value: String) {
-    addLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
+  def setJobDescription(value: String) {
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
 
   // Post init
