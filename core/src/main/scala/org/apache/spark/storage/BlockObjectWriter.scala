@@ -62,4 +62,9 @@ abstract class BlockObjectWriter(val blockId: String) {
    * Size of the valid writes, in bytes.
    */
   def size(): Long
+
+  /**
+   * Cumulative time spent performing blocking writes, in ns.
+   */
+  def timeWriting(): Long
 }

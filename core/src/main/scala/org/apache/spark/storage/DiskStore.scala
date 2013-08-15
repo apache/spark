@@ -45,19 +45,38 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   class DiskBlockObjectWriter(blockId: String, serializer: Serializer, bufferSize: Int)
     extends BlockObjectWriter(blockId) {
 
+    /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
+    private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
+      def timeWriting = _timeWriting
+
+      private var _timeWriting = 0L
+
+      private def callWithTiming(f: => Unit) = {
+        val start = System.nanoTime()
+        f
+        _timeWriting += (System.nanoTime() - start)
+      }
+
+      def write(i: Int): Unit = callWithTiming(out.write(i))
+      override def write(b: Array[Byte]) = callWithTiming(out.write(b))
+      override def write(b: Array[Byte], off: Int, len: Int) = callWithTiming(out.write(b, off, len))
+    }
+
     private val f: File = createFile(blockId /*, allowAppendExisting */)
 
     // The file channel, used for repositioning / truncating the file.
     private var channel: FileChannel = null
     private var bs: OutputStream = null
+    private var ts: TimeTrackingOutputStream = null
     private var objOut: SerializationStream = null
     private var lastValidPosition = 0L
     private var initialized = false
 
     override def open(): DiskBlockObjectWriter = {
       val fos = new FileOutputStream(f, true)
+      ts = new TimeTrackingOutputStream(fos)
       channel = fos.getChannel()
-      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos, bufferSize))
+      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(ts, bufferSize))
       objOut = serializer.newInstance().serializeStream(bs)
       initialized = true
       this
@@ -68,6 +87,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
         objOut.close()
         channel = null
         bs = null
+        ts = null
         objOut = null
       }
       // Invoke the close callback handler.
@@ -110,6 +130,10 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     }
 
     override def size(): Long = lastValidPosition
+
+    override def timeWriting: Long = {
+      Option(ts).map(t => t.timeWriting).getOrElse(0L) // ts could be null if never written to
+    }
   }
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10

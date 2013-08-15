@@ -152,6 +152,22 @@ private[spark] class StagePage(parent: JobProgressUI) {
       else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
 
+
+    val remoteBytesRead: Option[Long] = metrics.flatMap{m => m.shuffleReadMetrics}.map(r => r.remoteBytesRead)
+    val shuffleBytesWritten: Option[Long] = metrics.flatMap{m => m.shuffleWriteMetrics}.map(r => r.shuffleBytesWritten)
+
+    val writeThroughput: Option[Long] = metrics.flatMap{m => m.shuffleWriteMetrics}.flatMap{ s=>
+      val bytesWritten = s.shuffleBytesWritten
+      val timeTaken = s.shuffleWriteTime
+      val timeSeconds = timeTaken / (1000 * 1000 * 1000.0)
+      if (bytesWritten < 10000 || timeSeconds < .01) { // To little data to form an useful average
+        None
+      } else {
+        Some((bytesWritten / timeSeconds).toLong)
+      }
+    }
+    val writeThroughputStr = writeThroughput.map(t => " (%s/s)".format(Utils.bytesToString(t)))
+
     <tr>
       <td>{info.taskId}</td>
       <td>{info.status}</td>
@@ -170,7 +186,9 @@ private[spark] class StagePage(parent: JobProgressUI) {
       }}
       {if (shuffleWrite) {
         <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-          Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
+          Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")}
+          {writeThroughputStr.getOrElse("")}
+        </td>
       }}
       <td>{exception.map(e =>
         <span>
