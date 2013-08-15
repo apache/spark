@@ -60,6 +60,27 @@ private[spark] case class CoalescedRDDPartition(
  *
  * This transformation is useful when an RDD with many partitions gets filtered into a smaller one,
  * or to avoid having a large number of small tasks when processing a directory with many files.
+ *
+ * If there is no locality information (no preferredLocations) in the parent RDD, then the coalescing
+ * is very simple: chunk parents that are close in the Array in chunks.
+ * If there is locality information, it proceeds to pack them with the following three goals in mind:
+ *
+ * (1) Balance the groups so they roughly have the same number of parent partitions
+ * (2) Achieve locality per partition, i.e. there exists one machine which most parent partitions prefer
+ * (3) Be efficient, i.e. O(n) algorithm for n parent partitions (underlying problem is likely NP-hard)
+ * (4) Balance preferred machines, i.e. avoid as much as possible picking the same preferred machine
+ *
+ * Furthermore, it is assumed that the parent RDD may have many partitions, e.g. 100 000.
+ * We assume the final number of desired partitions is small, e.g. less than 1000.
+ *
+ * The algorithm tries to assign unique preferred machines to each partition. If the number of desired
+ * partitions is greater than the number of preferred machines (can happen), it needs to start picking
+ * duplicate preferred machines. This is determined using coupon collector estimation (2n log(n)).
+ * The load balancing is done using power-of-two randomized bins-balls with one twist: it tries to
+ * also achieve locality. This is done by allowing a slack (balanceSlack) between two bins.
+ * If two bins are within the slack in terms of balance, the algorithm will assign partitions
+ * according to locality. (contact alig for questions)
+ *
  */
 class CoalescedRDD[T: ClassManifest](
     @transient var prev: RDD[T],
