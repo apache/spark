@@ -63,7 +63,7 @@ function dev_classpath {
   CLASSPATH="$CLASSPATH:$REPL_DIR/lib/*"
   # Add the shaded JAR for Maven builds
   if [ -e $REPL_BIN_DIR/target ]; then
-    for jar in `find "$REPL_BIN_DIR/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
+    for jar in `find "$REPL_BIN_DIR/target" -name 'spark-repl-*-shaded.jar'`; do
       CLASSPATH="$CLASSPATH:$jar"
     done
     # The shaded JAR doesn't contain examples, so include those separately

@@ -118,56 +118,11 @@
   <profiles>
     <profile>
       <id>hadoop2-yarn</id>
-      <properties>
-        <classifier>hadoop2-yarn</classifier>
-      </properties>
       <dependencies>
         <dependency>
           <groupId>org.spark-project</groupId>
-          <artifactId>spark-core</artifactId>
+          <artifactId>spark-yarn</artifactId>
           <version>${project.version}</version>
-          <classifier>hadoop2-yarn</classifier>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-bagel</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2-yarn</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-examples</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2-yarn</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-repl</artifactId>
-          <version>${project.version}</version>
-          <classifier>hadoop2-yarn</classifier>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-api</artifactId>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-common</artifactId>
-          <scope>runtime</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-yarn-client</artifactId>
-          <scope>runtime</scope>
         </dependency>
       </dependencies>
     </profile>
