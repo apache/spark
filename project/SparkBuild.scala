@@ -193,6 +193,17 @@ object SparkBuild extends Build {
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
       "com.twitter" % "chill_2.9.3" % "0.3.1",
       "com.twitter" % "chill-java" % "0.3.1"
+    ) ++ (
+      if (isYarnMode) {
+        // This kludge is needed for 0.23.x
+        Seq(
+          "org.apache.hadoop" % "hadoop-yarn-api" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+          "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+          "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm)
+        )
+      } else {
+        Seq()
+      }
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
