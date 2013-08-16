@@ -615,6 +615,15 @@ class SparkContext(
   }
 
   /**
+   * Gets the locality information associated with the partition in a particular rdd
+   * @param rdd of interest
+   * @param partition to be looked up for locality
+   * @return list of preferred locations for the partition
+   */
+  def getPreferredLocs(rdd: RDD[_], partition: Int): List[String] =
+    dagScheduler.getPreferredLocs(rdd, partition)
+
+  /**
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI.

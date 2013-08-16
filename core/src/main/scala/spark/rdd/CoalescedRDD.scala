@@ -17,9 +17,11 @@
 
 package spark.rdd
 
-import spark.{Dependency, OneToOneDependency, NarrowDependency, RDD, Partition, TaskContext}
+import spark._
 import java.io.{ObjectOutputStream, IOException}
 import scala.collection.mutable
+import scala.Some
+import spark.rdd.CoalescedRDDPartition
 
 private[spark] case class CoalescedRDDPartition(
     index: Int,
@@ -42,7 +44,8 @@ private[spark] case class CoalescedRDDPartition(
    * @return locality of this coalesced partition between 0 and 1
    */
   def localFraction: Double = {
-    val loc = parents.count(p => rdd.preferredLocations(p).contains(preferredLocation))
+    val loc = parents.count(p => rdd.context.getPreferredLocs(rdd, p.index)
+      .contains(preferredLocation))
     if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
   }
 }
@@ -126,8 +129,8 @@ class CoalescedRDD[T: ClassManifest](
 
 }
 
-private[spark] class PartitionCoalescer (maxPartitions: Int, prev: RDD[_], balanceSlack: Double) {
-
+private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_],
+                                        balanceSlack: Double) {
   protected def compare(o1: PartitionGroup, o2: PartitionGroup): Boolean = o1.size < o2.size
   protected def compare(o1: Option[PartitionGroup], o2: Option[PartitionGroup]): Boolean =
     if (o1 == None) false else if (o2 == None) true else compare(o1.get, o2.get)
@@ -149,6 +152,10 @@ private[spark] class PartitionCoalescer (maxPartitions: Int, prev: RDD[_], balan
 
   protected var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
+  // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
+  protected def currentPreferredLocations(rdd: RDD[_], part: Partition) : Seq[String] =
+    rdd.context.getPreferredLocs(rdd, part.index)
+
   // this class just keeps iterating and rotating infinitely over the partitions of the RDD
   // next() returns the next preferred machine that a partition is replicated on
   // the rotator first goes through the first replica copy of each partition, then second, third
@@ -161,14 +168,14 @@ private[spark] class PartitionCoalescer (maxPartitions: Int, prev: RDD[_], balan
     // initializes/resets to start iterating from the beginning
     protected def resetIterator() = {
       val i1 =  prev.partitions.view.map{ p: Partition =>
-      { if (prev.preferredLocations(p).length > 0)
-        Some((prev.preferredLocations(p)(0),p)) else None } }
+      { if (currentPreferredLocations(prev, p).length > 0)
+        Some((currentPreferredLocations(prev, p)(0),p)) else None } }
       val i2 =  prev.partitions.view.map{ p: Partition =>
-      { if (prev.preferredLocations(p).length > 1)
-        Some((prev.preferredLocations(p)(1),p)) else None } }
+      { if (currentPreferredLocations(prev, p).length > 1)
+        Some((currentPreferredLocations(prev, p)(1),p)) else None } }
       val i3 =  prev.partitions.view.map{ p: Partition =>
-      { if (prev.preferredLocations(p).length > 2)
-        Some((prev.preferredLocations(p)(2),p)) else None } }
+      { if (currentPreferredLocations(prev, p).length > 2)
+        Some((currentPreferredLocations(prev, p)(2),p)) else None } }
       val res = List(i1,i2,i3)
       res.view.flatMap(x => x).flatten.iterator // fuses the 3 iterators (1st replica, 2nd, 3rd)
     }
@@ -265,7 +272,8 @@ private[spark] class PartitionCoalescer (maxPartitions: Int, prev: RDD[_], balan
    * @return partition group (bin to be put in)
    */
   protected def pickBin(p: Partition): PartitionGroup = {
-    val pref = prev.preferredLocations(p).map(getLeastGroupHash(_)).sortWith(compare) // least load
+    val pref = prev.context.getPreferredLocs(prev, p.index).
+      map(getLeastGroupHash(_)).sortWith(compare)   // least loaded of the pref locations
     val prefPart = if (pref == Nil) None else pref.head
 
     val r1 = rnd.nextInt(groupArr.size)

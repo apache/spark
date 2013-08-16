@@ -221,13 +221,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(maxImbalance <= 20, "Expected 100 +/- 20 per partition, but got " + maxImbalance)
 
     // TDD: Test for later when we have implemented functionality to get locality from DAGScheduler
-//    val data3 = sc.makeRDD(blocks).map( i => i*2 )
-//    val coalesced3 = data3.coalesce(numMachines*2)
-//    val minLocality2 = coalesced3.partitions
-//      .map( part => part.asInstanceOf[CoalescedRDDPartition].localFraction )
-//      .foldLeft(1.)( (perc, loc) => math.min(perc,loc) )
-//    assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
-//      (minLocality2*100.).toInt + "%")
+    val data3 = sc.makeRDD(blocks).map( i => i*2 )
+    val coalesced3 = data3.coalesce(numMachines*2)
+    val minLocality2 = coalesced3.partitions
+      .map( part => part.asInstanceOf[CoalescedRDDPartition].localFraction )
+      .foldLeft(1.)( (perc, loc) => math.min(perc,loc) )
+    assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
+      (minLocality2*100.).toInt + "%")
   }
 
   test("zipped RDDs") {
