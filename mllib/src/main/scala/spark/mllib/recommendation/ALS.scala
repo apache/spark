@@ -133,9 +133,9 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     var products = productOutLinks.mapPartitions {itr =>
       val rand = new Random()
       itr.map({case (x, y) =>
-	       (x, y.elementIds.map(u => randomFactor(rank, rand)))
+	(x, y.elementIds.map(u => randomFactor(rank, rand)))
 	     })
-    })
+    }
 
     for (iter <- 0 until iterations) {
       // perform ALS update
