@@ -17,6 +17,7 @@
 
 package spark.deploy.master.ui
 
+import scala.util.parsing.json.JSONType
 import scala.xml.Node
 
 import akka.dispatch.Await
@@ -24,8 +25,6 @@ import akka.pattern.ask
 import akka.util.duration._
 
 import javax.servlet.http.HttpServletRequest
-
-import net.liftweb.json.JsonAST.JValue
 
 import spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import spark.deploy.JsonProtocol
@@ -37,7 +36,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
   implicit val timeout = parent.timeout
 
   /** Executor details for a particular application */
-  def renderJson(request: HttpServletRequest): JValue = {
+  def renderJson(request: HttpServletRequest): JSONType = {
     val appId = request.getParameter("appId")
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, 30 seconds)

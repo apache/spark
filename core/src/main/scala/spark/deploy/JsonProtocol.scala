@@ -17,7 +17,7 @@
 
 package spark.deploy
 
-import net.liftweb.json.JsonDSL._
+import scala.util.parsing.json.{JSONArray, JSONObject, JSONType}
 
 import spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import spark.deploy.master.{ApplicationInfo, WorkerInfo}
@@ -25,61 +25,63 @@ import spark.deploy.worker.ExecutorRunner
 
 
 private[spark] object JsonProtocol {
- def writeWorkerInfo(obj: WorkerInfo) = {
-   ("id" -> obj.id) ~
-   ("host" -> obj.host) ~
-   ("port" -> obj.port) ~
-   ("webuiaddress" -> obj.webUiAddress) ~
-   ("cores" -> obj.cores) ~
-   ("coresused" -> obj.coresUsed) ~
-   ("memory" -> obj.memory) ~
-   ("memoryused" -> obj.memoryUsed)
- }
 
-  def writeApplicationInfo(obj: ApplicationInfo) = {
-    ("starttime" -> obj.startTime) ~
-    ("id" -> obj.id) ~
-    ("name" -> obj.desc.name) ~
-    ("cores" -> obj.desc.maxCores) ~
-    ("user" ->  obj.desc.user) ~
-    ("memoryperslave" -> obj.desc.memoryPerSlave) ~
-    ("submitdate" -> obj.submitDate.toString)
-  }
+  def writeWorkerInfo(obj: WorkerInfo): JSONType = JSONObject(Map(
+    "id" -> obj.id,
+    "host" -> obj.host,
+    "port" -> obj.port,
+    "webuiaddress" -> obj.webUiAddress,
+    "cores" -> obj.cores,
+    "coresused" -> obj.coresUsed,
+    "memory" -> obj.memory,
+    "memoryused" -> obj.memoryUsed,
+    "state" -> obj.state.toString
+  ))
 
-  def writeApplicationDescription(obj: ApplicationDescription) = {
-    ("name" -> obj.name) ~
-    ("cores" -> obj.maxCores) ~
-    ("memoryperslave" -> obj.memoryPerSlave) ~
-    ("user" -> obj.user)
-  }
+  def writeApplicationInfo(obj: ApplicationInfo): JSONType = JSONObject(Map(
+    "starttime" -> obj.startTime,
+    "id" -> obj.id,
+    "name" -> obj.desc.name,
+    "cores" -> obj.desc.maxCores,
+    "user" ->  obj.desc.user,
+    "memoryperslave" -> obj.desc.memoryPerSlave,
+    "submitdate" -> obj.submitDate.toString
+  ))
 
-  def writeExecutorRunner(obj: ExecutorRunner) = {
-    ("id" -> obj.execId) ~
-    ("memory" -> obj.memory) ~
-    ("appid" -> obj.appId) ~
-    ("appdesc" -> writeApplicationDescription(obj.appDesc))
-  }
+  def writeApplicationDescription(obj: ApplicationDescription): JSONType = JSONObject(Map(
+    "name" -> obj.name,
+    "cores" -> obj.maxCores,
+    "memoryperslave" -> obj.memoryPerSlave,
+    "user" -> obj.user
+  ))
 
-  def writeMasterState(obj: MasterStateResponse) = {
-    ("url" -> ("spark://" + obj.uri)) ~
-    ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
-    ("cores" -> obj.workers.map(_.cores).sum) ~
-    ("coresused" -> obj.workers.map(_.coresUsed).sum) ~
-    ("memory" -> obj.workers.map(_.memory).sum) ~
-    ("memoryused" -> obj.workers.map(_.memoryUsed).sum) ~
-    ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
-    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo))
-  }
+  def writeExecutorRunner(obj: ExecutorRunner): JSONType = JSONObject(Map(
+    "id" -> obj.execId,
+    "memory" -> obj.memory,
+    "appid" -> obj.appId,
+    "appdesc" -> writeApplicationDescription(obj.appDesc)
+  ))
 
-  def writeWorkerState(obj: WorkerStateResponse) = {
-    ("id" -> obj.workerId) ~
-    ("masterurl" -> obj.masterUrl) ~
-    ("masterwebuiurl" -> obj.masterWebUiUrl) ~
-    ("cores" -> obj.cores) ~
-    ("coresused" -> obj.coresUsed) ~
-    ("memory" -> obj.memory) ~
-    ("memoryused" -> obj.memoryUsed) ~
-    ("executors" -> obj.executors.toList.map(writeExecutorRunner)) ~
-    ("finishedexecutors" -> obj.finishedExecutors.toList.map(writeExecutorRunner))
-  }
+  def writeMasterState(obj: MasterStateResponse): JSONType = JSONObject(Map(
+    "url" -> ("spark://" + obj.uri),
+    "workers" -> obj.workers.toList.map(writeWorkerInfo),
+    "cores" -> obj.workers.map(_.cores).sum,
+    "coresused" -> obj.workers.map(_.coresUsed).sum,
+    "memory" -> obj.workers.map(_.memory).sum,
+    "memoryused" -> obj.workers.map(_.memoryUsed).sum,
+    "activeapps" -> JSONArray(obj.activeApps.toList.map(writeApplicationInfo)),
+    "completedapps" -> JSONArray(obj.completedApps.toList.map(writeApplicationInfo))
+  ))
+
+  def writeWorkerState(obj: WorkerStateResponse): JSONType = JSONObject(Map(
+    "id" -> obj.workerId,
+    "masterurl" -> obj.masterUrl,
+    "masterwebuiurl" -> obj.masterWebUiUrl,
+    "cores" -> obj.cores,
+    "coresused" -> obj.coresUsed,
+    "memory" -> obj.memory,
+    "memoryused" -> obj.memoryUsed,
+    "executors" -> JSONArray(obj.executors.toList.map(writeExecutorRunner)),
+    "finishedexecutors" -> JSONArray(obj.finishedExecutors.toList.map(writeExecutorRunner))
+  ))
 }
