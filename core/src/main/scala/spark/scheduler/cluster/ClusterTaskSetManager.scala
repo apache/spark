@@ -37,7 +37,14 @@ import spark.TaskResultTooBigFailure
 
 
 /**
- * Schedules the tasks within a single TaskSet in the ClusterScheduler.
+ * Schedules the tasks within a single TaskSet in the ClusterScheduler. This class keeps track of
+ * the status of each task, retries tasks if they fail (up to a limited number of times), and
+ * handles locality-aware scheduling for this TaskSet via delay scheduling. The main interfaces
+ * to it are resourceOffer, which asks the TaskSet whether it wants to run a task on one node,
+ * and statusUpdate, which tells it that one of its tasks changed state (e.g. finished).
+ *
+ * THREADING: This class is designed to only be called from code with a lock on the
+ * ClusterScheduler (e.g. its event handlers). It should not be called from other threads.
  */
 private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet: TaskSet)
   extends TaskSetManager with Logging {
