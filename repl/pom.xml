@@ -49,12 +49,6 @@
       <scope>runtime</scope>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
-      <artifactId>spark-examples</artifactId>
-      <version>${project.version}</version>
-      <scope>runtime</scope>
-    </dependency>
-    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
       <scope>provided</scope>
