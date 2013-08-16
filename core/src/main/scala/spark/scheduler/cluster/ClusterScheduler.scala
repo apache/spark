@@ -184,27 +184,29 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       }
     }
 
-    // Build a list of tasks to assign to each slave
+    // Build a list of tasks to assign to each worker
     val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = offers.map(o => o.cores).toArray
-    val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
-    for (manager <- sortedTaskSetQueue) {
+    val sortedTaskSets = rootPool.getSortedTaskSetQueue()
+    for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
-        manager.parent.name, manager.name, manager.runningTasks))
+        taskSet.parent.name, taskSet.name, taskSet.runningTasks))
     }
 
+    // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
+    // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
-    for (manager <- sortedTaskSetQueue; offer <- offers) {
+    for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
       do {
         launchedTask = false
         for (i <- 0 until offers.size) {
           val execId = offers(i).executorId
           val host = offers(i).host
-          for (task <- manager.resourceOffer(execId, host, availableCpus(i))) {
+          for (task <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
             tasks(i) += task
             val tid = task.taskId
-            taskIdToTaskSetId(tid) = manager.taskSet.id
-            taskSetTaskIds(manager.taskSet.id) += tid
+            taskIdToTaskSetId(tid) = taskSet.taskSet.id
+            taskSetTaskIds(taskSet.taskSet.id) += tid
             taskIdToExecutorId(tid) = execId
             activeExecutorIds += execId
             executorsByHost(host) += execId
@@ -402,8 +404,7 @@ object ClusterScheduler {
 
     // order keyList based on population of value in map
     val keyList = _keyList.sortWith(
-      // TODO(matei): not sure why we're using getOrElse if keyList = map.keys... see if it matters
-      (left, right) => map.get(left).getOrElse(Set()).size > map.get(right).getOrElse(Set()).size
+      (left, right) => map(left).size > map(right).size
     )
 
     val retval = new ArrayBuffer[T](keyList.size * 2)

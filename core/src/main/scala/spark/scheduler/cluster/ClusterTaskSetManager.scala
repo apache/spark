@@ -43,7 +43,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   extends TaskSetManager with Logging {
 
   // CPUs to request per task
-  val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toDouble
+  val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toInt
 
   // Maximum times a task is allowed to fail before failing the job
   val MAX_TASK_FAILURES = System.getProperty("spark.task.maxFailures", "4").toInt
@@ -325,15 +325,22 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   /**
    * Respond to an offer of a single slave from the scheduler by finding a task
    */
-  override def resourceOffer(execId: String, host: String, availableCpus: Double)
+  override def resourceOffer(
+      execId: String,
+      host: String,
+      availableCpus: Int,
+      maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
       val curTime = System.currentTimeMillis()
 
-      val locality = getAllowedLocalityLevel(curTime)
+      var allowedLocality = getAllowedLocalityLevel(curTime)
+      if (allowedLocality > maxLocality) {
+        allowedLocality = maxLocality   // We're not allowed to search for farther-away tasks
+      }
 
-      findTask(execId, host, locality) match {
+      findTask(execId, host, allowedLocality) match {
         case Some((index, taskLocality)) => {
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
@@ -347,7 +354,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           // Update our locality level for delay scheduling
-          currentLocalityIndex = getLocalityIndex(locality)
+          currentLocalityIndex = getLocalityIndex(allowedLocality)
           lastLaunchTime = curTime
           // Serialize and return the task
           val startTime = System.currentTimeMillis()
