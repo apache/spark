@@ -33,8 +33,7 @@ private[spark] object JsonProtocol {
    ("cores" -> obj.cores) ~
    ("coresused" -> obj.coresUsed) ~
    ("memory" -> obj.memory) ~
-   ("memoryused" -> obj.memoryUsed) ~
-   ("state" -> obj.getState)
+   ("memoryused" -> obj.memoryUsed)
  }
 
   def writeApplicationInfo(obj: ApplicationInfo) = {
