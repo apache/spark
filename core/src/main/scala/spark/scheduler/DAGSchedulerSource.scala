@@ -21,7 +21,7 @@ private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler) extends 
   })
 
   metricRegistry.register(MetricRegistry.name("job", "allJobs", "number"), new Gauge[Int] {
-    override def getValue: Int = dagScheduler.nextRunId.get()
+    override def getValue: Int = dagScheduler.nextJobId.get()
   })
 
   metricRegistry.register(MetricRegistry.name("job", "activeJobs", "number"), new Gauge[Int] {
