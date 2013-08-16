@@ -26,8 +26,10 @@ import AssemblyKeys._
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
   // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
-  val HADOOP_VERSION = "1.2.1"
-  val HADOOP_YARN = false
+  // Note that these variables can be set through the environment variables
+  // SPARK_HADOOP_VERSION and SPARK_WITH_YARN.
+  val DEFAULT_HADOOP_VERSION = "1.2.1"
+  val DEFAULT_WITH_YARN = false
 
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
@@ -55,9 +57,9 @@ object SparkBuild extends Build {
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
   // Allows build configuration to be set through environment variables
-  lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", HADOOP_VERSION)
-  lazy val isYarnMode = scala.util.Properties.envOrNone("SPARK_YARN_MODE") match {
-    case None => HADOOP_YARN
+  lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
+  lazy val isYarnMode = scala.util.Properties.envOrNone("SPARK_WITH_YARN") match {
+    case None => DEFAULT_WITH_YARN
     case Some(v) => v.toBoolean
   }
 

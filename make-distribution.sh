@@ -47,7 +47,7 @@ VERSION=$($FWDIR/sbt/sbt "show version" | tail -1 | cut -f 2 | sed 's/^\([a-zA-Z
 
 # Initialize defaults
 SPARK_HADOOP_VERSION=1.2.1
-SPARK_YARN_MODE=false
+SPARK_WITH_YARN=false
 MAKE_TGZ=false
 
 # Parse arguments
@@ -58,7 +58,7 @@ while (( "$#" )); do
       shift
       ;;
     --with-yarn)
-      SPARK_YARN_MODE=true
+      SPARK_WITH_YARN=true
       ;;
     --tgz)
       MAKE_TGZ=true
@@ -74,7 +74,7 @@ else
 fi
 
 echo "Hadoop version set to $SPARK_HADOOP_VERSION"
-if [ "$SPARK_YARN_MODE" == "true" ]; then
+if [ "$SPARK_WITH_YARN" == "true" ]; then
   echo "YARN enabled"
 else
   echo "YARN disabled"
@@ -82,7 +82,7 @@ fi
 
 # Build fat JAR
 export SPARK_HADOOP_VERSION
-export SPARK_YARN_MODE
+export SPARK_WITH_YARN
 "$FWDIR/sbt/sbt" "repl/assembly"
 
 # Make directories
