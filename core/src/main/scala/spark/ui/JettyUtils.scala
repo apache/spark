@@ -21,9 +21,8 @@ import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
 
 import scala.annotation.tailrec
 import scala.util.{Try, Success, Failure}
+import scala.util.parsing.json.JSONType
 import scala.xml.Node
-
-import net.liftweb.json.{JValue, pretty, render}
 
 import org.eclipse.jetty.server.{Server, Request, Handler}
 import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHandler, AbstractHandler}
@@ -39,8 +38,8 @@ private[spark] object JettyUtils extends Logging {
   type Responder[T] = HttpServletRequest => T
 
   // Conversions from various types of Responder's to jetty Handlers
-  implicit def jsonResponderToHandler(responder: Responder[JValue]): Handler =
-    createHandler(responder, "text/json", (in: JValue) => pretty(render(in)))
+  implicit def jsonResponderToHandler(responder: Responder[JSONType]): Handler =
+    createHandler(responder, "text/json", (in: JSONType) => in.toString)
 
   implicit def htmlResponderToHandler(responder: Responder[Seq[Node]]): Handler =
     createHandler(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)

@@ -255,11 +255,6 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>net.liftweb</groupId>
-        <artifactId>lift-json_2.9.2</artifactId>
-        <version>2.5</version>
-      </dependency>
-      <dependency>
         <groupId>com.codahale.metrics</groupId>
         <artifactId>metrics-core</artifactId>
         <version>3.0.0</version>
