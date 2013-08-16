@@ -748,7 +748,7 @@ public class JavaAPISuite implements Serializable {
         }
       };
 
-    JavaRDD<Integer> sizes = rdd1.zipPartitions(sizesFn, rdd2);
+    JavaRDD<Integer> sizes = rdd1.zipPartitions(rdd2, sizesFn);
     Assert.assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
   }
 
