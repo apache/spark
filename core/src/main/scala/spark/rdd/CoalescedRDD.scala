@@ -21,9 +21,8 @@ import spark._
 import java.io.{ObjectOutputStream, IOException}
 import scala.collection.mutable
 import scala.Some
-import spark.rdd.CoalescedRDDPartition
 
-private[spark] case class CoalescedRDDPartition(
+case class CoalescedRDDPartition(
     index: Int,
     @transient rdd: RDD[_],
     parentsIndices: Array[Int],
