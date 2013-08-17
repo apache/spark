@@ -67,11 +67,11 @@ public class JavaLassoSuite implements Serializable {
     List<LabeledPoint> validationData =
         LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
 
-    LassoWithSGD svmSGDImpl = new LassoWithSGD();
-    svmSGDImpl.optimizer().setStepSize(1.0)
+    LassoWithSGD lassoSGDImpl = new LassoWithSGD();
+    lassoSGDImpl.optimizer().setStepSize(1.0)
                           .setRegParam(0.01)
                           .setNumIterations(20);
-    LassoModel model = svmSGDImpl.run(testRDD.rdd());
+    LassoModel model = lassoSGDImpl.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);

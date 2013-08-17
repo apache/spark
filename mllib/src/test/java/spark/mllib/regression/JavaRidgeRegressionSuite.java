@@ -67,11 +67,11 @@ public class JavaRidgeRegressionSuite implements Serializable {
         List<LabeledPoint> validationData =
                 LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
 
-        RidgeRegressionWithSGD svmSGDImpl = new RidgeRegressionWithSGD();
-        svmSGDImpl.optimizer().setStepSize(1.0)
+        RidgeRegressionWithSGD ridgeSGDImpl = new RidgeRegressionWithSGD();
+        ridgeSGDImpl.optimizer().setStepSize(1.0)
                 .setRegParam(0.01)
                 .setNumIterations(20);
-        RidgeRegressionModel model = svmSGDImpl.run(testRDD.rdd());
+        RidgeRegressionModel model = ridgeSGDImpl.run(testRDD.rdd());
 
         int numAccurate = validatePrediction(validationData, model);
         Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);

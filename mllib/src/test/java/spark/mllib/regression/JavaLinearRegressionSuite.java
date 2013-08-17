@@ -67,11 +67,11 @@ public class JavaLinearRegressionSuite implements Serializable {
         List<LabeledPoint> validationData =
                 LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
 
-        LinearRegressionWithSGD svmSGDImpl = new LinearRegressionWithSGD();
-        svmSGDImpl.optimizer().setStepSize(1.0)
+        LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD();
+        linSGDImpl.optimizer().setStepSize(1.0)
                 .setRegParam(0.01)
                 .setNumIterations(20);
-        LinearRegressionModel model = svmSGDImpl.run(testRDD.rdd());
+        LinearRegressionModel model = linSGDImpl.run(testRDD.rdd());
 
         int numAccurate = validatePrediction(validationData, model);
         Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);

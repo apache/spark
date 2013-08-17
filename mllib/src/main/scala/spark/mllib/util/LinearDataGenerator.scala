@@ -91,13 +91,13 @@ object LinearDataGenerator {
    * @return RDD of LabeledPoint containing sample data.
    */
   def generateLinearRDD(
-    sc: SparkContext,
-    nexamples: Int,
-    nfeatures: Int,
-    eps: Double,
-    weights: Array[Double] = Array[Double](),
-    nparts: Int = 2,
-    intercept: Double = 0.0) : RDD[LabeledPoint] = {
+      sc: SparkContext,
+      nexamples: Int,
+      nfeatures: Int,
+      eps: Double,
+      weights: Array[Double] = Array[Double](),
+      nparts: Int = 2,
+      intercept: Double = 0.0) : RDD[LabeledPoint] = {
     org.jblas.util.Random.seed(42)
     // Random values distributed uniformly in [-0.5, 0.5]
     val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
