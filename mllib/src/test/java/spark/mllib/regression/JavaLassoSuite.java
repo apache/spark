@@ -27,6 +27,7 @@ import org.junit.Test;
 
 import spark.api.java.JavaRDD;
 import spark.api.java.JavaSparkContext;
+import spark.mllib.util.LinearDataGenerator;
 
 public class JavaLassoSuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -61,10 +62,10 @@ public class JavaLassoSuite implements Serializable {
     double A = 2.0;
     double[] weights = {-1.5, 1.0e-2};
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(LassoSuite.generateLassoInputAsList(A,
-        weights, nPoints, 42), 2).cache();
+    JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
+            weights, nPoints, 42), 2).cache();
     List<LabeledPoint> validationData =
-        LassoSuite.generateLassoInputAsList(A, weights, nPoints, 17);
+        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
 
     LassoWithSGD svmSGDImpl = new LassoWithSGD();
     svmSGDImpl.optimizer().setStepSize(1.0)
@@ -82,10 +83,10 @@ public class JavaLassoSuite implements Serializable {
     double A = 2.0;
     double[] weights = {-1.5, 1.0e-2};
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(LassoSuite.generateLassoInputAsList(A,
+    JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
         weights, nPoints, 42), 2).cache();
     List<LabeledPoint> validationData =
-        LassoSuite.generateLassoInputAsList(A, weights, nPoints, 17);
+        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
 
     LassoModel model = LassoWithSGD.train(testRDD.rdd(), 100, 1.0, 0.01, 1.0);
 

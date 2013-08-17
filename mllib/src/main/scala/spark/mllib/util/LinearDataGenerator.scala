@@ -23,54 +23,92 @@ import org.jblas.DoubleMatrix
 
 import spark.{RDD, SparkContext}
 import spark.mllib.regression.LabeledPoint
+import scala.collection.JavaConversions._
+import spark.mllib.regression.LabeledPoint
 
 /**
- * Generate sample data used for RidgeRegression. This class generates
+ * Generate sample data used for Linear Data. This class generates
  * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
  * response variable `Y`.
  *
  */
-object RidgeRegressionDataGenerator {
+object LinearDataGenerator {
 
   /**
-   * Generate an RDD containing sample data for RidgeRegression.
+   * Return a Java List of synthetic data randomly generated according to a multi
+   * collinear model.
+   * @param intercept Data intercept
+   * @param weights  Weights to be applied.
+   * @param nPoints Number of points in sample.
+   * @param seed Random seed
+   * @return Java List of input.
+   */
+  def generateLinearInputAsList(
+      intercept: Double,
+      weights: Array[Double],
+      nPoints: Int,
+      seed: Int): java.util.List[LabeledPoint] = {
+    seqAsJavaList(generateLinearInput(intercept, weights, nPoints, seed))
+  }
+
+  /**
+   *
+   * @param intercept Data intercept
+   * @param weights  Weights to be applied.
+   * @param nPoints Number of points in sample.
+   * @param seed Random seed
+   * @param eps Epsilon scaling factor.
+   * @return
+   */
+  def generateLinearInput(
+      intercept: Double,
+      weights: Array[Double],
+      nPoints: Int,
+      seed: Int,
+      eps: Double = 0.1): Seq[LabeledPoint] = {
+
+    val rnd = new Random(seed)
+    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
+    val x = Array.fill[Array[Double]](nPoints)(
+      Array.fill[Double](weights.length)(rnd.nextGaussian()))
+    val y = x.map(xi =>
+      (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + eps * rnd.nextGaussian()
+    )
+    y.zip(x).map(p => LabeledPoint(p._1, p._2))
+  }
+
+  /**
+   * Generate an RDD containing sample data for Linear Regression models - including Ridge, Lasso,
+   * and uregularized variants.
    *
    * @param sc SparkContext to be used for generating the RDD.
    * @param nexamples Number of examples that will be contained in the RDD.
    * @param nfeatures Number of features to generate for each example.
    * @param eps Epsilon factor by which examples are scaled.
+   * @param weights Weights associated with the first weights.length features.
    * @param nparts Number of partitions in the RDD. Default value is 2.
    *
    * @return RDD of LabeledPoint containing sample data.
    */
-  def generateRidgeRDD(
+  def generateLinearRDD(
     sc: SparkContext,
     nexamples: Int,
     nfeatures: Int,
     eps: Double,
+    weights: Array[Double] = Array[Double](),
     nparts: Int = 2,
     intercept: Double = 0.0) : RDD[LabeledPoint] = {
     org.jblas.util.Random.seed(42)
     // Random values distributed uniformly in [-0.5, 0.5]
     val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
-    w.put(0, 0, 10)
-    w.put(1, 0, 10)
+
+    (0 until weights.length.max(nfeatures)).map(i => w.put(i, 0, weights(i)))
 
     val data: RDD[LabeledPoint] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
-      org.jblas.util.Random.seed(42 + p)
+      val seed = 42+p
       val examplesInPartition = nexamples / nparts
 
-      val X = DoubleMatrix.rand(examplesInPartition, nfeatures)
-      val y = X.mmul(w).add(intercept)
-
-      val rnd = new Random(42 + p)
-
-      val normalValues = Array.fill[Double](examplesInPartition)(rnd.nextGaussian() * eps)
-      val yObs = new DoubleMatrix(normalValues).addi(y)
-
-      Iterator.tabulate(examplesInPartition) { i =>
-        LabeledPoint(yObs.get(i, 0), X.getRow(i).toArray)
-      }
+      generateLinearInput(intercept, w.toArray, examplesInPartition, seed, eps)
     }
     data
   }
@@ -90,7 +128,7 @@ object RidgeRegressionDataGenerator {
     val eps = 10
 
     val sc = new SparkContext(sparkMaster, "RidgeRegressionDataGenerator")
-    val data = generateRidgeRDD(sc, nexamples, nfeatures, eps, parts)
+    val data = generateLinearRDD(sc, nexamples, nfeatures, eps, nparts = parts)
 
     MLUtils.saveLabeledData(data, outputPath)
     sc.stop()

@@ -27,6 +27,7 @@ import org.junit.Test;
 
 import spark.api.java.JavaRDD;
 import spark.api.java.JavaSparkContext;
+import spark.mllib.util.LinearDataGenerator;
 
 public class JavaLinearRegressionSuite implements Serializable {
     private transient JavaSparkContext sc;
@@ -61,10 +62,10 @@ public class JavaLinearRegressionSuite implements Serializable {
         double A = 2.0;
         double[] weights = {-1.5, 1.0e-2};
 
-        JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearRegressionSuite.generateLinearRegressionInputAsList(A,
+        JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
                 weights, nPoints, 42), 2).cache();
         List<LabeledPoint> validationData =
-                LinearRegressionSuite.generateLinearRegressionInputAsList(A, weights, nPoints, 17);
+                LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
 
         LinearRegressionWithSGD svmSGDImpl = new LinearRegressionWithSGD();
         svmSGDImpl.optimizer().setStepSize(1.0)
@@ -82,10 +83,10 @@ public class JavaLinearRegressionSuite implements Serializable {
         double A = 2.0;
         double[] weights = {-1.5, 1.0e-2};
 
-        JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearRegressionSuite.generateLinearRegressionInputAsList(A,
+        JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
                 weights, nPoints, 42), 2).cache();
         List<LabeledPoint> validationData =
-                LinearRegressionSuite.generateLinearRegressionInputAsList(A, weights, nPoints, 17);
+                LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
 
         LinearRegressionModel model = LinearRegressionWithSGD.train(testRDD.rdd(), 100, 1.0, 1.0);
 

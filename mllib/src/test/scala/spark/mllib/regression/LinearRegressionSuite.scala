@@ -17,46 +17,12 @@
 
 package spark.mllib.regression
 
-import scala.collection.JavaConversions._
-import scala.util.Random
-
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
 import spark.SparkContext._
-import spark.mllib.util.LinearRegressionDataGenerator
-import spark.mllib.regression.LabeledPoint
-import org.jblas.DoubleMatrix
-
-object LinearRegressionSuite {
-
-  def generateLinearRegressionInputAsList(
-                                intercept: Double,
-                                weights: Array[Double],
-                                nPoints: Int,
-                                seed: Int): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateLinearRegressionInput(intercept, weights, nPoints, seed))
-  }
-
-
-  // Generate noisy input of the form Y = x.dot(weights) + intercept + noise
-  def generateLinearRegressionInput(
-                          intercept: Double,
-                          weights: Array[Double],
-                          nPoints: Int,
-                          seed: Int): Seq[LabeledPoint] = {
-    val rnd = new Random(seed)
-    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
-    val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(rnd.nextGaussian()))
-    val y = x.map(xi =>
-      (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + 0.1 * rnd.nextGaussian()
-    )
-    y.zip(x).map(p => LabeledPoint(p._1, p._2))
-  }
-
-}
+import spark.mllib.util.LinearDataGenerator
 
 class LinearRegressionSuite extends FunSuite with BeforeAndAfterAll {
   @transient private var sc: SparkContext = _
@@ -73,7 +39,7 @@ class LinearRegressionSuite extends FunSuite with BeforeAndAfterAll {
   // Test if we can correctly learn Y = 3 + 10*X1 + 10*X2 when
   // X1 and X2 are collinear.
   test("multi-collinear variables") {
-    val testRDD = LinearRegressionDataGenerator.generateLinearRDD(sc, 100, 2, 0.0, intercept=3.0).cache()
+    val testRDD = LinearDataGenerator.generateLinearRDD(sc, 100, 2, 0.0, Array(10.0, 10.0), intercept=3.0).cache()
     val linReg = new LinearRegressionWithSGD()
     linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
 
