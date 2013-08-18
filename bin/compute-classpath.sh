@@ -67,8 +67,9 @@ function dev_classpath {
       CLASSPATH="$CLASSPATH:$jar"
     done
     # The shaded JAR doesn't contain examples, so include those separately
-    EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
-    CLASSPATH+=":$EXAMPLES_JAR"
+    for jar in `find "$EXAMPLES_DIR/target" -name 'spark-examples*[0-9T].jar'`; do
+      CLASSPATH="$CLASSPATH:$jar"
+    done
   fi
   CLASSPATH="$CLASSPATH:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$MLLIB_DIR/target/scala-$SCALA_VERSION/classes"
