@@ -85,17 +85,18 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     }
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (self.partitioner == Some(partitioner)) {
-      self.mapPartitions(aggregator.combineValuesByKey(_), true)
+      self.mapPartitions(aggregator.combineValuesByKey, true)
     } else if (mapSideCombine) {
-      val mapSideCombined = self.mapPartitions(aggregator.combineValuesByKey(_), true)
-      val partitioned = new ShuffledRDD[K, C](mapSideCombined, partitioner, serializerClass)
-      partitioned.mapPartitions(aggregator.combineCombinersByKey(_), true)
+      val mapSideCombined = self.mapPartitions(aggregator.combineValuesByKey, true)
+      val partitioned = new ShuffledRDD[K, C](mapSideCombined, partitioner)
+        .setSerializer(serializerClass)
+      partitioned.mapPartitions(aggregator.combineCombinersByKey, true)
     } else {
       // Don't apply map-side combiner.
       // A sanity check to make sure mergeCombiners is not defined.
       assert(mergeCombiners == null)
-      val values = new ShuffledRDD[K, V](self, partitioner, serializerClass)
-      values.mapPartitions(aggregator.combineValuesByKey(_), true)
+      val values = new ShuffledRDD[K, V](self, partitioner).setSerializer(serializerClass)
+      values.mapPartitions(aggregator.combineValuesByKey, true)
     }
   }
 
@@ -233,31 +234,13 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
   }
 
   /**
-   * Return a copy of the RDD partitioned using the specified partitioner. If `mapSideCombine`
-   * is true, Spark will group values of the same key together on the map side before the
-   * repartitioning, to only send each key over the network once. If a large number of
-   * duplicated keys are expected, and the size of the keys are large, `mapSideCombine` should
-   * be set to true.
+   * Return a copy of the RDD partitioned using the specified partitioner.
    */
-  def partitionBy(partitioner: Partitioner, mapSideCombine: Boolean = false): RDD[(K, V)] = {
-    if (getKeyClass().isArray) {
-      if (mapSideCombine) {
-        throw new SparkException("Cannot use map-side combining with array keys.")
-      }
-      if (partitioner.isInstanceOf[HashPartitioner]) {
-        throw new SparkException("Default partitioner cannot partition array keys.")
-      }
+  def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
+    if (getKeyClass().isArray && partitioner.isInstanceOf[HashPartitioner]) {
+      throw new SparkException("Default partitioner cannot partition array keys.")
     }
-    if (mapSideCombine) {
-      def createCombiner(v: V) = ArrayBuffer(v)
-      def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
-      def mergeCombiners(b1: ArrayBuffer[V], b2: ArrayBuffer[V]) = b1 ++= b2
-      val bufs = combineByKey[ArrayBuffer[V]](
-        createCombiner _, mergeValue _, mergeCombiners _, partitioner)
-      bufs.flatMapValues(buf => buf)
-    } else {
-      new ShuffledRDD[K, V](self, partitioner)
-    }
+    new ShuffledRDD[K, V](self, partitioner)
   }
 
   /**

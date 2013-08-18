@@ -49,9 +49,15 @@ import spark.OneToOneDependency
 private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassManifest](
     @transient var rdd1: RDD[(K, V)],
     @transient var rdd2: RDD[(K, W)],
-    part: Partitioner,
-    val serializerClass: String = null)
+    part: Partitioner)
   extends RDD[(K, V)](rdd1.context, Nil) {
+
+  private var serializerClass: String = null
+
+  def setSerializer(cls: String): SubtractedRDD[K, V, W] = {
+    serializerClass = cls
+    this
+  }
 
   override def getDependencies: Seq[Dependency[_]] = {
     Seq(rdd1, rdd2).map { rdd =>

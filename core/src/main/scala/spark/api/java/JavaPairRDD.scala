@@ -253,11 +253,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     fromRDD(rdd.subtract(other, p))
 
   /**
-   * Return a copy of the RDD partitioned using the specified partitioner. If `mapSideCombine`
-   * is true, Spark will group values of the same key together on the map side before the
-   * repartitioning, to only send each key over the network once. If a large number of
-   * duplicated keys are expected, and the size of the keys are large, `mapSideCombine` should
-   * be set to true.
+   * Return a copy of the RDD partitioned using the specified partitioner.
    */
   def partitionBy(partitioner: Partitioner): JavaPairRDD[K, V] =
     fromRDD(rdd.partitionBy(partitioner))
