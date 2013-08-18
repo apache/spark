@@ -96,11 +96,12 @@ private[spark] class Worker(
 
   override def preStart() {
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
-      host, port, cores, Utils.memoryMegabytesToString(memory)))
+      host, port, cores, Utils.megabytesToString(memory)))
     sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
+
     webUi.start()
     connectToMaster()
 

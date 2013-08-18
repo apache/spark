@@ -67,7 +67,12 @@ object LogisticRegressionSuite {
 }
 
 class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll with ShouldMatchers {
-  val sc = new SparkContext("local", "test")
+  @transient private var sc: SparkContext = _
+
+  override def beforeAll() {
+    sc = new SparkContext("local", "test")
+  }
+
 
   override def afterAll() {
     sc.stop()

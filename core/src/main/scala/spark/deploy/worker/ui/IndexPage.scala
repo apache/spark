@@ -19,13 +19,12 @@ package spark.deploy.worker.ui
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.util.parsing.json.JSONType
 import scala.xml.Node
 
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.duration._
-
-import net.liftweb.json.JsonAST.JValue
 
 import spark.Utils
 import spark.deploy.JsonProtocol
@@ -39,7 +38,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
   val worker = parent.worker
   val timeout = parent.timeout
 
-  def renderJson(request: HttpServletRequest): JValue = {
+  def renderJson(request: HttpServletRequest): JSONType = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, 30 seconds)
     JsonProtocol.writeWorkerState(workerState)
@@ -65,8 +64,8 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
                 Master URL:</strong> {workerState.masterUrl}
               </li>
               <li><strong>Cores:</strong> {workerState.cores} ({workerState.coresUsed} Used)</li>
-              <li><strong>Memory:</strong> {Utils.memoryMegabytesToString(workerState.memory)}
-                ({Utils.memoryMegabytesToString(workerState.memoryUsed)} Used)</li>
+              <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
+                ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
             </ul>
             <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
           </div>
@@ -97,7 +96,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
       <td>{executor.execId}</td>
       <td>{executor.cores}</td>
       <td sorttable_customkey={executor.memory.toString}>
-        {Utils.memoryMegabytesToString(executor.memory)}
+        {Utils.megabytesToString(executor.memory)}
       </td>
       <td>
         <ul class="unstyled">

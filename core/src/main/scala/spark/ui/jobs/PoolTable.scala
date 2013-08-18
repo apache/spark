@@ -1,8 +1,8 @@
 package spark.ui.jobs
 
-import scala.xml.Node
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
+import scala.xml.Node
 
 import spark.scheduler.Stage
 import spark.scheduler.cluster.Schedulable
@@ -21,14 +21,14 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
   private def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[Stage]]) => Seq[Node],
     rows: Seq[Schedulable]
     ): Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable">
+    <table class="table table-bordered table-striped table-condensed sortable table-fixed">
       <thead>
         <th>Pool Name</th>
         <th>Minimum Share</th>
         <th>Pool Weight</th>
-        <td>Active Stages</td>
-        <td>Running Tasks</td>
-        <td>SchedulingMode</td>
+        <th>Active Stages</th>
+        <th>Running Tasks</th>
+        <th>SchedulingMode</th>
       </thead>
       <tbody>
         {rows.map(r => makeRow(r, poolToActiveStages))}
@@ -36,7 +36,8 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
     </table>
   }
 
-  private def poolRow(p: Schedulable, poolToActiveStages: HashMap[String, HashSet[Stage]]): Seq[Node] = {
+  private def poolRow(p: Schedulable, poolToActiveStages: HashMap[String, HashSet[Stage]])
+    : Seq[Node] = {
     val activeStages = poolToActiveStages.get(p.name) match {
       case Some(stages) => stages.size
       case None => 0

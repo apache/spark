@@ -27,7 +27,11 @@ import spark.SparkContext._
 
 
 class RidgeRegressionSuite extends FunSuite with BeforeAndAfterAll {
-  val sc = new SparkContext("local", "test")
+  @transient private var sc: SparkContext = _
+
+  override def beforeAll() {
+    sc = new SparkContext("local", "test")
+  }
 
   override def afterAll() {
     sc.stop()

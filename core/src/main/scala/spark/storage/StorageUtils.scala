@@ -42,9 +42,9 @@ case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
   numCachedPartitions: Int, numPartitions: Int, memSize: Long, diskSize: Long)
   extends Ordered[RDDInfo] {
   override def toString = {
-    import Utils.memoryBytesToString
+    import Utils.bytesToString
     "RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; DiskSize: %s".format(name, id,
-      storageLevel.toString, numCachedPartitions, numPartitions, memoryBytesToString(memSize), memoryBytesToString(diskSize))
+      storageLevel.toString, numCachedPartitions, numPartitions, bytesToString(memSize), bytesToString(diskSize))
   }
 
   override def compare(that: RDDInfo) = {

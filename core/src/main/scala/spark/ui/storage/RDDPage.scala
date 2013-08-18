@@ -21,11 +21,12 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import spark.storage.{StorageStatus, StorageUtils}
-import spark.ui.UIUtils._
 import spark.Utils
+import spark.storage.{StorageStatus, StorageUtils}
 import spark.storage.BlockManagerMasterActor.BlockStatus
+import spark.ui.UIUtils._
 import spark.ui.Page._
+
 
 /** Page showing storage details for a given RDD */
 private[spark] class RDDPage(parent: BlockManagerUI) {
@@ -44,7 +45,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     val workerTable = listingTable(workerHeaders, workerRow, workers)
 
     val blockHeaders = Seq("Block Name", "Storage Level", "Size in Memory", "Size on Disk",
-      "Locations")
+      "Executors")
 
     val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).toArray.sortWith(_._1 < _._1)
     val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
@@ -71,11 +72,11 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
             </li>
             <li>
               <strong>Memory Size:</strong>
-              {Utils.memoryBytesToString(rddInfo.memSize)}
+              {Utils.bytesToString(rddInfo.memSize)}
             </li>
             <li>
               <strong>Disk Size:</strong>
-              {Utils.memoryBytesToString(rddInfo.diskSize)}
+              {Utils.bytesToString(rddInfo.diskSize)}
             </li>
           </ul>
         </div>
@@ -83,19 +84,19 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
       <hr/>
       <div class="row">
         <div class="span12">
-          <h3> Data Distribution Summary </h3>
+          <h4> Data Distribution on {workers.size} Executors </h4>
           {workerTable}
         </div>
       </div>
       <hr/>
       <div class="row">
         <div class="span12">
-          <h4> Partitions </h4>
+          <h4> {blocks.size} Partitions </h4>
           {blockTable}
         </div>
       </div>;
 
-    headerSparkPage(content, parent.sc, "RDD Info: " + rddInfo.name, Storage)
+    headerSparkPage(content, parent.sc, "RDD Storage Info for " + rddInfo.name, Storage)
   }
 
   def blockRow(row: (String, BlockStatus, Seq[String])): Seq[Node] = {
@@ -106,10 +107,10 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
         {block.storageLevel.description}
       </td>
       <td sorttable_customkey={block.memSize.toString}>
-        {Utils.memoryBytesToString(block.memSize)}
+        {Utils.bytesToString(block.memSize)}
       </td>
       <td sorttable_customkey={block.diskSize.toString}>
-        {Utils.memoryBytesToString(block.diskSize)}
+        {Utils.bytesToString(block.diskSize)}
       </td>
       <td>
         {locations.map(l => <span>{l}<br/></span>)}
@@ -122,10 +123,10 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     <tr>
       <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
       <td>
-        {Utils.memoryBytesToString(status.memUsed(prefix))}
-        ({Utils.memoryBytesToString(status.memRemaining)} Total Available)
+        {Utils.bytesToString(status.memUsed(prefix))}
+        ({Utils.bytesToString(status.memRemaining)} Remaining)
       </td>
-      <td>{Utils.memoryBytesToString(status.diskUsed(prefix))}</td>
+      <td>{Utils.bytesToString(status.diskUsed(prefix))}</td>
     </tr>
   }
 }

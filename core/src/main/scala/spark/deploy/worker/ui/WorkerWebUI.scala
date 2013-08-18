@@ -17,7 +17,6 @@
 
 package spark.deploy.worker.ui
 
-import akka.actor.ActorRef
 import akka.util.{Duration, Timeout}
 
 import java.io.{FileInputStream, File}
@@ -49,7 +48,9 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   val indexPage = new IndexPage(this)
 
-  val handlers = Array[(String, Handler)](
+  val metricsHandlers = worker.metricsSystem.getServletHandlers
+
+  val handlers = metricsHandlers ++ Array[(String, Handler)](
     ("/static", createStaticHandler(WorkerWebUI.STATIC_RESOURCE_DIR)),
     ("/log", (request: HttpServletRequest) => log(request)),
     ("/logPage", (request: HttpServletRequest) => logPage(request)),
@@ -113,7 +114,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
           .format(appId, executorId, logType, math.max(startByte-byteLength, 0),
           byteLength)}>
           <button type="button" class="btn btn-default">
-            Previous {Utils.memoryBytesToString(math.min(byteLength, startByte))}
+            Previous {Utils.bytesToString(math.min(byteLength, startByte))}
           </button>
         </a>
       }
@@ -128,7 +129,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
           format(appId, executorId, logType, endByte, byteLength)}>
           <button type="button" class="btn btn-default">
-            Next {Utils.memoryBytesToString(math.min(byteLength, logLength-endByte))}
+            Next {Utils.bytesToString(math.min(byteLength, logLength-endByte))}
           </button>
         </a>
       }

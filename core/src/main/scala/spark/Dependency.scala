@@ -39,7 +39,6 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
 
 /**
  * Represents a dependency on the output of a shuffle stage.
- * @param shuffleId the shuffle id
  * @param rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
  * @param serializerClass class name of the serializer to use

@@ -1,21 +1,14 @@
 package spark.ui.jobs
 
 import java.util.Date
-import java.text.SimpleDateFormat
 
-import javax.servlet.http.HttpServletRequest
-
-import scala.Some
-import scala.xml.{NodeSeq, Node}
-import scala.collection.mutable.HashMap
+import scala.xml.Node
 import scala.collection.mutable.HashSet
 
+import spark.Utils
 import spark.scheduler.cluster.{SchedulingMode, TaskInfo}
 import spark.scheduler.Stage
-import spark.ui.UIUtils._
-import spark.ui.Page._
-import spark.Utils
-import spark.storage.StorageLevel
+
 
 /** Page showing list of all ongoing and recently finished stages */
 private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressUI) {
@@ -38,22 +31,15 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
         {if (isFairScheduler) {<th>Pool Name</th>} else {}}
         <th>Description</th>
         <th>Submitted</th>
-        <td>Duration</td>
-        <td>Tasks: Succeeded/Total</td>
-        <td>Shuffle Read</td>
-        <td>Shuffle Write</td>
+        <th>Duration</th>
+        <th>Tasks: Succeeded/Total</th>
+        <th>Shuffle Read</th>
+        <th>Shuffle Write</th>
       </thead>
       <tbody>
         {rows.map(r => makeRow(r))}
       </tbody>
     </table>
-  }
-
-  private def getElapsedTime(submitted: Option[Long], completed: Long): String = {
-    submitted match {
-      case Some(t) => parent.formatDuration(completed - t)
-      case _ => "Unknown"
-    }
   }
 
   private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] = {
@@ -78,11 +64,11 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
 
     val shuffleRead = listener.stageToShuffleRead.getOrElse(s.id, 0L) match {
       case 0 => ""
-      case b => Utils.memoryBytesToString(b)
+      case b => Utils.bytesToString(b)
     }
     val shuffleWrite = listener.stageToShuffleWrite.getOrElse(s.id, 0L) match {
       case 0 => ""
-      case b => Utils.memoryBytesToString(b)
+      case b => Utils.bytesToString(b)
     }
 
     val startedTasks = listener.stageToTasksActive.getOrElse(s.id, HashSet[TaskInfo]()).size
@@ -98,6 +84,8 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
     val nameLink = <a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a>
     val description = listener.stageToDescription.get(s)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
+    val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
+    val duration =  s.submissionTime.map(t => finishTime - t)
 
     <tr>
       <td>{s.id}</td>
@@ -106,8 +94,9 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
       }
       <td>{description}</td>
       <td valign="middle">{submissionTime}</td>
-      <td>{getElapsedTime(s.submissionTime,
-             s.completionTime.getOrElse(System.currentTimeMillis()))}</td>
+      <td sorttable_customkey={duration.getOrElse(-1).toString}>
+        {duration.map(d => parent.formatDuration(d)).getOrElse("Unknown")}
+      </td>
       <td class="progress-cell">
         {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
       </td>

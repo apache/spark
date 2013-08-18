@@ -91,10 +91,6 @@
       <artifactId>scala-library</artifactId>
     </dependency>
     <dependency>
-      <groupId>net.liftweb</groupId>
-      <artifactId>lift-json_2.9.2</artifactId>
-    </dependency>
-    <dependency>
       <groupId>it.unimi.dsi</groupId>
       <artifactId>fastutil</artifactId>
     </dependency>
@@ -125,6 +121,10 @@
     <dependency>
       <groupId>com.codahale.metrics</groupId>
       <artifactId>metrics-jvm</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.codahale.metrics</groupId>
+      <artifactId>metrics-json</artifactId>
     </dependency>
 
     <dependency>

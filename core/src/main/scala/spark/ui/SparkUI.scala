@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.{Handler, Server}
 
-import spark.{Logging, SparkContext, Utils}
+import spark.{Logging, SparkContext, SparkEnv, Utils}
 import spark.ui.env.EnvironmentUI
 import spark.ui.exec.ExecutorsUI
 import spark.ui.storage.BlockManagerUI
@@ -43,8 +43,12 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   val jobs = new JobProgressUI(sc)
   val env = new EnvironmentUI(sc)
   val exec = new ExecutorsUI(sc)
+
+  // Add MetricsServlet handlers by default
+  val metricsServletHandlers = SparkEnv.get.metricsSystem.getServletHandlers
+
   val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
-    exec.getHandlers ++ handlers
+    exec.getHandlers ++ metricsServletHandlers ++ handlers
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {

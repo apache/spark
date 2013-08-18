@@ -29,7 +29,7 @@ import spark.{RDD, Partitioner}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.conf.Configuration
-import spark.api.java.{JavaRDD, JavaPairRDD}
+import spark.api.java.{JavaUtils, JavaRDD, JavaPairRDD}
 import spark.storage.StorageLevel
 import com.google.common.base.Optional
 import spark.RDD
@@ -401,10 +401,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   (Seq[V], Option[S]) => Option[S] = {
     val scalaFunc: (Seq[V], Option[S]) => Option[S] = (values, state) => {
       val list: JList[V] = values
-      val scalaState: Optional[S] = state match {
-        case Some(s) => Optional.of(s)
-        case _ => Optional.absent()
-      }
+      val scalaState: Optional[S] = JavaUtils.optionToOptional(state)
       val result: Optional[S] = in.apply(list, scalaState)
       result.isPresent match {
         case true => Some(result.get())

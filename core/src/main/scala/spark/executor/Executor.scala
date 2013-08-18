@@ -17,18 +17,17 @@
 
 package spark.executor
 
-import java.io.{File, FileOutputStream}
-import java.net.{URI, URL, URLClassLoader}
+import java.io.{File}
+import java.lang.management.ManagementFactory
+import java.nio.ByteBuffer
 import java.util.concurrent._
 
-import org.apache.hadoop.fs.FileUtil
+import scala.collection.JavaConversions._
+import scala.collection.mutable.HashMap
 
-import scala.collection.mutable.{ArrayBuffer, Map, HashMap}
-
-import spark.broadcast._
 import spark.scheduler._
 import spark._
-import java.nio.ByteBuffer
+
 
 /**
  * The Mesos executor for Spark.
@@ -116,6 +115,9 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
       context.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var attemptedTask: Option[Task[Any]] = None
       var taskStart: Long = 0
+      def getTotalGCTime = ManagementFactory.getGarbageCollectorMXBeans.map(g => g.getCollectionTime).sum
+      val startGCTime = getTotalGCTime
+
       try {
         SparkEnv.set(env)
         Accumulators.clear()
@@ -128,10 +130,11 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         taskStart = System.currentTimeMillis()
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
-        task.metrics.foreach{ m =>
+        for (m <- task.metrics) {
           m.hostname = Utils.localHostName
           m.executorDeserializeTime = (taskStart - startTime).toInt
           m.executorRunTime = (taskFinish - taskStart).toInt
+          m.jvmGCTime = getTotalGCTime - startGCTime
         }
         //TODO I'd also like to track the time it takes to serialize the task results, but that is huge headache, b/c
         // we need to serialize the task metrics first.  If TaskMetrics had a custom serialized format, we could
@@ -155,7 +158,10 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         case t: Throwable => {
           val serviceTime = (System.currentTimeMillis() - taskStart).toInt
           val metrics = attemptedTask.flatMap(t => t.metrics)
-          metrics.foreach{m => m.executorRunTime = serviceTime}
+          for (m <- metrics) {
+            m.executorRunTime = serviceTime
+            m.jvmGCTime = getTotalGCTime - startGCTime
+          }
           val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
           context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 

@@ -36,7 +36,11 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
   var propertyCategories: mutable.HashMap[String, Properties] = null
 
   private def setDefaultProperties(prop: Properties) {
-    // empty function, any default property can be set here
+    prop.setProperty("*.sink.servlet.class", "spark.metrics.sink.MetricsServlet")
+    prop.setProperty("*.sink.servlet.uri", "/metrics/json")
+    prop.setProperty("*.sink.servlet.sample", "false")
+    prop.setProperty("master.sink.servlet.uri", "/metrics/master/json")
+    prop.setProperty("applications.sink.servlet.uri", "/metrics/applications/json")
   }
 
   def initialize() {

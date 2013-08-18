@@ -17,17 +17,8 @@
 
 package spark
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashSet
-
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import org.scalatest.prop.Checkers
-import org.scalacheck.Arbitrary._
-import org.scalacheck.Gen
-import org.scalacheck.Prop._
-
-import com.google.common.io.Files
 
 import spark.rdd.ShuffledRDD
 import spark.SparkContext._
@@ -59,8 +50,8 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     }
     // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
-    val c = new ShuffledRDD(b, new HashPartitioner(NUM_BLOCKS),
-      classOf[spark.KryoSerializer].getName)
+    val c = new ShuffledRDD(b, new HashPartitioner(NUM_BLOCKS))
+      .setSerializer(classOf[spark.KryoSerializer].getName)
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
 
     assert(c.count === 10)
@@ -81,7 +72,8 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     }
     // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
-    val c = new ShuffledRDD(b, new HashPartitioner(3), classOf[spark.KryoSerializer].getName)
+    val c = new ShuffledRDD(b, new HashPartitioner(3))
+      .setSerializer(classOf[spark.KryoSerializer].getName)
     assert(c.count === 10)
   }
 
@@ -96,7 +88,8 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
 
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
-    val c = new ShuffledRDD(b, new HashPartitioner(10), classOf[spark.KryoSerializer].getName)
+    val c = new ShuffledRDD(b, new HashPartitioner(10))
+      .setSerializer(classOf[spark.KryoSerializer].getName)
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
     assert(c.count === 4)
