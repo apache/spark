@@ -60,11 +60,15 @@ class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep])
  * @param rdds parent RDDs.
  * @param part partitioner used to partition the shuffle output.
  */
-class CoGroupedRDD[K](
-  @transient var rdds: Seq[RDD[(K, _)]],
-  part: Partitioner,
-  val serializerClass: String = null)
+class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(K, _)]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
+
+  private var serializerClass: String = null
+
+  def setSerializer(cls: String): CoGroupedRDD[K] = {
+    serializerClass = cls
+    this
+  }
 
   override def getDependencies: Seq[Dependency[_]] = {
     rdds.map { rdd: RDD[(K, _)] =>
