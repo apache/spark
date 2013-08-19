@@ -55,11 +55,6 @@
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
-      <scope>runtime</scope>
-    </dependency>
   </dependencies>
 
   <build>
