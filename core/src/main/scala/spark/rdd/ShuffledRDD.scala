@@ -17,9 +17,7 @@
 
 package spark.rdd
 
-import spark._
-import scala.Some
-import scala.Some
+import spark.{Dependency, Partitioner, RDD, SparkEnv, ShuffleDependency, Partition, TaskContext}
 
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
@@ -35,7 +33,7 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
  * @tparam V the value class.
  */
 class ShuffledRDD[K, V](
-    @transient var prev: RDD[(K, V)],
+    @transient var prev: RDD[_ <: Product2[K, V]],
     part: Partitioner)
   extends RDD[(K, V)](prev.context, Nil) {
 

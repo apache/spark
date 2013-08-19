@@ -28,11 +28,11 @@ import scala.collection.JavaConversions._
   * @param mergeCombiners function to merge outputs from multiple mergeValue function.
   */
 case class Aggregator[K, V, C] (
-    val createCombiner: V => C,
-    val mergeValue: (C, V) => C,
-    val mergeCombiners: (C, C) => C) {
+    createCombiner: V => C,
+    mergeValue: (C, V) => C,
+    mergeCombiners: (C, C) => C) {
 
-  def combineValuesByKey(iter: Iterator[(K, V)]) : Iterator[(K, C)] = {
+  def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
     val combiners = new JHashMap[K, C]
     for ((k, v) <- iter) {
       val oldC = combiners.get(k)

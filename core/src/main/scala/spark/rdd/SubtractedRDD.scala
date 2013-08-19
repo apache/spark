@@ -47,8 +47,8 @@ import spark.OneToOneDependency
  * out of memory because of the size of `rdd2`.
  */
 private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassManifest](
-    @transient var rdd1: RDD[(K, V)],
-    @transient var rdd2: RDD[(K, W)],
+    @transient var rdd1: RDD[_ <: Product2[K, V]],
+    @transient var rdd2: RDD[_ <: Product2[K, W]],
     part: Partitioner)
   extends RDD[(K, V)](rdd1.context, Nil) {
 
@@ -66,7 +66,7 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassM
         new OneToOneDependency(rdd)
       } else {
         logInfo("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency(rdd.asInstanceOf[RDD[(K, Any)]], part, serializerClass)
+        new ShuffleDependency(rdd, part, serializerClass)
       }
     }
   }

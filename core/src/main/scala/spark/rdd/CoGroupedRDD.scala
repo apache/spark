@@ -60,7 +60,7 @@ class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep])
  * @param rdds parent RDDs.
  * @param part partitioner used to partition the shuffle output.
  */
-class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(K, _)]], part: Partitioner)
+class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
 
   private var serializerClass: String = null
@@ -71,13 +71,13 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[(K, _)]], part: Partitioner)
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    rdds.map { rdd: RDD[(K, _)] =>
+    rdds.map { rdd: RDD[_ <: Product2[K, _]] =>
       if (rdd.partitioner == Some(part)) {
         logInfo("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
         logInfo("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency[Any, Any](rdd.asInstanceOf[RDD[(Any, Any)]], part, serializerClass)
+        new ShuffleDependency[Any, Any](rdd, part, serializerClass)
       }
     }
   }

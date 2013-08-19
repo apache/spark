@@ -60,7 +60,8 @@ import org.apache.mesos.MesosNativeLibrary
 
 import spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import spark.partial.{ApproximateEvaluator, PartialResult}
-import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
+import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD,
+  OrderedRDDFunctions}
 import spark.scheduler.{DAGScheduler, DAGSchedulerSource, ResultTask, ShuffleMapTask, SparkListener,
   SplitInfo, Stage, StageInfo, TaskScheduler, ActiveJob}
 import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
@@ -833,11 +834,11 @@ class SparkContext(
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
 
-  private var nextShuffleId = new AtomicInteger(0)
+  private val nextShuffleId = new AtomicInteger(0)
 
   private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement()
 
-  private var nextRddId = new AtomicInteger(0)
+  private val nextRddId = new AtomicInteger(0)
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
@@ -886,7 +887,7 @@ object SparkContext {
 
   implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
       rdd: RDD[(K, V)]) =
-    new OrderedRDDFunctions(rdd)
+    new OrderedRDDFunctions(rdd.asInstanceOf[RDD[Product2[K, V]]])
 
   implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
 

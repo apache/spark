@@ -287,7 +287,10 @@ abstract class RDD[T: ClassManifest](
   def coalesce(numPartitions: Int, shuffle: Boolean = false): RDD[T] = {
     if (shuffle) {
       // include a shuffle step so that our upstream tasks are still distributed
-      new CoalescedRDD(new ShuffledRDD(map(x => (x, null)), new HashPartitioner(numPartitions)), numPartitions).keys
+      new CoalescedRDD(
+        new ShuffledRDD(map(x => (x, null)),
+        new HashPartitioner(numPartitions)),
+        numPartitions).keys
     } else {
       new CoalescedRDD(this, numPartitions)
     }
