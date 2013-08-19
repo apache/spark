@@ -33,6 +33,7 @@ private[spark] class PythonRDD[T: ClassManifest](
     parent: RDD[T],
     command: Seq[String],
     envVars: JMap[String, String],
+    pythonIncludes: JList[String],
     preservePartitoning: Boolean,
     pythonExec: String,
     broadcastVars: JList[Broadcast[Array[Byte]]],
@@ -44,10 +45,11 @@ private[spark] class PythonRDD[T: ClassManifest](
   // Similar to Runtime.exec(), if we are given a single string, split it into words
   // using a standard StringTokenizer (i.e. by spaces)
   def this(parent: RDD[T], command: String, envVars: JMap[String, String],
+      pythonIncludes: JList[String],
       preservePartitoning: Boolean, pythonExec: String,
       broadcastVars: JList[Broadcast[Array[Byte]]],
       accumulator: Accumulator[JList[Array[Byte]]]) =
-    this(parent, PipedRDD.tokenize(command), envVars, preservePartitoning, pythonExec,
+    this(parent, PipedRDD.tokenize(command), envVars, pythonIncludes, preservePartitoning, pythonExec,
       broadcastVars, accumulator)
 
   override def getPartitions = parent.partitions
@@ -78,6 +80,11 @@ private[spark] class PythonRDD[T: ClassManifest](
             dataOut.writeLong(broadcast.id)
             dataOut.writeInt(broadcast.value.length)
             dataOut.write(broadcast.value)
+          }
+          // Python includes (*.zip and *.egg files)
+          dataOut.writeInt(pythonIncludes.length)
+          for (f <- pythonIncludes) {
+            PythonRDD.writeAsPickle(f, dataOut)
           }
           dataOut.flush()
           // Serialized user code

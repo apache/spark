@@ -49,15 +49,26 @@ def main(infile, outfile):
     split_index = read_int(infile)
     if split_index == -1:  # for unit tests
         return
+
+    # fetch name of workdir
     spark_files_dir = load_pickle(read_with_length(infile))
     SparkFiles._root_directory = spark_files_dir
     SparkFiles._is_running_on_worker = True
-    sys.path.append(spark_files_dir)
+
+    # fetch names and values of broadcast variables
     num_broadcast_variables = read_int(infile)
     for _ in range(num_broadcast_variables):
         bid = read_long(infile)
         value = read_with_length(infile)
         _broadcastRegistry[bid] = Broadcast(bid, load_pickle(value))
+
+    # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
+    sys.path.append(spark_files_dir) # *.py files that were added will be copied here
+    num_python_includes =  read_int(infile)
+    for _ in range(num_python_includes):
+        sys.path.append(os.path.join(spark_files_dir, load_pickle(read_with_length(infile))))
+
+    # now load function
     func = load_obj(infile)
     bypassSerializer = load_obj(infile)
     if bypassSerializer:
