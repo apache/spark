@@ -564,7 +564,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
       override def compare(b: K) = comp.compare(a, b)
     }
     implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
-    fromRDD(new OrderedRDDFunctions(rdd).sortByKey(ascending))
+    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending))
   }
 
   /**

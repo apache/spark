@@ -73,10 +73,10 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   override def getDependencies: Seq[Dependency[_]] = {
     rdds.map { rdd: RDD[_ <: Product2[K, _]] =>
       if (rdd.partitioner == Some(part)) {
-        logInfo("Adding one-to-one dependency with " + rdd)
+        logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
-        logInfo("Adding shuffle dependency with " + rdd)
+        logDebug("Adding shuffle dependency with " + rdd)
         new ShuffleDependency[Any, Any](rdd, part, serializerClass)
       }
     }
@@ -122,15 +122,15 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
-        for ((k, v) <- rdd.iterator(itsSplit, context)) {
-          getSeq(k.asInstanceOf[K])(depNum) += v
+        rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]].foreach { kv =>
+          getSeq(kv._1)(depNum) += kv._2
         }
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
         val fetcher = SparkEnv.get.shuffleFetcher
-        fetcher.fetch[K, Any](shuffleId, split.index, context.taskMetrics, ser).foreach {
-          case (key, value) => getSeq(key)(depNum) += value
+        fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context.taskMetrics, ser).foreach {
+          kv => getSeq(kv._1)(depNum) += kv._2
         }
       }
     }

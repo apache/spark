@@ -34,12 +34,12 @@ case class Aggregator[K, V, C] (
 
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
     val combiners = new JHashMap[K, C]
-    for ((k, v) <- iter) {
-      val oldC = combiners.get(k)
+    for (kv <- iter) {
+      val oldC = combiners.get(kv._1)
       if (oldC == null) {
-        combiners.put(k, createCombiner(v))
+        combiners.put(kv._1, createCombiner(kv._2))
       } else {
-        combiners.put(k, mergeValue(oldC, v))
+        combiners.put(kv._1, mergeValue(oldC, kv._2))
       }
     }
     combiners.iterator
@@ -47,7 +47,7 @@ case class Aggregator[K, V, C] (
 
   def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] = {
     val combiners = new JHashMap[K, C]
-    for ((k, c) <- iter) {
+    iter.foreach { case(k, c) =>
       val oldC = combiners.get(k)
       if (oldC == null) {
         combiners.put(k, c)

@@ -338,7 +338,7 @@ object JavaAPICompletenessChecker {
     println()
 
     println("Missing OrderedRDD methods")
-    printMissingMethods(classOf[OrderedRDDFunctions[_, _]], classOf[JavaPairRDD[_, _]])
+    printMissingMethods(classOf[OrderedRDDFunctions[_, _, _]], classOf[JavaPairRDD[_, _]])
     println()
 
     println("Missing SparkContext methods")

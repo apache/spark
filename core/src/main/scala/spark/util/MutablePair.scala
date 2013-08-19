@@ -15,20 +15,20 @@
  * limitations under the License.
  */
 
-package spark.rdd
+package spark.util
 
 
-import spark.{TaskContext, Partition, RDD}
+/** A tuple of 2 elements.
+  *  @param  _1   Element 1 of this MutablePair
+  *  @param  _2   Element 2 of this MutablePair
+  */
+case class MutablePair[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T1,
+                      @specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T2]
+  (var _1: T1,var _2: T2)
+  extends Product2[T1, T2]
+{
 
-private[spark]
-class MappedValuesRDD[K, V, U](prev: RDD[_ <: Product2[K, V]], f: V => U)
-  extends RDD[(K, U)](prev) {
+  override def toString = "(" + _1 + "," + _2 + ")"
 
-  override def getPartitions = firstParent[Product2[K, U]].partitions
-
-  override val partitioner = firstParent[Product2[K, U]].partitioner
-
-  override def compute(split: Partition, context: TaskContext): Iterator[(K, U)] = {
-    firstParent[Product2[K, V]].iterator(split, context).map { case Product2(k ,v) => (k, f(v)) }
-  }
+  def canEqual(that: Any): Boolean = that.isInstanceOf[MutablePair[T1, T2]]
 }

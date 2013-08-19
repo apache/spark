@@ -32,14 +32,14 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
  * @tparam K the key class.
  * @tparam V the value class.
  */
-class ShuffledRDD[K, V](
-    @transient var prev: RDD[_ <: Product2[K, V]],
+class ShuffledRDD[K, V, P <: Product2[K, V] : ClassManifest](
+    @transient var prev: RDD[P],
     part: Partitioner)
-  extends RDD[(K, V)](prev.context, Nil) {
+  extends RDD[P](prev.context, Nil) {
 
   private var serializerClass: String = null
 
-  def setSerializer(cls: String): ShuffledRDD[K, V] = {
+  def setSerializer(cls: String): ShuffledRDD[K, V, P] = {
     serializerClass = cls
     this
   }
@@ -54,9 +54,9 @@ class ShuffledRDD[K, V](
     Array.tabulate[Partition](part.numPartitions)(i => new ShuffledRDDPartition(i))
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[(K, V)] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[P] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
-    SparkEnv.get.shuffleFetcher.fetch[K, V](shuffledId, split.index, context.taskMetrics,
+    SparkEnv.get.shuffleFetcher.fetch[P](shuffledId, split.index, context.taskMetrics,
       SparkEnv.get.serializerManager.get(serializerClass))
   }
 

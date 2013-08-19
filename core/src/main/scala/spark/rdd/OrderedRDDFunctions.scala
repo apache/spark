@@ -24,8 +24,10 @@ import spark.{RangePartitioner, Logging, RDD}
  * an implicit conversion. Import `spark.SparkContext._` at the top of your program to use these
  * functions. They will work with any key type that has a `scala.math.Ordered` implementation.
  */
-class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
-    self: RDD[_ <: Product2[K, V]])
+class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest,
+                          V: ClassManifest,
+                          P <: Product2[K, V] : ClassManifest](
+    self: RDD[P])
   extends Logging with Serializable {
 
   /**
@@ -34,11 +36,9 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
    * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
    * order of the keys).
    */
-  def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.size)
-    : RDD[(K, V)] =
-  {
-    val part = new RangePartitioner(numPartitions, self.asInstanceOf[RDD[Product2[K,V]]], ascending)
-    val shuffled = new ShuffledRDD[K, V](self, part)
+  def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.size): RDD[P] = {
+    val part = new RangePartitioner(numPartitions, self, ascending)
+    val shuffled = new ShuffledRDD[K, V, P](self, part)
     shuffled.mapPartitions(iter => {
       val buf = iter.toArray
       if (ascending) {

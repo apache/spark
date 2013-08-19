@@ -880,7 +880,7 @@ object SparkContext {
 
   implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
       rdd: RDD[(K, V)]) =
-    new OrderedRDDFunctions(rdd)
+    new OrderedRDDFunctions[K, V, (K, V)](rdd)
 
   implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
 

@@ -48,7 +48,7 @@ import spark.Partitioner._
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  * Import `spark.SparkContext._` at the top of your program to use these functions.
  */
-class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Product2[K, V]])
+class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   extends Logging
   with HadoopMapReduceUtil
   with Serializable {
@@ -85,13 +85,14 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
       self.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
     } else if (mapSideCombine) {
       val combined = self.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
-      val partitioned = new ShuffledRDD[K, C](combined, partitioner).setSerializer(serializerClass)
+      val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
+        .setSerializer(serializerClass)
       partitioned.mapPartitions(aggregator.combineCombinersByKey, preservesPartitioning = true)
     } else {
       // Don't apply map-side combiner.
       // A sanity check to make sure mergeCombiners is not defined.
       assert(mergeCombiners == null)
-      val values = new ShuffledRDD[K, V](self, partitioner).setSerializer(serializerClass)
+      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializerClass)
       values.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
     }
   }
@@ -162,7 +163,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
       throw new SparkException("reduceByKeyLocally() does not support array keys")
     }
 
-    def reducePartition(iter: Iterator[Product2[K, V]]): Iterator[JHashMap[K, V]] = {
+    def reducePartition(iter: Iterator[(K, V)]): Iterator[JHashMap[K, V]] = {
       val map = new JHashMap[K, V]
       for ((k, v) <- iter) {
         val old = map.get(k)
@@ -236,7 +237,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
     if (getKeyClass().isArray && partitioner.isInstanceOf[HashPartitioner]) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
-    new ShuffledRDD[K, V](self, partitioner)
+    new ShuffledRDD[K, V, (K, V)](self, partitioner)
   }
 
   /**
@@ -245,9 +246,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
-    this.cogroup(other, partitioner).flatMapValues {
-      case (vs, ws) =>
-        for (v <- vs.iterator; w <- ws.iterator) yield (v, w)
+    this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
+      for (v <- vs.iterator; w <- ws.iterator) yield (v, w)
     }
   }
 
@@ -258,13 +258,12 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
    * partition the output RDD.
    */
   def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
-    this.cogroup(other, partitioner).flatMapValues {
-      case (vs, ws) =>
-        if (ws.isEmpty) {
-          vs.iterator.map(v => (v, None))
-        } else {
-          for (v <- vs.iterator; w <- ws.iterator) yield (v, Some(w))
-        }
+    this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
+      if (ws.isEmpty) {
+        vs.iterator.map(v => (v, None))
+      } else {
+        for (v <- vs.iterator; w <- ws.iterator) yield (v, Some(w))
+      }
     }
   }
 
@@ -276,13 +275,12 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
    */
   def rightOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], W))] = {
-    this.cogroup(other, partitioner).flatMapValues {
-      case (vs, ws) =>
-        if (vs.isEmpty) {
-          ws.iterator.map(w => (None, w))
-        } else {
-          for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), w)
-        }
+    this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
+      if (vs.isEmpty) {
+        ws.iterator.map(w => (None, w))
+      } else {
+        for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), w)
+      }
     }
   }
 
@@ -378,7 +376,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
     val data = self.toArray()
     val map = new mutable.HashMap[K, V]
     map.sizeHint(data.length)
-    data.foreach { case(k, v) => map.put(k, v) }
+    data.foreach { case (k, v) => map.put(k, v) }
     map
   }
 
@@ -501,7 +499,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
     self.partitioner match {
       case Some(p) =>
         val index = p.getPartition(key)
-        def process(it: Iterator[Product2[K, V]]): Seq[V] = {
+        def process(it: Iterator[(K, V)]): Seq[V] = {
           val buf = new ArrayBuffer[V]
           for ((k, v) <- it if k == key) {
             buf += v
@@ -559,7 +557,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
-    def writeShard(context: spark.TaskContext, iter: Iterator[Product2[K,V]]): Int = {
+    def writeShard(context: spark.TaskContext, iter: Iterator[(K,V)]): Int = {
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
@@ -658,7 +656,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[_ <: Produc
     val writer = new HadoopWriter(conf)
     writer.preSetup()
 
-    def writeToFile(context: TaskContext, iter: Iterator[Product2[K,V]]) {
+    def writeToFile(context: TaskContext, iter: Iterator[(K, V)]) {
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
