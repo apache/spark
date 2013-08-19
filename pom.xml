@@ -733,17 +733,6 @@
               </exclusion>
             </exclusions>
           </dependency>
-          <!-- Specify Avro version because Kafka also has it as a dependency -->
-          <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>1.7.4</version>
-          </dependency>
-          <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro-ipc</artifactId>
-            <version>1.7.4</version>
-          </dependency>
         </dependencies>
       </dependencyManagement>
     </profile>
