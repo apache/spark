@@ -34,6 +34,7 @@ import scala.Some
 import spark.FetchFailed
 import spark.ExceptionFailure
 import spark.TaskResultTooBigFailure
+import spark.util.{SystemClock, Clock}
 
 
 /**
@@ -46,9 +47,13 @@ import spark.TaskResultTooBigFailure
  * THREADING: This class is designed to only be called from code with a lock on the
  * ClusterScheduler (e.g. its event handlers). It should not be called from other threads.
  */
-private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet: TaskSet)
-  extends TaskSetManager with Logging {
-
+private[spark] class ClusterTaskSetManager(
+    sched: ClusterScheduler,
+    val taskSet: TaskSet,
+    clock: Clock = SystemClock)
+  extends TaskSetManager
+  with Logging
+{
   // CPUs to request per task
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toInt
 
@@ -142,7 +147,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
   // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task.
   var currentLocalityIndex = 0    // Index of our current locality level in validLocalityLevels
-  var lastLaunchTime = System.currentTimeMillis()  // Time we last launched a task at this level
+  var lastLaunchTime = clock.getTime()  // Time we last launched a task at this level
 
   /**
    * Add a task to all the pending-task lists that it should be on. If readding is set, we are
@@ -340,7 +345,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
     : Option[TaskDescription] =
   {
     if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
-      val curTime = System.currentTimeMillis()
+      val curTime = clock.getTime()
 
       var allowedLocality = getAllowedLocalityLevel(curTime)
       if (allowedLocality > maxLocality) {
@@ -361,22 +366,22 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
           taskInfos(taskId) = info
           taskAttempts(index) = info :: taskAttempts(index)
           // Update our locality level for delay scheduling
-          currentLocalityIndex = getLocalityIndex(allowedLocality)
+          currentLocalityIndex = getLocalityIndex(taskLocality)
           lastLaunchTime = curTime
           // Serialize and return the task
-          val startTime = System.currentTimeMillis()
+          val startTime = clock.getTime()
           // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
           // we assume the task can be serialized without exceptions.
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
-          val timeTaken = System.currentTimeMillis() - startTime
+          val timeTaken = clock.getTime() - startTime
           increaseRunningTasks(1)
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
           if (taskAttempts(index).size == 1)
             taskStarted(task,info)
-          return Some(new TaskDescription(taskId, execId, taskName, serializedTask))
+          return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
         }
         case _ =>
       }
@@ -505,7 +510,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
           case ef: ExceptionFailure =>
             sched.listener.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
             val key = ef.description
-            val now = System.currentTimeMillis()
+            val now = clock.getTime()
             val (printFull, dupCount) = {
               if (recentExceptions.contains(key)) {
                 val (dupCount, printTime) = recentExceptions(key)
@@ -643,7 +648,7 @@ private[spark] class ClusterTaskSetManager(sched: ClusterScheduler, val taskSet:
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
     if (tasksFinished >= minFinishedForSpeculation) {
-      val time = System.currentTimeMillis()
+      val time = clock.getTime()
       val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
       Arrays.sort(durations)
       val medianDuration = durations(min((0.5 * numTasks).round.toInt, durations.size - 1))

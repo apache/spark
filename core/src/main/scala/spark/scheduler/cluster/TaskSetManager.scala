@@ -22,6 +22,15 @@ import java.nio.ByteBuffer
 import spark.TaskState.TaskState
 import spark.scheduler.TaskSet
 
+/**
+ * Tracks and schedules the tasks within a single TaskSet. This class keeps track of the status of
+ * each task and is responsible for retries on failure and locality. The main interfaces to it
+ * are resourceOffer, which asks the TaskSet whether it wants to run a task on one node, and
+ * statusUpdate, which tells it that one of its tasks changed state (e.g. finished).
+ *
+ * THREADING: This class is designed to only be called from code with a lock on the TaskScheduler
+ * (e.g. its event handlers). It should not be called from other threads.
+ */
 private[spark] trait TaskSetManager extends Schedulable {
   def schedulableQueue = null
   

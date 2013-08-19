@@ -23,7 +23,9 @@ package spark.scheduler
  * of preference will be executors on the same host if this is not possible.
  */
 private[spark]
-class TaskLocation private (val host: String, val executorId: Option[String]) extends Serializable
+class TaskLocation private (val host: String, val executorId: Option[String]) extends Serializable {
+  override def toString: String = "TaskLocation(" + host + ", " + executorId + ")"
+}
 
 private[spark] object TaskLocation {
   def apply(host: String, executorId: String) = new TaskLocation(host, Some(executorId))

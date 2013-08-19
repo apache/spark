@@ -15,23 +15,15 @@
  * limitations under the License.
  */
 
-package spark.scheduler.cluster
+package spark.util
 
-import java.nio.ByteBuffer
-import spark.util.SerializableBuffer
+/**
+ * An interface to represent clocks, so that they can be mocked out in unit tests.
+ */
+private[spark] trait Clock {
+  def getTime(): Long
+}
 
-private[spark] class TaskDescription(
-    val taskId: Long,
-    val executorId: String,
-    val name: String,
-    val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
-  extends Serializable {
-
-  // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
-  private val buffer = new SerializableBuffer(_serializedTask)
-
-  def serializedTask: ByteBuffer = buffer.value
-
-  override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
+private[spark] object SystemClock extends Clock {
+  def getTime(): Long = System.currentTimeMillis()
 }

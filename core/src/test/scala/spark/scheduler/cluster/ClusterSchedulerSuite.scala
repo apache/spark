@@ -27,7 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import java.util.Properties
 
-class DummyTaskSetManager(
+class FakeTaskSetManager(
     initPriority: Int,
     initStageId: Int,
     initNumTasks: Int,
@@ -81,7 +81,7 @@ class DummyTaskSetManager(
   {
     if (tasksFinished + runningTasks < numTasks) {
       increaseRunningTasks(1)
-      return Some(new TaskDescription(0, execId, "task 0:0", null))
+      return Some(new TaskDescription(0, execId, "task 0:0", 0, null))
     }
     return None
   }
@@ -104,17 +104,10 @@ class DummyTaskSetManager(
   }
 }
 
-class DummyTask(stageId: Int) extends Task[Int](stageId)
-{
-  def run(attemptId: Long): Int = {
-    return 0
-  }
-}
-
 class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging {
 
-  def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: ClusterScheduler, taskSet: TaskSet): DummyTaskSetManager = {
-    new DummyTaskSetManager(priority, stage, numTasks, cs , taskSet)
+  def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: ClusterScheduler, taskSet: TaskSet): FakeTaskSetManager = {
+    new FakeTaskSetManager(priority, stage, numTasks, cs , taskSet)
   }
 
   def resourceOffer(rootPool: Pool): Int = {
@@ -141,7 +134,7 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     sc = new SparkContext("local", "ClusterSchedulerSuite")
     val clusterScheduler = new ClusterScheduler(sc)
     var tasks = ArrayBuffer[Task[_]]()
-    val task = new DummyTask(0)
+    val task = new FakeTask(0)
     tasks += task
     val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
 
@@ -168,7 +161,7 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     sc = new SparkContext("local", "ClusterSchedulerSuite")
     val clusterScheduler = new ClusterScheduler(sc)
     var tasks = ArrayBuffer[Task[_]]()
-    val task = new DummyTask(0)
+    val task = new FakeTask(0)
     tasks += task
     val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
 
@@ -225,7 +218,7 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     sc = new SparkContext("local", "ClusterSchedulerSuite")
     val clusterScheduler = new ClusterScheduler(sc)
     var tasks = ArrayBuffer[Task[_]]()
-    val task = new DummyTask(0)
+    val task = new FakeTask(0)
     tasks += task
     val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
 

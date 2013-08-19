@@ -125,7 +125,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
           copiesRunning(index) += 1
           increaseRunningTasks(1)
           taskStarted(task, info)
-          return Some(new TaskDescription(taskId, null, taskName, bytes))
+          return Some(new TaskDescription(taskId, null, taskName, index, bytes))
         case None => {}
       }
     }
