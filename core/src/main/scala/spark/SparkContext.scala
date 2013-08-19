@@ -20,19 +20,14 @@ package spark
 import java.io._
 import java.net.URI
 import java.util.Properties
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.generic.Growable
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
 import scala.util.DynamicVariable
-import scala.collection.mutable.{ConcurrentMap, HashMap}
-
-import akka.actor.Actor._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -54,7 +49,6 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.mesos.MesosNativeLibrary
 
@@ -63,15 +57,14 @@ import spark.partial.{ApproximateEvaluator, PartialResult}
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD,
   OrderedRDDFunctions}
 import spark.scheduler.{DAGScheduler, DAGSchedulerSource, ResultTask, ShuffleMapTask, SparkListener,
-  SplitInfo, Stage, StageInfo, TaskScheduler, ActiveJob}
+  SplitInfo, Stage, StageInfo, TaskScheduler}
 import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
   ClusterScheduler, Schedulable, SchedulingMode}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.{StorageStatus, StorageUtils, RDDInfo, BlockManagerSource}
+import spark.ui.SparkUI
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
-import ui.{SparkUI}
-import spark.metrics._
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -887,7 +880,7 @@ object SparkContext {
 
   implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
       rdd: RDD[(K, V)]) =
-    new OrderedRDDFunctions(rdd.asInstanceOf[RDD[Product2[K, V]]])
+    new OrderedRDDFunctions(rdd)
 
   implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
 
