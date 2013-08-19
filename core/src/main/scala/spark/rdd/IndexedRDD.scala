@@ -34,7 +34,13 @@ import spark.Partitioner._
 
 
 
-// import java.io.{ObjectOutputStream, IOException}
+/**
+ * And index RDD 
+ */
+class BlockIndex[@specialized K: ClassManifest] extends JHashMap[K,Int]
+
+//type BlockIndex[@specialized K: ClassManifest] = JHashMap[K,Int]
+
 
 /**
  * An IndexedRDD is an RDD[(K,V)] where each K is unique.  
@@ -43,20 +49,26 @@ import spark.Partitioner._
  * be used to accelerate join and aggregation operations. 
  */
 class IndexedRDD[K: ClassManifest, V: ClassManifest](
-    val index:  RDD[ JHashMap[K, Int] ],
+    val index:  RDD[ BlockIndex[K] ],
     val valuesRDD: RDD[ Seq[Seq[V]] ])
   extends RDD[(K, V)](index.context, 
     List(new OneToOneDependency(index), new OneToOneDependency(valuesRDD)) ) {
-  //with PairRDDFunctions[K,V] {
 
-
-
-  val tuples = new ZippedRDD[JHashMap[K, Int], Seq[Seq[V]]](index.context, index, valuesRDD)
+  /**
+   * An internal representation of the maps and block managers
+   */
+  protected val tuples = new ZippedRDD(index.context, index, valuesRDD)
 
 
   override val partitioner = index.partitioner
+  
+
   override def getPartitions: Array[Partition] = tuples.getPartitions 
-  override def getPreferredLocations(s: Partition): Seq[String] = tuples.getPreferredLocations(s)
+  
+
+  override def getPreferredLocations(s: Partition): Seq[String] = 
+    tuples.getPreferredLocations(s)
+
 
   override def cache: IndexedRDD[K,V] = {
     index.cache
@@ -77,9 +89,10 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    */
   def mapValues[U: ClassManifest](f: V => U): IndexedRDD[K, U] = {
     val cleanF = index.context.clean(f)
-    val newValues = valuesRDD.mapPartitions(_.map{ values =>
-      values.map{_.map(x => f(x))}
-      }, true)
+    val newValues = valuesRDD.mapPartitions(_.map(values => values.map{ 
+        case null => null 
+        case row => row.map(x => f(x))
+      }), true)
     new IndexedRDD[K,U](index, newValues)
   }
 
@@ -90,9 +103,10 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    */
   def flatMapValues[U: ClassManifest](f: V => TraversableOnce[U]): IndexedRDD[K,U] = {
     val cleanF = index.context.clean(f)
-    val newValues = valuesRDD.mapPartitions(_.map{ values =>
-      values.map{_.flatMap(x => f(x))}
-      }, true)
+    val newValues = valuesRDD.mapPartitions(_.map(values => values.map{
+        case null => null 
+        case row => row.flatMap(x => f(x))
+      }), true)
     new IndexedRDD[K,U](index, newValues)
   }
 
@@ -106,15 +120,10 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    * - `mergeCombiners`, to combine two C's into a single one.
-   *
-   * In addition, users can control the partitioning of the output RDD, and whether to perform
-   * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
   def combineByKey[C: ClassManifest](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
-      partitioner: Partitioner,
-      mapSideCombine: Boolean = true,
       serializerClass: String = null): IndexedRDD[K, C] = {
     val newValues = valuesRDD.mapPartitions(
       _.map{ groups: Seq[Seq[V]] => 
@@ -131,35 +140,12 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
     new IndexedRDD[K,C](index, newValues)
   }
 
-
-  /**
-   * Simplified version of combineByKey that hash-partitions the output RDD.
-   */
-  def combineByKey[C: ClassManifest](createCombiner: V => C,
-      mergeValue: (C, V) => C,
-      mergeCombiners: (C, C) => C,
-      numPartitions: Int): IndexedRDD[K, C] = {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numPartitions))
-  }
-
-
-  /**
-   * Simplified version of combineByKey that hash-partitions the resulting RDD using the
-   * existing partitioner/parallelism level.
-   */
-  def combineByKey[C: ClassManifest](createCombiner: V => C, mergeValue: (C, V) => C, 
-    mergeCombiners: (C, C) => C)
-      : IndexedRDD[K, C] = {
-    combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(index))
-  }
-
-
   /**
    * Merge the values for each key using an associative function and a neutral "zero value" which may
    * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
    * list concatenation, 0 for addition, or 1 for multiplication.).
    */
-  def foldByKey(zeroValue: V, partitioner: Partitioner)(func: (V, V) => V): IndexedRDD[K, V] = {
+  def foldByKey(zeroValue: V)(func: (V, V) => V): IndexedRDD[K, V] = {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
     val zeroBuffer = SparkEnv.get.closureSerializer.newInstance().serialize(zeroValue)
     val zeroArray = new Array[Byte](zeroBuffer.limit)
@@ -168,45 +154,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
     // When deserializing, use a lazy val to create just one instance of the serializer per task
     lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
     def createZero() = cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
-    combineByKey[V]((v: V) => func(createZero(), v), func, func, partitioner)
-  }
-
-  /**
-   * Merge the values for each key using an associative function and a neutral "zero value" which may
-   * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
-   * list concatenation, 0 for addition, or 1 for multiplication.).
-   */
-  def foldByKey(zeroValue: V, numPartitions: Int)(func: (V, V) => V): IndexedRDD[K, V] = {
-    foldByKey(zeroValue, new HashPartitioner(numPartitions))(func)
-  }
-
-
-  /**
-   * Merge the values for each key using an associative function and a neutral "zero value" which may
-   * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
-   * list concatenation, 0 for addition, or 1 for multiplication.).
-   */
-  def foldByKey(zeroValue: V)(func: (V, V) => V): IndexedRDD[K, V] = {
-    foldByKey(zeroValue, defaultPartitioner(index))(func)
-  }
-
-
-  /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce.
-   */
-  def reduceByKey(partitioner: Partitioner, func: (V, V) => V): IndexedRDD[K, V] = {
-    combineByKey[V]((v: V) => v, func, func, partitioner)
-  }
-
-  /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
-   */
-  def reduceByKey(func: (V, V) => V, numPartitions: Int): IndexedRDD[K, V] = {
-    reduceByKey(new HashPartitioner(numPartitions), func)
+    combineByKey[V]((v: V) => func(createZero(), v), func, func)
   }
 
   /**
@@ -216,26 +164,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * parallelism level.
    */
   def reduceByKey(func: (V, V) => V): IndexedRDD[K, V] = {
-    reduceByKey(defaultPartitioner(index), func)
-  }
-
-
-  /**
-   * Group the values for each key in the RDD into a single sequence. Allows controlling the
-   * partitioning of the resulting key-value pair RDD by passing a Partitioner.
-   */
-  def groupByKey(partitioner: Partitioner): IndexedRDD[K, Seq[V]] = {
-    val newValues = valuesRDD.mapPartitions(_.map{ar => ar.map{s => Seq(s)} }, true)
-    new IndexedRDD[K, Seq[V]](index, newValues)
-  }
-
-
-  /**
-   * Group the values for each key in the RDD into a single sequence. Hash-partitions the
-   * resulting RDD with into `numPartitions` partitions.
-   */
-  def groupByKey(numPartitions: Int): IndexedRDD[K, Seq[V]] = {
-    groupByKey(new HashPartitioner(numPartitions))
+    combineByKey[V]((v: V) => v, func, func)
   }
 
 
@@ -244,7 +173,8 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * resulting RDD with the existing partitioner/parallelism level.
    */
   def groupByKey(): IndexedRDD[K, Seq[V]] = {
-    groupByKey(defaultPartitioner(index))
+    val newValues = valuesRDD.mapPartitions(_.map{ar => ar.map{s => Seq(s)} }, true)
+    new IndexedRDD[K, Seq[V]](index, newValues)
   }
 
 
@@ -252,8 +182,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): 
-        IndexedRDD[K, (Seq[V], Seq[W])] = {
+  def cogroup[W: ClassManifest](other: RDD[(K, W)]): IndexedRDD[K, (Seq[V], Seq[W])] = {
     //RDD[(K, (Seq[V], Seq[W]))] = {
     other match {
       case other: IndexedRDD[_, _] if other.index == index => {
@@ -291,7 +220,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
             assert(!thisIter.hasNext())
             val otherIndex = otherIter.next()
             assert(!otherIter.hasNext())
-            val newIndex = new JHashMap[K, Int]()
+            val newIndex = new BlockIndex[K]()
             // @todo Merge only the keys that correspond to non-null values
             // Merge the keys
             newIndex.putAll(thisIndex)
@@ -356,9 +285,9 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
             val (thisIndex, thisValues) = thisTuplesIter.next()
             assert(!thisTuplesIter.hasNext())
             // Construct a new index
-            val newIndex = thisIndex.clone().asInstanceOf[JHashMap[K, Int]]
+            val newIndex = thisIndex.clone().asInstanceOf[BlockIndex[K]]
             // Construct a new array Buffer to store the values
-            val newValues = ArrayBuffer.fill[(Seq[V], ArrayBuffer[W])](thisValues.size)(null)
+            val newValues = ArrayBuffer.fill[(Seq[V], Seq[W])](thisValues.size)(null)
             // populate the newValues with the values in this IndexedRDD
             for ((k,i) <- thisIndex) {
               if (thisValues(i) != null) {
@@ -375,12 +304,21 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
                 newValues.append( (Seq.empty[V], ArrayBuffer(w) ) )               
               } else {
                 val ind = newIndex.get(k)
-                newValues(ind)._2.append(w)
+                if(newValues(ind) == null) {
+                  // If the other key was in the index but not in the values 
+                  // of this indexed RDD then create a new values entry for it 
+                  newValues(ind) = (Seq.empty[V], ArrayBuffer(w))
+                } else {
+                  newValues(ind)._2.asInstanceOf[ArrayBuffer[W]].append(w)
+                }
               }
             }
             // Finalize the new values array
             val newValuesArray: Seq[Seq[(Seq[V],Seq[W])]] = 
-              newValues.view.map{ case (s, ab) => Seq((s, ab.toSeq)) }.toSeq 
+              newValues.view.map{ 
+                case null => null
+                case (s, ab) => Seq((s, ab.toSeq)) 
+                }.toSeq 
             List( (newIndex, newValuesArray) ).iterator
           }).cache()
 
@@ -394,13 +332,6 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   }
   
 
-  /**
-   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
-   * list of values for that key in `this` as well as `other`.
-   */
-  def cogroup[W: ClassManifest](other: RDD[(K, W)]): IndexedRDD[K, (Seq[V], Seq[W])] = {
-    cogroup(other, defaultPartitioner(this, other))
-  }
 
   // /**
   //  * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
@@ -410,14 +341,6 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   //     : IndexedRDD[K, (Seq[V], Seq[W1], Seq[W2])] = {
   //   cogroup(other1, other2, defaultPartitioner(this, other1, other2))
   // }
-
-  /**
-   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
-   * list of values for that key in `this` as well as `other`.
-   */
-  def cogroup[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): IndexedRDD[K, (Seq[V], Seq[W])] = {
-    cogroup(other, new HashPartitioner(numPartitions))
-  }
 
   // /**
   //  * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
@@ -430,7 +353,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 
   /** Alias for cogroup. */
   def groupWith[W: ClassManifest](other: RDD[(K, W)]): IndexedRDD[K, (Seq[V], Seq[W])] = {
-    cogroup(other, defaultPartitioner(this, other))
+    cogroup(other)
   }
 
   // /** Alias for cogroup. */
@@ -439,52 +362,6 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   //   cogroup(other1, other2, defaultPartitioner(self, other1, other2))
   // }
 
-  /**
-   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
-   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
-   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
-   */
-  def join[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): IndexedRDD[K, (V, W)] = {
-    cogroup(other, partitioner).flatMapValues {
-      case (vs, ws) =>
-        for (v <- vs.iterator; w <- ws.iterator) yield (v, w)
-    }
-  }
-
-  /**
-   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
-   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
-   * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
-   * partition the output RDD.
-   */
-  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): IndexedRDD[K, (V, Option[W])] = {
-    cogroup(other, partitioner).flatMapValues {
-      case (vs, ws) =>
-        if (ws.isEmpty) {
-          vs.iterator.map(v => (v, None))
-        } else {
-          for (v <- vs.iterator; w <- ws.iterator) yield (v, Some(w))
-        }
-    }
-  }
-
-  /**
-   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
-   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
-   * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
-   * partition the output RDD.
-   */
-  def rightOuterJoin[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner)
-      : IndexedRDD[K, (Option[V], W)] = {
-    cogroup(other, partitioner).flatMapValues {
-      case (vs, ws) =>
-        if (vs.isEmpty) {
-          ws.iterator.map(w => (None, w))
-        } else {
-          for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), w)
-        }
-    }
-  }
 
   /**
    * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
@@ -492,17 +369,12 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
   def join[W: ClassManifest](other: RDD[(K, W)]): IndexedRDD[K, (V, W)] = {
-    join(other, defaultPartitioner(this, other))
+    cogroup(other).flatMapValues {
+      case (vs, ws) =>
+        for (v <- vs.iterator; w <- ws.iterator) yield (v, w)
+    }
   }
 
-  /**
-   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
-   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
-   * (k, v2) is in `other`. Performs a hash join across the cluster.
-   */
-  def join[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): IndexedRDD[K, (V, W)] = {
-    join(other, new HashPartitioner(numPartitions))
-  }
 
   /**
    * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
@@ -511,18 +383,17 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * using the existing partitioner/parallelism level.
    */
   def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)]): IndexedRDD[K, (V, Option[W])] = {
-    leftOuterJoin(other, defaultPartitioner(this, other))
+    cogroup(other).flatMapValues {
+      case (vs, ws) =>
+        if (ws.isEmpty) {
+          vs.iterator.map(v => (v, None))
+        } else {
+          for (v <- vs.iterator; w <- ws.iterator) yield (v, Some(w))
+        }
+    }
+
   }
 
-  /**
-   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
-   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
-   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
-   * into `numPartitions` partitions.
-   */
-  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): IndexedRDD[K, (V, Option[W])] = {
-    leftOuterJoin(other, new HashPartitioner(numPartitions))
-  }
 
   /**
    * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
@@ -531,20 +402,16 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * RDD using the existing partitioner/parallelism level.
    */
   def rightOuterJoin[W: ClassManifest](other: RDD[(K, W)]): IndexedRDD[K, (Option[V], W)] = {
-    rightOuterJoin(other, defaultPartitioner(this, other))
+    cogroup(other).flatMapValues {
+      case (vs, ws) =>
+        if (vs.isEmpty) {
+          ws.iterator.map(w => (None, w))
+        } else {
+          for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), w)
+        }
+    }
+
   }
-
-  /**
-   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
-   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
-   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
-   * RDD into the given number of partitions.
-   */
-  def rightOuterJoin[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): IndexedRDD[K, (Option[V], W)] = {
-    rightOuterJoin(other, new HashPartitioner(numPartitions))
-  }
-
-
 
 
   /**
@@ -571,7 +438,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 object IndexedRDD {
   def apply[K: ClassManifest, V: ClassManifest](
     tbl: RDD[(K,V)],
-    existingIndex: RDD[JHashMap[K,Int]] = null ): IndexedRDD[K, V] = {
+    existingIndex: RDD[BlockIndex[K]] = null ): IndexedRDD[K, V] = {
 
     if (existingIndex == null) {
       // Shuffle the table (if necessary)
@@ -581,7 +448,7 @@ object IndexedRDD {
         } else { tbl }
 
       val groups = shuffledTbl.mapPartitions( iter => {
-        val indexMap = new JHashMap[K, Int]()
+        val indexMap = new BlockIndex[K]()
         val values = new ArrayBuffer[Seq[V]]()
         for ((k,v) <- iter){
           if(!indexMap.contains(k)) {
@@ -617,12 +484,12 @@ object IndexedRDD {
       val values = index.zipPartitions(shuffledTbl)(
         (indexIter, tblIter) => {
           // There is only one map
-          val index: JHashMap[K,Int] = indexIter.next()
+          val index = indexIter.next()
           assert(!indexIter.hasNext())
           val values = new Array[Seq[V]](index.size)
           for ((k,v) <- tblIter) {
             if (!index.contains(k)) {
-              throw new SparkException("Error: Try to bind an external index " +
+              throw new SparkException("Error: Trying to bind an external index " +
                 "to an RDD which contains keys that are not in the index.")
             }
             val ind = index(k)
@@ -636,6 +503,41 @@ object IndexedRDD {
 
       new IndexedRDD[K,V](index, values)
     }
+  }
+
+  /**
+   * Construct and index of the unique values in a given RDD.
+   */
+  def makeIndex[K: ClassManifest](keys: RDD[K], 
+    partitioner: Option[Partitioner] = None): RDD[BlockIndex[K]] = {
+
+
+    // Ugly hack :-(.  In order to partition the keys they must have values. 
+    val tbl = keys.mapPartitions(_.map(k => (k, false)), true)
+    // Shuffle the table (if necessary)
+    val shuffledTbl = partitioner match {
+      case None =>  {
+        if (tbl.partitioner.isEmpty) {
+          new ShuffledRDD[K, Boolean](tbl, Partitioner.defaultPartitioner(tbl))
+        } else { tbl }
+      }
+      case Some(partitioner) => 
+        tbl.partitionBy(partitioner)
+//        new ShuffledRDD[K, Boolean](tbl, partitioner)
+    }
+   
+
+    val index = shuffledTbl.mapPartitions( iter => {
+      val indexMap = new BlockIndex[K]()
+      for ( (k,_) <- iter ){
+        if(!indexMap.contains(k)){
+          val ind = indexMap.size
+          indexMap.put(k, ind)   
+        }
+      }
+      List(indexMap).iterator
+      }, true).cache
+    index
   }
 
 }
