@@ -620,7 +620,7 @@ class SparkContext(
    * @param partition to be looked up for locality
    * @return list of preferred locations for the partition
    */
-  def getPreferredLocs(rdd: RDD[_], partition: Int): List[String] =
+  private [spark] def getPreferredLocs(rdd: RDD[_], partition: Int): List[String] =
     dagScheduler.getPreferredLocs(rdd, partition)
 
   /**
