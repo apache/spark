@@ -181,7 +181,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(coalesced1.collect().toList.sorted === (1 to 9).toList, "Data got *lost* in coalescing")
 
     val splits = coalesced1.glom().collect().map(_.toList).toList
-    assert(splits.length == 3, "Supposed to coalesce to 3 but got " + splits.length)
+    assert(splits.length === 3, "Supposed to coalesce to 3 but got " + splits.length)
 
     assert(splits.foldLeft(true)
       ((x,y) => if (!x) false else y.length >= 1) === true, "Some partitions were empty")
@@ -189,10 +189,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     // If we try to coalesce into more partitions than the original RDD, it should just
     // keep the original number of partitions.
     val coalesced4 = data.coalesce(20)
-    assert(coalesced4.glom().collect().map(_.toList).toList.sortWith(
-      (x, y) => if (x.isEmpty) false else if (y.isEmpty) true else x(0) < y(0)) === (1 to 9).
-      map(x => List(x)).toList, "Tried coalescing 9 partitions to 20 but didn't get 9 back")
-
+    val listOfLists = coalesced4.glom().collect().map(_.toList).toList
+    val sortedList = listOfLists.sortWith{ (x, y) => !x.isEmpty && (y.isEmpty || (x(0) < y(0))) }
+    assert( sortedList === (1 to 9).
+      map{x => List(x)}.toList, "Tried coalescing 9 partitions to 20 but didn't get 9 back")
   }
 
   test("cogrouped RDDs with locality, large scale (10K partitions)") {
@@ -204,8 +204,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val machines = mutable.ListBuffer[String]()
     (1 to numMachines).foreach(machines += "m"+_)
 
-    val blocks = (1 to partitions).map(i => (i, (i to (i+2))
-      .map{ j => machines(rnd.nextInt(machines.size))}))
+    val blocks = (1 to partitions).map(i =>
+    { (i, Array.fill(3)(machines(rnd.nextInt(machines.size))).toList) } )
 
     val data2 = sc.makeRDD(blocks)
     val coalesced2 = data2.coalesce(numMachines*2)
