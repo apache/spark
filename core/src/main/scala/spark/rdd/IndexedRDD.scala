@@ -35,18 +35,20 @@ import spark.Partitioner._
 
 
 /**
- * And index RDD 
+ * The BlockIndex is the internal map structure used inside the index 
+ * of the IndexedRDD.
  */
 class BlockIndex[@specialized K: ClassManifest] extends JHashMap[K,Int]
 
-//type BlockIndex[@specialized K: ClassManifest] = JHashMap[K,Int]
 
 
 /**
- * An IndexedRDD is an RDD[(K,V)] where each K is unique.  
+ * An IndexedRDD[K,V] extends the RDD[(K,V)] by pre-indexing the keys and 
+ * organizing the values to enable faster join operations.
+ *
+ * In addition to providing the basic RDD[(K,V)] functionality the IndexedRDD
+ * exposes an index member which can be used to "key" other IndexedRDDs
  * 
- * The IndexedRDD contains an index datastructure that can 
- * be used to accelerate join and aggregation operations. 
  */
 class IndexedRDD[K: ClassManifest, V: ClassManifest](
     val index:  RDD[ BlockIndex[K] ],
