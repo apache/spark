@@ -165,7 +165,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
 
     def reducePartition(iter: Iterator[(K, V)]): Iterator[JHashMap[K, V]] = {
       val map = new JHashMap[K, V]
-      for ((k, v) <- iter) {
+      iter.foreach { case (k, v) =>
         val old = map.get(k)
         map.put(k, if (old == null) v else func(old, v))
       }
@@ -173,7 +173,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
     }
 
     def mergeMaps(m1: JHashMap[K, V], m2: JHashMap[K, V]): JHashMap[K, V] = {
-      for ((k, v) <- m2) {
+      m2.foreach { case (k, v) =>
         val old = m1.get(k)
         m1.put(k, if (old == null) v else func(old, v))
       }

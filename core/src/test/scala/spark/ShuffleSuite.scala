@@ -22,8 +22,7 @@ import org.scalatest.matchers.ShouldMatchers
 
 import spark.SparkContext._
 import spark.ShuffleSuite.NonJavaSerializableClass
-import spark.rdd.OrderedRDDFunctions
-import spark.rdd.ShuffledRDD
+import spark.rdd.{SubtractedRDD, CoGroupedRDD, OrderedRDDFunctions, ShuffledRDD}
 import spark.util.MutablePair
 
 
@@ -158,6 +157,45 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     results(1) should be (p(2, 22))
     results(2) should be (p(3, 33))
     results(3) should be (p(100, 100))
+  }
+
+  test("cogroup using mutable pairs") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
+    val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"), p(3, "3"))
+    val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
+    val pairs2: RDD[MutablePair[Int, String]] = sc.parallelize(data2, 2)
+    val results = new CoGroupedRDD[Int](Seq(pairs1, pairs2), new HashPartitioner(2)).collectAsMap()
+
+    assert(results(1)(0).length === 3)
+    assert(results(1)(0).contains(1))
+    assert(results(1)(0).contains(2))
+    assert(results(1)(0).contains(3))
+    assert(results(1)(1).length === 2)
+    assert(results(1)(1).contains("11"))
+    assert(results(1)(1).contains("12"))
+    assert(results(2)(0).length === 1)
+    assert(results(2)(0).contains(1))
+    assert(results(2)(1).length === 1)
+    assert(results(2)(1).contains("22"))
+    assert(results(3)(0).length === 0)
+    assert(results(3)(1).contains("3"))
+  }
+
+  test("subtract mutable pairs") {
+    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    def p[T1, T2](_1: T1, _2: T2) = MutablePair(_1, _2)
+    val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1), p(3, 33))
+    val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"))
+    val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
+    val pairs2: RDD[MutablePair[Int, String]] = sc.parallelize(data2, 2)
+    val results = new SubtractedRDD(pairs1, pairs2, new HashPartitioner(2)).collect()
+    results should have length (1)
+    // substracted rdd return results as Tuple2
+    results(0) should be ((3, 33))
   }
 }
 
