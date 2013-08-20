@@ -24,7 +24,7 @@ import org.eclipse.jetty.server.Server
 
 class UISuite extends FunSuite {
   test("jetty port increases under contention") {
-    val startPort = 33333
+    val startPort = 3030
     val server = new Server(startPort)
     server.start()
     val (jettyServer1, boundPort1) = JettyUtils.startJettyServer("localhost", startPort, Seq())
