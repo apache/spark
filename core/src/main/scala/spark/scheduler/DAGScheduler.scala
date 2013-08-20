@@ -635,7 +635,7 @@ class DAGScheduler(
                 mapOutputTracker.registerMapOutputs(
                   stage.shuffleDep.get.shuffleId,
                   stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
-                  changeGeneration = true)
+                  changeEpoch = true)
               }
               clearCacheLocs()
               if (stage.outputLocs.count(_ == Nil) != 0) {
@@ -718,7 +718,7 @@ class DAGScheduler(
       for ((shuffleId, stage) <- shuffleToMapStage) {
         stage.removeOutputsOnExecutor(execId)
         val locs = stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray
-        mapOutputTracker.registerMapOutputs(shuffleId, locs, changeGeneration = true)
+        mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
       }
       if (shuffleToMapStage.isEmpty) {
         mapOutputTracker.incrementEpoch()
