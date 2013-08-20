@@ -706,7 +706,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](
     IndexedRDD(self.partitionBy(partitioner))
 
 
-  def indexed(existingIndex: RDD[BlockIndex[K]] = null): IndexedRDD[K,V] = 
+  def indexed(existingIndex: RDDIndex[K] = null): IndexedRDD[K,V] = 
     IndexedRDD(self, existingIndex)
 
   private[spark] def getKeyClass() = implicitly[ClassManifest[K]].erasure

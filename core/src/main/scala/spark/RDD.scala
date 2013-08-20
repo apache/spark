@@ -55,7 +55,7 @@ import spark.rdd.ZippedPartitionsRDD2
 import spark.rdd.ZippedPartitionsRDD3
 import spark.rdd.ZippedPartitionsRDD4
 
-import spark.rdd.{IndexedRDD, BlockIndex}
+import spark.rdd.{IndexedRDD, RDDIndex}
 
 import spark.storage.StorageLevel
 import spark.util.BoundedPriorityQueue
@@ -774,7 +774,7 @@ abstract class RDD[T: ClassManifest](
   }
 
 
-  def makeIndex(partitioner: Option[Partitioner] = None): RDD[BlockIndex[T]] = 
+  def makeIndex(partitioner: Option[Partitioner] = None): RDDIndex[T] = 
     IndexedRDD.makeIndex(this, partitioner)
 
 

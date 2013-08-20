@@ -31,6 +31,10 @@ import spark.rdd._
 import spark.SparkContext._
 import spark.Partitioner._
 
+import spark.storage.StorageLevel
+
+
+
 
 
 
@@ -39,6 +43,20 @@ import spark.Partitioner._
  * of the IndexedRDD.
  */
 class BlockIndex[@specialized K: ClassManifest] extends JHashMap[K,Int]
+
+
+/**
+ * The RDDIndex is an opaque type used to represent the organization 
+ * of values in an RDD
+ */
+class RDDIndex[@specialized K: ClassManifest](private[spark] val rdd: RDD[BlockIndex[K]]) {
+  def persist(newLevel: StorageLevel): RDDIndex[K] = {
+    rdd.persist(newLevel)
+    return this
+  }
+}
+
+
 
 
 
@@ -51,30 +69,41 @@ class BlockIndex[@specialized K: ClassManifest] extends JHashMap[K,Int]
  * 
  */
 class IndexedRDD[K: ClassManifest, V: ClassManifest](
-    val index:  RDD[ BlockIndex[K] ],
+    val index:  RDDIndex[K],
     val valuesRDD: RDD[ Seq[Seq[V]] ])
-  extends RDD[(K, V)](index.context, 
-    List(new OneToOneDependency(index), new OneToOneDependency(valuesRDD)) ) {
+  extends RDD[(K, V)](index.rdd.context, 
+    List(new OneToOneDependency(index.rdd), new OneToOneDependency(valuesRDD)) ) {
 
   /**
-   * An internal representation of the maps and block managers
+   * An internal representation which joins the block indices with the values
    */
-  protected val tuples = new ZippedRDD(index.context, index, valuesRDD)
+  protected val tuples = new ZippedRDD(index.rdd.context, index.rdd, valuesRDD)
 
 
-  override val partitioner = index.partitioner
+  /**
+   * The partitioner is defined by the index
+   */
+  override val partitioner = index.rdd.partitioner
   
 
+  /**
+   * The actual partitions are defined by the tuples.
+   */
   override def getPartitions: Array[Partition] = tuples.getPartitions 
   
-
+  /**
+   * The preferred locations are computed based on the preferred locations of the tuples.
+   */
   override def getPreferredLocations(s: Partition): Seq[String] = 
     tuples.getPreferredLocations(s)
 
 
-  override def cache: IndexedRDD[K,V] = {
-    index.cache
-    valuesRDD.cache
+  /**
+   * Caching an IndexedRDD causes the index and values to be cached separately. 
+   */
+  override def persist(newLevel: StorageLevel): RDD[(K,V)] = {
+    index.persist(newLevel)
+    valuesRDD.persist(newLevel)
     return this
   }
 
@@ -90,7 +119,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * this also retains the original RDD's partitioning.
    */
   def mapValues[U: ClassManifest](f: V => U): IndexedRDD[K, U] = {
-    val cleanF = index.context.clean(f)
+    val cleanF = index.rdd.context.clean(f)
     val newValues = valuesRDD.mapPartitions(_.map(values => values.map{ 
         case null => null 
         case row => row.map(x => f(x))
@@ -104,7 +133,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * keys; this also retains the original RDD's partitioning.
    */
   def flatMapValues[U: ClassManifest](f: V => TraversableOnce[U]): IndexedRDD[K,U] = {
-    val cleanF = index.context.clean(f)
+    val cleanF = index.rdd.context.clean(f)
     val newValues = valuesRDD.mapPartitions(_.map(values => values.map{
         case null => null 
         case row => row.flatMap(x => f(x))
@@ -211,12 +240,12 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
           })
         new IndexedRDD[K, (Seq[V], Seq[W])](index, newValues) 
       }
-      case other: IndexedRDD[_, _] if other.index.partitioner == index.partitioner => {
+      case other: IndexedRDD[_, _] if other.index.rdd.partitioner == index.rdd.partitioner => {
         // If both RDDs are indexed using different indices but with the same partitioners
         // then we we need to first merge the indicies and then use the merged index to
         // merge the values.
         val newIndex = 
-          index.zipPartitions(other.index)(
+          index.rdd.zipPartitions(other.index.rdd)(
             (thisIter, otherIter) => {
             val thisIndex = thisIter.next()
             assert(!thisIter.hasNext())
@@ -264,11 +293,11 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
               }
               List(newValues.toSeq).iterator
             })
-        new IndexedRDD(newIndex, newValues)
+        new IndexedRDD(new RDDIndex(newIndex), newValues)
       }
       case _ => {
         // Get the partitioner from the index
-        val partitioner = index.partitioner match {
+        val partitioner = index.rdd.partitioner match {
           case Some(p) => p
           case None => throw new SparkException("An index must have a partitioner.")
         }
@@ -328,7 +357,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
         val newIndex = groups.mapPartitions(_.map{ case (kMap,vAr) => kMap }, true)
         val newValues = groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
           
-        new IndexedRDD[K, (Seq[V], Seq[W])](newIndex, newValues)
+        new IndexedRDD[K, (Seq[V], Seq[W])](new RDDIndex(newIndex), newValues)
       }
     }
   }
@@ -440,7 +469,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 object IndexedRDD {
   def apply[K: ClassManifest, V: ClassManifest](
     tbl: RDD[(K,V)],
-    existingIndex: RDD[BlockIndex[K]] = null ): IndexedRDD[K, V] = {
+    existingIndex: RDDIndex[K] = null ): IndexedRDD[K, V] = {
 
     if (existingIndex == null) {
       // Shuffle the table (if necessary)
@@ -466,10 +495,10 @@ object IndexedRDD {
       // extract the index and the values
       val index = groups.mapPartitions(_.map{ case (kMap,vAr) => kMap }, true)
       val values = groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
-      new IndexedRDD[K,V](index, values)
+      new IndexedRDD[K,V](new RDDIndex(index), values)
     } else {
       val index = existingIndex
-      val partitioner = index.partitioner match {
+      val partitioner = index.rdd.partitioner match {
         case Some(p) => p
         case None => throw new SparkException("An index must have a partitioner.")
       }
@@ -483,7 +512,7 @@ object IndexedRDD {
         }
 
       // Use the index to build the new values table
-      val values = index.zipPartitions(shuffledTbl)(
+      val values = index.rdd.zipPartitions(shuffledTbl)(
         (indexIter, tblIter) => {
           // There is only one map
           val index = indexIter.next()
@@ -511,7 +540,7 @@ object IndexedRDD {
    * Construct and index of the unique values in a given RDD.
    */
   def makeIndex[K: ClassManifest](keys: RDD[K], 
-    partitioner: Option[Partitioner] = None): RDD[BlockIndex[K]] = {
+    partitioner: Option[Partitioner] = None): RDDIndex[K] = {
 
 
     // Ugly hack :-(.  In order to partition the keys they must have values. 
@@ -539,7 +568,7 @@ object IndexedRDD {
       }
       List(indexMap).iterator
       }, true).cache
-    index
+    new RDDIndex(index)
   }
 
 }
