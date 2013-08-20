@@ -167,8 +167,8 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
   var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
   // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
-  def currPrefLocs(rdd: RDD[_], part: Partition): Seq[String] =
-    rdd.context.getPreferredLocs(rdd, part.index)
+  def currPrefLocs(part: Partition): Seq[String] =
+    prev.context.getPreferredLocs(prev, part.index)
 
   // this class just keeps iterating and rotating infinitely over the partitions of the RDD
   // next() returns the next preferred machine that a partition is replicated on
@@ -184,7 +184,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
     def resetIterator() = {
       val iterators = (0 to 2).map( x =>
         prev.partitions.iterator.flatMap(p => {
-          if (currPrefLocs(prev, p).size > x) Some((currPrefLocs(prev, p)(x), p)) else None
+          if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
         } )
       )
       iterators.reduceLeft((x, y) => x ++ y)

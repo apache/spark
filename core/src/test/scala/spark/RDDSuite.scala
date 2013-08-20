@@ -183,8 +183,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val splits = coalesced1.glom().collect().map(_.toList).toList
     assert(splits.length === 3, "Supposed to coalesce to 3 but got " + splits.length)
 
-    assert(splits.foldLeft(true)
-      ((x,y) => if (!x) false else y.length >= 1) === true, "Some partitions were empty")
+    assert(splits.forall(_.length >= 1) === true, "Some partitions were empty")
 
     // If we try to coalesce into more partitions than the original RDD, it should just
     // keep the original number of partitions.
