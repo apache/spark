@@ -31,12 +31,14 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.mapred.FileOutputCommitter
 import org.apache.hadoop.mapred.FileOutputFormat
-import org.apache.hadoop.mapred.HadoopWriter
+import org.apache.hadoop.mapred.SparkHadoopWriter
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputFormat
 
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, Job => NewAPIHadoopJob, HadoopMapReduceUtil}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat,
+    RecordWriter => NewRecordWriter, Job => NewAPIHadoopJob, SparkHadoopMapReduceUtil}
+import org.apache.hadoop.security.UserGroupInformation
 
 import spark.partial.BoundedDouble
 import spark.partial.PartialResult
@@ -50,7 +52,7 @@ import spark.Partitioner._
  */
 class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   extends Logging
-  with HadoopMapReduceUtil
+  with SparkHadoopMapReduceUtil
   with Serializable {
 
   /**
@@ -627,7 +629,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
       conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
     }
     conf.setOutputCommitter(classOf[FileOutputCommitter])
-    FileOutputFormat.setOutputPath(conf, HadoopWriter.createPathFromString(path, conf))
+    FileOutputFormat.setOutputPath(conf, SparkHadoopWriter.createPathFromString(path, conf))
     saveAsHadoopDataset(conf)
   }
 
@@ -653,7 +655,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
 
     logInfo("Saving as hadoop file of type (" + keyClass.getSimpleName+ ", " + valueClass.getSimpleName+ ")")
 
-    val writer = new HadoopWriter(conf)
+    val writer = new SparkHadoopWriter(conf)
     writer.preSetup()
 
     def writeToFile(context: TaskContext, iter: Iterator[(K, V)]) {

@@ -25,6 +25,7 @@ import akka.remote.RemoteActorRefProvider
 
 import spark.broadcast.BroadcastManager
 import spark.metrics.MetricsSystem
+import spark.deploy.SparkHadoopUtil
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
@@ -57,6 +58,19 @@ class SparkEnv (
     val metricsSystem: MetricsSystem) {
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
+
+  val hadoop = {
+    val yarnMode = java.lang.Boolean.valueOf(System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+    if(yarnMode) {
+      try {
+        Class.forName("spark.deploy.yarn.YarnSparkHadoopUtil").newInstance.asInstanceOf[SparkHadoopUtil]
+      } catch {
+        case th: Throwable => throw new SparkException("Unable to load YARN support", th)
+      }
+    } else {
+      new SparkHadoopUtil
+    }
+  }
 
   def stop() {
     pythonWorkers.foreach { case(key, worker) => worker.stop() }

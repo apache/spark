@@ -21,7 +21,6 @@ import java.util.Random
 import scala.math.exp
 import spark.util.Vector
 import spark._
-import spark.deploy.SparkHadoopUtil
 import spark.scheduler.InputFormatInfo
 
 /**
@@ -52,7 +51,7 @@ object SparkHdfsLR {
       System.exit(1)
     }
     val inputPath = args(1)
-    val conf = SparkHadoopUtil.newConfiguration()
+    val conf = SparkEnv.get.hadoop.newConfiguration()
     val sc = new SparkContext(args(0), "SparkHdfsLR",
       System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")), Map(), 
       InputFormatInfo.computePreferredLocations(

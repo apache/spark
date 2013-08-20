@@ -52,7 +52,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 
 import org.apache.mesos.MesosNativeLibrary
 
-import spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import spark.deploy.LocalSparkCluster
 import spark.partial.{ApproximateEvaluator, PartialResult}
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD,
   OrderedRDDFunctions}
@@ -235,7 +235,8 @@ class SparkContext(
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
-    val conf = SparkHadoopUtil.newConfiguration()
+    val env = SparkEnv.get
+    val conf = env.hadoop.newConfiguration()
     // Explicitly check for S3 environment variables
     if (System.getenv("AWS_ACCESS_KEY_ID") != null && System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
       conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
@@ -623,10 +624,11 @@ class SparkContext(
       logWarning("null specified as parameter to addJar",
         new SparkException("null specified as parameter to addJar"))
     } else {
+      val env = SparkEnv.get
       val uri = new URI(path)
       val key = uri.getScheme match {
         case null | "file" =>
-          if (SparkHadoopUtil.isYarnMode()) {
+          if (env.hadoop.isYarnMode()) {
             logWarning("local jar specified as parameter to addJar under Yarn mode")
             return
           }
@@ -809,8 +811,9 @@ class SparkContext(
    * prevent accidental overriding of checkpoint files in the existing directory.
    */
   def setCheckpointDir(dir: String, useExisting: Boolean = false) {
+    val env = SparkEnv.get
     val path = new Path(dir)
-    val fs = path.getFileSystem(SparkHadoopUtil.newConfiguration())
+    val fs = path.getFileSystem(env.hadoop.newConfiguration())
     if (!useExisting) {
       if (fs.exists(path)) {
         throw new Exception("Checkpoint directory '" + path + "' already exists.")

@@ -165,7 +165,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
     Client.populateHadoopClasspath(yarnConf, env)
-    SparkHadoopUtil.setYarnMode(env)
+    env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_JAR_PATH") = 
       localResources("spark.jar").getResource().getScheme.toString() + "://" +
       localResources("spark.jar").getResource().getFile().toString()
@@ -313,8 +313,11 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
 object Client {
   def main(argStrings: Array[String]) {
+    // Set an env variable indicating we are running in YARN mode.
+    // Note that anything with SPARK prefix gets propagated to all (remote) processes
+    System.setProperty("SPARK_YARN_MODE", "true")
+
     val args = new ClientArguments(argStrings)
-    SparkHadoopUtil.setYarnMode()
     new Client(args).run
   }
 

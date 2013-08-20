@@ -1,4 +1,3 @@
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -16,15 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.mapred
+package spark.deploy
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapred.JobConf
 
-import org.apache.hadoop.mapreduce.TaskType
 
-trait HadoopMapRedUtil {
-  def newJobContext(conf: JobConf, jobId: JobID): JobContext = new JobContextImpl(conf, jobId)
+/**
+ * Contains util methods to interact with Hadoop from spark.
+ */
+class SparkHadoopUtil {
 
-  def newTaskAttemptContext(conf: JobConf, attemptId: TaskAttemptID): TaskAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+  // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
+  def newConfiguration(): Configuration = new Configuration()
 
-  def newTaskAttemptID(jtIdentifier: String, jobId: Int, isMap: Boolean, taskId: Int, attemptId: Int) =
-    new TaskAttemptID(jtIdentifier, jobId, if (isMap) TaskType.MAP else TaskType.REDUCE, taskId, attemptId)
+  // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
+  def addCredentials(conf: JobConf) {}
+
+  def isYarnMode(): Boolean = { false }
+
 }

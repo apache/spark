@@ -266,8 +266,9 @@ private object Utils extends Logging {
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
+        val env = SparkEnv.get
         val uri = new URI(url)
-        val conf = SparkHadoopUtil.newConfiguration()
+        val conf = env.hadoop.newConfiguration()
         val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
@@ -404,10 +405,6 @@ private object Utils extends Logging {
   // Used by DEBUG code : remove when all testing done
   def logErrorWithStack(msg: String) {
     try { throw new Exception } catch { case ex: Exception => { logError(msg, ex) } }
-  }
-
-  def getUserNameFromEnvironment(): String = {
-    SparkHadoopUtil.getUserNameFromEnvironment
   }
 
   // Typically, this will be of order of number of nodes in cluster

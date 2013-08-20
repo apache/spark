@@ -73,8 +73,9 @@
     <mesos.version>0.12.1</mesos.version>
     <akka.version>2.0.3</akka.version>
     <slf4j.version>1.7.2</slf4j.version>
-    <cdh.version>4.1.2</cdh.version>
     <log4j.version>1.2.17</log4j.version>
+    <hadoop.version>1.2.1</hadoop.version>
+    <!-- <hadoop.version>2.0.0-mr1-cdh4.1.2</hadoop.version> -->
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -320,6 +321,54 @@
         <version>0.8</version>
         <scope>test</scope>
       </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client</artifactId>
+        <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-core-asl</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-mapper-asl</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-jaxrs</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-xc</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!-- Specify Avro version because Kafka also has it as a dependency -->
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro</artifactId>
+        <version>1.7.4</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-ipc</artifactId>
+        <version>1.7.4</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -526,60 +575,6 @@
 
   <profiles>
     <profile>
-      <id>hadoop1</id>
-      <properties>
-        <hadoop.major.version>1</hadoop.major.version>
-      </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-core</artifactId>
-            <version>1.0.4</version>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
-    </profile>
-
-    <profile>
-      <id>hadoop2</id>
-      <properties>
-        <hadoop.major.version>2</hadoop.major.version>
-      </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-core</artifactId>
-            <version>2.0.0-mr1-cdh${cdh.version}</version>
-          </dependency>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client</artifactId>
-            <version>2.0.0-mr1-cdh${cdh.version}</version>
-          </dependency>
-          <!-- Specify Avro version because Kafka also has it as a dependency -->
-          <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>1.7.4</version>
-          </dependency>
-          <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro-ipc</artifactId>
-            <version>1.7.4</version>
-            <exclusions>
-              <exclusion>
-                <groupId>org.jboss.netty</groupId>
-                <artifactId>netty</artifactId>
-              </exclusion>
-            </exclusions>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
-    </profile>
-
-    <profile>
       <id>hadoop2-yarn</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
@@ -587,6 +582,10 @@
         <!-- <yarn.version>0.23.7</yarn.version> -->
         <yarn.version>2.0.5-alpha</yarn.version>
       </properties>
+
+      <modules>
+        <module>yarn</module>
+      </modules>
 
       <repositories>
         <repository>
@@ -609,32 +608,125 @@
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
             <version>${yarn.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-core-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-mapper-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-jaxrs</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-xc</artifactId>
+              </exclusion>
+            </exclusions>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-api</artifactId>
             <version>${yarn.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-core-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-mapper-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-jaxrs</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-xc</artifactId>
+              </exclusion>
+            </exclusions>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-common</artifactId>
             <version>${yarn.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-core-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-mapper-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-jaxrs</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-xc</artifactId>
+              </exclusion>
+            </exclusions>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-client</artifactId>
             <version>${yarn.version}</version>
-          </dependency>
-          <!-- Specify Avro version because Kafka also has it as a dependency -->
-          <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>1.7.4</version>
-          </dependency>
-          <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro-ipc</artifactId>
-            <version>1.7.4</version>
+            <exclusions>
+              <exclusion>
+                <groupId>asm</groupId>
+                <artifactId>asm</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.jboss.netty</groupId>
+                <artifactId>netty</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-core-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-mapper-asl</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-jaxrs</artifactId>
+              </exclusion>
+              <exclusion>
+                <groupId>org.codehaus.jackson</groupId>
+                <artifactId>jackson-xc</artifactId>
+              </exclusion>
+            </exclusions>
           </dependency>
         </dependencies>
       </dependencyManagement>

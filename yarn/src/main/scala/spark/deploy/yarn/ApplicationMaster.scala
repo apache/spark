@@ -124,18 +124,20 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   private def waitForSparkMaster() {
     logInfo("Waiting for spark driver to be reachable.")
     var driverUp = false
-    while(!driverUp) {
+    var tries = 0
+    while(!driverUp && tries < 10) {
       val driverHost = System.getProperty("spark.driver.host")
       val driverPort = System.getProperty("spark.driver.port")
       try {
         val socket = new Socket(driverHost, driverPort.toInt)
         socket.close()
-        logInfo("Master now available: " + driverHost + ":" + driverPort)
+        logInfo("Driver now available: " + driverHost + ":" + driverPort)
         driverUp = true
       } catch {
         case e: Exception =>
-          logError("Failed to connect to driver at " + driverHost + ":" + driverPort)
+          logWarning("Failed to connect to driver at " + driverHost + ":" + driverPort + ", retrying")
         Thread.sleep(100)
+        tries = tries + 1
       }
     }
   }
@@ -176,7 +178,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       var sparkContext: SparkContext = null
       ApplicationMaster.sparkContextRef.synchronized {
         var count = 0
-        while (ApplicationMaster.sparkContextRef.get() == null) {
+        while (ApplicationMaster.sparkContextRef.get() == null && count < 10) {
           logInfo("Waiting for spark context initialization ... " + count)
           count = count + 1
           ApplicationMaster.sparkContextRef.wait(10000L)

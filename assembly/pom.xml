@@ -37,55 +37,30 @@
     </plugins>
   </build>
 
-  <profiles>
-    <profile>
-      <id>hadoop1</id>
-      <properties>
-        <classifier.name>hadoop1</classifier.name>
-      </properties>
-    </profile>
-    <profile>
-      <id>hadoop2</id>
-      <properties>
-        <classifier.name>hadoop2</classifier.name>
-      </properties>
-    </profile>
-    <profile>
-      <id>hadoop2-yarn</id>
-      <properties>
-        <classifier.name>hadoop2-yarn</classifier.name>
-      </properties>
-    </profile>
-  </profiles>
   <dependencies>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-core</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-bagel</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-mllib</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-repl</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.spark-project</groupId>
       <artifactId>spark-streaming</artifactId>
-      <classifier>${classifier.name}</classifier>
       <version>${project.version}</version>
     </dependency>
   </dependencies>
