@@ -32,5 +32,5 @@ case class MutablePair[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/
 {
   override def toString = "(" + _1 + "," + _2 + ")"
 
-  override def canEqual(that: Any): Boolean = that.isInstanceOf[MutablePair[T1, T2]]
+  override def canEqual(that: Any): Boolean = that.isInstanceOf[MutablePair[_,_]]
 }
