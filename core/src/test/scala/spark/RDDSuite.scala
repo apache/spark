@@ -176,9 +176,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
   test("cogrouped RDDs with locality") {
     val data3 = sc.makeRDD(List((1,List("a","c")), (2,List("a","b","c")), (3,List("b"))))
-    val coalesced3 = data3.coalesce(3)
-    val list3 = coalesced3.partitions.map(p => p.asInstanceOf[CoalescedRDDPartition])
-    assert(list3.map(p => p.preferredLocation).length === 3, "Locality preferences are dropped")
+    val coal3 = data3.coalesce(3)
+    val list3 = coal3.partitions.map(p => p.asInstanceOf[CoalescedRDDPartition].preferredLocation)
+    assert(list3.sorted === Array("a","b","c"), "Locality preferences are dropped")
 
     // RDD with locality preferences spread (non-randomly) over 6 machines, m0 through m5
     val data = sc.makeRDD((1 to 9).map(i => (i, (i to (i+2)).map{ j => "m" + (j%6)})))
