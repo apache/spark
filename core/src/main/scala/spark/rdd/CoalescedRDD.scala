@@ -260,7 +260,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
     }
 
     while (numCreated < targetLen) {  // if we don't have enough partition groups, create duplicates
-    var (nxt_replica, nxt_part) = rotIt.next()
+      var (nxt_replica, nxt_part) = rotIt.next()
       val pgroup = PartitionGroup(nxt_replica)
       groupArr += pgroup
       groupHash.get(nxt_replica).get += pgroup
