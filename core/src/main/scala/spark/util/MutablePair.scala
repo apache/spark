@@ -15,21 +15,22 @@
  * limitations under the License.
  */
 
-package spark
-
-import spark.executor.TaskMetrics
-import spark.serializer.Serializer
+package spark.util
 
 
-private[spark] abstract class ShuffleFetcher {
+/**
+ * A tuple of 2 elements. This can be used as an alternative to Scala's Tuple2 when we want to
+ * minimize object allocation.
+ *
+ * @param  _1   Element 1 of this MutablePair
+ * @param  _2   Element 2 of this MutablePair
+ */
+case class MutablePair[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T1,
+                      @specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T2]
+  (var _1: T1, var _2: T2)
+  extends Product2[T1, T2]
+{
+  override def toString = "(" + _1 + "," + _2 + ")"
 
-  /**
-   * Fetch the shuffle outputs for a given ShuffleDependency.
-   * @return An iterator over the elements of the fetched shuffle outputs.
-   */
-  def fetch[T](shuffleId: Int, reduceId: Int, metrics: TaskMetrics,
-      serializer: Serializer = SparkEnv.get.serializerManager.default): Iterator[T]
-
-  /** Stop the fetcher */
-  def stop() {}
+  override def canEqual(that: Any): Boolean = that.isInstanceOf[MutablePair[T1, T2]]
 }

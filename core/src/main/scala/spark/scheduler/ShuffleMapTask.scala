@@ -148,7 +148,7 @@ private[spark] class ShuffleMapTask(
 
       // Write the map output to its associated buckets.
       for (elem <- rdd.iterator(split, taskContext)) {
-        val pair = elem.asInstanceOf[(Any, Any)]
+        val pair = elem.asInstanceOf[Product2[Any, Any]]
         val bucketId = dep.partitioner.getPartition(pair._1)
         buckets.writers(bucketId).write(pair)
       }

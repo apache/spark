@@ -17,13 +17,15 @@
 
 package spark.tools
 
-import spark._
 import java.lang.reflect.Method
+
 import scala.collection.mutable.ArrayBuffer
+
+import spark._
 import spark.api.java._
+import spark.rdd.OrderedRDDFunctions
 import spark.streaming.{PairDStreamFunctions, DStream, StreamingContext}
 import spark.streaming.api.java.{JavaPairDStream, JavaDStream, JavaStreamingContext}
-import scala.Tuple2
 
 
 private[spark] abstract class SparkType(val name: String)
@@ -336,7 +338,7 @@ object JavaAPICompletenessChecker {
     println()
 
     println("Missing OrderedRDD methods")
-    printMissingMethods(classOf[OrderedRDDFunctions[_, _]], classOf[JavaPairRDD[_, _]])
+    printMissingMethods(classOf[OrderedRDDFunctions[_, _, _]], classOf[JavaPairRDD[_, _]])
     println()
 
     println("Missing SparkContext methods")

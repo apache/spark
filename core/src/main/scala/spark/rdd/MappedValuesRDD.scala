@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package spark
-
-import spark.executor.TaskMetrics
-import spark.serializer.Serializer
+package spark.rdd
 
 
-private[spark] abstract class ShuffleFetcher {
+import spark.{TaskContext, Partition, RDD}
 
-  /**
-   * Fetch the shuffle outputs for a given ShuffleDependency.
-   * @return An iterator over the elements of the fetched shuffle outputs.
-   */
-  def fetch[T](shuffleId: Int, reduceId: Int, metrics: TaskMetrics,
-      serializer: Serializer = SparkEnv.get.serializerManager.default): Iterator[T]
+private[spark]
+class MappedValuesRDD[K, V, U](prev: RDD[_ <: Product2[K, V]], f: V => U)
+  extends RDD[(K, U)](prev) {
 
-  /** Stop the fetcher */
-  def stop() {}
+  override def getPartitions = firstParent[Product2[K, U]].partitions
+
+  override val partitioner = firstParent[Product2[K, U]].partitioner
+
+  override def compute(split: Partition, context: TaskContext): Iterator[(K, U)] = {
+    firstParent[Product2[K, V]].iterator(split, context).map { case Product2(k ,v) => (k, f(v)) }
+  }
 }

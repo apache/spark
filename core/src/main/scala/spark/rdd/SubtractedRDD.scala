@@ -47,8 +47,8 @@ import spark.OneToOneDependency
  * out of memory because of the size of `rdd2`.
  */
 private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassManifest](
-    @transient var rdd1: RDD[(K, V)],
-    @transient var rdd2: RDD[(K, W)],
+    @transient var rdd1: RDD[_ <: Product2[K, V]],
+    @transient var rdd2: RDD[_ <: Product2[K, W]],
     part: Partitioner)
   extends RDD[(K, V)](rdd1.context, Nil) {
 
@@ -62,11 +62,11 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassM
   override def getDependencies: Seq[Dependency[_]] = {
     Seq(rdd1, rdd2).map { rdd =>
       if (rdd.partitioner == Some(part)) {
-        logInfo("Adding one-to-one dependency with " + rdd)
+        logDebug("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
-        logInfo("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency(rdd.asInstanceOf[RDD[(K, Any)]], part, serializerClass)
+        logDebug("Adding shuffle dependency with " + rdd)
+        new ShuffleDependency(rdd, part, serializerClass)
       }
     }
   }
@@ -103,16 +103,14 @@ private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassM
         seq
       }
     }
-    def integrate(dep: CoGroupSplitDep, op: ((K, V)) => Unit) = dep match {
+    def integrate(dep: CoGroupSplitDep, op: Product2[K, V] => Unit) = dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
-        for (t <- rdd.iterator(itsSplit, context))
-          op(t.asInstanceOf[(K, V)])
+        rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, V]]].foreach(op)
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
-        val iter = SparkEnv.get.shuffleFetcher.fetch(shuffleId, partition.index,
+        val iter = SparkEnv.get.shuffleFetcher.fetch[Product2[K, V]](shuffleId, partition.index,
           context.taskMetrics, serializer)
-        for (t <- iter)
-          op(t.asInstanceOf[(K, V)])
+        iter.foreach(op)
       }
     }
     // the first dep is rdd1; add all values to the map

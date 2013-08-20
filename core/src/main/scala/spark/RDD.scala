@@ -31,9 +31,8 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 
-import spark.api.java.JavaRDD
-import spark.broadcast.Broadcast
 import spark.Partitioner._
+import spark.api.java.JavaRDD
 import spark.partial.BoundedDouble
 import spark.partial.CountEvaluator
 import spark.partial.GroupedCountEvaluator
@@ -287,7 +286,10 @@ abstract class RDD[T: ClassManifest](
   def coalesce(numPartitions: Int, shuffle: Boolean = false): RDD[T] = {
     if (shuffle) {
       // include a shuffle step so that our upstream tasks are still distributed
-      new CoalescedRDD(new ShuffledRDD(map(x => (x, null)), new HashPartitioner(numPartitions)), numPartitions).keys
+      new CoalescedRDD(
+        new ShuffledRDD[T, Null, (T, Null)](map(x => (x, null)),
+        new HashPartitioner(numPartitions)),
+        numPartitions).keys
     } else {
       new CoalescedRDD(this, numPartitions)
     }
@@ -302,8 +304,8 @@ abstract class RDD[T: ClassManifest](
   def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
     var fraction = 0.0
     var total = 0
-    var multiplier = 3.0
-    var initialCount = this.count()
+    val multiplier = 3.0
+    val initialCount = this.count()
     var maxSelected = 0
 
     if (num < 0) {
