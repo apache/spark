@@ -1004,43 +1004,43 @@ private[spark] object BlockManager extends Logging {
     }
   }
 
-  def blockIdsToExecutorLocations(blockIds: Array[String], env: SparkEnv, blockManagerMaster: BlockManagerMaster = null): HashMap[String, List[String]] = {
+  def blockIdsToBlockManagers(
+      blockIds: Array[String],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null)
+  : Map[String, Seq[BlockManagerId]] =
+  {
     // env == null and blockManagerMaster != null is used in tests
     assert (env != null || blockManagerMaster != null)
-    val locationBlockIds: Seq[Seq[BlockManagerId]] =
-      if (env != null) {
-        env.blockManager.getLocationBlockIds(blockIds)
-      } else {
-        blockManagerMaster.getLocations(blockIds)
-      }
-
-    // Convert from block master locations to executor locations (we need that for task scheduling)
-    val executorLocations = new HashMap[String, List[String]]()
-    for (i <- 0 until blockIds.length) {
-      val blockId = blockIds(i)
-      val blockLocations = locationBlockIds(i)
-
-      val executors = new HashSet[String]()
-
-      if (env != null) {
-        for (bkLocation <- blockLocations) {
-          val executorHostPort = env.resolveExecutorIdToHostPort(bkLocation.executorId, bkLocation.host)
-          executors += executorHostPort
-          // logInfo("bkLocation = " + bkLocation + ", executorHostPort = " + executorHostPort)
-        }
-      } else {
-        // Typically while testing, etc - revert to simply using host.
-        for (bkLocation <- blockLocations) {
-          executors += bkLocation.host
-          // logInfo("bkLocation = " + bkLocation + ", executorHostPort = " + executorHostPort)
-        }
-      }
-
-      executorLocations.put(blockId, executors.toSeq.toList)
+    val blockLocations: Seq[Seq[BlockManagerId]] = if (env != null) {
+      env.blockManager.getLocationBlockIds(blockIds)
+    } else {
+      blockManagerMaster.getLocations(blockIds)
     }
 
-    executorLocations
+    val blockManagers = new HashMap[String, Seq[BlockManagerId]]
+    for (i <- 0 until blockIds.length) {
+      blockManagers(blockIds(i)) = blockLocations(i)
+    }
+    blockManagers.toMap
   }
 
+  def blockIdsToExecutorIds(
+      blockIds: Array[String],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null)
+    : Map[String, Seq[String]] =
+  {
+    blockIdsToBlockManagers(blockIds, env, blockManagerMaster).mapValues(s => s.map(_.executorId))
+  }
+
+  def blockIdsToHosts(
+      blockIds: Array[String],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null)
+    : Map[String, Seq[String]] =
+  {
+    blockIdsToBlockManagers(blockIds, env, blockManagerMaster).mapValues(s => s.map(_.host))
+  }
 }
 

@@ -220,8 +220,8 @@ abstract class RDD[T: ClassManifest](
   }
 
   /**
-   * Get the preferred location of a split, taking into account whether the
-   * RDD is checkpointed or not.
+   * Get the preferred locations of a partition (as hostnames), taking into account whether the
+   * RDD is checkpointed.
    */
   final def preferredLocations(split: Partition): Seq[String] = {
     checkpointRDD.map(_.getPreferredLocations(split)).getOrElse {

@@ -156,7 +156,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
       <td>{info.taskId}</td>
       <td>{info.status}</td>
       <td>{info.taskLocality}</td>
-      <td>{info.hostPort}</td>
+      <td>{info.host}</td>
       <td>{dateFmt.format(new Date(info.launchTime))}</td>
       <td sorttable_customkey={duration.toString}>
         {formatDuration}

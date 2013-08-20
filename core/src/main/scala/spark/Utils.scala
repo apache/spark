@@ -393,40 +393,13 @@ private object Utils extends Logging {
     retval
   }
 
-/*
-  // Used by DEBUG code : remove when all testing done
-  private val ipPattern = Pattern.compile("^[0-9]+(\\.[0-9]+)*$")
   def checkHost(host: String, message: String = "") {
-    // Currently catches only ipv4 pattern, this is just a debugging tool - not rigourous !
-    // if (host.matches("^[0-9]+(\\.[0-9]+)*$")) {
-    if (ipPattern.matcher(host).matches()) {
-      Utils.logErrorWithStack("Unexpected to have host " + host + " which matches IP pattern. Message " + message)
-    }
-    if (Utils.parseHostPort(host)._2 != 0){
-      Utils.logErrorWithStack("Unexpected to have host " + host + " which has port in it. Message " + message)
-    }
+    assert(host.indexOf(':') == -1, message)
   }
 
-  // Used by DEBUG code : remove when all testing done
   def checkHostPort(hostPort: String, message: String = "") {
-    val (host, port) = Utils.parseHostPort(hostPort)
-    checkHost(host)
-    if (port <= 0){
-      Utils.logErrorWithStack("Unexpected to have port " + port + " which is not valid in " + hostPort + ". Message " + message)
-    }
+    assert(hostPort.indexOf(':') != -1, message)
   }
-
-  // Used by DEBUG code : remove when all testing done
-  def logErrorWithStack(msg: String) {
-    try { throw new Exception } catch { case ex: Exception => { logError(msg, ex) } }
-    // temp code for debug
-    System.exit(-1)
-  }
-*/
-
-  // Once testing is complete in various modes, replace with this ?
-  def checkHost(host: String, message: String = "") {}
-  def checkHostPort(hostPort: String, message: String = "") {}
 
   // Used by DEBUG code : remove when all testing done
   def logErrorWithStack(msg: String) {

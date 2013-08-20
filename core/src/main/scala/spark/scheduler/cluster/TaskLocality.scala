@@ -17,21 +17,16 @@
 
 package spark.scheduler.cluster
 
-import java.nio.ByteBuffer
-import spark.util.SerializableBuffer
 
-private[spark] class TaskDescription(
-    val taskId: Long,
-    val executorId: String,
-    val name: String,
-    val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
-  extends Serializable {
+private[spark] object TaskLocality
+  extends Enumeration("PROCESS_LOCAL", "NODE_LOCAL", "RACK_LOCAL", "ANY")
+{
+  // process local is expected to be used ONLY within tasksetmanager for now.
+  val PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY = Value
 
-  // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
-  private val buffer = new SerializableBuffer(_serializedTask)
+  type TaskLocality = Value
 
-  def serializedTask: ByteBuffer = buffer.value
-
-  override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
+  def isAllowed(constraint: TaskLocality, condition: TaskLocality): Boolean = {
+    condition <= constraint
+  }
 }

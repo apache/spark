@@ -73,7 +73,7 @@ private[spark] class ResultTask[T, U](
     var rdd: RDD[T],
     var func: (TaskContext, Iterator[T]) => U,
     var partition: Int,
-    @transient locs: Seq[String],
+    @transient locs: Seq[TaskLocation],
     val outputId: Int)
   extends Task[U](stageId) with Externalizable {
 
@@ -85,11 +85,8 @@ private[spark] class ResultTask[T, U](
     rdd.partitions(partition)
   }
 
-  private val preferredLocs: Seq[String] = if (locs == null) Nil else locs.toSet.toSeq
-
-  {
-    // DEBUG code
-    preferredLocs.foreach (hostPort => Utils.checkHost(Utils.parseHostPort(hostPort)._1, "preferredLocs : " + preferredLocs))
+  @transient private val preferredLocs: Seq[TaskLocation] = {
+    if (locs == null) Nil else locs.toSet.toSeq
   }
 
   override def run(attemptId: Long): U = {
@@ -102,7 +99,7 @@ private[spark] class ResultTask[T, U](
     }
   }
 
-  override def preferredLocations: Seq[String] = preferredLocs
+  override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
   override def toString = "ResultTask(" + stageId + ", " + partition + ")"
 
@@ -116,7 +113,7 @@ private[spark] class ResultTask[T, U](
       out.write(bytes)
       out.writeInt(partition)
       out.writeInt(outputId)
-      out.writeLong(generation)
+      out.writeLong(epoch)
       out.writeObject(split)
     }
   }
@@ -131,7 +128,7 @@ private[spark] class ResultTask[T, U](
     func = func_.asInstanceOf[(TaskContext, Iterator[T]) => U]
     partition = in.readInt()
     val outputId = in.readInt()
-    generation = in.readLong()
+    epoch = in.readLong()
     split = in.readObject().asInstanceOf[Partition]
   }
 }

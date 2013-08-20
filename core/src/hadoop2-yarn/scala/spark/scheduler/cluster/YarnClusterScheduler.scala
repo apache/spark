@@ -41,13 +41,6 @@ private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
     if (retval != null) Some(retval) else None
   }
 
-  // By default, if rack is unknown, return nothing
-  override def getCachedHostsForRack(rack: String): Option[Set[String]] = {
-    if (rack == None || rack == null) return None
-
-    YarnAllocationHandler.fetchCachedHostsForRack(rack)
-  }
-
   override def postStartHook() {
     val sparkContextInitialized = ApplicationMaster.sparkContextInitialized(sc)
     if (sparkContextInitialized){

@@ -112,22 +112,22 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
         "akka://spark@localhost:" + boundPort + "/user/MapOutputTracker")
 
     masterTracker.registerShuffle(10, 1)
-    masterTracker.incrementGeneration()
-    slaveTracker.updateGeneration(masterTracker.getGeneration)
+    masterTracker.incrementEpoch()
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
     intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
 
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
     masterTracker.registerMapOutput(10, 0, new MapStatus(
       BlockManagerId("a", "hostA", 1000, 0), Array(compressedSize1000)))
-    masterTracker.incrementGeneration()
-    slaveTracker.updateGeneration(masterTracker.getGeneration)
+    masterTracker.incrementEpoch()
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
     assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
            Seq((BlockManagerId("a", "hostA", 1000, 0), size1000)))
 
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000, 0))
-    masterTracker.incrementGeneration()
-    slaveTracker.updateGeneration(masterTracker.getGeneration)
+    masterTracker.incrementEpoch()
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
     intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
 
     // failure should be cached

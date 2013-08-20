@@ -54,11 +54,7 @@ class SparkEnv (
     val connectionManager: ConnectionManager,
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
-    val metricsSystem: MetricsSystem,
-    // To be set only as part of initialization of SparkContext.
-    // (executorId, defaultHostPort) => executorHostPort
-    // If executorId is NOT found, return defaultHostPort
-    var executorIdToHostPort: Option[(String, String) => String]) {
+    val metricsSystem: MetricsSystem) {
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
@@ -82,16 +78,6 @@ class SparkEnv (
       val key = (pythonExec, envVars)
       pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
     }
-  }
-
-  def resolveExecutorIdToHostPort(executorId: String, defaultHostPort: String): String = {
-    val env = SparkEnv.get
-    if (env.executorIdToHostPort.isEmpty) {
-      // default to using host, not host port. Relevant to non cluster modes.
-      return defaultHostPort
-    }
-
-    env.executorIdToHostPort.get(executorId, defaultHostPort)
   }
 }
 
@@ -236,7 +222,6 @@ object SparkEnv extends Logging {
       connectionManager,
       httpFileServer,
       sparkFilesDir,
-      metricsSystem,
-      None)
+      metricsSystem)
   }
 }

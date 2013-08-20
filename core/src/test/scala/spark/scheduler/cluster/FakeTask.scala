@@ -17,21 +17,10 @@
 
 package spark.scheduler.cluster
 
-import java.nio.ByteBuffer
-import spark.util.SerializableBuffer
+import spark.scheduler.{TaskLocation, Task}
 
-private[spark] class TaskDescription(
-    val taskId: Long,
-    val executorId: String,
-    val name: String,
-    val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
-  extends Serializable {
+class FakeTask(stageId: Int, prefLocs: Seq[TaskLocation] = Nil) extends Task[Int](stageId) {
+  override def run(attemptId: Long): Int = 0
 
-  // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
-  private val buffer = new SerializableBuffer(_serializedTask)
-
-  def serializedTask: ByteBuffer = buffer.value
-
-  override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
+  override def preferredLocations: Seq[TaskLocation] = prefLocs
 }

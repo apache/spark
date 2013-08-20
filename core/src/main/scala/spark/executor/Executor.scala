@@ -32,8 +32,12 @@ import spark._
 /**
  * The Mesos executor for Spark.
  */
-private[spark] class Executor(executorId: String, slaveHostname: String, properties: Seq[(String, String)]) extends Logging {
-
+private[spark] class Executor(
+    executorId: String,
+    slaveHostname: String,
+    properties: Seq[(String, String)])
+  extends Logging
+{
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
@@ -125,8 +129,8 @@ private[spark] class Executor(executorId: String, slaveHostname: String, propert
         updateDependencies(taskFiles, taskJars)
         val task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
         attemptedTask = Some(task)
-        logInfo("Its generation is " + task.generation)
-        env.mapOutputTracker.updateGeneration(task.generation)
+        logInfo("Its epoch is " + task.epoch)
+        env.mapOutputTracker.updateEpoch(task.epoch)
         taskStart = System.currentTimeMillis()
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
