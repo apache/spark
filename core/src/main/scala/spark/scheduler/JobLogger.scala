@@ -102,7 +102,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     stageIDToJobID.get(stageID).foreach(jobID => jobLogInfo(jobID, info, withTime))
 
   protected def buildJobDep(jobID: Int, stage: Stage) {
-    if (stage.priority == jobID) {
+    if (stage.jobId == jobID) {
       jobIDToStages.get(jobID) match {
         case Some(stageList) => stageList += stage
         case None => val stageList = new  ListBuffer[Stage]
@@ -178,12 +178,12 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     }else{
       stageInfo = "STAGE_ID=" + stage.id + " RESULT_STAGE"
     }
-    if (stage.priority == jobID) {
+    if (stage.jobId == jobID) {
       jobLogInfo(jobID, indentString(indent) + stageInfo, false)
       recordRddInStageGraph(jobID, stage.rdd, indent)
       stage.parents.foreach(recordStageDepGraph(jobID, _, indent + 2))
     } else
-      jobLogInfo(jobID, indentString(indent) + stageInfo + " JOB_ID=" + stage.priority, false)
+      jobLogInfo(jobID, indentString(indent) + stageInfo + " JOB_ID=" + stage.jobId, false)
   }
   
   // Record task metrics into job log files
@@ -260,7 +260,7 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   
   override def onJobEnd(jobEnd: SparkListenerJobEnd) {
     val job = jobEnd.job
-    var info = "JOB_ID=" + job.runId
+    var info = "JOB_ID=" + job.jobId
     jobEnd.jobResult match {
       case JobSucceeded => info += " STATUS=SUCCESS"
       case JobFailed(exception, _) =>
@@ -268,8 +268,8 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
         exception.getMessage.split("\\s+").foreach(info += _ + "_")
       case _ =>
     }
-    jobLogInfo(job.runId, info.substring(0, info.length - 1).toUpperCase)
-    closeLogWriter(job.runId)
+    jobLogInfo(job.jobId, info.substring(0, info.length - 1).toUpperCase)
+    closeLogWriter(job.jobId)
   }
 
   protected def recordJobProperties(jobID: Int, properties: Properties) {
@@ -282,11 +282,11 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   override def onJobStart(jobStart: SparkListenerJobStart) {
     val job = jobStart.job
     val properties = jobStart.properties
-    createLogWriter(job.runId)
-    recordJobProperties(job.runId, properties)
-    buildJobDep(job.runId, job.finalStage)
-    recordStageDep(job.runId)
-    recordStageDepGraph(job.runId, job.finalStage) 
-    jobLogInfo(job.runId, "JOB_ID=" + job.runId + " STATUS=STARTED")
+    createLogWriter(job.jobId)
+    recordJobProperties(job.jobId, properties)
+    buildJobDep(job.jobId, job.finalStage)
+    recordStageDep(job.jobId)
+    recordStageDepGraph(job.jobId, job.finalStage)
+    jobLogInfo(job.jobId, "JOB_ID=" + job.jobId + " STATUS=STARTED")
   }
 }

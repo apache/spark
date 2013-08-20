@@ -25,7 +25,7 @@ import java.util.Properties
  * Tracks information about an active job in the DAGScheduler.
  */
 private[spark] class ActiveJob(
-    val runId: Int,
+    val jobId: Int,
     val finalStage: Stage,
     val func: (TaskContext, Iterator[_]) => _,
     val partitions: Array[Int],
