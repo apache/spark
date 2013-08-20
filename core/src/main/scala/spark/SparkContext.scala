@@ -56,8 +56,7 @@ import spark.deploy.LocalSparkCluster
 import spark.partial.{ApproximateEvaluator, PartialResult}
 import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD,
   OrderedRDDFunctions}
-import spark.scheduler.{DAGScheduler, DAGSchedulerSource, ResultTask, ShuffleMapTask, SparkListener,
-  SplitInfo, Stage, StageInfo, TaskScheduler}
+import spark.scheduler._
 import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
   ClusterScheduler, Schedulable, SchedulingMode}
 import spark.scheduler.local.LocalScheduler
@@ -65,6 +64,10 @@ import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend
 import spark.storage.{StorageStatus, StorageUtils, RDDInfo, BlockManagerSource}
 import spark.ui.SparkUI
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
+import scala.Some
+import spark.scheduler.StageInfo
+import spark.storage.RDDInfo
+import spark.storage.StorageStatus
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -620,7 +623,7 @@ class SparkContext(
    * @param partition to be looked up for locality
    * @return list of preferred locations for the partition
    */
-  private [spark] def getPreferredLocs(rdd: RDD[_], partition: Int): List[String] = {
+  private [spark] def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
     dagScheduler.getPreferredLocs(rdd, partition)
   }
 

@@ -52,7 +52,7 @@ case class CoalescedRDDPartition(
    */
   def localFraction: Double = {
     val loc = parents.count(p =>
-      rdd.context.getPreferredLocs(rdd, p.index).contains(preferredLocation))
+      rdd.context.getPreferredLocs(rdd, p.index).map(tl => tl.host).contains(preferredLocation))
 
     if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
   }
@@ -167,8 +167,9 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
   var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
   // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
-  def currPrefLocs(part: Partition): Seq[String] =
-    prev.context.getPreferredLocs(prev, part.index)
+  def currPrefLocs(part: Partition): Seq[String] = {
+    prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
+  }
 
   // this class just keeps iterating and rotating infinitely over the partitions of the RDD
   // next() returns the next preferred machine that a partition is replicated on
@@ -282,8 +283,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
    * @return partition group (bin to be put in)
    */
   def pickBin(p: Partition): PartitionGroup = {
-    val pref = prev.context.getPreferredLocs(prev, p.index).
-      map(getLeastGroupHash(_)).sortWith(compare)   // least loaded of the pref locations
+    val pref = currPrefLocs(p).map(getLeastGroupHash(_)).sortWith(compare) // least loaded pref locs
     val prefPart = if (pref == Nil) None else pref.head
 
     val r1 = rnd.nextInt(groupArr.size)
