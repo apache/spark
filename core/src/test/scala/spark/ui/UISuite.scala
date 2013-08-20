@@ -30,8 +30,9 @@ class UISuite extends FunSuite {
     val (jettyServer1, boundPort1) = JettyUtils.startJettyServer("localhost", startPort, Seq())
     val (jettyServer2, boundPort2) = JettyUtils.startJettyServer("localhost", startPort, Seq())
 
-    assert(boundPort1 === startPort + 1)
-    assert(boundPort2 === startPort + 2)
+    // Allow some wiggle room in case ports on the machine are under contention
+    assert(boundPort1 > startPort && boundPort1 < startPort + 10)
+    assert(boundPort2 > boundPort1 && boundPort2 < boundPort1 + 10)
   }
 
   test("jetty binds to port 0 correctly") {
