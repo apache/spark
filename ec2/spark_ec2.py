@@ -73,8 +73,8 @@ def parse_args():
   parser.add_option("--spark-git-repo", 
       default="https://github.com/mesos/spark", 
       help="Github repo from which to checkout supplied commit hash")
-  parser.add_option("--hadoop-major-version", default="2",
-      help="Major version of Hadoop (default: 2)")
+  parser.add_option("--hadoop-major-version", default="1",
+      help="Major version of Hadoop (default: 1)")
 
   parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
