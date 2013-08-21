@@ -50,6 +50,11 @@ SPARK_HADOOP_VERSION=1.0.4
 SPARK_WITH_YARN=false
 MAKE_TGZ=false
 
+# Load configuration
+if [ -f "$FWDIR/conf/spark-env.sh" ]; then
+  source "$FWDIR/conf/spark-env.sh"
+fi
+
 # Parse arguments
 while (( "$#" )); do
   case $1 in

@@ -19,6 +19,14 @@
 # - SPARK_JAVA_OPTS, to set the jvm options for executor backend. Note: This is
 #   only for node-specific options, whereas app-specific options should be set
 #   in the application.
-#   Examples of node-speicic options : -Dspark.local.dir, GC related options.
+#   Examples of node-specific options : -Dspark.local.dir, GC related options.
 #   Examples of app-specific options : -Dspark.serializer
 
+# Hadoop version to build against
+# export SPARK_HADOOP_VERSION=1.0.4
+
+# Uncomment this when using a Hadoop version with YARN
+# export SPARK_WITH_YARN=true
+
+# Extra arguments to pass to `java` when building with SBT
+# export EXTRA_BUILD_ARGS="$EXTRA_BUILD_ARGS -Xmx8g"
