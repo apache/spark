@@ -17,34 +17,35 @@
 
 package spark.deploy.worker.ui
 
+import javax.servlet.http.HttpServletRequest
+
+import scala.util.parsing.json.JSONType
+import scala.xml.Node
+
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.duration._
 
-import javax.servlet.http.HttpServletRequest
-
-import net.liftweb.json.JsonAST.JValue
-
-import scala.xml.Node
-
-import spark.deploy.{RequestWorkerState, JsonProtocol, WorkerState}
-import spark.deploy.worker.ExecutorRunner
 import spark.Utils
+import spark.deploy.JsonProtocol
+import spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
+import spark.deploy.worker.ExecutorRunner
 import spark.ui.UIUtils
+
 
 private[spark] class IndexPage(parent: WorkerWebUI) {
   val workerActor = parent.worker.self
   val worker = parent.worker
   val timeout = parent.timeout
 
-  def renderJson(request: HttpServletRequest): JValue = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerState]
+  def renderJson(request: HttpServletRequest): JSONType = {
+    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, 30 seconds)
     JsonProtocol.writeWorkerState(workerState)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerState]
+    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, 30 seconds)
 
     val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Logs")
@@ -63,18 +64,17 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
                 Master URL:</strong> {workerState.masterUrl}
               </li>
               <li><strong>Cores:</strong> {workerState.cores} ({workerState.coresUsed} Used)</li>
-              <li><strong>Memory:</strong> {Utils.memoryMegabytesToString(workerState.memory)}
-                ({Utils.memoryMegabytesToString(workerState.memoryUsed)} Used)</li>
+              <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
+                ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
             </ul>
             <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
           </div>
         </div>
-          <hr/>
+        <hr/>
 
         <div class="row"> <!-- Running Executors -->
           <div class="span12">
-            <h3> Running Executors {workerState.executors.size} </h3>
-            <br/>
+            <h4> Running Executors {workerState.executors.size} </h4>
             {runningExecutorTable}
           </div>
         </div>
@@ -82,13 +82,13 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
 
         <div class="row"> <!-- Finished Executors  -->
           <div class="span12">
-            <h3> Finished Executors </h3>
-            <br/>
+            <h4> Finished Executors </h4>
             {finishedExecutorTable}
           </div>
         </div>;
 
-    UIUtils.basicSparkPage(content, "Spark Worker on %s:%s".format(workerState.host, workerState.port))
+    UIUtils.basicSparkPage(content, "Spark Worker on %s:%s".format(
+      workerState.host, workerState.port))
   }
 
   def executorRow(executor: ExecutorRunner): Seq[Node] = {
@@ -96,7 +96,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
       <td>{executor.execId}</td>
       <td>{executor.cores}</td>
       <td sorttable_customkey={executor.memory.toString}>
-        {Utils.memoryMegabytesToString(executor.memory)}
+        {Utils.megabytesToString(executor.memory)}
       </td>
       <td>
         <ul class="unstyled">

@@ -33,8 +33,9 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 
-import spark.serializer.SerializerInstance
+import spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import spark.deploy.SparkHadoopUtil
+import java.nio.ByteBuffer
 
 
 /**
@@ -66,6 +67,47 @@ private object Utils extends Logging {
         Class.forName(desc.getName, false, loader)
     }
     return ois.readObject.asInstanceOf[T]
+  }
+
+  /** Serialize via nested stream using specific serializer */
+  def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(f: SerializationStream => Unit) = {
+    val osWrapper = ser.serializeStream(new OutputStream {
+      def write(b: Int) = os.write(b)
+
+      override def write(b: Array[Byte], off: Int, len: Int) = os.write(b, off, len)
+    })
+    try {
+      f(osWrapper)
+    } finally {
+      osWrapper.close()
+    }
+  }
+
+  /** Deserialize via nested stream using specific serializer */
+  def deserializeViaNestedStream(is: InputStream, ser: SerializerInstance)(f: DeserializationStream => Unit) = {
+    val isWrapper = ser.deserializeStream(new InputStream {
+      def read(): Int = is.read()
+
+      override def read(b: Array[Byte], off: Int, len: Int): Int = is.read(b, off, len)
+    })
+    try {
+      f(isWrapper)
+    } finally {
+      isWrapper.close()
+    }
+  }
+
+  /**
+   * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
+   */
+  def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput) = {
+    if (bb.hasArray) {
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      val bbval = new Array[Byte](bb.remaining())
+      bb.get(bbval)
+      out.write(bbval)
+    }
   }
 
   def isAlpha(c: Char): Boolean = {
@@ -224,8 +266,9 @@ private object Utils extends Logging {
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
+        val env = SparkEnv.get
         val uri = new URI(url)
-        val conf = SparkHadoopUtil.newConfiguration()
+        val conf = env.hadoop.newConfiguration()
         val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
@@ -351,48 +394,17 @@ private object Utils extends Logging {
     retval
   }
 
-/*
-  // Used by DEBUG code : remove when all testing done
-  private val ipPattern = Pattern.compile("^[0-9]+(\\.[0-9]+)*$")
   def checkHost(host: String, message: String = "") {
-    // Currently catches only ipv4 pattern, this is just a debugging tool - not rigourous !
-    // if (host.matches("^[0-9]+(\\.[0-9]+)*$")) {
-    if (ipPattern.matcher(host).matches()) {
-      Utils.logErrorWithStack("Unexpected to have host " + host + " which matches IP pattern. Message " + message)
-    }
-    if (Utils.parseHostPort(host)._2 != 0){
-      Utils.logErrorWithStack("Unexpected to have host " + host + " which has port in it. Message " + message)
-    }
+    assert(host.indexOf(':') == -1, message)
   }
 
-  // Used by DEBUG code : remove when all testing done
   def checkHostPort(hostPort: String, message: String = "") {
-    val (host, port) = Utils.parseHostPort(hostPort)
-    checkHost(host)
-    if (port <= 0){
-      Utils.logErrorWithStack("Unexpected to have port " + port + " which is not valid in " + hostPort + ". Message " + message)
-    }
+    assert(hostPort.indexOf(':') != -1, message)
   }
 
   // Used by DEBUG code : remove when all testing done
   def logErrorWithStack(msg: String) {
     try { throw new Exception } catch { case ex: Exception => { logError(msg, ex) } }
-    // temp code for debug
-    System.exit(-1)
-  }
-*/
-
-  // Once testing is complete in various modes, replace with this ?
-  def checkHost(host: String, message: String = "") {}
-  def checkHostPort(hostPort: String, message: String = "") {}
-
-  // Used by DEBUG code : remove when all testing done
-  def logErrorWithStack(msg: String) {
-    try { throw new Exception } catch { case ex: Exception => { logError(msg, ex) } }
-  }
-
-  def getUserNameFromEnvironment(): String = {
-    SparkHadoopUtil.getUserNameFromEnvironment
   }
 
   // Typically, this will be of order of number of nodes in cluster
@@ -479,9 +491,9 @@ private object Utils extends Logging {
   }
 
   /**
-   * Convert a memory quantity in bytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
    */
-  def memoryBytesToString(size: Long): String = {
+  def bytesToString(size: Long): String = {
     val TB = 1L << 40
     val GB = 1L << 30
     val MB = 1L << 20
@@ -524,10 +536,10 @@ private object Utils extends Logging {
   }
 
   /**
-   * Convert a memory quantity in megabytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in megabytes to a human-readable string such as "4.0 MB".
    */
-  def memoryMegabytesToString(megabytes: Long): String = {
-    memoryBytesToString(megabytes * 1024L * 1024L)
+  def megabytesToString(megabytes: Long): String = {
+    bytesToString(megabytes * 1024L * 1024L)
   }
 
   /**
@@ -596,7 +608,7 @@ private object Utils extends Logging {
     output.toString
   }
 
-  /** 
+  /**
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
@@ -755,5 +767,14 @@ private object Utils extends Logging {
       endWord()
     }
     return buf
+  }
+
+ /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
+  * i.e. if 'x' is negative, than 'x' % 'mod' is negative too
+  * so function return (x % mod) + mod in that case.
+  */
+  def nonNegativeMod(x: Int, mod: Int): Int = {
+    val rawMod = x % mod
+    rawMod + (if (rawMod < 0) mod else 0)
   }
 }

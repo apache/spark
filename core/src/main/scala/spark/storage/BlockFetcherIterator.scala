@@ -111,7 +111,7 @@ object BlockFetcherIterator {
 
     protected def sendRequest(req: FetchRequest) {
       logDebug("Sending request for %d blocks (%s) from %s".format(
-        req.blocks.size, Utils.memoryBytesToString(req.size), req.address.hostPort))
+        req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
       val cmId = new ConnectionManagerId(req.address.host, req.address.port)
       val blockMessageArray = new BlockMessageArray(req.blocks.map {
         case (blockId, size) => BlockMessage.fromGetBlock(GetBlock(blockId))
@@ -132,9 +132,10 @@ object BlockFetcherIterator {
                 "Unexpected message " + blockMessage.getType + " received from " + cmId)
             }
             val blockId = blockMessage.getId
+            val networkSize = blockMessage.getData.limit()
             results.put(new FetchResult(blockId, sizeMap(blockId),
               () => dataDeserialize(blockId, blockMessage.getData, serializer)))
-            _remoteBytesRead += req.size
+            _remoteBytesRead += networkSize
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
           }
         }
@@ -309,7 +310,7 @@ object BlockFetcherIterator {
       }
 
       logDebug("Sending request for %d blocks (%s) from %s".format(
-        req.blocks.size, Utils.memoryBytesToString(req.size), req.address.host))
+        req.blocks.size, Utils.bytesToString(req.size), req.address.host))
       val cmId = new ConnectionManagerId(req.address.host, req.address.nettyPort)
       val cpier = new ShuffleCopier
       cpier.getBlocks(cmId, req.blocks, putResult)

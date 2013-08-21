@@ -32,6 +32,10 @@ import spark.{Dependency, ShuffleDependency, OneToOneDependency}
 import spark.{FetchFailed, Success, TaskEndReason}
 import spark.storage.{BlockManagerId, BlockManagerMaster}
 
+import spark.scheduler.cluster.Pool
+import spark.scheduler.cluster.SchedulingMode
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
+
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
  * rather than spawning an event loop thread as happens in the real code. They use EasyMock
@@ -49,11 +53,13 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
   val taskScheduler = new TaskScheduler() {
+    override def rootPool: Pool = null
+    override def schedulingMode: SchedulingMode = SchedulingMode.NONE
     override def start() = {}
     override def stop() = {}
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
-      taskSet.tasks.foreach(_.generation = mapOutputTracker.getGeneration)
+      taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
     }
     override def setListener(listener: TaskSchedulerListener) = {}
@@ -293,10 +299,10 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     val reduceRdd = makeRdd(2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     // pretend we were told hostA went away
-    val oldGeneration = mapOutputTracker.getGeneration
+    val oldEpoch = mapOutputTracker.getEpoch
     runEvent(ExecutorLost("exec-hostA"))
-    val newGeneration = mapOutputTracker.getGeneration
-    assert(newGeneration > oldGeneration)
+    val newEpoch = mapOutputTracker.getEpoch
+    assert(newEpoch > oldEpoch)
     val noAccum = Map[Long, Any]()
     val taskSet = taskSets(0)
     // should be ignored for being too old
@@ -305,8 +311,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostB", 1), noAccum, null, null))
     // should be ignored for being too old
     runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), noAccum, null, null))
-    // should work because it's a new generation
-    taskSet.tasks(1).generation = newGeneration
+    // should work because it's a new epoch
+    taskSet.tasks(1).epoch = newEpoch
     runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA", 1), noAccum, null, null))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
@@ -395,12 +401,14 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(results === Map(0 -> 42))
   }
 
-  /** Assert that the supplied TaskSet has exactly the given preferredLocations. Note, converts taskSet's locations to host only. */
-  private def assertLocations(taskSet: TaskSet, locations: Seq[Seq[String]]) {
-    assert(locations.size === taskSet.tasks.size)
-    for ((expectLocs, taskLocs) <-
-            taskSet.tasks.map(_.preferredLocations).zip(locations)) {
-      assert(expectLocs.map(loc => spark.Utils.parseHostPort(loc)._1) === taskLocs)
+  /**
+   * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
+   * Note that this checks only the host and not the executor ID.
+   */
+  private def assertLocations(taskSet: TaskSet, hosts: Seq[Seq[String]]) {
+    assert(hosts.size === taskSet.tasks.size)
+    for ((taskLocs, expectedLocs) <- taskSet.tasks.map(_.preferredLocations).zip(hosts)) {
+      assert(taskLocs.map(_.host) === expectedLocs)
     }
   }
 

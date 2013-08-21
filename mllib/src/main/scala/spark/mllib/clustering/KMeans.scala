@@ -112,7 +112,7 @@ class KMeans private (
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
    */
-  def train(data: RDD[Array[Double]]): KMeansModel = {
+  def run(data: RDD[Array[Double]]): KMeansModel = {
     // TODO: check whether data is persistent; this needs RDD.storageLevel to be publicly readable
 
     val sc = data.sparkContext
@@ -194,8 +194,8 @@ class KMeans private (
    */
   private def initRandom(data: RDD[Array[Double]]): Array[ClusterCenters] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
-    val sample = data.takeSample(true, runs * k, new Random().nextInt())
-    Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k))
+    val sample = data.takeSample(true, runs * k, new Random().nextInt()).toSeq
+    Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).toArray)
   }
 
   /**
@@ -210,7 +210,7 @@ class KMeans private (
   private def initKMeansParallel(data: RDD[Array[Double]]): Array[ClusterCenters] = {
     // Initialize each run's center to a random point
     val seed = new Random().nextInt()
-    val sample = data.takeSample(true, runs, seed)
+    val sample = data.takeSample(true, runs, seed).toSeq
     val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r)))
 
     // On each step, sample 2 * k points on average for each run with probability proportional
@@ -271,7 +271,7 @@ object KMeans {
                 .setMaxIterations(maxIterations)
                 .setRuns(runs)
                 .setInitializationMode(initializationMode)
-                .train(data)
+                .run(data)
   }
 
   def train(data: RDD[Array[Double]], k: Int, maxIterations: Int, runs: Int): KMeansModel = {
@@ -315,14 +315,15 @@ object KMeans {
   }
 
   def main(args: Array[String]) {
-    if (args.length != 4) {
-      println("Usage: KMeans <master> <input_file> <k> <max_iterations>")
+    if (args.length < 4) {
+      println("Usage: KMeans <master> <input_file> <k> <max_iterations> [<runs>]")
       System.exit(1)
     }
     val (master, inputFile, k, iters) = (args(0), args(1), args(2).toInt, args(3).toInt)
+    val runs = if (args.length >= 5) args(4).toInt else 1
     val sc = new SparkContext(master, "KMeans")
-    val data = sc.textFile(inputFile).map(line => line.split(' ').map(_.toDouble))
-    val model = KMeans.train(data, k, iters)
+    val data = sc.textFile(inputFile).map(line => line.split(' ').map(_.toDouble)).cache()
+    val model = KMeans.train(data, k, iters, runs)
     val cost = model.computeCost(data)
     println("Cluster centers:")
     for (c <- model.clusterCenters) {

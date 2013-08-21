@@ -207,12 +207,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * of elements in each partition.
    */
   def zipPartitions[U, V](
-      f: FlatMapFunction2[java.util.Iterator[T], java.util.Iterator[U], V],
-      other: JavaRDDLike[U, _]): JavaRDD[V] = {
+      other: JavaRDDLike[U, _],
+      f: FlatMapFunction2[java.util.Iterator[T], java.util.Iterator[U], V]): JavaRDD[V] = {
     def fn = (x: Iterator[T], y: Iterator[U]) => asScalaIterator(
       f.apply(asJavaIterator(x), asJavaIterator(y)).iterator())
     JavaRDD.fromRDD(
-      rdd.zipPartitions(fn, other.rdd)(other.classManifest, f.elementType()))(f.elementType())
+      rdd.zipPartitions(other.rdd)(fn)(other.classManifest, f.elementType()))(f.elementType())
   }
 
   // Actions (launch a job to return a value to the user program)
@@ -366,10 +366,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Gets the name of the file to which this RDD was checkpointed
    */
   def getCheckpointFile(): Optional[String] = {
-    rdd.getCheckpointFile match {
-      case Some(file) => Optional.of(file)
-      case _ => Optional.absent()
-    }
+    JavaUtils.optionToOptional(rdd.getCheckpointFile)
   }
 
   /** A description of this RDD and its recursive dependencies for debugging. */

@@ -35,7 +35,7 @@ for these variables.
 * `SPARK_JAVA_OPTS`, to add JVM options. This includes any system properties that you'd like to pass with `-D`.
 * `SPARK_CLASSPATH`, to add elements to Spark's classpath.
 * `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
-* `SPARK_MEM`, to set the amount of memory used per node. This should be in the same format as the 
+* `SPARK_MEM`, to set the amount of memory used per node. This should be in the same format as the
    JVM's -Xmx option, e.g. `300m` or `1g`. Note that this option will soon be deprecated in favor of
    the `spark.executor.memory` system property, so we recommend using that in new code.
 
@@ -77,7 +77,7 @@ there are at least five properties that you will commonly want to control:
     Class to use for serializing objects that will be sent over the network or need to be cached
     in serialized form. The default of Java serialization works with any Serializable Java object but is
     quite slow, so we recommend <a href="tuning.html">using <code>spark.KryoSerializer</code>
-    and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of 
+    and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
     <a href="api/core/index.html#spark.Serializer"><code>spark.Serializer</code></a>).
   </td>
 </tr>
@@ -86,7 +86,7 @@ there are at least five properties that you will commonly want to control:
   <td>(none)</td>
   <td>
     If you use Kryo serialization, set this class to register your custom classes with Kryo.
-    You need to set it to a class that extends 
+    You need to set it to a class that extends
     <a href="api/core/index.html#spark.KryoRegistrator"><code>spark.KryoRegistrator</code></a>).
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
@@ -181,6 +181,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.io.compression.codec</td>
+  <td>spark.io.SnappyCompressionCodec</td>
+  <td>
+    The compression codec class to use for various compressions. By default, Spark provides two
+    codecs: <code>spark.io.LZFCompressionCodec</code> and <code>spark.io.SnappyCompressionCodec</code>.
+  </td>
+</tr>
+<tr>
+  <td>spark.io.compression.snappy.block.size</td>
+  <td>32768</td>
+  <td>
+    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec is used.
+  </td>
+</tr>
+<tr>
   <td>spark.reducer.maxMbInFlight</td>
   <td>48</td>
   <td>
@@ -228,8 +243,34 @@ Apart from these, the following properties are also available, and may be useful
   <td>3000</td>
   <td>
     Number of milliseconds to wait to launch a data-local task before giving up and launching it
-    in a non-data-local location. You should increase this if your tasks are long and you are seeing
-    poor data locality, but the default generally works well.
+    on a less-local node. The same wait will be used to step through multiple locality levels
+    (process-local, node-local, rack-local and then any). It is also possible to customize the
+    waiting time for each level by setting <code>spark.locality.wait.node</code>, etc.
+    You should increase this setting if your tasks are long and see poor locality, but the
+    default usually works well.
+  </td>
+</tr>
+<tr>
+  <td>spark.locality.wait.process</td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for process locality. This affects tasks that attempt to access
+    cached data in a particular executor process.
+  </td>
+</tr>
+<tr>
+  <td>spark.locality.wait.node</td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for node locality. For example, you can set this to 0 to skip
+    node locality and search immediately for rack locality (if your cluster has rack information).
+  </td>
+</tr>
+<tr>
+  <td>spark.locality.wait.rack</td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for rack locality.
   </td>
 </tr>
 <tr>
@@ -293,6 +334,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>200</td>
   <td>
     Duration (milliseconds) of how long to batch new objects coming from network receivers.
+  </td>
+</tr>
+<tr>
+  <td>spark.task.maxFailures</td>
+  <td>4</td>
+  <td>
+    Number of individual task failures before giving up on the job.
+    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
 

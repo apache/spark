@@ -17,6 +17,7 @@
 
 package spark.mllib.recommendation
 
+import scala.collection.JavaConversions._
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
@@ -27,9 +28,49 @@ import spark.SparkContext._
 
 import org.jblas._
 
+object ALSSuite {
+
+  def generateRatingsAsJavaList(
+      users: Int,
+      products: Int,
+      features: Int,
+      samplingRate: Double): (java.util.List[Rating], DoubleMatrix) = {
+    val (sampledRatings, trueRatings) = generateRatings(users, products, features, samplingRate)
+    (seqAsJavaList(sampledRatings), trueRatings)
+  }
+
+  def generateRatings(
+      users: Int,
+      products: Int,
+      features: Int,
+      samplingRate: Double): (Seq[Rating], DoubleMatrix) = {
+    val rand = new Random(42)
+
+    // Create a random matrix with uniform values from -1 to 1
+    def randomMatrix(m: Int, n: Int) =
+      new DoubleMatrix(m, n, Array.fill(m * n)(rand.nextDouble() * 2 - 1): _*)
+
+    val userMatrix = randomMatrix(users, features)
+    val productMatrix = randomMatrix(features, products)
+    val trueRatings = userMatrix.mmul(productMatrix)
+
+    val sampledRatings = {
+      for (u <- 0 until users; p <- 0 until products if rand.nextDouble() < samplingRate)
+        yield Rating(u, p, trueRatings.get(u, p))
+    }
+
+    (sampledRatings, trueRatings)
+  }
+
+}
+
 
 class ALSSuite extends FunSuite with BeforeAndAfterAll {
-  val sc = new SparkContext("local", "test")
+  @transient private var sc: SparkContext = _
+
+  override def beforeAll() {
+    sc = new SparkContext("local", "test")
+  }
 
   override def afterAll() {
     sc.stop()
@@ -57,21 +98,8 @@ class ALSSuite extends FunSuite with BeforeAndAfterAll {
   def testALS(users: Int, products: Int, features: Int, iterations: Int,
     samplingRate: Double, matchThreshold: Double)
   {
-    val rand = new Random(42)
-
-    // Create a random matrix with uniform values from -1 to 1
-    def randomMatrix(m: Int, n: Int) =
-      new DoubleMatrix(m, n, Array.fill(m * n)(rand.nextDouble() * 2 - 1): _*)
-
-    val userMatrix = randomMatrix(users, features)
-    val productMatrix = randomMatrix(features, products)
-    val trueRatings = userMatrix.mmul(productMatrix)
-
-    val sampledRatings = {
-      for (u <- 0 until users; p <- 0 until products if rand.nextDouble() < samplingRate)
-        yield (u, p, trueRatings.get(u, p))
-    }
-
+    val (sampledRatings, trueRatings) = ALSSuite.generateRatings(users, products,
+      features, samplingRate)
     val model = ALS.train(sc.parallelize(sampledRatings), features, iterations)
 
     val predictedU = new DoubleMatrix(users, features)

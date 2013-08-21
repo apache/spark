@@ -28,13 +28,13 @@ private[spark] object UIUtils {
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
   : Seq[Node] = {
-    val storage = page match {
-      case Storage => <li class="active"><a href="/storage">Storage</a></li>
-      case _ => <li><a href="/storage">Storage</a></li>
-    }
     val jobs = page match {
       case Jobs => <li class="active"><a href="/stages">Jobs</a></li>
       case _ => <li><a href="/stages">Jobs</a></li>
+    }
+    val storage = page match {
+      case Storage => <li class="active"><a href="/storage">Storage</a></li>
+      case _ => <li><a href="/storage">Storage</a></li>
     }
     val environment = page match {
       case Environment => <li class="active"><a href="/environment">Environment</a></li>
@@ -65,18 +65,14 @@ private[spark] object UIUtils {
               <div class="navbar">
                 <div class="navbar-inner">
                   <div class="container">
-                    <div class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></div>
-                    <ul class="nav">
-                      {storage}
+                    <a href="/" class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></a>
+                    <ul class="nav nav-pills">
                       {jobs}
+                      {storage}
                       {environment}
                       {executors}
                     </ul>
-                    <ul id="infolist">
-                      <li>Application: <strong>{sc.appName}</strong></li>
-                      <li>Master: <strong>{sc.master}</strong></li>
-                      <li>Executors: <strong>{sc.getExecutorStorageStatus.size}</strong></li>
-                    </ul>
+                    <p class="navbar-text pull-right">Application: <strong>{sc.appName}</strong></p>
                   </div>
                 </div>
               </div>
@@ -85,9 +81,9 @@ private[spark] object UIUtils {
 
           <div class="row" style="padding-top: 5px;">
             <div class="span12">
-              <h1 style="vertical-align: bottom; display: inline-block;">
+              <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
-              </h1>
+              </h3>
             </div>
           </div>
           <hr/>
@@ -117,9 +113,9 @@ private[spark] object UIUtils {
               <img src="/static/spark_logo.png" />
             </div>
             <div class="span10">
-              <h1 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
+              <h3 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
                 {title}
-              </h1>
+              </h3>
             </div>
           </div>
           {content}
@@ -129,9 +125,21 @@ private[spark] object UIUtils {
   }
 
   /** Returns an HTML table constructed by generating a row for each object in a sequence. */
-  def listingTable[T](headers: Seq[String], makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable">
-      <thead>{headers.map(h => <th>{h}</th>)}</thead>
+  def listingTable[T](
+      headers: Seq[String],
+      makeRow: T => Seq[Node],
+      rows: Seq[T],
+      fixedWidth: Boolean = false): Seq[Node] = {
+
+    val colWidth = 100.toDouble / headers.size
+    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    var tableClass = "table table-bordered table-striped table-condensed sortable"
+    if (fixedWidth) {
+      tableClass += " table-fixed"
+    }
+
+    <table class={tableClass}>
+      <thead>{headers.map(h => <th width={colWidthAttr}>{h}</th>)}</thead>
       <tbody>
         {rows.map(r => makeRow(r))}
       </tbody>

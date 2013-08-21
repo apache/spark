@@ -24,9 +24,11 @@ private[spark] object TaskState
 
   val LAUNCHING, RUNNING, FINISHED, FAILED, KILLED, LOST = Value
 
+  val FINISHED_STATES = Set(FINISHED, FAILED, KILLED, LOST)
+
   type TaskState = Value
 
-  def isFinished(state: TaskState) = Seq(FINISHED, FAILED, LOST).contains(state)
+  def isFinished(state: TaskState) = FINISHED_STATES.contains(state)
 
   def toMesos(state: TaskState): MesosTaskState = state match {
     case LAUNCHING => MesosTaskState.TASK_STARTING

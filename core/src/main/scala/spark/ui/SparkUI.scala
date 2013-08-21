@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.{Handler, Server}
 
-import spark.{Logging, SparkContext, Utils}
+import spark.{Logging, SparkContext, SparkEnv, Utils}
 import spark.ui.env.EnvironmentUI
 import spark.ui.exec.ExecutorsUI
 import spark.ui.storage.BlockManagerUI
@@ -30,7 +30,7 @@ import spark.ui.JettyUtils._
 
 /** Top level user interface for Spark */
 private[spark] class SparkUI(sc: SparkContext) extends Logging {
-  val host = Utils.localHostName()
+  val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
   val port = Option(System.getProperty("spark.ui.port")).getOrElse(SparkUI.DEFAULT_PORT).toInt
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
@@ -43,8 +43,12 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   val jobs = new JobProgressUI(sc)
   val env = new EnvironmentUI(sc)
   val exec = new ExecutorsUI(sc)
+
+  // Add MetricsServlet handlers by default
+  val metricsServletHandlers = SparkEnv.get.metricsSystem.getServletHandlers
+
   val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
-    exec.getHandlers ++ handlers
+    exec.getHandlers ++ metricsServletHandlers ++ handlers
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {
@@ -54,9 +58,9 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
       server = Some(srv)
       boundPort = Some(usedPort)
     } catch {
-    case e: Exception =>
-      logError("Failed to create Spark JettyUtils", e)
-      System.exit(1)
+      case e: Exception =>
+        logError("Failed to create Spark JettyUtils", e)
+        System.exit(1)
     }
   }
 
@@ -78,6 +82,6 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 }
 
 private[spark] object SparkUI {
-  val DEFAULT_PORT = "33000"
+  val DEFAULT_PORT = "3030"
   val STATIC_RESOURCE_DIR = "spark/ui/static"
 }

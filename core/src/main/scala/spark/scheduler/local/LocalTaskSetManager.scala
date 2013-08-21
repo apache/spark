@@ -42,7 +42,8 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   val taskInfos = new HashMap[Long, TaskInfo]
   val numTasks = taskSet.tasks.size
   var numFinished = 0
-  val ser = SparkEnv.get.closureSerializer.newInstance()
+  val env = SparkEnv.get
+  val ser = env.closureSerializer.newInstance()
   val copiesRunning = new Array[Int](numTasks)
   val finished = new Array[Boolean](numTasks)
   val numFailures = new Array[Int](numTasks)
@@ -63,11 +64,11 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   }
 
   override def addSchedulable(schedulable: Schedulable): Unit = {
-    //nothing
+    // nothing
   }
 
   override def removeSchedulable(schedulable: Schedulable): Unit = {
-    //nothing
+    // nothing
   }
 
   override def getSchedulableByName(name: String): Schedulable = {
@@ -75,7 +76,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   }
 
   override def executorLost(executorId: String, host: String): Unit = {
-    //nothing
+    // nothing
   }
 
   override def checkSpeculatableTasks() = true
@@ -97,14 +98,15 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     return None
   }
 
-  override def slaveOffer(
+  override def resourceOffer(
       execId: String,
-      hostPort: String,
-      availableCpus: Double,
-      overrideLocality: TaskLocality.TaskLocality = null): Option[TaskDescription] =
+      host: String,
+      availableCpus: Int,
+      maxLocality: TaskLocality.TaskLocality)
+    : Option[TaskDescription] =
   {
     SparkEnv.set(sched.env)
-    logDebug("availableCpus:%d,numFinished:%d,numTasks:%d".format(
+    logDebug("availableCpus:%d, numFinished:%d, numTasks:%d".format(
       availableCpus.toInt, numFinished, numTasks))
     if (availableCpus > 0 && numFinished < numTasks) {
       findTask() match {
@@ -123,26 +125,15 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
           copiesRunning(index) += 1
           increaseRunningTasks(1)
           taskStarted(task, info)
-          return Some(new TaskDescription(taskId, null, taskName, bytes))
+          return Some(new TaskDescription(taskId, null, taskName, index, bytes))
         case None => {}
       }
     }
     return None
   }
 
-  override def numPendingTasksForHostPort(hostPort: String): Int = {
-    return 0
-  }
-
-  override def numRackLocalPendingTasksForHost(hostPort :String): Int = {
-    return 0
-  }
-
-  override def numPendingTasksForHost(hostPort: String): Int = {
-    return 0
-  }
-
   override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+    SparkEnv.set(env)
     state match {
       case TaskState.FINISHED =>
         taskEnded(tid, state, serializedData)

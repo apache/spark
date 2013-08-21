@@ -31,8 +31,8 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 
-import spark.broadcast.Broadcast
 import spark.Partitioner._
+import spark.api.java.JavaRDD
 import spark.partial.BoundedDouble
 import spark.partial.CountEvaluator
 import spark.partial.GroupedCountEvaluator
@@ -220,8 +220,8 @@ abstract class RDD[T: ClassManifest](
   }
 
   /**
-   * Get the preferred location of a split, taking into account whether the
-   * RDD is checkpointed or not.
+   * Get the preferred locations of a partition (as hostnames), taking into account whether the
+   * RDD is checkpointed.
    */
   final def preferredLocations(split: Partition): Seq[String] = {
     checkpointRDD.map(_.getPreferredLocations(split)).getOrElse {
@@ -286,7 +286,10 @@ abstract class RDD[T: ClassManifest](
   def coalesce(numPartitions: Int, shuffle: Boolean = false): RDD[T] = {
     if (shuffle) {
       // include a shuffle step so that our upstream tasks are still distributed
-      new CoalescedRDD(new ShuffledRDD(map(x => (x, null)), new HashPartitioner(numPartitions)), numPartitions).keys
+      new CoalescedRDD(
+        new ShuffledRDD[T, Null, (T, Null)](map(x => (x, null)),
+        new HashPartitioner(numPartitions)),
+        numPartitions).keys
     } else {
       new CoalescedRDD(this, numPartitions)
     }
@@ -301,8 +304,8 @@ abstract class RDD[T: ClassManifest](
   def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
     var fraction = 0.0
     var total = 0
-    var multiplier = 3.0
-    var initialCount = this.count()
+    val multiplier = 3.0
+    val initialCount = this.count()
     var maxSelected = 0
 
     if (num < 0) {
@@ -514,22 +517,19 @@ abstract class RDD[T: ClassManifest](
    * *same number of partitions*, but does *not* require them to have the same number
    * of elements in each partition.
    */
-  def zipPartitions[B: ClassManifest, V: ClassManifest](
-      f: (Iterator[T], Iterator[B]) => Iterator[V],
-      rdd2: RDD[B]): RDD[V] =
+  def zipPartitions[B: ClassManifest, V: ClassManifest]
+      (rdd2: RDD[B])
+      (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2)
 
-  def zipPartitions[B: ClassManifest, C: ClassManifest, V: ClassManifest](
-      f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V],
-      rdd2: RDD[B],
-      rdd3: RDD[C]): RDD[V] =
+  def zipPartitions[B: ClassManifest, C: ClassManifest, V: ClassManifest]
+      (rdd2: RDD[B], rdd3: RDD[C])
+      (f: (Iterator[T], Iterator[B], Iterator[C]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD3(sc, sc.clean(f), this, rdd2, rdd3)
 
-  def zipPartitions[B: ClassManifest, C: ClassManifest, D: ClassManifest, V: ClassManifest](
-      f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
-      rdd2: RDD[B],
-      rdd3: RDD[C],
-      rdd4: RDD[D]): RDD[V] =
+  def zipPartitions[B: ClassManifest, C: ClassManifest, D: ClassManifest, V: ClassManifest]
+      (rdd2: RDD[B], rdd3: RDD[C], rdd4: RDD[D])
+      (f: (Iterator[T], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD4(sc, sc.clean(f), this, rdd2, rdd3, rdd4)
 
 
@@ -949,5 +949,9 @@ abstract class RDD[T: ClassManifest](
     getClass.getSimpleName,
     id,
     origin)
+
+  def toJavaRDD() : JavaRDD[T] = {
+    new JavaRDD(this)(elementClassManifest)
+  }
 
 }

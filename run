@@ -72,7 +72,10 @@ esac
 # hard to kill the child with stuff like Process.destroy(). However, for
 # the Spark shell, the wrapper is necessary to properly reset the terminal
 # when we exit, so we allow it to set a variable to launch with scala.
-if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
+# We still fall back on java for the shell if this is a "release" created
+# from make-distribution.sh since it's possible scala is not installed
+# but we have everything we need to run the shell.
+if [[ "$SPARK_LAUNCH_WITH_SCALA" == "1" && ! -f "$FWDIR/RELEASE" ]]; then
   if [ "$SCALA_HOME" ]; then
     RUNNER="${SCALA_HOME}/bin/scala"
   else
@@ -161,4 +164,12 @@ else
   # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
   EXTRA_ARGS="$JAVA_OPTS"
 fi
-exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"
+
+command="$RUNNER -cp \"$CLASSPATH\" $EXTRA_ARGS $@"
+if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
+  echo "Spark Command: $command"
+  echo "========================================"
+  echo
+fi
+
+exec $command

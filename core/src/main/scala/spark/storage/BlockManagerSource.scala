@@ -3,7 +3,7 @@ package spark.storage
 import com.codahale.metrics.{Gauge,MetricRegistry}
 
 import spark.metrics.source.Source
-import spark.storage._
+
 
 private[spark] class BlockManagerSource(val blockManager: BlockManager) extends Source {
   val metricRegistry = new MetricRegistry()

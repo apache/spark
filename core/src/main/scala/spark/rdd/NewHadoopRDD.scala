@@ -43,7 +43,7 @@ class NewHadoopRDD[K, V](
     valueClass: Class[V],
     @transient conf: Configuration)
   extends RDD[(K, V)](sc, Nil)
-  with HadoopMapReduceUtil
+  with SparkHadoopMapReduceUtil
   with Logging {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
@@ -73,6 +73,7 @@ class NewHadoopRDD[K, V](
 
   override def compute(theSplit: Partition, context: TaskContext) = new Iterator[(K, V)] {
     val split = theSplit.asInstanceOf[NewHadoopPartition]
+    logInfo("Input split: " + split.serializableHadoopSplit)
     val conf = confBroadcast.value.value
     val attemptId = newTaskAttemptID(jobtrackerId, id, true, split.index, 0)
     val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)

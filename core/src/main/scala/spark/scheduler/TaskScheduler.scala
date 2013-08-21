@@ -17,6 +17,8 @@
 
 package spark.scheduler
 
+import spark.scheduler.cluster.Pool
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 /**
  * Low-level task scheduler interface, implemented by both ClusterScheduler and LocalScheduler.
  * These schedulers get sets of tasks submitted to them from the DAGScheduler for each stage,
@@ -25,6 +27,11 @@ package spark.scheduler
  * the TaskSchedulerListener interface.
  */
 private[spark] trait TaskScheduler {
+
+  def rootPool: Pool
+
+  def schedulingMode: SchedulingMode
+
   def start(): Unit
 
   // Invoked after system has successfully initialized (typically in spark context).

@@ -20,18 +20,14 @@ package spark
 import java.io._
 import java.net.URI
 import java.util.Properties
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.generic.Growable
-import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.HashMap
 import scala.util.DynamicVariable
-import scala.collection.mutable.{ConcurrentMap, HashMap}
-
-import akka.actor.Actor._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -53,21 +49,22 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.{Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.mesos.MesosNativeLibrary
 
-import spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import spark.deploy.LocalSparkCluster
 import spark.partial.{ApproximateEvaluator, PartialResult}
-import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD}
-import spark.scheduler.{DAGScheduler, DAGSchedulerSource, ResultTask, ShuffleMapTask, SparkListener, SplitInfo, Stage, StageInfo, TaskScheduler}
-import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend, ClusterScheduler}
+import spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD,
+  OrderedRDDFunctions}
+import spark.scheduler.{DAGScheduler, DAGSchedulerSource, ResultTask, ShuffleMapTask, SparkListener,
+  SplitInfo, Stage, StageInfo, TaskScheduler}
+import spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
+  ClusterScheduler, Schedulable, SchedulingMode}
 import spark.scheduler.local.LocalScheduler
 import spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import spark.storage.{StorageStatus, StorageUtils, RDDInfo, BlockManagerSource}
+import spark.ui.SparkUI
 import spark.util.{MetadataCleaner, TimeStampedHashMap}
-import ui.{SparkUI}
-import spark.metrics._
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -124,6 +121,8 @@ class SparkContext(
   // Initalize the Spark UI
   private[spark] val ui = new SparkUI(this)
   ui.bind()
+
+  val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
   if (jars != null) {
@@ -236,7 +235,8 @@ class SparkContext(
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
-    val conf = SparkHadoopUtil.newConfiguration()
+    val env = SparkEnv.get
+    val conf = env.hadoop.newConfiguration()
     // Explicitly check for S3 environment variables
     if (System.getenv("AWS_ACCESS_KEY_ID") != null && System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
       conf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
@@ -262,12 +262,22 @@ class SparkContext(
       localProperties.value = new Properties()
   }
 
-  def addLocalProperties(key: String, value: String) {
-    if(localProperties.value == null) {
+  def setLocalProperty(key: String, value: String) {
+    if (localProperties.value == null) {
       localProperties.value = new Properties()
     }
-    localProperties.value.setProperty(key,value)
+    if (value == null) {
+      localProperties.value.remove(key)
+    } else {
+      localProperties.value.setProperty(key, value)
+    }
   }
+
+  /** Set a human readable description of the current job. */
+  def setJobDescription(value: String) {
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
+  }
+
   // Post init
   taskScheduler.postStartHook()
 
@@ -536,7 +546,7 @@ class SparkContext(
   }
 
   def addSparkListener(listener: SparkListener) {
-    dagScheduler.sparkListeners += listener
+    dagScheduler.addSparkListener(listener)
   }
 
   /**
@@ -575,6 +585,28 @@ class SparkContext(
   }
 
   /**
+   *  Return pools for fair scheduler
+   *  TODO(xiajunluan): We should take nested pools into account
+   */
+  def getAllPools: ArrayBuffer[Schedulable] = {
+    taskScheduler.rootPool.schedulableQueue
+  }
+
+  /**
+   * Return the pool associated with the given name, if one exists
+   */
+  def getPoolForName(pool: String): Option[Schedulable] = {
+    taskScheduler.rootPool.schedulableNameToSchedulable.get(pool)
+  }
+
+  /**
+   *  Return current scheduling mode
+   */
+  def getSchedulingMode: SchedulingMode.SchedulingMode = {
+    taskScheduler.schedulingMode
+  }
+
+  /**
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
@@ -592,10 +624,11 @@ class SparkContext(
       logWarning("null specified as parameter to addJar",
         new SparkException("null specified as parameter to addJar"))
     } else {
+      val env = SparkEnv.get
       val uri = new URI(path)
       val key = uri.getScheme match {
         case null | "file" =>
-          if (SparkHadoopUtil.isYarnMode()) {
+          if (env.hadoop.isYarnMode()) {
             logWarning("local jar specified as parameter to addJar under Yarn mode")
             return
           }
@@ -778,8 +811,9 @@ class SparkContext(
    * prevent accidental overriding of checkpoint files in the existing directory.
    */
   def setCheckpointDir(dir: String, useExisting: Boolean = false) {
+    val env = SparkEnv.get
     val path = new Path(dir)
-    val fs = path.getFileSystem(SparkHadoopUtil.newConfiguration())
+    val fs = path.getFileSystem(env.hadoop.newConfiguration())
     if (!useExisting) {
       if (fs.exists(path)) {
         throw new Exception("Checkpoint directory '" + path + "' already exists.")
@@ -796,11 +830,11 @@ class SparkContext(
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
 
-  private var nextShuffleId = new AtomicInteger(0)
+  private val nextShuffleId = new AtomicInteger(0)
 
   private[spark] def newShuffleId(): Int = nextShuffleId.getAndIncrement()
 
-  private var nextRddId = new AtomicInteger(0)
+  private val nextRddId = new AtomicInteger(0)
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
@@ -816,6 +850,7 @@ class SparkContext(
  * various Spark features.
  */
 object SparkContext {
+  val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
@@ -848,7 +883,7 @@ object SparkContext {
 
   implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassManifest, V: ClassManifest](
       rdd: RDD[(K, V)]) =
-    new OrderedRDDFunctions(rdd)
+    new OrderedRDDFunctions[K, V, (K, V)](rdd)
 
   implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
 
@@ -933,7 +968,6 @@ object SparkContext {
   }
 }
 
-
 /**
  * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
  * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
@@ -945,3 +979,4 @@ private[spark] class WritableConverter[T](
     val writableClass: ClassManifest[T] => Class[_ <: Writable],
     val convert: Writable => T)
   extends Serializable
+

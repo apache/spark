@@ -1,48 +1,51 @@
-# syntax: [instance].[sink|source].[name].[options]
+#  syntax: [instance].sink|source.[name].[options]=[value]
 
-#  "instance" specify "who" (the role) use metrics system. In spark there are
-#  several roles like master, worker, executor, driver, these roles will
-#  create metrics system for monitoring. So instance represents these roles.
-#  Currently in Spark, several instances have already implemented: master,
-#  worker, executor, driver.
+#  This file configures Spark's internal metrics system. The metrics system is
+#  divided into instances which correspond to internal components.
+#  Each instance can be configured to report its metrics to one or more sinks.
+#  Accepted values for [instance] are "master", "worker", "executor", "driver",
+#  and "applications". A wild card "*" can be used as an instance name, in
+#  which case all instances will inherit the supplied property.
 #
-#  [instance] field can be "master", "worker", "executor", "driver", which means
-#  only the specified instance has this property.
-#  a wild card "*" can be used to represent instance name, which means all the
-#  instances will have this property.
+#  Within an instance, a "source" specifies a particular set of grouped metrics.
+#  there are two kinds of sources:
+#    1. Spark internal sources, like MasterSource, WorkerSource, etc, which will
+#    collect a Spark component's internal state. Each instance is paired with a
+#    Spark source that is added automatically.
+#    2. Common sources, like JvmSource, which will collect low level state.
+#    These can be added through configuration options and are then loaded
+#    using reflection.
 #
-#  "source" specify "where" (source) to collect metrics data. In metrics system,
-#  there exists two kinds of source:
-#    1. Spark internal source, like MasterSource, WorkerSource, etc, which will
-#    collect Spark component's internal state, these sources are related to
-#    instance and will be added after specific metrics system is created.
-#    2. Common source, like JvmSource, which will collect low level state, is
-#    configured by configuration and loaded through reflection.
+#  A "sink" specifies where metrics are delivered to. Each instance can be
+#  assigned one or more sinks.
 #
-#  "sink" specify "where" (destination) to output metrics data to. Several sinks
-#  can be coexisted and flush metrics to all these sinks.
+#  The sink|source field specifies whether the property relates to a sink or
+#  source.
 #
-#  [sink|source] field specify this property is source related or sink, this
-#  field can only be source or sink.
+#  The [name] field specifies the name of source or sink.
 #
-#  [name] field specify the name of source or sink, this is custom defined.
-#
-#  [options] field is the specific property of this source or sink, this source
-#  or sink is responsible for parsing this property.
+#  The [options] field is the specific property of this source or sink. The
+#  source or sink is responsible for parsing this property.
 #
 #  Notes:
-#    1. Sinks should be added through configuration, like console sink, class
-#    full name should be specified by class property.
-#    2. Some sinks can specify polling period, like console sink, which is 10 seconds,
-#    it should be attention minimal polling period is 1 seconds, any period
-#    below than 1s is illegal.
-#    3. Wild card property can be overlapped by specific instance property, for
-#    example, *.sink.console.period can be overlapped by master.sink.console.period.
+#    1. To add a new sink, set the "class" option to a fully qualified class
+#    name (see examples below).
+#    2. Some sinks involve a polling period. The minimum allowed polling period
+#    is  1 second.
+#    3. Wild card properties can be overridden by more specific properties.
+#    For example, master.sink.console.period takes precedence over
+#    *.sink.console.period.
 #    4. A metrics specific configuration
 #    "spark.metrics.conf=${SPARK_HOME}/conf/metrics.properties" should be
-#    added to Java property using -Dspark.metrics.conf=xxx if you want to
-#    customize metrics system, or you can put it in ${SPARK_HOME}/conf,
-#    metrics system will search and load it automatically.
+#    added to Java properties using -Dspark.metrics.conf=xxx if you want to
+#    customize metrics system. You can also put the file in ${SPARK_HOME}/conf
+#    and it will be loaded automatically.
+#    5. MetricsServlet is added by default as a sink in master, worker and client
+#    driver, you can send http request "/metrics/json" to get a snapshot of all the
+#    registered metrics in json format. For master, requests "/metrics/master/json" and
+#    "/metrics/applications/json" can be sent seperately to get metrics snapshot of
+#    instance master and applications. MetricsServlet may not be configured by self.
+#
 
 # Enable JmxSink for all instances by class name
 #*.sink.jmx.class=spark.metrics.sink.JmxSink

@@ -21,7 +21,7 @@ import java.io._
 
 import org.apache.hadoop.io.ObjectWritable
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.conf.Configuration
 
 class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
   def value = t
@@ -35,7 +35,7 @@ class SerializableWritable[T <: Writable](@transient var t: T) extends Serializa
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     val ow = new ObjectWritable()
-    ow.setConf(new JobConf())
+    ow.setConf(new Configuration())
     ow.readFields(in)
     t = ow.get().asInstanceOf[T]
   }

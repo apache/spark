@@ -32,8 +32,7 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
-import spark.deploy.SparkHadoopUtil
-import spark.{Dependency, Logging, Partition, RDD, SerializableWritable, SparkContext, TaskContext}
+import spark.{Dependency, Logging, Partition, RDD, SerializableWritable, SparkContext, SparkEnv, TaskContext}
 import spark.util.NextIterator
 import org.apache.hadoop.conf.Configurable
 
@@ -68,7 +67,8 @@ class HadoopRDD[K, V](
   private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
 
   override def getPartitions: Array[Partition] = {
-    SparkHadoopUtil.addCredentials(conf);
+    val env = SparkEnv.get
+    env.hadoop.addCredentials(conf)
     val inputFormat = createInputFormat(conf)
     if (inputFormat.isInstanceOf[Configurable]) {
       inputFormat.asInstanceOf[Configurable].setConf(conf)
@@ -88,6 +88,7 @@ class HadoopRDD[K, V](
 
   override def compute(theSplit: Partition, context: TaskContext) = new NextIterator[(K, V)] {
     val split = theSplit.asInstanceOf[HadoopPartition]
+    logInfo("Input split: " + split.inputSplit)
     var reader: RecordReader[K, V] = null
 
     val conf = confBroadcast.value.value

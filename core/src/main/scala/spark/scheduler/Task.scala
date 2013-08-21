@@ -30,9 +30,9 @@ import spark.executor.TaskMetrics
  */
 private[spark] abstract class Task[T](val stageId: Int) extends Serializable {
   def run(attemptId: Long): T
-  def preferredLocations: Seq[String] = Nil
+  def preferredLocations: Seq[TaskLocation] = Nil
 
-  var generation: Long = -1   // Map output tracker generation. Will be set by TaskScheduler.
+  var epoch: Long = -1   // Map output tracker epoch. Will be set by TaskScheduler.
 
   var metrics: Option[TaskMetrics] = None
 

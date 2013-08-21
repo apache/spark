@@ -17,33 +17,42 @@
 
 package spark.deploy.master.ui
 
+import javax.servlet.http.HttpServletRequest
+
+import scala.util.parsing.json.JSONType
+import scala.xml.Node
+
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.duration._
 
-import javax.servlet.http.HttpServletRequest
-
-import scala.xml.Node
-
-import spark.deploy.{RequestMasterState, DeployWebUI, MasterState}
 import spark.Utils
-import spark.ui.UIUtils
+import spark.deploy.DeployWebUI
+import spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
+import spark.deploy.JsonProtocol
 import spark.deploy.master.{ApplicationInfo, WorkerInfo}
+import spark.ui.UIUtils
 
 private[spark] class IndexPage(parent: MasterWebUI) {
-  val master = parent.master
+  val master = parent.masterActorRef
   implicit val timeout = parent.timeout
+
+  def renderJson(request: HttpServletRequest): JSONType = {
+    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
+    val state = Await.result(stateFuture, 30 seconds)
+    JsonProtocol.writeMasterState(state)
+  }
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterState]
+    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, 30 seconds)
 
     val workerHeaders = Seq("Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("ID", "Description", "Cores", "Memory per Node", "Submit Time", "User",
+    val appHeaders = Seq("ID", "Name", "Cores", "Memory per Node", "Submitted Time", "User",
       "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
@@ -60,8 +69,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
               <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,
                 {state.workers.map(_.coresUsed).sum} Used</li>
               <li><strong>Memory:</strong>
-                {Utils.memoryMegabytesToString(state.workers.map(_.memory).sum)} Total,
-                {Utils.memoryMegabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
+                {Utils.megabytesToString(state.workers.map(_.memory).sum)} Total,
+                {Utils.megabytesToString(state.workers.map(_.memoryUsed).sum)} Used</li>
               <li><strong>Applications:</strong>
                 {state.activeApps.size} Running,
                 {state.completedApps.size} Completed </li>
@@ -71,8 +80,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
         <div class="row">
           <div class="span12">
-            <h3> Workers </h3>
-            <br/>
+            <h4> Workers </h4>
             {workerTable}
           </div>
         </div>
@@ -81,8 +89,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
         <div class="row">
           <div class="span12">
-            <h3> Running Applications </h3>
-            <br/>
+            <h4> Running Applications </h4>
+
             {activeAppsTable}
           </div>
         </div>
@@ -91,8 +99,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
         <div class="row">
           <div class="span12">
-            <h3> Completed Applications </h3>
-            <br/>
+            <h4> Completed Applications </h4>
             {completedAppsTable}
           </div>
         </div>;
@@ -108,8 +115,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>{worker.state}</td>
       <td>{worker.cores} ({worker.coresUsed} Used)</td>
       <td sorttable_customkey={"%s.%s".format(worker.memory, worker.memoryUsed)}>
-        {Utils.memoryMegabytesToString(worker.memory)}
-        ({Utils.memoryMegabytesToString(worker.memoryUsed)} Used)
+        {Utils.megabytesToString(worker.memory)}
+        ({Utils.megabytesToString(worker.memoryUsed)} Used)
       </td>
     </tr>
   }
@@ -127,7 +134,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         {app.coresGranted}
       </td>
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
-        {Utils.memoryMegabytesToString(app.desc.memoryPerSlave)}
+        {Utils.megabytesToString(app.desc.memoryPerSlave)}
       </td>
       <td>{DeployWebUI.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>

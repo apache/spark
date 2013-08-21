@@ -37,6 +37,7 @@ EXAMPLES_DIR="$FWDIR/examples"
 BAGEL_DIR="$FWDIR/bagel"
 MLLIB_DIR="$FWDIR/mllib"
 TOOLS_DIR="$FWDIR/tools"
+YARN_DIR="$FWDIR/yarn"
 STREAMING_DIR="$FWDIR/streaming"
 PYSPARK_DIR="$FWDIR/python"
 
@@ -62,16 +63,18 @@ function dev_classpath {
   CLASSPATH="$CLASSPATH:$REPL_DIR/lib/*"
   # Add the shaded JAR for Maven builds
   if [ -e $REPL_BIN_DIR/target ]; then
-    for jar in `find "$REPL_BIN_DIR/target" -name 'spark-repl-*-shaded-hadoop*.jar'`; do
+    for jar in `find "$REPL_BIN_DIR/target" -name 'spark-repl-*-shaded.jar'`; do
       CLASSPATH="$CLASSPATH:$jar"
     done
     # The shaded JAR doesn't contain examples, so include those separately
-    EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
-    CLASSPATH+=":$EXAMPLES_JAR"
+    for jar in `find "$EXAMPLES_DIR/target" -name 'spark-examples*[0-9T].jar'`; do
+      CLASSPATH="$CLASSPATH:$jar"
+    done
   fi
   CLASSPATH="$CLASSPATH:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$MLLIB_DIR/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$TOOLS_DIR/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$YARN_DIR/target/scala-$SCALA_VERSION/classes"
   for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
     CLASSPATH="$CLASSPATH:$jar"
   done

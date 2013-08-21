@@ -41,8 +41,7 @@ def closestPoint(p, centers):
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
-        print >> sys.stderr, \
-            "Usage: PythonKMeans <master> <file> <k> <convergeDist>"
+        print >> sys.stderr, "Usage: kmeans <master> <file> <k> <convergeDist>"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonKMeans")
     lines = sc.textFile(sys.argv[2])

@@ -28,12 +28,11 @@ private[spark]
 class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[String])
   extends RDD[T](sc, Nil) {
 
-  @transient lazy val locations_ = BlockManager.blockIdsToExecutorLocations(blockIds, SparkEnv.get)
+  @transient lazy val locations_ = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
 
   override def getPartitions: Array[Partition] = (0 until blockIds.size).map(i => {
     new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]
   }).toArray
-
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     val blockManager = SparkEnv.get.blockManager
@@ -45,8 +44,8 @@ class BlockRDD[T: ClassManifest](sc: SparkContext, @transient blockIds: Array[St
     }
   }
 
-  override def getPreferredLocations(split: Partition): Seq[String] =
+  override def getPreferredLocations(split: Partition): Seq[String] = {
     locations_(split.asInstanceOf[BlockRDDPartition].blockId)
-
+  }
 }
 

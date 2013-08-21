@@ -19,14 +19,74 @@ package spark.mllib.optimization
 
 import org.jblas.DoubleMatrix
 
+/**
+ * Class used to compute the gradient for a loss function, given a single data point.
+ */
 abstract class Gradient extends Serializable {
   /**
-   * Compute the gradient for a given row of data.
+   * Compute the gradient and loss given features of a single data point.
    *
-   * @param data - One row of data. Row matrix of size 1xn where n is the number of features.
+   * @param data - Feature values for one data point. Column matrix of size nx1
+   *               where n is the number of features.
    * @param label - Label for this data item.
    * @param weights - Column matrix containing weights for every feature.
+   *
+   * @return A tuple of 2 elements. The first element is a column matrix containing the computed
+   *         gradient and the second element is the loss computed at this data point.
+   *
    */
   def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
       (DoubleMatrix, Double)
+}
+
+/**
+ * Compute gradient and loss for a logistic loss function.
+ */
+class LogisticGradient extends Gradient {
+  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
+      (DoubleMatrix, Double) = {
+    val margin: Double = -1.0 * data.dot(weights)
+    val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
+
+    val gradient = data.mul(gradientMultiplier)
+    val loss =
+      if (margin > 0) {
+        math.log(1 + math.exp(0 - margin))
+      } else {
+        math.log(1 + math.exp(margin)) - margin
+      }
+
+    (gradient, loss)
+  }
+}
+
+/**
+ * Compute gradient and loss for a Least-squared loss function.
+ */
+class SquaredGradient extends Gradient {
+  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
+      (DoubleMatrix, Double) = {
+    val diff: Double = data.dot(weights) - label
+
+    val loss = 0.5 * diff * diff
+    val gradient = data.mul(diff)
+
+    (gradient, loss)
+  }
+}
+
+/**
+ * Compute gradient and loss for a Hinge loss function.
+ */
+class HingeGradient extends Gradient {
+  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
+      (DoubleMatrix, Double) = {
+
+    val dotProduct = data.dot(weights)
+
+    if (1.0 > label * dotProduct)
+      (data.mul(-label), 1.0 - label * dotProduct)
+    else
+      (DoubleMatrix.zeros(1,weights.length), 0.0)
+  }
 }

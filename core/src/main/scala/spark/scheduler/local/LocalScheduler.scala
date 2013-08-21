@@ -18,8 +18,11 @@
 package spark.scheduler.local
 
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.util.concurrent.atomic.AtomicInteger
 import java.nio.ByteBuffer
+
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
@@ -29,6 +32,7 @@ import spark.TaskState.TaskState
 import spark.executor.ExecutorURLClassLoader
 import spark.scheduler._
 import spark.scheduler.cluster._
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 import akka.actor._
 
 /**
@@ -85,6 +89,8 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
 
   var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
+  val schedulingMode: SchedulingMode = SchedulingMode.withName(
+    System.getProperty("spark.cluster.schedulingmode", "FIFO"))
   val activeTaskSets = new HashMap[String, TaskSetManager]
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskSetTaskIds = new HashMap[String, HashSet[Long]]
@@ -92,15 +98,13 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
   var localActor: ActorRef = null
 
   override def start() {
-    //default scheduler is FIFO
-    val schedulingMode = System.getProperty("spark.cluster.schedulingmode", "FIFO")
-    //temporarily set rootPool name to empty
-    rootPool = new Pool("", SchedulingMode.withName(schedulingMode), 0, 0)
+    // temporarily set rootPool name to empty
+    rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
-        case "FIFO" =>
+        case SchedulingMode.FIFO =>
           new FIFOSchedulableBuilder(rootPool)
-        case "FAIR" =>
+        case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool)
       }
     }
@@ -137,7 +141,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       for (manager <- sortedTaskSetQueue) {
         do {
           launchTask = false
-          manager.slaveOffer(null, null, freeCpuCores) match {
+          manager.resourceOffer(null, null, freeCpuCores, null) match {
             case Some(task) =>
               tasks += task
               taskIdToTaskSetId(task.taskId) = manager.taskSet.id
@@ -168,9 +172,13 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     // Set the Spark execution environment for the worker thread
     SparkEnv.set(env)
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    var attemptedTask: Option[Task[_]] = None
+    val objectSer = SparkEnv.get.serializer.newInstance()
+    var attemptedTask: Option[Task[_]] = None   
     val start = System.currentTimeMillis()
     var taskStart: Long = 0
+    def getTotalGCTime = ManagementFactory.getGarbageCollectorMXBeans.map(g => g.getCollectionTime).sum
+    val startGCTime = getTotalGCTime
+
     try {
       Accumulators.clear()
       Thread.currentThread().setContextClassLoader(classLoader)
@@ -192,14 +200,15 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       // executor does. This is useful to catch serialization errors early
       // on in development (so when users move their local Spark programs
       // to the cluster, they don't get surprised by serialization errors).
-      val serResult = ser.serialize(result)
+      val serResult = objectSer.serialize(result)
       deserializedTask.metrics.get.resultSize = serResult.limit()
-      val resultToReturn = ser.deserialize[Any](serResult)
+      val resultToReturn = objectSer.deserialize[Any](serResult)
       val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
         ser.serialize(Accumulators.values))
       val serviceTime = System.currentTimeMillis() - taskStart
       logInfo("Finished " + taskId)
       deserializedTask.metrics.get.executorRunTime = serviceTime.toInt
+      deserializedTask.metrics.get.jvmGCTime = getTotalGCTime - startGCTime
       deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
       val taskResult = new TaskResult(result, accumUpdates, deserializedTask.metrics.getOrElse(null))
       val serializedResult = ser.serialize(taskResult)
@@ -208,7 +217,10 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       case t: Throwable => {
         val serviceTime = System.currentTimeMillis() - taskStart
         val metrics = attemptedTask.flatMap(t => t.metrics)
-        metrics.foreach{m => m.executorRunTime = serviceTime.toInt}
+        for (m <- metrics) {
+          m.executorRunTime = serviceTime.toInt
+          m.jvmGCTime = getTotalGCTime - startGCTime
+        }
         val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
         localActor ! LocalStatusUpdate(taskId, TaskState.FAILED, ser.serialize(failure))
       }

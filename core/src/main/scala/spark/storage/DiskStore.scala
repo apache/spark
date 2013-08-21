@@ -66,7 +66,6 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     override def close() {
       if (initialized) {
         objOut.close()
-        bs.close()
         channel = null
         bs = null
         objOut = null
@@ -148,7 +147,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     channel.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      blockId, Utils.memoryBytesToString(bytes.limit), (finishTime - startTime)))
+      blockId, Utils.bytesToString(bytes.limit), (finishTime - startTime)))
   }
 
   private def getFileBytes(file: File): ByteBuffer = {
@@ -182,7 +181,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
     val timeTaken = System.currentTimeMillis - startTime
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      blockId, Utils.memoryBytesToString(length), timeTaken))
+      blockId, Utils.bytesToString(length), timeTaken))
 
     if (returnValues) {
       // Return a byte buffer for the contents of the file

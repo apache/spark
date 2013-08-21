@@ -22,33 +22,40 @@ import scala.util.Random
 import org.jblas.DoubleMatrix
 
 import spark.{RDD, SparkContext}
+import spark.mllib.regression.LabeledPoint
 
+/**
+ * Generate sample data used for RidgeRegression. This class generates
+ * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
+ * response variable `Y`.
+ *
+ */
 object RidgeRegressionDataGenerator {
 
   /**
-   * Generate an RDD containing test data used for RidgeRegression. This function generates
-   * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
-   * response variable `Y`.
+   * Generate an RDD containing sample data for RidgeRegression.
    *
    * @param sc SparkContext to be used for generating the RDD.
    * @param nexamples Number of examples that will be contained in the RDD.
    * @param nfeatures Number of features to generate for each example.
    * @param eps Epsilon factor by which examples are scaled.
    * @param nparts Number of partitions in the RDD. Default value is 2.
+   *
+   * @return RDD of LabeledPoint containing sample data.
    */
   def generateRidgeRDD(
     sc: SparkContext,
     nexamples: Int,
     nfeatures: Int,
     eps: Double,
-    nparts: Int = 2) : RDD[(Double, Array[Double])] = {
+    nparts: Int = 2) : RDD[LabeledPoint] = {
     org.jblas.util.Random.seed(42)
     // Random values distributed uniformly in [-0.5, 0.5]
     val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
     w.put(0, 0, 10)
     w.put(1, 0, 10)
 
-    val data: RDD[(Double, Array[Double])] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
+    val data: RDD[LabeledPoint] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
       org.jblas.util.Random.seed(42 + p)
       val examplesInPartition = nexamples / nparts
 
@@ -61,16 +68,16 @@ object RidgeRegressionDataGenerator {
       val yObs = new DoubleMatrix(normalValues).addi(y)
 
       Iterator.tabulate(examplesInPartition) { i =>
-        (yObs.get(i, 0), X.getRow(i).toArray)
+        LabeledPoint(yObs.get(i, 0), X.getRow(i).toArray)
       }
     }
     data
   }
 
   def main(args: Array[String]) {
-    if (args.length != 5) {
+    if (args.length < 2) {
       println("Usage: RidgeRegressionGenerator " +
-        "<master> <output_dir> <num_examples> <num_features> <num_partitions>")
+        "<master> <output_dir> [num_examples] [num_features] [num_partitions]")
       System.exit(1)
     }
 

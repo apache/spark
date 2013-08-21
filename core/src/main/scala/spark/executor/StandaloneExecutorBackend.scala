@@ -18,19 +18,15 @@
 package spark.executor
 
 import java.nio.ByteBuffer
-import spark.Logging
-import spark.TaskState.TaskState
-import spark.util.AkkaUtils
+
 import akka.actor.{ActorRef, Actor, Props, Terminated}
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
-import java.util.concurrent.{TimeUnit, ThreadPoolExecutor, SynchronousQueue}
-import spark.scheduler.cluster._
-import spark.scheduler.cluster.RegisteredExecutor
-import spark.scheduler.cluster.LaunchTask
-import spark.scheduler.cluster.RegisterExecutorFailed
-import spark.scheduler.cluster.RegisterExecutor
-import spark.Utils
-import spark.deploy.SparkHadoopUtil
+
+import spark.{Logging, Utils, SparkEnv}
+import spark.TaskState.TaskState
+import spark.scheduler.cluster.StandaloneClusterMessages._
+import spark.util.AkkaUtils
+
 
 private[spark] class StandaloneExecutorBackend(
     driverUrl: String,
@@ -85,19 +81,6 @@ private[spark] class StandaloneExecutorBackend(
 
 private[spark] object StandaloneExecutorBackend {
   def run(driverUrl: String, executorId: String, hostname: String, cores: Int) {
-    SparkHadoopUtil.runAsUser(run0, Tuple4[Any, Any, Any, Any] (driverUrl, executorId, hostname, cores))
-  }
-
-  // This will be run 'as' the user
-  def run0(args: Product) {
-    assert(4 == args.productArity)
-    runImpl(args.productElement(0).asInstanceOf[String], 
-      args.productElement(1).asInstanceOf[String],
-      args.productElement(2).asInstanceOf[String],
-      args.productElement(3).asInstanceOf[Int])
-  }
-  
-  private def runImpl(driverUrl: String, executorId: String, hostname: String, cores: Int) {
     // Debug code
     Utils.checkHost(hostname)
 

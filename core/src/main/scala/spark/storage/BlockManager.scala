@@ -27,11 +27,10 @@ import akka.dispatch.{Await, Future}
 import akka.util.Duration
 import akka.util.duration._
 
-import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
 import spark.{Logging, SparkEnv, SparkException, Utils}
+import spark.io.CompressionCodec
 import spark.network._
 import spark.serializer.Serializer
 import spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStampedHashMap}
@@ -157,6 +156,13 @@ private[spark] class BlockManager(
 
   val metadataCleaner = new MetadataCleaner("BlockManager", this.dropOldBlocks)
   initialize()
+
+  // The compression codec to use. Note that the "lazy" val is necessary because we want to delay
+  // the initialization of the compression codec until it is first used. The reason is that a Spark
+  // program could be using a user-defined codec in a third party jar, which is loaded in
+  // Executor.updateDependencies. When the BlockManager is initialized, user level jars hasn't been
+  // loaded yet.
+  private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec()
 
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
@@ -919,18 +925,14 @@ private[spark] class BlockManager(
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: OutputStream): OutputStream = {
-    if (shouldCompress(blockId)) {
-      (new LZFOutputStream(s)).setFinishBlockOnFlush(true)
-    } else {
-      s
-    }
+    if (shouldCompress(blockId)) compressionCodec.compressedOutputStream(s) else s
   }
 
   /**
    * Wrap an input stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: InputStream): InputStream = {
-    if (shouldCompress(blockId)) new LZFInputStream(s) else s
+    if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
   }
 
   def dataSerialize(
@@ -1002,43 +1004,43 @@ private[spark] object BlockManager extends Logging {
     }
   }
 
-  def blockIdsToExecutorLocations(blockIds: Array[String], env: SparkEnv, blockManagerMaster: BlockManagerMaster = null): HashMap[String, List[String]] = {
+  def blockIdsToBlockManagers(
+      blockIds: Array[String],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null)
+  : Map[String, Seq[BlockManagerId]] =
+  {
     // env == null and blockManagerMaster != null is used in tests
     assert (env != null || blockManagerMaster != null)
-    val locationBlockIds: Seq[Seq[BlockManagerId]] =
-      if (env != null) {
-        env.blockManager.getLocationBlockIds(blockIds)
-      } else {
-        blockManagerMaster.getLocations(blockIds)
-      }
-
-    // Convert from block master locations to executor locations (we need that for task scheduling)
-    val executorLocations = new HashMap[String, List[String]]()
-    for (i <- 0 until blockIds.length) {
-      val blockId = blockIds(i)
-      val blockLocations = locationBlockIds(i)
-
-      val executors = new HashSet[String]()
-
-      if (env != null) {
-        for (bkLocation <- blockLocations) {
-          val executorHostPort = env.resolveExecutorIdToHostPort(bkLocation.executorId, bkLocation.host)
-          executors += executorHostPort
-          // logInfo("bkLocation = " + bkLocation + ", executorHostPort = " + executorHostPort)
-        }
-      } else {
-        // Typically while testing, etc - revert to simply using host.
-        for (bkLocation <- blockLocations) {
-          executors += bkLocation.host
-          // logInfo("bkLocation = " + bkLocation + ", executorHostPort = " + executorHostPort)
-        }
-      }
-
-      executorLocations.put(blockId, executors.toSeq.toList)
+    val blockLocations: Seq[Seq[BlockManagerId]] = if (env != null) {
+      env.blockManager.getLocationBlockIds(blockIds)
+    } else {
+      blockManagerMaster.getLocations(blockIds)
     }
 
-    executorLocations
+    val blockManagers = new HashMap[String, Seq[BlockManagerId]]
+    for (i <- 0 until blockIds.length) {
+      blockManagers(blockIds(i)) = blockLocations(i)
+    }
+    blockManagers.toMap
   }
 
+  def blockIdsToExecutorIds(
+      blockIds: Array[String],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null)
+    : Map[String, Seq[String]] =
+  {
+    blockIdsToBlockManagers(blockIds, env, blockManagerMaster).mapValues(s => s.map(_.executorId))
+  }
+
+  def blockIdsToHosts(
+      blockIds: Array[String],
+      env: SparkEnv,
+      blockManagerMaster: BlockManagerMaster = null)
+    : Map[String, Seq[String]] =
+  {
+    blockIdsToBlockManagers(blockIds, env, blockManagerMaster).mapValues(s => s.map(_.host))
+  }
 }
 

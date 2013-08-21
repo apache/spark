@@ -17,17 +17,19 @@
 
 package spark.scheduler.cluster
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import akka.actor._
-import akka.util.duration._
+import akka.dispatch.Await
 import akka.pattern.ask
+import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
 import akka.util.Duration
+import akka.util.duration._
 
 import spark.{Utils, SparkException, Logging, TaskState}
-import akka.dispatch.Await
-import java.util.concurrent.atomic.AtomicInteger
-import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
+import spark.scheduler.cluster.StandaloneClusterMessages._
 
 /**
  * A standalone scheduler backend, which waits for standalone executors to connect to it through
@@ -36,15 +38,15 @@ import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClient
  */
 private[spark]
 class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: ActorSystem)
-  extends SchedulerBackend with Logging {
-
+  extends SchedulerBackend with Logging
+{
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     private val executorActor = new HashMap[String, ActorRef]
     private val executorAddress = new HashMap[String, Address]
-    private val executorHostPort = new HashMap[String, String]
+    private val executorHost = new HashMap[String, String]
     private val freeCores = new HashMap[String, Int]
     private val actorToExecutorId = new HashMap[ActorRef, String]
     private val addressToExecutorId = new HashMap[Address, String]
@@ -52,6 +54,10 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
       context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+
+      // Periodically revive offers to allow delay scheduling to work
+      val reviveInterval = System.getProperty("spark.scheduler.revive.interval", "1000").toLong
+      context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
     def receive = {
@@ -64,7 +70,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
           sender ! RegisteredExecutor(sparkProperties)
           context.watch(sender)
           executorActor(executorId) = sender
-          executorHostPort(executorId) = hostPort
+          executorHost(executorId) = Utils.parseHostPort(hostPort)._1
           freeCores(executorId) = cores
           executorAddress(executorId) = sender.path.address
           actorToExecutorId(sender) = executorId
@@ -104,13 +110,13 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
     // Make fake resource offers on all executors
     def makeOffers() {
       launchTasks(scheduler.resourceOffers(
-        executorHostPort.toArray.map {case (id, hostPort) => new WorkerOffer(id, hostPort, freeCores(id))}))
+        executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
     }
 
     // Make fake resource offers on just one executor
     def makeOffers(executorId: String) {
       launchTasks(scheduler.resourceOffers(
-        Seq(new WorkerOffer(executorId, executorHostPort(executorId), freeCores(executorId)))))
+        Seq(new WorkerOffer(executorId, executorHost(executorId), freeCores(executorId)))))
     }
 
     // Launch tasks returned by a set of resource offers
@@ -129,9 +135,8 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
         actorToExecutorId -= executorActor(executorId)
         addressToExecutorId -= executorAddress(executorId)
         executorActor -= executorId
-        executorHostPort -= executorId
+        executorHost -= executorId
         freeCores -= executorId
-        executorHostPort -= executorId
         totalCoreCount.addAndGet(-numCores)
         scheduler.executorLost(executorId, SlaveLost(reason))
       }

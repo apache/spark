@@ -17,8 +17,7 @@
 
 package spark.rdd
 
-import spark.{Partitioner, RDD, SparkEnv, ShuffleDependency, Partition, TaskContext}
-import spark.SparkContext._
+import spark.{Dependency, Partitioner, RDD, SparkEnv, ShuffleDependency, Partition, TaskContext}
 
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
@@ -30,15 +29,24 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
  * The resulting RDD from a shuffle (e.g. repartitioning of data).
  * @param prev the parent RDD.
  * @param part the partitioner used to partition the RDD
- * @param serializerClass class name of the serializer to use.
  * @tparam K the key class.
  * @tparam V the value class.
  */
-class ShuffledRDD[K, V](
-    @transient prev: RDD[(K, V)],
-    part: Partitioner,
-    serializerClass: String = null)
-  extends RDD[(K, V)](prev.context, List(new ShuffleDependency(prev, part, serializerClass))) {
+class ShuffledRDD[K, V, P <: Product2[K, V] : ClassManifest](
+    @transient var prev: RDD[P],
+    part: Partitioner)
+  extends RDD[P](prev.context, Nil) {
+
+  private var serializerClass: String = null
+
+  def setSerializer(cls: String): ShuffledRDD[K, V, P] = {
+    serializerClass = cls
+    this
+  }
+
+  override def getDependencies: Seq[Dependency[_]] = {
+    List(new ShuffleDependency(prev, part, serializerClass))
+  }
 
   override val partitioner = Some(part)
 
@@ -46,9 +54,14 @@ class ShuffledRDD[K, V](
     Array.tabulate[Partition](part.numPartitions)(i => new ShuffledRDDPartition(i))
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[(K, V)] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[P] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
-    SparkEnv.get.shuffleFetcher.fetch[K, V](shuffledId, split.index, context.taskMetrics,
+    SparkEnv.get.shuffleFetcher.fetch[P](shuffledId, split.index, context.taskMetrics,
       SparkEnv.get.serializerManager.get(serializerClass))
+  }
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    prev = null
   }
 }

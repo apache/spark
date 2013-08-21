@@ -33,15 +33,16 @@ import spark.storage.BlockManagerId
  * initiated a job (e.g. count(), save(), etc). For shuffle map stages, we also track the nodes
  * that each output partition is on.
  *
- * Each Stage also has a priority, which is (by default) based on the job it was submitted in.
- * This allows Stages from earlier jobs to be computed first or recovered faster on failure.
+ * Each Stage also has a jobId, identifying the job that first submitted the stage.  When FIFO
+ * scheduling is used, this allows Stages from earlier jobs to be computed first or recovered
+ * faster on failure.
  */
 private[spark] class Stage(
     val id: Int,
     val rdd: RDD[_],
     val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
-    val priority: Int,
+    val jobId: Int,
     callSite: Option[String])
   extends Logging {
 

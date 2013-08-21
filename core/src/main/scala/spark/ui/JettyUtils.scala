@@ -17,20 +17,19 @@
 
 package spark.ui
 
-import annotation.tailrec
-
 import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
 
-import net.liftweb.json.{JValue, pretty, render}
+import scala.annotation.tailrec
+import scala.util.{Try, Success, Failure}
+import scala.util.parsing.json.JSONType
+import scala.xml.Node
 
 import org.eclipse.jetty.server.{Server, Request, Handler}
 import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHandler, AbstractHandler}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
-import scala.util.{Try, Success, Failure}
-import scala.xml.Node
-
 import spark.Logging
+
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
 private[spark] object JettyUtils extends Logging {
@@ -39,8 +38,8 @@ private[spark] object JettyUtils extends Logging {
   type Responder[T] = HttpServletRequest => T
 
   // Conversions from various types of Responder's to jetty Handlers
-  implicit def jsonResponderToHandler(responder: Responder[JValue]): Handler =
-    createHandler(responder, "text/json", (in: JValue) => pretty(render(in)))
+  implicit def jsonResponderToHandler(responder: Responder[JSONType]): Handler =
+    createHandler(responder, "text/json", (in: JSONType) => in.toString)
 
   implicit def htmlResponderToHandler(responder: Responder[Seq[Node]]): Handler =
     createHandler(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)
@@ -48,7 +47,7 @@ private[spark] object JettyUtils extends Logging {
   implicit def textResponderToHandler(responder: Responder[String]): Handler =
     createHandler(responder, "text/plain")
 
-  private def createHandler[T <% AnyRef](responder: Responder[T], contentType: String,
+  def createHandler[T <% AnyRef](responder: Responder[T], contentType: String,
                                  extractFn: T => String = (in: Any) => in.toString): Handler = {
     new AbstractHandler {
       def handle(target: String,
