@@ -74,7 +74,7 @@
     <akka.version>2.0.3</akka.version>
     <slf4j.version>1.7.2</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>1.2.1</hadoop.version>
+    <hadoop.version>1.0.4</hadoop.version>
     <!-- <hadoop.version>2.0.0-mr1-cdh4.1.2</hadoop.version> -->
 
     <PermGen>64m</PermGen>

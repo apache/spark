@@ -28,7 +28,7 @@ object SparkBuild extends Build {
   // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
   // Note that these variables can be set through the environment variables
   // SPARK_HADOOP_VERSION and SPARK_WITH_YARN.
-  val DEFAULT_HADOOP_VERSION = "1.2.1"
+  val DEFAULT_HADOOP_VERSION = "1.0.4"
   val DEFAULT_WITH_YARN = false
 
   // HBase version; set as appropriate.
