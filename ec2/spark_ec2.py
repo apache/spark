@@ -562,7 +562,7 @@ def ssh(host, opts, command):
     except subprocess.CalledProcessError as e:
       if (tries > 2):
         raise e
-      print "Error connecting to host {0}, sleeping 30".format(e)
+      print "Couldn't connect to host {0}, waiting 30 seconds".format(e)
       time.sleep(30)
       tries = tries + 1
 
