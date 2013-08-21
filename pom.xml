@@ -579,8 +579,8 @@
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
-        <!-- <yarn.version>0.23.7</yarn.version> -->
-        <yarn.version>2.0.5-alpha</yarn.version>
+        <!-- <hadoop.version>0.23.7</hadoop.version> -->
+        <hadoop.version>2.0.5-alpha</hadoop.version>
       </properties>
 
       <modules>
@@ -607,7 +607,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
-            <version>${yarn.version}</version>
+            <version>${hadoop.version}</version>
             <exclusions>
               <exclusion>
                 <groupId>asm</groupId>
@@ -638,7 +638,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-api</artifactId>
-            <version>${yarn.version}</version>
+            <version>${hadoop.version}</version>
             <exclusions>
               <exclusion>
                 <groupId>asm</groupId>
@@ -669,7 +669,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-common</artifactId>
-            <version>${yarn.version}</version>
+            <version>${hadoop.version}</version>
             <exclusions>
               <exclusion>
                 <groupId>asm</groupId>
@@ -700,7 +700,7 @@
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-yarn-client</artifactId>
-            <version>${yarn.version}</version>
+            <version>${hadoop.version}</version>
             <exclusions>
               <exclusion>
                 <groupId>asm</groupId>
