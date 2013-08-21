@@ -71,19 +71,19 @@ described below.
 
 When developing a Spark application, specify the Hadoop version by adding the
 "hadoop-client" artifact to your project's dependencies. For example, if you're
-using Hadoop 0.23.9 and build your application using SBT, add this to
+using Hadoop 1.0.1 and build your application using SBT, add this to
 `libraryDependencies`:
 
-    // "force()" is required because "0.23.9" is less than Spark's default of "1.0.4"
-    "org.apache.hadoop" % "hadoop-client" % "0.23.9" force()
+    // "force()" is required because "1.0.1" is less than Spark's default of "1.0.4"
+    "org.apache.hadoop" % "hadoop-client" % "1.0.1" force()
 
 If your project is built with Maven, add this to your POM file's `<dependencies>` section:
 
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
-      <!-- the brackets are needed to tell Maven that this is a hard dependency on version "0.23.9" exactly -->
-      <version>[0.23.9]</version>
+      <!-- the brackets are needed to tell Maven that this is a hard dependency on version "1.0.1" exactly -->
+      <version>[1.0.1]</version>
     </dependency>
 
 
