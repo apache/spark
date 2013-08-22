@@ -134,7 +134,6 @@ object SparkBuild extends Build {
 */
 
     libraryDependencies ++= Seq(
-      "io.netty" % "netty" % "3.5.3.Final",
       "org.eclipse.jetty" % "jetty-server" % "7.6.8.v20121106",
       "org.scalatest" %% "scalatest" % "1.9.1" % "test",
       "org.scalacheck" %% "scalacheck" % "1.10.0" % "test",
@@ -165,17 +164,15 @@ object SparkBuild extends Build {
     name := "spark-core",
     resolvers ++= Seq(
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      "Spray Repository" at "http://repo.spray.cc/",
       "Cloudera Repository" at "https://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
 
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "14.0.1",
       "com.google.code.findbugs" % "jsr305" % "1.3.9",
-      "log4j" % "log4j" % "1.2.16",
+      "log4j" % "log4j" % "1.2.17",
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
-      "commons-daemon" % "commons-daemon" % "1.0.10",
       "com.ning" % "compress-lzf" % "0.8.4",
       "org.xerial.snappy" % "snappy-java" % "1.0.5",
       "org.ow2.asm" % "asm" % "4.0",
