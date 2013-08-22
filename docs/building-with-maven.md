@@ -8,22 +8,26 @@ title: Building Spark with Maven
 
 Building Spark using Maven Requires Maven 3 (the build process is tested with Maven 3.0.4) and Java 1.6 or newer.
 
-Building with Maven requires that a Hadoop profile be specified explicitly at the command line, there is no default. There are two profiles to choose from, one for building for Hadoop 1 or Hadoop 2.
+## Specifying the Hadoop version ##
 
-for Hadoop 1 (using 0.20.205.0) use:
+To enable support for HDFS and other Hadoop-supported storage systems, specify the exact Hadoop version by setting the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default.
 
-    $ mvn -Phadoop1 clean install
+For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop versions without YARN, use:
 
+    # Apache Hadoop 1.2.1
+    $ mvn -Dhadoop.version=1.2.1 clean install
 
-for Hadoop 2 (using 2.0.0-mr1-cdh4.1.1) use:
+    # Cloudera CDH 4.2.0 with MapReduce v1
+    $ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 clean install
 
-    $ mvn -Phadoop2 clean install
+For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions with YARN, enable the "hadoop2-yarn" profile:
 
-It uses the scala-maven-plugin which supports incremental and continuous compilation. E.g.
+    # Apache Hadoop 2.0.5-alpha
+    $ mvn -Phadoop2-yarn -Dhadoop.version=2.0.5-alpha clean install
 
-    $ mvn -Phadoop2 scala:cc
+    # Cloudera CDH 4.2.0 with MapReduce v2
+    $ mvn -Phadoop2-yarn -Dhadoop.version=2.0.0-cdh4.2.0 clean install
 
-…should run continuous compilation (i.e. wait for changes). However, this has not been tested extensively.
 
 ## Spark Tests in Maven ##
 
@@ -31,11 +35,11 @@ Tests are run by default via the scalatest-maven-plugin. With this you can do th
 
 Skip test execution (but not compilation):
 
-    $ mvn -DskipTests -Phadoop2 clean install
+    $ mvn -Dhadoop.version=... -DskipTests clean install
 
 To run a specific test suite:
 
-    $ mvn -Phadoop2 -Dsuites=spark.repl.ReplSuite test
+    $ mvn -Dhadoop.version=... -Dsuites=spark.repl.ReplSuite test
 
 
 ## Setting up JVM Memory Usage Via Maven ##
@@ -53,6 +57,15 @@ To fix these, you can do the following:
     export MAVEN_OPTS="-Xmx1024m -XX:MaxPermSize=128M"
 
 
+## Continuous Compilation ##
+
+We use the scala-maven-plugin which supports incremental and continuous compilation. E.g.
+
+    $ mvn scala:cc
+
+…should run continuous compilation (i.e. wait for changes). However, this has not been tested extensively.
+
+
 ## Using With IntelliJ IDEA ##
 
 This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the pom.xml file in the project root folder, you only need to activate either the hadoop1 or hadoop2 profile in the "Maven Properties" popout. We have not tried Eclipse/Scala IDE with this.
@@ -61,6 +74,6 @@ This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the
 
 It includes support for building a Debian package containing a 'fat-jar' which includes the repl, the examples and bagel. This can be created by specifying the deb profile:
 
-    $ mvn -Phadoop2,deb clean install
+    $ mvn -Pdeb clean install
 
 The debian package can then be found under repl/target. We added the short commit hash to the file name so that we can distinguish individual packages build for SNAPSHOT versions.
