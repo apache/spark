@@ -24,10 +24,9 @@ import AssemblyKeys._
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
-  // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
-  // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
-  // Note that these variables can be set through the environment variables
-  // SPARK_HADOOP_VERSION and SPARK_WITH_YARN.
+  // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
+  // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
+  // through the environment variables SPARK_HADOOP_VERSION and SPARK_WITH_YARN.
   val DEFAULT_HADOOP_VERSION = "1.0.4"
   val DEFAULT_WITH_YARN = false
 

@@ -48,7 +48,7 @@ Hadoop, you must build Spark against the same version that your cluster runs.
 You can change the version by setting the `SPARK_HADOOP_VERSION` environment
 when building Spark.
 
-For Apache Hadoop versions 1.x, 0.20.x, Cloudera CDH MRv1, and other Hadoop
+For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop
 versions without YARN, use:
 
     # Apache Hadoop 1.2.1

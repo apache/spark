@@ -12,7 +12,7 @@ Building Spark using Maven Requires Maven 3 (the build process is tested with Ma
 
 To enable support for HDFS and other Hadoop-supported storage systems, specify the exact Hadoop version by setting the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default.
 
-For Apache Hadoop versions 1.x, 0.20.x, Cloudera CDH MRv1, and other Hadoop versions without YARN, use:
+For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop versions without YARN, use:
 
     # Apache Hadoop 1.2.1
     $ mvn -Dhadoop.version=1.2.1 clean install
