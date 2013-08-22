@@ -172,6 +172,7 @@ object SparkBuild extends Build {
       "log4j" % "log4j" % "1.2.17",
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
+      "commons-daemon" % "commons-daemon" % "1.0.10",  // workaround for bug HADOOP-9407
       "com.ning" % "compress-lzf" % "0.8.4",
       "org.xerial.snappy" % "snappy-java" % "1.0.5",
       "org.ow2.asm" % "asm" % "4.0",
