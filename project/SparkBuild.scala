@@ -57,14 +57,14 @@ object SparkBuild extends Build {
 
   // Allows build configuration to be set through environment variables
   lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
-  lazy val isYarnMode = scala.util.Properties.envOrNone("SPARK_WITH_YARN") match {
+  lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_WITH_YARN") match {
     case None => DEFAULT_WITH_YARN
     case Some(v) => v.toBoolean
   }
 
   // Conditionally include the yarn sub-project
-  lazy val maybeYarn = if(isYarnMode) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
-  lazy val maybeYarnRef = if(isYarnMode) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
+  lazy val maybeYarn = if(isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
+  lazy val maybeYarnRef = if(isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
   lazy val allProjects = Seq[ProjectReference](core, repl, examples, bagel, streaming, mllib, tools) ++ maybeYarnRef
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
@@ -253,7 +253,14 @@ object SparkBuild extends Build {
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def yarnSettings = sharedSettings ++ Seq(
-    name := "spark-yarn",
+    name := "spark-yarn"
+  ) ++ extraYarnSettings ++ assemblySettings ++ extraAssemblySettings
+
+  // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
+  // if we refer to nonexistent dependencies (e.g. hadoop-yarn-api from a Hadoop version without YARN).
+  def extraYarnSettings = if(isYarnEnabled) yarnEnabledSettings else Seq()
+
+  def yarnEnabledSettings = Seq(
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
       "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
@@ -261,7 +268,7 @@ object SparkBuild extends Build {
       "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
       "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm)
     )
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
     mergeStrategy in assembly := {
