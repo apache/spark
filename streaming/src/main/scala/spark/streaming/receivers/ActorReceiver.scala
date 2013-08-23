@@ -28,6 +28,8 @@ object ReceiverSupervisorStrategy {
  * A receiver trait to be mixed in with your Actor to gain access to
  * pushBlock API.
  *
+ * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
+ * 
  * @example {{{
  * 	class MyActor extends Actor with Receiver{
  * 		def receive {
