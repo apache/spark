@@ -24,10 +24,14 @@ FWDIR="$(cd `dirname $0`; pwd)"
 export SPARK_HOME="$FWDIR"
 
 # Exit if the user hasn't compiled Spark
-if [ ! -e "$SPARK_HOME/repl/target" ]; then
-  echo "Failed to find Spark classes in $SPARK_HOME/repl/target" >&2
-  echo "You need to compile Spark before running this program" >&2
-  exit 1
+if [ ! -f "$FWDIR/RELEASE" ]; then
+  # Exit if the user hasn't compiled Spark
+  ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*.jar >& /dev/null
+  if [[ $? != 0 ]]; then
+    echo "Failed to find Spark assembly in $FWDIR/assembly/target" >&2
+    echo "You need to compile Spark before running this program" >&2
+    exit 1
+  fi
 fi
 
 # Load environment variables from conf/spark-env.sh, if it exists

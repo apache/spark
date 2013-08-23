@@ -94,11 +94,14 @@ echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE
 cp $FWDIR/assembly/target/*/*assembly*.jar "$DISTDIR/jars/"
 
 # Copy other things
+mkdir "$DISTDIR"/conf
+cp -r "$FWDIR/conf/*.template" "$DISTDIR"
 cp -r "$FWDIR/bin" "$DISTDIR"
-cp -r "$FWDIR/conf" "$DISTDIR"
+cp -r "$FWDIR/python" "$DISTDIR"
 cp "$FWDIR/spark-class" "$DISTDIR"
 cp "$FWDIR/spark-shell" "$DISTDIR"
 cp "$FWDIR/spark-executor" "$DISTDIR"
+cp "$FWDIR/pyspark" "$DISTDIR"
 
 
 if [ "$MAKE_TGZ" == "true" ]; then
