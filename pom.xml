@@ -492,7 +492,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
-            <argLine>-Xms64m -Xmx1024m</argLine>
+            <argLine>-Xms64m -Xmx3g</argLine>
             <stderr/>
           </configuration>
           <executions>
