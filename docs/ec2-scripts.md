@@ -74,7 +74,7 @@ another.
      bidding for the given maximum price (in dollars).
 -    `--spark-version=VERSION` will pre-load the cluster with the
      specified version of Spark. VERSION can be a version number
-     (e.g. "0.7.2") or a specific git hash. By default, a recent
+     (e.g. "0.7.3") or a specific git hash. By default, a recent
      version will be used.
 -    If one of your launches fails due to e.g. not having the right
 permissions on your private key file, you can run `launch` with the
