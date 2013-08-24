@@ -27,9 +27,9 @@ Spark also supports building using Maven. If you would like to build using Maven
 # Testing the Build
 
 Spark comes with a number of sample programs in the `examples` directory.
-To run one of the samples, use `./run <class> <params>` in the top-level Spark directory
+To run one of the samples, use `./run-example <class> <params>` in the top-level Spark directory
 (the `run` script sets up the appropriate paths and launches that program).
-For example, `./run spark.examples.SparkPi` will run a sample program that estimates Pi. Each of the
+For example, `./run-example spark.examples.SparkPi` will run a sample program that estimates Pi. Each of the
 examples prints usage help if no params are given.
 
 Note that all of the sample programs take a `<master>` parameter specifying the cluster URL

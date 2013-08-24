@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package spark.bagel.examples
+package spark.examples.bagel
 
 import spark._
 import serializer.{DeserializationStream, SerializationStream, SerializerInstance}

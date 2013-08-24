@@ -20,16 +20,16 @@ Spark and its example programs, run:
 
 Spark also supports building using Maven. If you would like to build using Maven,
 see the [instructions for building Spark with Maven](http://spark-project.org/docs/latest/building-with-maven.html)
-in the spark documentation..
+in the Spark documentation..
 
 To run Spark, you will need to have Scala's bin directory in your `PATH`, or
 you will need to set the `SCALA_HOME` environment variable to point to where
 you've installed Scala. Scala must be accessible through one of these
 methods on your cluster's worker nodes as well as its master.
 
-To run one of the examples, use `./run <class> <params>`. For example:
+To run one of the examples, use `./run-example <class> <params>`. For example:
 
-    ./run spark.examples.SparkLR local[2]
+    ./run-example spark.examples.SparkLR local[2]
 
 will run the Logistic Regression example locally on 2 CPUs.
 

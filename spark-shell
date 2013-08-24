@@ -79,8 +79,7 @@ if [[ ! $? ]]; then
   saved_stty=""
 fi
 
-export SPARK_LAUNCH_WITH_SCALA=${SPARK_LAUNCH_WITH_SCALA:-1}
-$FWDIR/run $OPTIONS spark.repl.Main "$@"
+$FWDIR/spark-class $OPTIONS spark.repl.Main "$@"
 
 # record the exit status lest it be overwritten:
 # then reenable echo and propagate the code.

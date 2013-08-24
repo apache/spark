@@ -30,79 +30,25 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
-CORE_DIR="$FWDIR/core"
-REPL_DIR="$FWDIR/repl"
-REPL_BIN_DIR="$FWDIR/repl-bin"
-EXAMPLES_DIR="$FWDIR/examples"
-BAGEL_DIR="$FWDIR/bagel"
-MLLIB_DIR="$FWDIR/mllib"
-TOOLS_DIR="$FWDIR/tools"
-YARN_DIR="$FWDIR/yarn"
-STREAMING_DIR="$FWDIR/streaming"
-PYSPARK_DIR="$FWDIR/python"
-
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH"
-
-function dev_classpath {
-  CLASSPATH="$CLASSPATH:$FWDIR/conf"
-  CLASSPATH="$CLASSPATH:$CORE_DIR/target/scala-$SCALA_VERSION/classes"
-  if [ -n "$SPARK_TESTING" ] ; then
-    CLASSPATH="$CLASSPATH:$CORE_DIR/target/scala-$SCALA_VERSION/test-classes"
-    CLASSPATH="$CLASSPATH:$STREAMING_DIR/target/scala-$SCALA_VERSION/test-classes"
-  fi
-  CLASSPATH="$CLASSPATH:$CORE_DIR/src/main/resources"
-  CLASSPATH="$CLASSPATH:$REPL_DIR/target/scala-$SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$EXAMPLES_DIR/target/scala-$SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$STREAMING_DIR/target/scala-$SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$STREAMING_DIR/lib/org/apache/kafka/kafka/0.7.2-spark/*" # <-- our in-project Kafka Jar
-  if [ -e "$FWDIR/lib_managed" ]; then
-    CLASSPATH="$CLASSPATH:$FWDIR/lib_managed/jars/*"
-    CLASSPATH="$CLASSPATH:$FWDIR/lib_managed/bundles/*"
-  fi
-  CLASSPATH="$CLASSPATH:$REPL_DIR/lib/*"
-  # Add the shaded JAR for Maven builds
-  if [ -e $REPL_BIN_DIR/target ]; then
-    for jar in `find "$REPL_BIN_DIR/target" -name 'spark-repl-*-shaded.jar'`; do
-      CLASSPATH="$CLASSPATH:$jar"
-    done
-    # The shaded JAR doesn't contain examples, so include those separately
-    for jar in `find "$EXAMPLES_DIR/target" -name 'spark-examples*[0-9T].jar'`; do
-      CLASSPATH="$CLASSPATH:$jar"
-    done
-  fi
-  CLASSPATH="$CLASSPATH:$BAGEL_DIR/target/scala-$SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$MLLIB_DIR/target/scala-$SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$TOOLS_DIR/target/scala-$SCALA_VERSION/classes"
-  CLASSPATH="$CLASSPATH:$YARN_DIR/target/scala-$SCALA_VERSION/classes"
-  for jar in `find $PYSPARK_DIR/lib -name '*jar'`; do
-    CLASSPATH="$CLASSPATH:$jar"
-  done
-
-  # Add Scala standard library
-  if [ -z "$SCALA_LIBRARY_PATH" ]; then
-    if [ -z "$SCALA_HOME" ]; then
-      echo "SCALA_HOME is not set" >&2
-      exit 1
-    fi
-    SCALA_LIBRARY_PATH="$SCALA_HOME/lib"
-  fi
-  CLASSPATH="$CLASSPATH:$SCALA_LIBRARY_PATH/scala-library.jar"
-  CLASSPATH="$CLASSPATH:$SCALA_LIBRARY_PATH/scala-compiler.jar"
-  CLASSPATH="$CLASSPATH:$SCALA_LIBRARY_PATH/jline.jar"
-}
-
-function release_classpath {
-  CLASSPATH="$CLASSPATH:$FWDIR/jars/*"
-}
-
+CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 if [ -f "$FWDIR/RELEASE" ]; then
-  release_classpath
+  ASSEMBLY_JAR=`ls "$FWDIR"/jars/spark-assembly*.jar`
 else
-  dev_classpath
+  ASSEMBLY_JAR=`ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*.jar`
+fi
+CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
+
+# Add test classes if we're running from SBT or Maven with SPARK_TESTING set to 1
+if [[ $SPARK_TESTING == 1 ]]; then
+  CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/streaming/target/scala-$SCALA_VERSION/test-classes"
 fi
 
-# Add hadoop conf dir - else FileSystem.*, etc fail !
+# Add hadoop conf dir if given -- otherwise FileSystem.*, etc fail !
 # Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
 # the configurtion files.
 if [ "x" != "x$HADOOP_CONF_DIR" ]; then

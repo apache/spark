@@ -66,51 +66,27 @@ case "$1" in
     ;;
 esac
 
-# Figure out whether to run our class with java or with the scala launcher.
-# In most cases, we'd prefer to execute our process with java because scala
-# creates a shell script as the parent of its Java process, which makes it
-# hard to kill the child with stuff like Process.destroy(). However, for
-# the Spark shell, the wrapper is necessary to properly reset the terminal
-# when we exit, so we allow it to set a variable to launch with scala.
-# We still fall back on java for the shell if this is a "release" created
-# from make-distribution.sh since it's possible scala is not installed
-# but we have everything we need to run the shell.
-if [[ "$SPARK_LAUNCH_WITH_SCALA" == "1" && ! -f "$FWDIR/RELEASE" ]]; then
-  if [ "$SCALA_HOME" ]; then
-    RUNNER="${SCALA_HOME}/bin/scala"
-  else
-    if [ `command -v scala` ]; then
-      RUNNER="scala"
-    else
-      echo "SCALA_HOME is not set and scala is not in PATH" >&2
-      exit 1
-    fi
-  fi
+# Find the java binary
+if [ -n "${JAVA_HOME}" ]; then
+  RUNNER="${JAVA_HOME}/bin/java"
 else
-  if [ -n "${JAVA_HOME}" ]; then
-    RUNNER="${JAVA_HOME}/bin/java"
+  if [ `command -v java` ]; then
+    RUNNER="java"
   else
-    if [ `command -v java` ]; then
-      RUNNER="java"
-    else
-      echo "JAVA_HOME is not set" >&2
-      exit 1
-    fi
+    echo "JAVA_HOME is not set" >&2
+    exit 1
   fi
-  if [[ ! -f "$FWDIR/RELEASE" && -z "$SCALA_LIBRARY_PATH" ]]; then
-    if [ -z "$SCALA_HOME" ]; then
-      echo "SCALA_HOME is not set" >&2
-      exit 1
-    fi
-    SCALA_LIBRARY_PATH="$SCALA_HOME/lib"
+fi
+if [[ ! -f "$FWDIR/RELEASE" && -z "$SCALA_LIBRARY_PATH" ]]; then
+  if [ -z "$SCALA_HOME" ]; then
+    echo "SCALA_HOME is not set" >&2
+    exit 1
   fi
+  SCALA_LIBRARY_PATH="$SCALA_HOME/lib"
 fi
 
-# Figure out how much memory to use per executor and set it as an environment
-# variable so that our process sees it and can report it to Mesos
-if [ -z "$SPARK_MEM" ] ; then
-  SPARK_MEM="512m"
-fi
+# Set SPARK_MEM if it isn't already set since we also use it for this process
+SPARK_MEM=${SPARK_MEM:-512m}
 export SPARK_MEM
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
@@ -125,32 +101,12 @@ export JAVA_OPTS
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
 
 if [ ! -f "$FWDIR/RELEASE" ]; then
-  CORE_DIR="$FWDIR/core"
-  EXAMPLES_DIR="$FWDIR/examples"
-  REPL_DIR="$FWDIR/repl"
-
   # Exit if the user hasn't compiled Spark
-  if [ ! -e "$CORE_DIR/target" ]; then
-    echo "Failed to find Spark classes in $CORE_DIR/target" >&2
+  ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*.jar >& /dev/null
+  if [[ $? != 0 ]]; then
+    echo "Failed to find Spark assembly in $FWDIR/assembly/target" >&2
     echo "You need to compile Spark before running this program" >&2
     exit 1
-  fi
-
-  if [[ "$@" = *repl* && ! -e "$REPL_DIR/target" ]]; then
-    echo "Failed to find Spark classes in $REPL_DIR/target" >&2
-    echo "You need to compile Spark repl module before running this program" >&2
-    exit 1
-  fi
-
-  # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
-  # to avoid the -sources and -doc packages that are built by publish-local.
-  if [ -e "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar ]; then
-    # Use the JAR from the SBT build
-    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/scala-$SCALA_VERSION/spark-examples"*[0-9T].jar`
-  fi
-  if [ -e "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar ]; then
-    # Use the JAR from the Maven build
-    export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR/target/spark-examples"*[0-9T].jar`
   fi
 fi
 
@@ -158,18 +114,11 @@ fi
 CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
 export CLASSPATH
 
-if [ "$SPARK_LAUNCH_WITH_SCALA" == "1" ]; then
-  EXTRA_ARGS=""     # Java options will be passed to scala as JAVA_OPTS
-else
-  # The JVM doesn't read JAVA_OPTS by default so we need to pass it in
-  EXTRA_ARGS="$JAVA_OPTS"
-fi
-
-command="$RUNNER -cp \"$CLASSPATH\" $EXTRA_ARGS $@"
 if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
-  echo "Spark Command: $command"
+  echo -n "Spark Command: "
+  echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
   echo "========================================"
   echo
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"
+exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"

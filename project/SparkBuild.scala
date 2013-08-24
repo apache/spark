@@ -26,30 +26,35 @@ import AssemblyKeys._
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
-  // through the environment variables SPARK_HADOOP_VERSION and SPARK_WITH_YARN.
+  // through the environment variables SPARK_HADOOP_VERSION and SPARK_YARN.
   val DEFAULT_HADOOP_VERSION = "1.0.4"
-  val DEFAULT_WITH_YARN = false
+  val DEFAULT_YARN = false
 
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects:_*)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects: _*)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
-  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn(core) dependsOn(bagel) dependsOn(mllib) dependsOn(maybeYarn:_*)
+  lazy val repl = Project("repl", file("repl"), settings = replSettings)
+    .dependsOn(core, bagel, mllib) dependsOn(maybeYarn: _*)
 
-  lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core) dependsOn (streaming) dependsOn(mllib)
+  lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
+    .dependsOn(core, mllib, bagel, streaming)
 
-  lazy val tools = Project("tools", file("tools"), settings = examplesSettings) dependsOn (core) dependsOn (streaming)
+  lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
-  lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
+  lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn(core)
 
-  lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
+  lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
-  lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn (core)
+  lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
-  lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn (core)
+  lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
+
+  lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
+    .dependsOn(core, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -57,15 +62,16 @@ object SparkBuild extends Build {
 
   // Allows build configuration to be set through environment variables
   lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
-  lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_WITH_YARN") match {
-    case None => DEFAULT_WITH_YARN
+  lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_YARN") match {
+    case None => DEFAULT_YARN
     case Some(v) => v.toBoolean
   }
 
   // Conditionally include the yarn sub-project
   lazy val maybeYarn = if(isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
   lazy val maybeYarnRef = if(isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
-  lazy val allProjects = Seq[ProjectReference](core, repl, examples, bagel, streaming, mllib, tools) ++ maybeYarnRef
+  lazy val allProjects = Seq[ProjectReference](
+    core, repl, examples, bagel, streaming, mllib, tools, assemblyProj) ++ maybeYarnRef
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
@@ -100,8 +106,8 @@ object SparkBuild extends Build {
       <url>http://spark-project.org/</url>
       <licenses>
         <license>
-          <name>BSD License</name>
-          <url>https://github.com/mesos/spark/blob/master/LICENSE</url>
+          <name>Apache 2.0 License</name>
+          <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
           <distribution>repo</distribution>
         </license>
       </licenses>
@@ -195,7 +201,7 @@ object SparkBuild extends Build {
       "com.twitter" % "chill_2.9.3" % "0.3.1",
       "com.twitter" % "chill-java" % "0.3.1"
     )
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def rootSettings = sharedSettings ++ Seq(
     publish := {}
@@ -204,7 +210,7 @@ object SparkBuild extends Build {
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
@@ -223,7 +229,7 @@ object SparkBuild extends Build {
         exclude("org.apache.cassandra.deps", "avro")
         excludeAll(excludeSnappy)
     )
-  )
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def toolsSettings = sharedSettings ++ Seq(
     name := "spark-tools"
@@ -251,7 +257,7 @@ object SparkBuild extends Build {
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)
     )
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def yarnSettings = sharedSettings ++ Seq(
     name := "spark-yarn"
@@ -271,7 +277,13 @@ object SparkBuild extends Build {
     )
   )
 
-  def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
+  def assemblyProjSettings = sharedSettings ++ Seq(
+    name := "spark-assembly",
+    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" }
+  ) ++ assemblySettings ++ extraAssemblySettings
+
+  def extraAssemblySettings() = Seq(
+    test in assembly := {},
     mergeStrategy in assembly := {
       case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
