@@ -145,8 +145,8 @@ abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Log
   }
 
   /**
-   * Stops the receiver and reports to exception to the tracker.
-   * This should be called whenever an exception has happened on any thread
+   * Stops the receiver and reports exception to the tracker.
+   * This should be called whenever an exception is to be handled on any thread
    * of the receiver.
    */
   protected def stopOnError(e: Exception) {
@@ -202,7 +202,7 @@ abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Log
   }
 
   /**
-   * Batches objects created by a [[spark.streaming.NetworkReceiver]] and puts them into
+   * Batches objects created by a [[spark.streaming.dstream.NetworkReceiver]] and puts them into
    * appropriately named blocks at regular intervals. This class starts two threads,
    * one to periodically start a new batch and prepare the previous batch of as a block,
    * the other to push the blocks into the block manager.

@@ -46,7 +46,7 @@ export TERM=dumb   # Prevents color codes in SBT output
 VERSION=$($FWDIR/sbt/sbt "show version" | tail -1 | cut -f 2 | sed 's/^\([a-zA-Z0-9.-]*\).*/\1/')
 
 # Initialize defaults
-SPARK_HADOOP_VERSION=1.2.1
+SPARK_HADOOP_VERSION=1.0.4
 SPARK_WITH_YARN=false
 MAKE_TGZ=false
 

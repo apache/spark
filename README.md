@@ -16,7 +16,7 @@ Spark requires Scala 2.9.3 (Scala 2.10 is not yet supported). The project is
 built using Simple Build Tool (SBT), which is packaged with it. To build
 Spark and its example programs, run:
 
-    sbt/sbt package
+    sbt/sbt package assembly
 
 Spark also supports building using Maven. If you would like to build using Maven,
 see the [instructions for building Spark with Maven](http://spark-project.org/docs/latest/building-with-maven.html)
@@ -43,10 +43,47 @@ locally with one thread, or "local[N]" to run locally with N threads.
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
-storage systems. Because the HDFS API has changed in different versions of
+storage systems. Because the protocols have changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster runs.
-You can change the version by setting the `HADOOP_VERSION` variable at the top
-of `project/SparkBuild.scala`, then rebuilding Spark.
+You can change the version by setting the `SPARK_HADOOP_VERSION` environment
+when building Spark.
+
+For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop
+versions without YARN, use:
+
+    # Apache Hadoop 1.2.1
+    $ SPARK_HADOOP_VERSION=1.2.1 sbt/sbt package assembly
+
+    # Cloudera CDH 4.2.0 with MapReduce v1
+    $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt package assembly
+
+For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
+with YARN, also set `SPARK_WITH_YARN=true`:
+
+    # Apache Hadoop 2.0.5-alpha
+    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_WITH_YARN=true sbt/sbt package assembly
+
+    # Cloudera CDH 4.2.0 with MapReduce v2
+    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_WITH_YARN=true sbt/sbt package assembly
+
+For convenience, these variables may also be set through the `conf/spark-env.sh` file
+described below.
+
+When developing a Spark application, specify the Hadoop version by adding the
+"hadoop-client" artifact to your project's dependencies. For example, if you're
+using Hadoop 1.0.1 and build your application using SBT, add this entry to
+`libraryDependencies`:
+
+    "org.apache.hadoop" % "hadoop-client" % "1.2.1"
+
+If your project is built with Maven, add this to your POM file's `<dependencies>` section:
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
+      <!-- the brackets are needed to tell Maven that this is a hard dependency on version "1.2.1" exactly -->
+      <version>[1.2.1]</version>
+    </dependency>
 
 
 ## Configuration

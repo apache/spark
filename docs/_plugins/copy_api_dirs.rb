@@ -18,7 +18,7 @@
 require 'fileutils'
 include FileUtils
 
-if ENV['SKIP_API'] != '1'
+if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   # Build Scaladoc for Java/Scala
   projects = ["core", "examples", "repl", "bagel", "streaming", "mllib"]
 

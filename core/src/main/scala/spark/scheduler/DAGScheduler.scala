@@ -435,23 +435,24 @@ class DAGScheduler(
       if (event != null) {
         logDebug("Got event of type " + event.getClass.getName)
       }
-
-      if (event != null) {
-        if (processEvent(event)) {
-          return
+      this.synchronized { // needed in case other threads makes calls into methods of this class
+        if (event != null) {
+          if (processEvent(event)) {
+            return
+          }
         }
-      }
 
-      val time = System.currentTimeMillis() // TODO: use a pluggable clock for testability
-      // Periodically resubmit failed stages if some map output fetches have failed and we have
-      // waited at least RESUBMIT_TIMEOUT. We wait for this short time because when a node fails,
-      // tasks on many other nodes are bound to get a fetch failure, and they won't all get it at
-      // the same time, so we want to make sure we've identified all the reduce tasks that depend
-      // on the failed node.
-      if (failed.size > 0 && time > lastFetchFailureTime + RESUBMIT_TIMEOUT) {
-        resubmitFailedStages()
-      } else {
-        submitWaitingStages()
+        val time = System.currentTimeMillis() // TODO: use a pluggable clock for testability
+        // Periodically resubmit failed stages if some map output fetches have failed and we have
+        // waited at least RESUBMIT_TIMEOUT. We wait for this short time because when a node fails,
+        // tasks on many other nodes are bound to get a fetch failure, and they won't all get it at
+        // the same time, so we want to make sure we've identified all the reduce tasks that depend
+        // on the failed node.
+        if (failed.size > 0 && time > lastFetchFailureTime + RESUBMIT_TIMEOUT) {
+          resubmitFailedStages()
+        } else {
+          submitWaitingStages()
+        }
       }
     }
   }
@@ -789,7 +790,14 @@ class DAGScheduler(
     visitedRdds.contains(target.rdd)
   }
 
-  private def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
+  /**
+   * Synchronized method that might be called from other threads.
+   * @param rdd whose partitions are to be looked at
+   * @param partition to lookup locality information for
+   * @return list of machines that are preferred by the partition
+   */
+  private[spark]
+  def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = synchronized {
     // If the partition is cached, return the cache locations
     val cached = getCacheLocs(rdd)(partition)
     if (!cached.isEmpty) {

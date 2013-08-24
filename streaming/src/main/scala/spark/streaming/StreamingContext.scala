@@ -183,6 +183,7 @@ class StreamingContext private (
 
   /**
    * Create an input stream with any arbitrary user implemented network receiver.
+   * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of NetworkReceiver
    */
   def networkStream[T: ClassManifest](
@@ -195,6 +196,7 @@ class StreamingContext private (
 
   /**
    * Create an input stream with any arbitrary user implemented actor receiver.
+   * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
    * @param storageLevel RDD storage level. Defaults to memory-only.
