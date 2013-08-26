@@ -221,6 +221,10 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // Add Xmx for am memory
     JAVA_OPTS += "-Xmx" + amMemory + "m "
 
+    JAVA_OPTS += " -Djava.io.tmpdir=" + new Path(Environment.PWD.$(),
+                                                 YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+
+
     // Commenting it out for now - so that people can refer to the properties if required. Remove it once cpuset version is pushed out.
     // The context is, default gc for server class machines end up using all cores to do gc - hence if there are multiple containers in same
     // node, spark gc effects all other containers performance (which can also be other spark containers)

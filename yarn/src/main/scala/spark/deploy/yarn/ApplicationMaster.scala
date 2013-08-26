@@ -47,6 +47,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   private var isFinished:Boolean = false
 
   def run() {
+    // setup the directories so things go to yarn approved directories rather
+    // then user specified and /tmp
+    System.setProperty("spark.local.dir", getLocalDirs())
     
     appAttemptId = getApplicationAttemptId()
     resourceManager = registerWithResourceManager()
@@ -88,6 +91,20 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     userThread.join()
 
     System.exit(0)
+  }
+
+  /** Get the Yarn approved local directories. */
+  private def getLocalDirs(): String = {
+    // Hadoop 0.23 and 2.x have different Environment variable names for the
+    // local dirs, so lets check both. We assume one of the 2 is set.
+    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
+    var localDirs = System.getenv("LOCAL_DIRS")
+    val yarnLocalSysDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
+    yarnLocalSysDirs match {
+        case Some(s) => localDirs = s
+        case None => if (localDirs == null) localDirs = ""
+    }
+    return localDirs
   }
   
   private def getApplicationAttemptId(): ApplicationAttemptId = {
