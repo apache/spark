@@ -243,7 +243,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // Command for the ApplicationMaster
     var javaCommand = "java";
     val javaHome = System.getenv("JAVA_HOME")
-    if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")){
+    if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
       javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
     }
 
