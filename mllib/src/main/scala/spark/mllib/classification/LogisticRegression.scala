@@ -54,8 +54,7 @@ class LogisticRegressionWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
     var regParam: Double,
-    var miniBatchFraction: Double,
-    var addIntercept: Boolean)
+    var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel]
   with Serializable {
 
@@ -71,7 +70,7 @@ class LogisticRegressionWithSGD private (
   /**
    * Construct a LogisticRegression object with default parameters
    */
-  def this() = this(1.0, 100, 0.0, 1.0, true)
+  def this() = this(1.0, 100, 0.0, 1.0)
 
   def createModel(weights: Array[Double], intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
@@ -108,7 +107,7 @@ object LogisticRegressionWithSGD {
       initialWeights: Array[Double])
     : LogisticRegressionModel =
   {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction, true).run(
+    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction).run(
       input, initialWeights)
   }
 
@@ -131,7 +130,7 @@ object LogisticRegressionWithSGD {
       miniBatchFraction: Double)
     : LogisticRegressionModel =
   {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction, true).run(
+    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction).run(
       input)
   }
 

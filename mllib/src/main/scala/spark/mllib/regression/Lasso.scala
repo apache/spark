@@ -48,8 +48,7 @@ class LassoWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
     var regParam: Double,
-    var miniBatchFraction: Double,
-    var addIntercept: Boolean)
+    var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LassoModel]
   with Serializable {
 
@@ -63,7 +62,7 @@ class LassoWithSGD private (
   /**
    * Construct a Lasso object with default parameters
    */
-  def this() = this(1.0, 100, 1.0, 1.0, true)
+  def this() = this(1.0, 100, 1.0, 1.0)
 
   def createModel(weights: Array[Double], intercept: Double) = {
     new LassoModel(weights, intercept)
@@ -98,7 +97,7 @@ object LassoWithSGD {
       initialWeights: Array[Double])
     : LassoModel =
   {
-    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input,
+    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input,
         initialWeights)
   }
 
@@ -121,7 +120,7 @@ object LassoWithSGD {
       miniBatchFraction: Double)
     : LassoModel =
   {
-    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input)
+    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
   }
 
   /**

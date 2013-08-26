@@ -162,5 +162,8 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
     intercept[spark.SparkException] {
       val model = SVMWithSGD.train(testRDDInvalid, 100)
     }
+
+    // Turning off data validation should not throw an exception
+    val noValidationModel = new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
   }
 }

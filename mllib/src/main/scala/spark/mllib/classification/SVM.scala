@@ -54,8 +54,7 @@ class SVMWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
     var regParam: Double,
-    var miniBatchFraction: Double,
-    var addIntercept: Boolean)
+    var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
 
   val gradient = new HingeGradient()
@@ -71,7 +70,7 @@ class SVMWithSGD private (
   /**
    * Construct a SVM object with default parameters
    */
-  def this() = this(1.0, 100, 1.0, 1.0, true)
+  def this() = this(1.0, 100, 1.0, 1.0)
 
   def createModel(weights: Array[Double], intercept: Double) = {
     new SVMModel(weights, intercept)
@@ -107,7 +106,7 @@ object SVMWithSGD {
       initialWeights: Array[Double])
     : SVMModel =
   {
-    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input,
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input,
       initialWeights)
   }
 
@@ -131,7 +130,7 @@ object SVMWithSGD {
       miniBatchFraction: Double)
     : SVMModel =
   {
-    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input)
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
   }
 
   /**

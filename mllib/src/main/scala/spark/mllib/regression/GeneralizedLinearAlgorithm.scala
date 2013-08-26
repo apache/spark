@@ -87,18 +87,28 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   val optimizer: Optimizer
 
+  protected var addIntercept: Boolean = true
+
+  protected var validateData: Boolean = true
+
   /**
    * Create a model given the weights and intercept
    */
   protected def createModel(weights: Array[Double], intercept: Double): M
-
-  protected var addIntercept: Boolean
 
   /**
    * Set if the algorithm should add an intercept. Default true.
    */
   def setIntercept(addIntercept: Boolean): this.type = {
     this.addIntercept = addIntercept
+    this
+  }
+
+  /**
+   * Set if the algorithm should validate data before training. Default true.
+   */
+  def setValidateData(validateData: Boolean): this.type = {
+    this.validateData = validateData
     this
   }
 
@@ -119,7 +129,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   def run(input: RDD[LabeledPoint], initialWeights: Array[Double]) : M = {
 
     // Check the data properties before running the optimizer
-    if (!validators.forall(func => func(input))) {
+    if (validateData && !validators.forall(func => func(input))) {
       throw new SparkException("Input validation failed.")
     }
 
