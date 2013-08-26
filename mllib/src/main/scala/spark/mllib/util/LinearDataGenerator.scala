@@ -17,20 +17,19 @@
 
 package spark.mllib.util
 
+import scala.collection.JavaConversions._
 import scala.util.Random
 
 import org.jblas.DoubleMatrix
 
 import spark.{RDD, SparkContext}
 import spark.mllib.regression.LabeledPoint
-import scala.collection.JavaConversions._
 import spark.mllib.regression.LabeledPoint
 
 /**
  * Generate sample data used for Linear Data. This class generates
  * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
  * response variable `Y`.
- *
  */
 object LinearDataGenerator {
 
@@ -47,8 +46,9 @@ object LinearDataGenerator {
       intercept: Double,
       weights: Array[Double],
       nPoints: Int,
-      seed: Int): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateLinearInput(intercept, weights, nPoints, seed))
+      seed: Int,
+      eps: Double): java.util.List[LabeledPoint] = {
+    seqAsJavaList(generateLinearInput(intercept, weights, nPoints, seed, eps))
   }
 
   /**
@@ -70,10 +70,10 @@ object LinearDataGenerator {
     val rnd = new Random(seed)
     val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
     val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(rnd.nextGaussian()))
-    val y = x.map(xi =>
+      Array.fill[Double](weights.length)(2 * rnd.nextDouble - 1.0))
+    val y = x.map { xi =>
       (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + eps * rnd.nextGaussian()
-    )
+    }
     y.zip(x).map(p => LabeledPoint(p._1, p._2))
   }
 
@@ -95,19 +95,15 @@ object LinearDataGenerator {
       nexamples: Int,
       nfeatures: Int,
       eps: Double,
-      weights: Array[Double] = Array[Double](),
       nparts: Int = 2,
       intercept: Double = 0.0) : RDD[LabeledPoint] = {
     org.jblas.util.Random.seed(42)
     // Random values distributed uniformly in [-0.5, 0.5]
     val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
 
-    (0 until weights.length.max(nfeatures)).map(i => w.put(i, 0, weights(i)))
-
     val data: RDD[LabeledPoint] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
-      val seed = 42+p
+      val seed = 42 + p
       val examplesInPartition = nexamples / nparts
-
       generateLinearInput(intercept, w.toArray, examplesInPartition, seed, eps)
     }
     data
@@ -115,7 +111,7 @@ object LinearDataGenerator {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
-      println("Usage: RidgeRegressionGenerator " +
+      println("Usage: LinearDataGenerator " +
         "<master> <output_dir> [num_examples] [num_features] [num_partitions]")
       System.exit(1)
     }
@@ -127,7 +123,7 @@ object LinearDataGenerator {
     val parts: Int = if (args.length > 4) args(4).toInt else 2
     val eps = 10
 
-    val sc = new SparkContext(sparkMaster, "RidgeRegressionDataGenerator")
+    val sc = new SparkContext(sparkMaster, "LinearDataGenerator")
     val data = generateLinearRDD(sc, nexamples, nfeatures, eps, nparts = parts)
 
     MLUtils.saveLabeledData(data, outputPath)

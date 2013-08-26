@@ -25,73 +25,86 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.jblas.DoubleMatrix;
+
 import spark.api.java.JavaRDD;
 import spark.api.java.JavaSparkContext;
 import spark.mllib.util.LinearDataGenerator;
 
 public class JavaRidgeRegressionSuite implements Serializable {
-    private transient JavaSparkContext sc;
+  private transient JavaSparkContext sc;
 
-    @Before
-    public void setUp() {
-        sc = new JavaSparkContext("local", "JavaRidgeRegressionSuite");
+  @Before
+  public void setUp() {
+      sc = new JavaSparkContext("local", "JavaRidgeRegressionSuite");
+  }
+
+  @After
+  public void tearDown() {
+      sc.stop();
+      sc = null;
+      System.clearProperty("spark.driver.port");
+  }
+
+  double predictionError(List<LabeledPoint> validationData, RidgeRegressionModel model) {
+    double errorSum = 0;
+    for (LabeledPoint point: validationData) {
+      Double prediction = model.predict(point.features());
+      errorSum += (prediction - point.label()) * (prediction - point.label());
     }
+    return errorSum / validationData.size();
+  }
 
-    @After
-    public void tearDown() {
-        sc.stop();
-        sc = null;
-        System.clearProperty("spark.driver.port");
-    }
+  List<LabeledPoint> generateRidgeData(int numPoints, int nfeatures, double eps) {
+    org.jblas.util.Random.seed(42);
+    // Pick weights as random values distributed uniformly in [-0.5, 0.5]
+    DoubleMatrix w = DoubleMatrix.rand(nfeatures, 1).subi(0.5);
+    // Set first two weights to eps
+    w.put(0, 0, eps);
+    w.put(1, 0, eps);
+    return LinearDataGenerator.generateLinearInputAsList(0.0, w.data, numPoints, 42, eps);
+  }
 
-    int validatePrediction(List<LabeledPoint> validationData, RidgeRegressionModel model) {
-        int numAccurate = 0;
-        for (LabeledPoint point: validationData) {
-            Double prediction = model.predict(point.features());
-            // A prediction is off if the prediction is more than 0.5 away from expected value.
-            if (Math.abs(prediction - point.label()) <= 0.5) {
-                numAccurate++;
-            }
-        }
-        return numAccurate;
-    }
+  @Test
+  public void runRidgeRegressionUsingConstructor() {
+    int nexamples = 200;
+    int nfeatures = 20;
+    double eps = 10.0;
+    List<LabeledPoint> data = generateRidgeData(2*nexamples, nfeatures, eps);
 
-    @Test
-    public void runRidgeRegressionUsingConstructor() {
-        int nPoints = 10000;
-        double A = 2.0;
-        double[] weights = {-1.5, 1.0e-2};
+    JavaRDD<LabeledPoint> testRDD = sc.parallelize(data.subList(0, nexamples));
+    List<LabeledPoint> validationData = data.subList(nexamples, 2*nexamples);
 
-        JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
-                weights, nPoints, 42), 2).cache();
-        List<LabeledPoint> validationData =
-                LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
+    RidgeRegressionWithSGD ridgeSGDImpl = new RidgeRegressionWithSGD();
+    ridgeSGDImpl.optimizer().setStepSize(1.0)
+                            .setRegParam(0.0)
+                            .setNumIterations(200);
+    RidgeRegressionModel model = ridgeSGDImpl.run(testRDD.rdd());
+    double unRegularizedErr = predictionError(validationData, model);
 
-        RidgeRegressionWithSGD ridgeSGDImpl = new RidgeRegressionWithSGD();
-        ridgeSGDImpl.optimizer().setStepSize(1.0)
-                .setRegParam(0.01)
-                .setNumIterations(20);
-        RidgeRegressionModel model = ridgeSGDImpl.run(testRDD.rdd());
+    ridgeSGDImpl.optimizer().setRegParam(0.1);
+    model = ridgeSGDImpl.run(testRDD.rdd());
+    double regularizedErr = predictionError(validationData, model);
 
-        int numAccurate = validatePrediction(validationData, model);
-        Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
-    }
+    Assert.assertTrue(regularizedErr < unRegularizedErr);
+  }
 
-    @Test
-    public void runRidgeRegressionUsingStaticMethods() {
-        int nPoints = 10000;
-        double A = 2.0;
-        double[] weights = {-1.5, 1.0e-2};
+  @Test
+  public void runRidgeRegressionUsingStaticMethods() {
+    int nexamples = 200;
+    int nfeatures = 20;
+    double eps = 10.0;
+    List<LabeledPoint> data = generateRidgeData(2*nexamples, nfeatures, eps);
 
-        JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
-                weights, nPoints, 42), 2).cache();
-        List<LabeledPoint> validationData =
-                LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
+    JavaRDD<LabeledPoint> testRDD = sc.parallelize(data.subList(0, nexamples));
+    List<LabeledPoint> validationData = data.subList(nexamples, 2*nexamples);
 
-        RidgeRegressionModel model = RidgeRegressionWithSGD.train(testRDD.rdd(), 100, 1.0, 0.01, 1.0);
+    RidgeRegressionModel model = RidgeRegressionWithSGD.train(testRDD.rdd(), 200, 1.0, 0.0);
+    double unRegularizedErr = predictionError(validationData, model);
 
-        int numAccurate = validatePrediction(validationData, model);
-        Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
-    }
+    model = RidgeRegressionWithSGD.train(testRDD.rdd(), 200, 1.0, 0.1);
+    double regularizedErr = predictionError(validationData, model);
 
+    Assert.assertTrue(regularizedErr < unRegularizedErr);
+  }
 }

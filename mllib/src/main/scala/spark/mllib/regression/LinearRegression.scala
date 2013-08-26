@@ -45,10 +45,10 @@ class LinearRegressionModel(
  * Train a regression model with no regularization using Stochastic Gradient Descent.
  */
 class LinearRegressionWithSGD private (
-                             var stepSize: Double,
-                             var numIterations: Int,
-                             var miniBatchFraction: Double,
-                             var addIntercept: Boolean)
+    var stepSize: Double,
+    var numIterations: Int,
+    var miniBatchFraction: Double,
+    var addIntercept: Boolean)
   extends GeneralizedLinearAlgorithm[LinearRegressionModel]
   with Serializable {
 
@@ -87,12 +87,12 @@ object LinearRegressionWithSGD {
    *        the number of features in the data.
    */
   def train(
-             input: RDD[LabeledPoint],
-             numIterations: Int,
-             stepSize: Double,
-             miniBatchFraction: Double,
-             initialWeights: Array[Double])
-  : LinearRegressionModel =
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double,
+      initialWeights: Array[Double])
+    : LinearRegressionModel =
   {
     new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction, true).run(input,
       initialWeights)
@@ -109,11 +109,11 @@ object LinearRegressionWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    */
   def train(
-             input: RDD[LabeledPoint],
-             numIterations: Int,
-             stepSize: Double,
-             miniBatchFraction: Double)
-  : LinearRegressionModel =
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double)
+    : LinearRegressionModel =
   {
     new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction, true).run(input)
   }
@@ -129,10 +129,10 @@ object LinearRegressionWithSGD {
    * @return a LinearRegressionModel which has the weights and offset from training.
    */
   def train(
-             input: RDD[LabeledPoint],
-             numIterations: Int,
-             stepSize: Double)
-  : LinearRegressionModel =
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double)
+    : LinearRegressionModel =
   {
     train(input, numIterations, stepSize, 1.0)
   }
@@ -147,9 +147,9 @@ object LinearRegressionWithSGD {
    * @return a LinearRegressionModel which has the weights and offset from training.
    */
   def train(
-             input: RDD[LabeledPoint],
-             numIterations: Int)
-  : LinearRegressionModel =
+      input: RDD[LabeledPoint],
+      numIterations: Int)
+    : LinearRegressionModel =
   {
     train(input, numIterations, 1.0, 1.0)
   }

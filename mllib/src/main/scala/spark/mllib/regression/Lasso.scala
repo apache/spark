@@ -55,10 +55,17 @@ class LassoWithSGD private (
 
   val gradient = new SquaredGradient()
   val updater = new L1Updater()
-  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
-                                                        .setNumIterations(numIterations)
-                                                        .setRegParam(regParam)
-                                                        .setMiniBatchFraction(miniBatchFraction)
+  @transient val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+    .setNumIterations(numIterations)
+    .setRegParam(regParam)
+    .setMiniBatchFraction(miniBatchFraction)
+
+  // We don't want to penalize the intercept, so set this to false.
+  setIntercept(false)
+
+  var yMean = 0.0
+  var xColMean: DoubleMatrix = _
+  var xColSd: DoubleMatrix = _
 
   /**
    * Construct a Lasso object with default parameters
@@ -66,7 +73,35 @@ class LassoWithSGD private (
   def this() = this(1.0, 100, 1.0, 1.0, true)
 
   def createModel(weights: Array[Double], intercept: Double) = {
-    new LassoModel(weights, intercept)
+    val weightsMat = new DoubleMatrix(weights.length + 1, 1, (Array(intercept) ++ weights):_*)
+    val weightsScaled = weightsMat.div(xColSd)
+    val interceptScaled = yMean - (weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0))
+
+    new LassoModel(weightsScaled.data, interceptScaled)
+  }
+
+  override def run(
+      input: RDD[LabeledPoint],
+      initialWeights: Array[Double])
+    : LassoModel =
+  {
+    val nfeatures: Int = input.first.features.length
+    val nexamples: Long = input.count()
+
+    // To avoid penalizing the intercept, we center and scale the data.
+    val stats = MLUtils.computeStats(input, nfeatures, nexamples)
+    yMean = stats._1
+    xColMean = stats._2
+    xColSd = stats._3
+
+    val normalizedData = input.map { point =>
+      val yNormalized = point.label - yMean
+      val featuresMat = new DoubleMatrix(nfeatures, 1, point.features:_*)
+      val featuresNormalized = featuresMat.sub(xColMean).divi(xColSd)
+      LabeledPoint(yNormalized, featuresNormalized.toArray)
+    }
+
+    super.run(normalizedData, initialWeights)
   }
 }
 

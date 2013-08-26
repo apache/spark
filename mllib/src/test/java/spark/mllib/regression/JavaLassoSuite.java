@@ -63,9 +63,9 @@ public class JavaLassoSuite implements Serializable {
     double[] weights = {-1.5, 1.0e-2};
 
     JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
-            weights, nPoints, 42), 2).cache();
+            weights, nPoints, 42, 0.1), 2).cache();
     List<LabeledPoint> validationData =
-        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
+        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
 
     LassoWithSGD lassoSGDImpl = new LassoWithSGD();
     lassoSGDImpl.optimizer().setStepSize(1.0)
@@ -84,9 +84,9 @@ public class JavaLassoSuite implements Serializable {
     double[] weights = {-1.5, 1.0e-2};
 
     JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
-        weights, nPoints, 42), 2).cache();
+        weights, nPoints, 42, 0.1), 2).cache();
     List<LabeledPoint> validationData =
-        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17);
+        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
 
     LassoModel model = LassoWithSGD.train(testRDD.rdd(), 100, 1.0, 0.01, 1.0);
 

@@ -72,16 +72,16 @@ object MLUtils {
    *     xColMean - Row vector with mean for every column (or feature) of the input data
    *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
    */
-  def computeStats(data: RDD[(Double, Array[Double])], nfeatures: Int, nexamples: Long):
+  def computeStats(data: RDD[LabeledPoint], nfeatures: Int, nexamples: Long):
       (Double, DoubleMatrix, DoubleMatrix) = {
-    val yMean: Double = data.map { case (y, features) => y }.reduce(_ + _) / nexamples
+    val yMean: Double = data.map { labeledPoint => labeledPoint.label }.reduce(_ + _) / nexamples
 
     // NOTE: We shuffle X by column here to compute column sum and sum of squares.
-    val xColSumSq: RDD[(Int, (Double, Double))] = data.flatMap { case(y, features) =>
-      val nCols = features.length
+    val xColSumSq: RDD[(Int, (Double, Double))] = data.flatMap { labeledPoint =>
+      val nCols = labeledPoint.features.length
       // Traverse over every column and emit (col, value, value^2)
       Iterator.tabulate(nCols) { i =>
-        (i, (features(i), features(i)*features(i)))
+        (i, (labeledPoint.features(i), labeledPoint.features(i)*labeledPoint.features(i)))
       }
     }.reduceByKey { case(x1, x2) =>
       (x1._1 + x2._1, x1._2 + x2._2)

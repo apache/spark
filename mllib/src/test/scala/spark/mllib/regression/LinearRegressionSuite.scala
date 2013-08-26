@@ -36,10 +36,19 @@ class LinearRegressionSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-  // Test if we can correctly learn Y = 3 + 10*X1 + 10*X2 when
-  // X1 and X2 are collinear.
-  test("multi-collinear variables") {
-    val testRDD = LinearDataGenerator.generateLinearRDD(sc, 100, 2, 0.0, Array(10.0, 10.0), intercept=3.0).cache()
+  def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
+    val numOffPredictions = predictions.zip(input).filter { case (prediction, expected) =>
+      // A prediction is off if the prediction is more than 0.5 away from expected value.
+      math.abs(prediction - expected.label) > 0.5
+    }.size
+    // At least 80% of the predictions should be on.
+    assert(numOffPredictions < input.length / 5)
+  }
+
+  // Test if we can correctly learn Y = 3 + 10*X1 + 10*X2
+  test("linear regression") {
+    val testRDD = sc.parallelize(LinearDataGenerator.generateLinearInput(
+      3.0, Array(10.0, 10.0), 100, 42), 2).cache()
     val linReg = new LinearRegressionWithSGD()
     linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
 
@@ -49,5 +58,15 @@ class LinearRegressionSuite extends FunSuite with BeforeAndAfterAll {
     assert(model.weights.length === 2)
     assert(model.weights(0) >= 9.0 && model.weights(0) <= 11.0)
     assert(model.weights(1) >= 9.0 && model.weights(1) <= 11.0)
+
+    val validationData = LinearDataGenerator.generateLinearInput(
+      3.0, Array(10.0, 10.0), 100, 17)
+    val validationRDD = sc.parallelize(validationData, 2).cache()
+
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Test prediction on Array.
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
 }
