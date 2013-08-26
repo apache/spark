@@ -107,6 +107,10 @@
       <artifactId>scala-library</artifactId>
     </dependency>
     <dependency>
+      <groupId>net.liftweb</groupId>
+      <artifactId>lift-json_2.9.2</artifactId>
+    </dependency>
+    <dependency>
       <groupId>it.unimi.dsi</groupId>
       <artifactId>fastutil</artifactId>
     </dependency>

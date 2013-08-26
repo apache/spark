@@ -19,12 +19,13 @@ package spark.deploy.worker.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.util.parsing.json.JSONType
 import scala.xml.Node
 
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.duration._
+
+import net.liftweb.json.JsonAST.JValue
 
 import spark.Utils
 import spark.deploy.JsonProtocol
@@ -38,7 +39,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
   val worker = parent.worker
   val timeout = parent.timeout
 
-  def renderJson(request: HttpServletRequest): JSONType = {
+  def renderJson(request: HttpServletRequest): JValue = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, 30 seconds)
     JsonProtocol.writeWorkerState(workerState)
