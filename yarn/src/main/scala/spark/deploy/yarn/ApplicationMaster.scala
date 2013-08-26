@@ -102,7 +102,11 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     val yarnLocalSysDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
     yarnLocalSysDirs match {
         case Some(s) => localDirs = s
-        case None => if (localDirs == null) localDirs = ""
+        case None => {
+          if ((localDirs == null) || (localDirs.isEmpty())) {
+            throw new Exception("Yarn Local dirs can't be empty")
+         }
+       }
     }
     return localDirs
   }
