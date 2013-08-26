@@ -19,12 +19,13 @@ package spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.util.parsing.json.JSONType
 import scala.xml.Node
 
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.util.duration._
+
+import net.liftweb.json.JsonAST.JValue
 
 import spark.Utils
 import spark.deploy.DeployWebUI
@@ -37,7 +38,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
   val master = parent.masterActorRef
   implicit val timeout = parent.timeout
 
-  def renderJson(request: HttpServletRequest): JSONType = {
+  def renderJson(request: HttpServletRequest): JValue = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, 30 seconds)
     JsonProtocol.writeMasterState(state)
