@@ -28,7 +28,7 @@ import spark.streaming.StreamingContext._
  *   <directory> is the directory that Spark Streaming will use to find and read new text files.
  *
  * To run this on your local machine on directory `localdir`, run this example
- *    `$ ./run spark.streaming.examples.HdfsWordCount local[2] localdir`
+ *    `$ ./run-example spark.streaming.examples.HdfsWordCount local[2] localdir`
  * Then create a text file in `localdir` and the words in the file will get counted.
  */
 object HdfsWordCount {

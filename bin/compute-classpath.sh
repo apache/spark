@@ -35,7 +35,7 @@ CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 if [ -f "$FWDIR/RELEASE" ]; then
   ASSEMBLY_JAR=`ls "$FWDIR"/jars/spark-assembly*.jar`
 else
-  ASSEMBLY_JAR=`ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*.jar`
+  ASSEMBLY_JAR=`ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar`
 fi
 CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
 
