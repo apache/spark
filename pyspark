@@ -54,11 +54,6 @@ export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
 export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
 export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
 
-# Launch with `scala` by default:
-if [[ "$SPARK_LAUNCH_WITH_SCALA" != "0" ]] ; then
-    export SPARK_LAUNCH_WITH_SCALA=1
-fi
-
 if [ -n "$IPYTHON_OPTS" ]; then
   IPYTHON=1
 fi
