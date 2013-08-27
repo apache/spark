@@ -119,15 +119,12 @@ private[spark] class Executor(
     // Hadoop 0.23 and 2.x have different Environment variable names for the
     // local dirs, so lets check both. We assume one of the 2 is set.
     // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
-    var localDirs = System.getenv("LOCAL_DIRS")
-    val yarnLocalSysDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
-    yarnLocalSysDirs match {
-        case Some(s) => localDirs = s
-        case None => {
-          if ((localDirs == null) || (localDirs.isEmpty())) {
-            throw new Exception("Yarn Local dirs can't be empty")
-          }
-        }
+    val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
+      .getOrElse(Option(System.getenv("LOCAL_DIRS"))
+      .getOrElse(""))
+
+    if (localDirs.isEmpty()) {
+      throw new Exception("Yarn Local dirs can't be empty")
     }
     return localDirs
   }
