@@ -774,6 +774,19 @@ abstract class RDD[T: ClassManifest](
   }
 
 
+
+  // def pairRDDFunctions[K: ClassManifest, V,](implicit t: T <:< (K, V), k: ClassManifest[K], v: ClassManifest[V]): 
+  //     PairRDDFunctions[K, V] = {
+  //   new PairRDDFunctions(this.asInstanceOf[RDD[(K,V)]])
+  // }
+
+  def pairRDDFunctions[K, V](
+      implicit t: T <:< (K, V), k: ClassManifest[K], v: ClassManifest[V]): 
+      PairRDDFunctions[K, V] = {
+    new PairRDDFunctions(this.asInstanceOf[RDD[(K,V)]])
+  }
+
+
   def makeIndex(partitioner: Option[Partitioner] = None): RDDIndex[T] = 
     IndexedRDD.makeIndex(this, partitioner)
 
