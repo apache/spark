@@ -123,7 +123,7 @@ class IndexedRDDSuite extends FunSuite with SharedSparkContext {
     // count the dependencies to make sure there is only 1 ShuffledRDD
     val deps = lineage(sums)
     
-    assert(deps.filter(_.isInstanceOf[ShuffledRDD[_,_]]).size === 1) // ShuffledRDD, ParallelCollection
+    assert(deps.filter(_.isInstanceOf[ShuffledRDD[_,_,_]]).size === 1) // ShuffledRDD, ParallelCollection
   }
 
 

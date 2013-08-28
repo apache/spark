@@ -68,8 +68,8 @@ class RDDIndex[@specialized K: ClassManifest](private[spark] val rdd: RDD[BlockI
  * 
  */
 class IndexedRDD[K: ClassManifest, V: ClassManifest](
-    val index:  RDDIndex[K],
-    val valuesRDD: RDD[ Seq[Seq[V]] ])
+    @transient val index:  RDDIndex[K],
+    @transient val valuesRDD: RDD[ Seq[Seq[V]] ])
   extends RDD[(K, V)](index.rdd.context, 
     List(new OneToOneDependency(index.rdd), new OneToOneDependency(valuesRDD)) ) {
 
