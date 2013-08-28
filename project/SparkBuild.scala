@@ -41,7 +41,7 @@ object SparkBuild extends Build {
     .dependsOn(core, bagel, mllib) dependsOn(maybeYarn: _*)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, bagel, streaming)
+    .dependsOn(core, mllib, bagel, streaming) dependsOn(maybeYarn: _*)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
@@ -261,7 +261,7 @@ object SparkBuild extends Build {
 
   def yarnSettings = sharedSettings ++ Seq(
     name := "spark-yarn"
-  ) ++ extraYarnSettings ++ assemblySettings ++ extraAssemblySettings
+  ) ++ extraYarnSettings
 
   // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
   // if we refer to nonexistent dependencies (e.g. hadoop-yarn-api from a Hadoop version without YARN).

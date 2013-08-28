@@ -54,6 +54,11 @@ if [[ -z $SPARK_EXAMPLES_JAR ]]; then
   exit 1
 fi
 
+# Since the examples JAR ideally shouldn't include spark-core (that dependency should be
+# "provided"), also add our standard Spark classpath, built using compute-classpath.sh.
+CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
+CLASSPATH="$SPARK_EXAMPLES_JAR:$CLASSPATH"
+
 # Find java binary
 if [ -n "${JAVA_HOME}" ]; then
   RUNNER="${JAVA_HOME}/bin/java"
@@ -68,9 +73,9 @@ fi
 
 if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
   echo -n "Spark Command: "
-  echo "$RUNNER" -cp "$SPARK_EXAMPLES_JAR" "$@"
+  echo "$RUNNER" -cp "$CLASSPATH" "$@"
   echo "========================================"
   echo
 fi
 
-exec "$RUNNER" -cp "$SPARK_EXAMPLES_JAR" "$@"
+exec "$RUNNER" -cp "$CLASSPATH" "$@"
