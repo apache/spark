@@ -777,11 +777,9 @@ abstract class RDD[T: ClassManifest](
 
 
 
-  // def pairRDDFunctions[K: ClassManifest, V,](implicit t: T <:< (K, V), k: ClassManifest[K], v: ClassManifest[V]): 
-  //     PairRDDFunctions[K, V] = {
-  //   new PairRDDFunctions(this.asInstanceOf[RDD[(K,V)]])
-  // }
-
+  /**
+   * For RDD[(K,V)] this function returns a pair-functions object for this RDD
+   */ 
   def pairRDDFunctions[K, V](
       implicit t: T <:< (K, V), k: ClassManifest[K], v: ClassManifest[V]): 
       PairRDDFunctions[K, V] = {
