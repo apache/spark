@@ -104,7 +104,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
 
     var javaCommand = "java";
     val javaHome = System.getenv("JAVA_HOME")
-    if (javaHome != null && !javaHome.isEmpty()) {
+    if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
       javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
     }
 
@@ -186,6 +186,9 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
     Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
     Client.populateHadoopClasspath(yarnConf, env)
+
+    // allow users to specify some environment variables
+    Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
     return env
