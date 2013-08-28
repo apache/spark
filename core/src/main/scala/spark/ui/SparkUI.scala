@@ -30,7 +30,7 @@ import spark.ui.JettyUtils._
 
 /** Top level user interface for Spark */
 private[spark] class SparkUI(sc: SparkContext) extends Logging {
-  val host = Utils.localHostName()
+  val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
   val port = Option(System.getProperty("spark.ui.port")).getOrElse(SparkUI.DEFAULT_PORT).toInt
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
@@ -58,9 +58,9 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
       server = Some(srv)
       boundPort = Some(usedPort)
     } catch {
-    case e: Exception =>
-      logError("Failed to create Spark JettyUtils", e)
-      System.exit(1)
+      case e: Exception =>
+        logError("Failed to create Spark JettyUtils", e)
+        System.exit(1)
     }
   }
 
@@ -82,6 +82,6 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 }
 
 private[spark] object SparkUI {
-  val DEFAULT_PORT = "33000"
+  val DEFAULT_PORT = "3030"
   val STATIC_RESOURCE_DIR = "spark/ui/static"
 }

@@ -35,7 +35,7 @@ private[spark] trait TaskSchedulerListener {
                 taskInfo: TaskInfo, taskMetrics: TaskMetrics): Unit
 
   // A node was added to the cluster.
-  def executorGained(execId: String, hostPort: String): Unit
+  def executorGained(execId: String, host: String): Unit
 
   // A node was lost from the cluster.
   def executorLost(execId: String): Unit

@@ -40,12 +40,10 @@ private[spark] class ExecutorRunner(
     val memory: Int,
     val worker: ActorRef,
     val workerId: String,
-    val hostPort: String,
+    val host: String,
     val sparkHome: File,
     val workDir: File)
   extends Logging {
-
-  Utils.checkHostPort(hostPort, "Expected hostport")
 
   val fullId = appId + "/" + execId
   var workerThread: Thread = null
@@ -92,7 +90,7 @@ private[spark] class ExecutorRunner(
   /** Replace variables such as {{EXECUTOR_ID}} and {{CORES}} in a command argument passed to us */
   def substituteVariables(argument: String): String = argument match {
     case "{{EXECUTOR_ID}}" => execId.toString
-    case "{{HOSTNAME}}" => Utils.parseHostPort(hostPort)._1
+    case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
     case other => other
   }

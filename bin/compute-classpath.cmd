@@ -34,6 +34,7 @@ set EXAMPLES_DIR=%FWDIR%examples
 set BAGEL_DIR=%FWDIR%bagel
 set MLLIB_DIR=%FWDIR%mllib
 set TOOLS_DIR=%FWDIR%tools
+set YARN_DIR=%FWDIR%yarn
 set STREAMING_DIR=%FWDIR%streaming
 set PYSPARK_DIR=%FWDIR%python
 
@@ -50,6 +51,7 @@ set CLASSPATH=%CLASSPATH%;%FWDIR%python\lib\*
 set CLASSPATH=%CLASSPATH%;%BAGEL_DIR%\target\scala-%SCALA_VERSION%\classes
 set CLASSPATH=%CLASSPATH%;%MLLIB_DIR%\target\scala-%SCALA_VERSION%\classes
 set CLASSPATH=%CLASSPATH%;%TOOLS_DIR%\target\scala-%SCALA_VERSION%\classes
+set CLASSPATH=%CLASSPATH%;%YARN_DIR%\target\scala-%SCALA_VERSION%\classes
 
 rem Add hadoop conf dir - else FileSystem.*, etc fail
 rem Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts

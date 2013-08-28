@@ -147,7 +147,7 @@ object IndexedRDD {
       // Shuffle the table (if necessary)
       val shuffledTbl =
         if (tbl.partitioner.isEmpty) {
-          new ShuffledRDD[K,V](tbl, Partitioner.defaultPartitioner(tbl))
+          new ShuffledRDD[K, V, (K,V)](tbl, Partitioner.defaultPartitioner(tbl))
         } else { tbl }
 
       val groups = shuffledTbl.mapPartitions( iter => {
@@ -180,7 +180,7 @@ object IndexedRDD {
         if (tbl.partitioner == Some(partitioner)) {
           tbl
         } else {
-          new ShuffledRDD[K,V](tbl, partitioner)
+          new ShuffledRDD[K, V, (K,V)](tbl, partitioner)
         }
 
       // Use the index to build the new values table
@@ -213,15 +213,15 @@ object IndexedRDD {
    */
   def makeIndex[K: ClassManifest](keys: RDD[K], 
     partitioner: Option[Partitioner] = None): RDDIndex[K] = {
-
-
+    // @todo: I don't need the boolean its only there to be the second type since I want to shuffle a single RDD
     // Ugly hack :-(.  In order to partition the keys they must have values. 
     val tbl = keys.mapPartitions(_.map(k => (k, false)), true)
     // Shuffle the table (if necessary)
     val shuffledTbl = partitioner match {
       case None =>  {
         if (tbl.partitioner.isEmpty) {
-          new ShuffledRDD[K, Boolean](tbl, Partitioner.defaultPartitioner(tbl))
+          // @todo: I don't need the boolean its only there to be the second type of the shuffle. 
+          new ShuffledRDD[K, Boolean, (K, Boolean)](tbl, Partitioner.defaultPartitioner(tbl))
         } else { tbl }
       }
       case Some(partitioner) => 

@@ -209,7 +209,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
           if (other.partitioner == Some(partitioner)) {
             other
           } else {
-            new ShuffledRDD[K,W](other, partitioner)
+            new ShuffledRDD[K, W, (K,W)](other, partitioner)
           }
         // Join the other RDD with this RDD building a new valueset and new index on the fly
         val groups = 

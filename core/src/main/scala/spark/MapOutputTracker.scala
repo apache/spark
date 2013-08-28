@@ -64,11 +64,11 @@ private[spark] class MapOutputTracker extends Logging {
 
   // Incremented every time a fetch fails so that client nodes know to clear
   // their cache of map output locations if this happens.
-  private var generation: Long = 0
-  private val generationLock = new java.lang.Object
+  private var epoch: Long = 0
+  private val epochLock = new java.lang.Object
 
   // Cache a serialized version of the output statuses for each shuffle to send them out faster
-  var cacheGeneration = generation
+  var cacheEpoch = epoch
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]
 
   val metadataCleaner = new MetadataCleaner("MapOutputTracker", this.cleanup)
@@ -108,10 +108,10 @@ private[spark] class MapOutputTracker extends Logging {
   def registerMapOutputs(
       shuffleId: Int,
       statuses: Array[MapStatus],
-      changeGeneration: Boolean = false) {
+      changeEpoch: Boolean = false) {
     mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
-    if (changeGeneration) {
-      incrementGeneration()
+    if (changeEpoch) {
+      incrementEpoch()
     }
   }
 
@@ -124,7 +124,7 @@ private[spark] class MapOutputTracker extends Logging {
           array(mapId) = null
         }
       }
-      incrementGeneration()
+      incrementEpoch()
     } else {
       throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
     }
@@ -206,58 +206,58 @@ private[spark] class MapOutputTracker extends Logging {
     trackerActor = null
   }
 
-  // Called on master to increment the generation number
-  def incrementGeneration() {
-    generationLock.synchronized {
-      generation += 1
-      logDebug("Increasing generation to " + generation)
+  // Called on master to increment the epoch number
+  def incrementEpoch() {
+    epochLock.synchronized {
+      epoch += 1
+      logDebug("Increasing epoch to " + epoch)
     }
   }
 
-  // Called on master or workers to get current generation number
-  def getGeneration: Long = {
-    generationLock.synchronized {
-      return generation
+  // Called on master or workers to get current epoch number
+  def getEpoch: Long = {
+    epochLock.synchronized {
+      return epoch
     }
   }
 
-  // Called on workers to update the generation number, potentially clearing old outputs
-  // because of a fetch failure. (Each Mesos task calls this with the latest generation
+  // Called on workers to update the epoch number, potentially clearing old outputs
+  // because of a fetch failure. (Each worker task calls this with the latest epoch
   // number on the master at the time it was created.)
-  def updateGeneration(newGen: Long) {
-    generationLock.synchronized {
-      if (newGen > generation) {
-        logInfo("Updating generation to " + newGen + " and clearing cache")
+  def updateEpoch(newEpoch: Long) {
+    epochLock.synchronized {
+      if (newEpoch > epoch) {
+        logInfo("Updating epoch to " + newEpoch + " and clearing cache")
         // mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]
         mapStatuses.clear()
-        generation = newGen
+        epoch = newEpoch
       }
     }
   }
 
   def getSerializedLocations(shuffleId: Int): Array[Byte] = {
     var statuses: Array[MapStatus] = null
-    var generationGotten: Long = -1
-    generationLock.synchronized {
-      if (generation > cacheGeneration) {
+    var epochGotten: Long = -1
+    epochLock.synchronized {
+      if (epoch > cacheEpoch) {
         cachedSerializedStatuses.clear()
-        cacheGeneration = generation
+        cacheEpoch = epoch
       }
       cachedSerializedStatuses.get(shuffleId) match {
         case Some(bytes) =>
           return bytes
         case None =>
           statuses = mapStatuses(shuffleId)
-          generationGotten = generation
+          epochGotten = epoch
       }
     }
     // If we got here, we failed to find the serialized locations in the cache, so we pulled
     // out a snapshot of the locations as "locs"; let's serialize and return that
     val bytes = serializeStatuses(statuses)
     logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, bytes.length))
-    // Add them into the table only if the generation hasn't changed while we were working
-    generationLock.synchronized {
-      if (generation == generationGotten) {
+    // Add them into the table only if the epoch hasn't changed while we were working
+    epochLock.synchronized {
+      if (epoch == epochGotten) {
         cachedSerializedStatuses(shuffleId) = bytes
       }
     }

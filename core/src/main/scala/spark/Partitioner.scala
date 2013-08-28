@@ -84,7 +84,7 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  */
 class RangePartitioner[K <% Ordered[K]: ClassManifest, V](
     partitions: Int,
-    @transient rdd: RDD[(K,V)],
+    @transient rdd: RDD[_ <: Product2[K,V]],
     private val ascending: Boolean = true) 
   extends Partitioner {
 

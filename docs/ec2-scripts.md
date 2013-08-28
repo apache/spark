@@ -4,10 +4,11 @@ title: Running Spark on EC2
 ---
 
 The `spark-ec2` script, located in Spark's `ec2` directory, allows you
-to launch, manage and shut down Spark clusters on Amazon EC2. It automatically sets up Mesos, Spark and HDFS
-on the cluster for you.
-This guide describes how to use `spark-ec2` to launch clusters, how to run jobs on them, and how to shut them down.
-It assumes you've already signed up for an EC2 account on the [Amazon Web Services site](http://aws.amazon.com/).
+to launch, manage and shut down Spark clusters on Amazon EC2. It automatically
+sets up Spark, Shark and HDFS on the cluster for you. This guide describes 
+how to use `spark-ec2` to launch clusters, how to run jobs on them, and how 
+to shut them down. It assumes you've already signed up for an EC2 account 
+on the [Amazon Web Services site](http://aws.amazon.com/).
 
 `spark-ec2` is designed to manage multiple named clusters. You can
 launch a new cluster (telling the script its size and giving it a name),
@@ -59,18 +60,22 @@ RAM). Refer to the Amazon pages about [EC2 instance
 types](http://aws.amazon.com/ec2/instance-types) and [EC2
 pricing](http://aws.amazon.com/ec2/#pricing) for information about other
 instance types. 
+-    `--region=<EC2_REGION>` specifies an EC2 region in which to launch
+instances. The default region is `us-east-1`.
 -    `--zone=<EC2_ZONE>` can be used to specify an EC2 availability zone
 to launch instances in. Sometimes, you will get an error because there
 is not enough capacity in one zone, and you should try to launch in
-another. This happens mostly with the `m1.large` instance types;
-extra-large (both `m1.xlarge` and `c1.xlarge`) instances tend to be more
-available.
+another.
 -    `--ebs-vol-size=GB` will attach an EBS volume with a given amount
      of space to each node so that you can have a persistent HDFS cluster
      on your nodes across cluster restarts (see below).
 -    `--spot-price=PRICE` will launch the worker nodes as
      [Spot Instances](http://aws.amazon.com/ec2/spot-instances/),
      bidding for the given maximum price (in dollars).
+-    `--spark-version=VERSION` will pre-load the cluster with the
+     specified version of Spark. VERSION can be a version number
+     (e.g. "0.7.3") or a specific git hash. By default, a recent
+     version will be used.
 -    If one of your launches fails due to e.g. not having the right
 permissions on your private key file, you can run `launch` with the
 `--resume` option to restart the setup process on an existing cluster.
@@ -99,9 +104,8 @@ permissions on your private key file, you can run `launch` with the
     `spark-ec2` to attach a persistent EBS volume to each node for
     storing the persistent HDFS.
 -   Finally, if you get errors while running your jobs, look at the slave's logs
-    for that job inside of the Mesos work directory (/mnt/mesos-work). You can
-    also view the status of the cluster using the Mesos web UI 
-    (`http://<master-hostname>:8080`).
+    for that job inside of the scheduler work directory (/root/spark/work). You can
+    also view the status of the cluster using the web UI: `http://<master-hostname>:8080`.
 
 # Configuration
 
@@ -140,21 +144,13 @@ section.
 
 # Limitations
 
-- `spark-ec2` currently only launches machines in the US-East region of EC2.
-  It should not be hard to make it launch VMs in other zones, but you will need
-  to create your own AMIs in them.
 - Support for "cluster compute" nodes is limited -- there's no way to specify a
   locality group. However, you can launch slave nodes in your
   `<clusterName>-slaves` group manually and then use `spark-ec2 launch
   --resume` to start a cluster with them.
-- Support for spot instances is limited.
 
 If you have a patch or suggestion for one of these limitations, feel free to
 [contribute](contributing-to-spark.html) it!
-
-# Using a Newer Spark Version
-
-The Spark EC2 machine images may not come with the latest version of Spark. To use a newer version, you can run `git pull` to pull in `/root/spark` to pull in the latest version of Spark from `git`, and build it using `sbt/sbt compile`. You will also need to copy it to all the other nodes in the cluster using `~/spark-ec2/copy-dir /root/spark`.
 
 # Accessing Data in S3
 

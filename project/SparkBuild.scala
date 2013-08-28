@@ -24,30 +24,20 @@ import AssemblyKeys._
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
-  // Hadoop version to build against. For example, "0.20.2", "0.20.205.0", or
-  // "1.0.4" for Apache releases, or "0.20.2-cdh3u5" for Cloudera Hadoop.
-  val HADOOP_VERSION = "1.0.4"
-  val HADOOP_MAJOR_VERSION = "1"
-  val HADOOP_YARN = false
-
-  // For Hadoop 2 versions such as "2.0.0-mr1-cdh4.1.1", set the HADOOP_MAJOR_VERSION to "2"
-  //val HADOOP_VERSION = "2.0.0-mr1-cdh4.1.1"
-  //val HADOOP_MAJOR_VERSION = "2"
-  //val HADOOP_YARN = false
-
-  // For Hadoop 2 YARN support
-  //val HADOOP_VERSION = "2.0.2-alpha"
-  //val HADOOP_MAJOR_VERSION = "2"
-  //val HADOOP_YARN = true
+  // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
+  // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
+  // through the environment variables SPARK_HADOOP_VERSION and SPARK_WITH_YARN.
+  val DEFAULT_HADOOP_VERSION = "1.0.4"
+  val DEFAULT_WITH_YARN = false
 
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(core, repl, examples, bagel, streaming, mllib, tools)
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects:_*)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
-  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn (core) dependsOn(bagel) dependsOn(mllib)
+  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn(core) dependsOn(bagel) dependsOn(mllib) dependsOn(maybeYarn:_*)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core) dependsOn (streaming) dependsOn(mllib)
 
@@ -59,9 +49,23 @@ object SparkBuild extends Build {
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn (core)
 
+  lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn (core)
+
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
+
+  // Allows build configuration to be set through environment variables
+  lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
+  lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_WITH_YARN") match {
+    case None => DEFAULT_WITH_YARN
+    case Some(v) => v.toBoolean
+  }
+
+  // Conditionally include the yarn sub-project
+  lazy val maybeYarn = if(isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
+  lazy val maybeYarnRef = if(isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
+  lazy val allProjects = Seq[ProjectReference](core, repl, examples, bagel, streaming, mllib, tools) ++ maybeYarnRef
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.spark-project",
@@ -129,7 +133,6 @@ object SparkBuild extends Build {
 */
 
     libraryDependencies ++= Seq(
-      "io.netty" % "netty" % "3.5.3.Final",
       "org.eclipse.jetty" % "jetty-server" % "7.6.8.v20121106",
       "org.scalatest" %% "scalatest" % "1.9.1" % "test",
       "org.scalacheck" %% "scalacheck" % "1.10.0" % "test",
@@ -160,17 +163,16 @@ object SparkBuild extends Build {
     name := "spark-core",
     resolvers ++= Seq(
       "JBoss Repository" at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      "Spray Repository" at "http://repo.spray.cc/",
       "Cloudera Repository" at "https://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
 
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "14.0.1",
       "com.google.code.findbugs" % "jsr305" % "1.3.9",
-      "log4j" % "log4j" % "1.2.16",
+      "log4j" % "log4j" % "1.2.17",
       "org.slf4j" % "slf4j-api" % slf4jVersion,
       "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
-      "commons-daemon" % "commons-daemon" % "1.0.10",
+      "commons-daemon" % "commons-daemon" % "1.0.10",  // workaround for bug HADOOP-9407
       "com.ning" % "compress-lzf" % "0.8.4",
       "org.xerial.snappy" % "snappy-java" % "1.0.5",
       "org.ow2.asm" % "asm" % "4.0",
@@ -180,40 +182,19 @@ object SparkBuild extends Build {
       "com.typesafe.akka" % "akka-slf4j" % "2.0.5" excludeAll(excludeNetty),
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
+      "net.liftweb" % "lift-json_2.9.2" % "2.5",
       "org.apache.mesos" % "mesos" % "0.12.1",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
       "org.apache.derby" % "derby" % "10.4.2.0" % "test",
+      "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.avro" % "avro" % "1.7.4",
+      "org.apache.avro" % "avro-ipc" % "1.7.4" excludeAll(excludeNetty),
       "com.codahale.metrics" % "metrics-core" % "3.0.0",
       "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
       "com.twitter" % "chill_2.9.3" % "0.3.1",
       "com.twitter" % "chill-java" % "0.3.1"
-    ) ++ (
-      if (HADOOP_MAJOR_VERSION == "2") {
-        if (HADOOP_YARN) {
-          Seq(
-            // Exclude rule required for all ?
-            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
-            "org.apache.hadoop" % "hadoop-yarn-api" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
-            "org.apache.hadoop" % "hadoop-yarn-common" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
-            "org.apache.hadoop" % "hadoop-yarn-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm)
-          )
-        } else {
-          Seq(
-            "org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm),
-            "org.apache.hadoop" % "hadoop-client" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty, excludeAsm)
-          )
-        }
-      } else {
-        Seq("org.apache.hadoop" % "hadoop-core" % HADOOP_VERSION excludeAll(excludeJackson, excludeNetty) )
-      }),
-    unmanagedSourceDirectories in Compile <+= baseDirectory{ _ /
-      ( if (HADOOP_YARN && HADOOP_MAJOR_VERSION == "2") {
-        "src/hadoop2-yarn/scala"
-      } else {
-        "src/hadoop" + HADOOP_MAJOR_VERSION + "/scala"
-      } )
-    }
+    )
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def rootSettings = sharedSettings ++ Seq(
@@ -271,6 +252,24 @@ object SparkBuild extends Build {
       "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
+
+  def yarnSettings = sharedSettings ++ Seq(
+    name := "spark-yarn"
+  ) ++ extraYarnSettings ++ assemblySettings ++ extraAssemblySettings
+
+  // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
+  // if we refer to nonexistent dependencies (e.g. hadoop-yarn-api from a Hadoop version without YARN).
+  def extraYarnSettings = if(isYarnEnabled) yarnEnabledSettings else Seq()
+
+  def yarnEnabledSettings = Seq(
+    libraryDependencies ++= Seq(
+      // Exclude rule required for all ?
+      "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-api" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm)
+    )
+  )
 
   def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
     mergeStrategy in assembly := {

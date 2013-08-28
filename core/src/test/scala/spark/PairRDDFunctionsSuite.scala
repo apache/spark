@@ -21,15 +21,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 
 import org.scalatest.FunSuite
-import org.scalatest.prop.Checkers
-import org.scalacheck.Arbitrary._
-import org.scalacheck.Gen
-import org.scalacheck.Prop._
 
 import com.google.common.io.Files
-
-import spark.rdd.ShuffledRDD
 import spark.SparkContext._
+
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   test("groupByKey") {

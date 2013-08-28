@@ -22,7 +22,8 @@ import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.{Span, Millis}
 import spark.SparkContext._
-import spark.rdd.{CoalescedRDD, CoGroupedRDD, EmptyRDD, PartitionPruningRDD, ShuffledRDD}
+import spark.rdd._
+import scala.collection.parallel.mutable
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -170,8 +171,68 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     // we can optionally shuffle to keep the upstream parallel
     val coalesced5 = data.coalesce(1, shuffle = true)
-    assert(coalesced5.dependencies.head.rdd.dependencies.head.rdd.asInstanceOf[ShuffledRDD[_, _]] !=
+    assert(coalesced5.dependencies.head.rdd.dependencies.head.rdd.asInstanceOf[ShuffledRDD[_, _, _]] !=
       null)
+  }
+  test("cogrouped RDDs with locality") {
+    val data3 = sc.makeRDD(List((1,List("a","c")), (2,List("a","b","c")), (3,List("b"))))
+    val coal3 = data3.coalesce(3)
+    val list3 = coal3.partitions.map(p => p.asInstanceOf[CoalescedRDDPartition].preferredLocation)
+    assert(list3.sorted === Array("a","b","c"), "Locality preferences are dropped")
+
+    // RDD with locality preferences spread (non-randomly) over 6 machines, m0 through m5
+    val data = sc.makeRDD((1 to 9).map(i => (i, (i to (i+2)).map{ j => "m" + (j%6)})))
+    val coalesced1 = data.coalesce(3)
+    assert(coalesced1.collect().toList.sorted === (1 to 9).toList, "Data got *lost* in coalescing")
+
+    val splits = coalesced1.glom().collect().map(_.toList).toList
+    assert(splits.length === 3, "Supposed to coalesce to 3 but got " + splits.length)
+
+    assert(splits.forall(_.length >= 1) === true, "Some partitions were empty")
+
+    // If we try to coalesce into more partitions than the original RDD, it should just
+    // keep the original number of partitions.
+    val coalesced4 = data.coalesce(20)
+    val listOfLists = coalesced4.glom().collect().map(_.toList).toList
+    val sortedList = listOfLists.sortWith{ (x, y) => !x.isEmpty && (y.isEmpty || (x(0) < y(0))) }
+    assert( sortedList === (1 to 9).
+      map{x => List(x)}.toList, "Tried coalescing 9 partitions to 20 but didn't get 9 back")
+  }
+
+  test("cogrouped RDDs with locality, large scale (10K partitions)") {
+    // large scale experiment
+    import collection.mutable
+    val rnd = scala.util.Random
+    val partitions = 10000
+    val numMachines = 50
+    val machines = mutable.ListBuffer[String]()
+    (1 to numMachines).foreach(machines += "m"+_)
+
+    val blocks = (1 to partitions).map(i =>
+    { (i, Array.fill(3)(machines(rnd.nextInt(machines.size))).toList) } )
+
+    val data2 = sc.makeRDD(blocks)
+    val coalesced2 = data2.coalesce(numMachines*2)
+
+    // test that you get over 90% locality in each group
+    val minLocality = coalesced2.partitions
+      .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
+      .foldLeft(1.)((perc, loc) => math.min(perc,loc))
+    assert(minLocality >= 0.90, "Expected 90% locality but got " + (minLocality*100.).toInt + "%")
+
+    // test that the groups are load balanced with 100 +/- 20 elements in each
+    val maxImbalance = coalesced2.partitions
+      .map(part => part.asInstanceOf[CoalescedRDDPartition].parents.size)
+      .foldLeft(0)((dev, curr) => math.max(math.abs(100-curr),dev))
+    assert(maxImbalance <= 20, "Expected 100 +/- 20 per partition, but got " + maxImbalance)
+
+    val data3 = sc.makeRDD(blocks).map(i => i*2) // derived RDD to test *current* pref locs
+    val coalesced3 = data3.coalesce(numMachines*2)
+    val minLocality2 = coalesced3.partitions
+      .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
+      .foldLeft(1.)((perc, loc) => math.min(perc,loc))
+    assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
+      (minLocality2*100.).toInt + "%")
   }
 
   test("zipped RDDs") {
