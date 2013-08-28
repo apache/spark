@@ -91,7 +91,7 @@ mkdir -p "$DISTDIR/jars"
 echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 
 # Copy jars
-cp $FWDIR/assembly/target/*/*assembly*.jar "$DISTDIR/jars/"
+cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/jars/"
 
 # Copy other things
 mkdir "$DISTDIR"/conf
