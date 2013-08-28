@@ -63,7 +63,7 @@ private[spark] class Executor(
   // If we are in yarn mode, systems can have different disk layouts so we must set it
   // to what Yarn on this system said was available. This will be used later when SparkEnv
   // created.
-  if (java.lang.Boolean.valueOf(System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))) {
+  if (java.lang.Boolean.valueOf(System.getenv("SPARK_YARN_MODE"))) {
     System.setProperty("spark.local.dir", getYarnLocalDirs())
   }
 
