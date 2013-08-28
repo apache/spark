@@ -20,7 +20,7 @@ of these methods on slave nodes on your cluster.
 
 Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
 
-    sbt/sbt package
+    sbt/sbt assembly
 
 Spark also supports building using Maven. If you would like to build using Maven, see the [instructions for building Spark with Maven](building-with-maven.html).
 

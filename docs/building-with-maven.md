@@ -15,18 +15,18 @@ To enable support for HDFS and other Hadoop-supported storage systems, specify t
 For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop versions without YARN, use:
 
     # Apache Hadoop 1.2.1
-    $ mvn -Dhadoop.version=1.2.1 clean install
+    $ mvn -Dhadoop.version=1.2.1 clean package
 
     # Cloudera CDH 4.2.0 with MapReduce v1
-    $ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 clean install
+    $ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 clean package
 
 For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions with YARN, enable the "hadoop2-yarn" profile:
 
     # Apache Hadoop 2.0.5-alpha
-    $ mvn -Phadoop2-yarn -Dhadoop.version=2.0.5-alpha clean install
+    $ mvn -Phadoop2-yarn -Dhadoop.version=2.0.5-alpha clean package
 
     # Cloudera CDH 4.2.0 with MapReduce v2
-    $ mvn -Phadoop2-yarn -Dhadoop.version=2.0.0-cdh4.2.0 clean install
+    $ mvn -Phadoop2-yarn -Dhadoop.version=2.0.0-cdh4.2.0 clean package
 
 
 ## Spark Tests in Maven ##
@@ -35,7 +35,7 @@ Tests are run by default via the scalatest-maven-plugin. With this you can do th
 
 Skip test execution (but not compilation):
 
-    $ mvn -Dhadoop.version=... -DskipTests clean install
+    $ mvn -Dhadoop.version=... -DskipTests clean package
 
 To run a specific test suite:
 
@@ -72,8 +72,8 @@ This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the
 
 ## Building Spark Debian Packages ##
 
-It includes support for building a Debian package containing a 'fat-jar' which includes the repl, the examples and bagel. This can be created by specifying the deb profile:
+It includes support for building a Debian package containing a 'fat-jar' which includes the repl, the examples and bagel. This can be created by specifying the following profiles:
 
-    $ mvn -Pdeb clean install
+    $ mvn -Prepl-bin -Pdeb clean package
 
 The debian package can then be found under repl/target. We added the short commit hash to the file name so that we can distinguish individual packages build for SNAPSHOT versions.
