@@ -172,4 +172,4 @@ if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
   echo
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" "$@"
+exec "$RUNNER" -cp "$CLASSPATH" $EXTRA_ARGS "$@"
