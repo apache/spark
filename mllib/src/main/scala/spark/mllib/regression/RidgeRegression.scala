@@ -48,8 +48,7 @@ class RidgeRegressionWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
     var regParam: Double,
-    var miniBatchFraction: Double,
-    var addIntercept: Boolean)
+    var miniBatchFraction: Double)
     extends GeneralizedLinearAlgorithm[RidgeRegressionModel]
   with Serializable {
 
@@ -71,7 +70,7 @@ class RidgeRegressionWithSGD private (
   /**
    * Construct a RidgeRegression object with default parameters
    */
-  def this() = this(1.0, 100, 1.0, 1.0, true)
+  def this() = this(1.0, 100, 1.0, 1.0)
 
   def createModel(weights: Array[Double], intercept: Double) = {
     val weightsMat = new DoubleMatrix(weights.length + 1, 1, (Array(intercept) ++ weights):_*)
@@ -134,7 +133,7 @@ object RidgeRegressionWithSGD {
       initialWeights: Array[Double])
     : RidgeRegressionModel =
   {
-    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(
+    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(
       input, initialWeights)
   }
 
@@ -157,8 +156,7 @@ object RidgeRegressionWithSGD {
       miniBatchFraction: Double)
     : RidgeRegressionModel =
   {
-    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(
-      input)
+    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
   }
 
   /**
