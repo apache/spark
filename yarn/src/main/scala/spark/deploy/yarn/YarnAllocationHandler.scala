@@ -479,13 +479,21 @@ object YarnAllocationHandler {
   private val hostToRack = new ConcurrentHashMap[String, String]()
   private val rackToHostSet = new ConcurrentHashMap[String, JSet[String]]()
 
+
+  def newAllocator(conf: Configuration,
+                   resourceManager: AMRMProtocol, appAttemptId: ApplicationAttemptId,
+                   args: ApplicationMasterArguments): YarnAllocationHandler = {
+
+    new YarnAllocationHandler(conf, resourceManager, appAttemptId, args.numWorkers, 
+      args.workerMemory, args.workerCores, Map[String, Int](), Map[String, Int]())
+  }
+
   def newAllocator(conf: Configuration,
                    resourceManager: AMRMProtocol, appAttemptId: ApplicationAttemptId,
                    args: ApplicationMasterArguments,
                    map: collection.Map[String, collection.Set[SplitInfo]]): YarnAllocationHandler = {
 
     val (hostToCount, rackToCount) = generateNodeToWeight(conf, map)
-
 
     new YarnAllocationHandler(conf, resourceManager, appAttemptId, args.numWorkers, 
       args.workerMemory, args.workerCores, hostToCount, rackToCount)

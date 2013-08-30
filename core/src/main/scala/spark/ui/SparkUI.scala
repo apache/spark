@@ -1,5 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
+/* * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
@@ -78,7 +77,9 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
     server.foreach(_.stop())
   }
 
-  private[spark] def appUIAddress = "http://" + host + ":" + boundPort.getOrElse("-1")
+  private[spark] def appHttpUIAddress = "http://" + appUIAddress
+  private[spark] def appUIAddress = host + ":" + boundPort.getOrElse("-1")
+
 }
 
 private[spark] object SparkUI {

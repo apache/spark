@@ -49,7 +49,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val sparkHome = sc.getSparkHome().getOrElse(
       throw new IllegalArgumentException("must supply spark home for spark standalone"))
     val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome,
-        sc.ui.appUIAddress)
+        sc.ui.appHttpUIAddress)
 
     client = new Client(sc.env.actorSystem, master, appDesc, this)
     client.start()

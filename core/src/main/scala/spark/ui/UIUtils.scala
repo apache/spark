@@ -25,33 +25,53 @@ import spark.SparkContext
 private[spark] object UIUtils {
   import Page._
 
+  // Yarn has to go through a proxy so the base uri is provided and has to be on all links
+  private[spark] val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).
+                                         getOrElse("")
+
+  def addBaseUri(resource: String = ""): String = {
+    return uiRoot + resource
+  }
+
+  private[spark] val storageStr = addBaseUri("/storage")
+  private[spark] val stagesStr = addBaseUri("/stages")
+  private[spark] val envStr = addBaseUri("/environment")
+  private[spark] val executorsStr = addBaseUri("/executors")
+  private[spark] val bootstrapMinCssStr = addBaseUri("/static/bootstrap.min.css")
+  private[spark] val webuiCssStr = addBaseUri("/static/webui.css")
+  private[spark] val bootstrapResponsiveCssStr = addBaseUri("/static/bootstrap-responsive.min.css")
+  private[spark] val sortTableStr = addBaseUri("/static/sorttable.js")
+  private[spark] val sparkLogoHdStr = addBaseUri("/static/spark-logo-77x50px-hd.png")
+  private[spark] val sparkLogoStr = addBaseUri("/static/spark_logo.png")
+
+
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
   : Seq[Node] = {
-    val jobs = page match {
-      case Jobs => <li class="active"><a href="/stages">Jobs</a></li>
-      case _ => <li><a href="/stages">Jobs</a></li>
-    }
     val storage = page match {
-      case Storage => <li class="active"><a href="/storage">Storage</a></li>
-      case _ => <li><a href="/storage">Storage</a></li>
+      case Storage => <li class="active"><a href={storageStr}>Storage</a></li>
+      case _ => <li><a href={storageStr}>Storage</a></li>
+    }
+    val jobs = page match {
+      case Jobs => <li class="active"><a href={stagesStr}>Jobs</a></li>
+      case _ => <li><a href={stagesStr}>Jobs</a></li>
     }
     val environment = page match {
-      case Environment => <li class="active"><a href="/environment">Environment</a></li>
-      case _ => <li><a href="/environment">Environment</a></li>
+      case Environment => <li class="active"><a href={envStr}>Environment</a></li>
+      case _ => <li><a href={envStr}>Environment</a></li>
     }
     val executors = page match {
-      case Executors => <li class="active"><a href="/executors">Executors</a></li>
-      case _ => <li><a href="/executors">Executors</a></li>
+      case Executors => <li class="active"><a href={executorsStr}>Executors</a></li>
+      case _ => <li><a href={executorsStr}>Executors</a></li>
     }
 
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href="/static/bootstrap.min.css" type="text/css" />
-        <link rel="stylesheet" href="/static/webui.css" type="text/css" />
-        <link rel="stylesheet" href="/static/bootstrap-responsive.min.css" type="text/css" />
-        <script src="/static/sorttable.js"></script>
+        <link rel="stylesheet" href={bootstrapMinCssStr} type="text/css" />
+        <link rel="stylesheet" href={webuiCssStr} type="text/css" />
+        <link rel="stylesheet" href={bootstrapResponsiveCssStr} type="text/css" />
+        <script src={sortTableStr}></script>
         <title>{sc.appName} - {title}</title>
         <style type="text/css">
           table.sortable thead {{ cursor: pointer; }}
@@ -65,7 +85,7 @@ private[spark] object UIUtils {
               <div class="navbar">
                 <div class="navbar-inner">
                   <div class="container">
-                    <a href="/" class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></a>
+                    <a href="/" class="brand"><img src={sparkLogoHdStr} /></a>
                     <ul class="nav nav-pills">
                       {jobs}
                       {storage}
@@ -98,9 +118,9 @@ private[spark] object UIUtils {
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href="/static/bootstrap.min.css" type="text/css" />
-        <link rel="stylesheet" href="/static/bootstrap-responsive.min.css" type="text/css" />
-        <script src="/static/sorttable.js"></script>
+        <link rel="stylesheet" href={bootstrapMinCssStr} type="text/css" />
+        <link rel="stylesheet" href={bootstrapResponsiveCssStr} type="text/css" />
+        <script src={sortTableStr}></script>
         <title>{title}</title>
         <style type="text/css">
           table.sortable thead {{ cursor: pointer; }}
@@ -110,7 +130,7 @@ private[spark] object UIUtils {
         <div class="container">
           <div class="row">
             <div class="span2">
-              <img src="/static/spark_logo.png" />
+              <img src={sparkLogoStr} />
             </div>
             <div class="span10">
               <h3 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">

@@ -27,6 +27,8 @@ import org.apache.hadoop.conf.Configuration
  */
 private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration) extends ClusterScheduler(sc) {
 
+  logInfo("Created YarnClusterScheduler")
+
   def this(sc: SparkContext) = this(sc, new Configuration())
 
   // Nothing else for now ... initialize application master : which needs sparkContext to determine how to allocate
