@@ -29,12 +29,12 @@ import spark.api.java.JavaRDD;
 import spark.api.java.JavaSparkContext;
 import spark.mllib.util.LinearDataGenerator;
 
-public class JavaLassoSuite implements Serializable {
+public class JavaLinearRegressionSuite implements Serializable {
   private transient JavaSparkContext sc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaLassoSuite");
+    sc = new JavaSparkContext("local", "JavaLinearRegressionSuite");
   }
 
   @After
@@ -44,51 +44,48 @@ public class JavaLassoSuite implements Serializable {
     System.clearProperty("spark.driver.port");
   }
 
-  int validatePrediction(List<LabeledPoint> validationData, LassoModel model) {
+  int validatePrediction(List<LabeledPoint> validationData, LinearRegressionModel model) {
     int numAccurate = 0;
     for (LabeledPoint point: validationData) {
-      Double prediction = model.predict(point.features());
-      // A prediction is off if the prediction is more than 0.5 away from expected value.
-      if (Math.abs(prediction - point.label()) <= 0.5) {
-        numAccurate++;
-      }
+        Double prediction = model.predict(point.features());
+        // A prediction is off if the prediction is more than 0.5 away from expected value.
+        if (Math.abs(prediction - point.label()) <= 0.5) {
+            numAccurate++;
+        }
     }
     return numAccurate;
   }
 
   @Test
-  public void runLassoUsingConstructor() {
-    int nPoints = 10000;
-    double A = 2.0;
-    double[] weights = {-1.5, 1.0e-2};
+  public void runLinearRegressionUsingConstructor() {
+    int nPoints = 100;
+    double A = 3.0;
+    double[] weights = {10, 10};
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
-            weights, nPoints, 42, 0.1), 2).cache();
+    JavaRDD<LabeledPoint> testRDD = sc.parallelize(
+        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
     List<LabeledPoint> validationData =
-        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
+            LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
 
-    LassoWithSGD lassoSGDImpl = new LassoWithSGD();
-    lassoSGDImpl.optimizer().setStepSize(1.0)
-                          .setRegParam(0.01)
-                          .setNumIterations(20);
-    LassoModel model = lassoSGDImpl.run(testRDD.rdd());
+    LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD();
+    LinearRegressionModel model = linSGDImpl.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
 
   @Test
-  public void runLassoUsingStaticMethods() {
-    int nPoints = 10000;
-    double A = 2.0;
-    double[] weights = {-1.5, 1.0e-2};
+  public void runLinearRegressionUsingStaticMethods() {
+    int nPoints = 100;
+    double A = 3.0;
+    double[] weights = {10, 10};
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(LinearDataGenerator.generateLinearInputAsList(A,
-        weights, nPoints, 42, 0.1), 2).cache();
+    JavaRDD<LabeledPoint> testRDD = sc.parallelize(
+        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
     List<LabeledPoint> validationData =
-        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
+            LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
 
-    LassoModel model = LassoWithSGD.train(testRDD.rdd(), 100, 1.0, 0.01, 1.0);
+    LinearRegressionModel model = LinearRegressionWithSGD.train(testRDD.rdd(), 100);
 
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);

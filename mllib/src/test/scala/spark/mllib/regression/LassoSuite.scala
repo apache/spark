@@ -24,37 +24,8 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
+import spark.mllib.util.LinearDataGenerator
 
-import org.jblas.DoubleMatrix
-
-object LassoSuite {
-
-  def generateLassoInputAsList(
-    intercept: Double,
-    weights: Array[Double],
-    nPoints: Int,
-    seed: Int): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateLassoInput(intercept, weights, nPoints, seed))
-  }
-
-
-  // Generate noisy input of the form Y = x.dot(weights) + intercept + noise
-  def generateLassoInput(
-    intercept: Double,
-    weights: Array[Double],
-    nPoints: Int,
-    seed: Int): Seq[LabeledPoint] = {
-    val rnd = new Random(seed)
-    val weightsMat = new DoubleMatrix(1, weights.length, weights:_*)
-    val x = Array.fill[Array[Double]](nPoints)(
-      Array.fill[Double](weights.length)(rnd.nextGaussian()))
-    val y = x.map(xi =>
-      (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + 0.1 * rnd.nextGaussian()
-    )
-    y.zip(x).map(p => LabeledPoint(p._1, p._2))
-  }
-
-}
 
 class LassoSuite extends FunSuite with BeforeAndAfterAll {
   @transient private var sc: SparkContext = _
@@ -85,7 +56,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     val B = -1.5
     val C = 1.0e-2
 
-    val testData = LassoSuite.generateLassoInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 42)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
@@ -101,7 +72,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
     assert(weight1 >= -1.0e-3 && weight1 <= 1.0e-3, weight1 + " not in [-0.001, 0.001]")
 
-    val validationData = LassoSuite.generateLassoInput(A, Array[Double](B,C), nPoints, 17)
+    val validationData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 17)
     val validationRDD  = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
@@ -118,7 +89,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     val B = -1.5
     val C = 1.0e-2
 
-    val testData = LassoSuite.generateLassoInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 42)
 
     val initialB = -1.0
     val initialC = -1.0
@@ -138,7 +109,7 @@ class LassoSuite extends FunSuite with BeforeAndAfterAll {
     assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
     assert(weight1 >= -1.0e-3 && weight1 <= 1.0e-3, weight1 + " not in [-0.001, 0.001]")
 
-    val validationData = LassoSuite.generateLassoInput(A, Array[Double](B,C), nPoints, 17)
+    val validationData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 17)
     val validationRDD  = sc.parallelize(validationData,2)
 
     // Test prediction on RDD.

@@ -18,200 +18,198 @@
 package spark.mllib.regression
 
 import spark.{Logging, RDD, SparkContext}
+import spark.mllib.optimization._
 import spark.mllib.util.MLUtils
 
 import org.jblas.DoubleMatrix
-import org.jblas.Solve
-
-import scala.annotation.tailrec
-import scala.collection.mutable
 
 /**
- * Ridge Regression from Joseph Gonzalez's implementation in MLBase
+ * Regression model trained using RidgeRegression.
+ *
+ * @param weights Weights computed for every feature.
+ * @param intercept Intercept computed for this model.
  */
 class RidgeRegressionModel(
-    val weights: DoubleMatrix,
-    val intercept: Double,
-    val lambdaOpt: Double,
-    val lambdas: Seq[(Double, Double, DoubleMatrix)])
-  extends RegressionModel {
+    override val weights: Array[Double],
+    override val intercept: Double)
+  extends GeneralizedLinearModel(weights, intercept)
+  with RegressionModel with Serializable {
 
-  override def predict(testData: RDD[Array[Double]]): RDD[Double] = {
-    // A small optimization to avoid serializing the entire model.
-    val localIntercept = this.intercept
-    val localWeights = this.weights
-    testData.map { x =>
-      (new DoubleMatrix(1, x.length, x:_*).mmul(localWeights)).get(0) + localIntercept
-    }
-  }
-
-  override def predict(testData: Array[Double]): Double = {
-    (new DoubleMatrix(1, testData.length, testData:_*).mmul(this.weights)).get(0) + this.intercept
-  }
-}
-
-class RidgeRegression private (var lambdaLow: Double, var lambdaHigh: Double)
-  extends Logging {
-
-  def this() = this(0.0, 100.0)
-
-  /**
-   * Set the lower bound on binary search for lambda's. Default is 0.
-   */
-  def setLowLambda(low: Double) = {
-    this.lambdaLow = low
-    this
-  }
-
-  /**
-   * Set the upper bound on binary search for lambda's. Default is 100.0.
-   */
-  def setHighLambda(hi: Double) = {
-    this.lambdaHigh = hi
-    this
-  }
-
-  def train(inputLabeled: RDD[LabeledPoint]): RidgeRegressionModel = {
-    val input = inputLabeled.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
-    val nfeatures: Int = input.take(1)(0)._2.length
-    val nexamples: Long = input.count()
-
-    val (yMean, xColMean, xColSd) = MLUtils.computeStats(input, nfeatures, nexamples)
-
-    val data = input.map { case(y, features) =>
-      val yNormalized = y - yMean
-      val featuresMat = new DoubleMatrix(nfeatures, 1, features:_*)
-      val featuresNormalized = featuresMat.sub(xColMean).divi(xColSd)
-      (yNormalized, featuresNormalized.toArray)
-    }
-
-    // Compute XtX - Size of XtX is nfeatures by nfeatures
-    val XtX: DoubleMatrix = data.map { case (y, features) =>
-      val x = new DoubleMatrix(1, features.length, features:_*)
-      x.transpose().mmul(x)
-    }.reduce(_.addi(_))
-
-    // Compute Xt*y - Size of Xty is nfeatures by 1
-    val Xty: DoubleMatrix = data.map { case (y, features) =>
-      new DoubleMatrix(features.length, 1, features:_*).mul(y)
-    }.reduce(_.addi(_))
-
-    // Define a function to compute the leave one out cross validation error
-    // for a single example
-    def crossValidate(lambda: Double): (Double, Double, DoubleMatrix) = {
-      // Compute the MLE ridge regression parameter value
-
-      // Ridge Regression parameter = inv(XtX + \lambda*I) * Xty
-      val XtXlambda = DoubleMatrix.eye(nfeatures).muli(lambda).addi(XtX)
-      val w = Solve.solveSymmetric(XtXlambda, Xty)
-
-      val invXtX = Solve.solveSymmetric(XtXlambda, DoubleMatrix.eye(nfeatures))
-
-      // compute the generalized cross validation score
-      val cverror = data.map {
-        case (y, features) =>
-          val x = new DoubleMatrix(features.length, 1, features:_*)
-          val yhat = w.transpose().mmul(x).get(0)
-          val H_ii = x.transpose().mmul(invXtX).mmul(x).get(0)
-          val residual = (y - yhat) / (1.0 - H_ii)
-          residual * residual
-      }.reduce(_ + _) / nexamples
-
-      (lambda, cverror, w)
-    }
-
-    // Binary search for the best assignment to lambda.
-    def binSearch(low: Double, high: Double): Seq[(Double, Double, DoubleMatrix)] = {
-      val buffer = mutable.ListBuffer.empty[(Double, Double, DoubleMatrix)]
-
-      @tailrec
-      def loop(low: Double, high: Double): Seq[(Double, Double, DoubleMatrix)] = {
-        val mid = (high - low) / 2 + low
-        val lowValue = crossValidate((mid - low) / 2 + low)
-        val highValue = crossValidate((high - mid) / 2 + mid)
-        val (newLow, newHigh) = if (lowValue._2 < highValue._2) {
-          (low, mid + (high-low)/4)
-        } else {
-          (mid - (high-low)/4, high)
-        }
-        if (newHigh - newLow > 1.0E-7) {
-          buffer += lowValue += highValue
-          loop(newLow, newHigh)
-        } else {
-          buffer += lowValue += highValue
-          buffer.result()
-        }
-      }
-
-      loop(low, high)
-    }
-
-    // Actually compute the best lambda
-    val lambdas = binSearch(lambdaLow, lambdaHigh).sortBy(_._1)
-
-    // Find the best parameter set by taking the lowest cverror.
-    val (lambdaOpt, cverror, weights) = lambdas.reduce((a, b) => if (a._2 < b._2) a else b)
-
-    // Return the model which contains the solution
-    val weightsScaled = weights.div(xColSd)
-    val intercept = yMean - (weights.transpose().mmul(xColMean.div(xColSd)).get(0))
-    val model = new RidgeRegressionModel(weightsScaled, intercept, lambdaOpt, lambdas)
-
-    logInfo("RidgeRegression: optimal lambda " + model.lambdaOpt)
-    logInfo("RidgeRegression: optimal weights " + model.weights)
-    logInfo("RidgeRegression: optimal intercept " + model.intercept)
-    logInfo("RidgeRegression: cross-validation error " + cverror)
-
-    model
+  override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+                            intercept: Double) = {
+    dataMatrix.dot(weightMatrix) + intercept
   }
 }
 
 /**
- * Top-level methods for calling Ridge Regression.
+ * Train a regression model with L2-regularization using Stochastic Gradient Descent.
  */
-object RidgeRegression {
-  // NOTE(shivaram): We use multiple train methods instead of default arguments to support
-  // Java programs.
+class RidgeRegressionWithSGD private (
+    var stepSize: Double,
+    var numIterations: Int,
+    var regParam: Double,
+    var miniBatchFraction: Double,
+    var addIntercept: Boolean)
+    extends GeneralizedLinearAlgorithm[RidgeRegressionModel]
+  with Serializable {
+
+  val gradient = new SquaredGradient()
+  val updater = new SquaredL2Updater()
+
+  @transient val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+    .setNumIterations(numIterations)
+    .setRegParam(regParam)
+    .setMiniBatchFraction(miniBatchFraction)
+
+  // We don't want to penalize the intercept in RidgeRegression, so set this to false.
+  setIntercept(false)
+
+  var yMean = 0.0
+  var xColMean: DoubleMatrix = _
+  var xColSd: DoubleMatrix = _
 
   /**
-   * Train a ridge regression model given an RDD of (response, features) pairs.
-   * We use the closed form solution to compute the cross-validation score for
-   * a given lambda. The optimal lambda is computed by performing binary search
-   * between the provided bounds of lambda.
+   * Construct a RidgeRegression object with default parameters
+   */
+  def this() = this(1.0, 100, 1.0, 1.0, true)
+
+  def createModel(weights: Array[Double], intercept: Double) = {
+    val weightsMat = new DoubleMatrix(weights.length + 1, 1, (Array(intercept) ++ weights):_*)
+    val weightsScaled = weightsMat.div(xColSd)
+    val interceptScaled = yMean - (weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0))
+
+    new RidgeRegressionModel(weightsScaled.data, interceptScaled)
+  }
+
+  override def run(
+      input: RDD[LabeledPoint],
+      initialWeights: Array[Double])
+    : RidgeRegressionModel =
+  {
+    val nfeatures: Int = input.first.features.length
+    val nexamples: Long = input.count()
+
+    // To avoid penalizing the intercept, we center and scale the data.
+    val stats = MLUtils.computeStats(input, nfeatures, nexamples)
+    yMean = stats._1
+    xColMean = stats._2
+    xColSd = stats._3
+
+    val normalizedData = input.map { point =>
+      val yNormalized = point.label - yMean
+      val featuresMat = new DoubleMatrix(nfeatures, 1, point.features:_*)
+      val featuresNormalized = featuresMat.sub(xColMean).divi(xColSd)
+      LabeledPoint(yNormalized, featuresNormalized.toArray)
+    }
+
+    super.run(normalizedData, initialWeights)
+  }
+}
+
+/**
+ * Top-level methods for calling RidgeRegression.
+ */
+object RidgeRegressionWithSGD {
+
+  /**
+   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
+   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
+   * gradient descent are initialized using the initial weights provided.
    *
-   * @param input RDD of (response, array of features) pairs.
-   * @param lambdaLow lower bound used in binary search for lambda
-   * @param lambdaHigh upper bound used in binary search for lambda
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param regParam Regularization parameter.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to 
+   *        the number of features in the data.
    */
   def train(
       input: RDD[LabeledPoint],
-      lambdaLow: Double,
-      lambdaHigh: Double)
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double,
+      miniBatchFraction: Double,
+      initialWeights: Array[Double])
     : RidgeRegressionModel =
   {
-    new RidgeRegression(lambdaLow, lambdaHigh).train(input)
+    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(
+      input, initialWeights)
   }
 
   /**
-   * Train a ridge regression model given an RDD of (response, features) pairs.
-   * We use the closed form solution to compute the cross-validation score for
-   * a given lambda. The optimal lambda is computed by performing binary search
-   * between lambda values of 0 and 100.
+   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
+   * of iterations of gradient descent using the specified step size. Each iteration uses
+   * `miniBatchFraction` fraction of the data to calculate the gradient.
    *
-   * @param input RDD of (response, array of features) pairs.
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param stepSize Step size to be used for each iteration of gradient descent.
+   * @param regParam Regularization parameter.
+   * @param miniBatchFraction Fraction of data to be used per iteration.
    */
-  def train(input: RDD[LabeledPoint]) : RidgeRegressionModel = {
-    train(input, 0.0, 100.0)
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double,
+      miniBatchFraction: Double)
+    : RidgeRegressionModel =
+  {
+    new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(
+      input)
+  }
+
+  /**
+   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
+   * of iterations of gradient descent using the specified step size. We use the entire data set to
+   * update the gradient in each iteration.
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param stepSize Step size to be used for each iteration of Gradient Descent.
+   * @param regParam Regularization parameter.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @return a RidgeRegressionModel which has the weights and offset from training.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double)
+    : RidgeRegressionModel =
+  {
+    train(input, numIterations, stepSize, regParam, 1.0)
+  }
+
+  /**
+   * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
+   * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
+   * update the gradient in each iteration.
+   *
+   * @param input RDD of (label, array of features) pairs.
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @return a RidgeRegressionModel which has the weights and offset from training.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      numIterations: Int)
+    : RidgeRegressionModel =
+  {
+    train(input, numIterations, 1.0, 1.0, 1.0)
   }
 
   def main(args: Array[String]) {
-    if (args.length != 2) {
-      println("Usage: RidgeRegression <master> <input_dir>")
+    if (args.length != 5) {
+      println("Usage: RidgeRegression <master> <input_dir> <step_size> <regularization_parameter>" +
+        " <niters>")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "RidgeRegression")
     val data = MLUtils.loadLabeledData(sc, args(1))
-    val model = RidgeRegression.train(data, 0, 1000)
+    val model = RidgeRegressionWithSGD.train(data, args(4).toInt, args(2).toDouble,
+        args(3).toDouble)
+
     sc.stop()
   }
 }

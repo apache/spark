@@ -17,14 +17,16 @@
 
 package spark.mllib.regression
 
+import scala.collection.JavaConversions._
 import scala.util.Random
 
+import org.jblas.DoubleMatrix
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import spark.SparkContext
 import spark.SparkContext._
-
+import spark.mllib.util.LinearDataGenerator
 
 class RidgeRegressionSuite extends FunSuite with BeforeAndAfterAll {
   @transient private var sc: SparkContext = _
@@ -38,31 +40,51 @@ class RidgeRegressionSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-  // Test if we can correctly learn Y = 3 + X1 + X2 when
-  // X1 and X2 are collinear.
-  test("multi-collinear variables") {
-    val rnd = new Random(43)
-    val x1 = Array.fill[Double](20)(rnd.nextGaussian())
+  def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]) = {
+    predictions.zip(input).map { case (prediction, expected) =>
+      (prediction - expected.label) * (prediction - expected.label)
+    }.reduceLeft(_ + _) / predictions.size
+  }
 
-    // Pick a mean close to mean of x1
-    val rnd1 = new Random(42) //new NormalDistribution(0.1, 0.01)
-    val x2 = Array.fill[Double](20)(0.1 + rnd1.nextGaussian() * 0.01)
+  test("regularization with skewed weights") {
+    val nexamples = 200
+    val nfeatures = 20
+    val eps = 10
 
-    val xMat = (0 until 20).map(i => Array(x1(i), x2(i))).toArray
+    org.jblas.util.Random.seed(42)
+    // Pick weights as random values distributed uniformly in [-0.5, 0.5]
+    val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
+    // Set first two weights to eps
+    w.put(0, 0, eps)
+    w.put(1, 0, eps)
 
-    val y = xMat.map(i => 3 + i(0) + i(1))
-    val testData = (0 until 20).map(i => LabeledPoint(y(i), xMat(i))).toArray
+    // Use half of data for training and other half for validation
+    val data = LinearDataGenerator.generateLinearInput(3.0, w.toArray, 2*nexamples, 42, eps)
+    val testData = data.take(nexamples)
+    val validationData = data.takeRight(nexamples)
 
-    val testRDD = sc.parallelize(testData, 2)
-    testRDD.cache()
-    val ridgeReg = new RidgeRegression().setLowLambda(0)
-                                        .setHighLambda(10)
+    val testRDD = sc.parallelize(testData, 2).cache()
+    val validationRDD = sc.parallelize(validationData, 2).cache()
 
-    val model = ridgeReg.train(testRDD)
+    // First run without regularization.
+    val linearReg = new LinearRegressionWithSGD()
+    linearReg.optimizer.setNumIterations(200)
+                       .setStepSize(1.0)
 
-    assert(model.intercept >= 2.9 && model.intercept <= 3.1)
-    assert(model.weights.length === 2)
-    assert(model.weights.get(0) >= 0.9 && model.weights.get(0) <= 1.1)
-    assert(model.weights.get(1) >= 0.9 && model.weights.get(1) <= 1.1)
+    val linearModel = linearReg.run(testRDD)
+    val linearErr = predictionError(
+        linearModel.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    val ridgeReg = new RidgeRegressionWithSGD()
+    ridgeReg.optimizer.setNumIterations(200)
+                      .setRegParam(0.1)
+                      .setStepSize(1.0)
+    val ridgeModel = ridgeReg.run(testRDD)
+    val ridgeErr = predictionError(
+        ridgeModel.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Ridge CV-error should be lower than linear regression
+    assert(ridgeErr < linearErr,
+      "ridgeError (" + ridgeErr + ") was not less than linearError(" + linearErr + ")")
   }
 }
