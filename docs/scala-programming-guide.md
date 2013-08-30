@@ -356,7 +356,7 @@ res2: Int = 10
 # Where to Go from Here
 
 You can see some [example Spark programs](http://www.spark-project.org/examples.html) on the Spark website.
-In addition, Spark includes several sample programs in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `run` script included in Spark -- for example, `./run spark.examples.SparkPi`. Each example program prints usage help when run without any arguments.
+In addition, Spark includes several sample programs in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `run-example` script included in Spark -- for example, `./run-example spark.examples.SparkPi`. Each example program prints usage help when run without any arguments.
 
 For help on optimizing your program, the [configuration](configuration.html) and
 [tuning](tuning.html) guides provide information on best practices. They are especially important for

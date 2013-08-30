@@ -87,7 +87,7 @@ TEST_LOG_DIR=$?
 if [ "${TEST_LOG_DIR}" = "0" ]; then
   rm -f $SPARK_LOG_DIR/.spark_test
 else
-  chown $SPARK_IDENT_STRING $SPARK_LOG_DIR 
+  chown $SPARK_IDENT_STRING $SPARK_LOG_DIR
 fi
 
 if [ "$SPARK_PID_DIR" = "" ]; then
@@ -109,7 +109,7 @@ fi
 case $startStop in
 
   (start)
-    
+
     mkdir -p "$SPARK_PID_DIR"
 
     if [ -f $pid ]; then
@@ -128,11 +128,11 @@ case $startStop in
     echo starting $command, logging to $log
     echo "Spark Daemon: $command" > $log
     cd "$SPARK_PREFIX"
-    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/run $command "$@" >> "$log" 2>&1 < /dev/null &
+    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
     echo $! > $pid
     sleep 1; head "$log"
     ;;
-          
+
   (stop)
 
     if [ -f $pid ]; then

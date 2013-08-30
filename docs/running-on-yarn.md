@@ -15,9 +15,9 @@ We need a consolidated spark core jar (which bundles all the required dependenci
 This can be built either through sbt or via maven.
 
 -   Building spark assembled jar via sbt.
-Enable YARN support by setting `SPARK_WITH_YARN=true` when invoking sbt:
+Enable YARN support by setting `SPARK_YARN=true` when invoking sbt:
 
-    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_WITH_YARN=true ./sbt/sbt clean assembly
+    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true ./sbt/sbt clean assembly
 
 The assembled jar would typically be something like :
 `./yarn/target/spark-yarn-assembly-0.8.0-SNAPSHOT.jar`
@@ -55,7 +55,7 @@ This would be used to connect to the cluster, write to the dfs and submit jobs t
 
 The command to launch the YARN Client is as follows:
 
-    SPARK_JAR=<SPARK_YARN_JAR_FILE> ./run spark.deploy.yarn.Client \
+    SPARK_JAR=<SPARK_YARN_JAR_FILE> ./spark-class spark.deploy.yarn.Client \
       --jar <YOUR_APP_JAR_FILE> \
       --class <APP_MAIN_CLASS> \
       --args <APP_MAIN_ARGUMENTS> \
@@ -67,7 +67,7 @@ The command to launch the YARN Client is as follows:
 
 For example:
 
-    SPARK_JAR=./yarn/target/spark-yarn-assembly-{{site.SPARK_VERSION}}.jar ./run spark.deploy.yarn.Client \
+    SPARK_JAR=./yarn/target/spark-yarn-assembly-{{site.SPARK_VERSION}}.jar ./spark-class spark.deploy.yarn.Client \
       --jar examples/target/scala-{{site.SCALA_VERSION}}/spark-examples_{{site.SCALA_VERSION}}-{{site.SPARK_VERSION}}.jar \
       --class spark.examples.SparkPi \
       --args yarn-standalone \

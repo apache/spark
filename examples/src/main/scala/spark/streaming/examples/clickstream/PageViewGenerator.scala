@@ -37,8 +37,8 @@ object PageView {
 /** Generates streaming events to simulate page views on a website.
   *
   * This should be used in tandem with PageViewStream.scala. Example:
-  * $ ./run spark.streaming.examples.clickstream.PageViewGenerator 44444 10
-  * $ ./run spark.streaming.examples.clickstream.PageViewStream errorRatePerZipCode localhost 44444
+  * $ ./run-example spark.streaming.examples.clickstream.PageViewGenerator 44444 10
+  * $ ./run-example spark.streaming.examples.clickstream.PageViewStream errorRatePerZipCode localhost 44444
   * */
 object PageViewGenerator {
   val pages = Map("http://foo.com/"        -> .7,

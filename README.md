@@ -16,20 +16,20 @@ Spark requires Scala 2.9.3 (Scala 2.10 is not yet supported). The project is
 built using Simple Build Tool (SBT), which is packaged with it. To build
 Spark and its example programs, run:
 
-    sbt/sbt package assembly
+    sbt/sbt assembly
 
 Spark also supports building using Maven. If you would like to build using Maven,
 see the [instructions for building Spark with Maven](http://spark-project.org/docs/latest/building-with-maven.html)
-in the spark documentation..
+in the Spark documentation..
 
 To run Spark, you will need to have Scala's bin directory in your `PATH`, or
 you will need to set the `SCALA_HOME` environment variable to point to where
 you've installed Scala. Scala must be accessible through one of these
 methods on your cluster's worker nodes as well as its master.
 
-To run one of the examples, use `./run <class> <params>`. For example:
+To run one of the examples, use `./run-example <class> <params>`. For example:
 
-    ./run spark.examples.SparkLR local[2]
+    ./run-example spark.examples.SparkLR local[2]
 
 will run the Logistic Regression example locally on 2 CPUs.
 
@@ -52,19 +52,19 @@ For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop
 versions without YARN, use:
 
     # Apache Hadoop 1.2.1
-    $ SPARK_HADOOP_VERSION=1.2.1 sbt/sbt package assembly
+    $ SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
 
     # Cloudera CDH 4.2.0 with MapReduce v1
-    $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt package assembly
+    $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt assembly
 
 For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
 with YARN, also set `SPARK_WITH_YARN=true`:
 
     # Apache Hadoop 2.0.5-alpha
-    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_WITH_YARN=true sbt/sbt package assembly
+    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_WITH_YARN=true sbt/sbt assembly
 
     # Cloudera CDH 4.2.0 with MapReduce v2
-    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_WITH_YARN=true sbt/sbt package assembly
+    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_WITH_YARN=true sbt/sbt assembly
 
 For convenience, these variables may also be set through the `conf/spark-env.sh` file
 described below.

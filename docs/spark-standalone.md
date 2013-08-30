@@ -20,7 +20,7 @@ Compile Spark with `sbt package` as described in the [Getting Started Guide](ind
 
 You can start a standalone master server by executing:
 
-    ./run spark.deploy.master.Master
+    ./spark-class spark.deploy.master.Master
 
 Once started, the master will print out a `spark://IP:PORT` URL for itself, which you can use to connect workers to it,
 or pass as the "master" argument to `SparkContext` to connect a job to the cluster. You can also find this URL on
@@ -28,7 +28,7 @@ the master's web UI, which is [http://localhost:8080](http://localhost:8080) by 
 
 Similarly, you can start one or more workers and connect them to the master via:
 
-    ./run spark.deploy.worker.Worker spark://IP:PORT
+    ./spark-class spark.deploy.worker.Worker spark://IP:PORT
 
 Once you have started a worker, look at the master's web UI ([http://localhost:8080](http://localhost:8080) by default).
 You should see the new node listed there, along with its number of CPUs and memory (minus one gigabyte left for the OS).

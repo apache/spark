@@ -190,6 +190,6 @@ We hope to generate documentation with Java-style syntax in the future.
 
 Spark includes several sample programs using the Java API in
 [`examples/src/main/java`](https://github.com/mesos/spark/tree/master/examples/src/main/java/spark/examples).  You can run them by passing the class name to the
-`run` script included in Spark -- for example, `./run
+`run-example` script included in Spark -- for example, `./run-example
 spark.examples.JavaWordCount`.  Each example program prints usage help when run
 without any arguments.
