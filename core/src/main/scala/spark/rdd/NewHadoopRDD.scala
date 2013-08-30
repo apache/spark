@@ -120,4 +120,7 @@ class NewHadoopRDD[K, V](
     val theSplit = split.asInstanceOf[NewHadoopPartition]
     theSplit.serializableHadoopSplit.value.getLocations.filter(_ != "localhost")
   }
+
+  def getConf: Configuration = confBroadcast.value.value
 }
+
