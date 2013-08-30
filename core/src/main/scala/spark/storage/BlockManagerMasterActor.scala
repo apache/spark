@@ -372,12 +372,12 @@ object BlockManagerMasterActor {
         if (blockStatus.storageLevel.useMemory) {
           _remainingMem += blockStatus.memSize
           logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
+            blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.memSize),
             Utils.bytesToString(_remainingMem)))
         }
         if (blockStatus.storageLevel.useDisk) {
           logInfo("Removed %s on %s on disk (size: %s)".format(
-            blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
+            blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
         }
       }
     }
