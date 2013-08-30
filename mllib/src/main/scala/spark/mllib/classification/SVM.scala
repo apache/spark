@@ -18,10 +18,12 @@
 package spark.mllib.classification
 
 import scala.math.signum
+
 import spark.{Logging, RDD, SparkContext}
 import spark.mllib.optimization._
 import spark.mllib.regression._
 import spark.mllib.util.MLUtils
+import spark.mllib.util.DataValidators
 
 import org.jblas.DoubleMatrix
 
@@ -39,31 +41,36 @@ class SVMModel(
 
   override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
       intercept: Double) = {
-    signum(dataMatrix.dot(weightMatrix) + intercept)
+    val margin = dataMatrix.dot(weightMatrix) + intercept
+    if (margin < 0) 0.0 else 1.0
   }
 }
 
 /**
  * Train an SVM using Stochastic Gradient Descent.
+ * NOTE: Labels used in SVM should be {0, 1}
  */
 class SVMWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
     var regParam: Double,
-    var miniBatchFraction: Double,
-    var addIntercept: Boolean)
+    var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
 
   val gradient = new HingeGradient()
   val updater = new SquaredL2Updater()
-  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
-                                                        .setNumIterations(numIterations)
-                                                        .setRegParam(regParam)
-                                                        .setMiniBatchFraction(miniBatchFraction)
+  override val optimizer = new GradientDescent(gradient, updater)
+    .setStepSize(stepSize)
+    .setNumIterations(numIterations)
+    .setRegParam(regParam)
+    .setMiniBatchFraction(miniBatchFraction)
+
+  override val validators = List(DataValidators.classificationLabels)
+
   /**
    * Construct a SVM object with default parameters
    */
-  def this() = this(1.0, 100, 1.0, 1.0, true)
+  def this() = this(1.0, 100, 1.0, 1.0)
 
   def createModel(weights: Array[Double], intercept: Double) = {
     new SVMModel(weights, intercept)
@@ -71,7 +78,7 @@ class SVMWithSGD private (
 }
 
 /**
- * Top-level methods for calling SVM.
+ * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}
  */
 object SVMWithSGD {
 
@@ -80,6 +87,7 @@ object SVMWithSGD {
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
+   * NOTE: Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -98,7 +106,7 @@ object SVMWithSGD {
       initialWeights: Array[Double])
     : SVMModel =
   {
-    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input,
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input,
       initialWeights)
   }
 
@@ -106,6 +114,7 @@ object SVMWithSGD {
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
+   * NOTE: Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -121,13 +130,14 @@ object SVMWithSGD {
       miniBatchFraction: Double)
     : SVMModel =
   {
-    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction, true).run(input)
+    new SVMWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
   }
 
   /**
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. We use the entire data set to
    * update the gradient in each iteration.
+   * NOTE: Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
@@ -149,6 +159,7 @@ object SVMWithSGD {
    * Train a SVM model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
    * update the gradient in each iteration.
+   * NOTE: Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.

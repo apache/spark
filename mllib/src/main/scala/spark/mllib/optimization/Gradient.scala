@@ -77,16 +77,22 @@ class SquaredGradient extends Gradient {
 
 /**
  * Compute gradient and loss for a Hinge loss function.
+ * NOTE: This assumes that the labels are {0,1}
  */
 class HingeGradient extends Gradient {
-  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
+  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix):
       (DoubleMatrix, Double) = {
 
     val dotProduct = data.dot(weights)
 
-    if (1.0 > label * dotProduct)
-      (data.mul(-label), 1.0 - label * dotProduct)
-    else
-      (DoubleMatrix.zeros(1,weights.length), 0.0)
+    // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
+    // Therefore the gradient is -(2y - 1)*x
+    val labelScaled = 2 * label - 1.0
+
+    if (1.0 > labelScaled * dotProduct) {
+      (data.mul(-labelScaled), 1.0 - labelScaled * dotProduct)
+    } else {
+      (DoubleMatrix.zeros(1, weights.length), 0.0)
+    }
   }
 }
