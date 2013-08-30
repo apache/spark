@@ -142,7 +142,13 @@ resolvers ++= Seq(
   "Spray Repository" at "http://repo.spray.cc/")
 {% endhighlight %}
 
-Of course, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job.
+If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on `hadoop-client` for your version of HDFS:
+
+{% highlight scala %}
+libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "<your-hdfs-version>"
+{% endhighlight %}
+
+Finally, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job.
 
 {% highlight bash %}
 $ find .
@@ -223,6 +229,16 @@ To build the job, we also write a Maven `pom.xml` file that lists Spark as a dep
 </project>
 {% endhighlight %}
 
+If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on `hadoop-client` for your version of HDFS:
+
+{% highlight xml %}
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
+      <version>...</version>
+    </dependency>
+{% endhighlight %}
+
 We lay out these files according to the canonical Maven directory structure:
 {% highlight bash %}
 $ find .
@@ -281,3 +297,5 @@ Lines with a: 46, Lines with b: 23
 {% endhighlight python %}
 
 This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
+
+Also, this example links against the default version of HDFS that Spark builds with (1.0.4). You can run it against other HDFS versions by [building Spark with another HDFS version](index.html#a-note-about-hadoop-versions).

@@ -3,42 +3,37 @@ layout: global
 title: Spark Overview
 ---
 
-Apache Spark is a cluster computing engine that aims to make data analytics both easier and faster.
-It provides rich, language-integrated APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html), and a powerful execution engine that supports general operator graphs.
+Apache Spark is a cluster computing system that aims to make data analytics faster to run and faster to write.
+It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html), and a general execution engine that supports rich operator graphs.
 Spark can run on the Apache Mesos cluster manager, Hadoop YARN, Amazon EC2, or without an independent resource manager ("standalone mode").
 
 # Downloading
 
-Get Spark from the [downloads page](http://spark.incubator.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}.
+Get Spark by visiting the [downloads page](http://spark.incubator.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}.
 
 # Building
-
-Spark requires [Scala {{site.SCALA_VERSION}}](http://www.scala-lang.org/). You will need to have Scala's `bin` directory in your `PATH`,
-or you will need to set the `SCALA_HOME` environment variable to point
-to where you've installed Scala. Scala must also be accessible through one
-of these methods on slave nodes on your cluster.
 
 Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
 
     sbt/sbt assembly
 
-Spark also supports building using Maven. If you would like to build using Maven, see the [instructions for building Spark with Maven](building-with-maven.html).
+For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_VERSION}}. If you write applications in Scala, you will need to use this same version of Scala in your own program -- newer major versions may not work. You can get the right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
 
 # Testing the Build
 
-Spark comes with a number of sample programs in the `examples` directory.
+Spark comes with several sample programs in the `examples` directory.
 To run one of the samples, use `./run-example <class> <params>` in the top-level Spark directory
-(the `run` script sets up the appropriate paths and launches that program).
-For example, `./run-example spark.examples.SparkPi` will run a sample program that estimates Pi. Each of the
-examples prints usage help if no params are given.
+(the `run-example` script sets up the appropriate paths and launches that program).
+For example, `./run-example spark.examples.SparkPi` will run a sample program that estimates Pi. Each
+example prints usage help if no params are given.
 
 Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
 to connect to. This can be a [URL for a distributed cluster](scala-programming-guide.html#master-urls),
 or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing.
 
-Finally, Spark can be used interactively from a modified version of the Scala interpreter that you can start through
-`./spark-shell`. This is a great way to learn Spark.
+Finally, Spark can be used interactively through modified versions of the Scala shell (`./spark-shell`) or
+Python interpreter (`./pyspark`). These are a great way to learn Spark.
 
 # A Note About Hadoop Versions
 
@@ -50,7 +45,7 @@ You can do this by setting the `SPARK_HADOOP_VERSION` variable when compiling:
     SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
 
 In addition, if you wish to run Spark on [YARN](running-on-yarn.md), you should also
-set `SPARK_YARN` to `true`:
+set `SPARK_YARN`:
 
     SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
 
