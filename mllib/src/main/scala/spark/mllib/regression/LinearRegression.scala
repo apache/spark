@@ -47,8 +47,7 @@ class LinearRegressionModel(
 class LinearRegressionWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
-    var miniBatchFraction: Double,
-    var addIntercept: Boolean)
+    var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LinearRegressionModel]
   with Serializable {
 
@@ -61,7 +60,7 @@ class LinearRegressionWithSGD private (
   /**
    * Construct a LinearRegression object with default parameters
    */
-  def this() = this(1.0, 100, 1.0, true)
+  def this() = this(1.0, 100, 1.0)
 
   def createModel(weights: Array[Double], intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
@@ -94,7 +93,7 @@ object LinearRegressionWithSGD {
       initialWeights: Array[Double])
     : LinearRegressionModel =
   {
-    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction, true).run(input,
+    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input,
       initialWeights)
   }
 
@@ -115,7 +114,7 @@ object LinearRegressionWithSGD {
       miniBatchFraction: Double)
     : LinearRegressionModel =
   {
-    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction, true).run(input)
+    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input)
   }
 
   /**
