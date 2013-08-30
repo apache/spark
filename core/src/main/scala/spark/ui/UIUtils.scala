@@ -48,13 +48,13 @@ private[spark] object UIUtils {
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
   : Seq[Node] = {
-    val storage = page match {
-      case Storage => <li class="active"><a href={storageStr}>Storage</a></li>
-      case _ => <li><a href={storageStr}>Storage</a></li>
-    }
     val jobs = page match {
       case Jobs => <li class="active"><a href={stagesStr}>Jobs</a></li>
       case _ => <li><a href={stagesStr}>Jobs</a></li>
+    }
+    val storage = page match {
+      case Storage => <li class="active"><a href={storageStr}>Storage</a></li>
+      case _ => <li><a href={storageStr}>Storage</a></li>
     }
     val environment = page match {
       case Environment => <li class="active"><a href={envStr}>Environment</a></li>

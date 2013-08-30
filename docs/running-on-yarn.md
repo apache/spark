@@ -49,7 +49,7 @@ Most of the configs are the same for Spark on YARN as other deploys. See the Con
 Environment variables:
 * `SPARK_YARN_USER_ENV`, to add environment variables to the Spark processes launched on YARN. This can be a comma separated list of environment variables. ie SPARK_YARN_USER_ENV="JAVA_HOME=/jdk64,FOO=bar"
 
-Properties:
+System Properties:
 * 'spark.yarn.applicationMaster.waitTries', property to set the number of times the ApplicationMaster waits for the the spark master and then also the number of tries it waits for the Spark Context to be intialized. Default is 10.
 
 # Launching Spark on YARN
