@@ -3,13 +3,13 @@ layout: global
 title: Spark Overview
 ---
 
-Spark is a MapReduce-like cluster computing framework designed for low-latency iterative jobs and interactive use from an interpreter.
-It provides clean, language-integrated APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html), with a rich array of parallel operators.
+Apache Spark is a cluster computing engine that aims to make data analytics both easier and faster.
+It provides rich, language-integrated APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html), and a powerful execution engine that supports general operator graphs.
 Spark can run on the Apache Mesos cluster manager, Hadoop YARN, Amazon EC2, or without an independent resource manager ("standalone mode").
 
 # Downloading
 
-Get Spark by visiting the [downloads page](http://spark-project.org/downloads.html) of the Spark website. This documentation is for Spark version {{site.SPARK_VERSION}}.
+Get Spark from the [downloads page](http://spark.incubator.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}.
 
 # Building
 
@@ -42,11 +42,17 @@ Finally, Spark can be used interactively from a modified version of the Scala in
 
 # A Note About Hadoop Versions
 
-Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
+Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
 storage systems. Because the HDFS protocol has changed in different versions of
-Hadoop, you must build Spark against the same version that your cluster runs.
-You can change the version by setting the `HADOOP_VERSION` variable at the top
-of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
+Hadoop, you must build Spark against the same version that your cluster uses.
+You can do this by setting the `SPARK_HADOOP_VERSION` variable when compiling:
+
+    SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
+
+In addition, if you wish to run Spark on [YARN](running-on-yarn.md), you should also
+set `SPARK_YARN` to `true`:
+
+    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
 
 # Where to Go from Here
 
@@ -54,15 +60,20 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
 * [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts, and details on the Scala API
-* [Java Programming Guide](java-programming-guide.html): using Spark from Java
-* [Python Programming Guide](python-programming-guide.html): using Spark from Python
-* [Spark Streaming Guide](streaming-programming-guide.html): using the alpha release of Spark Streaming
+  * [Java Programming Guide](java-programming-guide.html): using Spark from Java
+  * [Python Programming Guide](python-programming-guide.html): using Spark from Python
+* [Spark Streaming](streaming-programming-guide.html): using the alpha release of Spark Streaming
+* [MLlib (Machine Learning)](mllib-programming-guide.html): Spark's built-in machine learning library
+* [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
 
 **API Docs:**
 
-* [Spark Java/Scala (Scaladoc)](api/core/index.html)
-* [Spark Python (Epydoc)](api/pyspark/index.html)
-* [Spark Streaming Java/Scala (Scaladoc)](api/streaming/index.html)
+* [Spark for Java/Scala (Scaladoc)](api/core/index.html)
+* [Spark for Python (Epydoc)](api/pyspark/index.html)
+* [Spark Streaming for Java/Scala (Scaladoc)](api/streaming/index.html)
+* [MLlib (Machine Learning) for Java/Scala (Scaladoc)](api/mllib/index.html)
+* [Bagel (Pregel on Spark) for Scala (Scaladoc)](api/bagel/index.html)
+
 
 **Deployment guides:**
 
@@ -74,27 +85,27 @@ of `project/SparkBuild.scala`, then rebuilding Spark (`sbt/sbt clean compile`).
 
 **Other documents:**
 
-* [Building Spark With Maven](building-with-maven.html): Build Spark using the Maven build tool
 * [Configuration](configuration.html): customize Spark via its configuration system
 * [Tuning Guide](tuning.html): best practices to optimize performance and memory use
-* [Bagel](bagel-programming-guide.html): an implementation of Google's Pregel on Spark
+* [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
+* [Building Spark with Maven](building-with-maven.html): Build Spark using the Maven build tool
 * [Contributing to Spark](contributing-to-spark.html)
 
 **External resources:**
 
-* [Spark Homepage](http://www.spark-project.org)
-* [Mailing List](http://groups.google.com/group/spark-users): ask questions about Spark here
-* [AMP Camp](http://ampcamp.berkeley.edu/): a two-day training camp at UC Berkeley that featured talks and exercises
-  about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012),
+* [Spark Homepage](http://spark.incubator.apache.org)
+* [Mailing Lists](http://spark.incubator.apache.org/mailing-lists.html): ask questions about Spark here
+* [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
+  exercises about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012),
   [slides](http://ampcamp.berkeley.edu/agenda-2012) and [exercises](http://ampcamp.berkeley.edu/exercises-2012) are
   available online for free.
-* [Code Examples](http://spark-project.org/examples.html): more are also available in the [examples subfolder](https://github.com/mesos/spark/tree/master/examples/src/main/scala/spark/examples) of Spark
+* [Code Examples](http://spark.incubator.apache.org/examples.html): more are also available in the [examples subfolder](https://github.com/mesos/spark/tree/master/examples/src/main/scala/spark/examples) of Spark
 * [Paper Describing Spark](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
 * [Paper Describing Spark Streaming](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf)
 
 # Community
 
-To get help using Spark or keep up with Spark development, sign up for the [spark-users mailing list](http://groups.google.com/group/spark-users).
+To get help using Spark or keep up with Spark development, sign up for the [user mailing list](http://spark.incubator.apache.org/mailing-lists.html).
 
 If you're in the San Francisco Bay Area, there's a regular [Spark meetup](http://www.meetup.com/spark-users/) every few weeks. Come by to meet the developers and other users.
 

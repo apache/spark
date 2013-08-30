@@ -50,7 +50,7 @@ if [ -e "$EXAMPLES_DIR"/target/spark-examples*[0-9T].jar ]; then
 fi
 if [[ -z $SPARK_EXAMPLES_JAR ]]; then
   echo "Failed to find Spark examples assembly in $FWDIR/examples/target" >&2
-  echo "You need to compile Spark before running this program" >&2
+  echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
   exit 1
 fi
 
