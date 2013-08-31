@@ -55,7 +55,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     val blockTable = listingTable(blockHeaders, blockRow, blocks)
 
     val content =
-      <div class="row">
+      <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
             <li>
@@ -81,15 +81,15 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
           </ul>
         </div>
       </div>
-      <hr/>
-      <div class="row">
+
+      <div class="row-fluid">
         <div class="span12">
           <h4> Data Distribution on {workers.size} Executors </h4>
           {workerTable}
         </div>
       </div>
-      <hr/>
-      <div class="row">
+
+      <div class="row-fluid">
         <div class="span12">
           <h4> {blocks.size} Partitions </h4>
           {blockTable}

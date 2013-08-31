@@ -56,8 +56,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
       UIUtils.listingTable(executorHeaders, executorRow, workerState.finishedExecutors)
 
     val content =
-        <hr />
-        <div class="row"> <!-- Worker Details -->
+        <div class="row-fluid"> <!-- Worker Details -->
           <div class="span12">
             <ul class="unstyled">
               <li><strong>ID:</strong> {workerState.workerId}</li>
@@ -71,24 +70,22 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
             <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
           </div>
         </div>
-        <hr/>
 
-        <div class="row"> <!-- Running Executors -->
+        <div class="row-fluid"> <!-- Running Executors -->
           <div class="span12">
             <h4> Running Executors {workerState.executors.size} </h4>
             {runningExecutorTable}
           </div>
         </div>
-          <hr/>
 
-        <div class="row"> <!-- Finished Executors  -->
+        <div class="row-fluid"> <!-- Finished Executors  -->
           <div class="span12">
             <h4> Finished Executors </h4>
             {finishedExecutorTable}
           </div>
         </div>;
 
-    UIUtils.basicSparkPage(content, "Spark Worker on %s:%s".format(
+    UIUtils.basicSparkPage(content, "Spark Worker at %s:%s".format(
       workerState.host, workerState.port))
   }
 

@@ -46,7 +46,7 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
-    <div class="progress" style="height: 15px; margin-bottom: 0px; position: relative">
+    <div class="progress">
       <span style="text-align:center; position:absolute; width:100%;">
         {completed}/{total} {failed}
       </span>

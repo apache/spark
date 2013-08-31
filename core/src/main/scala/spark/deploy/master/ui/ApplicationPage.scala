@@ -31,6 +31,7 @@ import spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import spark.deploy.JsonProtocol
 import spark.deploy.master.ExecutorInfo
 import spark.ui.UIUtils
+import spark.Utils
 
 private[spark] class ApplicationPage(parent: MasterWebUI) {
   val master = parent.masterActorRef
@@ -61,24 +62,26 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
     val executorTable = UIUtils.listingTable(executorHeaders, executorRow, executors)
 
     val content =
-        <hr />
-        <div class="row">
+        <div class="row-fluid">
           <div class="span12">
             <ul class="unstyled">
               <li><strong>ID:</strong> {app.id}</li>
-              <li><strong>Description:</strong> {app.desc.name}</li>
+              <li><strong>Name:</strong> {app.desc.name}</li>
               <li><strong>User:</strong> {app.desc.user}</li>
               <li><strong>Cores:</strong>
                 {
                 if (app.desc.maxCores == Integer.MAX_VALUE) {
-                  "Unlimited %s granted".format(app.coresGranted)
+                  "Unlimited (%s granted)".format(app.coresGranted)
                 } else {
                   "%s (%s granted, %s left)".format(
                     app.desc.maxCores, app.coresGranted, app.coresLeft)
                 }
                 }
               </li>
-              <li><strong>Memory per Slave:</strong> {app.desc.memoryPerSlave}</li>
+              <li>
+                <strong>Executor Memory:</strong>
+                {Utils.megabytesToString(app.desc.memoryPerSlave)}
+              </li>
               <li><strong>Submit Date:</strong> {app.submitDate}</li>
               <li><strong>State:</strong> {app.state}</li>
               <li><strong><a href={app.appUiUrl}>Application Detail UI</a></strong></li>
@@ -86,15 +89,13 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
           </div>
         </div>
 
-          <hr/>
-
-        <div class="row"> <!-- Executors -->
+        <div class="row-fluid"> <!-- Executors -->
           <div class="span12">
             <h4> Executor Summary </h4>
             {executorTable}
           </div>
         </div>;
-    UIUtils.basicSparkPage(content, "Application Info: " + app.desc.name)
+    UIUtils.basicSparkPage(content, "Application: " + app.desc.name)
   }
 
   def executorRow(executor: ExecutorInfo): Seq[Node] = {

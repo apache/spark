@@ -46,7 +46,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return headerSparkPage(content, parent.sc, "Details for Stage %s".format(stageId), Jobs)
+        return headerSparkPage(content, parent.sc, "Details for Stage %s".format(stageId), Stages)
       }
 
       val tasks = listener.stageToTaskInfos(stageId).toSeq.sortBy(_._1.launchTime)
@@ -133,9 +133,9 @@ private[spark] class StagePage(parent: JobProgressUI) {
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
-        <hr/><h4>Tasks</h4> ++ taskTable;
+        <h4>Tasks</h4> ++ taskTable;
 
-      headerSparkPage(content, parent.sc, "Details for Stage %d".format(stageId), Jobs)
+      headerSparkPage(content, parent.sc, "Details for Stage %d".format(stageId), Stages)
     }
   }
 
