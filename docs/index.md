@@ -58,7 +58,7 @@ set `SPARK_YARN`:
   * [Java Programming Guide](java-programming-guide.html): using Spark from Java
   * [Python Programming Guide](python-programming-guide.html): using Spark from Python
 * [Spark Streaming](streaming-programming-guide.html): using the alpha release of Spark Streaming
-* [MLlib (Machine Learning)](mllib-programming-guide.html): Spark's built-in machine learning library
+* [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
 * [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
 
 **API Docs:**
