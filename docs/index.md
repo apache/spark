@@ -40,12 +40,13 @@ Python interpreter (`./pyspark`). These are a great way to learn Spark.
 Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
 storage systems. Because the HDFS protocol has changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster uses.
-You can do this by setting the `SPARK_HADOOP_VERSION` variable when compiling:
+By default, Spark links to Hadoop 1.0.4. You can change this by setting the
+`SPARK_HADOOP_VERSION` variable when compiling:
 
     SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
 
-In addition, if you wish to run Spark on [YARN](running-on-yarn.md), you should also
-set `SPARK_YARN`:
+In addition, if you wish to run Spark on [YARN](running-on-yarn.md), set
+`SPARK_YARN` to `true`:
 
     SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
 
@@ -94,7 +95,7 @@ set `SPARK_YARN`:
   exercises about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012),
   [slides](http://ampcamp.berkeley.edu/agenda-2012) and [exercises](http://ampcamp.berkeley.edu/exercises-2012) are
   available online for free.
-* [Code Examples](http://spark.incubator.apache.org/examples.html): more are also available in the [examples subfolder](https://github.com/mesos/spark/tree/master/examples/src/main/scala/spark/examples) of Spark
+* [Code Examples](http://spark.incubator.apache.org/examples.html): more are also available in the [examples subfolder](https://github.com/mesos/spark/tree/master/examples/src/main/scala/) of Spark
 * [Paper Describing Spark](http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf)
 * [Paper Describing Spark Streaming](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf)
 

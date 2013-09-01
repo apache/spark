@@ -4,7 +4,7 @@
 # spark-env.sh and edit that to configure Spark for your site.
 #
 # The following variables can be set in this file:
-# - SPARK_LOCAL_IP, to override the IP address binds to
+# - SPARK_LOCAL_IP, to set the IP address Spark binds to on this node
 # - MESOS_NATIVE_LIBRARY, to point to your libmesos.so if you use Mesos
 # - SPARK_JAVA_OPTS, to set node-specific JVM options for Spark. Note that
 #   we recommend setting app-wide options in the application's driver program.
