@@ -23,8 +23,7 @@ from pyspark import SparkContext
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print >> sys.stderr, \
-            "Usage: PythonWordCount <master> <file>"
+        print >> sys.stderr, "Usage: wordcount <master> <file>"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonWordCount")
     lines = sc.textFile(sys.argv[2], 1)
@@ -33,4 +32,4 @@ if __name__ == "__main__":
                   .reduceByKey(add)
     output = counts.collect()
     for (word, count) in output:
-        print "%s : %i" % (word, count)
+        print "%s: %i" % (word, count)

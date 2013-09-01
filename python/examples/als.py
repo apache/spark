@@ -48,8 +48,7 @@ def update(i, vec, mat, ratings):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print >> sys.stderr, \
-            "Usage: PythonALS <master> <M> <U> <F> <iters> <slices>"
+        print >> sys.stderr, "Usage: als <master> <M> <U> <F> <iters> <slices>"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonALS", pyFiles=[realpath(__file__)])
     M = int(sys.argv[2]) if len(sys.argv) > 2 else 100
@@ -84,5 +83,5 @@ if __name__ == "__main__":
         usb = sc.broadcast(us)
 
         error = rmse(R, ms, us)
-        print "Iteration %d:" % i 
+        print "Iteration %d:" % i
         print "\nRMSE: %5.4f\n" % error

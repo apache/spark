@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -22,7 +22,7 @@ if [ "$MESOS_HOME" != "" ]; then
   EXTRA_ARGS="-Djava.library.path=$MESOS_HOME/lib/java"
 fi
 
-export SPARK_HOME=$(cd "$(dirname $0)/.."; pwd)
+export SPARK_HOME=$(cd "$(dirname $0)/.." 2>&1 >/dev/null ; pwd)
 export SPARK_TESTING=1  # To put test classes on classpath
 
-java -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=128m $EXTRA_ARGS -jar $SPARK_HOME/sbt/sbt-launch-*.jar "$@"
+java -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m $EXTRA_ARGS $SBT_OPTS -jar "$SPARK_HOME"/sbt/sbt-launch-*.jar "$@"

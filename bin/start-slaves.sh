@@ -35,8 +35,6 @@ if [ "$SPARK_MASTER_IP" = "" ]; then
   SPARK_MASTER_IP=`hostname`
 fi
 
-echo "Master IP: $SPARK_MASTER_IP"
-
 # Launch the slaves
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
   exec "$bin/slaves.sh" cd "$SPARK_HOME" \; "$bin/start-slave.sh" 1 spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT

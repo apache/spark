@@ -8,39 +8,14 @@ title: Building Spark with Maven
 
 Building Spark using Maven Requires Maven 3 (the build process is tested with Maven 3.0.4) and Java 1.6 or newer.
 
-Building with Maven requires that a Hadoop profile be specified explicitly at the command line, there is no default. There are two profiles to choose from, one for building for Hadoop 1 or Hadoop 2.
 
-for Hadoop 1 (using 0.20.205.0) use:
+## Setting up Maven's Memory Usage ##
 
-    $ mvn -Phadoop1 clean install
+You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`. We recommend the following settings:
 
+    export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-for Hadoop 2 (using 2.0.0-mr1-cdh4.1.1) use:
-
-    $ mvn -Phadoop2 clean install
-
-It uses the scala-maven-plugin which supports incremental and continuous compilation. E.g.
-
-    $ mvn -Phadoop2 scala:cc
-
-…should run continuous compilation (i.e. wait for changes). However, this has not been tested extensively.
-
-## Spark Tests in Maven ##
-
-Tests are run by default via the scalatest-maven-plugin. With this you can do things like:
-
-Skip test execution (but not compilation):
-
-    $ mvn -DskipTests -Phadoop2 clean install
-
-To run a specific test suite:
-
-    $ mvn -Phadoop2 -Dsuites=spark.repl.ReplSuite test
-
-
-## Setting up JVM Memory Usage Via Maven ##
-
-You might run into the following errors if you're using a vanilla installation of Maven:
+If you don't run this, you may see errors like the following:
 
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_VERSION}}/classes...
     [ERROR] PermGen space -> [Help 1]
@@ -48,10 +23,45 @@ You might run into the following errors if you're using a vanilla installation o
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_VERSION}}/classes...
     [ERROR] Java heap space -> [Help 1]
 
-To fix these, you can do the following:
+You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
-    export MAVEN_OPTS="-Xmx1024m -XX:MaxPermSize=128M"
+## Specifying the Hadoop version ##
 
+Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default.
+
+For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop versions without YARN, use:
+
+    # Apache Hadoop 1.2.1
+    $ mvn -Dhadoop.version=1.2.1 -DskipTests clean package
+
+    # Cloudera CDH 4.2.0 with MapReduce v1
+    $ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
+
+For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions with YARN, you should also enable the "hadoop2-yarn" profile:
+
+    # Apache Hadoop 2.0.5-alpha
+    $ mvn -Phadoop2-yarn -Dhadoop.version=2.0.5-alpha -DskipTests clean package
+
+    # Cloudera CDH 4.2.0 with MapReduce v2
+    $ mvn -Phadoop2-yarn -Dhadoop.version=2.0.0-cdh4.2.0 -DskipTests clean package
+
+
+## Spark Tests in Maven ##
+
+Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin). Some of the require Spark to be packaged first, so always run `mvn package` with `-DskipTests` the first time. You can then run the tests with `mvn -Dhadoop.version=... test`.
+
+The ScalaTest plugin also supports running only a specific test suite as follows:
+
+    $ mvn -Dhadoop.version=... -Dsuites=spark.repl.ReplSuite test
+
+
+## Continuous Compilation ##
+
+We use the scala-maven-plugin which supports incremental and continuous compilation. E.g.
+
+    $ mvn scala:cc
+
+should run continuous compilation (i.e. wait for changes). However, this has not been tested extensively.
 
 ## Using With IntelliJ IDEA ##
 
@@ -59,8 +69,8 @@ This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the
 
 ## Building Spark Debian Packages ##
 
-It includes support for building a Debian package containing a 'fat-jar' which includes the repl, the examples and bagel. This can be created by specifying the deb profile:
+It includes support for building a Debian package containing a 'fat-jar' which includes the repl, the examples and bagel. This can be created by specifying the following profiles:
 
-    $ mvn -Phadoop2,deb clean install
+    $ mvn -Prepl-bin -Pdeb clean package
 
 The debian package can then be found under repl/target. We added the short commit hash to the file name so that we can distinguish individual packages build for SNAPSHOT versions.

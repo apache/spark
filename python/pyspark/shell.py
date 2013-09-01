@@ -21,12 +21,30 @@ An interactive shell.
 This file is designed to be launched as a PYTHONSTARTUP script.
 """
 import os
+import platform
 import pyspark
 from pyspark.context import SparkContext
 
+# this is the equivalent of ADD_JARS
+add_files = os.environ.get("ADD_FILES").split(',') if os.environ.get("ADD_FILES") != None else None
 
-sc = SparkContext(os.environ.get("MASTER", "local"), "PySparkShell")
+sc = SparkContext(os.environ.get("MASTER", "local"), "PySparkShell", pyFiles=add_files)
+
+print """Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /__ / .__/\_,_/_/ /_/\_\   version 0.8.0
+      /_/
+"""
+print "Using Python version %s (%s, %s)" % (
+    platform.python_version(),
+    platform.python_build()[0],
+    platform.python_build()[1])
 print "Spark context avaiable as sc."
+
+if add_files != None:
+    print "Adding files: [%s]" % ", ".join(add_files)
 
 # The ./pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:

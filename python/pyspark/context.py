@@ -46,6 +46,7 @@ class SparkContext(object):
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
+    _python_includes = None # zip and egg files that need to be added to PYTHONPATH
 
     def __init__(self, master, jobName, sparkHome=None, pyFiles=None,
         environment=None, batchSize=1024):
@@ -103,16 +104,19 @@ class SparkContext(object):
         # send.
         self._pickled_broadcast_vars = set()
 
+        SparkFiles._sc = self
+        root_dir = SparkFiles.getRootDirectory()
+        sys.path.append(root_dir)
+
         # Deploy any code dependencies specified in the constructor
+        self._python_includes = list()
         for path in (pyFiles or []):
             self.addPyFile(path)
-        SparkFiles._sc = self
-        sys.path.append(SparkFiles.getRootDirectory())
 
         # Create a temporary directory inside spark.local.dir:
-        local_dir = self._jvm.spark.Utils.getLocalDir()
+        local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir()
         self._temp_dir = \
-            self._jvm.spark.Utils.createTempDir(local_dir).getAbsolutePath()
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
     @property
     def defaultParallelism(self):
@@ -141,14 +145,21 @@ class SparkContext(object):
     def parallelize(self, c, numSlices=None):
         """
         Distribute a local Python collection to form an RDD.
+
+        >>> sc.parallelize(range(5), 5).glom().collect()
+        [[0], [1], [2], [3], [4]]
         """
         numSlices = numSlices or self.defaultParallelism
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
         tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
-        if self.batchSize != 1:
-            c = batched(c, self.batchSize)
+        # Make sure we distribute data evenly if it's smaller than self.batchSize
+        if "__len__" not in dir(c):
+            c = list(c)    # Make it a list so we can compute its length
+        batchSize = min(len(c) // numSlices, self.batchSize)
+        if batchSize > 1:
+            c = batched(c, batchSize)
         for x in c:
             write_with_length(dump_pickle(x), tempFile)
         tempFile.close()
@@ -250,7 +261,11 @@ class SparkContext(object):
         HTTP, HTTPS or FTP URI.
         """
         self.addFile(path)
-        filename = path.split("/")[-1]
+        (dirname, filename) = os.path.split(path) # dirname may be directory or HDFS/S3 prefix
+
+        if filename.endswith('.zip') or filename.endswith('.ZIP') or filename.endswith('.egg'):
+            self._python_includes.append(filename)
+            sys.path.append(os.path.join(SparkFiles.getRootDirectory(), filename)) # for tests in local mode
 
     def setCheckpointDir(self, dirName, useExisting=False):
         """

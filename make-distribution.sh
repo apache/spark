@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -24,6 +24,11 @@
 # so it is completely self contained.
 # It does not contain source or *.class files.
 #
+# Optional Arguments
+#      --tgz: Additionally creates spark-$VERSION-bin.tar.gz
+#      --hadoop VERSION: Builds against specified version of Hadoop.
+#      --with-yarn: Enables support for Hadoop YARN.
+#
 # Recommended deploy/testing procedure (standalone mode):
 # 1) Rsync / deploy the dist/ dir to one host
 # 2) cd to deploy dir; ./bin/start-master.sh
@@ -38,21 +43,70 @@ DISTDIR="$FWDIR/dist"
 
 # Get version from SBT
 export TERM=dumb   # Prevents color codes in SBT output
-VERSION=$($FWDIR/sbt/sbt "show version" | tail -1 | cut -f 2)
-echo "Making distribution for Spark $VERSION in $DISTDIR..."
+VERSION=$($FWDIR/sbt/sbt "show version" | tail -1 | cut -f 2 | sed 's/^\([a-zA-Z0-9.-]*\).*/\1/')
+
+# Initialize defaults
+SPARK_HADOOP_VERSION=1.0.4
+SPARK_YARN=false
+MAKE_TGZ=false
+
+# Parse arguments
+while (( "$#" )); do
+  case $1 in
+    --hadoop)
+      SPARK_HADOOP_VERSION="$2"
+      shift
+      ;;
+    --with-yarn)
+      SPARK_YARN=true
+      ;;
+    --tgz)
+      MAKE_TGZ=true
+      ;;
+  esac
+  shift
+done
+
+if [ "$MAKE_TGZ" == "true" ]; then
+	echo "Making spark-$VERSION-hadoop_$SPARK_HADOOP_VERSION-bin.tar.gz"
+else
+	echo "Making distribution for Spark $VERSION in $DISTDIR..."
+fi
+
+echo "Hadoop version set to $SPARK_HADOOP_VERSION"
+if [ "$SPARK_YARN" == "true" ]; then
+  echo "YARN enabled"
+else
+  echo "YARN disabled"
+fi
 
 # Build fat JAR
-$FWDIR/sbt/sbt "repl/assembly"
+export SPARK_HADOOP_VERSION
+export SPARK_YARN
+"$FWDIR/sbt/sbt" "assembly/assembly"
 
 # Make directories
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/jars"
-echo "$VERSION" >$DISTDIR/RELEASE
+echo "Spark $VERSION built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 
 # Copy jars
-cp $FWDIR/repl/target/*.jar "$DISTDIR/jars/"
+cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/jars/"
 
 # Copy other things
+mkdir "$DISTDIR"/conf
+cp -r "$FWDIR/conf/*.template" "$DISTDIR"
 cp -r "$FWDIR/bin" "$DISTDIR"
-cp -r "$FWDIR/conf" "$DISTDIR"
-cp "$FWDIR/run" "$FWDIR/spark-shell" "$DISTDIR"
+cp -r "$FWDIR/python" "$DISTDIR"
+cp "$FWDIR/spark-class" "$DISTDIR"
+cp "$FWDIR/spark-shell" "$DISTDIR"
+cp "$FWDIR/spark-executor" "$DISTDIR"
+cp "$FWDIR/pyspark" "$DISTDIR"
+
+
+if [ "$MAKE_TGZ" == "true" ]; then
+  TARDIR="$FWDIR/spark-$VERSION"
+  cp -r "$DISTDIR" "$TARDIR"
+  tar -zcf "spark-$VERSION-hadoop_$SPARK_HADOOP_VERSION-bin.tar.gz" -C "$FWDIR" "spark-$VERSION"
+  rm -rf "$TARDIR"
+fi

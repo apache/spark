@@ -9,16 +9,15 @@ In the Pregel programming model, jobs run as a sequence of iterations called _su
 
 This guide shows the programming model and features of Bagel by walking through an example implementation of PageRank on Bagel.
 
-## Linking with Bagel
+# Linking with Bagel
 
-To write a Bagel application, you will need to add Spark, its dependencies, and Bagel to your CLASSPATH:
+To use Bagel in your program, add the following SBT or Maven dependency:
 
-1. Run `sbt/sbt update` to fetch Spark's dependencies, if you haven't already done so.
-2. Run `sbt/sbt assembly` to build Spark and its dependencies into one JAR (`core/target/spark-core-assembly-{{site.SPARK_VERSION}}.jar`) 
-3. Run `sbt/sbt package` build the Bagel JAR (`bagel/target/scala_{{site.SCALA_VERSION}}/spark-bagel_{{site.SCALA_VERSION}}-{{site.SPARK_VERSION}}.jar`).
-4. Add these two JARs to your CLASSPATH.
+    groupId = org.apache.spark
+    artifactId = spark-bagel_{{site.SCALA_VERSION}}
+    version = {{site.SPARK_VERSION}}
 
-## Programming Model
+# Programming Model
 
 Bagel operates on a graph represented as a [distributed dataset](scala-programming-guide.html) of (K, V) pairs, where keys are vertex IDs and values are vertices plus their associated state. In each superstep, Bagel runs a user-specified compute function on each vertex that takes as input the current vertex state and a list of messages sent to that vertex during the previous superstep, and returns the new vertex state and a list of outgoing messages.
 
@@ -29,8 +28,8 @@ representing the current PageRank of the vertex, and similarly extend
 the `Message` and `Edge` classes. Note that these need to be marked `@serializable` to allow Spark to transfer them across machines. We also import the Bagel types and implicit conversions.
 
 {% highlight scala %}
-import spark.bagel._
-import spark.bagel.Bagel._
+import org.apache.spark.bagel._
+import org.apache.spark.bagel.Bagel._
 
 @serializable class PREdge(val targetId: String) extends Edge
 
@@ -89,7 +88,7 @@ Finally, we print the results.
 println(result.map(v => "%s\t%s\n".format(v.id, v.rank)).collect.mkString)
 {% endhighlight %}
 
-### Combiners
+## Combiners
 
 Sending a message to another vertex generally involves expensive communication over the network. For certain algorithms, it's possible to reduce the amount of communication using _combiners_. For example, if the compute function receives integer messages and only uses their sum, it's possible for Bagel to combine multiple messages to the same vertex by summing them.
 
@@ -97,7 +96,7 @@ For combiner support, Bagel can optionally take a set of combiner functions that
 
 _Example: PageRank with combiners_
 
-### Aggregators
+## Aggregators
 
 Aggregators perform a reduce across all vertices after each superstep, and provide the result to each vertex in the next superstep.
 
@@ -105,11 +104,11 @@ For aggregator support, Bagel can optionally take an aggregator function that re
 
 _Example_
 
-### Operations
+## Operations
 
-Here are the actions and types in the Bagel API. See [Bagel.scala](https://github.com/mesos/spark/blob/master/bagel/src/main/scala/spark/bagel/Bagel.scala) for details.
+Here are the actions and types in the Bagel API. See [Bagel.scala](https://github.com/apache/incubator-spark/blob/master/bagel/src/main/scala/spark/bagel/Bagel.scala) for details.
 
-#### Actions
+### Actions
 
 {% highlight scala %}
 /*** Full form ***/
@@ -133,7 +132,7 @@ Bagel.run(sc, vertices, messages, numSplits)(compute)
 // and returns (newVertex: V, outMessages: Array[M])
 {% endhighlight %}
 
-#### Types
+### Types
 
 {% highlight scala %}
 trait Combiner[M, C] {
@@ -156,6 +155,10 @@ trait Message[K] {
 }
 {% endhighlight %}
 
-## Where to Go from Here
+# Where to Go from Here
 
-Two example jobs, PageRank and shortest path, are included in `bagel/src/main/scala/spark/bagel/examples`. You can run them by passing the class name to the `run` script included in Spark -- for example, `./run spark.bagel.examples.WikipediaPageRank`. Each example program prints usage help when run without any arguments.
+Two example jobs, PageRank and shortest path, are included in `examples/src/main/scala/org/apache/spark/examples/bagel`. You can run them by passing the class name to the `run-example` script included in Spark; e.g.:
+
+    ./run-example org.apache.spark.examples.bagel.WikipediaPageRank
+
+Each example program prints usage help when run without any arguments.
