@@ -121,8 +121,8 @@ object SparkBuild extends Build {
           <name>Matei Zaharia</name>
           <email>matei.zaharia@gmail.com</email>
           <url>http://www.cs.berkeley.edu/~matei</url>
-          <organization>U.C. Berkeley Computer Science</organization>
-          <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
+          <organization>Apache Software Foundation</organization>
+          <organizationUrl>http://spark.incubator.apache.org</organizationUrl>
         </developer>
       </developers>
       <issueManagement>

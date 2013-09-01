@@ -28,7 +28,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-assembly</artifactId>
   <name>Spark Project Assembly</name>
-  <url>http://spark-project.org/</url>
+  <url>http://spark.incubator.apache.org/</url>
 
   <repositories>
     <!-- A repository in the local filesystem for the Py4J JAR, which is not in Maven central -->

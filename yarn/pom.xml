@@ -28,7 +28,7 @@
   <artifactId>spark-yarn</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN Support</name>
-  <url>http://spark-project.org/</url>
+  <url>http://spark.incubator.apache.org/</url>
 
   <build>
     <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>

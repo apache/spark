@@ -143,4 +143,4 @@ _A more comprehensive example is provided in the spark streaming examples_
 ## References
 
 1.[Akka Actor documentation](http://doc.akka.io/docs/akka/2.0.5/scala/actors.html)
-2.[NetworkReceiver](http://spark-project.org/docs/latest/api/streaming/index.html#spark.streaming.dstream.NetworkReceiver)
+2.[NetworkReceiver](http://spark.incubator.apache.org/docs/latest/api/streaming/index.html#spark.streaming.dstream.NetworkReceiver)

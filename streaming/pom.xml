@@ -29,7 +29,7 @@
   <artifactId>spark-streaming</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Streaming</name>
-  <url>http://spark-project.org/</url>
+  <url>http://spark.incubator.apache.org/</url>
 
   <repositories>
     <!-- A repository in the local filesystem for the Kafka JAR, which we modified for Scala 2.9 -->

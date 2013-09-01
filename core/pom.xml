@@ -29,7 +29,7 @@
   <artifactId>spark-core</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
-  <url>http://spark-project.org/</url>
+  <url>http://spark.incubator.apache.org/</url>
 
   <dependencies>
     <dependency>

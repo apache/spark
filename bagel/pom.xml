@@ -29,7 +29,7 @@
   <artifactId>spark-bagel</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Bagel</name>
-  <url>http://spark-project.org/</url>
+  <url>http://spark.incubator.apache.org/</url>
 
   <dependencies>
     <dependency>
