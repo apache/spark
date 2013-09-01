@@ -32,4 +32,4 @@ if __name__ == "__main__":
                   .reduceByKey(add)
     output = counts.collect()
     for (word, count) in output:
-        print "%s : %i" % (word, count)
+        print "%s: %i" % (word, count)

@@ -17,8 +17,8 @@ There are a few key differences between the Python and Scala APIs:
 
 * Python is dynamically typed, so RDDs can hold objects of different types.
 * PySpark does not currently support the following Spark features:
-    - Special functions on RDDs of doubles, such as `mean` and `stdev`
-    - `lookup`, `sample` and `sort`
+    - `lookup`
+    - `sort`
     - `persist` at storage levels other than `MEMORY_ONLY`
     - Execution on Windows -- this is slated for a future release
 
@@ -70,7 +70,7 @@ The script automatically adds the `pyspark` package to the `PYTHONPATH`.
 The `pyspark` script launches a Python interpreter that is configured to run PySpark jobs. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
 
 {% highlight bash %}
-$ sbt/sbt package
+$ sbt/sbt assembly
 $ ./pyspark
 {% endhighlight %}
 
@@ -135,8 +135,11 @@ Code dependencies can be added to an existing SparkContext using its `addPyFile(
 
 # Where to Go from Here
 
-PySpark includes several sample programs in the [`python/examples` folder](https://github.com/mesos/spark/tree/master/python/examples).
-You can run them by passing the files to the `pyspark` script -- for example `./pyspark python/examples/wordcount.py`.
+PySpark includes several sample programs in the [`python/examples` folder](https://github.com/apache/incubator-spark/tree/master/python/examples).
+You can run them by passing the files to the `pyspark` script; e.g.:
+
+    ./pyspark python/examples/wordcount.py
+
 Each program prints usage help when run without arguments.
 
 We currently provide [API documentation](api/pyspark/index.html) for the Python API as Epydoc.

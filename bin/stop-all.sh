@@ -20,6 +20,7 @@
 # Start all spark daemons.
 # Run this on the master nde
 
+
 bin=`dirname "$0"`
 bin=`cd "$bin"; pwd`
 
