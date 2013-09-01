@@ -294,12 +294,15 @@ There are a few additional considerations when running jobs on a
 
 ### Including Your Dependencies
 If your code depends on other projects, you will need to ensure they are also
-present on the slave nodes. The most common way to do this is to create an
-assembly jar (or "uber" jar) containing your code and its dependencies. You
-may then submit the assembly jar when creating a SparkContext object. If you
-do this, you should make Spark itself a `provided` dependency, since it will 
-already be present on the slave nodes. It is also possible to submit your 
-dependent jars one-by-one when creating a SparkContext.
+present on the slave nodes. A popular approach is to create an
+assembly jar (or "uber" jar) containing your code and its dependencies. Both
+[sbt](https://github.com/sbt/sbt-assembly) and 
+[Maven](http://maven.apache.org/plugins/maven-assembly-plugin/) 
+have assembly plugins. When creating assembly jars, list Spark 
+itself as a `provided` dependency; it need not be bundled since it is 
+already present on the slaves. Once you have an assembled jar, 
+add it to the SparkContext as shown here. It is also possible to submit 
+your dependent jars one-by-one when creating a SparkContext.
 
 ### Setting Configuration Options
 Spark includes several configuration options which influence the behavior
