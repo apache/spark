@@ -46,8 +46,7 @@ private[spark] class SparkDeploySchedulerBackend(
       StandaloneSchedulerBackend.ACTOR_NAME)
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command("spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
-    val sparkHome = sc.getSparkHome().getOrElse(
-      throw new IllegalArgumentException("must supply spark home for spark standalone"))
+    val sparkHome = sc.getSparkHome().getOrElse(null)
     val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome,
         sc.ui.appUIAddress)
 
