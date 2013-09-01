@@ -74,7 +74,7 @@ object SparkBuild extends Build {
     core, repl, examples, bagel, streaming, mllib, tools, assemblyProj) ++ maybeYarnRef
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
-    organization := "org.spark-project",
+    organization := "org.apache.spark",
     version := "0.8.0-SNAPSHOT",
     scalaVersion := "2.9.3",
     scalacOptions := Seq("-unchecked", "-optimize", "-deprecation"),
@@ -103,7 +103,7 @@ object SparkBuild extends Build {
     //useGpg in Global := true,
 
     pomExtra := (
-      <url>http://spark-project.org/</url>
+      <url>http://spark.incubator.apache.org/</url>
       <licenses>
         <license>
           <name>Apache 2.0 License</name>
@@ -112,8 +112,8 @@ object SparkBuild extends Build {
         </license>
       </licenses>
       <scm>
-        <connection>scm:git:git@github.com:mesos/spark.git</connection>
-        <url>scm:git:git@github.com:mesos/spark.git</url>
+        <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
+        <url>scm:git:git@github.com:apache/incubator-spark.git</url>
       </scm>
       <developers>
         <developer>
@@ -121,10 +121,14 @@ object SparkBuild extends Build {
           <name>Matei Zaharia</name>
           <email>matei.zaharia@gmail.com</email>
           <url>http://www.cs.berkeley.edu/~matei</url>
-          <organization>U.C. Berkeley Computer Science</organization>
-          <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
+          <organization>Apache Software Foundation</organization>
+          <organizationUrl>http://spark.incubator.apache.org</organizationUrl>
         </developer>
       </developers>
+      <issueManagement>
+        <system>JIRA</system>
+        <url>https://spark-project.atlassian.net/browse/SPARK</url>
+      </issueManagement>
     ),
 
 /*

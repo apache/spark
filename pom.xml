@@ -18,22 +18,22 @@
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>org.spark-project</groupId>
+  <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
   <version>0.8.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
-  <url>http://spark-project.org/</url>
+  <url>http://spark.incubator.apache.org/</url>
   <licenses>
     <license>
-      <name>BSD License</name>
-      <url>https://github.com/mesos/spark/blob/master/LICENSE</url>
+      <name>Apache 2.0 License</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
       <distribution>repo</distribution>
     </license>
   </licenses>
   <scm>
-    <connection>scm:git:git@github.com:mesos/spark.git</connection>
-    <url>scm:git:git@github.com:mesos/spark.git</url>
+    <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
+    <url>scm:git:git@github.com:apache/incubator-spark.git</url>
   </scm>
   <developers>
     <developer>
@@ -41,12 +41,12 @@
       <name>Matei Zaharia</name>
       <email>matei.zaharia@gmail.com</email>
       <url>http://www.cs.berkeley.edu/~matei</url>
-      <organization>U.C. Berkeley Computer Science</organization>
-      <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
+      <organization>Apache Software Foundation</organization>
+      <organizationUrl>http://spark.incubator.apache.org</organizationUrl>
     </developer>
   </developers>
   <issueManagement>
-    <system>github</system>
+    <system>JIRA</system>
     <url>https://spark-project.atlassian.net/browse/SPARK</url>
   </issueManagement>
 

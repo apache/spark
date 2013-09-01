@@ -108,8 +108,8 @@ We'll create a very simple Spark job in Scala. So simple, in fact, that it's nam
 
 {% highlight scala %}
 /*** SimpleJob.scala ***/
-import spark.SparkContext
-import SparkContext._
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
 
 object SimpleJob {
   def main(args: Array[String]) {
@@ -135,7 +135,7 @@ version := "1.0"
 
 scalaVersion := "{{site.SCALA_VERSION}}"
 
-libraryDependencies += "org.spark-project" %% "spark-core" % "{{site.SPARK_VERSION}}"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "{{site.SPARK_VERSION}}"
 
 resolvers += "Akka Repository" at "http://repo.akka.io/releases/"
 {% endhighlight %}
@@ -170,8 +170,8 @@ We'll create a very simple Spark job, `SimpleJob.java`:
 
 {% highlight java %}
 /*** SimpleJob.java ***/
-import spark.api.java.*;
-import spark.api.java.function.Function;
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
 
 public class SimpleJob {
   public static void main(String[] args) {
@@ -213,7 +213,7 @@ To build the job, we also write a Maven `pom.xml` file that lists Spark as a dep
   </repositories>
   <dependencies>
     <dependency> <!-- Spark dependency -->
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_{{site.SCALA_VERSION}}</artifactId>
       <version>{{site.SPARK_VERSION}}</version>
     </dependency>

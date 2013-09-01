@@ -27,7 +27,7 @@ Or, for the Python API, the Python shell (`./pyspark`).
 Spark also comes with several sample programs in the `examples` directory.
 To run one of them, use `./run-example <class> <params>`. For example:
 
-    ./run-example spark.examples.SparkLR local[2]
+    ./run-example org.apache.spark.examples.SparkLR local[2]
 
 will run the Logistic Regression example locally on 2 CPUs.
 
