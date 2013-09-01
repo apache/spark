@@ -21,9 +21,10 @@ import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.util.Random
 import scala.util.Sorting
 
-import org.apache.spark.{HashPartitioner, Partitioner, SparkContext, RDD}
+import org.apache.spark.{HashPartitioner, Partitioner, SparkContext}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.KryoRegistrator
+import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.SparkContext._
 
 import com.esotericsoftware.kryo.Kryo
@@ -432,7 +433,7 @@ object ALS {
     val (master, ratingsFile, rank, iters, outputDir) =
       (args(0), args(1), args(2).toInt, args(3).toInt, args(4))
     val blocks = if (args.length == 6) args(5).toInt else -1
-    System.setProperty("spark.serializer", "org.apache.spark.KryoSerializer")
+    System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     System.setProperty("spark.kryo.registrator", classOf[ALSRegistrator].getName)
     System.setProperty("spark.kryo.referenceTracking", "false")
     System.setProperty("spark.kryoserializer.buffer.mb", "8")

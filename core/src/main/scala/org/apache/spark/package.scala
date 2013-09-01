@@ -1,3 +1,5 @@
+import org.apache.spark.rdd.{SequenceFileRDDFunctions, DoubleRDDFunctions, PairRDDFunctions}
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -16,16 +18,17 @@
  */
 
 /**
- * Core Spark functionality. [[org.apache.spark.SparkContext]] serves as the main entry point to Spark, while
- * [[org.apache.spark.RDD]] is the data type representing a distributed collection, and provides most
- * parallel operations. 
+ * Core Spark functionality. [[org.apache.spark.SparkContext]] serves as the main entry point to
+ * Spark, while [[org.apache.spark.rdd.RDD]] is the data type representing a distributed collection,
+ * and provides most parallel operations.
  *
- * In addition, [[org.apache.spark.PairRDDFunctions]] contains operations available only on RDDs of key-value
- * pairs, such as `groupByKey` and `join`; [[org.apache.spark.DoubleRDDFunctions]] contains operations
- * available only on RDDs of Doubles; and [[org.apache.spark.SequenceFileRDDFunctions]] contains operations
- * available on RDDs that can be saved as SequenceFiles. These operations are automatically
- * available on any RDD of the right type (e.g. RDD[(Int, Int)] through implicit conversions when
- * you `import org.apache.spark.SparkContext._`.
+ * In addition, [[org.apache.spark.rdd.PairRDDFunctions]] contains operations available only on RDDs
+ * of key-value pairs, such as `groupByKey` and `join`; [[org.apache.spark.rdd.DoubleRDDFunctions]]
+ * contains operations available only on RDDs of Doubles; and
+ * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that can
+ * be saved as SequenceFiles. These operations are automatically available on any RDD of the right
+ * type (e.g. RDD[(Int, Int)] through implicit conversions when you
+ * `import org.apache.spark.SparkContext._`.
  */
 package object spark { 
   // For package docs only

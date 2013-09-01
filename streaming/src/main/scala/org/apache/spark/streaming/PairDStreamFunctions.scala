@@ -22,8 +22,9 @@ import org.apache.spark.streaming.dstream.{ReducedWindowedDStream, StateDStream}
 import org.apache.spark.streaming.dstream.{CoGroupedDStream, ShuffledDStream}
 import org.apache.spark.streaming.dstream.{MapValuedDStream, FlatMapValuedDStream}
 
-import org.apache.spark.{Manifests, RDD, Partitioner, HashPartitioner}
+import org.apache.spark.{Partitioner, HashPartitioner}
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.{Manifests, RDD, PairRDDFunctions}
 import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
@@ -101,8 +102,8 @@ extends Serializable {
 
   /**
    * Combine elements of each key in DStream's RDDs using custom functions. This is similar to the
-   * combineByKey for RDDs. Please refer to combineByKey in [[org.apache.spark.PairRDDFunctions]] for more
-   * information.
+   * combineByKey for RDDs. Please refer to combineByKey in
+   * [[org.apache.spark.rdd.PairRDDFunctions]] for more information.
    */
   def combineByKey[C: ClassManifest](
     createCombiner: V => C,
@@ -379,7 +380,7 @@ extends Serializable {
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
-   * [[org.apache.spark.Paxrtitioner]] is used to control the partitioning of each RDD.
+   * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
    *                   corresponding state key-value pair will be eliminated. Note, that
    *                   this function may generate a different a tuple with a different key

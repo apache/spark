@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util
 
 import java.io._
 import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address, ServerSocket}
@@ -36,12 +36,13 @@ import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
 import java.nio.ByteBuffer
+import org.apache.spark.{SparkEnv, SparkException, Logging}
 
 
 /**
  * Various utility methods used by Spark.
  */
-private object Utils extends Logging {
+private[spark] object Utils extends Logging {
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {

@@ -22,7 +22,7 @@ import java.util.Random
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
-import org.apache.spark.{RDD, Partition, TaskContext}
+import org.apache.spark.{Partition, TaskContext}
 
 private[spark]
 class SampledRDDPartition(val prev: Partition, val seed: Int) extends Partition with Serializable {

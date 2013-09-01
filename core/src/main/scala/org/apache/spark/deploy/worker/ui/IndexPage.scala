@@ -27,11 +27,11 @@ import akka.util.duration._
 
 import net.liftweb.json.JsonAST.JValue
 
-import org.apache.spark.Utils
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
 import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.ui.UIUtils
+import org.apache.spark.util.Utils
 
 
 private[spark] class IndexPage(parent: WorkerWebUI) {

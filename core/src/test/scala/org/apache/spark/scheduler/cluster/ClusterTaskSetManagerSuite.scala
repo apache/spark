@@ -26,7 +26,7 @@ import org.apache.spark._
 import org.apache.spark.scheduler._
 import org.apache.spark.executor.TaskMetrics
 import java.nio.ByteBuffer
-import org.apache.spark.util.FakeClock
+import org.apache.spark.util.{Utils, FakeClock}
 
 /**
  * A mock ClusterScheduler implementation that just remembers information about tasks started and

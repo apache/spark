@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.serializer
 
 import java.io._
 import java.nio.ByteBuffer
 
-import serializer.{Serializer, SerializerInstance, DeserializationStream, SerializationStream}
 import org.apache.spark.util.ByteBufferInputStream
 
 private[spark] class JavaSerializationStream(out: OutputStream) extends SerializationStream {

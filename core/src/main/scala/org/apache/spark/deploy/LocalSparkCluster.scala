@@ -21,8 +21,8 @@ import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
 
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.util.AkkaUtils
-import org.apache.spark.{Logging, Utils}
+import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.spark.{Logging}
 
 import scala.collection.mutable.ArrayBuffer
 

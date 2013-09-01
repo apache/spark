@@ -24,6 +24,7 @@ import java.util.Random
 import scala.collection.mutable.Map
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 private object MultiTracker
 extends Logging {

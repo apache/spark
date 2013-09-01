@@ -25,9 +25,10 @@ import akka.actor.ActorRef
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
-import org.apache.spark.{Utils, Logging}
+import org.apache.spark.{Logging}
 import org.apache.spark.deploy.{ExecutorState, ApplicationDescription}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.util.Utils
 
 /**
  * Manages the execution of one executor process.

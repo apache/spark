@@ -26,6 +26,7 @@ import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.time.SpanSugar._
+import org.apache.spark.util.Utils
 
 class DriverSuite extends FunSuite with Timeouts {
   test("driver should exit after finishing") {

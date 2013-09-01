@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.serializer
 
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-import com.esotericsoftware.kryo._
+import com.esotericsoftware.kryo.Kryo
 
-import KryoTest._
+import org.scalatest.FunSuite
+import org.apache.spark.SharedSparkContext
+import org.apache.spark.serializer.KryoTest._
 
 class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   test("basic types") {
@@ -103,7 +104,6 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 
   test("custom registrator") {
-    import KryoTest._
     System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
 
     val ser = (new KryoSerializer).newInstance()
@@ -167,7 +167,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 
   override def beforeAll() {
-    System.setProperty("spark.serializer", "org.apache.spark.KryoSerializer")
+    System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
     super.beforeAll()
   }

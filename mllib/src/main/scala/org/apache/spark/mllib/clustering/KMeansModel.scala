@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.MLUtils
 

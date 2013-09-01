@@ -17,12 +17,13 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{RangePartitioner, Logging, RDD}
+import org.apache.spark.{RangePartitioner, Logging}
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
- * an implicit conversion. Import `spark.SparkContext._` at the top of your program to use these
- * functions. They will work with any key type that has a `scala.math.Ordered` implementation.
+ * an implicit conversion. Import `org.apache.spark.SparkContext._` at the top of your program to
+ * use these functions. They will work with any key type that has a `scala.math.Ordered`
+ * implementation.
  */
 class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest,
                           V: ClassManifest,

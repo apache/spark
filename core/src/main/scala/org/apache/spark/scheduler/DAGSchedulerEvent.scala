@@ -23,6 +23,7 @@ import org.apache.spark.scheduler.cluster.TaskInfo
 import scala.collection.mutable.Map
 
 import org.apache.spark._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 
 /**

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.Utils
+import org.apache.spark.util.Utils
 
 /**
  * Information about a running task attempt inside a TaskSet.

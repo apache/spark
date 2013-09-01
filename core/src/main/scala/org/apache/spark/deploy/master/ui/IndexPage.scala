@@ -27,12 +27,12 @@ import akka.util.duration._
 
 import net.liftweb.json.JsonAST.JValue
 
-import org.apache.spark.Utils
 import org.apache.spark.deploy.DeployWebUI
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.master.{ApplicationInfo, WorkerInfo}
 import org.apache.spark.ui.UIUtils
+import org.apache.spark.util.Utils
 
 private[spark] class IndexPage(parent: MasterWebUI) {
   val master = parent.masterActorRef

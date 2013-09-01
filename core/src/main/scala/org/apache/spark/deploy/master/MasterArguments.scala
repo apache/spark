@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.util.IntParam
-import org.apache.spark.Utils
+import org.apache.spark.util.{Utils, IntParam}
 
 /**
  * Command-line parser for the master.

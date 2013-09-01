@@ -25,14 +25,15 @@ import scala.collection.JavaConversions._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
-import org.apache.spark.{RDD, Partitioner}
+import org.apache.spark.Partitioner
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.api.java.{JavaUtils, JavaRDD, JavaPairRDD}
 import org.apache.spark.storage.StorageLevel
 import com.google.common.base.Optional
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.PairRDDFunctions
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val kManifiest: ClassManifest[K],
@@ -147,7 +148,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
   /**
    * Combine elements of each key in DStream's RDDs using custom function. This is similar to the
-   * combineByKey for RDDs. Please refer to combineByKey in [[org.apache.spark.PairRDDFunctions]] for more
+   * combineByKey for RDDs. Please refer to combineByKey in [[PairRDDFunctions]] for more
    * information.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],

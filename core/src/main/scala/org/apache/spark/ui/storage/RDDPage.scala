@@ -21,11 +21,11 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.Utils
 import org.apache.spark.storage.{StorageStatus, StorageUtils}
 import org.apache.spark.storage.BlockManagerMasterActor.BlockStatus
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
+import org.apache.spark.util.Utils
 
 
 /** Page showing storage details for a given RDD */

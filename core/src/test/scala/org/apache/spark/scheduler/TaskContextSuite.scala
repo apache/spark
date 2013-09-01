@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 import org.apache.spark.TaskContext
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.Partition
 import org.apache.spark.LocalSparkContext

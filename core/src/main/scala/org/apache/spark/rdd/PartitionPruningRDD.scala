@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{NarrowDependency, RDD, SparkEnv, Partition, TaskContext}
+import org.apache.spark.{NarrowDependency, SparkEnv, Partition, TaskContext}
 
 
 class PartitionPruningRDDPartition(idx: Int, val parentSplit: Partition) extends Partition {

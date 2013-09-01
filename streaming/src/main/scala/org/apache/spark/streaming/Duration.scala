@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.Utils
+import org.apache.spark.util.Utils
 
 case class Duration (private val millis: Long) {
 

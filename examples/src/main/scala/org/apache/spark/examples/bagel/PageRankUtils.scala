@@ -19,6 +19,7 @@ package org.apache.spark.examples.bagel
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
+import org.apache.spark.serializer.KryoRegistrator
 
 import org.apache.spark.bagel._
 import org.apache.spark.bagel.Bagel._

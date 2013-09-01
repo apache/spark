@@ -15,40 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-
-import java.io.EOFException
-import java.net.URL
-import java.io.ObjectInputStream
-import java.util.concurrent.atomic.AtomicLong
-import java.util.HashSet
-import java.util.Random
-import java.util.Date
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.Map
-import scala.collection.mutable.HashMap
+package org.apache.spark.rdd
 
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapred.OutputFormat
-import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
-import org.apache.hadoop.mapred.OutputCommitter
-import org.apache.hadoop.mapred.FileOutputCommitter
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.io.BytesWritable
-import org.apache.hadoop.io.Text
 
 import org.apache.spark.SparkContext._
+import org.apache.spark.Logging
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,
  * through an implicit conversion. Note that this can't be part of PairRDDFunctions because
  * we need more implicit parameters to convert our keys and values to Writable.
  *
- * Users should import `spark.SparkContext._` at the top of their program to use these functions.
+ * Import `org.apache.spark.SparkContext._` at the top of their program to use these functions.
  */
 class SequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable : ClassManifest](
     self: RDD[(K, V)])

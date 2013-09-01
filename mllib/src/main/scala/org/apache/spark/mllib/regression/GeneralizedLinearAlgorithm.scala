@@ -17,7 +17,8 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.{Logging, RDD, SparkException}
+import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 
 import org.jblas.DoubleMatrix

@@ -36,13 +36,13 @@ there are at least five properties that you will commonly want to control:
 </tr>
 <tr>
   <td>spark.serializer</td>
-  <td>org.apache.spark.JavaSerializer</td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
     Class to use for serializing objects that will be sent over the network or need to be cached
     in serialized form. The default of Java serialization works with any Serializable Java object but is
-    quite slow, so we recommend <a href="tuning.html">using <code>org.apache.spark.KryoSerializer</code>
+    quite slow, so we recommend <a href="tuning.html">using <code>org.apache.spark.serializer.KryoSerializer</code>
     and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
-    <a href="api/core/index.html#org.apache.spark.Serializer"><code>org.apache.spark.Serializer</code></a>.
+    <a href="api/core/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 <tr>
@@ -51,7 +51,7 @@ there are at least five properties that you will commonly want to control:
   <td>
     If you use Kryo serialization, set this class to register your custom classes with Kryo.
     It should be set to a class that extends
-    <a href="api/core/index.html#org.apache.spark.KryoRegistrator"><code>KryoRegistrator</code></a>.
+    <a href="api/core/index.html#org.apache.spark.serializer.KryoRegistrator"><code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
@@ -171,7 +171,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.closure.serializer</td>
-  <td>org.apache.spark.JavaSerializer</td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
     Serializer class to use for closures. Generally Java is fine unless your distributed functions
     (e.g. map functions) reference large objects in the driver program.

@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{Utils, OneToOneDependency, RDD, SparkContext, Partition, TaskContext}
+import org.apache.spark.{OneToOneDependency, SparkContext, Partition, TaskContext}
 import java.io.{ObjectOutputStream, IOException}
 
 

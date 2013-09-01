@@ -17,11 +17,14 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
-import scala.collection.mutable.ArrayBuffer
-import SparkContext._
-import org.apache.spark.util.StatCounter
 import scala.math.abs
+import scala.collection.mutable.ArrayBuffer
+
+import org.scalatest.FunSuite
+
+import org.apache.spark.SparkContext._
+import org.apache.spark.util.StatCounter
+import org.apache.spark.rdd.RDD
 
 class PartitioningSuite extends FunSuite with SharedSparkContext {
 

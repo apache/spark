@@ -17,7 +17,8 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.{RDD, Partitioner}
+import org.apache.spark.Partitioner
+import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.CoGroupedRDD
 import org.apache.spark.streaming.{Time, DStream, Duration}
 

@@ -37,7 +37,7 @@ Finally, you need to import some Spark classes and implicit conversions into you
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
-import SparkContext._
+import org.apache.spark.SparkContext._
 {% endhighlight %}
 
 # Initializing Spark

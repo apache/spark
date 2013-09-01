@@ -29,12 +29,8 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.JavaSerializer
-import org.apache.spark.KryoSerializer
-import org.apache.spark.SizeEstimator
-import org.apache.spark.Utils
-import org.apache.spark.util.AkkaUtils
-import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.util.{SizeEstimator, Utils, AkkaUtils, ByteBufferInputStream}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 
 
 class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {

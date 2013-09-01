@@ -20,8 +20,9 @@ package org.apache.spark.mllib.clustering
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.spark.{SparkContext, RDD}
+import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.util.MLUtils
 

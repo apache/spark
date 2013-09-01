@@ -21,6 +21,7 @@ import java.io._
 
 import scala.collection.mutable.Map
 import scala.collection.generic.Growable
+import org.apache.spark.serializer.JavaSerializer
 
 /**
  * A datatype that can be accumulated, i.e. has an commutative and associative "add" operation,

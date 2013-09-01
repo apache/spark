@@ -17,7 +17,8 @@
 
 package org.apache.spark.mllib.optimization
 
-import org.apache.spark.{Logging, RDD, SparkContext}
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 
 import org.jblas.DoubleMatrix
@@ -29,8 +30,9 @@ import scala.collection.mutable.ArrayBuffer
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-class GradientDescent(var gradient: Gradient, var updater: Updater) extends Optimizer {
-
+class GradientDescent(var gradient: Gradient, var updater: Updater)
+  extends Optimizer with Logging
+{
   private var stepSize: Double = 1.0
   private var numIterations: Int = 100
   private var regParam: Double = 0.0

@@ -27,6 +27,7 @@ import scala.math
 
 import org.apache.spark._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id)

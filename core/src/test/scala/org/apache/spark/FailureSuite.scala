@@ -20,6 +20,7 @@ package org.apache.spark
 import org.scalatest.FunSuite
 
 import SparkContext._
+import org.apache.spark.util.NonSerializable
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
 // for this because any local variables used in the task closures will rightfully

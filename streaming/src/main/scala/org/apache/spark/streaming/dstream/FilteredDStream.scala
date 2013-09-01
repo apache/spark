@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.dstream
 
 import org.apache.spark.streaming.{Duration, DStream, Time}
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
 
 private[streaming]
 class FilteredDStream[T: ClassManifest](

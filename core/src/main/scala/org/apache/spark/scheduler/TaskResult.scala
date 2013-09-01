@@ -21,8 +21,9 @@ import java.io._
 
 import scala.collection.mutable.Map
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.{Utils, SparkEnv}
+import org.apache.spark.{SparkEnv}
 import java.nio.ByteBuffer
+import org.apache.spark.util.Utils
 
 // Task result. Also contains updates to accumulator variables.
 // TODO: Use of distributed cache to return result is a hack to get around

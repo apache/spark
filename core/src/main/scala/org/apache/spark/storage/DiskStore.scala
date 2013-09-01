@@ -28,12 +28,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
-import org.apache.spark.Utils
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.serializer.{Serializer, SerializationStream}
 import org.apache.spark.Logging
 import org.apache.spark.network.netty.ShuffleSender
 import org.apache.spark.network.netty.PathResolver
+import org.apache.spark.util.Utils
 
 
 /**

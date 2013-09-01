@@ -29,11 +29,12 @@ import scala.Seq
 import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
 
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.{ExceptionFailure, SparkContext, Success, Utils}
+import org.apache.spark.{ExceptionFailure, SparkContext, Success}
 import org.apache.spark.scheduler._
 import collection.mutable
 import org.apache.spark.scheduler.cluster.SchedulingMode
 import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
+import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[spark] class JobProgressUI(val sc: SparkContext) {

@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import org.apache.spark.rdd.RDD
+
 /**
  * Base class for dependencies.
  */

@@ -34,6 +34,7 @@ import scala.collection.mutable.ArrayBuffer
 import akka.dispatch.{Await, Promise, ExecutionContext, Future}
 import akka.util.Duration
 import akka.util.duration._
+import org.apache.spark.util.Utils
 
 
 private[spark] class ConnectionManager(port: Int) extends Logging {

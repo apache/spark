@@ -19,9 +19,9 @@ package org.apache.spark.storage
 
 import java.util.LinkedHashMap
 import java.util.concurrent.ArrayBlockingQueue
-import org.apache.spark.{SizeEstimator, Utils}
 import java.nio.ByteBuffer
 import collection.mutable.ArrayBuffer
+import org.apache.spark.util.{SizeEstimator, Utils}
 
 /**
  * Stores blocks in memory, either as ArrayBuffers of deserialized Java objects or as

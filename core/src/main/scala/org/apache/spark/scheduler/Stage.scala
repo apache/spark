@@ -17,9 +17,8 @@
 
 package org.apache.spark.scheduler
 
-import java.net.URI
-
 import org.apache.spark._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
 
 /**

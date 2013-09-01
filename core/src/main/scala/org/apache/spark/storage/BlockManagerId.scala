@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
-import org.apache.spark.Utils
+import org.apache.spark.util.Utils
 
 /**
  * This class represent an unique identifier for a BlockManager.

@@ -19,6 +19,7 @@ package org.apache.spark.partial
 
 import org.apache.spark._
 import org.apache.spark.scheduler.JobListener
+import org.apache.spark.rdd.RDD
 
 /**
  * A JobListener for an approximate single-result action, such as count() or non-parallel reduce().

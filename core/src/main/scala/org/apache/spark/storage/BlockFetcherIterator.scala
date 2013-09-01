@@ -27,12 +27,12 @@ import scala.collection.mutable.Queue
 import io.netty.buffer.ByteBuf
 
 import org.apache.spark.Logging
-import org.apache.spark.Utils
 import org.apache.spark.SparkException
 import org.apache.spark.network.BufferMessage
 import org.apache.spark.network.ConnectionManagerId
 import org.apache.spark.network.netty.ShuffleCopier
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.util.Utils
 
 
 /**

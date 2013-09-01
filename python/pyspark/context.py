@@ -114,9 +114,9 @@ class SparkContext(object):
             self.addPyFile(path)
 
         # Create a temporary directory inside spark.local.dir:
-        local_dir = self._jvm.org.apache.spark.Utils.getLocalDir()
+        local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir()
         self._temp_dir = \
-            self._jvm.org.apache.spark.Utils.createTempDir(local_dir).getAbsolutePath()
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
     @property
     def defaultParallelism(self):

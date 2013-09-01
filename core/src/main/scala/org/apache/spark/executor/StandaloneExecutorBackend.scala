@@ -22,10 +22,10 @@ import java.nio.ByteBuffer
 import akka.actor.{ActorRef, Actor, Props, Terminated}
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 
-import org.apache.spark.{Logging, Utils, SparkEnv}
+import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.cluster.StandaloneClusterMessages._
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.{Utils, AkkaUtils}
 
 
 private[spark] class StandaloneExecutorBackend(

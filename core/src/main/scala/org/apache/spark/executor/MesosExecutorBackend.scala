@@ -22,8 +22,9 @@ import org.apache.mesos.{Executor => MesosExecutor, MesosExecutorDriver, MesosNa
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, TaskStatus => MesosTaskStatus, _}
 import org.apache.spark.TaskState.TaskState
 import com.google.protobuf.ByteString
-import org.apache.spark.{Utils, Logging}
+import org.apache.spark.{Logging}
 import org.apache.spark.TaskState
+import org.apache.spark.util.Utils
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor

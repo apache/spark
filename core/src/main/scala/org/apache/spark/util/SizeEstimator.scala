@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util
 
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
@@ -30,6 +30,7 @@ import java.lang.management.ManagementFactory
 import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
+import org.apache.spark.Logging
 
 /**
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in 

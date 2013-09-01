@@ -19,8 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 import org.apache.spark.scheduler.cluster.TaskInfo
-import org.apache.spark.util.Distribution
-import org.apache.spark.{Logging, SparkContext, TaskEndReason, Utils}
+import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.{Logging, SparkContext, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
 
 sealed trait SparkListenerEvents

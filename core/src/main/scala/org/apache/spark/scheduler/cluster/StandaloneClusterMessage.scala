@@ -20,8 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.Utils
-import org.apache.spark.util.SerializableBuffer
+import org.apache.spark.util.{Utils, SerializableBuffer}
 
 
 private[spark] sealed trait StandaloneClusterMessage extends Serializable

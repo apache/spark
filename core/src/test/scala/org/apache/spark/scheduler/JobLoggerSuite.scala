@@ -19,11 +19,15 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 import java.util.concurrent.LinkedBlockingQueue
+
+import scala.collection.mutable
+
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import scala.collection.mutable
+
 import org.apache.spark._
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.RDD
 
 
 class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers {

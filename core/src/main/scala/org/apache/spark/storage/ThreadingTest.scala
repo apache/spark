@@ -19,9 +19,9 @@ package org.apache.spark.storage
 
 import akka.actor._
 
-import org.apache.spark.KryoSerializer
 import java.util.concurrent.ArrayBlockingQueue
 import util.Random
+import org.apache.spark.serializer.KryoSerializer
 
 /**
  * This class tests the BlockManager and MemoryStore for thread safety and

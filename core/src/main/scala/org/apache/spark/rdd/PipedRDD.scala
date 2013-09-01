@@ -25,7 +25,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
-import org.apache.spark.{RDD, SparkEnv, Partition, TaskContext}
+import org.apache.spark.{SparkEnv, Partition, TaskContext}
 import org.apache.spark.broadcast.Broadcast
 
 

@@ -7,13 +7,14 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.Handler
 
-import org.apache.spark.{ExceptionFailure, Logging, Utils, SparkContext}
+import org.apache.spark.{ExceptionFailure, Logging, SparkContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.TaskInfo
 import org.apache.spark.scheduler.{SparkListenerTaskStart, SparkListenerTaskEnd, SparkListener}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
 import org.apache.spark.ui.UIUtils
+import org.apache.spark.util.Utils
 
 
 private[spark] class ExecutorsUI(val sc: SparkContext) {

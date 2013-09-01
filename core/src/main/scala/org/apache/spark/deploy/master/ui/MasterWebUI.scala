@@ -23,10 +23,11 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.{Handler, Server}
 
-import org.apache.spark.{Logging, Utils}
+import org.apache.spark.{Logging}
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.ui.JettyUtils
 import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.util.Utils
 
 /**
  * Web UI server for the standalone master.

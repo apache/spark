@@ -19,6 +19,7 @@ package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import org.apache.spark.storage.{BlockManager, StorageLevel}
+import org.apache.spark.rdd.RDD
 
 
 /** Spark class responsible for passing RDDs split contents to the BlockManager and making

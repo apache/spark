@@ -29,11 +29,11 @@ import akka.util.duration._
 
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
-import org.apache.spark.{Logging, SparkEnv, SparkException, Utils}
+import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStampedHashMap}
+import org.apache.spark.util._
 
 import sun.nio.ch.DirectBuffer
 

@@ -26,7 +26,7 @@ import org.apache.spark.streaming._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDDLike, JavaRDD}
 import org.apache.spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
 import java.util
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
 import JavaDStream._
 
 trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T, R]]

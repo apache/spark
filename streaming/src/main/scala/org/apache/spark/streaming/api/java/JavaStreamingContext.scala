@@ -17,23 +17,26 @@
 
 package org.apache.spark.streaming.api.java
 
-import org.apache.spark.streaming._
-import receivers.{ActorReceiver, ReceiverSupervisorStrategy}
-import org.apache.spark.streaming.dstream._
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
-import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import java.lang.{Long => JLong, Integer => JInt}
+import java.io.InputStream
+import java.util.{Map => JMap}
+
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import twitter4j.Status
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
 import akka.zeromq.Subscribe
-import scala.collection.JavaConversions._
-import java.lang.{Long => JLong, Integer => JInt}
-import java.io.InputStream
-import java.util.{Map => JMap}
 import twitter4j.auth.Authorization
-import org.apache.spark.RDD
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
+import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receivers.{ActorReceiver, ReceiverSupervisorStrategy}
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic

@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.ShouldMatchers
-import SparkContext._
+
+import org.apache.spark.{Logging, SharedSparkContext}
+import org.apache.spark.SparkContext._
 
 class SortingSuite extends FunSuite with SharedSparkContext with ShouldMatchers with Logging {
 

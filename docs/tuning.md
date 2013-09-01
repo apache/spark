@@ -38,17 +38,17 @@ in your operations) and performance. It provides two serialization libraries:
   `Serializable` types and requires you to *register* the classes you'll use in the program in advance
   for best performance.
 
-You can switch to using Kryo by calling `System.setProperty("spark.serializer", "org.apache.spark.KryoSerializer")`
+You can switch to using Kryo by calling `System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")`
 *before* creating your SparkContext. The only reason it is not the default is because of the custom
 registration requirement, but we recommend trying it in any network-intensive application.
 
 Finally, to register your classes with Kryo, create a public class that extends
-[`org.apache.spark.KryoRegistrator`](api/core/index.html#org.apache.spark.KryoRegistrator) and set the
+[`org.apache.spark.serializer.KryoRegistrator`](api/core/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
 `spark.kryo.registrator` system property to point to it, as follows:
 
 {% highlight scala %}
 import com.esotericsoftware.kryo.Kryo
-import org.apache.spark.KryoRegistrator
+import org.apache.spark.serializer.KryoRegistrator
 
 class MyRegistrator extends KryoRegistrator {
   override def registerClasses(kryo: Kryo) {
@@ -58,7 +58,7 @@ class MyRegistrator extends KryoRegistrator {
 }
 
 // Make sure to set these properties *before* creating a SparkContext!
-System.setProperty("spark.serializer", "org.apache.spark.KryoSerializer")
+System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
 System.setProperty("spark.kryo.registrator", "mypackage.MyRegistrator")
 val sc = new SparkContext(...)
 {% endhighlight %}
@@ -217,7 +217,7 @@ enough. Spark automatically sets the number of "map" tasks to run on each file a
 (though you can control it through optional parameters to `SparkContext.textFile`, etc), and for
 distributed "reduce" operations, such as `groupByKey` and `reduceByKey`, it uses the largest
 parent RDD's number of partitions. You can pass the level of parallelism as a second argument
-(see the [`spark.PairRDDFunctions`](api/core/index.html#org.apache.spark.PairRDDFunctions) documentation),
+(see the [`spark.PairRDDFunctions`](api/core/index.html#org.apache.spark.rdd.PairRDDFunctions) documentation),
 or set the system property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
 

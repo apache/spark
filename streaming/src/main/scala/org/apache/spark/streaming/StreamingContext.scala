@@ -24,6 +24,7 @@ import akka.zeromq.Subscribe
 import org.apache.spark.streaming.dstream._
 
 import org.apache.spark._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.receivers.ActorReceiver
 import org.apache.spark.streaming.receivers.ReceiverSupervisorStrategy
 import org.apache.spark.streaming.receivers.ZeroMQReceiver

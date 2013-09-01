@@ -34,6 +34,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
 import akka.actor._
+import org.apache.spark.util.Utils
 
 /**
  * A FIFO or Fair TaskScheduler implementation that runs tasks locally in a thread pool. Optionally

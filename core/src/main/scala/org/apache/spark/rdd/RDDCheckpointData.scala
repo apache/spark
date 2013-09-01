@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
-import rdd.{CheckpointRDD, CoalescedRDD}
-import scheduler.{ResultTask, ShuffleMapTask}
+
+import org.apache.spark.{Partition, SparkException, Logging}
+import org.apache.spark.scheduler.{ResultTask, ShuffleMapTask}
 
 /**
  * Enumeration to manage state transitions of an RDD through checkpointing

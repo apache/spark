@@ -20,14 +20,15 @@ package org.apache.spark.streaming
 import org.apache.spark.streaming.dstream.{InputDStream, ForEachDStream}
 import org.apache.spark.streaming.util.ManualClock
 
-import org.apache.spark.{RDD, Logging}
-
 import collection.mutable.ArrayBuffer
 import collection.mutable.SynchronizedBuffer
 
 import java.io.{ObjectInputStream, IOException}
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
+
+import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,

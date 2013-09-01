@@ -19,7 +19,8 @@ package org.apache.spark.mllib.util
 
 import scala.util.Random
 
-import org.apache.spark.{RDD, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
 
 /**
  * Generate test data for KMeans. This class first chooses k cluster centers

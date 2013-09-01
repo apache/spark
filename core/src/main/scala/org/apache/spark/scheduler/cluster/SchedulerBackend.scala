@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.{SparkContext, Utils}
+import org.apache.spark.{SparkContext}
 
 /**
  * A backend interface for cluster scheduling systems that allows plugging in different ones under

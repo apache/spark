@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.Utils
-
 /**
  * An extractor object for parsing JVM memory strings, such as "10g", into an Int representing
  * the number of megabytes. Supports the same formats as Utils.memoryStringToMb.

@@ -19,7 +19,7 @@ package org.apache.spark.deploy.master
 
 import akka.actor.ActorRef
 import scala.collection.mutable
-import org.apache.spark.Utils
+import org.apache.spark.util.Utils
 
 private[spark] class WorkerInfo(
   val id: String,

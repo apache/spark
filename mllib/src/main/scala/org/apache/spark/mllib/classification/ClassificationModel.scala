@@ -1,6 +1,6 @@
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
 
 trait ClassificationModel extends Serializable {
   /**

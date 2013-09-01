@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{OneToOneDependency, RDD, Partition, TaskContext}
+import org.apache.spark.{OneToOneDependency, Partition, TaskContext}
 
 private[spark] class FilteredRDD[T: ClassManifest](
     prev: RDD[T],

@@ -28,6 +28,7 @@ import scala.collection.mutable.{Map, HashMap, ListBuffer}
 import scala.io.Source
 
 import org.apache.spark._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.TaskInfo
 

@@ -33,12 +33,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.HashPartitioner
 import org.apache.spark.Partitioner
 import org.apache.spark.Partitioner._
-import org.apache.spark.RDD
 import org.apache.spark.SparkContext.rddToPairRDDFunctions
 import org.apache.spark.api.java.function.{Function2 => JFunction2}
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.PartialResult
+import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.OrderedRDDFunctions
 import org.apache.spark.storage.StorageLevel
 

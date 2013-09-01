@@ -20,7 +20,6 @@ package org.apache.spark.rdd
 import java.util.{HashMap => JHashMap}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.RDD
 import org.apache.spark.Partitioner
 import org.apache.spark.Dependency
 import org.apache.spark.TaskContext

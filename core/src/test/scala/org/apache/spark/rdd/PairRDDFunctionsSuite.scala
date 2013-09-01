@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
@@ -24,6 +24,7 @@ import org.scalatest.FunSuite
 
 import com.google.common.io.Files
 import org.apache.spark.SparkContext._
+import org.apache.spark.{Partitioner, SharedSparkContext}
 
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {

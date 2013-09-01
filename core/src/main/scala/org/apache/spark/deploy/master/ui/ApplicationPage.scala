@@ -31,7 +31,7 @@ import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMaste
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.master.ExecutorInfo
 import org.apache.spark.ui.UIUtils
-import org.apache.spark.Utils
+import org.apache.spark.util.Utils
 
 private[spark] class ApplicationPage(parent: MasterWebUI) {
   val master = parent.masterActorRef

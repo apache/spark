@@ -26,7 +26,7 @@ import scala.collection.mutable.HashSet
 import scala.math.max
 import scala.math.min
 
-import org.apache.spark.{FetchFailed, Logging, Resubmitted, SparkEnv, Success, TaskEndReason, TaskState, Utils}
+import org.apache.spark.{FetchFailed, Logging, Resubmitted, SparkEnv, Success, TaskEndReason, TaskState}
 import org.apache.spark.{ExceptionFailure, SparkException, TaskResultTooBigFailure}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler._

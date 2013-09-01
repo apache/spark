@@ -54,17 +54,15 @@ import org.apache.mesos.MesosNativeLibrary
 
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{CheckpointRDD, HadoopRDD, NewHadoopRDD, UnionRDD, ParallelCollectionRDD,
-  OrderedRDDFunctions}
+import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
   ClusterScheduler, Schedulable, SchedulingMode}
 import org.apache.spark.scheduler.local.LocalScheduler
 import org.apache.spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import org.apache.spark.storage.{StorageStatus, StorageUtils, RDDInfo, BlockManagerSource}
+import org.apache.spark.storage.{StorageUtils, BlockManagerSource}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{MetadataCleaner, TimeStampedHashMap}
-import scala.Some
+import org.apache.spark.util.{ClosureCleaner, Utils, MetadataCleaner, TimeStampedHashMap}
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.RDDInfo
 import org.apache.spark.storage.StorageStatus

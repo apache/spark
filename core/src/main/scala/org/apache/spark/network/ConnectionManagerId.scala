@@ -19,7 +19,7 @@ package org.apache.spark.network
 
 import java.net.InetSocketAddress
 
-import org.apache.spark.Utils
+import org.apache.spark.util.Utils
 
 
 private[spark] case class ConnectionManagerId(host: String, port: Int) {

@@ -28,8 +28,9 @@ import akka.pattern.ask
 import akka.util.Duration
 import akka.util.duration._
 
-import org.apache.spark.{Logging, Utils, SparkException}
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.util.Utils
 
 
 /**

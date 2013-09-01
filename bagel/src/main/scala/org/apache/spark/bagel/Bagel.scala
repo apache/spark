@@ -19,7 +19,7 @@ package org.apache.spark.bagel
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 object Bagel extends Logging {

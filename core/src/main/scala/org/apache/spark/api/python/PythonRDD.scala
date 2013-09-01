@@ -26,7 +26,9 @@ import scala.collection.JavaConversions._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PipedRDD
+import org.apache.spark.util.Utils
 
 
 private[spark] class PythonRDD[T: ClassManifest](

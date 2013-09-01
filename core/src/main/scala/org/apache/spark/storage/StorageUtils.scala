@@ -17,8 +17,9 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.{Utils, SparkContext}
+import org.apache.spark.{SparkContext}
 import BlockManagerMasterActor.BlockStatus
+import org.apache.spark.util.Utils
 
 private[spark]
 case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,

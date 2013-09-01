@@ -17,22 +17,21 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Time, StreamingContext, AddBlocks, RegisterReceiver, DeregisterReceiver}
-
-import org.apache.spark.{Logging, SparkEnv, RDD}
-import org.apache.spark.rdd.BlockRDD
-import org.apache.spark.storage.StorageLevel
+import java.util.concurrent.ArrayBlockingQueue
+import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-
-import java.nio.ByteBuffer
 
 import akka.actor.{Props, Actor}
 import akka.pattern.ask
 import akka.dispatch.Await
 import akka.util.duration._
+
 import org.apache.spark.streaming.util.{RecurringTimer, SystemClock}
-import java.util.concurrent.ArrayBlockingQueue
+import org.apache.spark.streaming._
+import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.rdd.{RDD, BlockRDD}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Abstract class for defining any InputDStream that has to start a receiver on worker

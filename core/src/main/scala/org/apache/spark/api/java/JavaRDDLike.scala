@@ -21,13 +21,15 @@ import java.util.{List => JList, Comparator}
 import scala.Tuple2
 import scala.collection.JavaConversions._
 
+import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.spark.{SparkContext, Partition, RDD, TaskContext}
+
+import org.apache.spark.{SparkContext, Partition, TaskContext}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
 import org.apache.spark.partial.{PartialResult, BoundedDouble}
 import org.apache.spark.storage.StorageLevel
-import com.google.common.base.Optional
 
 
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {

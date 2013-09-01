@@ -26,6 +26,8 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.storage._
 import org.apache.spark.util.{TimeStampedHashMap, MetadataCleaner}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDDCheckpointData
 
 
 private[spark] object ShuffleMapTask {

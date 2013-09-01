@@ -21,7 +21,7 @@ import org.apache.spark.streaming.{Duration, Time, DStream}
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous

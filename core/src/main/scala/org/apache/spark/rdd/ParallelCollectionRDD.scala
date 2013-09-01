@@ -23,6 +23,8 @@ import scala.collection.Map
 import org.apache.spark._
 import java.io._
 import scala.Serializable
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.Utils
 
 private[spark] class ParallelCollectionPartition[T: ClassManifest](
     var rddId: Long,

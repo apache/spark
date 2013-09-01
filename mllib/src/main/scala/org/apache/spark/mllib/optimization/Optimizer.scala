@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.optimization
 
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
 
 trait Optimizer {
 

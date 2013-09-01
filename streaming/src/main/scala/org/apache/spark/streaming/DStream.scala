@@ -23,7 +23,8 @@ import org.apache.spark.util.MetadataCleaner
 
 //import Time._
 
-import org.apache.spark.{RDD, Logging}
+import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer

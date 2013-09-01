@@ -18,7 +18,7 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.{Dependency, RangeDependency, RDD, SparkContext, Partition, TaskContext}
+import org.apache.spark.{Dependency, RangeDependency, SparkContext, Partition, TaskContext}
 import java.io.{ObjectOutputStream, IOException}
 
 private[spark] class UnionPartition[T: ClassManifest](idx: Int, rdd: RDD[T], splitIndex: Int)

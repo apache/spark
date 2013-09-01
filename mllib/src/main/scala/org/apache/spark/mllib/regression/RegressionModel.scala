@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.RDD
+import org.apache.spark.rdd.RDD
 
 trait RegressionModel extends Serializable {
   /**

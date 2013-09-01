@@ -17,9 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.util.IntParam
-import org.apache.spark.util.MemoryParam
-import org.apache.spark.Utils
+import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 import java.lang.management.ManagementFactory
 
 /**

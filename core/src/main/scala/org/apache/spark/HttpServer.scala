@@ -26,6 +26,7 @@ import org.eclipse.jetty.server.handler.DefaultHandler
 import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.server.handler.ResourceHandler
 import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.apache.spark.util.Utils
 
 /**
  * Exception type thrown by HttpServer when it is in the wrong state for an operation.

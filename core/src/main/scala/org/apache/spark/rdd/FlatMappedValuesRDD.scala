@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{TaskContext, Partition, RDD}
+import org.apache.spark.{TaskContext, Partition}
 
 
 private[spark]

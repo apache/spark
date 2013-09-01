@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import java.util.Random
 
@@ -37,37 +37,22 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
-import org.apache.spark.rdd.CoalescedRDD
-import org.apache.spark.rdd.CartesianRDD
-import org.apache.spark.rdd.FilteredRDD
-import org.apache.spark.rdd.FlatMappedRDD
-import org.apache.spark.rdd.GlommedRDD
-import org.apache.spark.rdd.MappedRDD
-import org.apache.spark.rdd.MapPartitionsRDD
-import org.apache.spark.rdd.MapPartitionsWithIndexRDD
-import org.apache.spark.rdd.PipedRDD
-import org.apache.spark.rdd.SampledRDD
-import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.rdd.UnionRDD
-import org.apache.spark.rdd.ZippedRDD
-import org.apache.spark.rdd.ZippedPartitionsRDD2
-import org.apache.spark.rdd.ZippedPartitionsRDD3
-import org.apache.spark.rdd.ZippedPartitionsRDD4
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.{Utils, BoundedPriorityQueue}
 
-import SparkContext._
+import org.apache.spark.SparkContext._
+import org.apache.spark._
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
  * partitioned collection of elements that can be operated on in parallel. This class contains the
  * basic operations available on all RDDs, such as `map`, `filter`, and `persist`. In addition,
- * [[org.apache.spark.PairRDDFunctions]] contains operations available only on RDDs of key-value pairs, such
- * as `groupByKey` and `join`; [[org.apache.spark.DoubleRDDFunctions]] contains operations available only on
- * RDDs of Doubles; and [[org.apache.spark.SequenceFileRDDFunctions]] contains operations available on RDDs
- * that can be saved as SequenceFiles. These operations are automatically available on any RDD of
- * the right type (e.g. RDD[(Int, Int)] through implicit conversions when you
- * `import org.apache.spark.SparkContext._`.
+ * [[org.apache.spark.rdd.PairRDDFunctions]] contains operations available only on RDDs of key-value
+ * pairs, such as `groupByKey` and `join`; [[org.apache.spark.rdd.DoubleRDDFunctions]] contains
+ * operations available only on RDDs of Doubles; and [[org.apache.spark.rdd.SequenceFileRDDFunctions]]
+ * contains operations available on RDDs that can be saved as SequenceFiles. These operations are
+ * automatically available on any RDD of the right type (e.g. RDD[(Int, Int)] through implicit
+ * conversions when you `import org.apache.spark.SparkContext._`.
  *
  * Internally, each RDD is characterized by five main properties:
  *

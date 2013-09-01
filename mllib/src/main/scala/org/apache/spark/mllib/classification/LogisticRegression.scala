@@ -19,7 +19,8 @@ package org.apache.spark.mllib.classification
 
 import scala.math.round
 
-import org.apache.spark.{Logging, RDD, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.MLUtils

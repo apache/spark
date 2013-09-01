@@ -23,7 +23,7 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{SparkException, Utils, Logging, SparkContext}
+import org.apache.spark.{SparkException, Logging, SparkContext}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.collection.JavaConversions._
 import java.io.File
@@ -31,6 +31,7 @@ import org.apache.spark.scheduler.cluster._
 import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 import org.apache.spark.TaskState
+import org.apache.spark.util.Utils
 
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a

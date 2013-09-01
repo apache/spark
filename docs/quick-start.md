@@ -109,7 +109,7 @@ We'll create a very simple Spark job in Scala. So simple, in fact, that it's nam
 {% highlight scala %}
 /*** SimpleJob.scala ***/
 import org.apache.spark.SparkContext
-import SparkContext._
+import org.apache.spark.SparkContext._
 
 object SimpleJob {
   def main(args: Array[String]) {

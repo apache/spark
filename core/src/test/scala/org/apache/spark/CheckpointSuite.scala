@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.rdd._
 import org.apache.spark.SparkContext._
 import storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
   initLogging()

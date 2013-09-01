@@ -5,9 +5,9 @@ import java.util.Date
 import scala.xml.Node
 import scala.collection.mutable.HashSet
 
-import org.apache.spark.Utils
 import org.apache.spark.scheduler.cluster.{SchedulingMode, TaskInfo}
 import org.apache.spark.scheduler.Stage
+import org.apache.spark.util.Utils
 
 
 /** Page showing list of all ongoing and recently finished stages */

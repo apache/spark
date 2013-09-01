@@ -17,10 +17,11 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.StreamingContext
+import java.net.InetSocketAddress
+import java.io.{ObjectInput, ObjectOutput, Externalizable}
+import java.nio.ByteBuffer
 
-import org.apache.spark.Utils
-import org.apache.spark.storage.StorageLevel
+import scala.collection.JavaConversions._
 
 import org.apache.flume.source.avro.AvroSourceProtocol
 import org.apache.flume.source.avro.AvroFlumeEvent
@@ -28,11 +29,9 @@ import org.apache.flume.source.avro.Status
 import org.apache.avro.ipc.specific.SpecificResponder
 import org.apache.avro.ipc.NettyServer
 
-import scala.collection.JavaConversions._
-
-import java.net.InetSocketAddress
-import java.io.{ObjectInput, ObjectOutput, Externalizable}
-import java.nio.ByteBuffer
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.util.Utils
+import org.apache.spark.storage.StorageLevel
 
 private[streaming]
 class FlumeInputDStream[T: ClassManifest](

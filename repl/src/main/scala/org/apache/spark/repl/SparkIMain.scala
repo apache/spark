@@ -28,7 +28,7 @@ import scala.reflect.NameTransformer
 import SparkIMain._
 
 import org.apache.spark.HttpServer
-import org.apache.spark.Utils
+import org.apache.spark.util.Utils
 import org.apache.spark.SparkEnv
 
 /** An interpreter for Scala code.

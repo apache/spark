@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
 import org.apache.spark.api.java._
-import org.apache.spark.rdd.OrderedRDDFunctions
+import org.apache.spark.rdd.{RDD, DoubleRDDFunctions, PairRDDFunctions, OrderedRDDFunctions}
 import org.apache.spark.streaming.{PairDStreamFunctions, DStream, StreamingContext}
 import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream, JavaStreamingContext}
 
@@ -139,7 +139,7 @@ object JavaAPICompletenessChecker {
       scalaType match {
         case ParameterizedType(name, parameters, typebounds) =>
           name match {
-            case "org.apache.spark.RDD" =>
+            case "org.apache.spark.rdd.RDD" =>
               if (parameters(0).name == classOf[Tuple2[_, _]].getName) {
                 val tupleParams =
                   parameters(0).asInstanceOf[ParameterizedType].parameters.map(applySubs)
@@ -211,23 +211,23 @@ object JavaAPICompletenessChecker {
     // This list also includes a few methods that are only used by the web UI or other
     // internal Spark components.
     val excludedNames = Seq(
-      "org.apache.spark.RDD.origin",
-      "org.apache.spark.RDD.elementClassManifest",
-      "org.apache.spark.RDD.checkpointData",
-      "org.apache.spark.RDD.partitioner",
-      "org.apache.spark.RDD.partitions",
-      "org.apache.spark.RDD.firstParent",
-      "org.apache.spark.RDD.doCheckpoint",
-      "org.apache.spark.RDD.markCheckpointed",
-      "org.apache.spark.RDD.clearDependencies",
-      "org.apache.spark.RDD.getDependencies",
-      "org.apache.spark.RDD.getPartitions",
-      "org.apache.spark.RDD.dependencies",
-      "org.apache.spark.RDD.getPreferredLocations",
-      "org.apache.spark.RDD.collectPartitions",
-      "org.apache.spark.RDD.computeOrReadCheckpoint",
-      "org.apache.spark.PairRDDFunctions.getKeyClass",
-      "org.apache.spark.PairRDDFunctions.getValueClass",
+      "org.apache.spark.rdd.RDD.origin",
+      "org.apache.spark.rdd.RDD.elementClassManifest",
+      "org.apache.spark.rdd.RDD.checkpointData",
+      "org.apache.spark.rdd.RDD.partitioner",
+      "org.apache.spark.rdd.RDD.partitions",
+      "org.apache.spark.rdd.RDD.firstParent",
+      "org.apache.spark.rdd.RDD.doCheckpoint",
+      "org.apache.spark.rdd.RDD.markCheckpointed",
+      "org.apache.spark.rdd.RDD.clearDependencies",
+      "org.apache.spark.rdd.RDD.getDependencies",
+      "org.apache.spark.rdd.RDD.getPartitions",
+      "org.apache.spark.rdd.RDD.dependencies",
+      "org.apache.spark.rdd.RDD.getPreferredLocations",
+      "org.apache.spark.rdd.RDD.collectPartitions",
+      "org.apache.spark.rdd.RDD.computeOrReadCheckpoint",
+      "org.apache.spark.rdd.PairRDDFunctions.getKeyClass",
+      "org.apache.spark.rdd.PairRDDFunctions.getValueClass",
       "org.apache.spark.SparkContext.stringToText",
       "org.apache.spark.SparkContext.makeRDD",
       "org.apache.spark.SparkContext.runJob",

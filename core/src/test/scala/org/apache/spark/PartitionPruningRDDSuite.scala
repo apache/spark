@@ -2,7 +2,7 @@ package org.apache.spark
 
 import org.scalatest.FunSuite
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.PartitionPruningRDD
+import org.apache.spark.rdd.{RDD, PartitionPruningRDD}
 
 
 class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {

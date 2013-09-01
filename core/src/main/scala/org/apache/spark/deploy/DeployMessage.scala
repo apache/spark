@@ -19,10 +19,10 @@ package org.apache.spark.deploy
 
 import scala.collection.immutable.List
 
-import org.apache.spark.Utils
 import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{WorkerInfo, ApplicationInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
+import org.apache.spark.util.Utils
 
 
 private[deploy] sealed trait DeployMessage extends Serializable

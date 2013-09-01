@@ -28,7 +28,7 @@ import org.apache.spark.streaming.util.RawTextHelper
  * lines have the word 'the' in them. This is useful for benchmarking purposes. This
  * will only work with spark.streaming.util.RawTextSender running on all worker nodes
  * and with Spark using Kryo serialization (set Java property "spark.serializer" to
- * "org.apache.spark.KryoSerializer").
+ * "org.apache.spark.serializer.KryoSerializer").
  * Usage: RawNetworkGrep <master> <numStreams> <host> <port> <batchMillis>
  *   <master> is the Spark master URL
  *   <numStream> is the number rawNetworkStreams, which should be same as number

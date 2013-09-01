@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.partial.SumEvaluator
 import org.apache.spark.util.StatCounter
+import org.apache.spark.{TaskContext, Logging}
 
 /**
  * Extra functions available on RDDs of Doubles through an implicit conversion.
- * Import `spark.SparkContext._` at the top of your program to use these functions.
+ * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
 class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /** Add up the elements in this RDD. */

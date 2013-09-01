@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files

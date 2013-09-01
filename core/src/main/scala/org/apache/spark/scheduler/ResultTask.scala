@@ -17,10 +17,13 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark._
 import java.io._
-import util.{MetadataCleaner, TimeStampedHashMap}
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
+
+import org.apache.spark._
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDDCheckpointData
+import org.apache.spark.util.{MetadataCleaner, TimeStampedHashMap}
 
 private[spark] object ResultTask {
 

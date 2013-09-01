@@ -15,40 +15,40 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import java.nio.ByteBuffer
-import java.util.{Date, HashMap => JHashMap}
+import java.util.Date
 import java.text.SimpleDateFormat
+import java.util.{HashMap => JHashMap}
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.mapred._
+import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.mapred.FileOutputCommitter
 import org.apache.hadoop.mapred.FileOutputFormat
-import org.apache.hadoop.mapred.SparkHadoopWriter
-import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.OutputFormat
-
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat,
-    RecordWriter => NewRecordWriter, Job => NewAPIHadoopJob, SparkHadoopMapReduceUtil}
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
+import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
+import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
 
-import org.apache.spark.partial.BoundedDouble
-import org.apache.spark.partial.PartialResult
-import org.apache.spark.rdd._
+import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.Partitioner._
+import org.apache.spark.partial.{BoundedDouble, PartialResult}
+import org.apache.spark.Aggregator
+import org.apache.spark.Partitioner
+import org.apache.spark.Partitioner.defaultPartitioner
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
- * Import `spark.SparkContext._` at the top of your program to use these functions.
+ * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
 class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   extends Logging
@@ -696,7 +696,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
 
   private[spark] def getValueClass() = implicitly[ClassManifest[V]].erasure
 }
-
 
 private[spark] object Manifests {
   val seqSeqManifest = classManifest[Seq[Seq[_]]]
