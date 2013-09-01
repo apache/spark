@@ -117,7 +117,6 @@ private[spark] object JettyUtils extends Logging {
 
       Try { server.start() } match {
         case s: Success[_] =>
-          sys.addShutdownHook(server.stop()) // Be kind, un-bind
           (server, server.getConnectors.head.getLocalPort)
         case f: Failure[_] =>
           server.stop()
