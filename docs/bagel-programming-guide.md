@@ -29,8 +29,8 @@ representing the current PageRank of the vertex, and similarly extend
 the `Message` and `Edge` classes. Note that these need to be marked `@serializable` to allow Spark to transfer them across machines. We also import the Bagel types and implicit conversions.
 
 {% highlight scala %}
-import spark.bagel._
-import spark.bagel.Bagel._
+import org.apache.spark.bagel._
+import org.apache.spark.bagel.Bagel._
 
 @serializable class PREdge(val targetId: String) extends Edge
 
@@ -158,4 +158,4 @@ trait Message[K] {
 
 ## Where to Go from Here
 
-Two example jobs, PageRank and shortest path, are included in `examples/src/main/scala/spark/examples/bagel`. You can run them by passing the class name to the `run-example` script included in Spark -- for example, `./run-example spark.examples.bagel.WikipediaPageRank`. Each example program prints usage help when run without any arguments.
+Two example jobs, PageRank and shortest path, are included in `examples/src/main/scala/org/apache/spark/examples/bagel`. You can run them by passing the class name to the `run-example` script included in Spark -- for example, `./run-example org.apache.spark.examples.bagel.WikipediaPageRank`. Each example program prints usage help when run without any arguments.

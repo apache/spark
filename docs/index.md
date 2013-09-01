@@ -3,8 +3,8 @@ layout: global
 title: Spark Overview
 ---
 
-Apache Spark is a cluster computing system that aims to make data analytics faster to run and faster to write.
-It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html), and a general execution engine that supports rich operator graphs.
+Apache Spark is a fast and general-purpose cluster computing system.
+It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html) that make parallel jobs easy to write, and an optimized engine that supports general computation graphs.
 Spark can run on the Apache Mesos cluster manager, Hadoop YARN, Amazon EC2, or without an independent resource manager ("standalone mode").
 
 # Downloading
@@ -24,8 +24,8 @@ For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_VE
 Spark comes with several sample programs in the `examples` directory.
 To run one of the samples, use `./run-example <class> <params>` in the top-level Spark directory
 (the `run-example` script sets up the appropriate paths and launches that program).
-For example, `./run-example spark.examples.SparkPi` will run a sample program that estimates Pi. Each
-example prints usage help if no params are given.
+For example, try `./run-example org.apache.spark.examples.SparkPi local`.
+Each example prints usage help when run with no parameters.
 
 Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
 to connect to. This can be a [URL for a distributed cluster](scala-programming-guide.html#master-urls),
