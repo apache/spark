@@ -96,7 +96,7 @@ private[spark] object UIUtils {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <img src="/static/spark-logo-77x50px-hd.png" style="margin-right: 20px;" />
+                <img src="/static/spark-logo-77x50px-hd.png" style="margin-right: 15px;" />
                 {title}
               </h3>
             </div>
