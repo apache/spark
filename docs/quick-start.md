@@ -53,7 +53,7 @@ scala> textFile.filter(line => line.contains("Spark")).count() // How many lines
 res3: Long = 15
 {% endhighlight %}
 
-## More On RDD Operations
+## More on RDD Operations
 RDD actions and transformations can be used for more complex computations. Let's say we want to find the line with the most words:
 
 {% highlight scala %}
@@ -163,8 +163,6 @@ $ sbt run
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
-This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
-
 # A Standalone Job In Java
 Now say we wanted to write a standalone job using the Java API. We will walk through doing this with Maven. If you are using other build systems, consider using the Spark assembly JAR described in the developer guide.
 
@@ -252,8 +250,6 @@ $ mvn exec:java -Dexec.mainClass="SimpleJob"
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
-This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
-
 # A Standalone Job In Python
 Now we will show how to write a standalone job using the Python API (PySpark).
 
@@ -290,6 +286,33 @@ $ ./pyspark SimpleJob.py
 Lines with a: 46, Lines with b: 23
 {% endhighlight python %}
 
-This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
+# Running Jobs on a Cluster
 
-Also, this example links against the default version of HDFS that Spark builds with (1.0.4). You can run it against other HDFS versions by [building Spark with another HDFS version](index.html#a-note-about-hadoop-versions).
+There are a few additional considerations when running jobs on a 
+[Spark](spark-standalone.html), [YARN](running-on-yarn.html), or 
+[Mesos](running-on-mesos.html) cluster.
+
+### Including Your Dependencies
+If your code depends on other projects, you will need to ensure they are also
+present on the slave nodes. A popular approach is to create an
+assembly jar (or "uber" jar) containing your code and its dependencies. Both
+[sbt](https://github.com/sbt/sbt-assembly) and 
+[Maven](http://maven.apache.org/plugins/maven-assembly-plugin/) 
+have assembly plugins. When creating assembly jars, list Spark 
+itself as a `provided` dependency; it need not be bundled since it is 
+already present on the slaves. Once you have an assembled jar, 
+add it to the SparkContext as shown here. It is also possible to submit 
+your dependent jars one-by-one when creating a SparkContext.
+
+### Setting Configuration Options
+Spark includes several configuration options which influence the behavior
+of your job. These should be set as 
+[JVM system properties](configuration.html#system-properties) in your 
+program. The options will be captured and shipped to all slave nodes.
+
+### Accessing Hadoop Filesystems
+
+The examples here access a local file. To read data from a distributed
+filesystem, such as HDFS, include 
+[Hadoop version information](index.html#a-note-about-hadoop-versions)
+in your build file. By default, Spark builds against HDFS 1.0.4.
