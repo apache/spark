@@ -19,4 +19,4 @@
 
 FWDIR="`dirname $0`"
 echo "Running spark-executor with framework dir = $FWDIR"
-exec $FWDIR/spark-class spark.executor.MesosExecutorBackend
+exec $FWDIR/spark-class org.apache.spark.executor.MesosExecutorBackend

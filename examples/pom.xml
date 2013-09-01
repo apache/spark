@@ -19,13 +19,13 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.spark-project</groupId>
+    <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
     <version>0.8.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.spark-project</groupId>
+  <groupId>org.apache.spark</groupId>
   <artifactId>spark-examples</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
@@ -33,25 +33,25 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-core</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-mllib</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-bagel</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
@@ -132,7 +132,7 @@
       <id>hadoop2-yarn</id>
       <dependencies>
         <dependency>
-          <groupId>org.spark-project</groupId>
+          <groupId>org.apache.spark</groupId>
           <artifactId>spark-yarn</artifactId>
           <version>${project.version}</version>
           <scope>provided</scope>
