@@ -126,7 +126,7 @@ object SimpleJob {
 
 This job simply counts the number of lines containing 'a' and the number containing 'b' in the Spark README. Note that you'll need to replace $YOUR_SPARK_HOME with the location where Spark is installed. Unlike the earlier examples with the Spark shell, which initializes its own SparkContext, we initialize a SparkContext as part of the job. We pass the SparkContext constructor four arguments, the type of scheduler we want to use (in this case, a local scheduler), a name for the job, the directory where Spark is installed, and a name for the jar file containing the job's sources. The final two arguments are needed in a distributed setting, where Spark is running across several nodes, so we include them for completeness. Spark will automatically ship the jar files you list to slave nodes.
 
-This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt` which explains that Spark is a dependency. This file also adds two repositories which host Spark dependencies:
+This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt` which explains that Spark is a dependency. This file also adds a repository that Spark depends on:
 
 {% highlight scala %}
 name := "Simple Project"
@@ -137,12 +137,16 @@ scalaVersion := "{{site.SCALA_VERSION}}"
 
 libraryDependencies += "org.spark-project" %% "spark-core" % "{{site.SPARK_VERSION}}"
 
-resolvers ++= Seq(
-  "Akka Repository" at "http://repo.akka.io/releases/",
-  "Spray Repository" at "http://repo.spray.cc/")
+resolvers += "Akka Repository" at "http://repo.akka.io/releases/"
 {% endhighlight %}
 
-Of course, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job.
+If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on `hadoop-client` for your version of HDFS:
+
+{% highlight scala %}
+libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "<your-hdfs-version>"
+{% endhighlight %}
+
+Finally, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job.
 
 {% highlight bash %}
 $ find .
@@ -205,10 +209,6 @@ To build the job, we also write a Maven `pom.xml` file that lists Spark as a dep
   <version>1.0</version>
   <repositories>
     <repository>
-      <id>Spray.cc repository</id>
-      <url>http://repo.spray.cc</url>
-    </repository>
-    <repository>
       <id>Akka repository</id>
       <url>http://repo.akka.io/releases</url>
     </repository>
@@ -221,6 +221,16 @@ To build the job, we also write a Maven `pom.xml` file that lists Spark as a dep
     </dependency>
   </dependencies>
 </project>
+{% endhighlight %}
+
+If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on `hadoop-client` for your version of HDFS:
+
+{% highlight xml %}
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
+      <version>...</version>
+    </dependency>
 {% endhighlight %}
 
 We lay out these files according to the canonical Maven directory structure:
@@ -281,3 +291,5 @@ Lines with a: 46, Lines with b: 23
 {% endhighlight python %}
 
 This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
+
+Also, this example links against the default version of HDFS that Spark builds with (1.0.4). You can run it against other HDFS versions by [building Spark with another HDFS version](index.html#a-note-about-hadoop-versions).

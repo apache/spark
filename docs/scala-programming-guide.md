@@ -17,15 +17,23 @@ This guide shows each of these features and walks through some samples. It assum
 
 # Linking with Spark
 
-To write a Spark application, you will need to add both Spark and its dependencies to your CLASSPATH. If you use sbt or Maven, Spark is available through Maven Central at:
+Spark {{site.SPARK_VERSION}} uses Scala {{site.SCALA_VERSION}}. If you write applications in Scala, you'll need to use this same version of Scala in your program -- newer major versions may not work.
+
+To write a Spark application, you need to add a dependency on Spark. If you use SBT or Maven, Spark is available through Maven Central at:
 
     groupId = org.spark-project
     artifactId = spark-core_{{site.SCALA_VERSION}}
     version = {{site.SPARK_VERSION}} 
 
-For other build systems or environments, you can run `sbt/sbt assembly` to build both Spark and its dependencies into one JAR (`core/target/spark-core-assembly-0.6.0.jar`), then add this to your CLASSPATH.
+In addition, if you wish to access an HDFS cluster, you need to add a dependency on `hadoop-client` for your version of HDFS:
 
-In addition, you'll need to import some Spark classes and implicit conversions. Add the following lines at the top of your program:
+    groupId = org.apache.hadoop
+    artifactId = hadoop-client
+    version = <your-hdfs-version>
+
+For other build systems, you can run `sbt/sbt assembly` to pack Spark and its dependencies into one JAR (`assembly/target/scala-{{site.SCALA_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop*.jar`), then add this to your CLASSPATH. Set the HDFS version as described [here](index.html#a-note-about-hadoop-versions).
+
+Finally, you need to import some Spark classes and implicit conversions into your program. Add the following lines:
 
 {% highlight scala %}
 import spark.SparkContext
