@@ -12,7 +12,7 @@
 #     Examples of app-wide options : -Dspark.serializer
 #
 # If using the standalone deploy mode, you can also set variables for it here:
-# - SPARK_MASTER_IP, to bind the master to a different IP address
+# - SPARK_MASTER_IP, to bind the master to a different IP address or hostname
 # - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports
 # - SPARK_WORKER_CORES, to set the number of cores to use on this machine
 # - SPARK_WORKER_MEMORY, to set how much memory to use (e.g. 1000m, 2g)
