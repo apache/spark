@@ -32,24 +32,25 @@ in your operations) and performance. It provides two serialization libraries:
   [`java.io.Externalizable`](http://docs.oracle.com/javase/6/docs/api/java/io/Externalizable.html).
   Java serialization is flexible but often quite slow, and leads to large
   serialized formats for many classes.
-* [Kryo serialization](http://code.google.com/p/kryo/wiki/V1Documentation): Spark can also use
+* [Kryo serialization](http://code.google.com/p/kryo/): Spark can also use
   the Kryo library (version 2) to serialize objects more quickly. Kryo is significantly
   faster and more compact than Java serialization (often as much as 10x), but does not support all
   `Serializable` types and requires you to *register* the classes you'll use in the program in advance
   for best performance.
 
-You can switch to using Kryo by calling `System.setProperty("spark.serializer", "spark.KryoSerializer")`
+You can switch to using Kryo by calling `System.setProperty("spark.serializer", "org.apache.spark.KryoSerializer")`
 *before* creating your SparkContext. The only reason it is not the default is because of the custom
 registration requirement, but we recommend trying it in any network-intensive application.
 
 Finally, to register your classes with Kryo, create a public class that extends
-[`spark.KryoRegistrator`](api/core/index.html#spark.KryoRegistrator) and set the
+[`org.apache.spark.KryoRegistrator`](api/core/index.html#org.apache.spark.KryoRegistrator) and set the
 `spark.kryo.registrator` system property to point to it, as follows:
 
 {% highlight scala %}
 import com.esotericsoftware.kryo.Kryo
+import org.apache.spark.KryoRegistrator
 
-class MyRegistrator extends spark.KryoRegistrator {
+class MyRegistrator extends KryoRegistrator {
   override def registerClasses(kryo: Kryo) {
     kryo.register(classOf[MyClass1])
     kryo.register(classOf[MyClass2])
@@ -57,7 +58,7 @@ class MyRegistrator extends spark.KryoRegistrator {
 }
 
 // Make sure to set these properties *before* creating a SparkContext!
-System.setProperty("spark.serializer", "spark.KryoSerializer")
+System.setProperty("spark.serializer", "org.apache.spark.KryoSerializer")
 System.setProperty("spark.kryo.registrator", "mypackage.MyRegistrator")
 val sc = new SparkContext(...)
 {% endhighlight %}
@@ -216,7 +217,7 @@ enough. Spark automatically sets the number of "map" tasks to run on each file a
 (though you can control it through optional parameters to `SparkContext.textFile`, etc), and for
 distributed "reduce" operations, such as `groupByKey` and `reduceByKey`, it uses the largest
 parent RDD's number of partitions. You can pass the level of parallelism as a second argument
-(see the [`spark.PairRDDFunctions`](api/core/index.html#spark.PairRDDFunctions) documentation),
+(see the [`spark.PairRDDFunctions`](api/core/index.html#org.apache.spark.PairRDDFunctions) documentation),
 or set the system property `spark.default.parallelism` to change the default.
 In general, we recommend 2-3 tasks per CPU core in your cluster.
 
