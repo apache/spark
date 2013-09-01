@@ -75,6 +75,9 @@ if [ "$SPARK_IDENT_STRING" = "" ]; then
   export SPARK_IDENT_STRING="$USER"
 fi
 
+
+export SPARK_PRINT_LAUNCH_COMMAND="1"
+
 # get log directory
 if [ "$SPARK_LOG_DIR" = "" ]; then
   export SPARK_LOG_DIR="$SPARK_HOME/logs"
@@ -122,12 +125,19 @@ case $startStop in
       rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' $SPARK_MASTER/ "$SPARK_HOME"
     fi
 
-    spark_rotate_log $log
+    spark_rotate_log "$log"
     echo starting $command, logging to $log
     cd "$SPARK_PREFIX"
     nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
-    echo $! > $pid
-    sleep 1; head "$log"
+    newpid=$!
+    echo $newpid > $pid
+    sleep 2
+    # Check if the process has died; in that case we'll tail the log so the user can see
+    if ! kill -0 $newpid >/dev/null 2>&1; then
+      echo "failed to launch $command:"
+      tail -2 "$log" | sed 's/^/  /'
+      echo "full log in $log"
+    fi
     ;;
 
   (stop)
