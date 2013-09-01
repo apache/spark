@@ -135,8 +135,11 @@ Code dependencies can be added to an existing SparkContext using its `addPyFile(
 
 # Where to Go from Here
 
-PySpark includes several sample programs in the [`python/examples` folder](https://github.com/mesos/spark/tree/master/python/examples).
-You can run them by passing the files to the `pyspark` script -- for example `./pyspark python/examples/wordcount.py`.
+PySpark includes several sample programs in the [`python/examples` folder](https://github.com/apache/incubator-spark/tree/master/python/examples).
+You can run them by passing the files to the `pyspark` script; e.g.:
+
+    ./pyspark python/examples/wordcount.py
+
 Each program prints usage help when run without arguments.
 
 We currently provide [API documentation](api/pyspark/index.html) for the Python API as Epydoc.
