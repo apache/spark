@@ -62,7 +62,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val execTable = UIUtils.listingTable(execHead, execRow, execInfo)
 
     val content =
-      <div class="row">
+      <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
             <li><strong>Memory:</strong>
@@ -78,7 +78,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(content, sc, execInfo.size + " Executors", Executors)
+    UIUtils.headerSparkPage(content, sc, "Executors (" + execInfo.size + ")", Executors)
   }
 
   def getExecInfo(a: Int): Seq[String] = {

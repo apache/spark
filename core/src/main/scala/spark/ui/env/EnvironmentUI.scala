@@ -78,14 +78,11 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
     val content =
       <span>
         <h4>Runtime Information</h4> {jvmTable}
-        <hr/>
-        <h4>{sparkProperties.size} Spark Properties</h4>
+        <h4>Spark Properties</h4>
         {sparkPropertyTable}
-        <hr/>
-        <h4>{otherProperties.size} System Properties</h4>
+        <h4>System Properties</h4>
         {otherPropertyTable}
-        <hr/>
-        <h4>{classPath.size} Classpath Entries</h4>
+        <h4>Classpath Entries</h4>
         {classPathTable}
       </span>
 

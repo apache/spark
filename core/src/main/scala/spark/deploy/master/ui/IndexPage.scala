@@ -61,8 +61,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
     val content =
-        <hr />
-        <div class="row">
+        <div class="row-fluid">
           <div class="span12">
             <ul class="unstyled">
               <li><strong>URL:</strong> {state.uri}</li>
@@ -79,16 +78,14 @@ private[spark] class IndexPage(parent: MasterWebUI) {
           </div>
         </div>
 
-        <div class="row">
+        <div class="row-fluid">
           <div class="span12">
             <h4> Workers </h4>
             {workerTable}
           </div>
         </div>
 
-          <hr/>
-
-        <div class="row">
+        <div class="row-fluid">
           <div class="span12">
             <h4> Running Applications </h4>
 
@@ -96,15 +93,13 @@ private[spark] class IndexPage(parent: MasterWebUI) {
           </div>
         </div>
 
-          <hr/>
-
-        <div class="row">
+        <div class="row-fluid">
           <div class="span12">
             <h4> Completed Applications </h4>
             {completedAppsTable}
           </div>
         </div>;
-    UIUtils.basicSparkPage(content, "Spark Master: " + state.uri)
+    UIUtils.basicSparkPage(content, "Spark Master at " + state.uri)
   }
 
   def workerRow(worker: WorkerInfo): Seq[Node] = {

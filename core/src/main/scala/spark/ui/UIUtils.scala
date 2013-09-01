@@ -29,8 +29,8 @@ private[spark] object UIUtils {
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
   : Seq[Node] = {
     val jobs = page match {
-      case Jobs => <li class="active"><a href="/stages">Jobs</a></li>
-      case _ => <li><a href="/stages">Jobs</a></li>
+      case Stages => <li class="active"><a href="/stages">Stages</a></li>
+      case _ => <li><a href="/stages">Stages</a></li>
     }
     val storage = page match {
       case Storage => <li class="active"><a href="/storage">Storage</a></li>
@@ -50,43 +50,31 @@ private[spark] object UIUtils {
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
         <link rel="stylesheet" href="/static/bootstrap.min.css" type="text/css" />
         <link rel="stylesheet" href="/static/webui.css" type="text/css" />
-        <link rel="stylesheet" href="/static/bootstrap-responsive.min.css" type="text/css" />
         <script src="/static/sorttable.js"></script>
         <title>{sc.appName} - {title}</title>
-        <style type="text/css">
-          table.sortable thead {{ cursor: pointer; }}
-        </style>
       </head>
       <body>
-        <div class="container">
-
-          <div class="row">
-            <div class="span12">
-              <div class="navbar">
-                <div class="navbar-inner">
-                  <div class="container">
-                    <a href="/" class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></a>
-                    <ul class="nav nav-pills">
-                      {jobs}
-                      {storage}
-                      {environment}
-                      {executors}
-                    </ul>
-                    <p class="navbar-text pull-right">Application: <strong>{sc.appName}</strong></p>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <div class="navbar navbar-static-top">
+          <div class="navbar-inner">
+            <a href="/" class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></a>
+            <ul class="nav">
+              {jobs}
+              {storage}
+              {environment}
+              {executors}
+            </ul>
+            <p class="navbar-text pull-right"><strong>{sc.appName}</strong> application UI</p>
           </div>
+        </div>
 
-          <div class="row" style="padding-top: 5px;">
+        <div class="container-fluid">
+          <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
               </h3>
             </div>
           </div>
-          <hr/>
           {content}
         </div>
       </body>
@@ -99,21 +87,16 @@ private[spark] object UIUtils {
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
         <link rel="stylesheet" href="/static/bootstrap.min.css" type="text/css" />
-        <link rel="stylesheet" href="/static/bootstrap-responsive.min.css" type="text/css" />
+        <link rel="stylesheet" href="/static/webui.css" type="text/css" />
         <script src="/static/sorttable.js"></script>
         <title>{title}</title>
-        <style type="text/css">
-          table.sortable thead {{ cursor: pointer; }}
-        </style>
       </head>
       <body>
-        <div class="container">
-          <div class="row">
-            <div class="span2">
-              <img src="/static/spark_logo.png" />
-            </div>
-            <div class="span10">
-              <h3 style="vertical-align: bottom; margin-top: 40px; display: inline-block;">
+        <div class="container-fluid">
+          <div class="row-fluid">
+            <div class="span12">
+              <h3 style="vertical-align: middle; display: inline-block;">
+                <img src="/static/spark-logo-77x50px-hd.png" style="margin-right: 15px;" />
                 {title}
               </h3>
             </div>

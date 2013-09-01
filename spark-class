@@ -77,13 +77,6 @@ else
     exit 1
   fi
 fi
-if [[ ! -f "$FWDIR/RELEASE" && -z "$SCALA_LIBRARY_PATH" ]]; then
-  if [ -z "$SCALA_HOME" ]; then
-    echo "SCALA_HOME is not set" >&2
-    exit 1
-  fi
-  SCALA_LIBRARY_PATH="$SCALA_HOME/lib"
-fi
 
 # Set SPARK_MEM if it isn't already set since we also use it for this process
 SPARK_MEM=${SPARK_MEM:-512m}

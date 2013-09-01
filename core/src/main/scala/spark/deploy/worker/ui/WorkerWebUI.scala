@@ -143,7 +143,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
       <html>
         <body>
           {linkToMaster}
-          <hr />
           <div>
             <div style="float:left;width:40%">{backButton}</div>
             <div style="float:left;">{range}</div>

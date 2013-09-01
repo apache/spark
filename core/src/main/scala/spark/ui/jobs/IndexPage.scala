@@ -52,12 +52,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
        <div>
          <ul class="unstyled">
            <li>
-             <strong>Duration: </strong>
+             <strong>Total Duration: </strong>
              {parent.formatDuration(now - listener.sc.startTime)}
-           </li>
-           <li>
-              <strong>CPU Time: </strong>
-              {parent.formatDuration(listener.totalTime + activeTime)}
            </li>
            <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
            <li>
@@ -77,18 +73,18 @@ private[spark] class IndexPage(parent: JobProgressUI) {
 
       val content = summary ++
         {if (listener.sc.getSchedulingMode == SchedulingMode.FAIR) {
-           <hr/><h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
+           <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
         } else {
           Seq()
         }} ++
-        <hr/><h4 id="active">{activeStages.size} Active Stages</h4> ++
+        <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq++
-        <hr/><h4 id="completed">{completedStages.size} Completed Stages</h4> ++
+        <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
         completedStagesTable.toNodeSeq++
-        <hr/><h4 id ="failed">{failedStages.size} Failed Stages</h4> ++
+        <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      headerSparkPage(content, parent.sc, "Spark Stages", Jobs)
+      headerSparkPage(content, parent.sc, "Spark Stages", Stages)
     }
   }
 }
