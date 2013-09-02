@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.python
 
-import java.io.{File, DataInputStream, IOException}
-import java.net.{Socket, SocketException, InetAddress}
+import java.io.{OutputStreamWriter, File, DataInputStream, IOException}
+import java.net.{ServerSocket, Socket, SocketException, InetAddress}
 
 import scala.collection.JavaConversions._
 
@@ -26,11 +26,30 @@ import org.apache.spark._
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
     extends Logging {
+
+  // Because forking processes from Java is expensive, we prefer to launch a single Python daemon
+  // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
+  // only works on UNIX-based systems now because it uses signals for child management, so we can
+  // also fall back to launching workers (pyspark/worker.py) directly.
+  val useDaemon = !System.getProperty("os.name").startsWith("Windows")
+
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
   var daemonPort: Int = 0
 
   def create(): Socket = {
+    if (useDaemon) {
+      createThroughDaemon()
+    } else {
+      createSimpleWorker()
+    }
+  }
+
+  /**
+   * Connect to a worker launched through pyspark/daemon.py, which forks python processes itself
+   * to avoid the high cost of forking from Java. This currently only works on UNIX-based systems.
+   */
+  private def createThroughDaemon(): Socket = {
     synchronized {
       // Start the daemon if it hasn't been started
       startDaemon()
@@ -48,6 +67,78 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         case e => throw e
       }
     }
+  }
+
+  /**
+   * Launch a worker by executing worker.py directly and telling it to connect to us.
+   */
+  private def createSimpleWorker(): Socket = {
+    var serverSocket: ServerSocket = null
+    try {
+      serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
+
+      // Create and start the worker
+      val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
+      val pb = new ProcessBuilder(Seq(pythonExec, sparkHome + "/python/pyspark/worker.py"))
+      val workerEnv = pb.environment()
+      workerEnv.putAll(envVars)
+      val pythonPath = sparkHome + "/python/" + File.pathSeparator + workerEnv.get("PYTHONPATH")
+      workerEnv.put("PYTHONPATH", pythonPath)
+      val worker = pb.start()
+
+      // Redirect the worker's stderr to ours
+      new Thread("stderr reader for " + pythonExec) {
+        setDaemon(true)
+        override def run() {
+          scala.util.control.Exception.ignoring(classOf[IOException]) {
+            // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
+            val in = worker.getErrorStream
+            val buf = new Array[Byte](1024)
+            var len = in.read(buf)
+            while (len != -1) {
+              System.err.write(buf, 0, len)
+              len = in.read(buf)
+            }
+          }
+        }
+      }.start()
+
+      // Redirect worker's stdout to our stderr
+      new Thread("stdout reader for " + pythonExec) {
+        setDaemon(true)
+        override def run() {
+          scala.util.control.Exception.ignoring(classOf[IOException]) {
+            // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
+            val in = worker.getInputStream
+            val buf = new Array[Byte](1024)
+            var len = in.read(buf)
+            while (len != -1) {
+              System.err.write(buf, 0, len)
+              len = in.read(buf)
+            }
+          }
+        }
+      }.start()
+
+      // Tell the worker our port
+      val out = new OutputStreamWriter(worker.getOutputStream)
+      out.write(serverSocket.getLocalPort + "\n")
+      out.flush()
+
+      // Wait for it to connect to our socket
+      serverSocket.setSoTimeout(10000)
+      try {
+        return serverSocket.accept()
+      } catch {
+        case e: Exception =>
+          throw new SparkException("Python worker did not connect back in time", e)
+      }
+    } finally {
+      if (serverSocket != null) {
+        serverSocket.close()
+      }
+    }
+    null
   }
 
   def stop() {
@@ -73,12 +164,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
         // Redirect the stderr to ours
         new Thread("stderr reader for " + pythonExec) {
+          setDaemon(true)
           override def run() {
             scala.util.control.Exception.ignoring(classOf[IOException]) {
-              // FIXME HACK: We copy the stream on the level of bytes to
-              // attempt to dodge encoding problems.
+              // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
               val in = daemon.getErrorStream
-              var buf = new Array[Byte](1024)
+              val buf = new Array[Byte](1024)
               var len = in.read(buf)
               while (len != -1) {
                 System.err.write(buf, 0, len)
@@ -93,11 +184,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
         // Redirect further stdout output to our stderr
         new Thread("stdout reader for " + pythonExec) {
+          setDaemon(true)
           override def run() {
             scala.util.control.Exception.ignoring(classOf[IOException]) {
-              // FIXME HACK: We copy the stream on the level of bytes to
-              // attempt to dodge encoding problems.
-              var buf = new Array[Byte](1024)
+              // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
+              val buf = new Array[Byte](1024)
               var len = in.read(buf)
               while (len != -1) {
                 System.err.write(buf, 0, len)

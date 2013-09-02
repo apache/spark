@@ -21,6 +21,7 @@ Worker that receives input from Piped RDD.
 import os
 import sys
 import time
+import socket
 import traceback
 from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
@@ -94,7 +95,9 @@ def main(infile, outfile):
 
 
 if __name__ == '__main__':
-    # Redirect stdout to stderr so that users must return values from functions.
-    old_stdout = os.fdopen(os.dup(1), 'w')
-    os.dup2(2, 1)
-    main(sys.stdin, old_stdout)
+    # Read a local port to connect to from stdin
+    java_port = int(sys.stdin.readline())
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect(("127.0.0.1", java_port))
+    sock_file = sock.makefile("a+", 65536)
+    main(sock_file, sock_file)
