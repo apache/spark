@@ -5,7 +5,7 @@ title: Spark Overview
 
 Apache Spark is a fast and general-purpose cluster computing system.
 It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html) that make parallel jobs easy to write, and an optimized engine that supports general computation graphs.
-Spark can run on the Apache Mesos cluster manager, Hadoop YARN, Amazon EC2, or without an independent resource manager ("standalone mode").
+It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [Bagel](bagel-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
 # Downloading
 
@@ -36,6 +36,15 @@ or `local` to run locally with one thread, or `local[N]` to run locally with N t
 
 Finally, Spark can be used interactively through modified versions of the Scala shell (`./spark-shell`) or
 Python interpreter (`./pyspark`). These are a great way to learn Spark.
+
+# Running on a Cluster
+
+Spark supports several options for deployment:
+
+* [Amazon EC2](ec2-scripts.html): our scripts let you launch a cluster in about 5 minutes
+* [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
+* [Apache Mesos](running-on-mesos.html)
+* [Hadoop YARN](running-on-yarn.html)
 
 # A Note About Hadoop Versions
 
@@ -94,6 +103,7 @@ In addition, if you wish to run Spark on [YARN](running-on-yarn.md), set
 **External resources:**
 
 * [Spark Homepage](http://spark.incubator.apache.org)
+* [Shark](http://shark.cs.berkeley.edu): Apache Hive over Spark
 * [Mailing Lists](http://spark.incubator.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
   exercises about Spark, Shark, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/agenda-2012),
