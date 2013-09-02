@@ -631,20 +631,26 @@ class SparkContext(
    * filesystems), or an HTTP, HTTPS or FTP URI.
    */
   def addJar(path: String) {
-    if (null == path) {
+    if (path == null) {
       logWarning("null specified as parameter to addJar",
         new SparkException("null specified as parameter to addJar"))
     } else {
-      val env = SparkEnv.get
-      val uri = new URI(path)
-      val key = uri.getScheme match {
-        case null | "file" =>
-          if (env.hadoop.isYarnMode()) {
-            logWarning("local jar specified as parameter to addJar under Yarn mode")
-            return
-          }
-          env.httpFileServer.addJar(new File(uri.getPath))
-        case _ => path
+      var key = ""
+      if (path.contains("\\")) {
+        // For local paths with backslashes on Windows, URI throws an exception
+        key = env.httpFileServer.addJar(new File(path))
+      } else {
+        val uri = new URI(path)
+        key = uri.getScheme match {
+          case null | "file" =>
+            if (env.hadoop.isYarnMode()) {
+              logWarning("local jar specified as parameter to addJar under Yarn mode")
+              return
+            }
+            env.httpFileServer.addJar(new File(uri.getPath))
+          case _ =>
+            path
+        }
       }
       addedJars(key) = System.currentTimeMillis
       logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))

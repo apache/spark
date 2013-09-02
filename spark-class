@@ -31,7 +31,7 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
 fi
 
 if [ -z "$1" ]; then
-  echo "Usage: run <spark-class> [<args>]" >&2
+  echo "Usage: spark-class <class> [<args>]" >&2
   exit 1
 fi
 

@@ -17,6 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-set FWDIR=%~dp0
+rem This is the entry point for running a Spark example. To avoid polluting
+rem the environment, it just launches a new cmd to do the real work.
 
-cmd /V /E /C %FWDIR%spark-class2.cmd org.apache.spark.repl.Main %*
+cmd /V /E /C %~dp0run-example2.cmd %*
