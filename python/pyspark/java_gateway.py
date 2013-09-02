@@ -18,6 +18,7 @@
 import os
 import sys
 import signal
+import platform
 from subprocess import Popen, PIPE
 from threading import Thread
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
@@ -29,12 +30,18 @@ SPARK_HOME = os.environ["SPARK_HOME"]
 def launch_gateway():
     # Launch the Py4j gateway using Spark's run command so that we pick up the
     # proper classpath and SPARK_MEM settings from spark-env.sh
-    command = [os.path.join(SPARK_HOME, "spark-class"), "py4j.GatewayServer",
+    on_windows = platform.system() == "Windows"
+    script = "spark-class.cmd" if on_windows else "spark-class"
+    command = [os.path.join(SPARK_HOME, script), "py4j.GatewayServer",
                "--die-on-broken-pipe", "0"]
-    # Don't send ctrl-c / SIGINT to the Java gateway:
-    def preexec_function():
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-    proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_function)
+    if not on_windows:
+        # Don't send ctrl-c / SIGINT to the Java gateway:
+        def preexec_func():
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+        proc = Popen(command, stdout=PIPE, stdin=PIPE, preexec_fn=preexec_func)
+    else:
+        # preexec_fn not supported on Windows
+        proc = Popen(command, stdout=PIPE, stdin=PIPE)
     # Determine which ephemeral port the server started on:
     port = int(proc.stdout.readline())
     # Create a thread to echo output from the GatewayServer, which is required
