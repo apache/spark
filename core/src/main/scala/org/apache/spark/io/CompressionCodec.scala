@@ -39,17 +39,13 @@ trait CompressionCodec {
 private[spark] object CompressionCodec {
 
   def createCodec(): CompressionCodec = {
-    // Set the default codec to Snappy since the LZF implementation initializes a pretty large
-    // buffer for every stream, which results in a lot of memory overhead when the number of
-    // shuffle reduce buckets are large.
-    createCodec(classOf[SnappyCompressionCodec].getName)
+    createCodec(System.getProperty(
+      "spark.io.compression.codec", classOf[LZFCompressionCodec].getName))
   }
 
   def createCodec(codecName: String): CompressionCodec = {
-    Class.forName(
-      System.getProperty("spark.io.compression.codec", codecName),
-      true,
-      Thread.currentThread.getContextClassLoader).newInstance().asInstanceOf[CompressionCodec]
+    Class.forName(codecName, true, Thread.currentThread.getContextClassLoader)
+      .newInstance().asInstanceOf[CompressionCodec]
   }
 }
 
