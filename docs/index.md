@@ -11,6 +11,8 @@ Spark can run on the Apache Mesos cluster manager, Hadoop YARN, Amazon EC2, or w
 
 Get Spark by visiting the [downloads page](http://spark.incubator.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}.
 
+Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). All you need to run it is to have `java` to installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
+
 # Building
 
 Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
@@ -49,6 +51,8 @@ In addition, if you wish to run Spark on [YARN](running-on-yarn.md), set
 `SPARK_YARN` to `true`:
 
     SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
+
+(Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.)
 
 # Where to Go from Here
 
