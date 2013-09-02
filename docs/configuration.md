@@ -147,7 +147,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.io.compression.codec</td>
-  <td>org.apache.spark.io.<br />SnappyCompressionCodec</td>
+  <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
   <td>
     The compression codec class to use for various compressions. By default, Spark provides two
     codecs: <code>org.apache.spark.io.LZFCompressionCodec</code> and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
