@@ -389,9 +389,9 @@ private[spark] object Master {
   def startSystemAndActor(host: String, port: Int, webUiPort: Int): (ActorSystem, Int, Int) = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
     val actor = actorSystem.actorOf(Props(new Master(host, boundPort, webUiPort)), name = actorName)
-    implicit val timeout = Timeout(1 seconds)
-    val respFuture = actor ? RequestWebUIPort
+    implicit val timeout = Timeout(5 seconds)
+    val respFuture = actor ? RequestWebUIPort   // ask pattern
     val resp = Await.result(respFuture, timeout.duration).asInstanceOf[WebUIPortResponse]
-    (actorSystem, boundPort, resp.boundedPort)
+    (actorSystem, boundPort, resp.webUIBoundPort)
   }
 }
