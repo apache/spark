@@ -127,4 +127,8 @@ private[deploy] object DeployMessages {
 
   case object CheckForWorkerTimeOut
 
+  case object RequestWebUIPort
+
+  case class WebUIPortResponse(webUIBoundPort: Int)
+
 }
