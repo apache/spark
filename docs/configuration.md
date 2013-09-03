@@ -147,7 +147,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.io.compression.codec</td>
-  <td>org.apache.spark.io.<br />SnappyCompressionCodec</td>
+  <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
   <td>
     The compression codec class to use for various compressions. By default, Spark provides two
     codecs: <code>org.apache.spark.io.LZFCompressionCodec</code> and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
@@ -315,7 +315,7 @@ Apart from these, the following properties are also available, and may be useful
 # Environment Variables
 
 Certain Spark settings can also be configured through environment variables, which are read from the `conf/spark-env.sh`
-script in the directory where Spark is installed. These variables are meant to be for machine-specific settings, such
+script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). These variables are meant to be for machine-specific settings, such
 as library search paths. While Java system properties can also be set here, for application settings, we recommend setting
 these properties within the application instead of in `spark-env.sh` so that different applications can use different
 settings.
@@ -325,6 +325,8 @@ Note that `conf/spark-env.sh` does not exist by default when Spark is installed.
 
 The following variables can be set in `spark-env.sh`:
 
+* `JAVA_HOME`, the location where Java is installed (if it's not on your default `PATH`)
+* `PYSPARK_PYTHON`, the Python binary to use for PySpark
 * `SPARK_LOCAL_IP`, to configure which IP address of the machine to bind to.
 * `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
 * `SPARK_CLASSPATH`, to add elements to Spark's classpath that you want to be present for _all_ applications.

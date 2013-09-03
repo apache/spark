@@ -1,5 +1,3 @@
-import org.apache.spark.rdd.{SequenceFileRDDFunctions, DoubleRDDFunctions, PairRDDFunctions}
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -30,6 +28,6 @@ import org.apache.spark.rdd.{SequenceFileRDDFunctions, DoubleRDDFunctions, PairR
  * type (e.g. RDD[(Int, Int)] through implicit conversions when you
  * `import org.apache.spark.SparkContext._`.
  */
-package object spark { 
+package object spark {
   // For package docs only
 }

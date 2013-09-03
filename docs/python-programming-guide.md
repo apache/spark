@@ -4,7 +4,7 @@ title: Python Programming Guide
 ---
 
 
-The Spark Python API (PySpark) exposes most of the Spark features available in the Scala version to Python.
+The Spark Python API (PySpark) exposes the Spark programming model to Python.
 To learn the basics of Spark, we recommend reading through the
 [Scala programming guide](scala-programming-guide.html) first; it should be
 easy to follow even if you don't know Scala.
@@ -15,12 +15,8 @@ This guide will show how to use the Spark features described there in Python.
 
 There are a few key differences between the Python and Scala APIs:
 
-* Python is dynamically typed, so RDDs can hold objects of different types.
-* PySpark does not currently support the following Spark features:
-    - `lookup`
-    - `sort`
-    - `persist` at storage levels other than `MEMORY_ONLY`
-    - Execution on Windows -- this is slated for a future release
+* Python is dynamically typed, so RDDs can hold objects of multiple types.
+* PySpark does not yet support a few API calls, such as `lookup`, `sort`, and `persist` at custom storage levels. See the [API docs](api/pyspark/index.html) for details.
 
 In PySpark, RDDs support the same methods as their Scala counterparts but take Python functions and return Python collection types.
 Short functions can be passed to RDD methods using Python's [`lambda`](http://www.diveintopython.net/power_of_introspection/lambda_functions.html) syntax:
@@ -30,7 +26,7 @@ logData = sc.textFile(logFile).cache()
 errors = logData.filter(lambda line: "ERROR" in line)
 {% endhighlight %}
 
-You can also pass functions that are defined using the `def` keyword; this is useful for more complicated functions that cannot be expressed using `lambda`:
+You can also pass functions that are defined with the `def` keyword; this is useful for longer functions that can't be expressed using `lambda`:
 
 {% highlight python %}
 def is_error(line):
@@ -38,7 +34,7 @@ def is_error(line):
 errors = logData.filter(is_error)
 {% endhighlight %}
 
-Functions can access objects in enclosing scopes, although modifications to those objects within RDD methods will not be propagated to other tasks:
+Functions can access objects in enclosing scopes, although modifications to those objects within RDD methods will not be propagated back:
 
 {% highlight python %}
 error_keywords = ["Exception", "Error"]
@@ -51,17 +47,20 @@ PySpark will automatically ship these functions to workers, along with any objec
 Instances of classes will be serialized and shipped to workers by PySpark, but classes themselves cannot be automatically distributed to workers.
 The [Standalone Use](#standalone-use) section describes how to ship code dependencies to workers.
 
+In addition, PySpark fully supports interactive use---simply run `./pyspark` to launch an interactive shell.
+
 
 # Installing and Configuring PySpark
 
 PySpark requires Python 2.6 or higher.
-PySpark jobs are executed using a standard cPython interpreter in order to support Python modules that use C extensions.
+PySpark jobs are executed using a standard CPython interpreter in order to support Python modules that use C extensions.
 We have not tested PySpark with Python 3 or with alternative Python interpreters, such as [PyPy](http://pypy.org/) or [Jython](http://www.jython.org/).
-By default, PySpark's scripts will run programs using `python`; an alternate Python executable may be specified by setting the `PYSPARK_PYTHON` environment variable in `conf/spark-env.sh`.
+
+By default, PySpark requires `python` to be available on the system `PATH` and use it to run programs; an alternate Python executable may be specified by setting the `PYSPARK_PYTHON` environment variable in `conf/spark-env.sh` (or `.cmd` on Windows).
 
 All of PySpark's library dependencies, including [Py4J](http://py4j.sourceforge.net/), are bundled with PySpark and automatically imported.
 
-Standalone PySpark jobs should be run using the `pyspark` script, which automatically configures the Java and Python environment using the settings in `conf/spark-env.sh`.
+Standalone PySpark jobs should be run using the `pyspark` script, which automatically configures the Java and Python environment using the settings in `conf/spark-env.sh` or `.cmd`.
 The script automatically adds the `pyspark` package to the `PYTHONPATH`.
 
 
@@ -101,7 +100,7 @@ $ MASTER=local[4] ./pyspark
 ## IPython
 
 It is also possible to launch PySpark in [IPython](http://ipython.org), the enhanced Python interpreter.
-To do this, simply set the `IPYTHON` variable to `1` when running `pyspark`:
+To do this, set the `IPYTHON` variable to `1` when running `pyspark`:
 
 {% highlight bash %}
 $ IPYTHON=1 ./pyspark
@@ -132,15 +131,16 @@ sc = SparkContext("local", "Job Name", pyFiles=['MyFile.py', 'lib.zip', 'app.egg
 Files listed here will be added to the `PYTHONPATH` and shipped to remote worker machines.
 Code dependencies can be added to an existing SparkContext using its `addPyFile()` method.
 
+# API Docs
+
+[API documentation](api/pyspark/index.html) for PySpark is available as Epydoc.
+Many of the methods also contain [doctests](http://docs.python.org/2/library/doctest.html) that provide additional usage examples.
 
 # Where to Go from Here
 
-PySpark includes several sample programs in the [`python/examples` folder](https://github.com/apache/incubator-spark/tree/master/python/examples).
-You can run them by passing the files to the `pyspark` script; e.g.:
+PySpark also includes several sample programs in the [`python/examples` folder](https://github.com/apache/incubator-spark/tree/master/python/examples).
+You can run them by passing the files to `pyspark`; e.g.:
 
     ./pyspark python/examples/wordcount.py
 
 Each program prints usage help when run without arguments.
-
-We currently provide [API documentation](api/pyspark/index.html) for the Python API as Epydoc.
-Many of the RDD method descriptions contain [doctests](http://docs.python.org/2/library/doctest.html) that provide additional usage examples.
