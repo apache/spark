@@ -50,7 +50,7 @@ private[spark] class SparkDeploySchedulerBackend(
       "org.apache.spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(null)
     val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome,
-        sc.ui.appUIAddress)
+        "http://" + sc.ui.appUIAddress)
 
     client = new Client(sc.env.actorSystem, master, appDesc, this)
     client.start()

@@ -196,7 +196,7 @@ class SparkContext(
 
       case "yarn-standalone" =>
         val scheduler = try {
-          val clazz = Class.forName("spark.scheduler.cluster.YarnClusterScheduler")
+          val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(this).asInstanceOf[ClusterScheduler]
         } catch {
