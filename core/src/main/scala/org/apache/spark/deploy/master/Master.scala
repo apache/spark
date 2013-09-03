@@ -17,17 +17,18 @@
 
 package org.apache.spark.deploy.master
 
-import java.text.SimpleDateFormat
 import java.util.Date
+import java.text.SimpleDateFormat
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import akka.actor._
 import akka.actor.Terminated
-import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
-import akka.util.duration._
 import akka.dispatch.Await
 import akka.pattern.ask
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
+import akka.util.duration._
+import akka.util.Timeout
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
@@ -36,7 +37,6 @@ import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{Utils, AkkaUtils}
 import akka.util.{Duration, Timeout}
-import java.util.concurrent.TimeUnit
 
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
