@@ -227,12 +227,12 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def aggregateNeighbors[VD2: ClassManifest](
-      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[VD2],
-      mergeFunc: (VD2, VD2) => VD2,
+  def aggregateNeighbors[A: ClassManifest](
+      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
+      mergeFunc: (A, A) => A,
       direction: EdgeDirection)
-    : RDD[(Vid, VD2)]
-
+    : Graph[(VD, Option[A]), ED]
+  // TODO: consider a version that doesn't preserve the original VD
 
   /**
    * This function is used to compute a statistic for the neighborhood of each

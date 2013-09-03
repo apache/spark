@@ -44,13 +44,13 @@ object GraphLab {
 
 
     // Add an active attribute to all vertices to track convergence.
-    var activeGraph = graph.mapVertices {
+    var activeGraph: Graph[(Boolean, VD), ED] = graph.mapVertices {
       case Vertex(id, data) => (true, data)
     }.cache()
 
     // The gather function wrapper strips the active attribute and
     // only invokes the gather function on active vertices
-    def gather(vid: Vid, e: EdgeTriplet[(Boolean, VD), ED]) = {
+    def gather(vid: Vid, e: EdgeTriplet[(Boolean, VD), ED]): Option[A] = {
       if (e.vertex(vid).data._1) {
         val edge = new EdgeTriplet[VD,ED]
         edge.src = Vertex(e.src.id, e.src.data._2)
@@ -64,14 +64,15 @@ object GraphLab {
 
     // The apply function wrapper strips the vertex of the active attribute
     // and only invokes the apply function on active vertices
-    def apply(v: Vertex[(Boolean, VD)], accum: Option[A]) = {
-      if (v.data._1) (true, applyFunc(Vertex(v.id, v.data._2), accum))
-      else (false, v.data._2)
+    def apply(v: Vertex[((Boolean, VD), Option[A])]): (Boolean, VD) = {
+      val ((active, vData), accum) = v.data
+      if (active) (true, applyFunc(Vertex(v.id, vData), accum))
+      else (false, vData)
     }
 
     // The scatter function wrapper strips the vertex of the active attribute
     // and only invokes the scatter function on active vertices
-    def scatter(rawVid: Vid, e: EdgeTriplet[(Boolean, VD), ED]) = {
+    def scatter(rawVid: Vid, e: EdgeTriplet[(Boolean, VD), ED]): Option[Boolean] = {
       val vid = e.otherVertex(rawVid).id
       if (e.vertex(vid).data._1) {
         val edge = new EdgeTriplet[VD,ED]
@@ -88,24 +89,31 @@ object GraphLab {
     }
 
     // Used to set the active status of vertices for the next round
-    def applyActive(v: Vertex[(Boolean, VD)], accum: Option[Boolean]) =
-      (accum.getOrElse(false), v.data._2)
+    def applyActive(v: Vertex[((Boolean, VD), Option[Boolean])]): (Boolean, VD) = {
+      val ((prevActive, vData), newActive) = v.data
+      (newActive.getOrElse(false), vData)
+    }
 
     // Main Loop ---------------------------------------------------------------------
     var i = 0
     var numActive = activeGraph.numVertices
     while (i < numIter && numActive > 0) {
 
-      val accUpdates: RDD[(Vid, A)] =
+      val gathered: Graph[((Boolean, VD), Option[A]), ED] =
         activeGraph.aggregateNeighbors(gather, mergeFunc, gatherDirection)
 
-      activeGraph = activeGraph.leftJoinVertices(accUpdates, apply).cache()
+      val applied: Graph[(Boolean, VD), ED] = gathered.mapVertices(apply).cache()
+
+      activeGraph = applied.cache()
 
       // Scatter is basically a gather in the opposite direction so we reverse the edge direction
-      val activeVertices: RDD[(Vid, Boolean)] =
+      // activeGraph: Graph[(Boolean, VD), ED]
+      val scattered: Graph[((Boolean, VD), Option[Boolean]), ED] =
         activeGraph.aggregateNeighbors(scatter, _ || _, scatterDirection.reverse)
+      val newActiveGraph: Graph[(Boolean, VD), ED] =
+        scattered.mapVertices(applyActive)
 
-      activeGraph = activeGraph.leftJoinVertices(activeVertices, applyActive).cache()
+      activeGraph = newActiveGraph.cache()
 
       numActive = activeGraph.vertices.map(v => if (v.data._1) 1 else 0).reduce(_ + _)
       println("Number active vertices: " + numActive)
