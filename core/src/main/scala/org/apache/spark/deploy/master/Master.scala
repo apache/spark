@@ -26,6 +26,8 @@ import akka.actor._
 import akka.actor.Terminated
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
 import akka.util.duration._
+import akka.dispatch.Await
+import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
@@ -33,6 +35,8 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{Utils, AkkaUtils}
+import akka.util.Timeout
+import java.util.concurrent.TimeUnit
 
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
@@ -179,6 +183,10 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     case CheckForWorkerTimeOut => {
       timeOutDeadWorkers()
+    }
+
+    case RequestWebUIPort => {
+      sender ! WebUIPortResponse(webUi.boundPort.getOrElse(-1))
     }
   }
 
@@ -364,7 +372,7 @@ private[spark] object Master {
 
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)
-    val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort)
+    val (actorSystem, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort)
     actorSystem.awaitTermination()
   }
 
@@ -378,9 +386,12 @@ private[spark] object Master {
     }
   }
 
-  def startSystemAndActor(host: String, port: Int, webUiPort: Int): (ActorSystem, Int) = {
+  def startSystemAndActor(host: String, port: Int, webUiPort: Int): (ActorSystem, Int, Int) = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
     val actor = actorSystem.actorOf(Props(new Master(host, boundPort, webUiPort)), name = actorName)
-    (actorSystem, boundPort)
+    implicit val timeout = Timeout(1 seconds)
+    val respFuture = actor ? RequestWebUIPort
+    val resp = Await.result(respFuture, timeout.duration).asInstanceOf[WebUIPortResponse]
+    (actorSystem, boundPort, resp.boundedPort)
   }
 }

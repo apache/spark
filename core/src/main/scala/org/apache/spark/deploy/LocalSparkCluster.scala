@@ -43,7 +43,7 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 
     /* Start the Master */
-    val (masterSystem, masterPort) = Master.startSystemAndActor(localHostname, 0, 0)
+    val (masterSystem, masterPort, _) = Master.startSystemAndActor(localHostname, 0, 0)
     masterActorSystems += masterSystem
     val masterUrl = "spark://" + localHostname + ":" + masterPort
 
