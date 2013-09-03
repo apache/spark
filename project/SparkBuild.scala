@@ -103,6 +103,11 @@ object SparkBuild extends Build {
     //useGpg in Global := true,
 
     pomExtra := (
+      <parent>
+        <groupId>org.apache</groupId>
+        <artifactId>apache</artifactId>
+        <version>13</version>
+      </parent>
       <url>http://spark.incubator.apache.org/</url>
       <licenses>
         <license>
