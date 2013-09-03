@@ -129,6 +129,6 @@ private[deploy] object DeployMessages {
 
   case object RequestWebUIPort
 
-  case class WebUIPortResponse(webUIBoundPort: Int) {}
+  case class WebUIPortResponse(webUIBoundPort: Int)
 
 }
