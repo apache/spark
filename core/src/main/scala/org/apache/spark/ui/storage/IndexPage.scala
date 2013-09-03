@@ -50,7 +50,7 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
   def rddRow(rdd: RDDInfo): Seq[Node] = {
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(addBaseUri(),rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(prependBaseUri(),rdd.id)}>
           {rdd.name}
         </a>
       </td>

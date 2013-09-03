@@ -27,44 +27,43 @@ private[spark] object UIUtils {
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
   private[spark] val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).
-                                         getOrElse("")
+    getOrElse("")
 
-  def addBaseUri(resource: String = ""): String = {
-    return uiRoot + resource
-  }
+  def prependBaseUri(resource: String = "") = uiRoot + resource
 
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
   : Seq[Node] = {
     val jobs = page match {
-      case Stages => <li class="active"><a href={"%s/stages".format(UIUtils.addBaseUri())}>Stages</a></li>
-      case _ => <li><a href={"%s/stages".format(UIUtils.addBaseUri())}>Stages</a></li>
+      case Stages => <li class="active"><a href={prependBaseUri("/stages")}>Stages</a></li>
+      case _ => <li><a href={prependBaseUri("/stages")}>Stages</a></li>
     }
     val storage = page match {
-      case Storage => <li class="active"><a href={"%s/storage".format(UIUtils.addBaseUri())}>Storage</a></li>
-      case _ => <li><a href={"%s/storage".format(UIUtils.addBaseUri())}>Storage</a></li>
+      case Storage => <li class="active"><a href={prependBaseUri("/storage")}>Storage</a></li>
+      case _ => <li><a href={prependBaseUri("/storage")}>Storage</a></li>
     }
     val environment = page match {
-      case Environment => <li class="active"><a href={"%s/environment".format(UIUtils.addBaseUri())}>Environment</a></li>
-      case _ => <li><a href={"%s/environment".format(UIUtils.addBaseUri())}>Environment</a></li>
+      case Environment => 
+        <li class="active"><a href={prependBaseUri("/environment")}>Environment</a></li>
+      case _ => <li><a href={prependBaseUri("/environment")}>Environment</a></li>
     }
     val executors = page match {
-      case Executors => <li class="active"><a href={"%s/executors".format(UIUtils.addBaseUri())}>Executors</a></li>
-      case _ => <li><a href={"%s/executors".format(UIUtils.addBaseUri())}>Executors</a></li>
+      case Executors => <li class="active"><a href={prependBaseUri("/executors")}>Executors</a></li>
+      case _ => <li><a href={prependBaseUri("/executors")}>Executors</a></li>
     }
 
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={"%s/static/bootstrap.min.css".format(UIUtils.addBaseUri())} type="text/css" />
-        <link rel="stylesheet" href={"%s/static/webui.css".format(UIUtils.addBaseUri())}  type="text/css" />
-        <script src={"%s/static/sorttable.js".format(UIUtils.addBaseUri())} ></script>
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
+        <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{sc.appName} - {title}</title>
       </head>
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href={"%s/".format(UIUtils.addBaseUri())} class="brand"><img src={"%s/static/spark-logo-77x50px-hd.png".format(UIUtils.addBaseUri())}  /></a>
+            <a href={prependBaseUri("/")} class="brand"><img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}  /></a>
             <ul class="nav">
               {jobs}
               {storage}
@@ -94,9 +93,9 @@ private[spark] object UIUtils {
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={"%s/static/bootstrap.min.css".format(UIUtils.addBaseUri())} type="text/css" />
-        <link rel="stylesheet" href={"%s/static/webui.css".format(UIUtils.addBaseUri())}  type="text/css" />
-        <script src={"%s/static/sorttable.js".format(UIUtils.addBaseUri())} ></script>
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
+        <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{title}</title>
       </head>
       <body>
@@ -104,7 +103,7 @@ private[spark] object UIUtils {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <img src={"%s/static/spark-logo-77x50px-hd.png".format(UIUtils.addBaseUri())} style="margin-right: 15px;" />
+                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} style="margin-right: 15px;" />
                 {title}
               </h3>
             </div>
