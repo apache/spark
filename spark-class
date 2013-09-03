@@ -31,7 +31,7 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
 fi
 
 if [ -z "$1" ]; then
-  echo "Usage: run <spark-class> [<args>]" >&2
+  echo "Usage: spark-class <class> [<args>]" >&2
   exit 1
 fi
 
@@ -77,13 +77,6 @@ else
     exit 1
   fi
 fi
-if [[ ! -f "$FWDIR/RELEASE" && -z "$SCALA_LIBRARY_PATH" ]]; then
-  if [ -z "$SCALA_HOME" ]; then
-    echo "SCALA_HOME is not set" >&2
-    exit 1
-  fi
-  SCALA_LIBRARY_PATH="$SCALA_HOME/lib"
-fi
 
 # Set SPARK_MEM if it isn't already set since we also use it for this process
 SPARK_MEM=${SPARK_MEM:-512m}
@@ -102,10 +95,10 @@ export JAVA_OPTS
 
 if [ ! -f "$FWDIR/RELEASE" ]; then
   # Exit if the user hasn't compiled Spark
-  ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*.jar >& /dev/null
+  ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar >& /dev/null
   if [[ $? != 0 ]]; then
     echo "Failed to find Spark assembly in $FWDIR/assembly/target" >&2
-    echo "You need to compile Spark before running this program" >&2
+    echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
     exit 1
   fi
 fi

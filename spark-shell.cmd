@@ -18,5 +18,5 @@ rem limitations under the License.
 rem
 
 set FWDIR=%~dp0
-set SPARK_LAUNCH_WITH_SCALA=1
-cmd /V /E /C %FWDIR%run2.cmd spark.repl.Main %*
+
+cmd /V /E /C %FWDIR%spark-class2.cmd org.apache.spark.repl.Main %*

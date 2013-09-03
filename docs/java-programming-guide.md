@@ -10,9 +10,9 @@ easy to follow even if you don't know Scala.
 This guide will show how to use the Spark features described there in Java.
 
 The Spark Java API is defined in the
-[`spark.api.java`](api/core/index.html#spark.api.java.package) package, and includes
-a [`JavaSparkContext`](api/core/index.html#spark.api.java.JavaSparkContext) for
-initializing Spark and [`JavaRDD`](api/core/index.html#spark.api.java.JavaRDD) classes,
+[`org.apache.spark.api.java`](api/core/index.html#org.apache.spark.api.java.package) package, and includes
+a [`JavaSparkContext`](api/core/index.html#org.apache.spark.api.java.JavaSparkContext) for
+initializing Spark and [`JavaRDD`](api/core/index.html#org.apache.spark.api.java.JavaRDD) classes,
 which support the same methods as their Scala counterparts but take Java functions and return
 Java data and collection types. The main differences have to do with passing functions to RDD
 operations (e.g. map) and handling RDDs of different types, as discussed next.
@@ -23,12 +23,12 @@ There are a few key differences between the Java and Scala APIs:
 
 * Java does not support anonymous or first-class functions, so functions must
   be implemented by extending the
-  [`spark.api.java.function.Function`](api/core/index.html#spark.api.java.function.Function),
-  [`Function2`](api/core/index.html#spark.api.java.function.Function2), etc.
+  [`org.apache.spark.api.java.function.Function`](api/core/index.html#org.apache.spark.api.java.function.Function),
+  [`Function2`](api/core/index.html#org.apache.spark.api.java.function.Function2), etc.
   classes.
 * To maintain type safety, the Java API defines specialized Function and RDD
   classes for key-value pairs and doubles. For example, 
-  [`JavaPairRDD`](api/core/index.html#spark.api.java.JavaPairRDD)
+  [`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD)
   stores key-value pairs.
 * RDD methods like `collect()` and `countByKey()` return Java collections types,
   such as `java.util.List` and `java.util.Map`.
@@ -44,8 +44,8 @@ In the Scala API, these methods are automatically added using Scala's
 [implicit conversions](http://www.scala-lang.org/node/130) mechanism.
 
 In the Java API, the extra methods are defined in the
-[`JavaPairRDD`](api/core/index.html#spark.api.java.JavaPairRDD)
-and [`JavaDoubleRDD`](api/core/index.html#spark.api.java.JavaDoubleRDD)
+[`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD)
+and [`JavaDoubleRDD`](api/core/index.html#org.apache.spark.api.java.JavaDoubleRDD)
 classes.  RDD methods like `map` are overloaded by specialized `PairFunction`
 and `DoubleFunction` classes, allowing them to return RDDs of the appropriate
 types.  Common methods like `filter` and `sample` are implemented by
@@ -75,7 +75,7 @@ class has a single abstract method, `call()`, that must be implemented.
 ## Storage Levels
 
 RDD [storage level](scala-programming-guide.html#rdd-persistence) constants, such as `MEMORY_AND_DISK`, are
-declared in the [spark.api.java.StorageLevels](api/core/index.html#spark.api.java.StorageLevels) class. To
+declared in the [org.apache.spark.api.java.StorageLevels](api/core/index.html#org.apache.spark.api.java.StorageLevels) class. To
 define your own storage level, you can use StorageLevels.create(...). 
 
 
@@ -92,8 +92,8 @@ The Java API supports other Spark features, including
 As an example, we will implement word count using the Java API.
 
 {% highlight java %}
-import spark.api.java.*;
-import spark.api.java.function.*;
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.*;
 
 JavaSparkContext sc = new JavaSparkContext(...);
 JavaRDD<String> lines = ctx.textFile("hdfs://...");
@@ -179,7 +179,7 @@ just a matter of style.
 # Javadoc
 
 We currently provide documentation for the Java API as Scaladoc, in the
-[`spark.api.java` package](api/core/index.html#spark.api.java.package), because
+[`org.apache.spark.api.java` package](api/core/index.html#org.apache.spark.api.java.package), because
 some of the classes are implemented in Scala. The main downside is that the types and function
 definitions show Scala syntax (for example, `def reduce(func: Function2[T, T]): T` instead of
 `T reduce(Function2<T, T> func)`). 
@@ -189,7 +189,10 @@ We hope to generate documentation with Java-style syntax in the future.
 # Where to Go from Here
 
 Spark includes several sample programs using the Java API in
-[`examples/src/main/java`](https://github.com/mesos/spark/tree/master/examples/src/main/java/spark/examples).  You can run them by passing the class name to the
-`run-example` script included in Spark -- for example, `./run-example
-spark.examples.JavaWordCount`.  Each example program prints usage help when run
+[`examples/src/main/java`](https://github.com/apache/incubator-spark/tree/master/examples/src/main/java/org/apache/spark/examples).  You can run them by passing the class name to the
+`run-example` script included in Spark; for example:
+
+    ./run-example org.apache.spark.examples.JavaWordCount
+
+Each example program prints usage help when run
 without any arguments.

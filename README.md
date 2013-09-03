@@ -1,12 +1,12 @@
-# Spark
+# Apache Spark
 
-Lightning-Fast Cluster Computing - <http://www.spark-project.org/>
+Lightning-Fast Cluster Computing - <http://spark.incubator.apache.org/>
 
 
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the project webpage at <http://spark-project.org/documentation.html>.
+guide, on the project webpage at <http://spark.incubator.apache.org/documentation.html>.
 This README file only contains basic setup instructions.
 
 
@@ -18,24 +18,22 @@ Spark and its example programs, run:
 
     sbt/sbt assembly
 
-Spark also supports building using Maven. If you would like to build using Maven,
-see the [instructions for building Spark with Maven](http://spark-project.org/docs/latest/building-with-maven.html)
-in the Spark documentation..
+Once you've built Spark, the easiest way to start using it is the shell:
 
-To run Spark, you will need to have Scala's bin directory in your `PATH`, or
-you will need to set the `SCALA_HOME` environment variable to point to where
-you've installed Scala. Scala must be accessible through one of these
-methods on your cluster's worker nodes as well as its master.
+    ./spark-shell
 
-To run one of the examples, use `./run-example <class> <params>`. For example:
+Or, for the Python API, the Python shell (`./pyspark`).
 
-    ./run-example spark.examples.SparkLR local[2]
+Spark also comes with several sample programs in the `examples` directory.
+To run one of them, use `./run-example <class> <params>`. For example:
+
+    ./run-example org.apache.spark.examples.SparkLR local[2]
 
 will run the Logistic Regression example locally on 2 CPUs.
 
 Each of the example programs prints usage help if no params are given.
 
-All of the Spark samples take a `<host>` parameter that is the cluster URL
+All of the Spark samples take a `<master>` parameter that is the cluster URL
 to connect to. This can be a mesos:// or spark:// URL, or "local" to run
 locally with one thread, or "local[N]" to run locally with N threads.
 
@@ -58,13 +56,13 @@ versions without YARN, use:
     $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt assembly
 
 For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
-with YARN, also set `SPARK_WITH_YARN=true`:
+with YARN, also set `SPARK_YARN=true`:
 
     # Apache Hadoop 2.0.5-alpha
-    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_WITH_YARN=true sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
 
     # Cloudera CDH 4.2.0 with MapReduce v2
-    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_WITH_YARN=true sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_YARN=true sbt/sbt assembly
 
 For convenience, these variables may also be set through the `conf/spark-env.sh` file
 described below.
@@ -81,22 +79,25 @@ If your project is built with Maven, add this to your POM file's `<dependencies>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
-      <!-- the brackets are needed to tell Maven that this is a hard dependency on version "1.2.1" exactly -->
-      <version>[1.2.1]</version>
+      <version>1.2.1</version>
     </dependency>
 
 
 ## Configuration
 
-Please refer to the "Configuration" guide in the online documentation for a
-full overview on how to configure Spark. At the minimum, you will need to
-create a `conf/spark-env.sh` script (copy `conf/spark-env.sh.template`) and
-set the following two variables:
+Please refer to the [Configuration guide](http://spark.incubator.apache.org/docs/latest/configuration.html)
+in the online documentation for an overview on how to configure Spark.
 
-- `SCALA_HOME`: Location where Scala is installed.
 
-- `MESOS_NATIVE_LIBRARY`: Your Mesos library (only needed if you want to run
-  on Mesos). For example, this might be `/usr/local/lib/libmesos.so` on Linux.
+## Apache Incubator Notice
+
+Apache Spark is an effort undergoing incubation at The Apache Software
+Foundation (ASF), sponsored by the Apache Incubator. Incubation is required of
+all newly accepted projects until a further review indicates that the
+infrastructure, communications, and decision making process have stabilized in
+a manner consistent with other successful ASF projects. While incubation status
+is not necessarily a reflection of the completeness or stability of the code,
+it does indicate that the project has yet to be fully endorsed by the ASF.
 
 
 ## Contributing to Spark

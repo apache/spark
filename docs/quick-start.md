@@ -53,7 +53,7 @@ scala> textFile.filter(line => line.contains("Spark")).count() // How many lines
 res3: Long = 15
 {% endhighlight %}
 
-## More On RDD Operations
+## More on RDD Operations
 RDD actions and transformations can be used for more complex computations. Let's say we want to find the line with the most words:
 
 {% highlight scala %}
@@ -108,8 +108,8 @@ We'll create a very simple Spark job in Scala. So simple, in fact, that it's nam
 
 {% highlight scala %}
 /*** SimpleJob.scala ***/
-import spark.SparkContext
-import SparkContext._
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
 
 object SimpleJob {
   def main(args: Array[String]) {
@@ -126,7 +126,7 @@ object SimpleJob {
 
 This job simply counts the number of lines containing 'a' and the number containing 'b' in the Spark README. Note that you'll need to replace $YOUR_SPARK_HOME with the location where Spark is installed. Unlike the earlier examples with the Spark shell, which initializes its own SparkContext, we initialize a SparkContext as part of the job. We pass the SparkContext constructor four arguments, the type of scheduler we want to use (in this case, a local scheduler), a name for the job, the directory where Spark is installed, and a name for the jar file containing the job's sources. The final two arguments are needed in a distributed setting, where Spark is running across several nodes, so we include them for completeness. Spark will automatically ship the jar files you list to slave nodes.
 
-This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt` which explains that Spark is a dependency. This file also adds two repositories which host Spark dependencies:
+This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt` which explains that Spark is a dependency. This file also adds a repository that Spark depends on:
 
 {% highlight scala %}
 name := "Simple Project"
@@ -135,14 +135,18 @@ version := "1.0"
 
 scalaVersion := "{{site.SCALA_VERSION}}"
 
-libraryDependencies += "org.spark-project" %% "spark-core" % "{{site.SPARK_VERSION}}"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "{{site.SPARK_VERSION}}"
 
-resolvers ++= Seq(
-  "Akka Repository" at "http://repo.akka.io/releases/",
-  "Spray Repository" at "http://repo.spray.cc/")
+resolvers += "Akka Repository" at "http://repo.akka.io/releases/"
 {% endhighlight %}
 
-Of course, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job.
+If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on `hadoop-client` for your version of HDFS:
+
+{% highlight scala %}
+libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "<your-hdfs-version>"
+{% endhighlight %}
+
+Finally, for sbt to work correctly, we'll need to layout `SimpleJob.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the job's code, then use `sbt run` to execute our example job.
 
 {% highlight bash %}
 $ find .
@@ -159,8 +163,6 @@ $ sbt run
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
-This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
-
 # A Standalone Job In Java
 Now say we wanted to write a standalone job using the Java API. We will walk through doing this with Maven. If you are using other build systems, consider using the Spark assembly JAR described in the developer guide.
 
@@ -168,8 +170,8 @@ We'll create a very simple Spark job, `SimpleJob.java`:
 
 {% highlight java %}
 /*** SimpleJob.java ***/
-import spark.api.java.*;
-import spark.api.java.function.Function;
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
 
 public class SimpleJob {
   public static void main(String[] args) {
@@ -205,22 +207,28 @@ To build the job, we also write a Maven `pom.xml` file that lists Spark as a dep
   <version>1.0</version>
   <repositories>
     <repository>
-      <id>Spray.cc repository</id>
-      <url>http://repo.spray.cc</url>
-    </repository>
-    <repository>
       <id>Akka repository</id>
       <url>http://repo.akka.io/releases</url>
     </repository>
   </repositories>
   <dependencies>
     <dependency> <!-- Spark dependency -->
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_{{site.SCALA_VERSION}}</artifactId>
       <version>{{site.SPARK_VERSION}}</version>
     </dependency>
   </dependencies>
 </project>
+{% endhighlight %}
+
+If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on `hadoop-client` for your version of HDFS:
+
+{% highlight xml %}
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
+      <version>...</version>
+    </dependency>
 {% endhighlight %}
 
 We lay out these files according to the canonical Maven directory structure:
@@ -241,8 +249,6 @@ $ mvn exec:java -Dexec.mainClass="SimpleJob"
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
-
-This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
 
 # A Standalone Job In Python
 Now we will show how to write a standalone job using the Python API (PySpark).
@@ -280,4 +286,33 @@ $ ./pyspark SimpleJob.py
 Lines with a: 46, Lines with b: 23
 {% endhighlight python %}
 
-This example only runs the job locally; for a tutorial on running jobs across several machines, see the [Standalone Mode](spark-standalone.html) documentation, and consider using a distributed input source, such as HDFS.
+# Running Jobs on a Cluster
+
+There are a few additional considerations when running jobs on a 
+[Spark](spark-standalone.html), [YARN](running-on-yarn.html), or 
+[Mesos](running-on-mesos.html) cluster.
+
+### Including Your Dependencies
+If your code depends on other projects, you will need to ensure they are also
+present on the slave nodes. A popular approach is to create an
+assembly jar (or "uber" jar) containing your code and its dependencies. Both
+[sbt](https://github.com/sbt/sbt-assembly) and 
+[Maven](http://maven.apache.org/plugins/maven-assembly-plugin/) 
+have assembly plugins. When creating assembly jars, list Spark 
+itself as a `provided` dependency; it need not be bundled since it is 
+already present on the slaves. Once you have an assembled jar, 
+add it to the SparkContext as shown here. It is also possible to submit 
+your dependent jars one-by-one when creating a SparkContext.
+
+### Setting Configuration Options
+Spark includes several configuration options which influence the behavior
+of your job. These should be set as 
+[JVM system properties](configuration.html#system-properties) in your 
+program. The options will be captured and shipped to all slave nodes.
+
+### Accessing Hadoop Filesystems
+
+The examples here access a local file. To read data from a distributed
+filesystem, such as HDFS, include 
+[Hadoop version information](index.html#a-note-about-hadoop-versions)
+in your build file. By default, Spark builds against HDFS 1.0.4.
