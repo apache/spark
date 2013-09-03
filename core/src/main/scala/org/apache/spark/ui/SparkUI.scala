@@ -79,7 +79,6 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
     server.foreach(_.stop())
   }
 
-  private[spark] def appHttpUIAddress = "http://" + appUIAddress
   private[spark] def appUIAddress = host + ":" + boundPort.getOrElse("-1")
 
 }

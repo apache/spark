@@ -33,49 +33,38 @@ private[spark] object UIUtils {
     return uiRoot + resource
   }
 
-  private[spark] val storageStr = addBaseUri("/storage")
-  private[spark] val stagesStr = addBaseUri("/stages")
-  private[spark] val envStr = addBaseUri("/environment")
-  private[spark] val executorsStr = addBaseUri("/executors")
-  private[spark] val bootstrapMinCssStr = addBaseUri("/static/bootstrap.min.css")
-  private[spark] val webuiCssStr = addBaseUri("/static/webui.css")
-  private[spark] val sortTableStr = addBaseUri("/static/sorttable.js")
-  private[spark] val sparkLogoHdStr = addBaseUri("/static/spark-logo-77x50px-hd.png")
-  private[spark] val sparkLogoStr = addBaseUri("/static/spark_logo.png")
-
-
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
   : Seq[Node] = {
     val jobs = page match {
-      case Stages => <li class="active"><a href={stagesStr}>Stages</a></li>
-      case _ => <li><a href="/stages">Stages</a></li>
+      case Stages => <li class="active"><a href={"%s/stages".format(UIUtils.addBaseUri())}>Stages</a></li>
+      case _ => <li><a href={"%s/stages".format(UIUtils.addBaseUri())}>Stages</a></li>
     }
     val storage = page match {
-      case Storage => <li class="active"><a href={storageStr}>Storage</a></li>
-      case _ => <li><a href={storageStr}>Storage</a></li>
+      case Storage => <li class="active"><a href={"%s/storage".format(UIUtils.addBaseUri())}>Storage</a></li>
+      case _ => <li><a href={"%s/storage".format(UIUtils.addBaseUri())}>Storage</a></li>
     }
     val environment = page match {
-      case Environment => <li class="active"><a href={envStr}>Environment</a></li>
-      case _ => <li><a href={envStr}>Environment</a></li>
+      case Environment => <li class="active"><a href={"%s/environment".format(UIUtils.addBaseUri())}>Environment</a></li>
+      case _ => <li><a href={"%s/environment".format(UIUtils.addBaseUri())}>Environment</a></li>
     }
     val executors = page match {
-      case Executors => <li class="active"><a href={executorsStr}>Executors</a></li>
-      case _ => <li><a href={executorsStr}>Executors</a></li>
+      case Executors => <li class="active"><a href={"%s/executors".format(UIUtils.addBaseUri())}>Executors</a></li>
+      case _ => <li><a href={"%s/executors".format(UIUtils.addBaseUri())}>Executors</a></li>
     }
 
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={bootstrapMinCssStr} type="text/css" />
-        <link rel="stylesheet" href={webuiCssStr} type="text/css" />
-        <script src={sortTableStr}></script>
+        <link rel="stylesheet" href={"%s/static/bootstrap.min.css".format(UIUtils.addBaseUri())} type="text/css" />
+        <link rel="stylesheet" href={"%s/static/webui.css".format(UIUtils.addBaseUri())}  type="text/css" />
+        <script src={"%s/static/sorttable.js".format(UIUtils.addBaseUri())} ></script>
         <title>{sc.appName} - {title}</title>
       </head>
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href="/" class="brand"><img src={sparkLogoHdStr} /></a>
+            <a href={"%s/".format(UIUtils.addBaseUri())} class="brand"><img src={"%s/static/spark-logo-77x50px-hd.png".format(UIUtils.addBaseUri())}  /></a>
             <ul class="nav">
               {jobs}
               {storage}
@@ -105,9 +94,9 @@ private[spark] object UIUtils {
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={bootstrapMinCssStr} type="text/css" />
-        <link rel="stylesheet" href="/static/webui.css" type="text/css" />
-        <script src={sortTableStr}></script>
+        <link rel="stylesheet" href={"%s/static/bootstrap.min.css".format(UIUtils.addBaseUri())} type="text/css" />
+        <link rel="stylesheet" href={"%s/static/webui.css".format(UIUtils.addBaseUri())}  type="text/css" />
+        <script src={"%s/static/sorttable.js".format(UIUtils.addBaseUri())} ></script>
         <title>{title}</title>
       </head>
       <body>
@@ -115,7 +104,7 @@ private[spark] object UIUtils {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <img src="/static/spark-logo-77x50px-hd.png" style="margin-right: 15px;" />
+                <img src={"%s/static/spark-logo-77x50px-hd.png".format(UIUtils.addBaseUri())} style="margin-right: 15px;" />
                 {title}
               </h3>
             </div>

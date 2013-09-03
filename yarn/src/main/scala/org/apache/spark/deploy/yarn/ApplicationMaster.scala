@@ -29,7 +29,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import scala.collection.JavaConversions._
-import org.apache.spark.{SparkContext, Logging, Utils}
+import org.apache.spark.{SparkContext, Logging}
+import org.apache.spark.util.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import java.security.PrivilegedExceptionAction
 
@@ -56,10 +57,14 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     appAttemptId = getApplicationAttemptId()
     resourceManager = registerWithResourceManager()
 
-    // TODO: Uncomment when hadoop is on a version which has this fixed.
+    // Workaround until hadoop moves to something which has
+    // https://issues.apache.org/jira/browse/HADOOP-8406 - fixed in (2.0.2-alpha but no 0.23 line)
+    // ignore result
+    // This does not, unfortunately, always work reliably ... but alleviates the bug a lot of times
+    // Hence args.workerCores = numCore disabled above. Any better option ?
+
     // Compute number of threads for akka
     //val minimumMemory = appMasterResponse.getMinimumResourceCapability().getMemory()
-
     //if (minimumMemory > 0) {
     //  val mem = args.workerMemory + YarnAllocationHandler.MEMORY_OVERHEAD
     //  val numCore = (mem  / minimumMemory) + (if (0 != (mem % minimumMemory)) 1 else 0)
@@ -70,12 +75,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
         // args.workerCores = numCore
     //  }
     //}
-
-    // Workaround until hadoop moves to something which has
-    // https://issues.apache.org/jira/browse/HADOOP-8406
-    // ignore result
-    // This does not, unfortunately, always work reliably ... but alleviates the bug a lot of times
-    // Hence args.workerCores = numCore disabled above. Any better option ?
     // org.apache.hadoop.io.compress.CompressionCodecFactory.getCodecClasses(conf)
     
     ApplicationMaster.register(this)
