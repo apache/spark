@@ -780,7 +780,7 @@ private[spark] object Utils extends Logging {
   }
 
   // Handles idiosyncracies with hash (add more as required)
-  def toHash(obj: AnyRef): Int = {
+  def nonNegativeHash(obj: AnyRef): Int = {
 
     // Required ?
     if (obj eq null) return 0

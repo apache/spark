@@ -58,7 +58,7 @@ private[spark] object ShuffleSender {
           throw new Exception("Block " + blockId + " is not a shuffle block")
         }
         // Figure out which local directory it hashes to, and which subdirectory in that
-        val hash = Utils.toHash(blockId)
+        val hash = Utils.nonNegativeHash(blockId)
         val dirId = hash % localDirs.length
         val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
         val subDir = new File(localDirs(dirId), "%02x".format(subDirId))

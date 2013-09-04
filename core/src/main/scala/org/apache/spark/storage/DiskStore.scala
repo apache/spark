@@ -238,7 +238,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     logDebug("Getting file for block " + blockId)
 
     // Figure out which local directory it hashes to, and which subdirectory in that
-    val hash = Utils.toHash(blockId)
+    val hash = Utils.nonNegativeHash(blockId)
     val dirId = hash % localDirs.length
     val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
 
