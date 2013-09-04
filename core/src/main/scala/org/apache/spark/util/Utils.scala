@@ -778,4 +778,18 @@ private[spark] object Utils extends Logging {
     val rawMod = x % mod
     rawMod + (if (rawMod < 0) mod else 0)
   }
+
+  // Handles idiosyncracies with hash (add more as required)
+  def toHash(obj: AnyRef): Int = {
+
+    // Required ?
+    if (obj eq null) return 0
+
+    val hash = obj.hashCode
+    // math.abs fails for Int.MinValue
+    val hashAbs = if (Int.MinValue != hash) math.abs(hash) else 0
+
+    // Nothing else to guard against ?
+    hashAbs
+  }
 }
