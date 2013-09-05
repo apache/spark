@@ -61,8 +61,8 @@ class JsonProtocolSuite extends FunSuite {
   test("writeWorkerState") {
     val executors = List[ExecutorRunner]()
     val finishedExecutors = List[ExecutorRunner](createExecutorRunner(), createExecutorRunner())
-    val stateResponse = new WorkerStateResponse("host", 8080, "workerId", executors, finishedExecutors,
-      "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl")
+    val stateResponse = new WorkerStateResponse("host", 8080, "workerId", executors,
+      finishedExecutors, "masterUrl", 4, 1234, 4, 1234, "masterWebUiUrl")
     val output = JsonProtocol.writeWorkerState(stateResponse)
     assertValidJson(output)
   }
