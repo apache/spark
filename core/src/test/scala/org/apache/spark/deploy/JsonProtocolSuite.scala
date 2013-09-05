@@ -17,14 +17,16 @@
 
 package org.apache.spark.deploy
 
-import org.apache.spark.deploy.master.{WorkerInfo, ApplicationInfo}
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import java.io.File
 import java.util.Date
+
 import net.liftweb.json.{JsonAST, JsonParser}
 import net.liftweb.json.JsonAST.JValue
+import org.scalatest.FunSuite
+
+import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
+import org.apache.spark.deploy.master.{ApplicationInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
-import org.apache.spark.deploy.DeployMessages.{WorkerStateResponse, MasterStateResponse}
 
 class JsonProtocolSuite extends FunSuite {
   test("writeApplicationInfo") {
@@ -66,7 +68,8 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   def createAppDesc() : ApplicationDescription = {
-    new ApplicationDescription("name", 4, 1234, null, "sparkHome", "appUiUrl")
+    val cmd = new Command("mainClass", List("arg1", "arg2"), Map())
+    new ApplicationDescription("name", 4, 1234, cmd, "sparkHome", "appUiUrl")
   }
   def createAppInfo() : ApplicationInfo = {
     new ApplicationInfo(3, "id", createAppDesc(), new Date(123456789), null, "appUriStr")
@@ -75,11 +78,15 @@ class JsonProtocolSuite extends FunSuite {
     new WorkerInfo("id", "host", 8080, 4, 1234, null, 80, "publicAddress")
   }
   def createExecutorRunner() : ExecutorRunner = {
-    new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host", null, null)
+    new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
+      new File("sparkHome"), new File("workDir"))
   }
 
-  /* @throws ParseException if not valid json */
   def assertValidJson(json: JValue) {
-    JsonParser.parse(JsonAST.compactRender(json))
+    try {
+      JsonParser.parse(JsonAST.compactRender(json))
+    } catch {
+      case e: JsonParser.ParseException => fail("Invalid Json detected", e)
+    }
   }
 }
