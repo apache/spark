@@ -531,9 +531,16 @@ class DAGScheduler(
         tasks += new ResultTask(stage.id, stage.rdd, job.func, partition, locs, id)
       }
     }
+
+    val properties = if (idToActiveJob.contains(stage.jobId)) {
+      idToActiveJob(stage.jobId).properties
+    } else {
+      //this stage will be assigned to "default" pool
+      null
+    }
+
     // must be run listener before possible NotSerializableException
     // should be "StageSubmitted" first and then "JobEnded"
-    val properties = idToActiveJob(stage.jobId).properties
     listenerBus.post(SparkListenerStageSubmitted(stage, tasks.size, properties))
 
     if (tasks.size > 0) {
