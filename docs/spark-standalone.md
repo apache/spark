@@ -22,7 +22,7 @@ Similarly, you can start one or more workers and connect them to the master via:
 Once you have started a worker, look at the master's web UI ([http://localhost:8080](http://localhost:8080) by default).
 You should see the new node listed there, along with its number of CPUs and memory (minus one gigabyte left for the OS).
 
-Finally, the following configuration options can be passed to the master and worker: 
+Finally, the following configuration options can be passed to the master and worker:
 
 <table class="table">
   <tr><th style="width:21%">Argument</th><th>Meaning</th></tr>
@@ -134,6 +134,10 @@ To run an interactive Spark shell against the cluster, run the following command
 
     MASTER=spark://IP:PORT ./spark-shell
 
+Note that if you are running spark-shell from one of the spark cluster machines, the `spark-shell` script will
+automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` variables in `conf/spark-env.sh`.
+
+You can also pass an option `-c <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
 # Job Scheduling
 
