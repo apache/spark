@@ -478,7 +478,8 @@ class DAGScheduler(
       SparkEnv.set(env)
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
-      val taskContext = new TaskContext(job.finalStage.id, job.partitions(0), 0, true)
+      val taskContext =
+        new TaskContext(job.finalStage.id, job.partitions(0), 0, runningLocally = true)
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
         job.listener.taskSucceeded(0, result)

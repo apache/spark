@@ -93,7 +93,7 @@ private[spark] class ResultTask[T, U](
   }
 
   override def run(attemptId: Long): U = {
-    val context = new TaskContext(stageId, partition, attemptId)
+    val context = new TaskContext(stageId, partition, attemptId, runningLocally = false)
     metrics = Some(context.taskMetrics)
     try {
       func(context, rdd.iterator(split, context))
