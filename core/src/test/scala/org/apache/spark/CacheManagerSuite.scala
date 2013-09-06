@@ -39,7 +39,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     blockManager = mock[BlockManager]
     cacheManager = new CacheManager(blockManager)
     split = new Partition { override def index: Int = 0 }
-    rdd = new RDD(sc, Nil) {
+    rdd = new RDD[Int](sc, Nil) {
       override def getPartitions: Array[Partition] = Array(split)
       override val getDependencies = List[Dependency[_]]()
       override def compute(split: Partition, context: TaskContext) = Array(1, 2, 3, 4).iterator
