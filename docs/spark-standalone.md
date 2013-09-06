@@ -5,6 +5,17 @@ title: Spark Standalone Mode
 
 In addition to running on the Mesos or YARN cluster managers, Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
 
+# Deploying Spark Standalone to a Cluster
+
+The easiest way to deploy Spark is by running the `./make-distribution.sh` script to create a binary distribution.
+This distribution can be deployed to any machine with the Java runtime installed; there is no need to install Scala.
+
+The recommended procedure is to deploy and start the master on one node first, get the master spark URL,
+then modify `conf/spark-env.sh` in the `dist/` directory before deploying to all the other nodes.
+
+It is also possible to deploy the source directory once you have built it with `sbt assembly`.  Scala 2.9.3
+will need to be deployed on all the machines as well, and SCALA_HOME will need to point to the Scala installation.
+
 # Starting a Cluster Manually
 
 You can start a standalone master server by executing:

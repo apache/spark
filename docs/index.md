@@ -21,6 +21,9 @@ Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with 
 
 For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_VERSION}}. If you write applications in Scala, you will need to use this same version of Scala in your own program -- newer major versions may not work. You can get the right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
 
+Note: if you are building a binary distribution using `./make-distribution.sh`, you will not need to run
+`sbt/sbt assembly`.
+
 # Testing the Build
 
 Spark comes with several sample programs in the `examples` directory.
@@ -45,6 +48,11 @@ Spark supports several options for deployment:
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
+
+There is a script, `./make-distribution.sh`, which will create a binary distribution of Spark for deployment
+to any machine with only the Java runtime as a necessary dependency.
+Running the script creates a distribution directory in `dist/`, or the `-tgz` option to create a .tgz file.
+Check the script for additional options.
 
 # A Note About Hadoop Versions
 
