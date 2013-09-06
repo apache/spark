@@ -279,6 +279,20 @@ class SparkContext(object):
         """
         self._jsc.sc().setCheckpointDir(dirName, useExisting)
 
+class StorageLevelReader:
+    """
+    Mimics the Scala StorageLevel by directing all attribute requests
+    (e.g., StorageLevel.DISK_ONLY) to the JVM for reflection.
+    """
+
+    def __init__(self, sc):
+        self.sc = sc
+
+    def __getattr__(self, name):
+        try:
+            return self.sc._jvm.PythonRDD.getStorageLevel(name)
+        except:
+            print "Failed to find StorageLevel:", name
 
 def _test():
     import atexit

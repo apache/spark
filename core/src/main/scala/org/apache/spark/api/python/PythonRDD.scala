@@ -28,6 +28,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PipedRDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 
@@ -268,6 +269,16 @@ private[spark] object PythonRDD {
       case e => throw e
     }
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
+  }
+
+  /**
+   * Returns the StorageLevel with the given string name.
+   * Throws an exception if the name is not a valid StorageLevel.
+   */
+  def getStorageLevel(name: String) : StorageLevel = {
+    // In Scala, "val MEMORY_ONLY" produces a public getter by the same name.
+    val storageLevelGetter = StorageLevel.getClass().getDeclaredMethod(name)
+    return storageLevelGetter.invoke(StorageLevel).asInstanceOf[StorageLevel]
   }
 
   def writeIteratorToPickleFile[T](items: java.util.Iterator[T], filename: String) {
